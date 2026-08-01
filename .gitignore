@@ -1,41 +1,82 @@
-# Prerequisites
+# Mac files
+*.DS_Store
+*.dylib
+*.app/
+platforms/macos/mcp
+
+# Visual Studio files
+.vscode/mcp.json
+.mcp.json
+.vs/
+ipch/
+[Oo]bj
+[Bb]in
+*.[Cc]ache
+*.obj
+*.o
+*.dll
+*.exe
+*.exp
+*.pdb
+*.user
+*.aps
+*.pch
+*.sdf
+*.opensdf
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.ilk
+*.log
+*.zip
+[Dd]ebug/
+*.sbr
+*.app
+Thumbs.db
+*[Rr]elease*/
+*[Pp]rofile*/
+[Tt]est[Rr]esults/
+_UpgradeReport_Files/
+_ReSharper.*/
+desktop.ini
+
+# Misc files
+*.ini
+*.cfg
+*.zip
+*.geartowns
+*.so
+*.sav
+*.tmp
+*.state*
+TODO
+docs/
+
+#Xcode
+*.xcuserstate
+xcuserdata/
+*.xcexplist
+*.xcsettings
+*.xccheckout
+
+#binaries
+platforms/**/geartowns
+binary_to_compressed_c
+
+#Switch
+*.a
 *.d
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+#Android
+platforms/libretro/libs/
 
-# Precompiled Headers
-*.gch
-*.pch
+#JetBrains
+.idea
 
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# debug information files
-*.dwo
+#Value Change Dump files
+*.vcd

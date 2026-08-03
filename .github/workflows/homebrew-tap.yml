@@ -11,7 +11,7 @@ env:
   APP_DESC: "FM Towns emulator"
   GITHUB_OWNER: drhelius
   TAP_REPO: drhelius/homebrew-geardome
-  PLIST_ID: com.drhelius.geartowns
+  PLIST_ID: com.drhelius.Geartowns
 
 jobs:
   update-tap:

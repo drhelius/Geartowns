@@ -85,22 +85,22 @@ GitHub Actions does not trigger `release.created` or `release.edited` for draft 
 
 ### Phase 2: Learn The Local Style
 
-1. Read at least six published releases from the last year in this repository.
-2. Use those releases as the style reference. Recent style is concise bullet lists with emoji, followed by a `**Full Changelog**:` compare link.
+1. Read up to six published releases from the last year in this repository. If no published release exists, treat this as the initial release and use the repository's commit history as the style and content source.
+2. When prior releases exist, use them as the style reference. The preferred style is concise bullet lists with emoji, followed by a `**Full Changelog**:` link.
 3. Prefer the direct bullet style used in recent releases, without `## What's Changed`, unless the existing generated notes include new contributors that should be preserved.
-4. Each bullet names a concrete, user-facing change in specific wording derived from the merged pull requests (name the exact feature or subsystem). Reserve `Many bug fixes and improvements` as the final catch-all bullet, and avoid vague `Improved X` bullets when a specific description is available.
+4. Each bullet names a concrete, user-facing change in specific wording derived from commits and merged pull requests (name the exact feature or subsystem). Reserve `Many bug fixes and improvements` as the final catch-all bullet, and avoid vague `Improved X` bullets when a specific description is available.
 
 ### Phase 3: Collect Changes
 
-1. The target release tag is `${{ github.event.inputs.release_tag }}`. Identify the previous published release tag from the list of published releases (published releases are visible to the read-only token).
-2. List both the merged pull requests and the full commit log between the previous published tag and `${{ github.event.inputs.release_tag }}`. Most feature work in this repository lands as direct commits without a pull request, so the commit log is the primary source of truth for features; read every commit subject in the range. Use the pull requests mainly to attribute external contributors and to confirm the compare range.
+1. The target release tag is `${{ github.event.inputs.release_tag }}`. Identify the previous published release tag when one exists. For an initial release, use the full reachable history ending at the target tag.
+2. List both the merged pull requests and the full commit log in the release range. Most feature work in this repository lands as direct commits without a pull request, so the commit log is the primary source of truth for features; read every commit subject in the range. Use pull requests mainly to attribute external contributors and confirm the range.
 3. Do not read the draft release body or call GitHub's generate-notes API; the read-only token cannot access drafts. Reconstruct the changelog from the commit log and merged pull requests instead.
 4. Identify notable user-facing changes from the commit subjects, not just from pull requests. Commit-message prefixes signal the affected area (for example `[mcp]` for the MCP server, `[debugger]` for debugger/tooling), and many feature commits have no prefix at all. Group related commits into a single bullet per feature, and fold only genuinely minor or purely internal commits into `Many bug fixes and improvements`. Never collapse a notable feature into the catch-all bullet just because it did not arrive through a pull request.
 5. Note the GitHub login of each notable pull request's author. Treat authors other than the repository owner (`drhelius`) as external contributors whose work should be credited with a profile link in Phase 4. Preserve useful `New Contributors` information when present.
 
 ### Phase 4: Draft Notes
 
-Write concise, specific release notes in the established style. Every bullet must describe a concrete, user-facing change taken from the merged pull requests — never a vague summary.
+Write concise, specific release notes in the established style. Every bullet must describe a concrete, user-facing change taken from commits or merged pull requests — never a vague summary.
 
 Guidelines:
 - Be specific. Prefer `Variable Refresh Rate ready` over `VRR ready`, and `Added WLA-DX and PCEAS syntaxes in disassembler` over `Improved debugger`. Spell out acronyms and name the actual feature, syntax, palette, or subsystem that changed.
@@ -118,13 +118,15 @@ Style example (illustrative only — every bullet must reflect this repository's
 ```markdown
 - 🖥️ Variable Refresh Rate ready
 - 🧠 Reduced token usage in MCP server with optional tool router
-- ⚙️ Added WLA-DX and PCEAS syntaxes in disassembler
+- ⚙️ Added a new debugger automation command
 - 🎨 New palette by [username](https://github.com/username)
 - 🤖 Agentic Workflows
 - 🐛 Many bug fixes and improvements
 
 **Full Changelog**: https://github.com/drhelius/Geartowns/compare/<previous>...<current>
 ```
+
+For an initial release with no previous tag, use `https://github.com/drhelius/Geartowns/commits/<current>` instead of a compare link.
 
 ### Phase 5: Update Release
 

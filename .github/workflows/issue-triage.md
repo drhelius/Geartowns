@@ -62,7 +62,7 @@ Use GitHub read tools to inspect the triggering issue. Search existing open and 
 ### Phase 1: Gather Context
 
 1. Read the triggering issue title, body, author association, and current labels.
-2. Search existing open and closed issues for similar titles, affected games, mapper names, hardware names, error messages, or workflow names.
+2. Search existing open and closed issues for similar titles, affected games, machine models, peripheral names, error messages, or workflow names.
 3. Consider the available label allowlist only: `agentic workflows`, `bug`, `duplicate`, `feature request`, `needs info`, `not a bug`, `question`, `wontfix`.
 4. Do not create, rename, remove, or edit labels.
 
@@ -78,21 +78,21 @@ Use GitHub read tools to inspect the triggering issue. Search existing open and 
 
 Apply labels only through the configured `add-labels` safe output. Choose exactly one primary label when there is enough information:
 
-- `bug`: broken behavior in an already-supported Geartowns feature, mapper, platform, build, package, or workflow. Use this for regressions, crashes, incorrect emulation, save-state problems, audio/video/input defects, frontend bugs, and release or CI breakages caused by this repository.
-- `feature request`: a request for new behavior, new platform support, new debugging/MCP capability, new frontend option, or support for currently unsupported cartridge hardware. If a user reports that a game does not run and the likely reason is a missing mapper, unsupported mapper variant, unsupported cartridge accessory, or unsupported special hardware, label it `feature request`, not `bug`.
+- `bug`: broken behavior in an already-supported Geartowns machine model, feature, platform, build, package, or workflow. Use this for regressions, crashes, incorrect emulation, save-state problems, audio/video/input defects, frontend bugs, and release or CI breakages caused by this repository.
+- `feature request`: a request for new behavior, new platform support, new debugging/MCP capability, new frontend option, or support for a currently unsupported FM Towns machine model, peripheral, storage controller, or media format. If a title does not run because required hardware is not implemented, label it `feature request`, not `bug`.
 - `question`: a user question, support request, usage question, or troubleshooting question where the user is asking how something works or how to use Geartowns.
-- `not a bug`: expected behavior, invalid or corrupted ROM/save data, a known hardware limitation, an external service problem, spam/test content, or behavior caused by user environment rather than Geartowns.
+- `not a bug`: expected behavior, invalid or corrupted BIOS/media/save data, a known hardware limitation, an external service problem, spam/test content, or behavior caused by user environment rather than Geartowns.
 - `wontfix`: a valid request or limitation that is intentionally outside project scope. Use this sparingly and only when the issue text or maintainer context makes that intent clear.
 - `agentic workflows`: an issue about gh-aw, Build Doctor, Issue Triage, workflow agents, safe outputs, generated lock files, or other agentic workflow behavior in this repository. Do not add this label to ordinary emulator bugs, game compatibility reports, or feature requests.
 
 ### Phase 4: Geartowns-Specific Checks
 
-For game compatibility reports, separate bugs from unsupported cartridge hardware:
+For game compatibility reports, separate bugs from unsupported FM Towns hardware and media:
 
-1. Treat likely unsupported cartridge banking or hardware variants as `feature request`. Clues include unusual cartridge banking, homebrew or prototype cartridge behavior, special cartridge hardware, or a game that fails only because Geartowns has no implementation for that cartridge type.
-2. Treat an already-supported mapper or known supported game that regressed, crashes, corrupts graphics/audio/input, fails save/RTC behavior, or diverges from hardware/reference emulator behavior as `bug`.
-3. Treat bad dumps, patched/trainer ROM issues without clean-ROM evidence, invalid save files, or expected FM Towns hardware behavior as `not a bug` when the evidence is clear.
-4. Use `needs info` when the report says only that a game does not run but omits the exact ROM title/region/revision, ROM hash, Geartowns version, platform, steps, or whether a clean dump was tested.
+1. Treat a missing machine model, CPU feature, peripheral, storage controller, or media format as `feature request`.
+2. Treat an already-supported configuration or title that regressed, crashes, corrupts graphics/audio/input, or diverges from hardware/reference emulator behavior as `bug`.
+3. Treat bad disk/CD images, invalid BIOS or save files, or expected FM Towns hardware behavior as `not a bug` when the evidence is clear.
+4. Use `needs info` when the report says only that a title does not run but omits the exact title/version, BIOS and machine configuration, media format or hash, Geartowns version, platform, and reproduction steps.
 
 ### Phase 5: Duplicate Detection
 
@@ -102,7 +102,7 @@ For game compatibility reports, separate bugs from unsupported cartridge hardwar
 4. Use a clearly automated, polite Markdown close comment with line breaks. Use this shape:
 
 ```markdown
-Automated triage result: this appears to duplicate #123 because it describes the same affected game and mapper symptom.
+Automated triage result: this appears to duplicate #123 because it describes the same affected game and hardware symptom.
 
 Closing this as a duplicate. If this report describes a different case, please add the details and it can be reopened.
 ```

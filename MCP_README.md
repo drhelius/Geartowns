@@ -1,0 +1,1 @@
+# Geartowns MCP Server

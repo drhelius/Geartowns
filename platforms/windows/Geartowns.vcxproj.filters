@@ -1,0 +1,331 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Manifest Include="Geartowns.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\shared\desktop\application.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\application_headless.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\config.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\emu.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_actions.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\rewind.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\runahead.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_debug.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_popups.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_menus.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\main.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\ogl_renderer.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\ogl_shader_program.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\ogl_shader_chain.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\shader_preset.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\display.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\events.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gamepad.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\sound_queue.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\mcp\mcp_server.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\single_instance.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\media.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\geartowns_core.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\input.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
+      <Filter>dependencies\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui_demo.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui_draw.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui_impl_opengl3.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui_impl_sdl3.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui_tables.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\imgui_widgets.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\implot.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\implot_demo.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\imgui\implot_items.cpp">
+      <Filter>dependencies\imgui</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\audio.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\bit_ops.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\crc.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\defines.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\game_db.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\geartowns.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\geartowns_core.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\geartowns_core_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\log.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\memory_stream.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\state_serializer.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\types.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\shared\desktop\application.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\application_headless.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\backers.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\config.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\console_utils.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\emu.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_actions.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\rewind.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\runahead.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_debug.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_popups.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_menus.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_filedialogs.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\license.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\ogl_renderer.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\ogl_shader_program.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\ogl_shader_chain.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\shader_preset.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\display.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\events.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gamepad.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\utils.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\sound_queue.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\mcp\mcp_transport.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\mcp\mcp_debug_adapter.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\mcp\mcp_server.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\mcp\mcp_manager.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\mcp\mcp_tool_registry.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\single_instance.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\json\json.hpp">
+      <Filter>dependencies</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\keyboard.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\miniz\miniz.h">
+      <Filter>dependencies\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="..\shared\dependencies\glad\glad.h">
+      <Filter>dependencies\glad</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\fonts\IconsMaterialDesign.h">
+      <Filter>dependencies\imgui\fonts</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\fonts\MaterialIcons.h">
+      <Filter>dependencies\imgui\fonts</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\fonts\RobotoMedium.h">
+      <Filter>dependencies\imgui\fonts</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imconfig.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imgui.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imgui_impl_opengl3_loader.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imgui_impl_sdl3.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imgui_internal.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\implot.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\implot_internal.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imstb_rectpack.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imstb_textedit.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\imstb_truetype.h">
+      <Filter>dependencies\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\mINI\ini.h">
+      <Filter>dependencies\mINI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\stb\stb_image_write.h">
+      <Filter>dependencies\stb</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{39e50856-2108-48fd-a913-eb2000b78c33}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies">
+      <UniqueIdentifier>{00c47854-d060-4dd7-ab5b-efaa60880894}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="desktop">
+      <UniqueIdentifier>{b305c14e-49f4-4f2f-9d40-5b15a839fbb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\miniz">
+      <UniqueIdentifier>{466b2296-06dc-4afd-a898-3c4ed168681e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\imgui">
+      <UniqueIdentifier>{e0759fc4-5e41-4967-af3f-6c065f466652}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\stb">
+      <UniqueIdentifier>{6e599b1a-7bc8-4a3f-9481-c8c04182c459}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\mINI">
+      <UniqueIdentifier>{b20161bf-e4e8-4d15-b5e1-74a0a7c0d526}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\glad">
+      <UniqueIdentifier>{eee9f957-716d-47d4-a4f4-3d987c06a27a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\imgui\fonts">
+      <UniqueIdentifier>{0ff4493d-dd39-4604-9082-9f79eae3d893}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="iconfile.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Geartowns.rc" />
+  </ItemGroup>
+</Project>

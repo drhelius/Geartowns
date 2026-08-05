@@ -1,0 +1,8 @@
+SOURCES_C   :=  $(DEPS_DIR)/miniz/miniz.c
+
+SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
+                $(CORE_DIR)/libretro_vfs_file.cpp \
+                $(SOURCE_DIR)/geartowns_core.cpp \
+                $(SOURCE_DIR)/audio.cpp \
+                $(SOURCE_DIR)/input.cpp \
+                $(SOURCE_DIR)/media.cpp

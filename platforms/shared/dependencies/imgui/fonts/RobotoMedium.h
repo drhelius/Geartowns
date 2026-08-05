@@ -1,6 +1,6 @@
 /*
- * Geargrafx - PC Engine / TurboGrafx Emulator
- * Copyright (C) 2024  Ignacio Sanchez
+ * Geartowns - FM Towns Emulator
+ * Copyright (C) 2026  Ignacio Sanchez
 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

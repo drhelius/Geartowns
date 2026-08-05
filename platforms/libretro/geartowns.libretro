@@ -1,0 +1,11 @@
+[Libretro]
+Type=Emulator
+Version=1.0.0
+Name=Geartowns
+Module=geartowns_libretro.so
+LibretroVersion=1
+Authors=Ignacio Sanchez Gines;
+License=GPL-3.0+;
+
+[Platform:FMTowns]
+MimeType=application/x-fm-towns-disk;application/x-cue;

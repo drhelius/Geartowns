@@ -1,0 +1,4 @@
+platforms/linux/geartowns usr/lib/geartowns/
+platforms/shared/gamecontrollerdb.txt usr/lib/geartowns/
+debian/geartowns.desktop usr/share/applications/
+debian/geartowns.xml usr/share/mime/packages/

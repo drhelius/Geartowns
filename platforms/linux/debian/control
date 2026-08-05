@@ -1,0 +1,22 @@
+Source: geartowns
+Section: games
+Priority: optional
+Maintainer: Nacho Sanchez <863613+drhelius@users.noreply.github.com>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ libgl-dev,
+ libsdl3-dev,
+ pkgconf
+Standards-Version: 4.6.2
+Homepage: https://github.com/drhelius/Geartowns
+Vcs-Browser: https://github.com/drhelius/Geartowns
+Vcs-Git: https://github.com/drhelius/Geartowns.git
+
+Package: geartowns
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends}
+Description: FM Towns emulator
+ Geartowns is a cross-platform emulator for Fujitsu FM Towns software.

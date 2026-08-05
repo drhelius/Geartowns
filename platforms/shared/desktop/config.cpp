@@ -1,0 +1,782 @@
+/*
+ * Geartowns - FM Towns Emulator
+ * Copyright (C) 2026  Ignacio Sanchez
+
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+ *
+ */
+
+#include <SDL3/SDL.h>
+#include <iomanip>
+#include <locale>
+#include <sstream>
+#include <string>
+#include <string.h>
+#include "geartowns.h"
+
+#define MINI_CASE_SENSITIVE
+#include "ini.h"
+
+#define CONFIG_IMPORT
+#include "config.h"
+#include "shader_preset.h"
+#include "utils.h"
+
+static char* get_portable_path(bool force_portable);
+static bool check_portable(const char* base_path);
+static int read_int(const char* group, const char* key, int default_value);
+static void write_int(const char* group, const char* key, int integer);
+static float read_float(const char* group, const char* key, float default_value);
+static void write_float(const char* group, const char* key, float value);
+static bool read_bool(const char* group, const char* key, bool default_value);
+static void write_bool(const char* group, const char* key, bool boolean);
+static std::string read_string(const char* group, const char* key);
+static void write_string(const char* group, const char* key, const std::string& value);
+static config_Hotkey read_hotkey(const char* group, const char* key, config_Hotkey default_value);
+static void write_hotkey(const char* group, const char* key, config_Hotkey hotkey);
+static config_Hotkey make_hotkey(SDL_Scancode key, SDL_Keymod mod);
+static std::string shader_preset_section_name(const char* preset_file);
+static bool parse_float_string(const std::string& value, float* result);
+static void sync_shader_preset_parameter_defaults(void);
+static void set_defaults(void);
+
+static void set_defaults(void)
+{
+    config_emulator = config_Emulator();
+    config_video = config_Video();
+    config_audio = config_Audio();
+    config_input = config_Input();
+    config_debug = config_Debug();
+
+    config_input_keyboard[0].key_left = SDL_SCANCODE_LEFT;
+    config_input_keyboard[0].key_right = SDL_SCANCODE_RIGHT;
+    config_input_keyboard[0].key_up = SDL_SCANCODE_UP;
+    config_input_keyboard[0].key_down = SDL_SCANCODE_DOWN;
+    config_input_keyboard[0].key_select = SDL_SCANCODE_A;
+    config_input_keyboard[0].key_run = SDL_SCANCODE_S;
+    config_input_keyboard[0].key_I = SDL_SCANCODE_X;
+    config_input_keyboard[0].key_II = SDL_SCANCODE_Z;
+    config_input_keyboard[0].key_III = SDL_SCANCODE_C;
+    config_input_keyboard[0].key_IV = SDL_SCANCODE_V;
+    config_input_keyboard[0].key_V = SDL_SCANCODE_B;
+    config_input_keyboard[0].key_VI = SDL_SCANCODE_N;
+    config_input_keyboard[0].key_toggle_turbo_I = SDL_SCANCODE_W;
+    config_input_keyboard[0].key_toggle_turbo_II = SDL_SCANCODE_Q;
+
+    config_input_keyboard[1].key_left = SDL_SCANCODE_J;
+    config_input_keyboard[1].key_right = SDL_SCANCODE_L;
+    config_input_keyboard[1].key_up = SDL_SCANCODE_I;
+    config_input_keyboard[1].key_down = SDL_SCANCODE_K;
+    config_input_keyboard[1].key_select = SDL_SCANCODE_G;
+    config_input_keyboard[1].key_run = SDL_SCANCODE_H;
+    config_input_keyboard[1].key_I = SDL_SCANCODE_Y;
+    config_input_keyboard[1].key_II = SDL_SCANCODE_T;
+    config_input_keyboard[1].key_III = SDL_SCANCODE_5;
+    config_input_keyboard[1].key_IV = SDL_SCANCODE_6;
+    config_input_keyboard[1].key_V = SDL_SCANCODE_7;
+    config_input_keyboard[1].key_VI = SDL_SCANCODE_8;
+    config_input_keyboard[1].key_toggle_turbo_I = SDL_SCANCODE_P;
+    config_input_keyboard[1].key_toggle_turbo_II = SDL_SCANCODE_O;
+
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        config_input_gamepad[i].gamepad_directional = 0;
+        config_input_gamepad[i].gamepad_invert_x_axis = false;
+        config_input_gamepad[i].gamepad_invert_y_axis = false;
+        config_input_gamepad[i].gamepad_start = SDL_GAMEPAD_BUTTON_START;
+        config_input_gamepad[i].gamepad_run = SDL_GAMEPAD_BUTTON_BACK;
+        config_input_gamepad[i].gamepad_A = SDL_GAMEPAD_BUTTON_SOUTH;
+        config_input_gamepad[i].gamepad_B = SDL_GAMEPAD_BUTTON_EAST;
+        config_input_gamepad[i].gamepad_C = SDL_GAMEPAD_BUTTON_WEST;
+        config_input_gamepad[i].gamepad_X = SDL_GAMEPAD_BUTTON_NORTH;
+        config_input_gamepad[i].gamepad_Y = SDL_GAMEPAD_BUTTON_LEFT_SHOULDER;
+        config_input_gamepad[i].gamepad_Z = SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
+        config_input_gamepad[i].gamepad_x_axis = SDL_GAMEPAD_AXIS_LEFTX;
+        config_input_gamepad[i].gamepad_y_axis = SDL_GAMEPAD_AXIS_LEFTY;
+
+        for (int j = 0; j < config_HotkeyIndex_COUNT; j++)
+            config_input_gamepad_shortcuts[i].gamepad_shortcuts[j] = SDL_GAMEPAD_BUTTON_INVALID;
+    }
+
+    config_hotkeys[config_HotkeyIndex_OpenROM] = make_hotkey(SDL_SCANCODE_O, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_ReloadROM] = make_hotkey(SDL_SCANCODE_D, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_Quit] = make_hotkey(SDL_SCANCODE_Q, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_Reset] = make_hotkey(SDL_SCANCODE_R, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_Pause] = make_hotkey(SDL_SCANCODE_P, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_FFWD] = make_hotkey(SDL_SCANCODE_F, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_Screenshot] = make_hotkey(SDL_SCANCODE_X, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_Fullscreen] = make_hotkey(SDL_SCANCODE_F12, SDL_KMOD_NONE);
+    config_hotkeys[config_HotkeyIndex_ShowMainMenu] = make_hotkey(SDL_SCANCODE_M, SDL_KMOD_CTRL);
+    config_hotkeys[config_HotkeyIndex_CaptureMouse] = make_hotkey(SDL_SCANCODE_F1, SDL_KMOD_NONE);
+    config_hotkeys[config_HotkeyIndex_Mute] = make_hotkey(SDL_SCANCODE_U, SDL_KMOD_CTRL);
+}
+
+void config_init(bool force_portable)
+{
+    const char* root_path = NULL;
+    char* portable_path = get_portable_path(force_portable);
+
+    if (portable_path)
+        root_path = portable_path;
+    else
+        root_path = SDL_GetPrefPath("Geardome", GT_TITLE);
+
+    if (root_path == NULL)
+    {
+        Log("Unable to determine config path. Falling back to current directory.");
+        root_path = SDL_strdup("./");
+    }
+
+    config_root_path = root_path;
+
+    strncpy_fit(config_temp_path, config_root_path, sizeof(config_temp_path));
+    strncat_fit(config_temp_path, "tmp/", sizeof(config_temp_path));
+    create_directory_if_not_exists(config_temp_path);
+
+    strncpy_fit(config_emu_file_path, config_root_path, sizeof(config_emu_file_path));
+    strncat_fit(config_emu_file_path, "config.ini", sizeof(config_emu_file_path));
+
+    strncpy_fit(config_imgui_file_path, config_root_path, sizeof(config_imgui_file_path));
+    strncat_fit(config_imgui_file_path, "imgui.ini", sizeof(config_imgui_file_path));
+
+    set_defaults();
+
+    config_ini_file = new mINI::INIFile(config_emu_file_path);
+}
+
+void config_destroy(void)
+{
+    SafeDelete(config_ini_file);
+    SDL_free((void*)config_root_path);
+}
+
+void config_load_defaults(void)
+{
+    Log("Loading default settings");
+
+    set_defaults();
+    config_write();
+}
+
+void config_push_recent_media(const std::string& path)
+{
+    if (path.empty())
+        return;
+
+    int slot = 0;
+    for (slot = 0; slot < config_max_recent_roms; slot++)
+    {
+        if (config_emulator.recent_roms[slot].compare(path) == 0)
+            break;
+    }
+
+    if (slot >= config_max_recent_roms)
+        slot = config_max_recent_roms - 1;
+
+    for (int index = slot; index > 0; index--)
+    {
+        config_emulator.recent_roms[index] = config_emulator.recent_roms[index - 1];
+    }
+
+    config_emulator.recent_roms[0] = path;
+}
+
+void config_read(void)
+{
+    if (!config_ini_file->read(config_ini_data))
+    {
+        Log("Unable to load settings from %s", config_emu_file_path);
+        return;
+    }
+
+    int file_version = read_int("General", "Version", 0);
+
+    if (file_version < 1)
+    {
+        Log("Settings version %d is outdated (current: %d). Using defaults.", file_version, config_version);
+        config_write();
+        return;
+    }
+
+    if (file_version < config_version)
+        Log("Migrating settings version %d to %d", file_version, config_version);
+
+    Log("Loading settings from %s (version %d)", config_emu_file_path, file_version);
+
+#if defined(GT_DISABLE_DISASSEMBLER)
+        config_debug.debug = false;
+#else
+        config_debug.debug = read_bool("Debug", "Debug", false);
+#endif
+    config_debug.single_instance = read_bool("Debug", "SingleInstance", false);
+
+    config_emulator.maximized = read_bool("Emulator", "Maximized", false);
+    config_emulator.fullscreen = read_bool("Emulator", "FullScreen", false);
+    config_emulator.fullscreen_mode = read_int("Emulator", "FullScreenMode", 0);
+    config_emulator.always_show_menu = read_bool("Emulator", "AlwaysShowMenu", false);
+    config_emulator.theme = read_int("Emulator", "Theme", config_Theme_Dark);
+    config_emulator.theme = CLAMP(config_emulator.theme, config_Theme_Light, config_Theme_Dark);
+    config_emulator.ffwd_speed = read_int("Emulator", "FFWD", 1);
+    config_emulator.ffwd_speed = CLAMP(config_emulator.ffwd_speed, 0, 4);
+    config_emulator.start_paused = read_bool("Emulator", "StartPaused", false);
+    config_emulator.pause_when_inactive = read_bool("Emulator", "PauseWhenInactive", true);
+    config_emulator.bios_path = read_string("Emulator", "BiosPath");
+    config_emulator.screenshots_dir_option = read_int("Emulator", "ScreenshotDirOption", 0);
+    config_emulator.screenshots_path = read_string("Emulator", "ScreenshotPath");
+    config_emulator.last_open_path = read_string("Emulator", "LastOpenPath");
+    config_emulator.window_width = read_int("Emulator", "WindowWidth", 800);
+    config_emulator.window_width = CLAMP(config_emulator.window_width, 500, 8192);
+    config_emulator.window_height = read_int("Emulator", "WindowHeight", 640);
+    config_emulator.window_height = CLAMP(config_emulator.window_height, 300, 8192);
+    config_emulator.status_messages = read_bool("Emulator", "StatusMessages", false);
+    config_emulator.allow_screensaver = read_bool("Emulator", "AllowScreenSaver", false);
+    config_emulator.mcp_tcp_port = read_int("Emulator", "MCPTCPPort", 7777);
+    config_emulator.mcp_tcp_port = CLAMP(config_emulator.mcp_tcp_port, 1, 65535);
+    config_emulator.mcp_http_address = read_string("Emulator", "MCPHTTPAddress");
+    if (config_emulator.mcp_http_address.empty())
+        config_emulator.mcp_http_address = "127.0.0.1";
+
+    if (config_emulator.screenshots_path.empty())
+    {
+        config_emulator.screenshots_path = config_root_path;
+    }
+
+    for (int i = 0; i < config_max_recent_roms; i++)
+    {
+        std::string item = "RecentROM" + std::to_string(i);
+        config_emulator.recent_roms[i] = read_string("Emulator", item.c_str());
+    }
+
+    config_video.scale = read_int("Video", "Scale", 0);
+    config_video.scale_manual = read_int("Video", "ScaleManual", 1);
+    config_video.ratio = read_int("Video", "AspectRatio", 1);
+    config_video.ratio = CLAMP(config_video.ratio, 0, 2);
+    config_video.fps = read_bool("Video", "FPS", false);
+    config_video.shader_mode = read_int("Video", "ShaderMode", config_ShaderMode_PixelPerfect);
+    config_video.shader_mode = CLAMP(config_video.shader_mode, config_ShaderMode_PixelPerfect, config_ShaderMode_External);
+    config_video.shader_preset_path = read_string("Video", "ShaderPresetFile");
+    config_video.sync_mode = read_int("Video", "SyncMode", config_VideoSync_Disabled);
+    config_video.sync_mode = CLAMP(config_video.sync_mode, config_VideoSync_Disabled, config_VideoSync_VRR);
+#if !defined(_WIN32)
+    if (config_video.sync_mode == config_VideoSync_VRR)
+        config_video.sync_mode = config_VideoSync_Fixed;
+#endif
+    config_video.background_color[config_Theme_Dark][0] = read_float("Video", "BackgroundColorR", 0.1f);
+    config_video.background_color[config_Theme_Dark][1] = read_float("Video", "BackgroundColorG", 0.1f);
+    config_video.background_color[config_Theme_Dark][2] = read_float("Video", "BackgroundColorB", 0.1f);
+    config_video.background_color[config_Theme_Light][0] = read_float("Video", "BackgroundColorLightR", 128.0f / 255.0f);
+    config_video.background_color[config_Theme_Light][1] = read_float("Video", "BackgroundColorLightG", 128.0f / 255.0f);
+    config_video.background_color[config_Theme_Light][2] = read_float("Video", "BackgroundColorLightB", 128.0f / 255.0f);
+
+    config_audio.enable = read_bool("Audio", "Enable", true);
+    config_audio.sync = read_bool("Audio", "Sync", true);
+    config_audio.master_volume = read_float("Audio", "MasterVolume", 1.0f);
+    config_audio.master_volume = CLAMP(config_audio.master_volume, 0.0f, 2.0f);
+    config_audio.buffer_count = read_int("Audio", "BufferCount", 3);
+    config_audio.buffer_count = CLAMP(config_audio.buffer_count, 1, 8);
+
+    config_input.allow_up_down = read_bool("Input", "AllowUpDown", false);
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "Input%d", i + 1);
+        config_input.controller_type[i] = read_int(input_group, "ControllerType", GT_CONTROLLER_ORIGINAL_GAMEPAD);
+        config_input.controller_type[i] = CLAMP(config_input.controller_type[i], GT_CONTROLLER_NONE, GT_CONTROLLER_6_BUTTON_GAMEPAD);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "InputKeyboard%d", i + 1);
+        config_Input_Keyboard& keys = config_input_keyboard[i];
+        keys.key_left = (SDL_Scancode)read_int(input_group, "KeyLeft", keys.key_left);
+        keys.key_right = (SDL_Scancode)read_int(input_group, "KeyRight", keys.key_right);
+        keys.key_up = (SDL_Scancode)read_int(input_group, "KeyUp", keys.key_up);
+        keys.key_down = (SDL_Scancode)read_int(input_group, "KeyDown", keys.key_down);
+        keys.key_start = (SDL_Scancode)read_int(input_group, "KeyStart", keys.key_start);
+        keys.key_run = (SDL_Scancode)read_int(input_group, "KeyRun", keys.key_run);
+        keys.key_A = (SDL_Scancode)read_int(input_group, "KeyA", keys.key_A);
+        keys.key_B = (SDL_Scancode)read_int(input_group, "KeyB", keys.key_B);
+        keys.key_C = (SDL_Scancode)read_int(input_group, "KeyC", keys.key_C);
+        keys.key_X = (SDL_Scancode)read_int(input_group, "KeyX", keys.key_X);
+        keys.key_Y = (SDL_Scancode)read_int(input_group, "KeyY", keys.key_Y);
+        keys.key_Z = (SDL_Scancode)read_int(input_group, "KeyZ", keys.key_Z);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "InputGamepad%d", i + 1);
+        config_Input_Gamepad& pad = config_input_gamepad[i];
+        pad.gamepad_directional = read_int(input_group, "GamepadDirectional", pad.gamepad_directional);
+        pad.gamepad_invert_x_axis = read_bool(input_group, "GamepadInvertX", pad.gamepad_invert_x_axis);
+        pad.gamepad_invert_y_axis = read_bool(input_group, "GamepadInvertY", pad.gamepad_invert_y_axis);
+        pad.gamepad_start = read_int(input_group, "GamepadStart", pad.gamepad_start);
+        pad.gamepad_run = read_int(input_group, "GamepadRun", pad.gamepad_run);
+        pad.gamepad_x_axis = read_int(input_group, "GamepadXAxis", pad.gamepad_x_axis);
+        pad.gamepad_y_axis = read_int(input_group, "GamepadYAxis", pad.gamepad_y_axis);
+        pad.gamepad_A = read_int(input_group, "GamepadA", pad.gamepad_A);
+        pad.gamepad_B = read_int(input_group, "GamepadB", pad.gamepad_B);
+        pad.gamepad_C = read_int(input_group, "GamepadC", pad.gamepad_C);
+        pad.gamepad_X = read_int(input_group, "GamepadX", pad.gamepad_X);
+        pad.gamepad_Y = read_int(input_group, "GamepadY", pad.gamepad_Y);
+        pad.gamepad_Z = read_int(input_group, "GamepadZ", pad.gamepad_Z);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "InputGamepadShortcuts%d", i + 1);
+        for (int j = 0; j < config_HotkeyIndex_COUNT; j++)
+        {
+            char key_name[32];
+            snprintf(key_name, sizeof(key_name), "Shortcut%d", j);
+            config_input_gamepad_shortcuts[i].gamepad_shortcuts[j] = read_int(input_group, key_name, SDL_GAMEPAD_BUTTON_INVALID);
+        }
+    }
+
+    // Read hotkeys
+    config_hotkeys[config_HotkeyIndex_OpenROM] = read_hotkey("Hotkeys", "OpenROM", make_hotkey(SDL_SCANCODE_O, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_ReloadROM] = read_hotkey("Hotkeys", "ReloadROM", make_hotkey(SDL_SCANCODE_D, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_Quit] = read_hotkey("Hotkeys", "Quit", make_hotkey(SDL_SCANCODE_Q, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_Reset] = read_hotkey("Hotkeys", "Reset", make_hotkey(SDL_SCANCODE_R, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_Pause] = read_hotkey("Hotkeys", "Pause", make_hotkey(SDL_SCANCODE_P, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_FFWD] = read_hotkey("Hotkeys", "FFWD", make_hotkey(SDL_SCANCODE_F, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_Screenshot] = read_hotkey("Hotkeys", "Screenshot", make_hotkey(SDL_SCANCODE_X, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_Fullscreen] = read_hotkey("Hotkeys", "Fullscreen", make_hotkey(SDL_SCANCODE_F12, SDL_KMOD_NONE));
+    config_hotkeys[config_HotkeyIndex_ShowMainMenu] = read_hotkey("Hotkeys", "ShowMainMenu", make_hotkey(SDL_SCANCODE_M, SDL_KMOD_CTRL));
+    config_hotkeys[config_HotkeyIndex_Mute] = read_hotkey("Hotkeys", "Mute", make_hotkey(SDL_SCANCODE_U, SDL_KMOD_CTRL));
+
+    sync_shader_preset_parameter_defaults();
+
+    Debug("Settings loaded");
+}
+
+void config_write(void)
+{
+    Log("Saving settings to %s", config_emu_file_path);
+
+    if (config_emulator.ffwd)
+        config_audio.sync = true;
+
+    write_int("General", "Version", config_version);
+
+    write_bool("Debug", "Debug", config_debug.debug);
+    write_bool("Debug", "SingleInstance", config_debug.single_instance);
+
+    write_bool("Emulator", "Maximized", config_emulator.maximized);
+    write_bool("Emulator", "FullScreen", config_emulator.fullscreen);
+    write_int("Emulator", "FullScreenMode", config_emulator.fullscreen_mode);
+    write_bool("Emulator", "AlwaysShowMenu", config_emulator.always_show_menu);
+    write_int("Emulator", "Theme", config_emulator.theme);
+    write_int("Emulator", "FFWD", config_emulator.ffwd_speed);
+    write_bool("Emulator", "StartPaused", config_emulator.start_paused);
+    write_bool("Emulator", "PauseWhenInactive", config_emulator.pause_when_inactive);
+    write_string("Emulator", "BiosPath", config_emulator.bios_path);
+    write_string("Emulator", "ScreenshotPath", config_emulator.screenshots_path);
+    write_string("Emulator", "LastOpenPath", config_emulator.last_open_path);
+    write_int("Emulator", "WindowWidth", config_emulator.window_width);
+    write_int("Emulator", "WindowHeight", config_emulator.window_height);
+    write_bool("Emulator", "StatusMessages", config_emulator.status_messages);
+    write_bool("Emulator", "AllowScreenSaver", config_emulator.allow_screensaver);
+    write_int("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port);
+    write_string("Emulator", "MCPHTTPAddress", config_emulator.mcp_http_address);
+
+    for (int i = 0; i < config_max_recent_roms; i++)
+    {
+        std::string item = "RecentROM" + std::to_string(i);
+        write_string("Emulator", item.c_str(), config_emulator.recent_roms[i]);
+    }
+
+    write_int("Video", "Scale", config_video.scale);
+    write_int("Video", "ScaleManual", config_video.scale_manual);
+    write_int("Video", "AspectRatio", config_video.ratio);
+    write_bool("Video", "FPS", config_video.fps);
+    write_int("Video", "ShaderMode", config_video.shader_mode);
+    write_string("Video", "ShaderPresetFile", get_filename(config_video.shader_preset_path.c_str()));
+    sync_shader_preset_parameter_defaults();
+    write_int("Video", "SyncMode", config_video.sync_mode);
+    write_float("Video", "BackgroundColorR", config_video.background_color[config_Theme_Dark][0]);
+    write_float("Video", "BackgroundColorG", config_video.background_color[config_Theme_Dark][1]);
+    write_float("Video", "BackgroundColorB", config_video.background_color[config_Theme_Dark][2]);
+    write_float("Video", "BackgroundColorLightR", config_video.background_color[config_Theme_Light][0]);
+    write_float("Video", "BackgroundColorLightG", config_video.background_color[config_Theme_Light][1]);
+    write_float("Video", "BackgroundColorLightB", config_video.background_color[config_Theme_Light][2]);
+
+    write_bool("Audio", "Enable", config_audio.enable);
+    write_bool("Audio", "Sync", config_audio.sync);
+    write_float("Audio", "MasterVolume", config_audio.master_volume);
+    write_int("Audio", "BufferCount", config_audio.buffer_count);
+
+    write_bool("Input", "AllowUpDown", config_input.allow_up_down);
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "Input%d", i + 1);
+        write_int(input_group, "ControllerType", config_input.controller_type[i]);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "InputKeyboard%d", i + 1);
+        const config_Input_Keyboard& keys = config_input_keyboard[i];
+        write_int(input_group, "KeyLeft", keys.key_left);
+        write_int(input_group, "KeyRight", keys.key_right);
+        write_int(input_group, "KeyUp", keys.key_up);
+        write_int(input_group, "KeyDown", keys.key_down);
+        write_int(input_group, "KeyStart", keys.key_start);
+        write_int(input_group, "KeyRun", keys.key_run);
+        write_int(input_group, "KeyA", keys.key_A);
+        write_int(input_group, "KeyB", keys.key_B);
+        write_int(input_group, "KeyC", keys.key_C);
+        write_int(input_group, "KeyX", keys.key_X);
+        write_int(input_group, "KeyY", keys.key_Y);
+        write_int(input_group, "KeyZ", keys.key_Z);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "InputGamepad%d", i + 1);
+        const config_Input_Gamepad& pad = config_input_gamepad[i];
+        write_int(input_group, "GamepadDirectional", pad.gamepad_directional);
+        write_bool(input_group, "GamepadInvertX", pad.gamepad_invert_x_axis);
+        write_bool(input_group, "GamepadInvertY", pad.gamepad_invert_y_axis);
+        write_int(input_group, "GamepadStart", pad.gamepad_start);
+        write_int(input_group, "GamepadRun", pad.gamepad_run);
+        write_int(input_group, "GamepadXAxis", pad.gamepad_x_axis);
+        write_int(input_group, "GamepadYAxis", pad.gamepad_y_axis);
+        write_int(input_group, "GamepadA", pad.gamepad_A);
+        write_int(input_group, "GamepadB", pad.gamepad_B);
+        write_int(input_group, "GamepadC", pad.gamepad_C);
+        write_int(input_group, "GamepadX", pad.gamepad_X);
+        write_int(input_group, "GamepadY", pad.gamepad_Y);
+        write_int(input_group, "GamepadZ", pad.gamepad_Z);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        char input_group[32];
+        snprintf(input_group, sizeof(input_group), "InputGamepadShortcuts%d", i + 1);
+        for (int j = 0; j < config_HotkeyIndex_COUNT; j++)
+        {
+            char key_name[32];
+            snprintf(key_name, sizeof(key_name), "Shortcut%d", j);
+            write_int(input_group, key_name, config_input_gamepad_shortcuts[i].gamepad_shortcuts[j]);
+        }
+    }
+
+    // Write hotkeys
+    write_hotkey("Hotkeys", "OpenROM", config_hotkeys[config_HotkeyIndex_OpenROM]);
+    write_hotkey("Hotkeys", "ReloadROM", config_hotkeys[config_HotkeyIndex_ReloadROM]);
+    write_hotkey("Hotkeys", "Quit", config_hotkeys[config_HotkeyIndex_Quit]);
+    write_hotkey("Hotkeys", "Reset", config_hotkeys[config_HotkeyIndex_Reset]);
+    write_hotkey("Hotkeys", "Pause", config_hotkeys[config_HotkeyIndex_Pause]);
+    write_hotkey("Hotkeys", "FFWD", config_hotkeys[config_HotkeyIndex_FFWD]);
+    write_hotkey("Hotkeys", "Screenshot", config_hotkeys[config_HotkeyIndex_Screenshot]);
+    write_hotkey("Hotkeys", "Fullscreen", config_hotkeys[config_HotkeyIndex_Fullscreen]);
+    write_hotkey("Hotkeys", "ShowMainMenu", config_hotkeys[config_HotkeyIndex_ShowMainMenu]);
+    write_hotkey("Hotkeys", "Mute", config_hotkeys[config_HotkeyIndex_Mute]);
+
+    if (config_ini_file->write(config_ini_data, true))
+    {
+        Debug("Settings saved");
+    }
+    else
+    {
+        Error("Unable to save settings to %s", config_emu_file_path);
+    }
+}
+
+static char* get_portable_path(bool force_portable)
+{
+    const char* base_path = SDL_GetBasePath();
+    if (base_path == NULL)
+        return NULL;
+
+#if defined(__APPLE__)
+    std::string app_path = base_path;
+    const std::string app_contents = ".app/Contents/";
+    size_t app_contents_pos = app_path.rfind(app_contents);
+
+    if (app_contents_pos != std::string::npos)
+    {
+        size_t app_dir_pos = app_path.rfind('/', app_contents_pos);
+
+        if (app_dir_pos != std::string::npos)
+        {
+            std::string portable_path = app_path.substr(0, app_dir_pos + 1);
+
+            if (force_portable || check_portable(portable_path.c_str()))
+                return SDL_strdup(portable_path.c_str());
+        }
+    }
+#endif
+
+    if (force_portable || check_portable(base_path))
+        return SDL_strdup(base_path);
+
+    return NULL;
+}
+
+static bool check_portable(const char* base_path)
+{
+    char portable_file_path[512];
+
+    if (base_path == NULL)
+        return false;
+
+    if (snprintf(portable_file_path, sizeof(portable_file_path), "%sportable.ini", base_path) >= (int)sizeof(portable_file_path))
+        return false;
+
+    FILE* file = fopen_utf8(portable_file_path, "r");
+
+    if (IsValidPointer(file))
+    {
+        fclose(file);
+        return true;
+    }
+
+    return false;
+}
+
+static int read_int(const char* group, const char* key, int default_value)
+{
+    int ret = default_value;
+
+    std::string value = config_ini_data[group][key];
+
+    if (!value.empty())
+    {
+        std::istringstream iss(value);
+        if (!(iss >> ret))
+            ret = default_value;
+    }
+
+    Debug("Load integer setting: [%s][%s]=%d", group, key, ret);
+    return ret;
+}
+
+static void write_int(const char* group, const char* key, int integer)
+{
+    std::string value = std::to_string(integer);
+    config_ini_data[group][key] = value;
+    Debug("Save integer setting: [%s][%s]=%s", group, key, value.c_str());
+}
+
+static float read_float(const char* group, const char* key, float default_value)
+{
+    float ret = default_value;
+
+    std::string value = config_ini_data[group][key];
+
+    if (!value.empty())
+    {
+        std::istringstream converter(value);
+        converter.imbue(std::locale::classic());
+        if (!(converter >> ret))
+            ret = default_value;
+    }
+
+    Debug("Load float setting: [%s][%s]=%.2f", group, key, ret);
+    return ret;
+}
+
+static void write_float(const char* group, const char* key, float value)
+{
+    std::ostringstream oss;
+    oss.imbue(std::locale::classic());
+    oss << std::fixed << std::setprecision(2) << value;
+    std::string value_str = oss.str();
+    config_ini_data[group][key] = value_str;
+    Debug("Save float setting: [%s][%s]=%s", group, key, value_str.c_str());
+}
+
+static bool read_bool(const char* group, const char* key, bool default_value)
+{
+    bool ret = default_value;
+
+    std::string value = config_ini_data[group][key];
+
+    if (!value.empty())
+    {
+        std::istringstream converter(value);
+        if (!(converter >> std::boolalpha >> ret))
+            ret = default_value;
+    }
+
+    Debug("Load bool setting: [%s][%s]=%s", group, key, ret ? "true" : "false");
+    return ret;
+}
+
+static void write_bool(const char* group, const char* key, bool boolean)
+{
+    std::stringstream converter;
+    converter << std::boolalpha << boolean;
+    std::string value;
+    value = converter.str();
+    config_ini_data[group][key] = value;
+    Debug("Save bool setting: [%s][%s]=%s", group, key, value.c_str());
+}
+
+static std::string read_string(const char* group, const char* key)
+{
+    std::string ret = config_ini_data[group][key];
+    Debug("Load string setting: [%s][%s]=%s", group, key, ret.c_str());
+    return ret;
+}
+
+static void write_string(const char* group, const char* key, const std::string& value)
+{
+    config_ini_data[group][key] = value;
+    Debug("Save string setting: [%s][%s]=%s", group, key, value.c_str());
+}
+
+static config_Hotkey read_hotkey(const char* group, const char* key, config_Hotkey default_value)
+{
+    config_Hotkey ret = default_value;
+
+    std::string scancode_key = std::string(key) + "Scancode";
+    std::string mod_key = std::string(key) + "Mod";
+
+    ret.key = (SDL_Scancode)read_int(group, scancode_key.c_str(), default_value.key);
+    ret.mod = (SDL_Keymod)read_int(group, mod_key.c_str(), default_value.mod);
+
+    config_update_hotkey_string(&ret);
+
+    return ret;
+}
+
+static void write_hotkey(const char* group, const char* key, config_Hotkey hotkey)
+{
+    std::string scancode_key = std::string(key) + "Scancode";
+    std::string mod_key = std::string(key) + "Mod";
+
+    write_int(group, scancode_key.c_str(), hotkey.key);
+    write_int(group, mod_key.c_str(), hotkey.mod);
+}
+
+static std::string shader_preset_section_name(const char* preset_file)
+{
+    return std::string("ShaderPreset.") + get_filename(preset_file);
+}
+
+static bool parse_float_string(const std::string& value, float* result)
+{
+    if (value.empty() || !result)
+        return false;
+
+    char* end = NULL;
+    float parsed = strtof(value.c_str(), &end);
+    if (end == value.c_str())
+        return false;
+
+    *result = parsed;
+    return true;
+}
+
+bool config_read_shader_parameter(const char* preset_file, const char* parameter_name, float* value)
+{
+    if (!preset_file || preset_file[0] == '\0' || !parameter_name || parameter_name[0] == '\0' || !value)
+        return false;
+
+    std::string section = shader_preset_section_name(preset_file);
+    if (!config_ini_data.has(section))
+        return false;
+
+    mINI::INIMap<std::string> parameters = config_ini_data.get(section);
+    if (!parameters.has(parameter_name))
+        return false;
+
+    return parse_float_string(parameters.get(parameter_name), value);
+}
+
+void config_write_shader_parameter(const char* preset_file, const char* parameter_name, float value)
+{
+    if (!preset_file || preset_file[0] == '\0' || !parameter_name || parameter_name[0] == '\0')
+        return;
+
+    std::string section = shader_preset_section_name(preset_file);
+    write_float(section.c_str(), parameter_name, value);
+}
+
+static void sync_shader_preset_parameter_defaults(void)
+{
+    ShaderPresetInfo presets[SHADER_PRESET_MAX_DISCOVERED];
+    int preset_count = shader_preset_scan_bundled(presets, SHADER_PRESET_MAX_DISCOVERED);
+
+    for (int i = 0; i < preset_count; i++)
+    {
+        ShaderPreset preset;
+        char error[512];
+        if (!shader_preset_load(presets[i].path, &preset, error, sizeof(error)))
+            continue;
+
+        char preset_file[SHADER_PRESET_MAX_PATH];
+        if (!shader_preset_get_config_path(preset.preset_path, preset_file, sizeof(preset_file)))
+            continue;
+
+        std::string section = shader_preset_section_name(preset_file);
+        for (int j = 0; j < preset.parameter_count; j++)
+        {
+            ShaderPresetParameter* parameter = &preset.parameters[j];
+            if (config_ini_data[section].has(parameter->name))
+                continue;
+
+            write_float(section.c_str(), parameter->name, parameter->default_value);
+        }
+    }
+}
+
+static config_Hotkey make_hotkey(SDL_Scancode key, SDL_Keymod mod)
+{
+    config_Hotkey hotkey;
+    hotkey.key = key;
+    hotkey.mod = mod;
+    config_update_hotkey_string(&hotkey);
+    return hotkey;
+}
+
+void config_update_hotkey_string(config_Hotkey* hotkey)
+{
+    if (hotkey->key == SDL_SCANCODE_UNKNOWN)
+    {
+        strcpy(hotkey->str, "");
+        return;
+    }
+
+    std::string result = "";
+
+    if (hotkey->mod & (SDL_KMOD_CTRL | SDL_KMOD_LCTRL | SDL_KMOD_RCTRL))
+        result += "Ctrl+";
+    if (hotkey->mod & (SDL_KMOD_SHIFT | SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT))
+        result += "Shift+";
+    if (hotkey->mod & (SDL_KMOD_ALT | SDL_KMOD_LALT | SDL_KMOD_RALT))
+        result += "Alt+";
+    if (hotkey->mod & (SDL_KMOD_GUI | SDL_KMOD_LGUI | SDL_KMOD_RGUI))
+        result += "Cmd+";
+
+    const char* key_name = SDL_GetScancodeName(hotkey->key);
+    if (key_name && strlen(key_name) > 0)
+        result += key_name;
+    else
+        result += "Unknown";
+
+    strncpy(hotkey->str, result.c_str(), sizeof(hotkey->str) - 1);
+    hotkey->str[sizeof(hotkey->str) - 1] = '\0';
+}

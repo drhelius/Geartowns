@@ -1,0 +1,20 @@
+# Software Information
+display_name = "Fujitsu - FM Towns (Geartowns)"
+authors = "Ignacio Sanchez"
+supported_extensions = "d77|rdd|cue|chd|iso|bin|zip"
+corename = "Geartowns"
+categories = "Emulator"
+license = "GPLv3"
+permissions = ""
+display_version = "0.1.0"
+
+# Hardware Information
+manufacturer = "Fujitsu"
+systemname = "FM Towns"
+systemid = "fm_towns"
+
+# Libretro Features
+supports_no_game = "false"
+savestate = "false"
+
+description = "Libretro version of the Geartowns FM Towns emulator."

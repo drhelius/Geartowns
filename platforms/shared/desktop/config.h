@@ -1,0 +1,214 @@
+/*
+ * Geartowns - FM Towns Emulator
+ * Copyright (C) 2026  Ignacio Sanchez
+
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+ *
+ */
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <SDL3/SDL.h>
+#include "geartowns.h"
+#define MINI_CASE_SENSITIVE
+#include "ini.h"
+
+#ifdef CONFIG_IMPORT
+    #define EXTERN
+#else
+    #define EXTERN extern
+#endif
+
+static const int config_version = 1;
+static const int config_max_recent_roms = 10;
+
+enum config_ShaderMode
+{
+    config_ShaderMode_PixelPerfect = 0,
+    config_ShaderMode_External = 1
+};
+
+enum config_Theme
+{
+    config_Theme_Light = 0,
+    config_Theme_Dark = 1,
+    config_Theme_Count = 2
+};
+
+enum config_VideoSync
+{
+    config_VideoSync_Disabled = 0,
+    config_VideoSync_Fixed = 1,
+    config_VideoSync_VRR = 2
+};
+
+struct config_Emulator
+{
+    bool maximized = false;
+    bool fullscreen = false;
+    int fullscreen_mode = 0;
+    bool always_show_menu = false;
+    int theme = config_Theme_Dark;
+    bool paused = false;
+    bool start_paused = false;
+    bool pause_when_inactive = true;
+    bool ffwd = false;
+    int ffwd_speed = 1;
+    bool show_info = false;
+    std::string recent_roms[config_max_recent_roms];
+    int screenshots_dir_option = 0;
+    std::string syscard_bios_path;
+    std::string gameexpress_bios_path;
+    std::string screenshots_path;
+    std::string last_open_path;
+    int window_width = 800;
+    int window_height = 640;
+    bool status_messages = false;
+    bool allow_screensaver = false;
+    int mcp_tcp_port = 7777;
+    std::string mcp_http_address = "127.0.0.1";
+    bool capture_mouse = false;
+    int mouse_sensitivity = 5;
+};
+
+struct config_Video
+{
+    int scale = 0;
+    int scale_manual = 1;
+    int ratio = 1;
+    bool fps = false;
+    int sync_mode = config_VideoSync_Disabled;
+    float background_color[config_Theme_Count][3] = {
+        {128.0f / 255.0f, 128.0f / 255.0f, 128.0f / 255.0f},
+        {0.1f, 0.1f, 0.1f}
+    };
+    float background_color_debugger[config_Theme_Count][3] = {
+        {160.0f / 255.0f, 160.0f / 255.0f, 160.0f / 255.0f},
+        {0.2f, 0.2f, 0.2f}
+    };
+    bool lowpass_speed[3] = { false, true, true };
+    int shader_mode = config_ShaderMode_PixelPerfect;
+    std::string shader_preset_path;
+};
+
+struct config_Audio
+{
+    bool enable = true;
+    bool sync = true;
+    float master_volume = 1.0f;
+    int buffer_count = 3;
+};
+
+struct config_Input
+{
+    bool allow_up_down = false;
+    int controller_type[GT_MAX_GAMEPADS];
+};
+
+struct config_Input_Keyboard
+{
+    SDL_Scancode key_left;
+    SDL_Scancode key_right;
+    SDL_Scancode key_up;
+    SDL_Scancode key_down;
+    SDL_Scancode key_start;
+    SDL_Scancode key_run;
+    SDL_Scancode key_A;
+    SDL_Scancode key_B;
+    SDL_Scancode key_C;
+    SDL_Scancode key_X;
+    SDL_Scancode key_Y;
+    SDL_Scancode key_Z;
+};
+
+struct config_Input_Gamepad
+{
+    int gamepad_directional;
+    bool gamepad_invert_x_axis;
+    bool gamepad_invert_y_axis;
+    int gamepad_start;
+    int gamepad_run;
+    int gamepad_A;
+    int gamepad_B;
+    int gamepad_C;
+    int gamepad_X;
+    int gamepad_Y;
+    int gamepad_Z;
+    int gamepad_x_axis;
+    int gamepad_y_axis;
+};
+
+enum config_HotkeyIndex
+{
+    config_HotkeyIndex_OpenROM = 0,
+    config_HotkeyIndex_ReloadROM,
+    config_HotkeyIndex_Quit,
+    config_HotkeyIndex_Reset,
+    config_HotkeyIndex_Pause,
+    config_HotkeyIndex_FFWD,
+    config_HotkeyIndex_Screenshot,
+    config_HotkeyIndex_Fullscreen,
+    config_HotkeyIndex_ShowMainMenu,
+    config_HotkeyIndex_Mute,
+    config_HotkeyIndex_COUNT
+};
+
+struct config_Input_Gamepad_Shortcuts
+{
+    int gamepad_shortcuts[config_HotkeyIndex_COUNT];
+};
+
+struct config_Hotkey
+{
+    SDL_Scancode key;
+    SDL_Keymod mod;
+    char str[64];
+};
+
+struct config_Debug
+{
+    bool debug = false;
+    bool single_instance = false;
+};
+
+EXTERN mINI::INIFile* config_ini_file;
+EXTERN mINI::INIStructure config_ini_data;
+EXTERN const char* config_root_path;
+EXTERN char config_temp_path[512];
+EXTERN char config_emu_file_path[512];
+EXTERN char config_imgui_file_path[512];
+EXTERN config_Emulator config_emulator;
+EXTERN config_Video config_video;
+EXTERN config_Audio config_audio;
+EXTERN config_Input config_input;
+EXTERN config_Input_Keyboard config_input_keyboard[GT_MAX_GAMEPADS];
+EXTERN config_Input_Gamepad config_input_gamepad[GT_MAX_GAMEPADS];
+EXTERN config_Input_Gamepad_Shortcuts config_input_gamepad_shortcuts[GT_MAX_GAMEPADS];
+EXTERN config_Hotkey config_hotkeys[config_HotkeyIndex_COUNT];
+EXTERN config_Debug config_debug;
+
+EXTERN void config_init(bool force_portable);
+EXTERN void config_destroy(void);
+EXTERN void config_read(void);
+EXTERN void config_write(void);
+EXTERN void config_load_defaults(void);
+EXTERN void config_push_recent_media(const std::string& path);
+EXTERN void config_update_hotkey_string(config_Hotkey* hotkey);
+EXTERN bool config_read_shader_parameter(const char* preset_file, const char* parameter_name, float* value);
+EXTERN void config_write_shader_parameter(const char* preset_file, const char* parameter_name, float value);
+
+#undef CONFIG_IMPORT
+#undef EXTERN
+#endif /* CONFIG_H */

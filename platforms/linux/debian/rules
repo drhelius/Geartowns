@@ -1,0 +1,41 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/pkg-info.mk
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CFLAGS_MAINT_APPEND = -ffile-prefix-map=$(CURDIR)=.
+export DEB_CXXFLAGS_MAINT_APPEND = -ffile-prefix-map=$(CURDIR)=.
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE) -C platforms/linux \
+		GIT_VERSION="$(DEB_VERSION_UPSTREAM)" \
+		USE_CLANG=0 \
+		DEBUG=0
+
+override_dh_auto_clean:
+	$(MAKE) -C platforms/linux clean || true
+
+override_dh_install:
+	dh_install
+	install -Dm644 platforms/shared/desktop/mcp/icon.png \
+		debian/geartowns/usr/share/icons/hicolor/128x128/apps/geartowns.png
+	install -dm755 debian/geartowns/usr/lib/geartowns/mcp/resources/hardware
+	install -m644 platforms/shared/desktop/mcp/resources/hardware/*.md \
+		debian/geartowns/usr/lib/geartowns/mcp/resources/hardware/
+	install -m644 platforms/shared/desktop/mcp/resources/hardware/toc.json \
+		debian/geartowns/usr/lib/geartowns/mcp/resources/hardware/toc.json
+	install -dm755 debian/geartowns/usr/lib/geartowns/shaders
+	install -m644 platforms/shared/desktop/shaders/*.gshader \
+		debian/geartowns/usr/lib/geartowns/shaders/
+	install -m644 platforms/shared/desktop/shaders/*.glsl \
+		debian/geartowns/usr/lib/geartowns/shaders/
+	install -m644 platforms/shared/desktop/shaders/README.md \
+		debian/geartowns/usr/lib/geartowns/shaders/
+	install -dm755 debian/geartowns/usr/games
+	ln -s ../lib/geartowns/geartowns debian/geartowns/usr/games/geartowns
+
+override_dh_shlibdeps:
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info

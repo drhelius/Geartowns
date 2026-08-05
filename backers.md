@@ -1,4 +1,4 @@
-# Gearlynx sponsorship
+#Geartowns sponsorship
 
 - [Become a backer or sponsor on GitHub](https://github.com/sponsors/drhelius).
 

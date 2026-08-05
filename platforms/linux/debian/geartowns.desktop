@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Geartowns
+GenericName=FM Towns emulator
+Comment=Play Fujitsu FM Towns software
+Exec=/usr/games/geartowns %f
+TryExec=/usr/games/geartowns
+Icon=geartowns
+Terminal=false
+MimeType=application/x-fm-towns-disk;application/x-cue;
+Categories=Game;Emulator;
+Keywords=FM Towns;Fujitsu;Emulator;
+StartupNotify=true

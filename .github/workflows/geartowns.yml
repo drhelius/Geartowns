@@ -113,6 +113,7 @@ jobs:
       env:
         USE_CLANG: 1
   libretro:
+    if: ${{ false }}
     name: Libretro (ubuntu)
     runs-on: ubuntu-latest
     permissions:
@@ -208,6 +209,7 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-desktop-macos-${{ matrix.architecture == 'arm' && 'arm64' || 'intel' }}
         path: artifact/*
   windows:
+    if: ${{ false }}
     name: Windows
     strategy:
       matrix:
@@ -257,6 +259,7 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-desktop-windows-${{ matrix.architecture }}
         path: artifact/*
   bsd:
+    if: ${{ false }}
     name: BSD
     runs-on: ubuntu-latest
     permissions:
@@ -294,6 +297,7 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-desktop-bsd-x64
         path: artifact/*
   mcpb:
+    if: ${{ false }}
     name: MCPB
     needs: [macos, windows, linux]
     runs-on: ubuntu-latest
@@ -385,6 +389,7 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-mcpb-${{ matrix.variant.platform == 'darwin' && 'macos' || matrix.variant.platform == 'win32' && 'windows' || matrix.variant.platform }}-${{ matrix.variant.arch }}
         path: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-mcpb-${{ matrix.variant.platform == 'darwin' && 'macos' || matrix.variant.platform == 'win32' && 'windows' || matrix.variant.platform }}-${{ matrix.variant.arch }}.mcpb
   release:
+    if: ${{ false }}
     name: Release
     needs: [linux, macos, windows, bsd, mcpb]
     if: github.event_name != 'pull_request' && startswith(github.ref, 'refs/tags/')
@@ -436,6 +441,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ github.TOKEN }}
   release-notes:
+    if: ${{ false }}
     name: Release Notes
     needs: release
     runs-on: ubuntu-latest

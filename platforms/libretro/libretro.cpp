@@ -23,15 +23,25 @@
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 #include "libretro.h"
 #include "geartowns.h"
+#include "cdrom_file.h"
 #include "libretro_core_options.h"
 #include "libretro_vfs_file.h"
 
+#ifdef _WIN32
+static const char slash = '\\';
+#else
+static const char slash = '/';
+#endif
+
 #define RETRO_DEVICE_TOWNS_GAMEPAD    RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
 #define RETRO_DEVICE_TOWNS_6_BUTTON   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 1)
+#define RETRO_DEVICE_TOWNS_MOUSE      RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_MOUSE, 0)
 
 #define MAX_PADS GT_MAX_GAMEPADS
+#define MAX_BUTTONS 12
 #define BASE_SCREEN_WIDTH 640
 #define BASE_SCREEN_HEIGHT 480
 #define MAX_SCREEN_WIDTH 1024
@@ -50,38 +60,53 @@ retro_log_printf_t log_cb;
 static char retro_system_directory[4096];
 static char retro_save_directory[4096];
 static char retro_game_path[4096];
-static char retro_vfs_temp_path[4096];
 
 static s16 audio_buf[GT_AUDIO_BUFFER_SIZE];
 static int audio_sample_count = 0;
-static u16* frame_buffer;
+static u8* frame_buffer;
+
+static int current_screen_width = 0;
+static int current_screen_height = 0;
+static int current_width_scale = 1;
+static float current_aspect_ratio = 0.0f;
 
 static float aspect_ratio = 0.0f;
 static bool allow_up_down = false;
 static bool libretro_supports_bitmasks = false;
-static u16 joypad_current[MAX_PADS];
-static u16 joypad_old[MAX_PADS];
+static int joypad_current[MAX_PADS][MAX_BUTTONS];
+static int joypad_old[MAX_PADS][MAX_BUTTONS];
+struct MouseState
+{
+    int delta_x;
+    int delta_y;
+    int button_left;
+    int button_right;
+    bool delta_applied;
+};
+
+static MouseState mouse_current[MAX_PADS];
 static unsigned input_device[MAX_PADS] = {
     RETRO_DEVICE_TOWNS_GAMEPAD,
     RETRO_DEVICE_TOWNS_GAMEPAD
 };
 
 static GeartownsCore* core;
+static GT_Runtime_Info runtime_info;
 static const retro_vfs_interface* vfs_interface = NULL;
 
+static void load_bios(void);
 static void set_controller_info(void);
 static void clear_input_state(void);
 static void reset_controller_devices(void);
 static void apply_controller_device(unsigned port, unsigned device, bool log_device);
 static void release_controller_input(unsigned port);
 static void poll_input(void);
+static void apply_input(void);
 static bool categories_supported = false;
 static void check_variables(void);
-static const char* get_path_extension(const char* path, size_t* length);
 static bool path_has_extension(const char* path, const char* extension);
-static bool path_requires_vfs_staging(const char* path);
-static bool load_media(const char* path);
-static void remove_vfs_temp_file(void);
+static bool path_is_cdrom_uri(const char* path);
+static bool path_is_cd_content(const char* path);
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -92,9 +117,9 @@ static void fallback_log(enum retro_log_level level, const char *fmt, ...)
     va_end(va);
 }
 
-static bool IsButtonPressed(u16 joypad_bits, unsigned button)
+static int IsButtonPressed(int joypad_bits, int button)
 {
-    return (joypad_bits & (1U << button)) != 0;
+    return (joypad_bits & (1 << button)) ? 1 : 0;
 }
 
 static bool IsJoypadDevice(unsigned device)
@@ -145,11 +170,24 @@ void retro_set_environment(retro_environment_t cb)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_interface_info) && vfs_interface_info.iface)
     {
         vfs_interface = vfs_interface_info.iface;
+        CdRomFile::SetVfsInterface(vfs_interface);
     }
     else
     {
         vfs_interface = NULL;
+        CdRomFile::SetVfsInterface(NULL);
     }
+
+    static const struct retro_system_content_info_override content_overrides[] = {
+        {
+            "d77|rdd",  // extensions
+            false,        // need_fullpath
+            false         // persistent_data
+        },
+        { NULL, false, false }
+    };
+
+    environ_cb(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, (void*)content_overrides);
 
     set_controller_info();
     libretro_set_core_options(environ_cb, &categories_supported);
@@ -174,15 +212,13 @@ void retro_init(void)
     else
         snprintf(retro_save_directory, sizeof(retro_save_directory), "%s", ".");
 
-    retro_vfs_temp_path[0] = 0;
-
     log_cb(RETRO_LOG_INFO, "%s (%s) libretro\n", GT_TITLE, GT_VERSION);
 
     core = new GeartownsCore();
     core->Init(NULL, GT_PIXEL_RGB565);
+    core->GetRuntimeInfo(runtime_info);
 
-    frame_buffer = new u16[MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT];
-    memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16));
+    frame_buffer = new u8[MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16)];
 
     clear_input_state();
 
@@ -194,12 +230,16 @@ void retro_init(void)
 
 void retro_deinit(void)
 {
-    remove_vfs_temp_file();
     SafeDeleteArray(frame_buffer);
     SafeDelete(core);
     vfs_interface = NULL;
+    CdRomFile::SetVfsInterface(NULL);
 
     audio_sample_count = 0;
+    current_screen_width = 0;
+    current_screen_height = 0;
+    current_width_scale = 1;
+    current_aspect_ratio = 0.0f;
     aspect_ratio = 0.0f;
     libretro_supports_bitmasks = false;
 
@@ -209,13 +249,12 @@ void retro_deinit(void)
 
 void retro_reset(void)
 {
-    if (!core)
-        return;
-
     if (log_cb)
         log_cb(RETRO_LOG_DEBUG, "Resetting...\n");
 
     check_variables();
+    if (core->GetMedia()->IsCDROM())
+        load_bios();
     core->ResetMedia(true);
 
     for (int i = 0; i < MAX_PADS; i++)
@@ -251,12 +290,12 @@ void retro_get_system_info(struct retro_system_info *info)
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-    info->geometry.base_width   = BASE_SCREEN_WIDTH;
-    info->geometry.base_height  = BASE_SCREEN_HEIGHT;
+    info->geometry.base_width   = runtime_info.screen_width;
+    info->geometry.base_height  = runtime_info.screen_height;
     info->geometry.max_width    = MAX_SCREEN_WIDTH;
     info->geometry.max_height   = MAX_SCREEN_HEIGHT;
-    info->geometry.aspect_ratio = aspect_ratio == 0.0f ? 4.0f / 3.0f : aspect_ratio;
-    info->timing.fps            = 60.0;
+    info->geometry.aspect_ratio = aspect_ratio == 0.0f ? (float)runtime_info.screen_width / (float)runtime_info.screen_height / (float)runtime_info.width_scale : aspect_ratio;
+    info->timing.fps            = runtime_info.fps;
     info->timing.sample_rate    = GT_AUDIO_SAMPLE_RATE;
 }
 
@@ -265,28 +304,39 @@ void retro_run(void)
     bool core_options_updated = false;
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &core_options_updated) && core_options_updated)
     {
-        float previous_aspect_ratio = aspect_ratio;
         check_variables();
-
-        if (aspect_ratio != previous_aspect_ratio)
-        {
-            struct retro_game_geometry geometry;
-            geometry.base_width = BASE_SCREEN_WIDTH;
-            geometry.base_height = BASE_SCREEN_HEIGHT;
-            geometry.max_width = MAX_SCREEN_WIDTH;
-            geometry.max_height = MAX_SCREEN_HEIGHT;
-            geometry.aspect_ratio = aspect_ratio == 0.0f ? 4.0f / 3.0f : aspect_ratio;
-            environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geometry);
-        }
     }
 
     poll_input();
+    apply_input();
 
     audio_sample_count = 0;
-    if (core)
-        core->RunToFrame((u8*)frame_buffer, audio_buf, &audio_sample_count);
+    core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count);
 
-    video_cb(frame_buffer, BASE_SCREEN_WIDTH, BASE_SCREEN_HEIGHT, BASE_SCREEN_WIDTH * sizeof(u16));
+    core->GetRuntimeInfo(runtime_info);
+
+    if ((runtime_info.screen_width != current_screen_width) ||
+        (runtime_info.screen_height != current_screen_height) ||
+        (runtime_info.width_scale != current_width_scale) ||
+        (aspect_ratio != current_aspect_ratio))
+    {
+        current_screen_width = runtime_info.screen_width;
+        current_screen_height = runtime_info.screen_height;
+        current_width_scale = runtime_info.width_scale;
+        current_aspect_ratio = aspect_ratio;
+
+        retro_system_av_info info;
+        info.geometry.base_width = runtime_info.screen_width;
+        info.geometry.base_height = runtime_info.screen_height;
+        info.geometry.max_width = MAX_SCREEN_WIDTH;
+        info.geometry.max_height = MAX_SCREEN_HEIGHT;
+        info.geometry.aspect_ratio = aspect_ratio == 0.0f ?
+            ((float)runtime_info.screen_width / (float)runtime_info.width_scale) / (float)runtime_info.screen_height : aspect_ratio;
+
+        environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &info.geometry);
+    }
+
+    video_cb(frame_buffer, runtime_info.screen_width, runtime_info.screen_height, runtime_info.screen_width * sizeof(u16));
 
     if (audio_sample_count > 0)
         audio_batch_cb(audio_buf, audio_sample_count / 2);
@@ -307,19 +357,26 @@ bool retro_load_game(const struct retro_game_info *info)
     snprintf(retro_game_path, sizeof(retro_game_path), "%s", load_path);
     log_cb(RETRO_LOG_INFO, "retro_load_game: %s\n", retro_game_path);
 
-    core->LoadBios(retro_system_directory);
-    if (!load_media(retro_game_path))
+    bool is_cd_content = path_is_cd_content(retro_game_path);
+
+    if (path_is_cdrom_uri(retro_game_path))
+        log_cb(RETRO_LOG_INFO, "Loading CD-ROM through libretro VFS: %s\n", retro_game_path);
+
+    if (is_cd_content)
+        load_bios();
+
+    if (!core->LoadMedia(retro_game_path))
         return false;
 
     enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
     if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
     {
         log_cb(RETRO_LOG_ERROR, "RGB565 is not supported.\n");
-        core->GetMedia()->Reset();
         retro_game_path[0] = 0;
-        remove_vfs_temp_file();
         return false;
     }
+
+    core->GetRuntimeInfo(runtime_info);
 
     return true;
 }
@@ -329,137 +386,22 @@ void retro_unload_game(void)
     if (core)
         core->GetMedia()->Reset();
     retro_game_path[0] = 0;
-    remove_vfs_temp_file();
     if (frame_buffer)
         memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16));
 }
 
-static bool load_media(const char* path)
+static void load_bios(void)
 {
-    if (!path || !path[0])
-        return false;
+    core->UnloadBios();
 
-    if (!vfs_interface || !path_requires_vfs_staging(path))
-        return core->LoadMedia(path);
-
-    if (path_has_extension(path, "cue"))
+    if (!core->LoadBios(retro_system_directory))
     {
-        log_cb(RETRO_LOG_ERROR, "VFS staging does not support CUE companion files: %s\n", path);
-        return false;
+        struct retro_message msg = {};
+        msg.msg = "FM Towns BIOS not found";
+        msg.frames = 360;
+        environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
+        log_cb(RETRO_LOG_ERROR, "%s\n", msg.msg);
     }
-
-    LibretroVfsFile input(vfs_interface);
-    if (!input.Open(path, RETRO_VFS_FILE_ACCESS_READ))
-    {
-        log_cb(RETRO_LOG_ERROR, "Failed to open VFS media: %s\n", path);
-        return false;
-    }
-
-    s64 size = input.GetSize();
-    if (size <= 0)
-    {
-        input.Close();
-        log_cb(RETRO_LOG_ERROR, "Invalid VFS media size: %s\n", path);
-        return false;
-    }
-
-    char extension[32] = ".bin";
-    size_t extension_length = 0;
-    const char* source_extension = get_path_extension(path, &extension_length);
-    if (source_extension && extension_length < sizeof(extension))
-    {
-        memcpy(extension, source_extension, extension_length);
-        extension[extension_length] = 0;
-    }
-
-    remove_vfs_temp_file();
-    int path_length = snprintf(retro_vfs_temp_path, sizeof(retro_vfs_temp_path),
-        "%s/geartowns-vfs-%p%s", retro_save_directory, (void*)core, extension);
-    if (path_length < 0 || path_length >= (int)sizeof(retro_vfs_temp_path))
-    {
-        retro_vfs_temp_path[0] = 0;
-        input.Close();
-        log_cb(RETRO_LOG_ERROR, "VFS staging path is too long: %s\n", path);
-        return false;
-    }
-
-    FILE* output = fopen(retro_vfs_temp_path, "wb");
-    if (!output)
-    {
-        input.Close();
-        log_cb(RETRO_LOG_ERROR, "Failed to create VFS staging file: %s\n", retro_vfs_temp_path);
-        remove_vfs_temp_file();
-        return false;
-    }
-
-    u8 buffer[64 * 1024];
-    s64 remaining = size;
-    bool copied = true;
-
-    while (remaining > 0)
-    {
-        u64 chunk_size = remaining > (s64)sizeof(buffer) ? sizeof(buffer) : (u64)remaining;
-        s64 bytes_read = input.Read(buffer, chunk_size);
-        if (bytes_read <= 0 || (u64)bytes_read > chunk_size)
-        {
-            copied = false;
-            break;
-        }
-
-        if (fwrite(buffer, 1, (size_t)bytes_read, output) != (size_t)bytes_read)
-        {
-            copied = false;
-            break;
-        }
-
-        remaining -= bytes_read;
-    }
-
-    bool input_closed = input.Close();
-    bool output_flushed = fflush(output) == 0;
-    bool output_clean = ferror(output) == 0;
-    bool output_closed = fclose(output) == 0;
-
-    if (!copied || !input_closed || !output_flushed || !output_clean || !output_closed)
-    {
-        remove_vfs_temp_file();
-        log_cb(RETRO_LOG_ERROR, "Failed to stage VFS media: %s\n", path);
-        return false;
-    }
-
-    bool loaded = core->LoadMedia(retro_vfs_temp_path);
-    if (!loaded)
-        remove_vfs_temp_file();
-    return loaded;
-}
-
-static const char* get_path_extension(const char* path, size_t* length)
-{
-    *length = 0;
-    if (!path)
-        return NULL;
-
-    const char* end = path + strlen(path);
-    const char* suffix = strpbrk(path, "?#");
-    if (suffix)
-        end = suffix;
-
-    const char* position = end;
-    while (position > path)
-    {
-        char character = position[-1];
-        if (character == '.')
-        {
-            *length = (size_t)(end - (position - 1));
-            return position - 1;
-        }
-        if (character == '/' || character == '\\')
-            break;
-
-        position--;
-    }
-
-    return NULL;
 }
 
 static bool path_has_extension(const char* path, const char* extension)
@@ -467,33 +409,33 @@ static bool path_has_extension(const char* path, const char* extension)
     if (!path || !extension)
         return false;
 
-    size_t path_extension_length = 0;
-    const char* path_extension = get_path_extension(path, &path_extension_length);
-    size_t extension_length = strlen(extension);
-    if (!path_extension || path_extension_length != extension_length + 1)
+    const char* dot = strrchr(path, '.');
+    if (!dot || !dot[1])
         return false;
 
-    for (size_t i = 0; i < extension_length; i++)
+    dot++;
+
+    while (*dot && *extension)
     {
-        if (tolower((unsigned char)path_extension[i + 1]) != tolower((unsigned char)extension[i]))
+        if (tolower((unsigned char)*dot) != tolower((unsigned char)*extension))
             return false;
+
+        dot++;
+        extension++;
     }
 
-    return true;
+    return (*dot == 0) && (*extension == 0);
 }
 
-static bool path_requires_vfs_staging(const char* path)
+static bool path_is_cdrom_uri(const char* path)
 {
-    return path && strstr(path, "://");
+    return path && (strncmp(path, "cdrom://", 8) == 0);
 }
 
-static void remove_vfs_temp_file(void)
+static bool path_is_cd_content(const char* path)
 {
-    if (retro_vfs_temp_path[0])
-    {
-        remove(retro_vfs_temp_path);
-        retro_vfs_temp_path[0] = 0;
-    }
+    return path_is_cdrom_uri(path) || path_has_extension(path, "cue") ||
+        path_has_extension(path, "chd") || path_has_extension(path, "iso");
 }
 
 unsigned retro_get_region(void)
@@ -511,32 +453,48 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 
 size_t retro_serialize_size(void)
 {
-    return 0;
+    size_t size = 0;
+    core->SaveState(NULL, size);
+    return size;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-    (void)data;
-    (void)size;
-    return false;
+    return core->SaveState(reinterpret_cast<u8*>(data), size);
 }
 
 bool retro_unserialize(const void *data, size_t size)
 {
-    (void)data;
-    (void)size;
-    return false;
+    return core->LoadState(reinterpret_cast<const u8*>(data), size);
 }
 
 void *retro_get_memory_data(unsigned id)
 {
-    (void)id;
+    switch (id)
+    {
+        case RETRO_MEMORY_SAVE_RAM:
+            return core->GetMemory()->GetBackupRAM();
+        case RETRO_MEMORY_SYSTEM_RAM:
+            return core->GetMemory()->GetWorkingRAM();
+        case RETRO_MEMORY_VIDEO_RAM:
+            return core->GetMemory()->GetVideoRAM();
+    }
+
     return NULL;
 }
 
 size_t retro_get_memory_size(unsigned id)
 {
-    (void)id;
+    switch (id)
+    {
+        case RETRO_MEMORY_SAVE_RAM:
+            return core->GetMemory()->GetBackupRAMSize();
+        case RETRO_MEMORY_SYSTEM_RAM:
+            return core->GetMemory()->GetWorkingRAMSize();
+        case RETRO_MEMORY_VIDEO_RAM:
+            return core->GetMemory()->GetVideoRAMSize();
+    }
+
     return 0;
 }
 
@@ -555,12 +513,13 @@ static void set_controller_info(void)
 {
     static const struct retro_controller_description port[] = {
         { "Original gamepad", RETRO_DEVICE_TOWNS_GAMEPAD },
-        { "6 button gamepad", RETRO_DEVICE_TOWNS_6_BUTTON }
+        { "6 button gamepad", RETRO_DEVICE_TOWNS_6_BUTTON },
+        { "Mouse", RETRO_DEVICE_TOWNS_MOUSE }
     };
 
     static const struct retro_controller_info ports[] = {
-        { port, 2 },
-        { port, 2 },
+        { port, 3 },
+        { port, 3 },
         { NULL, 0 }
     };
 
@@ -580,8 +539,13 @@ static void set_controller_info(void)
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,      "X" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,      "Y" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "Z" },
+        #define mouse_ids(INDEX) \
+        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT,     "Mouse Left" },\
+        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT,    "Mouse Right" },
         button_ids(0)
+        mouse_ids(0)
         button_ids(1)
+        mouse_ids(1)
         { 0, 0, 0, 0, NULL }
     };
 
@@ -592,8 +556,17 @@ static void clear_input_state(void)
 {
     for (int i = 0; i < MAX_PADS; i++)
     {
-        joypad_current[i] = 0;
-        joypad_old[i] = 0;
+        for (int j = 0; j < MAX_BUTTONS; j++)
+        {
+            joypad_current[i][j] = 0;
+            joypad_old[i][j] = 0;
+        }
+
+        mouse_current[i].delta_x = 0;
+        mouse_current[i].delta_y = 0;
+        mouse_current[i].button_left = 0;
+        mouse_current[i].button_right = 0;
+        mouse_current[i].delta_applied = false;
     }
 }
 
@@ -623,6 +596,11 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: 6 button gamepad\n", port);
             break;
+        case RETRO_DEVICE_TOWNS_MOUSE:
+            type = GT_CONTROLLER_MOUSE;
+            if (log_device && log_cb)
+                log_cb(RETRO_LOG_INFO, "Controller %u: Mouse\n", port);
+            break;
         case RETRO_DEVICE_NONE:
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: Unplugged\n", port);
@@ -644,85 +622,205 @@ static void release_controller_input(unsigned port)
         core->GetInput()->SetGamePadState((int)port, state);
     }
 
-    joypad_current[port] = 0;
-    joypad_old[port] = 0;
+    for (int i = 0; i < MAX_BUTTONS; i++)
+    {
+        joypad_current[port][i] = 0;
+        joypad_old[port][i] = 0;
+    }
+
+    mouse_current[port].delta_x = 0;
+    mouse_current[port].delta_y = 0;
+    mouse_current[port].button_left = 0;
+    mouse_current[port].button_right = 0;
+    mouse_current[port].delta_applied = false;
+
+    if ((input_device[port] == RETRO_DEVICE_TOWNS_MOUSE) && core)
+    {
+        core->GetInput()->SetMouseDelta(0, 0);
+        core->GetInput()->SetMouseButtons(false, false);
+    }
 }
 
 static void poll_input(void)
 {
+    int joypad_bits[MAX_PADS];
+
     if (!input_poll_cb || !input_state_cb || !core)
         return;
 
     input_poll_cb();
 
-    for (int port = 0; port < MAX_PADS; port++)
+    if (libretro_supports_bitmasks)
     {
-        joypad_old[port] = joypad_current[port];
-        joypad_current[port] = 0;
-
-        if (!IsJoypadDevice(input_device[port]))
+        for (int j = 0; j < MAX_PADS; j++)
         {
-            GT_GamePad_State state = { 0, 0, 0 };
-            core->GetInput()->SetGamePadState(port, state);
-            continue;
+            if (IsJoypadDevice(input_device[j]))
+                joypad_bits[j] = input_state_cb(j, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+            else
+                joypad_bits[j] = 0;
         }
-
-        u16 bits = 0;
-        if (libretro_supports_bitmasks)
+    }
+    else
+    {
+        for (int j = 0; j < MAX_PADS; j++)
         {
-            bits = (u16)input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+            joypad_bits[j] = 0;
+            if (IsJoypadDevice(input_device[j]))
+            {
+                for (int i = 0; i < (RETRO_DEVICE_ID_JOYPAD_R3 + 1); i++)
+                    joypad_bits[j] |= input_state_cb(j, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
+            }
+        }
+    }
+
+    for (int j = 0; j < MAX_PADS; j++)
+    {
+        mouse_current[j].delta_x = 0;
+        mouse_current[j].delta_y = 0;
+        mouse_current[j].button_left = 0;
+        mouse_current[j].button_right = 0;
+        mouse_current[j].delta_applied = false;
+
+        if (input_device[j] == RETRO_DEVICE_TOWNS_MOUSE)
+        {
+            mouse_current[j].delta_x = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+            mouse_current[j].delta_y = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+            mouse_current[j].button_left = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) ? 1 : 0;
+            mouse_current[j].button_right = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT) ? 1 : 0;
+        }
+    }
+
+    for (int j = 0; j < MAX_PADS; j++)
+    {
+        for (int i = 0; i < MAX_BUTTONS; i++)
+            joypad_old[j][i] = joypad_current[j][i];
+    }
+
+    for (int j = 0; j < MAX_PADS; j++)
+    {
+        int up_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_UP);
+        int down_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_DOWN);
+        int left_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_LEFT);
+        int right_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_RIGHT);
+
+        if (allow_up_down)
+        {
+            joypad_current[j][0] = up_pressed;
+            joypad_current[j][1] = down_pressed;
+            joypad_current[j][2] = left_pressed;
+            joypad_current[j][3] = right_pressed;
         }
         else
         {
-            for (unsigned button = 0; button <= RETRO_DEVICE_ID_JOYPAD_R3; button++)
+            int up = up_pressed;
+            int down = down_pressed;
+            int left = left_pressed;
+            int right = right_pressed;
+
+            if (up_pressed && down_pressed)
             {
-                if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, button))
-                    bits |= (u16)(1U << button);
+                if (joypad_old[j][0])
+                {
+                    up = 1;
+                    down = 0;
+                }
+                else if (joypad_old[j][1])
+                {
+                    up = 0;
+                    down = 1;
+                }
+                else
+                {
+                    up = 1;
+                    down = 0;
+                }
             }
+
+            if (left_pressed && right_pressed)
+            {
+                if (joypad_old[j][2])
+                {
+                    left = 1;
+                    right = 0;
+                }
+                else if (joypad_old[j][3])
+                {
+                    left = 0;
+                    right = 1;
+                }
+                else
+                {
+                    left = 1;
+                    right = 0;
+                }
+            }
+
+            joypad_current[j][0] = up;
+            joypad_current[j][1] = down;
+            joypad_current[j][2] = left;
+            joypad_current[j][3] = right;
         }
 
-        bool up = IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_UP);
-        bool down = IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_DOWN);
-        bool left = IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_LEFT);
-        bool right = IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_RIGHT);
+        joypad_current[j][4] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_START);
+        joypad_current[j][5] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_SELECT);
+        joypad_current[j][6] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_A);
+        joypad_current[j][7] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_B);
+        joypad_current[j][8] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_Y);
+        joypad_current[j][9] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_X);
+        joypad_current[j][10] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_L);
+        joypad_current[j][11] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_R);
+    }
+}
 
-        if (!allow_up_down)
+static void apply_input(void)
+{
+    int mouse_port = -1;
+
+    for (int j = 0; j < MAX_PADS; j++)
+    {
+        if (input_device[j] == RETRO_DEVICE_TOWNS_MOUSE)
         {
-            if (up && down)
+            mouse_port = j;
+            break;
+        }
+    }
+
+    for (int j = 0; j < MAX_PADS; j++)
+    {
+        if (j == mouse_port)
+        {
+            if (!mouse_current[j].delta_applied)
             {
-                down = (joypad_old[port] & GT_GAMEPAD_DOWN) != 0;
-                up = !down;
+                core->GetInput()->SetMouseDelta(mouse_current[j].delta_x, mouse_current[j].delta_y);
+                core->GetInput()->SetMouseButtons(mouse_current[j].button_left, mouse_current[j].button_right);
+                mouse_current[j].delta_applied = true;
             }
 
-            if (left && right)
-            {
-                right = (joypad_old[port] & GT_GAMEPAD_RIGHT) != 0;
-                left = !right;
-            }
+            GT_GamePad_State state = { 0, 0, 0 };
+            core->GetInput()->SetGamePadState(j, state);
+            continue;
         }
 
         u16 buttons = 0;
-        if (up) buttons |= GT_GAMEPAD_UP;
-        if (down) buttons |= GT_GAMEPAD_DOWN;
-        if (left) buttons |= GT_GAMEPAD_LEFT;
-        if (right) buttons |= GT_GAMEPAD_RIGHT;
-        if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_START)) buttons |= GT_GAMEPAD_START;
-        if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_SELECT)) buttons |= GT_GAMEPAD_RUN;
-        if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_A)) buttons |= GT_GAMEPAD_A;
-        if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_B)) buttons |= GT_GAMEPAD_B;
+        if (joypad_current[j][0]) buttons |= GT_GAMEPAD_UP;
+        if (joypad_current[j][1]) buttons |= GT_GAMEPAD_DOWN;
+        if (joypad_current[j][2]) buttons |= GT_GAMEPAD_LEFT;
+        if (joypad_current[j][3]) buttons |= GT_GAMEPAD_RIGHT;
+        if (joypad_current[j][4]) buttons |= GT_GAMEPAD_START;
+        if (joypad_current[j][5]) buttons |= GT_GAMEPAD_RUN;
+        if (joypad_current[j][6]) buttons |= GT_GAMEPAD_A;
+        if (joypad_current[j][7]) buttons |= GT_GAMEPAD_B;
 
-        if (input_device[port] == RETRO_DEVICE_TOWNS_6_BUTTON)
+        if (input_device[j] == RETRO_DEVICE_TOWNS_6_BUTTON)
         {
-            if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_Y)) buttons |= GT_GAMEPAD_C;
-            if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_X)) buttons |= GT_GAMEPAD_X;
-            if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_L)) buttons |= GT_GAMEPAD_Y;
-            if (IsButtonPressed(bits, RETRO_DEVICE_ID_JOYPAD_R)) buttons |= GT_GAMEPAD_Z;
+            if (joypad_current[j][8]) buttons |= GT_GAMEPAD_C;
+            if (joypad_current[j][9]) buttons |= GT_GAMEPAD_X;
+            if (joypad_current[j][10]) buttons |= GT_GAMEPAD_Y;
+            if (joypad_current[j][11]) buttons |= GT_GAMEPAD_Z;
         }
 
-        joypad_current[port] = buttons;
-
         GT_GamePad_State state = { buttons, 0, 0 };
-        core->GetInput()->SetGamePadState(port, state);
+        core->GetInput()->SetGamePadState(j, state);
     }
 }
 

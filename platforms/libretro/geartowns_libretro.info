@@ -6,7 +6,7 @@ corename = "Geartowns"
 categories = "Emulator"
 license = "GPLv3"
 permissions = ""
-display_version = "0.1.0"
+display_version = "1.0.0"
 
 # Hardware Information
 manufacturer = "Fujitsu"
@@ -15,6 +15,6 @@ systemid = "fm_towns"
 
 # Libretro Features
 supports_no_game = "false"
-savestate = "false"
+savestate = "true"
 
 description = "Libretro version of the Geartowns FM Towns emulator."

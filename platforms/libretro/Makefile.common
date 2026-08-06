@@ -1,4 +1,13 @@
-SOURCES_C   :=  $(DEPS_DIR)/miniz/miniz.c
+SOURCES_C   :=  $(DEPS_DIR)/miniz/miniz.c \
+                $(DEPS_DIR)/libchdr/src/libchdr_bitstream.c \
+                $(DEPS_DIR)/libchdr/src/libchdr_cdrom.c \
+                $(DEPS_DIR)/libchdr/src/libchdr_chd.c \
+                $(DEPS_DIR)/libchdr/src/libchdr_flac.c \
+                $(DEPS_DIR)/libchdr/src/libchdr_huffman.c \
+                $(DEPS_DIR)/lzma/src/LzFind.c \
+                $(DEPS_DIR)/lzma/src/LzmaEnc.c \
+                $(DEPS_DIR)/lzma/src/LzmaDec.c \
+                $(DEPS_DIR)/lzma/src/CpuArch.c \
 
 SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(CORE_DIR)/libretro_vfs_file.cpp \

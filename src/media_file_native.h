@@ -17,35 +17,29 @@
  *
  */
 
-#ifndef INPUT_H
-#define INPUT_H
+#ifndef MEDIA_FILE_NATIVE_H
+#define MEDIA_FILE_NATIVE_H
 
-#include "common.h"
+#include <fstream>
+#include "media_file.h"
 
-class Input
+class MediaFileNative : public MediaFile
 {
 public:
-    Input();
-    void Init();
-    void Reset();
-    void KeyPressed(GT_Keys key);
-    void KeyReleased(GT_Keys key);
-    bool IsKeyPressed(GT_Keys key) const;
-    void SetMouseDelta(s32 x, s32 y);
-    void SetMouseButtons(bool left, bool right);
-    void SetControllerType(int port, GT_Controller_Type type);
-    GT_Controller_Type GetControllerType(int port) const;
+    MediaFileNative();
+    virtual ~MediaFileNative();
+
+    virtual bool Open(const char* path) override;
+    virtual void Close() override;
+    virtual bool IsOpen() const override;
+    virtual bool IsValid() const override;
+    virtual s64 GetSize() override;
+    virtual s64 Tell() override;
+    virtual bool Seek(s64 offset) override;
+    virtual s64 Read(void* buffer, u64 size) override;
 
 private:
-    bool m_keys[GT_KEY_COUNT];
-    s32 m_mouse_x;
-    s32 m_mouse_y;
-    bool m_mouse_left;
-    bool m_mouse_right;
-    GT_GamePad_State m_gamepads[GT_MAX_GAMEPADS];
-    GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
+    std::ifstream m_file;
 };
 
-#include "input_inline.h"
-
-#endif /* INPUT_H */
+#endif /* MEDIA_FILE_NATIVE_H */

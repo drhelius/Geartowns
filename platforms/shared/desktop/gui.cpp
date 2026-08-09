@@ -19,6 +19,7 @@
 
 #include <math.h>
 #include "imgui.h"
+#include "implot.h"
 #include "fonts/RobotoMedium.h"
 #include "fonts/MaterialIcons.h"
 #include "fonts/IconsMaterialDesign.h"
@@ -34,6 +35,8 @@
 #include "gui_menus.h"
 #include "gui_popups.h"
 #include "gui_actions.h"
+#include "gui_debug.h"
+#include "gui_debug_disassembler.h"
 
 static bool status_message_active = false;
 static char status_message[4096] = "";
@@ -43,12 +46,14 @@ static bool error_window_active = false;
 static char error_message[4096] = "";
 static bool loading_rom_active = false;
 static char loading_rom_path[4096] = "";
-
+static char loading_symbol_path[4096] = "";
+static bool loading_physical_cdrom = false;
 static void main_window(void);
 static void show_status_message(void);
 static void show_error_window(void);
 static void show_loading_popup(void);
 static bool finish_loading_rom(void);
+static void update_window_visibility_padding(void);
 static void set_style(void);
 static void set_style_light(ImGuiStyle& style);
 static void set_style_dark(ImGuiStyle& style);
@@ -68,12 +73,18 @@ bool gui_init(void)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
 
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigDockingWithShift = true;
     io.IniFilename = config_imgui_file_path;
+
+#if defined(__APPLE__) || defined(_WIN32)
+    if (config_debug.multi_viewport)
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+#endif
 
     gui_roboto_font = io.Fonts->AddFontFromMemoryCompressedTTF(RobotoMedium_compressed_data, RobotoMedium_compressed_size, 17.0f, NULL, io.Fonts->GetGlyphRangesCyrillic());
 
@@ -87,12 +98,14 @@ bool gui_init(void)
     gui_material_icons_font = io.Fonts->AddFontFromMemoryCompressedTTF(MaterialIcons_compressed_data, MaterialIcons_compressed_size, iconFontSize, &icons_config, icons_ranges);
 
     ImFontConfig font_cfg;
+
     for (int i = 0; i < 4; i++)
     {
         font_cfg.SizePixels = (13.0f + (i * 3));
         gui_default_fonts[i] = io.Fonts->AddFontDefault(&font_cfg);
     }
-    gui_default_font = gui_default_fonts[0];
+
+    gui_default_font = gui_default_fonts[config_debug.font_size];
 
     set_style();
 
@@ -103,12 +116,22 @@ bool gui_init(void)
     emu_audio_cd_volume(config_audio.cd_volume);
     emu_audio_highres_pcm_volume(config_audio.highres_pcm_volume);
 
+    emu_set_preload_cdrom(config_emulator.preload_cdrom);
+    emu_set_disassembler_syntax(config_debug.dis_syntax);
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
         emu_set_pad_type(i, (GT_Controller_Type)config_input.controller_type[i]);
 
-    if (!config_emulator.bios_path.empty())
-        gui_load_bios(config_emulator.bios_path.c_str());
+    strncpy_fit(gui_savefiles_path, config_emulator.savefiles_path.c_str(), sizeof(gui_savefiles_path));
+    strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
+    strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
 
+    strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
+    strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
+    strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
+    if (strlen(gui_bios_path) > 0)
+        gui_load_bios(gui_bios_path, true);
+
+    gui_debug_init();
     gui_init_menus();
 
     return true;
@@ -116,6 +139,9 @@ bool gui_init(void)
 
 void gui_destroy(void)
 {
+    gui_debug_auto_save_settings();
+    gui_debug_destroy();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 }
 
@@ -123,14 +149,21 @@ void gui_render(void)
 {
     ImGui::NewFrame();
 
+    update_window_visibility_padding();
+
+    if (config_debug.debug)
+        ImGui::DockSpaceOverViewport();
+
     gui_in_use = gui_dialog_in_use;
 
     gui_main_menu();
 
     gui_main_window_hovered = false;
 
-    if (!emu_is_empty())
+    if((!config_debug.debug && !emu_is_empty()) || (config_debug.debug && config_debug.show_screen))
         main_window();
+
+    gui_debug_windows();
 
     if (config_emulator.show_info)
         gui_show_info();
@@ -145,7 +178,7 @@ void gui_render(void)
 void gui_shortcut(gui_ShortCutEvent event)
 {
     switch (event)
-    {
+    {  
     case gui_ShortcutOpenROM:
         gui_shortcut_open_rom = true;
         break;
@@ -166,12 +199,94 @@ void gui_shortcut(gui_ShortCutEvent event)
         config_audio.enable = !config_audio.enable;
         emu_audio_mute(!config_audio.enable);
         break;
+    case gui_ShortcutSaveState:
+    {
+        std::string message("Saving state to slot ");
+        message += std::to_string(config_emulator.save_slot + 1);
+        gui_set_status_message(message.c_str(), 3000);
+        emu_save_state_slot(config_emulator.save_slot + 1);
+        break;
+    }
+    case gui_ShortcutLoadState:
+    {
+        std::string message("Loading state from slot ");
+        message += std::to_string(config_emulator.save_slot + 1);
+        gui_set_status_message(message.c_str(), 3000);
+        emu_load_state_slot(config_emulator.save_slot + 1);
+        break;
+    }
+    case gui_ShortcutSelectSlot1:
+        config_emulator.save_slot = 0;
+        break;
+    case gui_ShortcutSelectSlot2:
+        config_emulator.save_slot = 1;
+        break;
+    case gui_ShortcutSelectSlot3:
+        config_emulator.save_slot = 2;
+        break;
+    case gui_ShortcutSelectSlot4:
+        config_emulator.save_slot = 3;
+        break;
+    case gui_ShortcutSelectSlot5:
+        config_emulator.save_slot = 4;
+        break;
     case gui_ShortcutScreenshot:
         gui_action_save_screenshot(NULL);
         break;
     case gui_ShortcutFullscreen:
         config_emulator.fullscreen = !config_emulator.fullscreen;
         application_trigger_fullscreen(config_emulator.fullscreen);
+        break;
+    case gui_ShortcutCaptureMouse:
+        config_emulator.capture_mouse = !config_emulator.capture_mouse;
+        break;
+    case gui_ShortcutDebugStepOver:
+        if (config_debug.debug)
+            emu_debug_step_over();
+        break;
+    case gui_ShortcutDebugStepInto:
+        if (config_debug.debug)
+            emu_debug_step_into();
+        break;
+    case gui_ShortcutDebugStepOut:
+        if (config_debug.debug)
+            emu_debug_step_out();
+        break;
+    case gui_ShortcutDebugStepFrame:
+        if (config_debug.debug)
+        {
+            emu_debug_step_frame();
+            gui_debug_memory_step_frame();
+        }
+        break;
+    case gui_ShortcutDebugBreak:
+        if (config_debug.debug)
+            emu_debug_break();
+        break;
+    case gui_ShortcutDebugContinue:
+        if (config_debug.debug)
+            emu_debug_continue();
+        break;
+    case gui_ShortcutDebugRuntocursor:
+        if (config_debug.debug)
+            gui_debug_runtocursor();
+        break;
+    case gui_ShortcutDebugGoBack:
+        if (config_debug.debug)
+            gui_debug_go_back();
+        break;
+    case gui_ShortcutDebugBreakpoint:
+        if (config_debug.debug)
+            gui_debug_toggle_breakpoint();
+        break;
+    case gui_ShortcutDebugCopy:
+        gui_debug_memory_copy();
+        break;
+    case gui_ShortcutDebugPaste:
+        gui_debug_memory_paste();
+        break;
+    case gui_ShortcutDebugSelectAll:
+        gui_debug_memory_select_all();
         break;
     case gui_ShortcutShowMainMenu:
         config_emulator.always_show_menu = !config_emulator.always_show_menu;
@@ -181,18 +296,133 @@ void gui_shortcut(gui_ShortCutEvent event)
     }
 }
 
+void gui_load_bios(const char* path, bool syscard)
+{
+    using namespace std;
+    string fullpath(path);
+    string filename;
+
+    size_t pos = fullpath.find_last_of("/\\");
+    if (pos != string::npos)
+        filename = fullpath.substr(pos + 1);
+    else
+        filename = fullpath;
+
+    if (!emu_load_bios(path, syscard))
+    {
+        std::string message("Error loading BIOS:\n");
+        message += filename;
+        gui_set_error_message(message.c_str());
+        gui_action_reset();
+        return;
+    }
+
+    if (!emu_get_core()->GetMedia()->IsValidBios(syscard))
+    {
+        std::string message("Invalid BIOS file:\n");
+        message += filename;
+        message += "\n\nMake sure the file is a valid BIOS file.";
+        gui_set_error_message(message.c_str());
+        gui_action_reset();
+        return;
+    }
+
+    gui_action_reset();
+}
+
+void gui_load_palette(const char* path)
+{
+    using namespace std;
+    string fullpath(path);
+    string filename;
+
+    size_t pos = fullpath.find_last_of("/\\");
+    if (pos != string::npos)
+        filename = fullpath.substr(pos + 1);
+    else
+        filename = fullpath;
+
+    ifstream file(path, ios::binary | ios::ate);
+    if (!file.is_open())
+    {
+        std::string message("Error opening palette file:\n");
+        message += filename;
+        gui_set_error_message(message.c_str());
+        return;
+    }
+
+    streamsize size = file.tellg();
+    if (size != 0x600)
+    {
+        file.close();
+        std::string message("Invalid palette file size:\n");
+        message += filename;
+        message += "\n\nPalette files must be exactly 1536 bytes (0x600).";
+        gui_set_error_message(message.c_str());
+        return;
+    }
+
+    file.seekg(0, ios::beg);
+    u8 palette_data[0x600];
+    if (!file.read(reinterpret_cast<char*>(palette_data), 0x600))
+    {
+        file.close();
+        std::string message("Error reading palette file:\n");
+        message += filename;
+        gui_set_error_message(message.c_str());
+        return;
+    }
+    file.close();
+
+    emu_set_custom_palette(palette_data);
+
+    std::string dest_path = config_root_path;
+    dest_path += "custom_palette.pal";
+
+    ofstream dest_file(dest_path, ios::binary);
+    if (dest_file.is_open())
+    {
+        dest_file.write(reinterpret_cast<const char*>(palette_data), 0x600);
+        dest_file.close();
+    }
+    else
+    {
+        Log("Warning: Could not save custom palette to %s", dest_path.c_str());
+    }
+
+    config_video.palette = 3;
+    emu_set_palette(config_video.palette);
+    gui_custom_palette_loaded = true;
+
+    std::string message("Custom palette loaded: ");
+    message += filename;
+    gui_set_status_message(message.c_str(), 3000);
+}
+
 bool gui_load_rom(const char* path, const char* symbol_path)
 {
-    UNUSED(symbol_path);
-
-    if (!path || !path[0] || loading_rom_active)
+    if (loading_rom_active)
         return false;
 
+    loading_physical_cdrom = false;
+
+    gui_debug_auto_save_settings();
     config_push_recent_media(path);
     emu_resume();
-    strncpy_fit(loading_rom_path, path, sizeof(loading_rom_path));
+
+    strncpy(loading_rom_path, path, sizeof(loading_rom_path) - 1);
+    loading_rom_path[sizeof(loading_rom_path) - 1] = '\0';
+    if (IsValidPointer(symbol_path) && (strlen(symbol_path) > 0))
+    {
+        strncpy(loading_symbol_path, symbol_path, sizeof(loading_symbol_path) - 1);
+        loading_symbol_path[sizeof(loading_symbol_path) - 1] = '\0';
+    }
+    else
+        loading_symbol_path[0] = '\0';
     loading_rom_active = true;
+
     emu_load_media_async(path);
+
     return true;
 }
 
@@ -214,46 +444,59 @@ bool gui_finish_loading_rom(void)
         success = finish_loading_rom();
     else
     {
-        std::string message = "Error loading media:\n";
+        std::string message("Error loading media:\n");
         message += loading_rom_path;
         gui_set_error_message(message.c_str());
 
         emu_get_core()->GetMedia()->Reset();
         gui_action_reset();
+        loading_physical_cdrom = false;
     }
 
     return success;
 }
 
-void gui_load_bios(const char* path)
+void gui_load_physical_cdrom(const char* device_id)
 {
-    if (!path || !path[0])
+    #if defined(GG_ENABLE_PHYSICAL_CDROM)
+    if (loading_rom_active)
+    {
+        Debug("Ignoring physical CD-ROM load request while another media load is active: %s", device_id);
         return;
+    }
 
-    config_emulator.bios_path = path;
-    if (!emu_load_bios(path))
-        gui_set_error_message("Unable to load BIOS files from the selected path.");
+    Log("Starting physical CD-ROM load from %s", device_id);
+    loading_physical_cdrom = true;
+    gui_debug_auto_save_settings();
+    emu_resume();
+
+    strncpy(loading_rom_path, device_id, sizeof(loading_rom_path) - 1);
+    loading_rom_path[sizeof(loading_rom_path) - 1] = '\0';
+    loading_symbol_path[0] = '\0';
+    loading_rom_active = true;
+
+    emu_load_physical_cdrom_async(device_id);
+
+    #else
+    UNUSED(device_id);
+    #endif
 }
 
 void gui_set_status_message(const char* message, Uint64 milliseconds)
 {
-    if (!message || !config_emulator.status_messages)
-        return;
-
-    strncpy_fit(status_message, message, sizeof(status_message));
-    status_message_active = true;
-    status_message_start_time = SDL_GetTicks();
-    status_message_duration = milliseconds;
+    if (config_emulator.status_messages)
+    {
+        strncpy_fit(status_message, message, sizeof(status_message));
+        status_message_active = true;
+        status_message_start_time = SDL_GetTicks();
+        status_message_duration = milliseconds;
+    }
 }
 
 void gui_set_error_message(const char* message)
 {
-    if (!message)
-        return;
-
     strncpy_fit(error_message, message, sizeof(error_message));
     error_window_active = true;
-    gui_dialog_in_use = true;
 }
 
 void gui_set_style(void)
@@ -261,12 +504,32 @@ void gui_set_style(void)
     set_style();
 }
 
+static void update_window_visibility_padding(void)
+{
+    static bool initialized = false;
+    static ImVec2 previous_work_size(0.0f, 0.0f);
+
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    if (!viewport || viewport->WorkSize.x <= 0.0f || viewport->WorkSize.y <= 0.0f)
+        return;
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    bool viewport_shrank = initialized && ((viewport->WorkSize.x < previous_work_size.x) || (viewport->WorkSize.y < previous_work_size.y));
+
+    style.DisplayWindowPadding = viewport_shrank ? ImVec2(100.0f, 70.0f) : ImVec2(19.0f, 19.0f);
+
+    previous_work_size = viewport->WorkSize;
+    initialized = true;
+}
+
 static void main_window(void)
 {
-    GT_Runtime_Info runtime;
+
+    GG_Runtime_Info runtime;
     emu_get_runtime(runtime);
 
     ImGuiIO& io = ImGui::GetIO();
+
     float framebuffer_scale_x = io.DisplayFramebufferScale.x;
     float framebuffer_scale_y = io.DisplayFramebufferScale.y;
 
@@ -277,16 +540,15 @@ static void main_window(void)
 
     float logical_w = io.DisplaySize.x;
     float logical_h = io.DisplaySize.y - (application_show_menu ? (float)gui_main_menu_height : 0.0f);
-    if (logical_w <= 0.0f || logical_h <= 0.0f || runtime.screen_width <= 0 || runtime.screen_height <= 0)
-        return;
-
     int w = (int)logical_w;
     int h = (int)logical_h;
     int physical_w = (int)floorf(logical_w * framebuffer_scale_x);
     int physical_h = (int)floorf(logical_h * framebuffer_scale_y);
 
-    float ratio = 0.0f;
-    switch (config_video.ratio)
+    int selected_ratio = config_debug.debug ? 0 : config_video.ratio;
+    float ratio = 0;
+
+    switch (selected_ratio)
     {
         case 1:
             ratio = 4.0f / 3.0f;
@@ -294,61 +556,84 @@ static void main_window(void)
         case 2:
             ratio = 16.0f / 9.0f;
             break;
-        default:
-            ratio = (float)runtime.screen_width / (float)runtime.screen_height;
+        case 3:
+            ratio = 16.0f / 10.0f;
             break;
+        case 4:
+            ratio = 6.0f / 5.0f;
+            break;
+        default:
+            ratio = ((float)runtime.screen_width / (float)runtime.width_scale) / (float)runtime.screen_height;
     }
 
-    if (config_video.scale == 3)
-        ratio = logical_w / logical_h;
-
-    int base_width = runtime.screen_width;
-    int base_height = runtime.screen_height;
-    int w_corrected;
-    int h_corrected;
-
-    if (config_video.ratio == 0)
+    if (!config_debug.debug && config_video.scale == 3)
     {
+        ratio = logical_w / logical_h;
+    }
+
+    int base_width = (int)(runtime.screen_width / runtime.width_scale);
+    int base_height = (int)(runtime.screen_height);
+
+    int w_corrected, h_corrected;
+    int scale_multiplier = 0;
+
+    if (config_debug.debug)
+    {
+        scale_multiplier = config_debug.scale;
         w_corrected = base_width;
         h_corrected = base_height;
     }
     else
     {
-        w_corrected = (int)roundf(base_height * ratio);
-        h_corrected = base_height;
-    }
+        if (selected_ratio == 0)
+        {
+            w_corrected = base_width;
+            h_corrected = base_height;
+        }
+        else
+        {
+            w_corrected = (int)round(base_height * ratio);
+            h_corrected = base_height;
+        }
 
-    int scale_multiplier = 1;
-    switch (config_video.scale)
-    {
+        switch (config_video.scale)
+        {
         case 0:
         {
             int factor_w = physical_w / w_corrected;
             int factor_h = physical_h / h_corrected;
-            scale_multiplier = MIN(factor_w, factor_h);
+            scale_multiplier = (factor_w < factor_h) ? factor_w : factor_h;
             break;
         }
         case 1:
             scale_multiplier = config_video.scale_manual;
             break;
         case 2:
+            scale_multiplier = 1;
             h_corrected = h;
-            w_corrected = (int)roundf(h * ratio);
+            w_corrected = (int)round(h * ratio);
             break;
         case 3:
+            scale_multiplier = 1;
             w_corrected = w;
             h_corrected = h;
             break;
         default:
+            scale_multiplier = 1;
             break;
-    }
+        }
 
-    if (config_video.scale <= 1 && scale_multiplier < 1)
-        scale_multiplier = 1;
+        if (config_video.scale <= 1)
+        {
+            if (scale_multiplier < 1)
+                scale_multiplier = 1;
+        }
+    }
 
     float image_w = (float)(w_corrected * scale_multiplier);
     float image_h = (float)(h_corrected * scale_multiplier);
-    if (config_video.scale <= 1)
+
+    if (config_debug.debug || config_video.scale <= 1)
     {
         image_w /= framebuffer_scale_x;
         image_h /= framebuffer_scale_y;
@@ -356,8 +641,13 @@ static void main_window(void)
 
     int image_logical_width = (int)ceilf(image_w);
     int image_logical_height = (int)ceilf(image_h);
-    int image_physical_width = MAX(1, (int)roundf(image_w * framebuffer_scale_x));
-    int image_physical_height = MAX(1, (int)roundf(image_h * framebuffer_scale_y));
+    int image_physical_width = (int)roundf(image_w * framebuffer_scale_x);
+    int image_physical_height = (int)roundf(image_h * framebuffer_scale_y);
+
+    if (image_physical_width < 1)
+        image_physical_width = 1;
+    if (image_physical_height < 1)
+        image_physical_height = 1;
 
     gui_main_window_width = image_logical_width;
     gui_main_window_height = image_logical_height;
@@ -365,21 +655,35 @@ static void main_window(void)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 
-    float window_x = (logical_w - image_w) * 0.5f;
-    float window_y = ((logical_h - image_h) * 0.5f) + (application_show_menu ? (float)gui_main_menu_height : 0.0f);
-
-    window_x = roundf(window_x * framebuffer_scale_x) / framebuffer_scale_x;
-    window_y = roundf(window_y * framebuffer_scale_y) / framebuffer_scale_y;
-
-    ImGui::SetNextWindowSize(ImVec2(image_w, image_h));
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(window_x, window_y));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
-    flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    
+    if (config_debug.debug)
+    {
+        flags |= ImGuiWindowFlags_AlwaysAutoResize;
 
-    ImGui::Begin(GT_TITLE, NULL, flags);
-    gui_main_window_hovered = ImGui::IsWindowHovered();
+        ImGui::SetNextWindowPos(ImVec2(631, 26), ImGuiCond_FirstUseEver);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+        ImGui::Begin("Output###debug_output", &config_debug.show_screen, flags);
+        gui_main_window_hovered = ImGui::IsWindowHovered();
+    }
+    else
+    {
+        float window_x = (logical_w - image_w) * 0.5f;
+        float window_y = ((logical_h - image_h) * 0.5f) + (application_show_menu ? (float)gui_main_menu_height : 0.0f);
+
+        window_x = roundf(window_x * framebuffer_scale_x) / framebuffer_scale_x;
+        window_y = roundf(window_y * framebuffer_scale_y) / framebuffer_scale_y;
+
+        ImGui::SetNextWindowSize(ImVec2(image_w, image_h));
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(window_x, window_y));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+        flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        ImGui::Begin(GT_TITLE, 0, flags);
+        gui_main_window_hovered = ImGui::IsWindowHovered();
+    }
 
     OglRendererScreenGeometry screen_geometry;
     screen_geometry.logical_width = image_logical_width;
@@ -393,12 +697,14 @@ static void main_window(void)
     float tex_h = 1.0f;
     float tex_v = 1.0f;
     ogl_renderer_get_screen_uv(&tex_h, &tex_v);
+
     ImGui::Image((ImTextureID)(intptr_t)ogl_renderer_get_screen_texture(), ImVec2(image_w, image_h), ImVec2(0, 0), ImVec2(tex_h, tex_v));
 
     if (config_video.fps)
         gui_show_fps();
 
     ImGui::End();
+
     ImGui::PopStyleVar();
     ImGui::PopStyleVar();
     ImGui::PopStyleVar();
@@ -488,11 +794,54 @@ static void show_loading_popup(void)
 
 static bool finish_loading_rom(void)
 {
-    if (!emu_is_empty())
-        application_update_title_with_rom(emu_get_core()->GetMedia()->GetFileName());
+    if (emu_get_core()->GetMedia()->IsCDROM() && !emu_get_core()->GetMedia()->IsLoadedBios())
+    {
+        bool is_gameexpress = emu_get_core()->GetMedia()->IsGameExpress();
+        std::string bios_name = is_gameexpress ? "Game Express BIOS" : "System Card BIOS";
+
+        std::string message;
+        message += bios_name;
+        message += " is required to run this ROM!!\n";
+        message += "Make sure you have a valid BIOS file in 'Menu->Emulator->BIOS'.";
+        gui_set_error_message(message.c_str());
+
+        emu_get_core()->GetMedia()->Reset();
+        gui_action_reset();
+        return false;
+    }
+
+    gui_debug_reset();
+
+#if defined(GG_ENABLE_PHYSICAL_CDROM)
+    if (!loading_physical_cdrom)
+#endif
+    {
+        if (loading_symbol_path[0] != '\0')
+            gui_debug_load_symbols_file(loading_symbol_path);
+        else
+        {
+            std::string str(loading_rom_path);
+            str = str.substr(0, str.find_last_of("."));
+            if (!gui_debug_load_symbols_file((str + ".sym").c_str()))
+                if (!gui_debug_load_symbols_file((str + ".lbl").c_str()))
+                    gui_debug_load_symbols_file((str + ".noi").c_str());
+        }
+    }
+
+    gui_debug_auto_load_settings();
 
     if (config_emulator.start_paused)
+    {
         emu_pause();
+
+        for (int i = 0; i < SYSTEM_TEXTURE_WIDTH * SYSTEM_TEXTURE_HEIGHT * 4; i++)
+        {
+            emu_frame_buffer[i] = 0;
+        }
+    }
+
+    if (!emu_is_empty())
+        application_update_title_with_rom(emu_get_core()->GetMedia()->GetFileName());
 
     return true;
 }
@@ -513,7 +862,6 @@ static void show_error_window(void)
         ImGui::Separator();
         if (ImGui::Button("OK"))
         {
-            gui_dialog_in_use = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

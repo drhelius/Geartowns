@@ -24,6 +24,7 @@
 #include "config.h"
 #include "gui.h"
 #include "gui_filedialogs.h"
+#include "gui_debug_disassembler.h"
 #include "ogl_renderer.h"
 #include "emu.h"
 #include "display.h"
@@ -137,8 +138,8 @@ int application_init(const ApplicationParams& params)
     if (!rom_file_argument && symbol_file_argument)
     {
         Log("Symbol file argument: %s", params.symbol_file);
-        //gui_debug_reset_symbols();
-        //gui_debug_load_symbols_file(params.symbol_file);
+        gui_debug_reset_symbols();
+        gui_debug_load_symbols_file(params.symbol_file);
     }
 
     if (params.mcp_mode >= 0)
@@ -460,8 +461,8 @@ static void handle_single_instance(void)
             gui_load_rom(s_pending_rom_path, s_pending_symbol_path);
         else if (s_pending_symbol_path[0] != '\0')
         {
-            //gui_debug_reset_symbols();
-            //gui_debug_load_symbols_file(s_pending_symbol_path);
+            gui_debug_reset_symbols();
+            gui_debug_load_symbols_file(s_pending_symbol_path);
         }
     }
 }

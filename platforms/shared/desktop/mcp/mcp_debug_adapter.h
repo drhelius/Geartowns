@@ -38,28 +38,11 @@ public:
     json GetScreenshot();
     json GetMediaInfo();
     json ListRecentMedia();
-    json StartLoadMedia(const std::string& file_path);
-    bool IsMediaLoading() const;
-    json FinishLoadMedia(const std::string& file_path);
-    json LoadBios(const std::string& file_path);
-    json SetFastForwardSpeed(int speed);
-    json ToggleFastForward(bool enabled);
-    json ControllerButton(int player, const std::string& button, const std::string& action);
-    json GetInputState();
-    json ControllerSetType(int player, const std::string& type);
-    json ControllerGetType(int player);
-    void ClearControllerState();
 
-    GeartownsCore* GetCore() { return m_core; }
 
 private:
-    u16 ButtonMask(const std::string& button) const;
-    const char* ControllerTypeName(GT_Controller_Type type) const;
-    void ApplyControllerState(int player);
-
 private:
     GeartownsCore* m_core;
-    u16 m_buttons[GT_MAX_GAMEPADS];
 };
 
 #endif /* MCP_DEBUG_ADAPTER_H */

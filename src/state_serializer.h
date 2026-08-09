@@ -27,6 +27,8 @@
 
 #define G_SERIALIZE(serializer, var) serializer.Serialize(var)
 #define G_SERIALIZE_ARRAY(serializer, array, count) serializer.SerializeArray(array, count)
+#define G_SERIALIZE_STRING(serializer, var) serializer.SerializeString(var)
+#define G_SERIALIZE_VECTOR(serializer, var) serializer.SerializeVector(var)
 
 class StateSerializer
 {

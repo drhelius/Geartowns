@@ -281,7 +281,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 void retro_get_system_info(struct retro_system_info *info)
 {
     memset(info, 0, sizeof(*info));
-    info->library_name     = "Geartowns";
+    info->library_name     = GT_TITLE;
     info->library_version  = GT_VERSION;
     info->need_fullpath    = true;
     info->block_extract    = true;

@@ -19,12 +19,13 @@
 
 #define GUI_ACTIONS_IMPORT
 #include "gui_actions.h"
-
-#include <string>
-#include <time.h>
 #include "gui.h"
+#include "gui_debug_trace_logger.h"
 #include "config.h"
 #include "emu.h"
+#include "ogl_renderer.h"
+#include "rewind.h"
+#include "events.h"
 #include "geartowns.h"
 #include "application.h"
 #include "display.h"
@@ -33,22 +34,63 @@
 void gui_action_reset(void)
 {
     gui_set_status_message("Resetting...", 3000);
+    gui_debug_trace_logger_clear();
 
     emu_resume();
     emu_reset();
 
     if (config_emulator.start_paused)
+    {
         emu_pause();
+
+        for (int i = 0; i < SYSTEM_TEXTURE_WIDTH * SYSTEM_TEXTURE_HEIGHT * 4; i++)
+        {
+            emu_frame_buffer[i] = 0;
+        }
+    }
 }
 
 void gui_action_reload_rom(void)
 {
     if (!emu_is_empty())
     {
+#if defined(GG_ENABLE_PHYSICAL_CDROM)
+        if (emu_get_core()->GetMedia()->IsPhysicalCdRom())
+        {
+            gui_load_physical_cdrom(emu_get_core()->GetMedia()->GetPhysicalCdRomDeviceId());
+            return;
+        }
+#endif
+
         char rom_path[4096];
         strncpy_fit(rom_path, emu_get_core()->GetMedia()->GetFilePath(), sizeof(rom_path));
         gui_load_rom(rom_path);
     }
+}
+
+void gui_action_eject_physical_cdrom(void)
+{
+    #if defined(GG_ENABLE_PHYSICAL_CDROM)
+    if (emu_is_empty() || !emu_get_core()->GetMedia()->IsPhysicalCdRom())
+    {
+        Debug("Physical CD-ROM eject requested but no physical CD-ROM is loaded");
+        gui_set_status_message("No physical CD-ROM loaded", 3000);
+        return;
+    }
+
+    char device_id[256];
+    strncpy_fit(device_id, emu_get_core()->GetMedia()->GetPhysicalCdRomDeviceId(), sizeof(device_id));
+
+    Log("Physical CD-ROM eject requested from GUI: %s", device_id);
+
+    if (emu_eject_physical_cdrom())
+    {
+        application_update_title_with_rom(NULL);
+        gui_set_status_message("Physical CD-ROM ejected", 3000);
+    }
+    else
+        gui_set_error_message("Unable to eject physical CD-ROM");
+    #endif
 }
 
 void gui_action_pause(void)
@@ -82,11 +124,42 @@ void gui_action_ffwd(void)
     }
 }
 
+void gui_action_rewind_pressed(void)
+{
+    if (emu_is_empty() || !config_rewind.enabled)
+        return;
+    if (rewind_get_snapshot_count() < 1)
+        return;
+
+    if (rewind_is_active())
+        return;
+
+    emu_reset_rewind_timing();
+    rewind_set_active(true);
+    display_use_vsync_if_enabled();
+    gui_set_status_message("Rewinding...", 500);
+}
+
+void gui_action_rewind_released(void)
+{
+    if (!rewind_is_active())
+        return;
+
+    rewind_set_active(false);
+    events_sync_input();
+    emu_reset_rewind_timing();
+    if (config_emulator.ffwd)
+        display_disable_vsync();
+    else
+        display_use_vsync_if_enabled();
+    emu_audio_reset();
+}
+
 void gui_action_save_screenshot(const char* path)
 {
     using namespace std;
 
-    if (emu_is_empty() || !emu_get_core()->GetMedia()->IsReady())
+    if (!emu_get_core()->GetMedia()->IsReady())
         return;
 
     time_t now = time(0);
@@ -95,13 +168,11 @@ void gui_action_save_screenshot(const char* path)
     char date_time_buffer[32] = {};
     if (get_local_time(now, &ltm))
         strftime(date_time_buffer, sizeof(date_time_buffer), "%Y-%m-%d %H%M%S", &ltm);
-    else
-        snprintf(date_time_buffer, sizeof(date_time_buffer), "screenshot");
     string date_time = date_time_buffer;
 
     string file_path;
 
-    if (path != NULL && path[0])
+    if (path != NULL)
     {
         file_path = path;
         if (file_path.find_last_of(".") == string::npos)
@@ -109,13 +180,30 @@ void gui_action_save_screenshot(const char* path)
     }
     else
     {
-        const char* directory = config_emulator.screenshots_path.empty() ? config_root_path : config_emulator.screenshots_path.c_str();
-        file_path = directory;
-        string file_name = emu_get_core()->GetMedia()->GetFileName();
-        file_name += " - ";
-        file_name += date_time;
-        file_name += ".png";
-        append_path_component(file_path, file_name.c_str());
+        switch ((Directory_Location)config_emulator.screenshots_dir_option)
+        {
+            default:
+            case Directory_Location_Default:
+            {
+                file_path = file_path.assign(config_root_path)+ "/" + string(emu_get_core()->GetMedia()->GetFileName()) + " - " + date_time + ".png";
+                break;
+            }
+            case Directory_Location_ROM:
+            {
+#if defined(GG_ENABLE_PHYSICAL_CDROM)
+                if (emu_get_core()->GetMedia()->IsPhysicalCdRom())
+                    file_path = file_path.assign(config_root_path) + "/" + string(emu_get_core()->GetMedia()->GetFileName()) + " - " + date_time + ".png";
+                else
+#endif
+                file_path = file_path.assign(emu_get_core()->GetMedia()->GetFilePath()) + " - " + date_time + ".png";
+                break;
+            }
+            case Directory_Location_Custom:
+            {
+                file_path = file_path.assign(config_emulator.screenshots_path)+ "/" + string(emu_get_core()->GetMedia()->GetFileName()) + " - " + date_time + ".png";
+                break;
+            }
+        }
     }
 
     emu_save_screenshot(file_path.c_str());

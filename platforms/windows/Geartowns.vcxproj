@@ -21,6 +21,8 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\audio.cpp" />
     <ClCompile Include="..\..\src\media.cpp" />
+    <ClCompile Include="..\..\src\media_file.cpp" />
+    <ClCompile Include="..\..\src\media_file_native.cpp" />
     <ClCompile Include="..\..\src\geartowns_core.cpp" />
     <ClCompile Include="..\..\src\input.cpp" />
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
@@ -39,6 +41,11 @@
     <ClCompile Include="..\shared\desktop\rewind.cpp" />
     <ClCompile Include="..\shared\desktop\runahead.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_trace_logger.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_memeditor.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_memory.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_rewind.cpp" />
     <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp" />
     <ClCompile Include="..\shared\desktop\gui_menus.cpp" />
     <ClCompile Include="..\shared\desktop\gui_popups.cpp" />
@@ -98,6 +105,8 @@
     <ClInclude Include="..\..\src\log.h" />
     <ClInclude Include="..\..\src\media.h" />
     <ClInclude Include="..\..\src\media_inline.h" />
+    <ClInclude Include="..\..\src\media_file.h" />
+    <ClInclude Include="..\..\src\media_file_native.h" />
     <ClInclude Include="..\..\src\memory_stream.h" />
     <ClInclude Include="..\..\src\state_serializer.h" />
     <ClInclude Include="..\..\src\types.h" />
@@ -122,6 +131,14 @@
     <ClInclude Include="..\shared\desktop\rewind.h" />
     <ClInclude Include="..\shared\desktop\runahead.h" />
     <ClInclude Include="..\shared\desktop\gui_debug.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_trace_logger.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_memeditor.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_memory.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_rewind.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_text.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_widgets.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_constants.h" />
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />
     <ClInclude Include="..\shared\desktop\gui_popups.h" />

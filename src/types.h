@@ -21,6 +21,7 @@
 #define TYPES_H
 
 #include <stdint.h>
+#include "defines.h"
 
 typedef uint8_t u8;
 typedef int8_t s8;
@@ -46,16 +47,43 @@ union u16_union
     };
 };
 
+union u32_union
+{
+    u32 value;
+    struct
+    {
+#ifdef GT_LITTLE_ENDIAN
+        u16 low;
+        u16 high;
+#else
+        u16 high;
+        u16 low;
+#endif
+    };
+    struct
+    {
+#ifdef GT_LITTLE_ENDIAN
+        u8 byte0;
+        u8 byte1;
+        u8 byte2;
+        u8 byte3;
+#else
+        u8 byte3;
+        u8 byte2;
+        u8 byte1;
+        u8 byte0;
+#endif
+    };
+};
+
 struct GT_Runtime_Info
 {
     int screen_width;
     int screen_height;
-    int width_scale;
     int sample_rate;
     bool media_ready;
-    bool cdrom_ready;
+    bool bios_ready;
     bool paused;
-    u64 towns_time_ns;
 };
 
 struct GT_Color
@@ -92,6 +120,12 @@ enum GT_Controller_Type
     GT_CONTROLLER_NONE = 0,
     GT_CONTROLLER_ORIGINAL_GAMEPAD,
     GT_CONTROLLER_6_BUTTON_GAMEPAD
+};
+
+enum GT_Controllers
+{
+    GT_CONTROLLER_1 = 0,
+    GT_CONTROLLER_2
 };
 
 enum GT_GamePad_Buttons

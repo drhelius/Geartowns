@@ -26,6 +26,11 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_popups.cpp \
     $(DESKTOP_SRC_DIR)/gui_actions.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_disassembler.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_trace_logger.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_memeditor.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_memory.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_rewind.cpp \
     $(DESKTOP_SRC_DIR)/ogl_renderer.cpp \
     $(DESKTOP_SRC_DIR)/ogl_shader_program.cpp \
     $(DESKTOP_SRC_DIR)/ogl_shader_chain.cpp \
@@ -44,4 +49,6 @@ SOURCES_CXX := \
     $(SRC_DIR)/audio.cpp \
     $(SRC_DIR)/geartowns_core.cpp \
     $(SRC_DIR)/input.cpp \
+    $(SRC_DIR)/media_file.cpp \
+    $(SRC_DIR)/media_file_native.cpp \
     $(SRC_DIR)/media.cpp

@@ -17,35 +17,30 @@
  *
  */
 
-#ifndef INPUT_H
-#define INPUT_H
+#ifndef MEDIA_FILE_H
+#define MEDIA_FILE_H
 
-#include "common.h"
+#include "types.h"
 
-class Input
+struct retro_vfs_interface;
+
+class MediaFile
 {
 public:
-    Input();
-    void Init();
-    void Reset();
-    void KeyPressed(GT_Keys key);
-    void KeyReleased(GT_Keys key);
-    bool IsKeyPressed(GT_Keys key) const;
-    void SetMouseDelta(s32 x, s32 y);
-    void SetMouseButtons(bool left, bool right);
-    void SetControllerType(int port, GT_Controller_Type type);
-    GT_Controller_Type GetControllerType(int port) const;
+    virtual ~MediaFile();
 
-private:
-    bool m_keys[GT_KEY_COUNT];
-    s32 m_mouse_x;
-    s32 m_mouse_y;
-    bool m_mouse_left;
-    bool m_mouse_right;
-    GT_GamePad_State m_gamepads[GT_MAX_GAMEPADS];
-    GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
+    static MediaFile* OpenFile(const char* path);
+    static void SetVfsInterface(const retro_vfs_interface* iface);
+    static bool HasVfsInterface();
+
+    virtual bool Open(const char* path) = 0;
+    virtual void Close() = 0;
+    virtual bool IsOpen() const = 0;
+    virtual bool IsValid() const = 0;
+    virtual s64 GetSize() = 0;
+    virtual s64 Tell() = 0;
+    virtual bool Seek(s64 offset) = 0;
+    virtual s64 Read(void* buffer, u64 size) = 0;
 };
 
-#include "input_inline.h"
-
-#endif /* INPUT_H */
+#endif /* MEDIA_FILE_H */

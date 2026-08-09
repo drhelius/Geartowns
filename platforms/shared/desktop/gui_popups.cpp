@@ -159,7 +159,7 @@ void gui_popup_modal_about(void)
 
         ImGui::TextColored(ImVec4(0.65f, 0.35f, 0.95f, 1.0f), "  By Ignacio Sánchez (DrHelius)");
         ImGui::Text(" "); ImGui::SameLine();
-        ImGui::TextLinkOpenURL("https://github.com/drhelius/geartowns");
+        ImGui::TextLinkOpenURL("https://github.com/drhelius/" GT_TITLE);
         ImGui::Text(" "); ImGui::SameLine();
         ImGui::TextLinkOpenURL("https://x.com/drhelius");
         ImGui::NewLine();

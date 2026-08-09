@@ -23,10 +23,6 @@ Audio::Audio()
 {
     m_mute = false;
     m_master_volume = 1.0f;
-    m_fm_volume = 1.0f;
-    m_pcm_volume = 1.0f;
-    m_cd_volume = 1.0f;
-    m_highres_pcm_volume = 1.0f;
 }
 
 Audio::~Audio()

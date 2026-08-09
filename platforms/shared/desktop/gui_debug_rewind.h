@@ -17,27 +17,18 @@
  *
  */
 
-#include "input.h"
+#ifndef GUI_DEBUG_REWIND_H
+#define GUI_DEBUG_REWIND_H
 
-Input::Input()
-{
-    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        m_controller_type[i] = GT_CONTROLLER_ORIGINAL_GAMEPAD;
+#ifdef GUI_DEBUG_REWIND_IMPORT
+    #define EXTERN
+#else
+    #define EXTERN extern
+#endif
 
-    Reset();
-}
+EXTERN void gui_debug_window_rewind(void);
+EXTERN bool gui_debug_rewind_seek(int age);
 
-void Input::Init()
-{
-    Reset();
-}
-
-void Input::Reset()
-{
-    memset(m_keys, 0, sizeof(m_keys));
-    m_mouse_x = 0;
-    m_mouse_y = 0;
-    m_mouse_left = false;
-    m_mouse_right = false;
-    memset(m_gamepads, 0, sizeof(m_gamepads));
-}
+#undef GUI_DEBUG_REWIND_IMPORT
+#undef EXTERN
+#endif /* GUI_DEBUG_REWIND_H */

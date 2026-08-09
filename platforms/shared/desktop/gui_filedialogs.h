@@ -27,9 +27,21 @@
 #endif
 
 EXTERN void gui_file_dialog_open_rom(void);
+EXTERN void gui_file_dialog_load_ram(void);
+EXTERN void gui_file_dialog_save_ram(void);
+EXTERN void gui_file_dialog_load_state(void);
+EXTERN void gui_file_dialog_save_state(void);
+EXTERN void gui_file_dialog_choose_savestate_path(void);
 EXTERN void gui_file_dialog_choose_screenshot_path(void);
-EXTERN void gui_file_dialog_load_bios(void);
+EXTERN void gui_file_dialog_load_bios();
+EXTERN void gui_file_dialog_load_symbols(void);
 EXTERN void gui_file_dialog_save_screenshot(void);
+EXTERN void gui_file_dialog_save_memory_dump(bool binary);
+EXTERN void gui_file_dialog_load_memory_dump(void);
+EXTERN void gui_file_dialog_save_disassembler(bool full);
+EXTERN void gui_file_dialog_save_log(void);
+EXTERN void gui_file_dialog_save_debug_settings(void);
+EXTERN void gui_file_dialog_load_debug_settings(void);
 EXTERN void gui_file_dialog_process_results(void);
 EXTERN bool gui_file_dialog_is_active(void);
 

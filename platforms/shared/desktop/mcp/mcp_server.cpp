@@ -304,8 +304,8 @@ void McpServer::HandleInitialize(const json& request)
         }},
         {"serverInfo", {
             {"name", "geartowns-mcp-server"},
-            {"title", "Geartowns MCP Server"},
-            {"description", "Control the Geartowns FM Towns emulator through generic execution, media, screenshot, fast-forward, and controller tools."},
+            {"title", GT_TITLE " MCP Server"},
+            {"description", "Control the " GT_TITLE " FM Towns emulator through generic execution, media, screenshot, fast-forward, and controller tools."},
             {"version", GT_VERSION}
         }}
     };

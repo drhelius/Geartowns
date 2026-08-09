@@ -37,9 +37,8 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_media);
 }
 
-void GeartownsCore::Init(GT_Input_Pump_Fn input_pump_fn, GT_Pixel_Format pixel_format)
+void GeartownsCore::Init(GT_Pixel_Format pixel_format)
 {
-    UNUSED(input_pump_fn);
     UNUSED(pixel_format);
 
     if (!IsValidPointer(m_audio))
@@ -55,7 +54,7 @@ void GeartownsCore::Init(GT_Input_Pump_Fn input_pump_fn, GT_Pixel_Format pixel_f
     Reset();
 }
 
-bool GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug)
+bool GeartownsCore::RunFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug)
 {
     UNUSED(frame_buffer);
     UNUSED(debug);
@@ -78,20 +77,13 @@ bool GeartownsCore::LoadBiosFromBuffer(const u8* buffer, int size)
     return IsValidPointer(m_media) && m_media->LoadBiosFromBuffer(buffer, size);
 }
 
-void GeartownsCore::UnloadBios()
-{
-    if (IsValidPointer(m_media))
-        m_media->UnloadBios();
-}
-
 bool GeartownsCore::LoadMedia(const char* file_path)
 {
     return IsValidPointer(m_media) && m_media->LoadMedia(file_path);
 }
 
-void GeartownsCore::ResetMedia(bool preserve_cmos)
+void GeartownsCore::ResetMedia()
 {
-    UNUSED(preserve_cmos);
     Reset();
 }
 

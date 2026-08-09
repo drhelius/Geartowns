@@ -27,26 +27,6 @@ INLINE void Audio::SetMasterVolume(float volume)
     m_master_volume = volume;
 }
 
-INLINE void Audio::SetFMVolume(float volume)
-{
-    m_fm_volume = volume;
-}
-
-INLINE void Audio::SetPCMVolume(float volume)
-{
-    m_pcm_volume = volume;
-}
-
-INLINE void Audio::SetCDVolume(float volume)
-{
-    m_cd_volume = volume;
-}
-
-INLINE void Audio::SetHighResPCMVolume(float volume)
-{
-    m_highres_pcm_volume = volume;
-}
-
 INLINE void Audio::Clock(u64 delta_ns)
 {
     UNUSED(delta_ns);

@@ -49,37 +49,6 @@ INLINE void Input::SetMouseButtons(bool left, bool right)
     m_mouse_right = right;
 }
 
-INLINE void Input::SetGamePadState(int port, const GT_GamePad_State& state)
-{
-    if (port < 0 || port >= GT_MAX_GAMEPADS)
-        return;
-
-    m_gamepads[port] = state;
-}
-
-INLINE void Input::SetInjectedGamePadState(int port, const GT_GamePad_State& state)
-{
-    if (port < 0 || port >= GT_MAX_GAMEPADS)
-        return;
-
-    m_injected_gamepads[port] = state;
-}
-
-INLINE GT_GamePad_State Input::GetGamePadState(int port) const
-{
-    GT_GamePad_State state = {0, 0, 0};
-
-    if (port >= 0 && port < GT_MAX_GAMEPADS)
-    {
-        state = m_gamepads[port];
-        state.buttons |= m_injected_gamepads[port].buttons;
-        state.axis_x = (s16)CLAMP((int)state.axis_x + (int)m_injected_gamepads[port].axis_x, -32768, 32767);
-        state.axis_y = (s16)CLAMP((int)state.axis_y + (int)m_injected_gamepads[port].axis_y, -32768, 32767);
-    }
-
-    return state;
-}
-
 INLINE void Input::SetControllerType(int port, GT_Controller_Type type)
 {
     if (port < 0 || port >= GT_MAX_GAMEPADS)

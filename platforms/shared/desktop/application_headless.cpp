@@ -24,6 +24,7 @@
 #include "emu.h"
 #include "gui.h"
 #include "gui_debug.h"
+#include "gui_debug_disassembler.h"
 #include "log.h"
 
 static volatile bool headless_running = true;

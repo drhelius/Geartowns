@@ -31,20 +31,12 @@ public:
     void Reset();
     void Mute(bool mute);
     void SetMasterVolume(float volume);
-    void SetFMVolume(float volume);
-    void SetPCMVolume(float volume);
-    void SetCDVolume(float volume);
-    void SetHighResPCMVolume(float volume);
     void Clock(u64 delta_ns);
     void EndFrame(s16* sample_buffer, int* sample_count);
 
 private:
     bool m_mute;
     float m_master_volume;
-    float m_fm_volume;
-    float m_pcm_volume;
-    float m_cd_volume;
-    float m_highres_pcm_volume;
 };
 
 #include "audio_inline.h"

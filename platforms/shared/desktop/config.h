@@ -33,6 +33,7 @@
 
 static const int config_version = 1;
 static const int config_max_recent_roms = 10;
+static const int config_memory_editor_count = 14;
 
 enum config_ShaderMode
 {
@@ -62,21 +63,27 @@ struct config_Emulator
     bool always_show_menu = false;
     int theme = config_Theme_Dark;
     bool paused = false;
+    int save_slot = 0;
     bool start_paused = false;
     bool pause_when_inactive = true;
     bool ffwd = false;
     int ffwd_speed = 1;
+    int runahead = 0;
     bool show_info = false;
     std::string recent_roms[config_max_recent_roms];
+    int savefiles_dir_option = 0;
+    std::string savefiles_path;
+    int savestates_dir_option = 0;
+    std::string savestates_path;
     int screenshots_dir_option = 0;
-    std::string syscard_bios_path;
-    std::string gameexpress_bios_path;
+    std::string bios_path;
     std::string screenshots_path;
     std::string last_open_path;
     int window_width = 800;
     int window_height = 640;
     bool status_messages = false;
     bool allow_screensaver = false;
+    bool preload_cdrom = false;
     int mcp_tcp_port = 7777;
     std::string mcp_http_address = "127.0.0.1";
     bool capture_mouse = false;
@@ -109,6 +116,14 @@ struct config_Audio
     bool sync = true;
     float master_volume = 1.0f;
     int buffer_count = 3;
+};
+
+struct config_Rewind
+{
+    bool enabled = true;
+    int buffer_seconds = 10;
+    int frames_per_snapshot = 1;
+    float speed = 2.0f;
 };
 
 struct config_Input
@@ -158,9 +173,27 @@ enum config_HotkeyIndex
     config_HotkeyIndex_Reset,
     config_HotkeyIndex_Pause,
     config_HotkeyIndex_FFWD,
+    config_HotkeyIndex_Rewind,
+    config_HotkeyIndex_SaveState,
+    config_HotkeyIndex_LoadState,
     config_HotkeyIndex_Screenshot,
     config_HotkeyIndex_Fullscreen,
     config_HotkeyIndex_ShowMainMenu,
+    config_HotkeyIndex_DebugStepInto,
+    config_HotkeyIndex_DebugStepOver,
+    config_HotkeyIndex_DebugStepOut,
+    config_HotkeyIndex_DebugStepFrame,
+    config_HotkeyIndex_DebugContinue,
+    config_HotkeyIndex_DebugBreak,
+    config_HotkeyIndex_DebugRunToCursor,
+    config_HotkeyIndex_DebugBreakpoint,
+    config_HotkeyIndex_DebugGoBack,
+    config_HotkeyIndex_SelectSlot1,
+    config_HotkeyIndex_SelectSlot2,
+    config_HotkeyIndex_SelectSlot3,
+    config_HotkeyIndex_SelectSlot4,
+    config_HotkeyIndex_SelectSlot5,
+    config_HotkeyIndex_CaptureMouse,
     config_HotkeyIndex_Mute,
     config_HotkeyIndex_COUNT
 };
@@ -180,7 +213,39 @@ struct config_Hotkey
 struct config_Debug
 {
     bool debug = false;
+    bool show_screen = true;
+    bool show_disassembler = true;
+    bool show_processor = true;
+    bool show_call_stack = false;
+    bool show_breakpoints = false;
+    bool show_symbols = false;
+    bool show_memory = false;
+    bool show_trace_logger = false;
+    bool show_rewind = false;
+    bool trace_counter = true;
+    bool trace_registers = true;
+    bool trace_flags = true;
+    bool trace_bytes = true;
+    bool trace_cpu = true;
+    bool trace_cpu_irq = true;
+    bool dis_show_mem = true;
+    bool dis_show_symbols = true;
+    bool dis_show_auto_symbols = true;
+    bool dis_dim_auto_symbols = false;
+    bool dis_replace_symbols = true;
+    bool dis_replace_labels = true;
+    int dis_syntax = GG_Disassembler_Syntax_Geargrafx;
+    int dis_look_ahead_count = 20;
+    int font_size = 0;
+    int scale = 2;
+    bool multi_viewport = false;
     bool single_instance = false;
+    bool auto_debug_settings = false;
+    int mem_editor_bytes_per_row[config_memory_editor_count] = {16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16};
+    int mem_editor_preview_data_type[config_memory_editor_count] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int mem_editor_preview_endianess[config_memory_editor_count] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    bool mem_editor_uppercase_hex[config_memory_editor_count] = {true, true, true, true, true, true, true, true, true, true, true, true, true, true};
+    bool mem_editor_gray_out_zeros[config_memory_editor_count] = {true, true, true, true, true, true, true, true, true, true, true, true, true, true};
 };
 
 EXTERN mINI::INIFile* config_ini_file;
@@ -192,6 +257,7 @@ EXTERN char config_imgui_file_path[512];
 EXTERN config_Emulator config_emulator;
 EXTERN config_Video config_video;
 EXTERN config_Audio config_audio;
+EXTERN config_Rewind config_rewind;
 EXTERN config_Input config_input;
 EXTERN config_Input_Keyboard config_input_keyboard[GT_MAX_GAMEPADS];
 EXTERN config_Input_Gamepad config_input_gamepad[GT_MAX_GAMEPADS];

@@ -17,27 +17,21 @@
  *
  */
 
-#include "input.h"
+#ifndef GUI_DEBUG_TRACE_LOGGER_H
+#define GUI_DEBUG_TRACE_LOGGER_H
 
-Input::Input()
-{
-    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        m_controller_type[i] = GT_CONTROLLER_ORIGINAL_GAMEPAD;
+#include "geargrafx.h"
 
-    Reset();
-}
+#ifdef GUI_DEBUG_TRACE_LOGGER_IMPORT
+    #define EXTERN
+#else
+    #define EXTERN extern
+#endif
 
-void Input::Init()
-{
-    Reset();
-}
+EXTERN void gui_debug_window_trace_logger(void);
+EXTERN void gui_debug_trace_logger_clear(void);
+EXTERN void gui_debug_save_log(const char* file_path);
 
-void Input::Reset()
-{
-    memset(m_keys, 0, sizeof(m_keys));
-    m_mouse_x = 0;
-    m_mouse_y = 0;
-    m_mouse_left = false;
-    m_mouse_right = false;
-    memset(m_gamepads, 0, sizeof(m_gamepads));
-}
+#undef GUI_DEBUG_TRACE_LOGGER_IMPORT
+#undef EXTERN
+#endif /* GUI_DEBUG_TRACE_LOGGER_H */

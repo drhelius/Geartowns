@@ -25,39 +25,7 @@
 #include "../emu.h"
 #include "../gui.h"
 #include "../gui_actions.h"
-
-static std::string base64_encode(const unsigned char* data, size_t size)
-{
-    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string output;
-    output.reserve(((size + 2) / 3) * 4);
-
-    for (size_t i = 0; i < size; i += 3)
-    {
-        u32 value = (u32)data[i] << 16;
-        if (i + 1 < size)
-            value |= (u32)data[i + 1] << 8;
-        if (i + 2 < size)
-            value |= data[i + 2];
-
-        output.push_back(table[(value >> 18) & 0x3F]);
-        output.push_back(table[(value >> 12) & 0x3F]);
-        output.push_back(i + 1 < size ? table[(value >> 6) & 0x3F] : '=');
-        output.push_back(i + 2 < size ? table[value & 0x3F] : '=');
-    }
-
-    return output;
-}
-
-static std::string get_file_name_from_path(const std::string& path)
-{
-    size_t position = path.find_last_of("/\\");
-
-    if (position == std::string::npos)
-        return path;
-
-    return path.substr(position + 1);
-}
+#include "../utils.h"
 
 DebugAdapter::DebugAdapter(GeartownsCore* core)
 {
@@ -114,7 +82,7 @@ json DebugAdapter::GetScreenshot()
         return result;
     }
 
-    std::string base64_png = base64_encode(png_buffer, (size_t)png_size);
+    std::string base64_png = base64_encode(png_buffer, png_size);
     free(png_buffer);
 
     result["__mcp_image"] = true;
@@ -150,7 +118,7 @@ json DebugAdapter::ListRecentMedia()
         if (!config_emulator.recent_roms[i].empty())
         {
             const std::string& path = config_emulator.recent_roms[i];
-            entries.push_back({{"index", i}, {"file_path", path}, {"file_name", get_file_name_from_path(path)}});
+            entries.push_back({{"index", i}, {"file_path", path}, {"file_name", get_filename(path.c_str())}});
         }
     }
 

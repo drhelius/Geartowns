@@ -32,7 +32,7 @@
 #endif
 
 static const int config_version = 1;
-static const int config_max_recent_roms = 10;
+static const int config_max_recent_roms = 15;
 static const int config_memory_editor_count = 14;
 
 enum config_ShaderMode

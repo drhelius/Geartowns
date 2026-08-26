@@ -343,6 +343,7 @@ void config_read(void)
 
     config_video.scale = read_int("Video", "Scale", 0);
     config_video.scale_manual = read_int("Video", "ScaleManual", 1);
+    config_video.scale_manual = CLAMP(config_video.scale_manual, 1, 20);
     config_video.ratio = read_int("Video", "AspectRatio", 1);
     config_video.ratio = CLAMP(config_video.ratio, 0, 2);
     config_video.fps = read_bool("Video", "FPS", false);

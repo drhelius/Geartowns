@@ -20,11 +20,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\audio.cpp" />
+    <ClCompile Include="..\..\src\firmware.cpp" />
+    <ClCompile Include="..\..\src\i386.cpp" />
     <ClCompile Include="..\..\src\media.cpp" />
     <ClCompile Include="..\..\src\media_file.cpp" />
     <ClCompile Include="..\..\src\media_file_native.cpp" />
     <ClCompile Include="..\..\src\geartowns_core.cpp" />
     <ClCompile Include="..\..\src\input.cpp" />
+    <ClCompile Include="..\..\src\memory.cpp" />
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
     </ClCompile>
@@ -33,19 +36,17 @@
     <ClCompile Include="..\shared\desktop\application_headless.cpp" />
     <ClCompile Include="..\shared\desktop\config.cpp" />
     <ClCompile Include="..\shared\desktop\emu.cpp" />
-    <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp" />
-    <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp" />
-    <ClCompile Include="..\shared\desktop\mcp\mcp_server.cpp" />
     <ClCompile Include="..\shared\desktop\single_instance.cpp" />
+    <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp" />
+    <ClCompile Include="..\shared\desktop\mcp\mcp_server.cpp" />
+    <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp" />
     <ClCompile Include="..\shared\desktop\gui_actions.cpp" />
     <ClCompile Include="..\shared\desktop\rewind.cpp" />
     <ClCompile Include="..\shared\desktop\runahead.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug.cpp" />
-    <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp" />
-    <ClCompile Include="..\shared\desktop\gui_debug_trace_logger.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_memory_provider.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_memeditor.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_memory.cpp" />
-    <ClCompile Include="..\shared\desktop\gui_debug_rewind.cpp" />
     <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp" />
     <ClCompile Include="..\shared\desktop\gui_menus.cpp" />
     <ClCompile Include="..\shared\desktop\gui_popups.cpp" />
@@ -96,12 +97,17 @@
     <ClInclude Include="..\..\src\common.h" />
     <ClInclude Include="..\..\src\crc.h" />
     <ClInclude Include="..\..\src\defines.h" />
+    <ClInclude Include="..\..\src\firmware.h" />
+    <ClInclude Include="..\..\src\i386.h" />
+    <ClInclude Include="..\..\src\firmware_inline.h" />
     <ClInclude Include="..\..\src\game_db.h" />
     <ClInclude Include="..\..\src\geartowns.h" />
     <ClInclude Include="..\..\src\geartowns_core.h" />
     <ClInclude Include="..\..\src\geartowns_core_inline.h" />
     <ClInclude Include="..\..\src\input.h" />
     <ClInclude Include="..\..\src\input_inline.h" />
+    <ClInclude Include="..\..\src\memory.h" />
+    <ClInclude Include="..\..\src\debug_memory.h" />
     <ClInclude Include="..\..\src\log.h" />
     <ClInclude Include="..\..\src\media.h" />
     <ClInclude Include="..\..\src\media_inline.h" />
@@ -119,6 +125,9 @@
     <ClInclude Include="..\shared\desktop\application_headless.h" />
     <ClInclude Include="..\shared\desktop\backers.h" />
     <ClInclude Include="..\shared\desktop\config.h" />
+    <ClInclude Include="..\shared\desktop\config_data.h" />
+    <ClInclude Include="..\shared\desktop\config_definitions.inc.h" />
+    <ClInclude Include="..\shared\desktop\config_macros.h" />
     <ClInclude Include="..\shared\desktop\console_utils.h" />
     <ClInclude Include="..\shared\desktop\emu.h" />
     <ClInclude Include="..\shared\dependencies\json\json.hpp" />
@@ -131,14 +140,10 @@
     <ClInclude Include="..\shared\desktop\rewind.h" />
     <ClInclude Include="..\shared\desktop\runahead.h" />
     <ClInclude Include="..\shared\desktop\gui_debug.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_trace_logger.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_constants.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_memory_provider.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memeditor.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memory.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_rewind.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_text.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_widgets.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_constants.h" />
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />
     <ClInclude Include="..\shared\desktop\gui_popups.h" />
@@ -194,6 +199,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <IntermediateDirectory>release\</IntermediateDirectory>
     <PrimaryOutput>Geartowns</PrimaryOutput>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" Label="Configuration">
     <PlatformToolSet>v145</PlatformToolSet>
@@ -203,6 +209,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <IntermediateDirectory>release\</IntermediateDirectory>
     <PrimaryOutput>Geartowns</PrimaryOutput>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <PlatformToolSet>v145</PlatformToolSet>
@@ -288,6 +295,7 @@
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <SubSystem>Windows</SubSystem>
       <SuppressStartupBanner>true</SuppressStartupBanner>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <Midl>
       <DefaultCharType>Unsigned</DefaultCharType>
@@ -329,6 +337,7 @@
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <SubSystem>Windows</SubSystem>
       <SuppressStartupBanner>true</SuppressStartupBanner>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <Midl>
       <DefaultCharType>Unsigned</DefaultCharType>

@@ -34,6 +34,7 @@
 #include "ogl_renderer.h"
 #include "keyboard.h"
 #include "imgui.h"
+#include "implot.h"
 #include "geartowns.h"
 
 static char build_info[4096] = "";
@@ -248,9 +249,6 @@ void gui_popup_modal_about(void)
                 #endif
                 #if defined(GT_NO_OPTIMIZATIONS)
                 add_build_info("define: GT_NO_OPTIMIZATIONS\n");
-                #endif
-                #if defined(GT_DISABLE_DISASSEMBLER)
-                add_build_info("define: GT_DISABLE_DISASSEMBLER\n");
                 #endif
                 #if defined(__cplusplus)
                 add_build_info("define: __cplusplus = %d\n", (int)__cplusplus);

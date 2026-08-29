@@ -26,7 +26,7 @@
 #include <math.h>
 #include "libretro.h"
 #include "geartowns.h"
-#include "cdrom_file.h"
+#include "media_file.h"
 #include "libretro_core_options.h"
 #include "libretro_vfs_file.h"
 
@@ -170,12 +170,12 @@ void retro_set_environment(retro_environment_t cb)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_interface_info) && vfs_interface_info.iface)
     {
         vfs_interface = vfs_interface_info.iface;
-        CdRomFile::SetVfsInterface(vfs_interface);
+        MediaFile::SetVfsInterface(vfs_interface);
     }
     else
     {
         vfs_interface = NULL;
-        CdRomFile::SetVfsInterface(NULL);
+        MediaFile::SetVfsInterface(NULL);
     }
 
     static const struct retro_system_content_info_override content_overrides[] = {
@@ -233,7 +233,7 @@ void retro_deinit(void)
     SafeDeleteArray(frame_buffer);
     SafeDelete(core);
     vfs_interface = NULL;
-    CdRomFile::SetVfsInterface(NULL);
+    MediaFile::SetVfsInterface(NULL);
 
     audio_sample_count = 0;
     current_screen_width = 0;
@@ -253,9 +253,8 @@ void retro_reset(void)
         log_cb(RETRO_LOG_DEBUG, "Resetting...\n");
 
     check_variables();
-    if (core->GetMedia()->IsCDROM())
-        load_bios();
-    core->ResetMedia(true);
+    load_bios();
+    core->ResetMedia();
 
     for (int i = 0; i < MAX_PADS; i++)
         apply_controller_device(i, input_device[i], false);
@@ -362,8 +361,10 @@ bool retro_load_game(const struct retro_game_info *info)
     if (path_is_cdrom_uri(retro_game_path))
         log_cb(RETRO_LOG_INFO, "Loading CD-ROM through libretro VFS: %s\n", retro_game_path);
 
-    if (is_cd_content)
-        load_bios();
+    if (is_cd_content && log_cb)
+        log_cb(RETRO_LOG_INFO, "Loading CD content.\n");
+
+    load_bios();
 
     if (!core->LoadMedia(retro_game_path))
         return false;
@@ -392,12 +393,10 @@ void retro_unload_game(void)
 
 static void load_bios(void)
 {
-    core->UnloadBios();
-
     if (!core->LoadBios(retro_system_directory))
     {
         struct retro_message msg = {};
-        msg.msg = "FM Towns BIOS not found";
+        msg.msg = "FM Towns firmware not found";
         msg.frames = 360;
         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
         log_cb(RETRO_LOG_ERROR, "%s\n", msg.msg);
@@ -472,8 +471,6 @@ void *retro_get_memory_data(unsigned id)
 {
     switch (id)
     {
-        case RETRO_MEMORY_SAVE_RAM:
-            return core->GetMemory()->GetBackupRAM();
         case RETRO_MEMORY_SYSTEM_RAM:
             return core->GetMemory()->GetWorkingRAM();
         case RETRO_MEMORY_VIDEO_RAM:
@@ -487,8 +484,6 @@ size_t retro_get_memory_size(unsigned id)
 {
     switch (id)
     {
-        case RETRO_MEMORY_SAVE_RAM:
-            return core->GetMemory()->GetBackupRAMSize();
         case RETRO_MEMORY_SYSTEM_RAM:
             return core->GetMemory()->GetWorkingRAMSize();
         case RETRO_MEMORY_VIDEO_RAM:

@@ -55,12 +55,6 @@ enum gui_ShortCutEvent
     gui_ShortcutDebugStepFrame,
     gui_ShortcutDebugBreak,
     gui_ShortcutDebugContinue,
-    gui_ShortcutDebugRuntocursor,
-    gui_ShortcutDebugGoBack,
-    gui_ShortcutDebugBreakpoint,
-    gui_ShortcutDebugCopy,
-    gui_ShortcutDebugPaste,
-    gui_ShortcutDebugSelectAll,
     gui_ShortcutShowMainMenu
 };
 
@@ -71,7 +65,7 @@ struct gui_HotkeyMapping
     bool allow_repeat;
 };
 
-#define GUI_HOTKEY_MAP_COUNT 26
+#define GUI_HOTKEY_MAP_COUNT 23
 
 const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutOpenROM, config_HotkeyIndex_OpenROM, false},
@@ -97,9 +91,6 @@ const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutDebugStepFrame, config_HotkeyIndex_DebugStepFrame, true},
     {gui_ShortcutDebugContinue, config_HotkeyIndex_DebugContinue, true},
     {gui_ShortcutDebugBreak, config_HotkeyIndex_DebugBreak, true},
-    {gui_ShortcutDebugRuntocursor, config_HotkeyIndex_DebugRunToCursor, false},
-    {gui_ShortcutDebugBreakpoint, config_HotkeyIndex_DebugBreakpoint, false},
-    {gui_ShortcutDebugGoBack, config_HotkeyIndex_DebugGoBack, false},
 };
 
 EXTERN bool gui_in_use;
@@ -125,8 +116,7 @@ EXTERN void gui_shortcut(gui_ShortCutEvent event);
 EXTERN bool gui_load_rom(const char* path, const char* symbol_path = NULL);
 EXTERN bool gui_is_rom_loading(void);
 EXTERN bool gui_finish_loading_rom(void);
-EXTERN void gui_load_physical_cdrom(const char* device_id);
-EXTERN void gui_load_bios(const char* path, bool syscard);
+EXTERN void gui_load_bios(const char* path);
 EXTERN void gui_set_style(void);
 EXTERN void gui_set_status_message(const char* message, Uint64 milliseconds);
 EXTERN void gui_set_error_message(const char* message);

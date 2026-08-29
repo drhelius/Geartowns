@@ -21,9 +21,12 @@
 #define GEARTOWNS_H
 
 #include "common.h"
+#include "firmware.h"
+#include "i386.h"
 #include "geartowns_core.h"
 #include "input.h"
 #include "audio.h"
 #include "media.h"
+#include "memory.h"
 
 #endif /* GEARTOWNS_H */

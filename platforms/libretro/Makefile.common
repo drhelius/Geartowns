@@ -10,10 +10,13 @@ SOURCES_C   :=  $(DEPS_DIR)/miniz/miniz.c \
                 $(DEPS_DIR)/lzma/src/CpuArch.c \
 
 SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
-                $(CORE_DIR)/libretro_vfs_file.cpp \
-                $(SOURCE_DIR)/geartowns_core.cpp \
-                $(SOURCE_DIR)/audio.cpp \
-                $(SOURCE_DIR)/input.cpp \
+    $(CORE_DIR)/libretro_vfs_file.cpp \
+    $(SOURCE_DIR)/geartowns_core.cpp \
+    $(SOURCE_DIR)/audio.cpp \
+    $(SOURCE_DIR)/firmware.cpp \
+    $(SOURCE_DIR)/i386.cpp \
+    $(SOURCE_DIR)/input.cpp \
+    $(SOURCE_DIR)/memory.cpp \
                 $(SOURCE_DIR)/media_file.cpp \
                 $(SOURCE_DIR)/media_file_libretro.cpp \
                 $(SOURCE_DIR)/media_file_native.cpp \

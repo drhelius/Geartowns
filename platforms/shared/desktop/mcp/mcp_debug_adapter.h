@@ -37,12 +37,21 @@ public:
     json GetDebugStatus();
     json GetScreenshot();
     json GetMediaInfo();
-    json ListRecentMedia();
-
+    json StartLoadMedia(const std::string& file_path);
+    bool IsMediaLoading() const;
+    json FinishLoadMedia(const std::string& file_path);
+    json ControllerButton(int player, const std::string& button,
+        const std::string& action);
+    json GetInputState();
+    void ClearControllerState();
 
 private:
+    u16 ButtonMask(const std::string& button) const;
+    void ApplyControllerState(int player);
+
 private:
     GeartownsCore* m_core;
+    u16 m_buttons[GT_MAX_GAMEPADS];
 };
 
 #endif /* MCP_DEBUG_ADAPTER_H */

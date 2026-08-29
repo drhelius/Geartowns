@@ -31,19 +31,13 @@
     <ClCompile Include="..\shared\desktop\gui_debug.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp">
-      <Filter>desktop</Filter>
-    </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_trace_logger.cpp">
+    <ClCompile Include="..\shared\desktop\gui_debug_memory_provider.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_debug_memeditor.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_debug_memory.cpp">
-      <Filter>desktop</Filter>
-    </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_rewind.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_popups.cpp">
@@ -82,19 +76,28 @@
     <ClCompile Include="..\shared\desktop\sound_queue.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp">
+    <ClCompile Include="..\shared\desktop\single_instance.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp">
+    <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\mcp\mcp_server.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\single_instance.cpp">
+    <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\audio.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\firmware.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\memory.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\media.cpp">
@@ -153,6 +156,11 @@
     <ClInclude Include="..\..\src\common.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\crc.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\defines.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\firmware.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\memory.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\debug_memory.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\firmware_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\game_db.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\geartowns.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\geartowns_core.h"><Filter>src</Filter></ClInclude>
@@ -179,6 +187,15 @@
     <ClInclude Include="..\shared\desktop\config.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\config_data.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\config_definitions.inc.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\config_macros.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\desktop\console_utils.h">
       <Filter>desktop</Filter>
     </ClInclude>
@@ -200,28 +217,16 @@
     <ClInclude Include="..\shared\desktop\gui_debug.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h">
+    <ClInclude Include="..\shared\desktop\gui_debug_constants.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_trace_logger.h">
+    <ClInclude Include="..\shared\desktop\gui_debug_memory_provider.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_memeditor.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_memory.h">
-      <Filter>desktop</Filter>
-    </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_rewind.h">
-      <Filter>desktop</Filter>
-    </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_text.h">
-      <Filter>desktop</Filter>
-    </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_widgets.h">
-      <Filter>desktop</Filter>
-    </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_constants.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_popups.h">

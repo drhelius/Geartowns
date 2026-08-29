@@ -20,14 +20,12 @@
 #ifndef MCP_MANAGER_H
 #define MCP_MANAGER_H
 
+#include <string>
+#include <vector>
 #include "mcp_server.h"
 #include "mcp_transport.h"
 #include "mcp_debug_adapter.h"
 #include "emu.h"
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <cctype>
 
 extern bool g_mcp_stdio_mode;
 
@@ -41,35 +39,7 @@ struct DelayedButtonRelease
 {
     int player;
     std::string button;
-    u64 release_at_frame;
-};
-
-enum McpInputMacroStepType
-{
-    MCP_INPUT_MACRO_STEP_PRESS,
-    MCP_INPUT_MACRO_STEP_RELEASE,
-    MCP_INPUT_MACRO_STEP_WAIT
-};
-
-struct McpInputMacroStep
-{
-    McpInputMacroStepType type;
-    int player;
-    std::string button;
-    int frames;
-};
-
-struct McpInputMacroState
-{
-    bool active;
-    json request_id;
-    std::vector<McpInputMacroStep> steps;
-    size_t step_index;
-    bool waiting;
-    u64 wait_target_frame;
-    int command_count;
-    int frames_waited;
-    bool restore_pause;
+    u64 release_at_pump;
 };
 
 class McpManager
@@ -77,56 +47,59 @@ class McpManager
 public:
     McpManager()
     {
-        m_debugAdapter = NULL;
+        m_debug_adapter = NULL;
         m_server = NULL;
         m_transport_mode = MCP_TRANSPORT_STDIO;
         m_tcp_port = 7777;
         m_tcp_address = "127.0.0.1";
         m_pending_media_load = false;
         m_pending_media_load_request_id = json();
-        reset_input_macro();
+        m_pump_count = 0;
     }
 
     ~McpManager()
     {
         Stop();
-        SafeDelete(m_debugAdapter);
+        SafeDelete(m_debug_adapter);
     }
 
     void Init(GeartownsCore* core)
     {
-        m_debugAdapter = new DebugAdapter(core);
+        m_debug_adapter = new DebugAdapter(core);
     }
 
-    void SetTransportMode(McpTransportMode mode, int tcp_port = 7777, const char* tcp_address = "127.0.0.1")
+    void SetTransportMode(McpTransportMode mode, int tcp_port = 7777,
+        const char* tcp_address = "127.0.0.1")
     {
         m_transport_mode = mode;
         m_tcp_port = tcp_port;
-        m_tcp_address = (tcp_address && tcp_address[0]) ? tcp_address : "127.0.0.1";
+        m_tcp_address = IsValidPointer(tcp_address) && tcp_address[0] ?
+            tcp_address : "127.0.0.1";
     }
 
     void Start()
     {
-        if (m_server)
+        if (IsValidPointer(m_server))
         {
             if (m_server->IsRunning())
                 return;
             SafeDelete(m_server);
         }
 
-        m_commandQueue.Clear();
-        m_responseQueue.Reset();
-        m_delayedReleases.clear();
+        m_command_queue.Clear();
+        m_response_queue.Reset();
+        m_delayed_releases.clear();
+        m_pump_count = 0;
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
-        reset_input_macro();
-        m_debugAdapter->ClearControllerState();
+        m_debug_adapter->ClearControllerState();
 
         McpTransportInterface* transport = NULL;
         if (m_transport_mode == MCP_TRANSPORT_TCP)
         {
             g_mcp_stdio_mode = false;
-            Log("[MCP] Starting HTTP transport on %s:%d", m_tcp_address.c_str(), m_tcp_port);
+            Log("[MCP] Starting HTTP transport on %s:%d", m_tcp_address.c_str(),
+                m_tcp_port);
             transport = new HttpTransport(m_tcp_address, m_tcp_port);
         }
         else
@@ -135,33 +108,26 @@ public:
             transport = new StdioTransport();
         }
 
-        m_server = new McpServer(
-            transport,
-            *m_debugAdapter,
-            m_commandQueue,
-            m_responseQueue
-        );
+        m_server = new McpServer(transport, *m_debug_adapter, m_command_queue,
+            m_response_queue);
         m_server->Start();
     }
 
     void Stop()
     {
         SafeDelete(m_server);
-        m_commandQueue.Clear();
-        m_delayedReleases.clear();
+        m_command_queue.Clear();
+        m_delayed_releases.clear();
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
-        bool restore_pause = m_inputMacro.active && m_inputMacro.restore_pause;
-        reset_input_macro();
-        if (restore_pause)
-            emu_pause();
-        if (m_debugAdapter)
-            m_debugAdapter->ClearControllerState();
+
+        if (IsValidPointer(m_debug_adapter))
+            m_debug_adapter->ClearControllerState();
     }
 
     bool IsRunning() const
     {
-        return m_server && m_server->IsRunning();
+        return IsValidPointer(m_server) && m_server->IsRunning();
     }
 
     int GetTransportMode() const
@@ -181,485 +147,128 @@ public:
 
     void PumpCommands(GeartownsCore* core)
     {
-        for (size_t i = 0; i < m_delayedReleases.size(); )
+        UNUSED(core);
+        m_pump_count++;
+
+        for (size_t i = 0; i < m_delayed_releases.size();)
         {
-            if (emu_frame_counter >= m_delayedReleases[i].release_at_frame)
+            if (m_pump_count >= m_delayed_releases[i].release_at_pump)
             {
-                m_debugAdapter->ControllerButton(m_delayedReleases[i].player, m_delayedReleases[i].button, "release");
-                m_delayedReleases.erase(m_delayedReleases.begin() + i);
+                m_debug_adapter->ControllerButton(m_delayed_releases[i].player,
+                    m_delayed_releases[i].button, "release");
+                m_delayed_releases.erase(m_delayed_releases.begin() + i);
             }
             else
                 i++;
         }
 
-        if (m_inputMacro.active)
-        {
-            pump_input_macro(core);
-            return;
-        }
-
         if (m_pending_media_load)
         {
-            if (m_debugAdapter->IsMediaLoading())
+            if (m_debug_adapter->IsMediaLoading())
                 return;
 
-            DebugResponse* resp = new DebugResponse();
-            resp->requestId = m_pending_media_load_request_id;
-            resp->isError = false;
-            resp->result = m_debugAdapter->FinishLoadMedia(m_pending_media_load_file_path);
-
-            update_response_error(resp);
+            DebugResponse* response = new DebugResponse();
+            response->requestId = m_pending_media_load_request_id;
+            response->result =
+                m_debug_adapter->FinishLoadMedia(m_pending_media_load_file_path);
+            UpdateResponseError(response);
 
             m_pending_media_load = false;
             m_pending_media_load_file_path.clear();
-            m_responseQueue.Push(resp);
+            m_response_queue.Push(response);
         }
 
-        DebugCommand* cmd = NULL;
-        while ((cmd = m_commandQueue.Pop()) != NULL)
+        DebugCommand* command = NULL;
+        while ((command = m_command_queue.Pop()) != NULL)
         {
-            bool was_paused = emu_is_paused();
-
-            if (is_load_media_command(cmd->toolName))
+            if (NormalizeToolName(command->toolName) == "load_media")
             {
-                DebugResponse* resp = new DebugResponse();
-                resp->requestId = cmd->requestId;
-                resp->isError = false;
+                DebugResponse* response = new DebugResponse();
+                response->requestId = command->requestId;
 
-                std::string file_path = cmd->arguments.value("file_path", "");
-                resp->result = m_debugAdapter->StartLoadMedia(file_path);
+                std::string file_path = command->arguments.value("file_path", "");
+                response->result = m_debug_adapter->StartLoadMedia(file_path);
 
-                if (resp->result.contains("error"))
+                if (response->result.contains("error"))
                 {
-                    update_response_error(resp);
-                    m_responseQueue.Push(resp);
+                    UpdateResponseError(response);
+                    m_response_queue.Push(response);
                 }
                 else
                 {
                     m_pending_media_load = true;
-                    m_pending_media_load_request_id = resp->requestId;
+                    m_pending_media_load_request_id = response->requestId;
                     m_pending_media_load_file_path = file_path;
-                    SafeDelete(resp);
+                    SafeDelete(response);
                 }
 
-                SafeDelete(cmd);
+                SafeDelete(command);
                 break;
             }
 
-            if (is_controller_macro_command(cmd->toolName))
-            {
-                DebugResponse* resp = new DebugResponse();
-                resp->requestId = cmd->requestId;
-                resp->isError = false;
-                resp->result = start_input_macro(cmd->arguments, cmd->requestId);
+            DebugResponse* response = new DebugResponse();
+            response->requestId = command->requestId;
+            response->result = m_server->ExecuteCommand(command->toolName,
+                command->arguments);
+            UpdateResponseError(response);
+            HandleControllerSideEffects(response->result);
 
-                if (resp->result.contains("error"))
-                {
-                    update_response_error(resp);
-                    m_responseQueue.Push(resp);
-                }
-                else
-                {
-                    SafeDelete(resp);
-                    pump_input_macro(core);
-                }
-
-                SafeDelete(cmd);
-                break;
-            }
-
-            DebugResponse* resp = new DebugResponse();
-            resp->requestId = cmd->requestId;
-            resp->isError = false;
-
-            resp->result = m_server->ExecuteCommand(cmd->toolName, cmd->arguments);
-
-            if (is_get_input_state_command(cmd->toolName))
-                append_input_runtime_state(resp->result);
-
-            update_response_error(resp);
-            handle_controller_side_effects(core, resp->result);
-
-            m_responseQueue.Push(resp);
-            SafeDelete(cmd);
-
-            if (was_paused && !emu_is_paused())
-                break;
+            m_response_queue.Push(response);
+            SafeDelete(command);
         }
     }
 
 private:
-    std::string normalize_tool_name(const std::string& tool_name) const
+    std::string NormalizeToolName(std::string tool_name) const
     {
-        std::string normalized_tool = tool_name;
-        size_t pos = 0;
-        while ((pos = normalized_tool.find('.', pos)) != std::string::npos)
+        size_t position = 0;
+        while ((position = tool_name.find('.', position)) != std::string::npos)
         {
-            normalized_tool[pos] = '_';
-            pos++;
+            tool_name[position] = '_';
+            position++;
         }
 
-        return normalized_tool;
+        return tool_name;
     }
 
-    bool is_load_media_command(const std::string& tool_name) const
+    void UpdateResponseError(DebugResponse* response)
     {
-        return normalize_tool_name(tool_name) == "load_media";
-    }
-
-    bool is_controller_macro_command(const std::string& tool_name) const
-    {
-        return normalize_tool_name(tool_name) == "controller_macro";
-    }
-
-    bool is_get_input_state_command(const std::string& tool_name) const
-    {
-        return normalize_tool_name(tool_name) == "get_input_state";
-    }
-
-    void append_input_runtime_state(json& result) const
-    {
-        if (result.contains("error"))
+        if (!response->result.contains("error"))
             return;
 
-        json pending_releases = json::array();
-        for (size_t i = 0; i < m_delayedReleases.size(); i++)
-        {
-            pending_releases.push_back({
-                {"player", m_delayedReleases[i].player},
-                {"button", m_delayedReleases[i].button}
-            });
-        }
-        result["pending_releases"] = pending_releases;
+        response->isToolError = true;
+        response->errorMessage = response->result["error"];
     }
 
-    void update_response_error(DebugResponse* resp)
+    void HandleControllerSideEffects(json& result)
     {
-        if (!resp->result.contains("error"))
+        if (!result.contains("__delayed_release") ||
+            result["__delayed_release"] != true)
+        {
             return;
+        }
 
-        resp->isToolError = true;
-        resp->errorMessage = resp->result["error"];
+        DelayedButtonRelease release;
+        release.player = result["player"];
+        release.button = result["button"];
+        release.release_at_pump = m_pump_count + 10;
+        m_delayed_releases.push_back(release);
+        result.erase("__delayed_release");
     }
 
-    void reset_input_macro()
-    {
-        m_inputMacro.active = false;
-        m_inputMacro.request_id = json();
-        m_inputMacro.steps.clear();
-        m_inputMacro.step_index = 0;
-        m_inputMacro.waiting = false;
-        m_inputMacro.wait_target_frame = 0;
-        m_inputMacro.command_count = 0;
-        m_inputMacro.frames_waited = 0;
-        m_inputMacro.restore_pause = false;
-    }
-
-    json start_input_macro(const json& arguments, const json& request_id)
-    {
-        json result;
-
-        if (emu_is_empty())
-        {
-            result["error"] = "No media loaded";
-            return result;
-        }
-
-        if (arguments.contains("player") && !arguments["player"].is_number_integer())
-        {
-            result["error"] = "player must be an integer";
-            return result;
-        }
-
-        int default_player = arguments.value("player", 1);
-        if (default_player < 1 || default_player > GT_MAX_GAMEPADS)
-        {
-            result["error"] = "Invalid player number (must be 1-2)";
-            return result;
-        }
-
-        if (!arguments.contains("commands") || !arguments["commands"].is_array())
-        {
-            result["error"] = "commands array is required";
-            return result;
-        }
-
-        const json& commands = arguments["commands"];
-        if (commands.empty())
-        {
-            result["error"] = "commands array must not be empty";
-            return result;
-        }
-
-        reset_input_macro();
-        m_inputMacro.request_id = request_id;
-        m_inputMacro.command_count = (int)commands.size();
-        m_inputMacro.restore_pause = emu_is_paused();
-
-        for (size_t i = 0; i < commands.size(); i++)
-        {
-            std::string error;
-            if (!append_input_macro_command(commands[i], default_player, error))
-            {
-                reset_input_macro();
-                result["error"] = "Invalid macro command " + std::to_string((int)i) + ": " + error;
-                return result;
-            }
-        }
-
-        m_inputMacro.active = true;
-
-        if (m_inputMacro.restore_pause)
-            emu_resume();
-
-        result["success"] = true;
-        result["pending"] = true;
-        result["commands"] = m_inputMacro.command_count;
-        result["steps"] = (int)m_inputMacro.steps.size();
-        return result;
-    }
-
-    bool append_input_macro_command(const json& command, int default_player, std::string& error)
-    {
-        if (!command.is_object())
-        {
-            error = "command must be an object";
-            return false;
-        }
-
-        int action_count = 0;
-        if (command.contains("tap")) action_count++;
-        if (command.contains("press")) action_count++;
-        if (command.contains("release")) action_count++;
-        if (command.contains("wait")) action_count++;
-
-        if (action_count != 1)
-        {
-            error = "command must contain exactly one of tap, press, release, or wait";
-            return false;
-        }
-
-        for (json::const_iterator it = command.begin(); it != command.end(); ++it)
-        {
-            if (it.key() != "tap" && it.key() != "press" && it.key() != "release" &&
-                it.key() != "wait" && it.key() != "player")
-            {
-                error = "unknown property: " + it.key();
-                return false;
-            }
-        }
-
-        if (command.contains("player") && !command["player"].is_number_integer())
-        {
-            error = "player must be an integer";
-            return false;
-        }
-
-        int player = command.value("player", default_player);
-        if (player < 1 || player > GT_MAX_GAMEPADS)
-        {
-            error = "player must be 1-2";
-            return false;
-        }
-
-        if (command.contains("wait"))
-        {
-            if (!command["wait"].is_number_integer())
-            {
-                error = "wait must be an integer frame count";
-                return false;
-            }
-
-            int frames = command["wait"].get<int>();
-            if (frames < 1 || frames > 1000)
-            {
-                error = "wait must be 1-1000 frames";
-                return false;
-            }
-
-            append_wait_step(frames);
-            return true;
-        }
-
-        const char* action = command.contains("tap") ? "tap" : (command.contains("press") ? "press" : "release");
-        if (!command[action].is_string())
-        {
-            error = std::string(action) + " must be a button string";
-            return false;
-        }
-
-        std::string button = command[action];
-
-        if (!is_valid_button_name(button))
-        {
-            error = "invalid button name";
-            return false;
-        }
-
-        if (std::string(action) == "tap")
-        {
-            append_button_step(MCP_INPUT_MACRO_STEP_PRESS, player, button);
-            append_wait_step(1);
-            append_button_step(MCP_INPUT_MACRO_STEP_RELEASE, player, button);
-        }
-        else if (std::string(action) == "press")
-            append_button_step(MCP_INPUT_MACRO_STEP_PRESS, player, button);
-        else
-            append_button_step(MCP_INPUT_MACRO_STEP_RELEASE, player, button);
-
-        return true;
-    }
-
-    bool is_valid_button_name(const std::string& button) const
-    {
-        std::string button_lower = button;
-        std::transform(button_lower.begin(), button_lower.end(), button_lower.begin(),
-            [](unsigned char c) { return (char)std::tolower(c); });
-
-        return button_lower == "up" || button_lower == "down" ||
-            button_lower == "left" || button_lower == "right" ||
-            button_lower == "start" || button_lower == "run" ||
-            button_lower == "a" || button_lower == "b" ||
-            button_lower == "c" || button_lower == "x" ||
-            button_lower == "y" || button_lower == "z";
-    }
-
-    void append_button_step(McpInputMacroStepType type, int player, const std::string& button)
-    {
-        McpInputMacroStep step;
-        step.type = type;
-        step.player = player;
-        step.button = button;
-        step.frames = 0;
-        m_inputMacro.steps.push_back(step);
-    }
-
-    void append_wait_step(int frames)
-    {
-        McpInputMacroStep step;
-        step.type = MCP_INPUT_MACRO_STEP_WAIT;
-        step.player = 1;
-        step.button.clear();
-        step.frames = frames;
-        m_inputMacro.steps.push_back(step);
-    }
-
-    void pump_input_macro(GeartownsCore* core)
-    {
-        if (m_inputMacro.waiting)
-        {
-            if (emu_frame_counter < m_inputMacro.wait_target_frame)
-            {
-                continue_input_macro_wait();
-                return;
-            }
-
-            m_inputMacro.waiting = false;
-        }
-
-        while (m_inputMacro.step_index < m_inputMacro.steps.size())
-        {
-            const McpInputMacroStep& step = m_inputMacro.steps[m_inputMacro.step_index];
-
-            if (step.type == MCP_INPUT_MACRO_STEP_WAIT)
-            {
-                m_inputMacro.frames_waited += step.frames;
-                m_inputMacro.wait_target_frame = emu_frame_counter + (u64)step.frames;
-                m_inputMacro.waiting = true;
-                m_inputMacro.step_index++;
-
-                continue_input_macro_wait();
-                return;
-            }
-
-            const char* action = (step.type == MCP_INPUT_MACRO_STEP_PRESS) ? "press" : "release";
-            json action_result = m_debugAdapter->ControllerButton(step.player, step.button, action);
-
-            if (action_result.contains("error"))
-            {
-                finish_input_macro_error(action_result["error"]);
-                return;
-            }
-
-            handle_controller_side_effects(core, action_result);
-            m_inputMacro.step_index++;
-        }
-
-        finish_input_macro_success();
-    }
-
-    void continue_input_macro_wait()
-    {
-        if (m_inputMacro.restore_pause && emu_is_paused())
-            emu_resume();
-    }
-
-    void finish_input_macro_success()
-    {
-        bool restore_pause = m_inputMacro.restore_pause;
-
-        DebugResponse* resp = new DebugResponse();
-        resp->requestId = m_inputMacro.request_id;
-        resp->isError = false;
-        resp->result = {
-            {"success", true},
-            {"commands", m_inputMacro.command_count},
-            {"steps", (int)m_inputMacro.steps.size()},
-            {"frames_waited", m_inputMacro.frames_waited}
-        };
-
-        reset_input_macro();
-        if (restore_pause)
-            emu_pause();
-
-        m_responseQueue.Push(resp);
-    }
-
-    void finish_input_macro_error(const std::string& error)
-    {
-        bool restore_pause = m_inputMacro.restore_pause;
-
-        DebugResponse* resp = new DebugResponse();
-        resp->requestId = m_inputMacro.request_id;
-        resp->isToolError = true;
-        resp->errorMessage = error;
-        resp->result = {{"error", error}};
-
-        reset_input_macro();
-        if (restore_pause)
-            emu_pause();
-
-        m_responseQueue.Push(resp);
-    }
-
-    void handle_controller_side_effects(GeartownsCore* core, json& result)
-    {
-        UNUSED(core);
-
-        if (result.contains("__delayed_release") && result["__delayed_release"] == true)
-        {
-            DelayedButtonRelease release;
-            release.player = result["player"];
-            release.button = result["button"];
-            release.release_at_frame = emu_frame_counter + 10;
-            m_delayedReleases.push_back(release);
-
-            result.erase("__delayed_release");
-        }
-    }
-
-    DebugAdapter* m_debugAdapter;
+private:
+    DebugAdapter* m_debug_adapter;
     McpServer* m_server;
-    CommandQueue m_commandQueue;
-    ResponseQueue m_responseQueue;
+    CommandQueue m_command_queue;
+    ResponseQueue m_response_queue;
     McpTransportMode m_transport_mode;
     int m_tcp_port;
     std::string m_tcp_address;
     bool m_pending_media_load;
     json m_pending_media_load_request_id;
     std::string m_pending_media_load_file_path;
-    std::vector<DelayedButtonRelease> m_delayedReleases;
-    McpInputMacroState m_inputMacro;
+    std::vector<DelayedButtonRelease> m_delayed_releases;
+    u64 m_pump_count;
 };
 
 #endif /* MCP_MANAGER_H */

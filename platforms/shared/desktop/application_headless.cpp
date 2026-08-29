@@ -24,7 +24,6 @@
 #include "emu.h"
 #include "gui.h"
 #include "gui_debug.h"
-#include "gui_debug_disassembler.h"
 #include "log.h"
 
 static volatile bool headless_running = true;
@@ -42,7 +41,7 @@ int application_headless_init(const ApplicationParams& params)
 
     if (params.mcp_mode < 0)
     {
-        Error("Headless mode requires --mcp-stdio or --mcp-http");
+        Error("Headless mode requires MCP");
         return 1;
     }
 
@@ -52,20 +51,20 @@ int application_headless_init(const ApplicationParams& params)
         return 1;
     }
 
-    if (!emu_init(NULL))
+    if (!emu_init())
     {
         Error("Failed to initialize emulator");
         return 2;
     }
 
-    config_debug.debug = true;
+    config_debug.debug = params.mcp_mode >= 0;
     emu_audio_mute(true);
 
     gui_debug_init();
 
     if (!config_emulator.bios_path.empty())
     {
-        Log("Loading BIOS: %s", config_emulator.bios_path.c_str());
+        Log("Loading firmware directory: %s", config_emulator.bios_path.c_str());
         emu_load_bios(config_emulator.bios_path.c_str());
     }
 
@@ -87,13 +86,19 @@ int application_headless_init(const ApplicationParams& params)
         gui_debug_load_symbols_file(params.symbol_file);
     }
 
-    const char* mcp_http_address = params.mcp_http_address.empty() ? "127.0.0.1" : params.mcp_http_address.c_str();
-    if (params.mcp_mode == 0)
-        Log("Starting MCP server (mode: stdio)...");
-    else
-        Log("Starting MCP server (mode: http, address: %s, port: %d)...", mcp_http_address, params.mcp_tcp_port);
-    emu_mcp_set_transport(params.mcp_mode, params.mcp_tcp_port, mcp_http_address);
-    emu_mcp_start();
+    if (params.mcp_mode >= 0)
+    {
+        const char* mcp_http_address = params.mcp_http_address.empty() ? "127.0.0.1" : params.mcp_http_address.c_str();
+
+        if (params.mcp_mode == 0)
+            Log("Starting MCP server (mode: stdio)...");
+        else
+            Log("Starting MCP server (mode: http, address: %s, port: %d)...",
+                mcp_http_address, params.mcp_tcp_port);
+
+        emu_mcp_set_transport(params.mcp_mode, params.mcp_tcp_port, mcp_http_address);
+        emu_mcp_start();
+    }
 
     signal(SIGINT, headless_signal_handler);
     signal(SIGTERM, headless_signal_handler);
@@ -117,11 +122,12 @@ void application_headless_mainloop(void)
         Uint64 frame_start = SDL_GetPerformanceCounter();
 
         emu_update();
+        gui_debug_update();
         gui_finish_loading_rom();
 
         if (!emu_mcp_is_running())
         {
-            Log("MCP server stopped, exiting headless mode");
+            Log("No service running, exiting headless mode");
             break;
         }
 

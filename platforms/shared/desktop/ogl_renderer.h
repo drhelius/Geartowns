@@ -21,6 +21,7 @@
 #define OGL_RENDERER_H
 
 #include <stdint.h>
+#include "defines.h"
 
 #ifdef OGL_RENDERER_IMPORT
     #define EXTERN
@@ -29,12 +30,13 @@
 #endif
 
 #define FRAME_BUFFER_SCALE 1
-#define SYSTEM_TEXTURE_WIDTH 1024
-#define SYSTEM_TEXTURE_HEIGHT 768
+#define SYSTEM_TEXTURE_WIDTH GT_MAX_FRAME_BUFFER_WIDTH
+#define SYSTEM_TEXTURE_HEIGHT GT_MAX_FRAME_BUFFER_HEIGHT
 #define FRAME_BUFFER_WIDTH (SYSTEM_TEXTURE_WIDTH * 1)
 #define FRAME_BUFFER_HEIGHT (SYSTEM_TEXTURE_HEIGHT * FRAME_BUFFER_SCALE)
 
 EXTERN uint32_t ogl_renderer_emu_texture;
+EXTERN uint32_t ogl_renderer_emu_savestates;
 EXTERN const char* ogl_renderer_opengl_version;
 
 struct OglRendererScreenGeometry

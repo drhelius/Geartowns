@@ -24,7 +24,7 @@
 #include "config.h"
 #include "gui.h"
 #include "gui_filedialogs.h"
-#include "gui_debug_disassembler.h"
+#include "gui_debug.h"
 #include "ogl_renderer.h"
 #include "emu.h"
 #include "display.h"
@@ -64,9 +64,13 @@ static void save_window_size(void);
 #if defined(__APPLE__)
 static void* macos_fullscreen_observer = NULL;
 static void* macos_nswindow = NULL;
+static bool macos_new_instance_enabled = false;
 extern "C" void* macos_install_fullscreen_observer(void* nswindow, void(*enter_cb)(), void(*exit_cb)());
 extern "C" void macos_set_native_fullscreen(void* nswindow, bool enter);
 extern "C" void macos_refocus_window(void* nswindow);
+extern "C" void macos_install_dock_menu(void);
+extern "C" void macos_remove_dock_menu(void);
+extern "C" void macos_launch_new_instance(void);
 #endif
 
 int application_init(const ApplicationParams& params)
@@ -97,7 +101,7 @@ int application_init(const ApplicationParams& params)
         return 2;
     }
 
-    if (!emu_init(application_input_pump))
+    if (!emu_init())
     {
         Error("Failed to initialize emulator");
         return 3;
@@ -161,12 +165,16 @@ int application_init(const ApplicationParams& params)
 
 void application_destroy(void)
 {
+#if defined(__APPLE__)
+    macos_remove_dock_menu();
+#endif
+
     remove_directory_and_contents(config_temp_path);
     save_window_size();
-    emu_destroy();
     ogl_renderer_destroy();
     ImGui_ImplSDL3_Shutdown();
     gui_destroy();
+    emu_destroy();
     gamepad_destroy();
     sdl_destroy();
     single_instance_destroy();
@@ -279,13 +287,12 @@ void application_update_title_with_rom(const char* rom)
     SDL_SetWindowTitle(application_sdl_window, final_title);
 }
 
-void application_input_pump(void)
-{
-    events_emu();
-}
-
 bool application_check_single_instance(const char* rom_file, const char* symbol_file)
 {
+#if defined(__APPLE__)
+    macos_new_instance_enabled = !config_debug.single_instance;
+#endif
+
     if (!config_debug.single_instance)
         return true;
 
@@ -302,6 +309,19 @@ bool application_check_single_instance(const char* rom_file, const char* symbol_
 
     return true;
 }
+
+#if defined(__APPLE__)
+bool application_can_launch_new_instance(void)
+{
+    return macos_new_instance_enabled;
+}
+
+void application_launch_new_instance(void)
+{
+    if (macos_new_instance_enabled)
+        macos_launch_new_instance();
+}
+#endif
 
 static bool sdl_init(void)
 {
@@ -395,6 +415,9 @@ static bool sdl_init(void)
         macos_nswindow = nswindow;
         macos_fullscreen_observer = macos_install_fullscreen_observer(nswindow, on_enter_fullscreen, on_exit_fullscreen);
     }
+
+    if (macos_new_instance_enabled)
+        macos_install_dock_menu();
 #endif
 
     display_use_vsync_if_enabled();
@@ -484,11 +507,11 @@ static void sdl_events(void)
             if (!file_dialog_active)
                 ImGui_ImplSDL3_ProcessEvent(&event);
 
+            if (!gui_in_use && !file_dialog_active)
+                events_emu(&event);
+
             if (!file_dialog_active && !ImGui::GetIO().WantCaptureKeyboard)
                 events_shortcuts(&event);
-
-            if (!file_dialog_active)
-                events_handle_emu_event(&event);
         }
     }
 }
@@ -582,12 +605,13 @@ static void run_emulator(void)
     if (!display_should_run_emu_frame())
         return;
 
+    if (!events_input_updated())
+        events_emu();
+
     config_emulator.paused = emu_is_paused();
     emu_audio_sync = config_audio.sync;
     emu_update();
 
-    if (!events_input_updated())
-        events_emu();
     events_reset_input();
 }
 

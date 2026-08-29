@@ -27,6 +27,11 @@ INLINE bool GeartownsCore::IsPaused()
     return m_paused;
 }
 
+INLINE Firmware* GeartownsCore::GetFirmware()
+{
+    return m_firmware;
+}
+
 INLINE Media* GeartownsCore::GetMedia()
 {
     return m_media;
@@ -40,4 +45,14 @@ INLINE Audio* GeartownsCore::GetAudio()
 INLINE Input* GeartownsCore::GetInput()
 {
     return m_input;
+}
+
+INLINE Memory* GeartownsCore::GetMemory()
+{
+    return m_memory;
+}
+
+INLINE I386* GeartownsCore::GetI386()
+{
+    return m_cpu;
 }

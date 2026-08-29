@@ -20,175 +20,112 @@
 #ifndef GUI_DEBUG_MEMEDITOR_H
 #define GUI_DEBUG_MEMEDITOR_H
 
-#include <stdint.h>
-#include <stdio.h>
+#include <iosfwd>
 #include <vector>
-#include <iostream>
-#include "imgui.h"
+#include "debug_memory.h"
 
-typedef void (*ContextMenuBreakpointCallback)(int editor, int start, int end);
+class DebugMemoryProvider;
 
 class MemEditor
 {
 public:
-    struct Bookmark
-    {
-        int address;
-        char name[32];
-    };
-
-    struct Watch
-    {
-        int address;
-        char notes[128];
-        int size;
-        int format;
-    };
-
-    struct Search
-    {
-        int address;
-        int value;
-        int prev_value;
-    };
-
     struct Options
     {
-        int bytes_per_row = 16;
-        int preview_data_type = 0;
-        int preview_endianess = 0;
-        bool uppercase_hex = true;
-        bool gray_out_zeros = true;
+        int bytes_per_row;
+        bool uppercase_hex;
+        bool gray_out_zeros;
+        bool auto_refresh;
+        int refresh_rate;
+        int text_encoding;
+        int preview_endian;
     };
 
 public:
     MemEditor();
     ~MemEditor();
-
-    void Reset(const char* title, uint8_t* mem_data, int mem_size, int base_display_addr = 0x0000, int word = 1);
-    void Draw(bool ascii = true, bool preview = true, bool options = true, bool cursors = true);
-    void DrawWatchWindow();
-    void DrawSearchWindow();
-    void Copy(bool as_decimal = false);
-    void Paste();
-    void JumpToAddress(int address);
-    void FindNextValue(int value);
-    void SelectAll();
-    void ClearSelection();
-    void SetValueToSelection(int value);
-    void SaveToTextFile(const char* file_path);
-    void SaveToBinaryFile(const char* file_path);
-    void LoadFromBinaryFile(const char* file_path);
-    void AddBookmark();
-    void RemoveBookmarks();
-    std::vector<Bookmark>* GetBookmarks();
-    void OpenWatchWindow();
-    void OpenSearchWindow();
-    void OpenFindBytes();
-    void AddWatch();
-    void PrepareAddWatch(int address, const char* notes);
-    bool AddWatchDirect(int address, const char* notes, int size);
-    void RemoveWatches();
-    std::vector<Watch>* GetWatches();
-    void SetGuiFont(ImFont* gui_font);
-    void BookMarkPopup();
-    void WatchPopup();
-    void DrawFindBytesWindow();
-    void SaveSettings(std::ostream& stream);
-    void LoadSettings(std::istream& stream);
+    void Init(DebugMemoryProvider* provider, int id);
+    void Reset();
+    void Update();
+    void Draw();
+    void Refresh(bool preserve_previous = true);
+    void RequestRefresh();
+    void JumpToAddress(u32 address, bool add_history = true);
+    void SetSource(const GT_Debug_Memory_Address& source);
+    const GT_Debug_Memory_Address& GetSource() const;
+    u32 GetWindowBase() const;
+    u32 GetWindowSize() const;
+    void GetSelection(u32& start, u32& end) const;
+    void SetSelection(u32 start, u32 end);
+    void CopySelection(bool decimal = false);
+    void PasteSelection();
+    void FillSelection(u8 value);
+    const char* GetTitle() const;
+    bool IsAvailable() const;
+    void SetAvailable(bool available);
+    bool TakeBookmarkRequest(GT_Debug_Memory_Address& address, u32& end);
+    bool TakeWatchRequest(GT_Debug_Memory_Address& address);
+    bool TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end);
+    DebugMemoryProvider* GetProvider() const;
     Options GetOptions() const;
     void SetOptions(const Options& options);
-    void StepFrame();
-    int GetWordBytes();
-    char* GetTitle();
-    void GetSelection(int* start, int* end);
-    bool SetSelection(int start, int end);
-    void ScrollToAddress(int address);
-    void SearchCapture();
-    int PerformSearch(int op, int compare_type, int compare_value, int data_type);
-    std::vector<Search>* GetSearchResults();
-    int FindBytesSequence(const char* hex_str, int* out_addresses, int max_results);
-    void SetBreakpointCallback(ContextMenuBreakpointCallback cb, int editor);
+    void SaveSettings(std::ostream& stream) const;
+    bool LoadSettings(std::istream& stream);
 
 private:
-    bool IsColumnSeparator(int current_column, int column_count);
-    void DrawSelectionBackground(int x, int address, ImVec2 cellPos, ImVec2 cellSize);
-    void DrawSelectionAsciiBackground(int address, ImVec2 cellPos, ImVec2 cellSize);
-    void DrawSelectionFrame(int x, int y, int address, ImVec2 cellPos, ImVec2 cellSize);
-    void HandleSelection(int address, int row);
-    void DrawCursors();
-    void DrawOptions();
-    void DrawDataPreview(int address);
-    void DrawDataPreviewAsHex(int data);
-    void DrawDataPreviewAsDec(int data);
-    void DrawDataPreviewAsBin(int data);
-    int DataPreviewSize();
-    void DrawContexMenu(int address, bool cell_hovered, bool options);
-    void WatchWindow();
-    void SearchWindow();
-    void FindBytesWindow();
-    void CalculateSearchResults();
-    void CalculateFindBytesResults();
-    void DrawSearchValue(int value, ImVec4 color);
-    void FindBytesNext(int start_offset);
-    bool ParseHexByteString(const char* str, uint8_t* out, int* out_len, int max_len);
-    bool NormalizeSelectionAddress(int address, int* offset);
-    bool CanWatchRangeFit(int address, int size);
-    bool CanSearchAddressFit(int address);
-    uint32_t ReadWatchValue(const Watch& watch);
-    void WriteWatchValue(const Watch& watch, uint32_t value);
-    int WatchSizeBytes(int size);
-    void DrawWatchValue(uint32_t value, int size, int format);
-    void PushGuiFont();
-    void PopGuiFont();
+    void DrawToolbar();
+    void DrawGrid();
+    void DrawCell(u32 address, u32 offset, int column,
+        int bytes_per_row, float cell_width);
+    void DrawContextMenu(u32 address);
+    void DrawOptionsPopup();
+    void UpdateTitle();
+    void SetWindowForAddress(u32 address);
+    bool ParseAddressInput(GT_Debug_Memory_Address& address,
+        char* reason, size_t reason_size) const;
+    bool ReadSelection(std::vector<u8>& data,
+        std::vector<GT_Debug_Memory_Status>& status) const;
+    u32 SelectionStart() const;
+    u32 SelectionEnd() const;
+    u32 SelectionSize() const;
+    bool AddressInWindow(u32 address) const;
+    bool AddressInSource(u32 address) const;
+    void PushHistory(u32 address);
+    void HistoryBack();
+    void HistoryForward();
 
 private:
-    char m_title[32];
-    float m_separator_column_width;
-    int m_selection_start;
-    int m_selection_end;
+    static const u32 WINDOW_SIZE = 0x4000;
+    static const int HISTORY_SIZE = 32;
+
+    DebugMemoryProvider* m_provider;
+    int m_id;
+    char m_title[96];
+    GT_Debug_Memory_Address m_source;
+    u32 m_window_base;
+    u32 m_selection_start;
+    u32 m_selection_end;
+    u32 m_editing_address;
+    u32 m_history[HISTORY_SIZE];
+    int m_history_count;
+    int m_history_position;
+    int m_update_counter;
+    char m_address_input[96];
+    char m_edit_buffer[3];
     Options m_options;
-    int m_row_scroll_top;
-    int m_row_scroll_bottom;
-    int m_editing_address;
-    bool m_set_keyboard_here;
-    int m_jump_to_address;
-    int m_scroll_to_address;
-    uint8_t* m_mem_data;
-    int m_mem_size;
-    int m_mem_base_addr;
-    char m_hex_addr_format[16];
-    int m_hex_addr_digits;
-    int m_mem_word;
-    char m_goto_address[7];
-    char m_find_next[5];
-    bool m_add_bookmark;
-    std::vector<Bookmark> m_bookmarks;
-    bool m_watch_window;
-    bool m_add_watch;
-    int m_pending_watch_address;
-    char m_pending_watch_notes[128];
-    std::vector<Watch> m_watches;
-    ImFont* m_gui_font;
-    ImDrawList* m_draw_list;
-    bool m_search_window;
-    int m_search_operator;
-    int m_search_compare_type;
-    int m_search_data_type;
-    char m_search_compare_specific_value_str[5];
-    int m_search_compare_specific_value;
-    char m_search_compare_specific_address_str[7];
-    int m_search_compare_specific_address;
-    uint8_t* m_search_data;
-    std::vector<Search> m_search_results;
-    bool m_search_auto;
-    bool m_find_bytes_window;
-    char m_find_bytes_buffer[1025];
-    int m_find_bytes_last_address;
-    int m_find_bytes_pattern_len;
-    std::vector<int> m_find_bytes_results;
-    ContextMenuBreakpointCallback m_breakpoint_callback;
-    int m_breakpoint_editor;
+    GT_Debug_Memory_Block_Info m_block_info;
+    std::vector<u8> m_data;
+    std::vector<u8> m_previous;
+    std::vector<GT_Debug_Memory_Status> m_status;
+    bool m_available;
+    bool m_has_snapshot;
+    bool m_refresh_requested;
+    bool m_edit_focus;
+    bool m_drag_selecting;
+    bool m_follow_expression;
+    bool m_bookmark_request;
+    bool m_watch_request;
+    bool m_breakpoint_request;
+    u32 m_request_end;
 };
 
 #endif /* GUI_DEBUG_MEMEDITOR_H */

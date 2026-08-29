@@ -51,43 +51,44 @@ EXTERN Debug_Command emu_debug_command;
 EXTERN bool emu_debug_pc_changed;
 EXTERN int emu_debug_step_frames_pending;
 EXTERN u64 emu_frame_counter;
-
 EXTERN bool emu_audio_sync;
-EXTERN bool emu_debug_disable_breakpoints;
-EXTERN bool emu_debug_irq_breakpoints;
 
-EXTERN bool emu_init(GG_Input_Pump_Fn input_pump_fn);
+EXTERN bool emu_init(void);
 EXTERN void emu_destroy(void);
 EXTERN void emu_update(void);
 EXTERN void emu_load_media_async(const char* file_path);
-EXTERN void emu_load_physical_cdrom_async(const char* device_id);
 EXTERN bool emu_is_media_loading(void);
 EXTERN bool emu_finish_media_loading(void);
-EXTERN void emu_key_pressed(GT_Controllers controller, GT_Keys key);
-EXTERN void emu_key_released(GT_Controllers controller, GT_Keys key);
+EXTERN void emu_set_gamepad_state(GT_Controllers controller,
+    const GT_GamePad_State& state);
+EXTERN void emu_key_pressed(GT_Keys key);
+EXTERN void emu_key_released(GT_Keys key);
+EXTERN void emu_set_mouse_delta(int x, int y);
+EXTERN void emu_set_mouse_buttons(bool left, bool right);
 EXTERN void emu_pause(void);
 EXTERN void emu_resume(void);
 EXTERN bool emu_is_paused(void);
 EXTERN bool emu_is_debug_idle(void);
 EXTERN bool emu_is_empty(void);
 EXTERN void emu_reset(void);
-EXTERN bool emu_eject_physical_cdrom(void);
 
 EXTERN void emu_audio_mute(bool mute);
 EXTERN void emu_audio_set_master_volume(float volume);
 EXTERN void emu_audio_reset(void);
 EXTERN bool emu_is_audio_enabled(void);
 EXTERN bool emu_is_audio_open(void);
-EXTERN void emu_save_ram(const char* file_path);
-EXTERN void emu_load_ram(const char* file_path);
+
 EXTERN void emu_save_state_slot(int index);
 EXTERN void emu_load_state_slot(int index);
 EXTERN void emu_save_state_file(const char* file_path);
 EXTERN void emu_load_state_file(const char* file_path);
 EXTERN void update_savestates_data(void);
-EXTERN void emu_get_runtime(GG_Runtime_Info& runtime);
+
+EXTERN void emu_get_runtime(GT_Runtime_Info& runtime);
+EXTERN double emu_get_frame_rate(void);
 EXTERN void emu_get_info(char* info, int buffer_size);
 EXTERN GeartownsCore* emu_get_core(void);
+
 EXTERN void emu_debug_step_over(void);
 EXTERN void emu_debug_step_into(void);
 EXTERN void emu_debug_step_out(void);
@@ -96,13 +97,13 @@ EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);
 EXTERN void emu_debug_continue(void);
 EXTERN void emu_set_disassembler_syntax(int syntax);
-EXTERN void emu_set_preload_cdrom(bool enabled);
-EXTERN void emu_set_pad_type(GG_Controllers controller, GG_Controller_Type type);
-EXTERN GG_Controller_Type emu_get_pad_type(GG_Controllers controller);
-EXTERN void emu_set_mouse_delta(int x, int y);
-EXTERN void emu_save_screenshot(const char* file_path);
+
+EXTERN void emu_set_pad_type(GT_Controllers controller, GT_Controller_Type type);
+EXTERN GT_Controller_Type emu_get_pad_type(GT_Controllers controller);
+EXTERN bool emu_save_screenshot(const char* file_path);
 EXTERN int emu_get_screenshot_png(unsigned char** out_buffer);
 EXTERN bool emu_load_bios(const char* path);
+
 EXTERN void emu_mcp_set_transport(int mode, int tcp_port, const char* tcp_address);
 EXTERN void emu_mcp_start(void);
 EXTERN void emu_mcp_stop(void);

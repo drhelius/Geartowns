@@ -20,6 +20,7 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 
+#include <iostream>
 #include "common.h"
 
 class Audio
@@ -33,6 +34,8 @@ public:
     void SetMasterVolume(float volume);
     void Clock(u64 delta_ns);
     void EndFrame(s16* sample_buffer, int* sample_count);
+    void SaveState(std::ostream& stream);
+    void LoadState(std::istream& stream);
 
 private:
     bool m_mute;

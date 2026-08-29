@@ -18,6 +18,7 @@
  */
 
 #include <SDL3/SDL.h>
+#include <fstream>
 #include "geartowns.h"
 #include "config.h"
 #include "gui.h"

@@ -19,35 +19,50 @@
 
 INLINE bool Media::IsReady() const
 {
-    return m_ready;
+    return m_media_info.ready;
 }
 
-INLINE bool Media::IsBiosReady() const
+INLINE const char* Media::GetTempPath() const
 {
-    return m_bios_ready;
-}
-
-INLINE bool Media::IsCdRomReady() const
-{
-    return m_cdrom_ready;
+    return m_temp_path;
 }
 
 INLINE const char* Media::GetFilePath() const
 {
-    return m_file_path;
+    return m_media_info.path;
 }
 
 INLINE const char* Media::GetFileDirectory() const
 {
-    return m_file_directory;
+    return m_media_info.directory;
 }
 
 INLINE const char* Media::GetFileName() const
 {
-    return m_file_name;
+    return m_media_info.name;
 }
 
 INLINE const char* Media::GetFileExtension() const
 {
-    return m_file_extension;
+    return m_media_info.extension;
+}
+
+INLINE const u8* Media::GetData() const
+{
+    return m_media_data;
+}
+
+INLINE int Media::GetSize() const
+{
+    return m_media_info.size;
+}
+
+INLINE u32 Media::GetCRC() const
+{
+    return m_media_info.crc;
+}
+
+INLINE const Media::MediaFileInfo& Media::GetMediaInfo() const
+{
+    return m_media_info;
 }

@@ -128,18 +128,11 @@ void McpServer::HandleLine(const std::string& line)
 
     bool is_notification = !request.contains("id");
 
-    const auto reject_or_send_error = [this, is_notification](const json& id, int code, const std::string& message)
-    {
-        if (is_notification)
-            m_transport->reject_notification();
-        else
-            SendError(id, code, message);
-    };
-
     if (request.contains("id") && !request["id"].is_string() &&
         !request["id"].is_number_integer() && !request["id"].is_number_unsigned())
     {
-        reject_or_send_error(json(), MCP_ERROR_INVALID_REQUEST, "Invalid Request: id must be a string or integer");
+        RejectOrSendError(is_notification, json(), MCP_ERROR_INVALID_REQUEST,
+            "Invalid Request: id must be a string or integer");
         return;
     }
 
@@ -147,13 +140,15 @@ void McpServer::HandleLine(const std::string& line)
 
     if (!request.contains("jsonrpc") || request["jsonrpc"] != "2.0")
     {
-        reject_or_send_error(json(), MCP_ERROR_INVALID_REQUEST, "Invalid Request: missing or invalid jsonrpc version");
+        RejectOrSendError(is_notification, json(), MCP_ERROR_INVALID_REQUEST,
+            "Invalid Request: missing or invalid jsonrpc version");
         return;
     }
 
     if (!request.contains("method") || !request["method"].is_string())
     {
-        reject_or_send_error(json(), MCP_ERROR_INVALID_REQUEST, "Invalid Request: missing method");
+        RejectOrSendError(is_notification, json(), MCP_ERROR_INVALID_REQUEST,
+            "Invalid Request: missing method");
         return;
     }
 
@@ -161,25 +156,22 @@ void McpServer::HandleLine(const std::string& line)
 
     if (request.contains("params") && !request["params"].is_object())
     {
-        reject_or_send_error(request_id, MCP_ERROR_INVALID_PARAMS, "Invalid params: expected an object");
+        RejectOrSendError(is_notification, request_id, MCP_ERROR_INVALID_PARAMS,
+            "Invalid params: expected an object");
         return;
     }
 
     if (method == "initialize" && is_notification)
     {
-        reject_or_send_error(json(), MCP_ERROR_INVALID_REQUEST, "Initialize must be a request");
-        return;
-    }
-
-    if (method == "initialize" && m_initialized)
-    {
-        reject_or_send_error(request_id, MCP_ERROR_INVALID_REQUEST, "Server already initialized");
+        RejectOrSendError(is_notification, json(), MCP_ERROR_INVALID_REQUEST,
+            "Initialize must be a request");
         return;
     }
 
     if (!m_initialized && method != "initialize" && method != "ping")
     {
-        reject_or_send_error(request_id, MCP_ERROR_INVALID_REQUEST, "Server not initialized");
+        RejectOrSendError(is_notification, request_id, MCP_ERROR_INVALID_REQUEST,
+            "Server not initialized");
         return;
     }
 
@@ -305,14 +297,14 @@ void McpServer::HandleInitialize(const json& request)
         {"serverInfo", {
             {"name", "geartowns-mcp-server"},
             {"title", GT_TITLE " MCP Server"},
-            {"description", "Control the " GT_TITLE " FM Towns emulator through generic execution, media, screenshot, fast-forward, and controller tools."},
+            {"description", "Control the " GT_TITLE " FM Towns emulator through basic execution, media, screenshot, and controller tools."},
             {"version", GT_VERSION}
         }}
     };
 
     response["result"]["instructions"] =
         "Use this server to pause, continue, reset, load media or BIOS files, capture screenshots, "
-        "control fast-forward, and inspect or update the two controller ports.";
+        "and inspect or update the two controller ports.";
 
     if (g_mcp_router_enabled)
     {
@@ -383,19 +375,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_media_info"},
         {"title", "Get Media Info"},
-        {"description", "Read loaded media metadata and BIOS readiness."},
-        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", json::object()},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
-        {"name", "list_recent_media"},
-        {"title", "List Recent Media"},
-        {"description", "List recent media with file_path values for load_media."},
+        {"description", "Read loaded media metadata and firmware status."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -432,51 +412,6 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
-        {"name", "load_bios"},
-        {"title", "Load BIOS"},
-        {"description", "Load FM Towns BIOS files from a local path."},
-        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", true}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"file_path", {{"type", "string"}, {"description", "Absolute BIOS file path."}}}
-            }},
-            {"required", json::array({"file_path"})},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
-        {"name", "set_fast_forward_speed"},
-        {"title", "Set Fast Forward Speed"},
-        {"description", "Set fast-forward speed index: 0=1.5x, 1=2x, 2=2.5x, 3=3x, 4=unlimited."},
-        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"speed", {{"type", "integer"}, {"description", "Speed index 0-4."}, {"minimum", 0}, {"maximum", 4}}}
-            }},
-            {"required", json::array({"speed"})},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
-        {"name", "toggle_fast_forward"},
-        {"title", "Toggle Fast Forward"},
-        {"description", "Enable or disable fast-forward mode at the configured speed."},
-        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"enabled", {{"type", "boolean"}, {"description", "true enables fast forward; false disables it."}}}
-            }},
-            {"required", json::array({"enabled"})},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
         {"name", "controller_button"},
         {"title", "Controller Button"},
         {"description", "Press, release, or tap a button on either FM Towns gamepad port."},
@@ -494,37 +429,6 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
-        {"name", "controller_macro"},
-        {"title", "Controller Macro"},
-        {"description", "Run a frame-based controller macro. Commands are tap, press, release, and wait; player defaults to 1."},
-        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"player", {{"type", "integer"}, {"description", "Default player number 1-2."}, {"minimum", 1}, {"maximum", 2}}},
-                {"commands", {
-                    {"type", "array"},
-                    {"description", "Ordered macro commands."},
-                    {"minItems", 1},
-                    {"items", {
-                        {"type", "object"},
-                        {"properties", {
-                            {"tap", {{"type", "string"}, {"enum", json::array({"up", "down", "left", "right", "start", "run", "A", "B", "C", "X", "Y", "Z"})}}},
-                            {"press", {{"type", "string"}, {"enum", json::array({"up", "down", "left", "right", "start", "run", "A", "B", "C", "X", "Y", "Z"})}}},
-                            {"release", {{"type", "string"}, {"enum", json::array({"up", "down", "left", "right", "start", "run", "A", "B", "C", "X", "Y", "Z"})}}},
-                            {"wait", {{"type", "integer"}, {"description", "Frames to wait."}, {"minimum", 1}, {"maximum", 1000}}},
-                            {"player", {{"type", "integer"}, {"description", "Player override for this command, 1-2."}, {"minimum", 1}, {"maximum", 2}}}
-                        }},
-                        {"additionalProperties", false}
-                    }}
-                }}
-            }},
-            {"required", json::array({"commands"})},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
         {"name", "get_input_state"},
         {"title", "Get Input State"},
         {"description", "Get effective pressed buttons and pending tap releases."},
@@ -532,37 +436,6 @@ json McpServer::BuildToolList()
         {"inputSchema", {
             {"type", "object"},
             {"properties", json::object()},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
-        {"name", "controller_set_type"},
-        {"title", "Controller Set Type"},
-        {"description", "Set a controller port type: none, original, or 6_button."},
-        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"player", {{"type", "integer"}, {"minimum", 1}, {"maximum", 2}}},
-                {"type", {{"type", "string"}, {"enum", json::array({"none", "original", "6_button"})}}}
-            }},
-            {"required", json::array({"player", "type"})},
-            {"additionalProperties", false}
-        }}
-    });
-
-    tools.push_back({
-        {"name", "controller_get_type"},
-        {"title", "Controller Get Type"},
-        {"description", "Read a controller port type."},
-        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"player", {{"type", "integer"}, {"minimum", 1}, {"maximum", 2}}}
-            }},
-            {"required", json::array({"player"})},
             {"additionalProperties", false}
         }}
     });
@@ -913,36 +786,16 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "get_media_info")
         return m_debugAdapter.GetMediaInfo();
-    else if (normalizedTool == "list_recent_media")
-        return m_debugAdapter.ListRecentMedia();
     else if (normalizedTool == "get_screenshot")
     {
         return m_debugAdapter.GetScreenshot();
     }
     else if (normalizedTool == "load_media")
         return {{"error", "load_media must be handled by the MCP manager"}};
-    else if (normalizedTool == "load_bios")
-        return m_debugAdapter.LoadBios(arguments["file_path"]);
-    else if (normalizedTool == "set_fast_forward_speed")
-    {
-        int speed = arguments["speed"];
-        return m_debugAdapter.SetFastForwardSpeed(speed);
-    }
-    else if (normalizedTool == "toggle_fast_forward")
-    {
-        bool enabled = arguments["enabled"];
-        return m_debugAdapter.ToggleFastForward(enabled);
-    }
     else if (normalizedTool == "controller_button")
         return m_debugAdapter.ControllerButton(arguments["player"], arguments["button"], arguments["action"]);
-    else if (normalizedTool == "controller_macro")
-        return {{"error", "controller_macro must be handled by the MCP manager"}};
     else if (normalizedTool == "get_input_state")
         return m_debugAdapter.GetInputState();
-    else if (normalizedTool == "controller_set_type")
-        return m_debugAdapter.ControllerSetType(arguments["player"], arguments["type"]);
-    else if (normalizedTool == "controller_get_type")
-        return m_debugAdapter.ControllerGetType(arguments["player"]);
     else
         return {{"error", "Unknown tool: " + toolName}};
 }
@@ -971,6 +824,15 @@ void McpServer::SendError(const json& id, int code, const std::string& message, 
     Log("[MCP] Sending error: %s", error.dump().c_str());
 
     SendResponse(error);
+}
+
+void McpServer::RejectOrSendError(bool notification, const json& id, int code,
+    const std::string& message)
+{
+    if (notification)
+        m_transport->reject_notification();
+    else
+        SendError(id, code, message);
 }
 
 void McpServer::LoadResources()
@@ -1169,4 +1031,3 @@ void McpServer::HandleResourcesRead(const json& request)
 
     SendResponse(response);
 }
-

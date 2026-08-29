@@ -260,6 +260,8 @@ private:
 
     void SendResponse(const json& response);
     void SendError(const json& id, int code, const std::string& message, const json& data = json::object());
+    void RejectOrSendError(bool notification, const json& id, int code,
+        const std::string& message);
 
     McpTransportInterface* m_transport;
     DebugAdapter& m_debugAdapter;

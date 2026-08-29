@@ -22,7 +22,6 @@ bundle:
 	mkdir -p $(APP_NAME).app/Contents/Resources/mcp
 	mkdir -p $(APP_NAME).app/Contents/Resources/shaders
 	cp ../shared/gamecontrollerdb.txt $(APP_NAME).app/Contents/Resources/
-	cp -r ../shared/desktop/mcp/resources $(APP_NAME).app/Contents/Resources/mcp/
 	cp -r ../shared/desktop/shaders/* $(APP_NAME).app/Contents/Resources/shaders/
 
 dist: clean

@@ -27,10 +27,11 @@ class Media
 public:
     struct MediaFileInfo
     {
-        char path[512];
-        char directory[512];
-        char name[512];
-        char extension[512];
+        char path[GT_MAX_PATH];
+        char directory[GT_MAX_PATH];
+        char name[GT_MAX_PATH];
+        char extension[64];
+        int size;
         u32 crc;
         bool ready;
     };
@@ -40,25 +41,27 @@ public:
     ~Media();
     void Init();
     void Reset();
-    bool LoadBios(const char* directory_path);
-    bool LoadBiosFromBuffer(const u8* buffer, int size);
     bool LoadMedia(const char* file_path);
     bool IsReady() const;
-    bool IsBiosReady() const;
     void SetTempPath(const char* path);
     const char* GetTempPath() const;
+    const char* GetFilePath() const;
+    const char* GetFileDirectory() const;
+    const char* GetFileName() const;
+    const char* GetFileExtension() const;
+    const u8* GetData() const;
+    int GetSize() const;
+    u32 GetCRC() const;
     const MediaFileInfo& GetMediaInfo() const;
-    const MediaFileInfo& GetBiosInfo() const;
 
 private:
-    bool IsValidFile(const char* path);
+    void ResetMediaInfo();
+    void GatherDataFromPath(const char* path);
 
 private:
     MediaFileInfo m_media_info;
-    MediaFileInfo m_bios_info;
-    char m_temp_path[512];
-    bool m_preload_cdrom;
-
+    char m_temp_path[GT_MAX_PATH];
+    u8* m_media_data;
 };
 
 #include "media_inline.h"

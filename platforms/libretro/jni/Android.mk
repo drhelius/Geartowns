@@ -8,7 +8,7 @@ INCLUDES   := -I$(CORE_DIR) -I$(SOURCE_DIR) -I$(DEPS_DIR)/miniz -I$(DEPS_DIR)/li
 
 include $(CORE_DIR)/Makefile.common
 
-COREFLAGS := -DHAVE_STDINT_H -DHAVE_INTTYPES_H -D__LIBRETRO__ -DGT_DISABLE_DISASSEMBLER -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES)
+COREFLAGS := -DHAVE_STDINT_H -DHAVE_INTTYPES_H -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES)
 
 GIT_VERSION ?= " $(shell git -c safe.directory="$(abspath $(ROOT_DIR))" describe --abbrev=7 --dirty --always --tags || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")

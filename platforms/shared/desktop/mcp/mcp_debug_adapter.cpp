@@ -24,14 +24,12 @@
 #include "../config.h"
 #include "../emu.h"
 #include "../gui.h"
-#include "../gui_actions.h"
 #include "../utils.h"
 
 DebugAdapter::DebugAdapter(GeartownsCore* core)
 {
     m_core = core;
-    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        m_buttons[i] = 0;
+    memset(m_buttons, 0, sizeof(m_buttons));
 }
 
 void DebugAdapter::Pause()
@@ -54,8 +52,12 @@ json DebugAdapter::GetDebugStatus()
 {
     return {
         {"paused", emu_is_paused()},
+        {"debug", config_debug.debug},
+        {"debug_idle", emu_is_debug_idle()},
         {"media_loading", emu_is_media_loading()},
         {"media_ready", m_core && m_core->GetMedia()->IsReady()},
+        {"bios_ready", m_core && m_core->GetFirmware()->IsReady()},
+        {"firmware_ready", m_core && m_core->GetFirmware()->IsReady()},
         {"frame", emu_frame_counter}
     };
 }
@@ -90,39 +92,48 @@ json DebugAdapter::GetScreenshot()
     result["mimeType"] = "image/png";
     result["width"] = runtime.screen_width;
     result["height"] = runtime.screen_height;
-
     return result;
 }
 
 json DebugAdapter::GetMediaInfo()
 {
     Media* media = m_core->GetMedia();
-    return {
+    Firmware* firmware = m_core->GetFirmware();
+    json result = {
         {"emulator", GT_TITLE},
         {"emulator_version", GT_VERSION},
         {"ready", media->IsReady()},
-        {"bios_ready", media->IsBiosReady()},
+        {"bios_ready", firmware->IsReady()},
+        {"firmware_ready", firmware->IsReady()},
+        {"firmware_directory", firmware->GetDirectory()},
         {"file_path", media->GetFilePath()},
         {"file_name", media->GetFileName()},
         {"file_directory", media->GetFileDirectory()},
-        {"file_extension", media->GetFileExtension()}
+        {"file_extension", media->GetFileExtension()},
+        {"size", media->GetSize()},
+        {"crc", media->GetCRC()}
     };
-}
 
-json DebugAdapter::ListRecentMedia()
-{
-    json entries = json::array();
-
-    for (int i = 0; i < config_max_recent_roms; i++)
+    result["firmware"] = json::array();
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
     {
-        if (!config_emulator.recent_roms[i].empty())
-        {
-            const std::string& path = config_emulator.recent_roms[i];
-            entries.push_back({{"index", i}, {"file_path", path}, {"file_name", get_filename(path.c_str())}});
-        }
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+        const GT_Firmware_Info& info = firmware->GetInfo(type);
+        result["firmware"].push_back({
+            {"type", Firmware::GetComponentName(type)},
+            {"file_name", Firmware::GetFileName(type)},
+            {"path", info.path},
+            {"size", info.size},
+            {"crc", info.crc},
+            {"required", Firmware::IsRequired(type)},
+            {"loaded", info.loaded},
+            {"recognized", info.recognized},
+            {"synthetic", info.synthetic},
+            {"database_name", info.database_name}
+        });
     }
 
-    return {{"count", entries.size()}, {"recent_media", entries}};
+    return result;
 }
 
 json DebugAdapter::StartLoadMedia(const std::string& file_path)
@@ -152,53 +163,6 @@ json DebugAdapter::FinishLoadMedia(const std::string& file_path)
     return {{"success", true}, {"file_path", file_path}};
 }
 
-json DebugAdapter::LoadBios(const std::string& file_path)
-{
-    if (file_path.empty())
-        return {{"error", "File path is required"}};
-
-    if (!emu_load_bios(file_path.c_str()))
-        return {{"error", "Failed to load BIOS"}};
-
-    return {{"success", true}, {"file_path", file_path}};
-}
-
-json DebugAdapter::SetFastForwardSpeed(int speed)
-{
-    json result;
-
-    if (speed < 0 || speed > 4)
-    {
-        result["error"] = "Invalid speed (must be 0-4: 0=1.5x, 1=2x, 2=2.5x, 3=3x, 4=Unlimited)";
-        Log("[MCP] SetFastForwardSpeed failed: Invalid speed %d", speed);
-        return result;
-    }
-
-    config_emulator.ffwd_speed = speed;
-
-    result["success"] = true;
-    result["speed"] = speed;
-
-    const char* speed_names[] = {"1.5x", "2x", "2.5x", "3x", "Unlimited"};
-    result["speed_name"] = speed_names[speed];
-
-    return result;
-}
-
-json DebugAdapter::ToggleFastForward(bool enabled)
-{
-    json result;
-
-    config_emulator.ffwd = enabled;
-    gui_action_ffwd();
-
-    result["success"] = true;
-    result["enabled"] = enabled;
-    result["speed"] = config_emulator.ffwd_speed;
-
-    return result;
-}
-
 u16 DebugAdapter::ButtonMask(const std::string& button) const
 {
     std::string name = button;
@@ -219,7 +183,8 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     return 0;
 }
 
-json DebugAdapter::ControllerButton(int player, const std::string& button, const std::string& action)
+json DebugAdapter::ControllerButton(int player, const std::string& button,
+    const std::string& action)
 {
     if (player < 1 || player > GT_MAX_GAMEPADS)
         return {{"error", "Invalid player number"}};
@@ -243,15 +208,25 @@ json DebugAdapter::ControllerButton(int player, const std::string& button, const
         return {{"error", "Invalid action"}};
 
     ApplyControllerState(player);
-    json result = {{"success", true}, {"player", player}, {"button", button}, {"action", action}};
+    json result = {
+        {"success", true},
+        {"player", player},
+        {"button", button},
+        {"action", action}
+    };
+
     if (delayed_release)
         result["__delayed_release"] = true;
+
     return result;
 }
 
 json DebugAdapter::GetInputState()
 {
-    static const char* names[] = {"up", "down", "left", "right", "start", "run", "A", "B", "C", "X", "Y", "Z"};
+    static const char* names[] = {
+        "up", "down", "left", "right", "start", "run",
+        "A", "B", "C", "X", "Y", "Z"
+    };
     static const u16 masks[] = {
         GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT, GT_GAMEPAD_RIGHT,
         GT_GAMEPAD_START, GT_GAMEPAD_RUN, GT_GAMEPAD_A, GT_GAMEPAD_B,
@@ -262,52 +237,18 @@ json DebugAdapter::GetInputState()
     for (int player = 0; player < GT_MAX_GAMEPADS; player++)
     {
         json pressed = json::array();
+        u16 buttons = m_core->GetInput()->GetGamePadState(player).buttons;
+
         for (size_t i = 0; i < sizeof(masks) / sizeof(masks[0]); i++)
         {
-            u16 effective_buttons = m_core->GetInput()->GetGamePadState(player).buttons | m_buttons[player];
-            if (effective_buttons & masks[i])
+            if (buttons & masks[i])
                 pressed.push_back(names[i]);
         }
+
         players.push_back({{"player", player + 1}, {"pressed", pressed}});
     }
 
     return {{"players", players}};
-}
-
-json DebugAdapter::ControllerSetType(int player, const std::string& type)
-{
-    if (player < 1 || player > GT_MAX_GAMEPADS)
-        return {{"error", "Invalid player number"}};
-
-    GT_Controller_Type controller_type = GT_CONTROLLER_NONE;
-    if (type == "original")
-        controller_type = GT_CONTROLLER_ORIGINAL_GAMEPAD;
-    else if (type == "6_button")
-        controller_type = GT_CONTROLLER_6_BUTTON_GAMEPAD;
-    else if (type != "none")
-        return {{"error", "Invalid controller type"}};
-
-    emu_set_pad_type(player - 1, controller_type);
-    config_input.controller_type[player - 1] = controller_type;
-    return {{"success", true}, {"player", player}, {"type", type}};
-}
-
-json DebugAdapter::ControllerGetType(int player)
-{
-    if (player < 1 || player > GT_MAX_GAMEPADS)
-        return {{"error", "Invalid player number"}};
-
-    GT_Controller_Type type = emu_get_pad_type(player - 1);
-    return {{"success", true}, {"player", player}, {"type", ControllerTypeName(type)}};
-}
-
-const char* DebugAdapter::ControllerTypeName(GT_Controller_Type type) const
-{
-    if (type == GT_CONTROLLER_ORIGINAL_GAMEPAD)
-        return "original";
-    if (type == GT_CONTROLLER_6_BUTTON_GAMEPAD)
-        return "6_button";
-    return "none";
 }
 
 void DebugAdapter::ApplyControllerState(int player)

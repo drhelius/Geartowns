@@ -41,6 +41,8 @@ static uint32_t system_texture;
 static uint32_t frame_buffer_object;
 static GT_Runtime_Info current_runtime;
 static OglRendererScreenGeometry screen_geometry;
+static int savestates_texture_slot = -1;
+static u32 savestates_texture_generation = 0;
 
 static uint32_t quad_shader_program = 0;
 static uint32_t quad_vao = 0;
@@ -52,6 +54,7 @@ static bool ogl_gui_initialized = false;
 
 static bool init_ogl_gui(void);
 static bool init_ogl_emu(void);
+static void init_ogl_savestates(void);
 static bool init_shaders(void);
 static void render_gui(void);
 static bool should_use_internal_shader_chain(void);
@@ -63,6 +66,7 @@ static void bind_texture_unit(int unit, uint32_t texture, uint32_t fallback_text
 static void render_quad(uint32_t program, uint32_t texture, int viewport_width, int viewport_height, float tex_h, float tex_v, float red, float green, float blue, float alpha);
 static void render_quad_preset(int pass_index, uint32_t program, uint32_t texture, int input_width, int input_height, int viewport_width, int viewport_height);
 static void update_system_texture(void);
+static void update_savestates_texture(void);
 static void load_configured_shader_preset(void);
 static void apply_shader_parameter_config(void);
 static bool get_active_shader_preset_file(char* preset_file, size_t preset_file_size);
@@ -117,6 +121,7 @@ bool ogl_renderer_init(void)
     }
 
     load_configured_shader_preset();
+    init_ogl_savestates();
 
     return true;
 }
@@ -126,6 +131,7 @@ void ogl_renderer_destroy(void)
     glDeleteFramebuffers(1, &frame_buffer_object);
     glDeleteTextures(1, &ogl_renderer_emu_texture);
     glDeleteTextures(1, &system_texture);
+    glDeleteTextures(1, &ogl_renderer_emu_savestates);
     ogl_shader_chain_destroy();
 
     if (quad_shader_program)
@@ -154,6 +160,7 @@ void ogl_renderer_begin_render(void)
 void ogl_renderer_render(void)
 {
     emu_get_runtime(current_runtime);
+    update_savestates_texture();
 
     bool use_internal_shader_chain = should_use_internal_shader_chain();
 
@@ -304,6 +311,14 @@ static bool init_ogl_emu(void)
     return complete;
 }
 
+static void init_ogl_savestates(void)
+{
+    create_texture_2d(&ogl_renderer_emu_savestates, SYSTEM_TEXTURE_WIDTH,
+        SYSTEM_TEXTURE_HEIGHT, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
+    savestates_texture_slot = -1;
+    savestates_texture_generation = 0;
+}
+
 static void render_gui(void)
 {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -314,6 +329,7 @@ static bool should_use_internal_shader_chain(void)
     return ogl_shader_chain_is_initialized() &&
             config_video.shader_mode == config_ShaderMode_External &&
             ogl_shader_chain_has_preset() &&
+            !config_debug.debug &&
             screen_geometry.physical_width > 0 &&
             screen_geometry.physical_height > 0;
 }
@@ -450,6 +466,31 @@ static void update_system_texture(void)
     glBindTexture(GL_TEXTURE_2D, system_texture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, current_runtime.screen_width, current_runtime.screen_height,
             GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*) emu_frame_buffer);
+}
+
+static void update_savestates_texture(void)
+{
+    int slot = config_emulator.save_slot;
+    if (slot < 0 || slot >= 5)
+        return;
+
+    if (savestates_texture_slot == slot &&
+        savestates_texture_generation == emu_savestates_generation)
+    {
+        return;
+    }
+
+    savestates_texture_slot = slot;
+    savestates_texture_generation = emu_savestates_generation;
+
+    if (IsValidPointer(emu_savestates_screenshots[slot].data))
+    {
+        int width = emu_savestates_screenshots[slot].width;
+        int height = emu_savestates_screenshots[slot].height;
+        glBindTexture(GL_TEXTURE_2D, ogl_renderer_emu_savestates);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA,
+            GL_UNSIGNED_BYTE, (GLvoid*)emu_savestates_screenshots[slot].data);
+    }
 }
 
 static void render_quad(uint32_t program, uint32_t texture, int viewport_width, int viewport_height, float tex_h, float tex_v, float red, float green, float blue, float alpha)

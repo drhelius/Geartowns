@@ -20,7 +20,10 @@
 #ifndef INPUT_H
 #define INPUT_H
 
+#include <iostream>
 #include "common.h"
+
+class StateSerializer;
 
 class Input
 {
@@ -33,8 +36,17 @@ public:
     bool IsKeyPressed(GT_Keys key) const;
     void SetMouseDelta(s32 x, s32 y);
     void SetMouseButtons(bool left, bool right);
+    void SetGamePadState(int port, const GT_GamePad_State& state);
+    void SetInjectedGamePadState(int port, const GT_GamePad_State& state);
+    const GT_GamePad_State& GetGamePadState(int port) const;
     void SetControllerType(int port, GT_Controller_Type type);
     GT_Controller_Type GetControllerType(int port) const;
+    void SaveState(std::ostream& stream);
+    void LoadState(std::istream& stream);
+
+private:
+    void UpdateGamePadState(int port);
+    void Serialize(StateSerializer& serializer);
 
 private:
     bool m_keys[GT_KEY_COUNT];
@@ -42,6 +54,8 @@ private:
     s32 m_mouse_y;
     bool m_mouse_left;
     bool m_mouse_right;
+    GT_GamePad_State m_physical_gamepads[GT_MAX_GAMEPADS];
+    GT_GamePad_State m_injected_gamepads[GT_MAX_GAMEPADS];
     GT_GamePad_State m_gamepads[GT_MAX_GAMEPADS];
     GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
 };

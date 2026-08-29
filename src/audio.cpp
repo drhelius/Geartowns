@@ -45,3 +45,13 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     if (sample_count != NULL)
         *sample_count = 0;
 }
+
+void Audio::SaveState(std::ostream& stream)
+{
+    UNUSED(stream);
+}
+
+void Audio::LoadState(std::istream& stream)
+{
+    UNUSED(stream);
+}

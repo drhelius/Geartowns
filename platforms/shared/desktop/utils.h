@@ -108,10 +108,22 @@ static inline std::string base64_encode(const unsigned char* data, int size)
     return result;
 }
 
+static inline bool get_local_time(time_t timestamp, struct tm* time_info)
+{
+#if defined(_WIN32)
+    return localtime_s(time_info, &timestamp) == 0;
+#else
+    return localtime_r(&timestamp, time_info) != NULL;
+#endif
+}
+
 static inline void get_date_time_string(time_t timestamp, char* buffer, size_t size)
 {
-    struct tm* timeinfo = localtime(&timestamp);
-    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", timeinfo);
+    struct tm time_info;
+    if (get_local_time(timestamp, &time_info))
+        strftime(buffer, size, "%Y-%m-%d %H:%M:%S", &time_info);
+    else if (size > 0)
+        buffer[0] = '\0';
 }
 
 static inline void get_current_date_time_string(char* buffer, size_t size)
@@ -342,6 +354,11 @@ static inline bool path_exists(const char* path)
 
 static inline void get_executable_path(char* path, size_t size)
 {
+    if (!path || size == 0)
+        return;
+
+    path[0] = '\0';
+
 #if defined(_WIN32)
     DWORD len = GetModuleFileNameA(NULL, path, (DWORD)size);
     if (len > 0 && len < size)
@@ -349,12 +366,15 @@ static inline void get_executable_path(char* path, size_t size)
         char* last_slash = strrchr(path, '\\');
         if (last_slash) *last_slash = '\0';
 
-        // Check if we're in an MCPB bundle (immediate server\ subfolder)
         char* server_pos = strrchr(path, '\\');
         const char* directory_name = server_pos ? server_pos + 1 : path;
         if (strcmp(directory_name, "server") == 0)
         {
-            if (server_pos)
+            if (server_pos == path + 2 && path[1] == ':')
+                path[3] = '\0';
+            else if (server_pos == path)
+                path[1] = '\0';
+            else if (server_pos)
                 *server_pos = '\0';
             else
                 path[0] = '\0';
@@ -366,22 +386,28 @@ static inline void get_executable_path(char* path, size_t size)
     }
 #elif defined(__APPLE__)
     uint32_t bufsize = (uint32_t)size;
-    if (_NSGetExecutablePath(path, &bufsize) == 0) {
+    if (_NSGetExecutablePath(path, &bufsize) == 0)
+    {
         char* dir = dirname(path);
-        strncpy(path, dir, size);
-        path[size - 1] = '\0';
+        size_t length = dir ? strlen(dir) : size;
+        if (length >= size)
+        {
+            path[0] = '\0';
+            return;
+        }
+        memmove(path, dir, length + 1);
 
-        // Check if we're in an MCPB bundle (immediate server/ subfolder)
         char* server_pos = strrchr(path, '/');
         const char* directory_name = server_pos ? server_pos + 1 : path;
         if (strcmp(directory_name, "server") == 0)
         {
-            if (server_pos)
+            if (server_pos == path)
+                path[1] = '\0';
+            else if (server_pos)
                 *server_pos = '\0';
             else
                 path[0] = '\0';
         }
-        // If running inside a .app bundle, use Contents/Resources as data root
         else if (ends_with(path, "/Contents/MacOS"))
         {
             size_t len = strlen(path);
@@ -400,18 +426,19 @@ static inline void get_executable_path(char* path, size_t size)
     }
 #elif defined(__linux__)
     ssize_t len = readlink("/proc/self/exe", path, size - 1);
-    if (len != -1)
+    if (len >= 0 && (size_t)len < size - 1)
     {
         path[len] = '\0';
         char* last_slash = strrchr(path, '/');
         if (last_slash) *last_slash = '\0';
 
-        // Check if we're in an MCPB bundle (immediate server/ subfolder)
         char* server_pos = strrchr(path, '/');
         const char* directory_name = server_pos ? server_pos + 1 : path;
         if (strcmp(directory_name, "server") == 0)
         {
-            if (server_pos)
+            if (server_pos == path)
+                path[1] = '\0';
+            else if (server_pos)
                 *server_pos = '\0';
             else
                 path[0] = '\0';
@@ -429,9 +456,19 @@ static inline void get_executable_path(char* path, size_t size)
         size_t len = strlen(path);
         while (len > 1 && (path[len - 1] == '/' || path[len - 1] == '\\'))
             path[--len] = '\0';
+
+        char* server_pos = strrchr(path, '/');
+        const char* directory_name = server_pos ? server_pos + 1 : path;
+        if (strcmp(directory_name, "server") == 0)
+        {
+            if (server_pos == path)
+                path[1] = '\0';
+            else if (server_pos)
+                *server_pos = '\0';
+            else
+                path[0] = '\0';
+        }
     }
-    else
-        path[0] = '\0';
 #endif
 }
 

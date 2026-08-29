@@ -31,6 +31,7 @@
 // Absolute hard cap for the ring buffer. Effective capacity is derived from
 // config_rewind (buffer_seconds / frames_per_snapshot) and clamped to this.
 #define REWIND_MAX_SNAPSHOTS        600
+#define REWIND_MAX_MEMORY_SIZE      (150 * 1024 * 1024)
 
 EXTERN bool rewind_init(void);
 EXTERN void rewind_destroy(void);

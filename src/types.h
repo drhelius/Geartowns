@@ -80,10 +80,39 @@ struct GT_Runtime_Info
 {
     int screen_width;
     int screen_height;
+    int width_scale;
     int sample_rate;
     bool media_ready;
     bool bios_ready;
     bool paused;
+};
+
+enum GT_Run_Result
+{
+    GT_RUN_FRAME_READY = 0,
+    GT_RUN_PAUSED,
+    GT_RUN_NOT_READY
+};
+
+enum GT_Firmware_Type
+{
+    GT_FIRMWARE_SYSTEM = 0,
+    GT_FIRMWARE_OS,
+    GT_FIRMWARE_FONT,
+    GT_FIRMWARE_DICTIONARY,
+    GT_FIRMWARE_FONT20,
+    GT_FIRMWARE_COUNT
+};
+
+struct GT_Firmware_Info
+{
+    char path[GT_MAX_PATH];
+    char database_name[128];
+    int size;
+    u32 crc;
+    bool loaded;
+    bool recognized;
+    bool synthetic;
 };
 
 struct GT_Color
@@ -149,6 +178,34 @@ struct GT_GamePad_State
     u16 buttons;
     s16 axis_x;
     s16 axis_y;
+};
+
+struct GT_SaveState_Header
+{
+    u32 magic;
+    u32 version;
+    u32 size;
+    s64 timestamp;
+    char rom_name[128];
+    u32 rom_crc;
+    u32 screenshot_size;
+    u16 screenshot_width;
+    u16 screenshot_height;
+    char emu_build[32];
+};
+
+struct GT_SaveState_Header_Libretro
+{
+    u32 magic;
+    u32 version;
+};
+
+struct GT_SaveState_Screenshot
+{
+    u32 width;
+    u32 height;
+    u32 size;
+    u8* data;
 };
 
 #endif /* TYPES_H */

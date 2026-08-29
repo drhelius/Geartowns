@@ -183,8 +183,8 @@ struct McpToolCategoryTools
 
 static const McpToolCategory kMcpToolCategories[] =
 {
-    {"execution", "Execution", "Pause, continue, reset, and control fast-forward."},
-    {"media", "Media", "Load BIOS or media files and inspect recent or loaded media."},
+    {"execution", "Execution", "Pause, continue, reset, and inspect execution."},
+    {"media", "Media", "Load BIOS or media files and inspect loaded media."},
     {"capture", "Capture", "Capture the current emulator screenshot."},
     {"input", "Input", "Inspect and control the two gamepad ports."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
@@ -192,13 +192,12 @@ static const McpToolCategory kMcpToolCategories[] =
 
 static const char* const kMcpExecutionTools[] =
 {
-    "debug_pause", "debug_continue", "debug_reset", "debug_get_status",
-    "set_fast_forward_speed", "toggle_fast_forward"
+    "debug_pause", "debug_continue", "debug_reset", "debug_get_status"
 };
 
 static const char* const kMcpMediaTools[] =
 {
-    "load_media", "get_media_info", "list_recent_media", "load_bios"
+    "load_media", "get_media_info"
 };
 
 static const char* const kMcpCaptureTools[] =
@@ -208,8 +207,7 @@ static const char* const kMcpCaptureTools[] =
 
 static const char* const kMcpInputTools[] =
 {
-    "controller_button", "controller_macro", "controller_set_type",
-    "controller_get_type", "get_input_state"
+    "controller_button", "get_input_state"
 };
 
 static const McpToolCategoryTools kMcpToolCategoryTools[] =
@@ -580,7 +578,7 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
     std::string aliases = ToolCategoryForName(name);
 
     if (StringContains(name, "controller"))
-        aliases += " input joypad gamepad button macro tap press release";
+        aliases += " input joypad gamepad button tap press release";
 
     return aliases;
 }

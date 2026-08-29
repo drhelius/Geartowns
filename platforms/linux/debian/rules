@@ -24,11 +24,6 @@ override_dh_install:
 		install -Dm644 platforms/shared/desktop/icons/geartowns-$${size}.png \
 			debian/geartowns/usr/share/icons/hicolor/$${size}x$${size}/apps/geartowns.png; \
 	done
-	install -dm755 debian/geartowns/usr/lib/geartowns/mcp/resources/hardware
-	install -m644 platforms/shared/desktop/mcp/resources/hardware/*.md \
-		debian/geartowns/usr/lib/geartowns/mcp/resources/hardware/
-	install -m644 platforms/shared/desktop/mcp/resources/hardware/toc.json \
-		debian/geartowns/usr/lib/geartowns/mcp/resources/hardware/toc.json
 	install -dm755 debian/geartowns/usr/lib/geartowns/shaders
 	install -m644 platforms/shared/desktop/shaders/*.gshader \
 		debian/geartowns/usr/lib/geartowns/shaders/

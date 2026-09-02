@@ -379,5 +379,6 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Geartowns.rc" />
+    <ResourceCompile Include="version.rc" />
   </ItemGroup>
 </Project>

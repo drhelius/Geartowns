@@ -183,7 +183,7 @@ static inline void process(config_Operation operation)
     {
         char section[32];
         snprintf(section, sizeof(section), "InputGamepad%d", i + 1);
-        CONFIG_INT(section, "GamepadDirectional", config_input_gamepad[i].gamepad_directional, 0);
+        CONFIG_INT_RANGE(section, "GamepadDirectional", config_input_gamepad[i].gamepad_directional, 0, 0, 2);
         CONFIG_BOOL(section, "GamepadInvertX", config_input_gamepad[i].gamepad_invert_x_axis, false);
         CONFIG_BOOL(section, "GamepadInvertY", config_input_gamepad[i].gamepad_invert_y_axis, false);
         CONFIG_INT(section, "GamepadStart", config_input_gamepad[i].gamepad_start, SDL_GAMEPAD_BUTTON_START);

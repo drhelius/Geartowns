@@ -208,7 +208,7 @@ static GT_GamePad_State input_build_state(int controller)
     if (gamepad_get_button(gamepad, mapping.gamepad_Y)) state.buttons |= GT_GAMEPAD_Y;
     if (gamepad_get_button(gamepad, mapping.gamepad_Z)) state.buttons |= GT_GAMEPAD_Z;
 
-    if (mapping.gamepad_directional == 0)
+    if (mapping.gamepad_directional == 0 || mapping.gamepad_directional == 2)
     {
         if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT))
             state.buttons |= GT_GAMEPAD_LEFT;
@@ -219,7 +219,7 @@ static GT_GamePad_State input_build_state(int controller)
         if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN))
             state.buttons |= GT_GAMEPAD_DOWN;
     }
-    else
+    if (mapping.gamepad_directional == 1 || mapping.gamepad_directional == 2)
     {
         int x = SDL_GetGamepadAxis(gamepad, (SDL_GamepadAxis)mapping.gamepad_x_axis);
         int y = SDL_GetGamepadAxis(gamepad, (SDL_GamepadAxis)mapping.gamepad_y_axis);

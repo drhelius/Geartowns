@@ -94,6 +94,31 @@ enum GT_Run_Result
     GT_RUN_NOT_READY
 };
 
+enum GT_Bus_Access_Origin
+{
+    GT_BUS_ORIGIN_CPU = 0,
+    GT_BUS_ORIGIN_DMA
+};
+
+struct GT_Bus_Access_Context;
+
+typedef void (*GT_Synchronize_Hardware_Fn)(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks);
+typedef void (*GT_Observe_Memory_Write_Fn)(void* observer, u32 bus_address, u8 previous, u8 value);
+
+struct GT_Bus_Access_Context
+{
+    u64 time_ns;
+    u32 elapsed_clocks;
+    u32 synchronized_clocks;
+    u32 wait_clocks;
+    GT_Bus_Access_Origin origin;
+    GT_Synchronize_Hardware_Fn synchronize;
+    void* synchronize_context;
+    GT_Observe_Memory_Write_Fn observe_memory_write;
+    void* memory_write_context;
+    bool end_batch;
+};
+
 enum GT_Firmware_Type
 {
     GT_FIRMWARE_SYSTEM = 0,

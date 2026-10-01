@@ -125,8 +125,8 @@ static int IsButtonPressed(int joypad_bits, int button)
 static bool IsJoypadDevice(unsigned device)
 {
     return (device == RETRO_DEVICE_JOYPAD) ||
-           (device == RETRO_DEVICE_TOWNS_GAMEPAD) ||
-           (device == RETRO_DEVICE_TOWNS_6_BUTTON);
+        (device == RETRO_DEVICE_TOWNS_GAMEPAD) ||
+        (device == RETRO_DEVICE_TOWNS_6_BUTTON);
 }
 
 unsigned retro_api_version(void)
@@ -163,21 +163,6 @@ void retro_set_environment(retro_environment_t cb)
 {
     environ_cb = cb;
 
-    struct retro_vfs_interface_info vfs_interface_info = { };
-    vfs_interface_info.required_interface_version = 2;
-    vfs_interface_info.iface = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_interface_info) && vfs_interface_info.iface)
-    {
-        vfs_interface = vfs_interface_info.iface;
-        MediaFile::SetVfsInterface(vfs_interface);
-    }
-    else
-    {
-        vfs_interface = NULL;
-        MediaFile::SetVfsInterface(NULL);
-    }
-
     static const struct retro_system_content_info_override content_overrides[] = {
         {
             "d77|rdd",  // extensions
@@ -195,18 +180,30 @@ void retro_set_environment(retro_environment_t cb)
 
 void retro_init(void)
 {
+    struct retro_vfs_interface_info vfs_interface_info = { };
+    vfs_interface_info.required_interface_version = 2;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_interface_info) && vfs_interface_info.iface)
+        vfs_interface = vfs_interface_info.iface;
+    else
+        vfs_interface = NULL;
+
+    MediaFile::SetVfsInterface(vfs_interface);
+
     if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &logging))
         log_cb = logging.log;
     else
         log_cb = fallback_log;
 
     const char *dir = NULL;
+
     if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
         snprintf(retro_system_directory, sizeof(retro_system_directory), "%s", dir);
     else
         snprintf(retro_system_directory, sizeof(retro_system_directory), "%s", ".");
 
     dir = NULL;
+
     if (environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &dir) && dir)
         snprintf(retro_save_directory, sizeof(retro_save_directory), "%s", dir);
     else
@@ -215,7 +212,7 @@ void retro_init(void)
     log_cb(RETRO_LOG_INFO, "%s (%s) libretro\n", GT_TITLE, GT_VERSION);
 
     core = new GeartownsCore();
-    core->Init(NULL, GT_PIXEL_RGB565);
+    core->Init(GT_PIXEL_RGB565);
     core->GetRuntimeInfo(runtime_info);
 
     frame_buffer = new u8[MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16)];
@@ -266,6 +263,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
     {
         if (log_cb)
             log_cb(RETRO_LOG_DEBUG, "retro_set_controller_port_device invalid port number: %u\n", port);
+
         return;
     }
 
@@ -293,14 +291,16 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     info->geometry.base_height  = runtime_info.screen_height;
     info->geometry.max_width    = MAX_SCREEN_WIDTH;
     info->geometry.max_height   = MAX_SCREEN_HEIGHT;
-    info->geometry.aspect_ratio = aspect_ratio == 0.0f ? (float)runtime_info.screen_width / (float)runtime_info.screen_height / (float)runtime_info.width_scale : aspect_ratio;
-    info->timing.fps            = runtime_info.fps;
+    info->geometry.aspect_ratio = aspect_ratio == 0.0f ?
+        (float)runtime_info.screen_width / (float)runtime_info.screen_height / (float)runtime_info.width_scale : aspect_ratio;
+    info->timing.fps            = 60.0;
     info->timing.sample_rate    = GT_AUDIO_SAMPLE_RATE;
 }
 
 void retro_run(void)
 {
     bool core_options_updated = false;
+
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &core_options_updated) && core_options_updated)
     {
         check_variables();
@@ -347,6 +347,7 @@ bool retro_load_game(const struct retro_game_info *info)
     {
         if (log_cb)
             log_cb(RETRO_LOG_ERROR, "retro_load_game received invalid state.\n");
+
         return false;
     }
 
@@ -370,6 +371,7 @@ bool retro_load_game(const struct retro_game_info *info)
         return false;
 
     enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
+
     if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
     {
         log_cb(RETRO_LOG_ERROR, "RGB565 is not supported.\n");
@@ -386,7 +388,9 @@ void retro_unload_game(void)
 {
     if (core)
         core->GetMedia()->Reset();
+
     retro_game_path[0] = 0;
+
     if (frame_buffer)
         memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16));
 }
@@ -409,6 +413,7 @@ static bool path_has_extension(const char* path, const char* extension)
         return false;
 
     const char* dot = strrchr(path, '.');
+
     if (!dot || !dot[1])
         return false;
 
@@ -433,8 +438,10 @@ static bool path_is_cdrom_uri(const char* path)
 
 static bool path_is_cd_content(const char* path)
 {
-    return path_is_cdrom_uri(path) || path_has_extension(path, "cue") ||
-        path_has_extension(path, "chd") || path_has_extension(path, "iso");
+    return path_is_cdrom_uri(path) ||
+        path_has_extension(path, "cue") ||
+        path_has_extension(path, "chd") ||
+        path_has_extension(path, "iso");
 }
 
 unsigned retro_get_region(void)
@@ -583,26 +590,34 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
         case RETRO_DEVICE_JOYPAD:
         case RETRO_DEVICE_TOWNS_GAMEPAD:
             type = GT_CONTROLLER_ORIGINAL_GAMEPAD;
+
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: Original gamepad\n", port);
+
             break;
         case RETRO_DEVICE_TOWNS_6_BUTTON:
             type = GT_CONTROLLER_6_BUTTON_GAMEPAD;
+
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: 6 button gamepad\n", port);
+
             break;
         case RETRO_DEVICE_TOWNS_MOUSE:
-            type = GT_CONTROLLER_MOUSE;
+            type = GT_CONTROLLER_NONE;
+
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: Mouse\n", port);
+
             break;
         case RETRO_DEVICE_NONE:
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: Unplugged\n", port);
+
             break;
         default:
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_DEBUG, "Controller %u: Unsupported device\n", port);
+
             break;
     }
 
@@ -660,6 +675,7 @@ static void poll_input(void)
         for (int j = 0; j < MAX_PADS; j++)
         {
             joypad_bits[j] = 0;
+
             if (IsJoypadDevice(input_device[j]))
             {
                 for (int i = 0; i < (RETRO_DEVICE_ID_JOYPAD_R3 + 1); i++)
@@ -798,19 +814,29 @@ static void apply_input(void)
 
         u16 buttons = 0;
         if (joypad_current[j][0]) buttons |= GT_GAMEPAD_UP;
+
         if (joypad_current[j][1]) buttons |= GT_GAMEPAD_DOWN;
+
         if (joypad_current[j][2]) buttons |= GT_GAMEPAD_LEFT;
+
         if (joypad_current[j][3]) buttons |= GT_GAMEPAD_RIGHT;
+
         if (joypad_current[j][4]) buttons |= GT_GAMEPAD_START;
+
         if (joypad_current[j][5]) buttons |= GT_GAMEPAD_RUN;
+
         if (joypad_current[j][6]) buttons |= GT_GAMEPAD_A;
+
         if (joypad_current[j][7]) buttons |= GT_GAMEPAD_B;
 
         if (input_device[j] == RETRO_DEVICE_TOWNS_6_BUTTON)
         {
             if (joypad_current[j][8]) buttons |= GT_GAMEPAD_C;
+
             if (joypad_current[j][9]) buttons |= GT_GAMEPAD_X;
+
             if (joypad_current[j][10]) buttons |= GT_GAMEPAD_Y;
+
             if (joypad_current[j][11]) buttons |= GT_GAMEPAD_Z;
         }
 

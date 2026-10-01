@@ -15,8 +15,16 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
     $(SOURCE_DIR)/audio.cpp \
     $(SOURCE_DIR)/firmware.cpp \
     $(SOURCE_DIR)/i386.cpp \
+    $(SOURCE_DIR)/i386_decode.cpp \
+    $(SOURCE_DIR)/i386_functors.cpp \
+    $(SOURCE_DIR)/i386_ops.cpp \
+    $(SOURCE_DIR)/i386_ops_0f.cpp \
+    $(SOURCE_DIR)/i386_protected.cpp \
     $(SOURCE_DIR)/input.cpp \
     $(SOURCE_DIR)/memory.cpp \
+    $(SOURCE_DIR)/rf5c68.cpp \
+    $(SOURCE_DIR)/towns_io.cpp \
+    $(SOURCE_DIR)/ym3438.cpp \
                 $(SOURCE_DIR)/media_file.cpp \
                 $(SOURCE_DIR)/media_file_libretro.cpp \
                 $(SOURCE_DIR)/media_file_native.cpp \

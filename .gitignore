@@ -46,6 +46,7 @@ _ReSharper.*/
 desktop.ini
 
 # Misc files
+tests/
 *.ini
 *.cfg
 *.zip

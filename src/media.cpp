@@ -56,6 +56,7 @@ bool Media::LoadMedia(const char* file_path)
     }
 
     MediaFile* file = MediaFile::OpenFile(file_path);
+
     if (!IsValidPointer(file))
     {
         Error("Unable to open media file %s", file_path);
@@ -63,6 +64,7 @@ bool Media::LoadMedia(const char* file_path)
     }
 
     s64 file_size = file->GetSize();
+
     if (file_size <= 0 || file_size > INT_MAX)
     {
         Error("Invalid media size for %s: %lld", file_path, (long long)file_size);
@@ -72,6 +74,7 @@ bool Media::LoadMedia(const char* file_path)
 
     int data_size = (int)file_size;
     u8* data = new (std::nothrow) u8[data_size];
+
     if (!IsValidPointer(data))
     {
         Error("Unable to allocate %d bytes for %s", data_size, file_path);
@@ -96,8 +99,7 @@ bool Media::LoadMedia(const char* file_path)
     m_media_info.crc = CalculateCRC32(0, data, data_size);
     m_media_info.ready = true;
 
-    Log("Media selected: %s (%d bytes, CRC %08X)", file_path, data_size,
-        m_media_info.crc);
+    Log("Media selected: %s (%d bytes, CRC %08X)", file_path, data_size, m_media_info.crc);
     return true;
 }
 
@@ -124,21 +126,20 @@ void Media::GatherDataFromPath(const char* path)
 
     std::string full_path(path);
     size_t separator = full_path.find_last_of("/\\");
-    std::string filename = separator == std::string::npos ? full_path :
-        full_path.substr(separator + 1);
+    std::string filename = separator == std::string::npos ? full_path : full_path.substr(separator + 1);
 
     if (separator == std::string::npos)
         m_media_info.directory[0] = '\0';
     else
     {
         std::string directory = full_path.substr(0, separator);
-        strncpy_fit(m_media_info.directory, directory.c_str(),
-            sizeof(m_media_info.directory));
+        strncpy_fit(m_media_info.directory, directory.c_str(), sizeof(m_media_info.directory));
     }
 
     strncpy_fit(m_media_info.name, filename.c_str(), sizeof(m_media_info.name));
 
     size_t dot = filename.find_last_of('.');
+
     if (dot == std::string::npos || dot + 1 >= filename.length())
     {
         m_media_info.extension[0] = '\0';
@@ -146,9 +147,9 @@ void Media::GatherDataFromPath(const char* path)
     }
 
     std::string extension = filename.substr(dot + 1);
+
     for (size_t i = 0; i < extension.length(); i++)
         extension[i] = (char)std::tolower((unsigned char)extension[i]);
 
-    strncpy_fit(m_media_info.extension, extension.c_str(),
-        sizeof(m_media_info.extension));
+    strncpy_fit(m_media_info.extension, extension.c_str(), sizeof(m_media_info.extension));
 }

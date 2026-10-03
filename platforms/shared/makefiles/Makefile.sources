@@ -26,6 +26,8 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_popups.cpp \
     $(DESKTOP_SRC_DIR)/gui_actions.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_disassembler.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_i386.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_memory_provider.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_memeditor.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_memory.cpp \
@@ -48,8 +50,23 @@ SOURCES_CXX := \
     $(SRC_DIR)/firmware.cpp \
     $(SRC_DIR)/geartowns_core.cpp \
     $(SRC_DIR)/i386.cpp \
+    $(SRC_DIR)/i386_disassembler.cpp \
+    $(SRC_DIR)/i386_encoding.cpp \
+    $(SRC_DIR)/i386_functors.cpp \
+    $(SRC_DIR)/i386_memory.cpp \
+    $(SRC_DIR)/i386_opcodes.cpp \
+    $(SRC_DIR)/i386_opcodes_0f.cpp \
+    $(SRC_DIR)/i386_opcodes_groups.cpp \
+    $(SRC_DIR)/i386_opcodes_string.cpp \
+    $(SRC_DIR)/i386_opcodes_transfer.cpp \
+    $(SRC_DIR)/i386_protected.cpp \
+    $(SRC_DIR)/i386_protected_transfer.cpp \
+    $(SRC_DIR)/i386_task.cpp \
     $(SRC_DIR)/input.cpp \
     $(SRC_DIR)/memory.cpp \
+    $(SRC_DIR)/rf5c68.cpp \
+    $(SRC_DIR)/towns_io.cpp \
+    $(SRC_DIR)/ym3438.cpp \
     $(SRC_DIR)/media_file.cpp \
     $(SRC_DIR)/media_file_native.cpp \
     $(SRC_DIR)/media.cpp

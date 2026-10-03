@@ -22,12 +22,27 @@
     <ClCompile Include="..\..\src\audio.cpp" />
     <ClCompile Include="..\..\src\firmware.cpp" />
     <ClCompile Include="..\..\src\i386.cpp" />
+    <ClCompile Include="..\..\src\i386_disassembler.cpp" />
+    <ClCompile Include="..\..\src\i386_encoding.cpp" />
+    <ClCompile Include="..\..\src\i386_functors.cpp" />
+    <ClCompile Include="..\..\src\i386_memory.cpp" />
+    <ClCompile Include="..\..\src\i386_opcodes.cpp" />
+    <ClCompile Include="..\..\src\i386_opcodes_0f.cpp" />
+    <ClCompile Include="..\..\src\i386_opcodes_groups.cpp" />
+    <ClCompile Include="..\..\src\i386_opcodes_string.cpp" />
+    <ClCompile Include="..\..\src\i386_opcodes_transfer.cpp" />
+    <ClCompile Include="..\..\src\i386_protected.cpp" />
+    <ClCompile Include="..\..\src\i386_protected_transfer.cpp" />
+    <ClCompile Include="..\..\src\i386_task.cpp" />
     <ClCompile Include="..\..\src\media.cpp" />
     <ClCompile Include="..\..\src\media_file.cpp" />
     <ClCompile Include="..\..\src\media_file_native.cpp" />
     <ClCompile Include="..\..\src\geartowns_core.cpp" />
     <ClCompile Include="..\..\src\input.cpp" />
     <ClCompile Include="..\..\src\memory.cpp" />
+    <ClCompile Include="..\..\src\rf5c68.cpp" />
+    <ClCompile Include="..\..\src\towns_io.cpp" />
+    <ClCompile Include="..\..\src\ym3438.cpp" />
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
     </ClCompile>
@@ -44,6 +59,8 @@
     <ClCompile Include="..\shared\desktop\rewind.cpp" />
     <ClCompile Include="..\shared\desktop\runahead.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_i386.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_memory_provider.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_memeditor.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_memory.cpp" />
@@ -99,6 +116,13 @@
     <ClInclude Include="..\..\src\defines.h" />
     <ClInclude Include="..\..\src\firmware.h" />
     <ClInclude Include="..\..\src\i386.h" />
+    <ClInclude Include="..\..\src\i386_inline.h" />
+    <ClInclude Include="..\..\src\i386_decode_inline.h" />
+    <ClInclude Include="..\..\src\i386_memory_inline.h" />
+    <ClInclude Include="..\..\src\i386_run_inline.h" />
+    <ClInclude Include="..\..\src\i386_names.h" />
+    <ClInclude Include="..\..\src\i386_opcodes_inline.h" />
+    <ClInclude Include="..\..\src\towns_io.h" />
     <ClInclude Include="..\..\src\firmware_inline.h" />
     <ClInclude Include="..\..\src\game_db.h" />
     <ClInclude Include="..\..\src\geartowns.h" />
@@ -107,6 +131,11 @@
     <ClInclude Include="..\..\src\input.h" />
     <ClInclude Include="..\..\src\input_inline.h" />
     <ClInclude Include="..\..\src\memory.h" />
+    <ClInclude Include="..\..\src\memory_inline.h" />
+    <ClInclude Include="..\..\src\rf5c68.h" />
+    <ClInclude Include="..\..\src\rf5c68_inline.h" />
+    <ClInclude Include="..\..\src\ym3438.h" />
+    <ClInclude Include="..\..\src\ym3438_inline.h" />
     <ClInclude Include="..\..\src\debug_memory.h" />
     <ClInclude Include="..\..\src\log.h" />
     <ClInclude Include="..\..\src\media.h" />
@@ -140,10 +169,13 @@
     <ClInclude Include="..\shared\desktop\rewind.h" />
     <ClInclude Include="..\shared\desktop\runahead.h" />
     <ClInclude Include="..\shared\desktop\gui_debug.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_i386.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_constants.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memory_provider.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memeditor.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memory.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_widgets.h" />
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />
     <ClInclude Include="..\shared\desktop\gui_popups.h" />

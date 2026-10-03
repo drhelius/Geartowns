@@ -319,11 +319,7 @@ else
 	SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
 endif
 
-ifneq (,$(filter $(platform),unix osx win))
-	PLATFORM_FLAGS += -DGG_ENABLE_CDROM_CUEBIN_READAHEAD
-endif
-
-ifneq (,$(filter $(platform),unix win))
+ifneq (,$(filter unix% win% classic_armv7_a7 rs90 gcw0 retrofw miyoo,$(platform)))
 	PLATFORM_FLAGS += -pthread
 	LDFLAGS += -pthread
 endif
@@ -371,8 +367,8 @@ INCLUDES += -I$(DEPS_DIR)/libchdr/include
 INCLUDES += -I$(DEPS_DIR)/zstd
 INCLUDES += -I$(DEPS_DIR)/lzma/include
 
-CFLAGS   += -Wall -fno-exceptions -D__LIBRETRO__ -DGT_DISABLE_DEBUGGER -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)
-CXXFLAGS += -Wall -fno-exceptions -D__LIBRETRO__ -DGT_DISABLE_DEBUGGER -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)
+CFLAGS   += -DGT_DISABLE_DISASSEMBLER -Wall -fno-exceptions -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)
+CXXFLAGS += -DGT_DISABLE_DISASSEMBLER -Wall -fno-exceptions -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)
 
 $(DEPS_DIR)/%.o: CPPFLAGS += -w
 

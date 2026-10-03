@@ -31,6 +31,12 @@
     <ClCompile Include="..\shared\desktop\gui_debug.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_debug_i386.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_debug_memory_provider.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -97,7 +103,52 @@
     <ClCompile Include="..\..\src\i386.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\i386_disassembler.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_encoding.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_functors.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_memory.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_opcodes.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_opcodes_0f.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_opcodes_groups.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_opcodes_string.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_opcodes_transfer.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_protected.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_protected_transfer.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386_task.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\memory.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\rf5c68.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\ym3438.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\towns_io.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\media.cpp">
@@ -158,7 +209,19 @@
     <ClInclude Include="..\..\src\defines.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\firmware.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386_decode_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386_memory_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386_run_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386_names.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\towns_io.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\memory.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\memory_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\rf5c68.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\rf5c68_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\ym3438.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\ym3438_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\debug_memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\firmware_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\game_db.h"><Filter>src</Filter></ClInclude>
@@ -217,6 +280,12 @@
     <ClInclude Include="..\shared\desktop\gui_debug.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_debug_i386.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_constants.h">
       <Filter>desktop</Filter>
     </ClInclude>
@@ -227,6 +296,9 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_memory.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_debug_widgets.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_popups.h">

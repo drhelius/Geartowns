@@ -126,7 +126,6 @@ jobs:
       env:
         USE_CLANG: 1
   libretro:
-    if: ${{ false }}
     name: Libretro (ubuntu)
     runs-on: ubuntu-latest
     permissions:
@@ -222,7 +221,6 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-desktop-macos-${{ matrix.architecture == 'arm' && 'arm64' || 'intel' }}
         path: artifact/*
   windows:
-    if: ${{ false }}
     name: Windows
     strategy:
       matrix:
@@ -274,7 +272,6 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-desktop-windows-${{ matrix.architecture }}
         path: artifact/*
   bsd:
-    if: ${{ false }}
     name: BSD
     runs-on: ubuntu-latest
     permissions:
@@ -312,7 +309,6 @@ jobs:
         name: ${{ env.NAME_UPPER }}-${{ env.BUILD_NUMBER }}-desktop-bsd-x64
         path: artifact/*
   mcpb:
-    if: ${{ false }}
     name: MCPB
     needs: [macos, windows, linux]
     runs-on: ubuntu-latest

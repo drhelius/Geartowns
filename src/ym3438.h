@@ -25,30 +25,25 @@
 
 class StateSerializer;
 
-const u32 GT_YM3438_CLOCK_RATE = 8000000;
-
 class YM3438
 {
 public:
     YM3438();
     ~YM3438();
-    void Init(u32 clock_rate = GT_YM3438_CLOCK_RATE, u32 sample_rate = GT_AUDIO_SAMPLE_RATE);
+    void Init();
     void Reset();
     void Clock(u32 cycles);
     void Synchronize();
+    void Sample(s16& left, s16& right);
     void Write(u8 port, u8 value);
     u8 Read(u8 port);
     bool IsIRQAsserted();
-    int EndFrame(s16* sample_buffer);
 
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
-    u32 GetClockRate() const;
-    u32 GetSampleRate() const;
     u16 GetSelectedAddress() const;
     u8 GetRegister(u16 address) const;
-    int GetBufferedSamples() const;
 
 private:
     enum
@@ -73,6 +68,7 @@ private:
     struct YM3438_Operator
     {
         u32 phase;
+        u32 phase_increment;
         u16 envelope;
         u8 state;
 
@@ -96,7 +92,6 @@ private:
         u8 key_on_pending;
 
         u8 ssg_direction;
-        u8 ssg_holding;
     };
 
     struct YM3438_Channel
@@ -105,9 +100,11 @@ private:
 
         u16 f_number;
         u8 block;
+        u8 key_code;
 
         u16 special_f_number[3];
         u8 special_block[3];
+        u8 special_key_code[3];
 
         u8 algorithm;
         u8 feedback;
@@ -116,23 +113,26 @@ private:
         u8 pan_left;
         u8 pan_right;
 
+        u8 s1_key_written;
+        u8 s1_key_register;
+        u8 phase_dirty;
+
         s16 feedback_output[2];
         s32 memory_output;
         s16 output;
     };
 
 private:
-    void InitTables();
     void ResetOperator(YM3438_Operator& op);
     void ResetChannel(YM3438_Channel& channel);
     void RunCycles(u64 cycles);
+    u64 GetCyclesToTimerFlag() const;
 
-    void AdvanceTimers(u32 cycles);
-    void AdvanceTimerA(u32 ticks);
-    void AdvanceTimerB(u32 ticks);
+    void ClockTimers();
     void TimerAOverflow();
 
     void GenerateNativeSample();
+    void UpdateKeyStates();
     void UpdateLFO();
     void UpdateEnvelopes();
     void UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index);
@@ -148,11 +148,11 @@ private:
     s16 CalculateChannel(int channel);
     s16 CalculateOperator(int channel, int operator_index, s32 modulation);
     u32 CalculatePhaseIncrement(int channel, int operator_index) const;
-    void GetOperatorFrequency(int channel, int operator_index, u16& f_number, u8& block) const;
+    void GetOperatorFrequency(int channel, int operator_index, u16& f_number, u8& block, u8& key_code) const;
+    u8 GetOperatorKeyCode(int channel, int operator_index) const;
     u8 CalculateKeyCode(u16 f_number, u8 block) const;
     u8 GetLFOAmplitude() const;
     u8 GetLFOPhase() const;
-    void WriteSample(s16 left, s16 right);
 
     void WriteRegister(u16 address, u8 value);
     void WriteModeRegister(u8 address, u8 value);
@@ -178,13 +178,13 @@ private:
     u8 m_lfo_frequency;
     u8 m_lfo_counter;
     u8 m_lfo_quotient;
+    u8 m_lfo_phase_changed;
 
     u16 m_timer_a_register;
     u16 m_timer_a_counter;
     u8 m_timer_b_register;
     u16 m_timer_b_counter;
-    u32 m_timer_a_phase;
-    u32 m_timer_b_phase;
+    u8 m_timer_b_prescaler;
     u8 m_timer_a_load;
     u8 m_timer_b_load;
     u8 m_timer_a_enable;
@@ -199,21 +199,14 @@ private:
     u8 m_envelope_divider;
 
     u32 m_native_cycle;
-    u64 m_sample_phase;
     u64 m_elapsed_cycles;
     u32 m_busy_cycles;
-
-    u32 m_clock_rate;
-    u32 m_sample_rate;
+    u8 m_status;
 
     s16 m_left_sample;
     s16 m_right_sample;
-
-    s16 m_buffer[GT_AUDIO_BUFFER_SIZE];
-    int m_buffer_index;
-
-    u16 m_log_sine_table[256];
-    u16 m_exp_table[256];
+    s16 m_previous_left_sample;
+    s16 m_previous_right_sample;
 };
 
 #include "ym3438_inline.h"

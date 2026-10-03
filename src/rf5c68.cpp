@@ -39,44 +39,25 @@ void RF5C68::Init()
 void RF5C68::Reset()
 {
     memset(m_channels, 0, sizeof(m_channels));
-    memset(m_buffer, 0, sizeof(m_buffer));
 
     m_channel_bank = 0;
     m_wave_bank = 0;
     m_enabled = false;
+    m_irq_mask = 0;
+    m_irq_flags = 0;
 
     m_elapsed_cycles = 0;
     m_cycle_counter = 0;
 
     m_left_sample = 0;
     m_right_sample = 0;
-
-    m_buffer_index = 0;
-    m_frame_samples = 0;
+    m_previous_left_sample = 0;
+    m_previous_right_sample = 0;
 }
 
-u8 RF5C68::Read(u16 address)
+void RF5C68::WriteRegister(u16 address, u8 value)
 {
     Synchronize();
-    address &= 0x1FFF;
-
-    // CPU Wave RAM reads are only available while global playback is stopped
-    if (address >= 0x1000 && !m_enabled)
-        return m_wave_ram[((u16)m_wave_bank << 12) | (address & 0x0FFF)];
-
-    return 0xFF;
-}
-
-void RF5C68::Write(u16 address, u8 value)
-{
-    Synchronize();
-    address &= 0x1FFF;
-
-    if (address >= 0x1000)
-    {
-        m_wave_ram[((u16)m_wave_bank << 12) | (address & 0x0FFF)] = value;
-        return;
-    }
 
     RF5C68_Channel& channel = m_channels[m_channel_bank];
 
@@ -125,7 +106,7 @@ void RF5C68::Write(u16 address, u8 value)
         }
 
         case 0x08:
-            for (int i = 0; i < CHANNEL_COUNT; i++)
+            for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
             {
                 m_channels[i].enabled = ((value & (1 << i)) == 0) ? 1 : 0;
 
@@ -139,67 +120,102 @@ void RF5C68::Write(u16 address, u8 value)
     }
 }
 
+void RF5C68::WriteIRQMask(u8 value)
+{
+    Synchronize();
+    m_irq_mask = value;
+}
+
+u8 RF5C68::ReadIRQFlags()
+{
+    Synchronize();
+
+    u8 flags = m_irq_flags;
+    // Reading the cause register clears every cause bit
+    m_irq_flags = 0;
+    return flags;
+}
+
 void RF5C68::Synchronize()
 {
-    u64 cycles = m_elapsed_cycles + m_cycle_counter;
-
+    u64 cycles = m_elapsed_cycles;
     m_elapsed_cycles = 0;
+    RunCycles(cycles);
+}
 
-    if (cycles < CYCLES_PER_SAMPLE)
+void RF5C68::Sample(s16& left, s16& right)
+{
+    Synchronize();
+
+    s32 phase = (s32)m_cycle_counter;
+    s32 left_delta = m_left_sample - m_previous_left_sample;
+    s32 right_delta = m_right_sample - m_previous_right_sample;
+    left = (s16)(m_previous_left_sample + (left_delta * phase) / k_rf5c68_cycles_per_sample);
+    right = (s16)(m_previous_right_sample + (right_delta * phase) / k_rf5c68_cycles_per_sample);
+}
+
+void RF5C68::RunCycles(u64 cycles)
+{
+    while (cycles >= k_rf5c68_cycles_per_sample - m_cycle_counter)
     {
-        m_cycle_counter = (u32)cycles;
-        return;
+        cycles -= k_rf5c68_cycles_per_sample - m_cycle_counter;
+        m_cycle_counter = 0;
+        GenerateSample();
     }
 
-    u64 samples = cycles / CYCLES_PER_SAMPLE;
-    m_cycle_counter = (u32)(cycles % CYCLES_PER_SAMPLE);
+    m_cycle_counter += (u32)cycles;
+}
 
+void RF5C68::GenerateSample()
+{
+    m_previous_left_sample = m_left_sample;
+    m_previous_right_sample = m_right_sample;
+
+    // A stopped IC holds every pointer at its start address and outputs silence
     if (!m_enabled)
     {
-        ResetChannelAddresses();
         m_left_sample = 0;
         m_right_sample = 0;
         return;
     }
 
-    while (samples > 0)
-    {
-        GenerateSample();
-        samples--;
-    }
-}
-
-void RF5C68::GenerateSample()
-{
     s32 left = 0;
     s32 right = 0;
+    s32 left_limit = 0;
+    s32 right_limit = 0;
 
-    for (int i = 0; i < CHANNEL_COUNT; i++)
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
     {
         RF5C68_Channel& channel = m_channels[i];
 
         if (!channel.enabled)
-        {
-            ResetChannelAddress(i);
             continue;
-        }
 
         u32 address = channel.address;
-        u8 sample = m_wave_ram[(address >> ADDRESS_FRACTION_BITS) & 0xFFFF];
+        u32 offset = address >> k_rf5c68_address_fraction_bits;
+        u8 sample = m_wave_ram[offset];
 
         if (sample == 0xFF)
         {
-            address = (u32)channel.loop_start << ADDRESS_FRACTION_BITS;
-            sample = m_wave_ram[channel.loop_start];
+            // A loop marker on the last byte of a 4 KiB block also ends that block
+            if ((offset & 0x0FFF) == 0x0FFF)
+                SetBlockIRQ(offset >> 12);
 
-            if (sample == 0xFF)
-            {
-                channel.address = address;
-                continue;
-            }
+            address = (u32)channel.loop_start << k_rf5c68_address_fraction_bits;
+            sample = m_wave_ram[channel.loop_start];
         }
 
-        channel.address = (address + channel.step) & ADDRESS_MASK;
+        u32 next_address = (address + channel.step) & k_rf5c68_address_mask;
+
+        // Advancing into another 4 KiB block raises the IRQ of the block left behind
+        if (((address ^ next_address) >> k_rf5c68_irq_block_shift) != 0)
+            SetBlockIRQ(address >> k_rf5c68_irq_block_shift);
+
+        channel.address = next_address;
+
+        // 0xFF is never waveform data, but the pointer keeps advancing from the loop address
+        if (sample == 0xFF)
+            continue;
 
         s32 magnitude = sample & 0x7F;
         // The DCA feeds product bits 18..5 to the channel accumulator
@@ -217,60 +233,47 @@ void RF5C68::GenerateSample()
             left -= left_output;
             right -= right_output;
         }
+
+        // An overflow while totaling channels 1 to 8 forces the limiter output to FFFFh or 0000h
+        if (left > k_rf5c68_output_max)
+            left_limit = k_rf5c68_output_max;
+        else if (left < k_rf5c68_output_min)
+            left_limit = k_rf5c68_output_min;
+
+        if (right > k_rf5c68_output_max)
+            right_limit = k_rf5c68_output_max;
+        else if (right < k_rf5c68_output_min)
+            right_limit = k_rf5c68_output_min;
     }
 
-    m_left_sample = QuantizeSample(left);
-    m_right_sample = QuantizeSample(right);
+    m_left_sample = QuantizeSample((left_limit != 0) ? left_limit : left);
+    m_right_sample = QuantizeSample((right_limit != 0) ? right_limit : right);
+}
+
+void RF5C68::SetBlockIRQ(u32 block)
+{
+    // PCM IRQ mask and cause bits each cover an 8 KiB region made of two 4 KiB blocks
+    u8 region = (u8)(1 << ((block >> 1) & 0x07));
+
+    if ((m_irq_mask & region) != 0)
+        m_irq_flags |= region;
 }
 
 void RF5C68::ResetChannelAddress(int channel)
 {
-    m_channels[channel].address = (u32)m_channels[channel].start << (8 + ADDRESS_FRACTION_BITS);
+    m_channels[channel].address = (u32)m_channels[channel].start << (8 + k_rf5c68_address_fraction_bits);
 }
 
 void RF5C68::ResetChannelAddresses()
 {
-    for (int i = 0; i < CHANNEL_COUNT; i++)
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
         ResetChannelAddress(i);
 }
 
 s16 RF5C68::QuantizeSample(s32 sample) const
 {
-    sample = CLAMP(sample, -32768, 32767);
-    // The DAC output uses the upper 10 bits of the saturated 16-bit accumulator
-    sample = ((sample + 32768) & ~OUTPUT_QUANTIZATION_MASK) - 32768;
-    return (s16)sample;
-}
-
-void RF5C68::Sample()
-{
-    Synchronize();
-
-    if (m_buffer_index > (GT_AUDIO_BUFFER_SIZE - 2))
-    {
-        Error("RF5C68 audio buffer overflow");
-        return;
-    }
-
-    m_buffer[m_buffer_index++] = m_left_sample;
-    m_buffer[m_buffer_index++] = m_right_sample;
-}
-
-int RF5C68::EndFrame(s16* sample_buffer)
-{
-    Synchronize();
-
-    int samples = 0;
-    m_frame_samples = m_buffer_index;
-
-    if (IsValidPointer(sample_buffer))
-    {
-        samples = m_buffer_index;
-        memcpy(sample_buffer, m_buffer, samples * sizeof(s16));
-    }
-
-    m_buffer_index = 0;
-    return samples;
+    // The DAC output uses the upper 10 bits of the limited 16-bit accumulator
+    return (s16)(sample & ~k_rf5c68_output_quantization_mask);
 }
 
 void RF5C68::SaveState(std::ostream& stream)
@@ -283,30 +286,14 @@ void RF5C68::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    m_channel_bank &= 0x07;
-    m_wave_bank &= 0x0F;
-    m_cycle_counter %= CYCLES_PER_SAMPLE;
-    m_buffer_index = CLAMP(m_buffer_index, 0, GT_AUDIO_BUFFER_SIZE);
-    m_buffer_index &= ~1;
-    m_frame_samples = CLAMP(m_frame_samples, 0, GT_AUDIO_BUFFER_SIZE);
-    m_frame_samples &= ~1;
-
-    for (int i = 0; i < CHANNEL_COUNT; i++)
-    {
-        m_channels[i].enabled = m_channels[i].enabled ? 1 : 0;
-        m_channels[i].address &= ADDRESS_MASK;
-    }
-
-    if (!m_enabled)
-        ResetChannelAddresses();
+    SanitizeState();
 }
 
 void RF5C68::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_wave_ram, WAVE_RAM_SIZE);
+    G_SERIALIZE_ARRAY(serializer, m_wave_ram, RF5C68_WAVE_RAM_SIZE);
 
-    for (int i = 0; i < CHANNEL_COUNT; i++)
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
     {
         G_SERIALIZE(serializer, m_channels[i].envelope);
         G_SERIALIZE(serializer, m_channels[i].pan);
@@ -320,11 +307,32 @@ void RF5C68::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_channel_bank);
     G_SERIALIZE(serializer, m_wave_bank);
     G_SERIALIZE(serializer, m_enabled);
+    G_SERIALIZE(serializer, m_irq_mask);
+    G_SERIALIZE(serializer, m_irq_flags);
     G_SERIALIZE(serializer, m_elapsed_cycles);
     G_SERIALIZE(serializer, m_cycle_counter);
     G_SERIALIZE(serializer, m_left_sample);
     G_SERIALIZE(serializer, m_right_sample);
-    G_SERIALIZE_ARRAY(serializer, m_buffer, GT_AUDIO_BUFFER_SIZE);
-    G_SERIALIZE(serializer, m_buffer_index);
-    G_SERIALIZE(serializer, m_frame_samples);
+    G_SERIALIZE(serializer, m_previous_left_sample);
+    G_SERIALIZE(serializer, m_previous_right_sample);
+}
+
+void RF5C68::SanitizeState()
+{
+    m_channel_bank &= 0x07;
+    m_wave_bank &= 0x0F;
+
+    // Pending work never spans a whole second, so this bounds corrupt states without touching valid ones
+    m_elapsed_cycles = MIN(m_elapsed_cycles, (u64)GT_SOUND_CLOCK_RATE);
+    m_cycle_counter %= k_rf5c68_cycles_per_sample;
+
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
+    {
+        m_channels[i].enabled = m_channels[i].enabled ? 1 : 0;
+        m_channels[i].address &= k_rf5c68_address_mask;
+
+        // Channels that are not sounding hold their pointer at the start address
+        if (!m_enabled || !m_channels[i].enabled)
+            ResetChannelAddress(i);
+    }
 }

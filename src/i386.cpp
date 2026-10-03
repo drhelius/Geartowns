@@ -19,8 +19,1093 @@
 
 #include "i386.h"
 #include "memory.h"
+#include "towns_io.h"
+#include "state_serializer.h"
 
-static bool equal_name(const char* left, const char* right)
+const u8 I386::k_szp_flags[256] =
+{
+    0x44, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04,
+    0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00,
+    0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00,
+    0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04,
+    0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00,
+    0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04,
+    0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04,
+    0x00, 0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x00, 0x04, 0x00, 0x04, 0x04, 0x00,
+    0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80,
+    0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84,
+    0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84,
+    0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80,
+    0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84,
+    0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80,
+    0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80,
+    0x84, 0x80, 0x80, 0x84, 0x80, 0x84, 0x84, 0x80, 0x80, 0x84, 0x84, 0x80, 0x84, 0x80, 0x80, 0x84
+};
+
+static const u32 k_i386_real_interrupt_entry_clocks = 33;
+
+I386::I386()
+{
+    InitPointer(m_memory);
+    InitPointer(m_towns_io);
+    InitPointer(m_trace);
+    m_trace_enabled = false;
+    m_trace_count = 0;
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    m_run_to_breakpoint = 0;
+    m_breakpoint_hit_address = 0;
+    m_run_to_breakpoint_enabled = false;
+    m_breakpoint_hit = false;
+    m_run_to_hit = false;
+#endif
+
+    Reset();
+}
+
+I386::~I386()
+{
+    SafeDeleteArray(m_trace);
+}
+
+void I386::Init(Memory* memory, TownsIO* towns_io)
+{
+    m_memory = memory;
+    m_towns_io = towns_io;
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    m_disassembler_records.clear();
+#endif
+
+    Reset();
+}
+
+void I386::Reset()
+{
+    InitPointer(m_read_pages);
+    InitPointer(m_write_pages);
+    InitPointer(m_bus_context);
+    m_memory_generation = 0;
+    m_batch_mode = false;
+    m_execution_mode = I386_MODE_REAL;
+
+    memset(&m_step, 0, sizeof(m_step));
+    memset(&m_step_exception, 0, sizeof(m_step_exception));
+    memset(m_registers, 0, sizeof(m_registers));
+    memset(m_segments, 0, sizeof(m_segments));
+    memset(&m_gdtr, 0, sizeof(m_gdtr));
+    memset(&m_idtr, 0, sizeof(m_idtr));
+    memset(&m_ldtr, 0, sizeof(m_ldtr));
+    memset(&m_task_register, 0, sizeof(m_task_register));
+
+    memset(m_debug_registers, 0, sizeof(m_debug_registers));
+    memset(m_test_registers, 0, sizeof(m_test_registers));
+
+    memset(&m_exception, 0, sizeof(m_exception));
+
+    memset(&m_repeat, 0, sizeof(m_repeat));
+    memset(&m_string, 0, sizeof(m_string));
+    memset(&m_instruction, 0, sizeof(m_instruction));
+    memset(&m_instruction_defaults, 0, sizeof(m_instruction_defaults));
+    m_instruction_defaults.segment_override = 0xFF;
+
+    m_address_clocks = 0;
+    m_instruction_restored = false;
+    InitPointer(m_passive_bytes);
+    m_passive_count = 0;
+    m_passive_index = 0;
+    m_debug_step = false;
+    m_step_slow = false;
+    m_slow_memory = false;
+    m_user_mode = false;
+    InitPointer(m_code_window);
+    m_code_window_eip = 0;
+    m_code_window_size = 0;
+    InitPointer(m_fetch_pointer);
+    m_fetch_remaining = 0;
+
+    m_checked_eip = 0;
+    m_checked_count = 0;
+    m_checked_valid = false;
+
+    memset(m_tlb, 0, sizeof(m_tlb));
+    m_tlb_used = 0;
+    ResetTLBReplacement();
+    m_trace_count = 0;
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    // Decoded rows are debugger history and survive a machine reset
+    m_disassembler_call_stack.clear();
+    m_run_to_breakpoint_enabled = false;
+    m_breakpoint_hit = false;
+    m_run_to_hit = false;
+    m_breakpoint_hit_address = 0;
+#endif
+
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+        SetRealModeSegment((I386_Segment_Register)i, 0);
+
+    SetRealModeSegment(I386_SEGMENT_CS, 0xF000);
+    m_segments[I386_SEGMENT_CS].base = 0xFFFF0000;
+
+    m_eip = 0x0000FFF0;
+    m_eflags = I386_FLAG_FIXED;
+    m_idtr.limit = 0x03FF;
+
+    m_cr0 = 0x00000010;
+    m_cr2 = 0;
+    m_cr3 = 0;
+
+    m_registers[I386_REG_EDX].value = 0x00000300;
+    m_debug_registers[6] = 0xFFFF1FF0;
+    m_debug_registers[7] = 0x00000400;
+
+    m_execution_mode = I386_MODE_REAL;
+    m_current_privilege_level = 0;
+
+    m_interrupt_shadow = I386_SHADOW_NONE;
+    m_interrupt_shadow_steps = 0;
+
+    m_halted = false;
+    m_shutdown = false;
+    m_nmi_blocked = false;
+    m_external_event = false;
+
+    m_debug_data_breakpoints = 0;
+    m_last_exception_vector = 0xFF;
+
+    UpdateSegmentFastPaths();
+    UpdateDebugState();
+}
+
+NO_INLINE bool I386::ExecuteOPCodeDebug(const I386_State& before)
+{
+    m_debug_step = true;
+    u16 old_task = m_task_register.selector;
+
+    m_debug_data_breakpoints = 0;
+
+    bool completed = ExecuteOPCode();
+    m_debug_step = false;
+
+    if (!completed)
+        return false;
+
+    if (m_step.instruction_completed && (m_eflags & I386_FLAG_RF) != 0)
+    {
+        bool preserve = !m_instruction.two_byte && (m_instruction.opcode == 0x9D || m_instruction.opcode == 0xCF);
+
+        if (m_task_register.selector != old_task)
+            preserve = true;
+
+        if (!preserve)
+            m_eflags &= ~I386_FLAG_RF;
+    }
+
+    if (!m_step.exception)
+    {
+        bool single_step = m_step.instruction_completed &&
+            (before.eflags & I386_FLAG_TF) != 0 &&
+            m_task_register.selector == old_task &&
+            (m_interrupt_shadow != I386_SHADOW_MOV_SS || m_interrupt_shadow_steps == 1);
+
+        if (m_debug_data_breakpoints != 0 || single_step)
+        {
+            m_debug_registers[6] |= m_debug_data_breakpoints;
+
+            if (single_step)
+                m_debug_registers[6] |= 0x00004000U;
+
+            RaiseException(1, I386_EXCEPTION_TRAP);
+            m_exception.has_return_eip = true;
+            m_exception.return_eip = m_eip;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Delivers the exception raised by the step
+// A failed delivery has already shut the CPU down
+void I386::CompleteFault(u16 old_task)
+{
+    StepState& result = m_step;
+
+    m_step_exception = {};
+    m_step_exception.clocks = result.clocks;
+    m_step_exception.instruction_completed = result.instruction_completed;
+    m_step_exception.end_batch = result.end_batch;
+    m_step_exception.exception_after_instruction =
+        m_exception.exception_class == I386_EXCEPTION_TRAP || m_task_register.selector != old_task;
+
+    ResolveException(*m_bus_context, m_step_exception);
+
+    result.clocks = m_step_exception.clocks;
+    result.exception = m_step_exception.exception;
+    result.end_batch = m_step_exception.end_batch;
+}
+
+u32 I386::RunInstruction(GT_Bus_Access_Context& context)
+{
+    m_batch_mode = false;
+    SetBusContext(context);
+    return RunCheckedStep();
+}
+
+I386_Run_Result I386::GetStepInfo() const
+{
+    I386_Run_Result result = {};
+    result.clocks = m_step.clocks;
+    result.steps = m_step.steps;
+    result.instruction_completed = m_step.instruction_completed;
+    result.end_batch = m_step.end_batch;
+    result.exception = m_step.exception;
+    result.exception_vector = 0xFF;
+
+    if (m_step.exception)
+    {
+        result.exception_vector = m_step_exception.exception_vector;
+        result.exception_after_instruction = m_step_exception.exception_after_instruction;
+        result.exception_return_cs = m_step_exception.exception_return_cs;
+        result.exception_return_eip = m_step_exception.exception_return_eip;
+        result.exception_return_base = m_step_exception.exception_return_base;
+        result.exception_source_eip = m_step_exception.exception_source_eip;
+    }
+
+    return result;
+}
+
+I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending)
+{
+    I386_Run_Result total = {};
+    total.instruction_completed = true;
+    total.exception_vector = 0xFF;
+
+    m_batch_mode = true;
+    m_checked_valid = false;
+    SetBusContext(context);
+    UpdateStepMode();
+
+    // The fast path keeps the totals in locals
+    // They are synchronized around slow steps
+    u64 clocks = 0;
+    u32 steps = 0;
+    bool completed = true;
+    bool interrupt_pending = nmi_pending || intr_pending;
+
+    while (clocks + context.wait_clocks < cycle_budget)
+    {
+        if (likely(!m_step_slow && !m_repeat.active && (m_eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
+        {
+            u16 old_task = m_task_register.selector;
+            m_step.clocks = 0;
+            m_step.instruction_completed = true;
+            m_step.end_batch = false;
+            m_step.exception = false;
+
+            if (unlikely(!ExecuteOPCode()))
+                CompleteFault(old_task);
+
+            if (unlikely(m_interrupt_shadow_steps > 0) && m_step.instruction_completed)
+                CountInterruptShadow();
+
+            clocks += m_step.clocks;
+            steps++;
+            completed = m_step.instruction_completed;
+
+            if (unlikely(m_step.end_batch || context.end_batch || m_halted || m_shutdown))
+            {
+                // Exceptions and software interrupts always end the batch
+                if (m_step.exception)
+                    CopyStepException(total);
+
+                total.end_batch = true;
+                break;
+            }
+
+            if (unlikely(interrupt_pending))
+                break;
+        }
+        else
+        {
+            total.clocks = clocks;
+            total.steps = steps;
+            total.instruction_completed = completed;
+
+            bool more = RunForSlowStep(total, cycle_budget, interrupt_pending);
+
+            clocks = total.clocks;
+            steps = total.steps;
+            completed = total.instruction_completed;
+
+            if (!more)
+                break;
+        }
+    }
+
+    total.clocks = clocks;
+    total.steps = steps;
+    total.instruction_completed = completed;
+    m_batch_mode = false;
+    return total;
+}
+
+// Debug, trace, halt and REP continuation steps
+// returns false when the batch must end
+NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool interrupt_pending)
+{
+    GT_Bus_Access_Context& context = *m_bus_context;
+
+    if (m_repeat.active && !interrupt_pending && !m_halted && !m_shutdown)
+    {
+        u32 clocks = 0;
+        u32 steps = RunRepeatBatch((u32)(cycle_budget - total.clocks - context.wait_clocks), clocks);
+
+        if (steps != 0)
+        {
+            total.clocks += clocks;
+            total.steps += steps;
+            total.instruction_completed = m_step.instruction_completed;
+            return true;
+        }
+    }
+
+    RunCheckedStep();
+
+    const StepState& step = m_step;
+    total.clocks += step.clocks;
+    total.steps += step.steps;
+    total.instruction_completed = step.instruction_completed;
+    total.end_batch = total.end_batch || step.end_batch;
+
+    if (step.exception)
+        CopyStepException(total);
+
+    return !(step.steps == 0 || step.end_batch || m_halted || m_shutdown || interrupt_pending);
+}
+
+void I386::CopyStepException(I386_Run_Result& total) const
+{
+    total.exception = true;
+    total.exception_vector = m_step_exception.exception_vector;
+    total.exception_after_instruction = m_step_exception.exception_after_instruction;
+    total.exception_return_cs = m_step_exception.exception_return_cs;
+    total.exception_return_eip = m_step_exception.exception_return_eip;
+    total.exception_return_base = m_step_exception.exception_return_base;
+    total.exception_source_eip = m_step_exception.exception_source_eip;
+}
+
+void I386::UpdateStepMode()
+{
+    m_step_slow = m_halted || m_shutdown || m_trace_enabled || (m_debug_registers[7] & 0xFF) != 0;
+}
+
+bool I386::Halted() const
+{
+    return m_halted;
+}
+
+bool I386::Shutdown() const
+{
+    return m_shutdown;
+}
+
+bool I386::CanAcceptMaskableInterrupt() const
+{
+    return !m_shutdown && (m_eflags & I386_FLAG_IF) != 0 && m_interrupt_shadow == I386_SHADOW_NONE;
+}
+
+bool I386::CanAcceptNMI() const
+{
+    return !m_shutdown && !m_nmi_blocked && m_interrupt_shadow != I386_SHADOW_MOV_SS;
+}
+
+u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context)
+{
+    SetBusContext(context);
+    m_halted = false;
+    m_repeat.active = false;
+    m_last_exception_vector = vector;
+
+    u64 clocks = k_i386_real_interrupt_entry_clocks;
+
+    if (EnterInterrupt(vector, m_eip, context, false, false, 0, false, true, &clocks))
+        return clocks;
+
+    if (m_exception.pending)
+    {
+        I386_Pending_Exception exception = m_exception;
+        memset(&m_exception, 0, sizeof(m_exception));
+
+        I386_Run_Result result = {};
+        result.clocks = clocks;
+        result.instruction_completed = true;
+        result.exception_vector = 0xFF;
+
+        DeliverException(exception, m_eip, context, result);
+        return (u32)result.clocks;
+    }
+    else
+        m_shutdown = true;
+
+    return clocks;
+}
+
+u32 I386::EnterNMI(GT_Bus_Access_Context& context)
+{
+    if (!CanAcceptNMI())
+        return 0;
+
+    m_nmi_blocked = true;
+    return EnterExternalInterrupt(2, context);
+}
+
+void I386::CopyState(I386_State& state) const
+{
+    memset(&state, 0, sizeof(state));
+
+    for (int i = 0; i < I386_REG_COUNT; i++)
+        state.registers[i] = m_registers[i].value;
+
+    state.eip = m_eip;
+    state.eflags = m_eflags;
+    memcpy(state.segments, m_segments, sizeof(m_segments));
+    state.gdtr = m_gdtr;
+    state.idtr = m_idtr;
+    state.ldtr = m_ldtr;
+    state.task_register = m_task_register;
+    state.cr0 = m_cr0;
+    state.cr2 = m_cr2;
+    state.cr3 = m_cr3;
+    memcpy(state.debug_registers, m_debug_registers, sizeof(m_debug_registers));
+    memcpy(state.test_registers, m_test_registers, sizeof(m_test_registers));
+    state.execution_mode = (u8)m_execution_mode;
+    state.current_privilege_level = m_current_privilege_level;
+    state.interrupt_shadow = (u8)m_interrupt_shadow;
+    state.interrupt_shadow_steps = m_interrupt_shadow_steps;
+    state.last_exception_vector = m_last_exception_vector;
+    state.halted = m_halted;
+    state.shutdown = m_shutdown;
+    state.nmi_blocked = m_nmi_blocked;
+    state.repeat.active = m_repeat.active;
+    state.repeat.start_eip = m_repeat.start_eip;
+    state.repeat.next_eip = m_repeat.next_eip;
+    state.repeat.opcode = m_repeat.opcode;
+    state.repeat.operand_size = m_repeat.operand_size;
+    state.repeat.address_size = m_repeat.address_size;
+    state.repeat.repeat = m_repeat.repeat;
+    state.repeat.segment_override = m_repeat.segment_override;
+}
+
+bool I386::SetState(const I386_State& state)
+{
+    for (int i = 0; i < I386_REG_COUNT; i++)
+        m_registers[i].value = state.registers[i];
+
+    m_eip = state.eip;
+    m_eflags = state.eflags;
+    memcpy(m_segments, state.segments, sizeof(m_segments));
+    m_gdtr = state.gdtr;
+    m_idtr = state.idtr;
+    m_ldtr = state.ldtr;
+    m_task_register = state.task_register;
+    m_cr0 = state.cr0;
+    m_cr2 = state.cr2;
+    m_cr3 = state.cr3;
+    memcpy(m_debug_registers, state.debug_registers, sizeof(m_debug_registers));
+    memcpy(m_test_registers, state.test_registers, sizeof(m_test_registers));
+    m_current_privilege_level = state.current_privilege_level;
+    m_interrupt_shadow = (I386_Interrupt_Shadow)state.interrupt_shadow;
+    m_interrupt_shadow_steps = state.interrupt_shadow_steps;
+    m_last_exception_vector = state.last_exception_vector;
+    m_halted = state.halted;
+    m_shutdown = state.shutdown;
+    m_nmi_blocked = state.nmi_blocked;
+    m_repeat = state.repeat;
+
+    SanitizeState();
+    FlushTLB();
+    return true;
+}
+
+void I386::SaveState(std::ostream& stream)
+{
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+}
+
+void I386::LoadState(std::istream& stream)
+{
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+    SanitizeState();
+}
+
+void I386::SerializeSegment(StateSerializer& serializer, I386_Segment& segment)
+{
+    G_SERIALIZE(serializer, segment.selector);
+    G_SERIALIZE(serializer, segment.attributes);
+    G_SERIALIZE(serializer, segment.base);
+    G_SERIALIZE(serializer, segment.limit);
+    G_SERIALIZE(serializer, segment.dpl);
+}
+
+void I386::SerializeDescriptorTable(StateSerializer& serializer, I386_Descriptor_Table& table)
+{
+    G_SERIALIZE(serializer, table.base);
+    G_SERIALIZE(serializer, table.limit);
+}
+
+void I386::Serialize(StateSerializer& serializer)
+{
+    for (int i = 0; i < I386_REG_COUNT; i++)
+        G_SERIALIZE(serializer, m_registers[i].value);
+
+    G_SERIALIZE(serializer, m_eip);
+    G_SERIALIZE(serializer, m_eflags);
+
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+        SerializeSegment(serializer, m_segments[i]);
+
+    SerializeDescriptorTable(serializer, m_gdtr);
+    SerializeDescriptorTable(serializer, m_idtr);
+    SerializeSegment(serializer, m_ldtr);
+    SerializeSegment(serializer, m_task_register);
+    G_SERIALIZE(serializer, m_cr0);
+    G_SERIALIZE(serializer, m_cr2);
+    G_SERIALIZE(serializer, m_cr3);
+    G_SERIALIZE_ARRAY(serializer, m_debug_registers, 8);
+    G_SERIALIZE_ARRAY(serializer, m_test_registers, 2);
+    G_SERIALIZE(serializer, m_current_privilege_level);
+    G_SERIALIZE(serializer, m_interrupt_shadow);
+    G_SERIALIZE(serializer, m_interrupt_shadow_steps);
+    G_SERIALIZE(serializer, m_last_exception_vector);
+    G_SERIALIZE(serializer, m_halted);
+    G_SERIALIZE(serializer, m_shutdown);
+    G_SERIALIZE(serializer, m_nmi_blocked);
+    G_SERIALIZE(serializer, m_repeat.active);
+    G_SERIALIZE(serializer, m_repeat.start_eip);
+    G_SERIALIZE(serializer, m_repeat.next_eip);
+    G_SERIALIZE(serializer, m_repeat.opcode);
+    G_SERIALIZE(serializer, m_repeat.operand_size);
+    G_SERIALIZE(serializer, m_repeat.address_size);
+    G_SERIALIZE(serializer, m_repeat.repeat);
+    G_SERIALIZE(serializer, m_repeat.segment_override);
+
+    for (int i = 0; i < I386_TLB_SIZE; i++)
+    {
+        G_SERIALIZE(serializer, m_tlb[i].linear_page);
+        G_SERIALIZE(serializer, m_tlb[i].physical_page);
+        G_SERIALIZE(serializer, m_tlb[i].flags);
+    }
+
+    G_SERIALIZE_ARRAY(serializer, m_tlb_plru, I386_TLB_SETS);
+}
+
+void I386::SanitizeState()
+{
+    m_eflags |= I386_FLAG_FIXED;
+    m_current_privilege_level &= 3;
+
+    if (m_interrupt_shadow > I386_SHADOW_MOV_SS)
+        m_interrupt_shadow = I386_SHADOW_NONE;
+
+    m_interrupt_shadow_steps = MIN(m_interrupt_shadow_steps, (u8)2);
+    m_external_event = false;
+
+    m_debug_data_breakpoints = 0;
+    m_step = {};
+    m_step_exception = {};
+
+    memset(&m_exception, 0, sizeof(m_exception));
+    memset(&m_string, 0, sizeof(m_string));
+    memset(&m_instruction, 0, sizeof(m_instruction));
+
+    if (m_repeat.active)
+    {
+        if (m_repeat.operand_size != 4)
+            m_repeat.operand_size = 2;
+
+        if (m_repeat.address_size != 4)
+            m_repeat.address_size = 2;
+
+        if (m_repeat.segment_override >= I386_SEGMENT_COUNT)
+            m_repeat.segment_override = 0xFF;
+
+        m_instruction.start_eip = m_repeat.start_eip;
+        m_instruction.next_eip = m_repeat.next_eip;
+        m_instruction.opcode = m_repeat.opcode;
+        m_instruction.operand_size = m_repeat.operand_size;
+        m_instruction.address_size = m_repeat.address_size;
+        m_instruction.repeat = m_repeat.repeat;
+        m_instruction.segment_override = m_repeat.segment_override;
+    }
+
+    // A restored REP continuation has no fetched bytes to report until the next decode
+    m_instruction_restored = m_repeat.active;
+    m_checked_valid = false;
+    m_fetch_remaining = 0;
+    m_address_clocks = 0;
+    CloseCodeWindow();
+
+    // Host pages stay NULL until first use
+    // The most recent way follows from the tree bits
+    for (int i = 0; i < I386_TLB_SIZE; i++)
+    {
+        m_tlb[i].linear_page &= 0xFFFFF000U;
+        m_tlb[i].physical_page &= 0xFFFFF000U;
+        m_tlb[i].flags &= k_i386_tlb_valid | k_i386_tlb_user | k_i386_tlb_writable | k_i386_tlb_dirty;
+        InitPointer(m_tlb[i].read_page);
+        InitPointer(m_tlb[i].write_page);
+    }
+
+    m_tlb_used = 0xFFFFFFFFU;
+
+    for (int set = 0; set < I386_TLB_SETS; set++)
+    {
+        u8 plru = m_tlb_plru[set] & 7;
+        m_tlb_plru[set] = plru;
+        m_tlb_mru[set] = (plru & 1) != 0 ? ((plru & 2) != 0 ? 0 : 1) : ((plru & 4) != 0 ? 2 : 3);
+    }
+
+    UpdateMemoryMode();
+    UpdateExecutionMode();
+
+    if (m_repeat.active)
+        PrepareString();
+
+    UpdateDebugState();
+}
+
+u8 I386::GetLastExceptionVector() const
+{
+    return m_last_exception_vector;
+}
+
+// Passive copy of the bytes at CS:EIP before a single step executes them
+void I386::CaptureCheckedBytes()
+{
+    u32 linear = m_segments[I386_SEGMENT_CS].base + m_eip;
+
+    m_checked_eip = m_eip;
+    m_checked_count = 0;
+
+    while (m_checked_count < GT_I386_MAX_INSTRUCTION_LENGTH &&
+        TryPeekLinear(linear + m_checked_count, m_checked_bytes[m_checked_count]))
+        m_checked_count++;
+}
+
+bool I386::CopyDecodeState(I386_Decode_State& state)
+{
+    u8 bytes[GT_I386_MAX_INSTRUCTION_LENGTH];
+    u32 length = m_instruction_restored ? 0 : m_instruction.next_eip - m_instruction.start_eip;
+    length = MIN(length, (u32)GT_I386_MAX_INSTRUCTION_LENGTH);
+
+    // A single step captured its bytes before executing, otherwise they are read back through the current CS
+    if (m_checked_valid && m_instruction.start_eip == m_checked_eip)
+    {
+        length = MIN(length, (u32)m_checked_count);
+        memcpy(bytes, m_checked_bytes, length);
+    }
+    else
+    {
+        u32 linear = m_segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
+
+        for (u32 i = 0; i < length; i++)
+        {
+            if (!TryPeekLinear(linear + i, bytes[i]))
+            {
+                length = i;
+                break;
+            }
+        }
+    }
+
+    // The default size is recovered from the decoded size and the prefixes actually present
+    bool operand_override = false;
+
+    for (u32 i = 0; i < length && (bytes[i] == 0x26 || bytes[i] == 0x2E || bytes[i] == 0x36 || bytes[i] == 0x3E ||
+        bytes[i] == 0x64 || bytes[i] == 0x65 || bytes[i] == 0x66 || bytes[i] == 0x67 || bytes[i] == 0xF0 ||
+        bytes[i] == 0xF2 || bytes[i] == 0xF3); i++)
+        operand_override = operand_override || bytes[i] == 0x66;
+
+    bool default32 = (m_instruction.operand_size == 4) != operand_override;
+    InstructionContext decoded;
+
+    m_passive_bytes = bytes;
+    m_passive_count = length;
+    m_passive_index = 0;
+
+    if (length == 0 || !DecodeInstructionPassive(decoded, m_instruction.start_eip, default32))
+    {
+        // Partially decoded instruction: report the prefix and opcode state of the execution context
+        decoded = m_instruction;
+        decoded.memory_operand = false;
+        decoded.immediate = 0;
+        decoded.immediate2 = 0;
+    }
+    else if (decoded.memory_operand)
+    {
+        decoded.effective_offset = m_instruction.effective_offset;
+        decoded.segment = m_instruction.segment;
+    }
+
+    decoded.start_eip = m_instruction.start_eip;
+    decoded.next_eip = m_instruction.next_eip;
+
+    FillDecodeState(decoded, bytes, length, state);
+    return state.length != 0;
+}
+
+void I386::SetTraceEnabled(bool enabled)
+{
+    if (enabled && !IsValidPointer(m_trace))
+        m_trace = new I386_Trace_Entry[GT_I386_TRACE_SIZE]();
+
+    m_trace_enabled = enabled;
+    m_trace_count = 0;
+}
+
+int I386::CopyTraceEntries(I386_Trace_Entry* entries, int capacity) const
+{
+    if (!IsValidPointer(entries) || capacity <= 0)
+        return 0;
+
+    int count = MIN(capacity, m_trace_count);
+    int first = m_trace_count - count;
+
+    for (int i = 0; i < count; i++)
+        entries[i] = m_trace[first + i];
+
+    return count;
+}
+
+void I386::SetRealModeSegment(I386_Segment_Register segment, u16 selector)
+{
+    I386_Segment& state = m_segments[segment];
+    state.selector = selector;
+    state.base = (u32)selector << 4;
+    state.limit = 0xFFFF;
+    state.dpl = 0;
+    state.attributes = I386_SEGMENT_PRESENT | I386_SEGMENT_READABLE;
+
+    if (segment == I386_SEGMENT_CS)
+        state.attributes |= I386_SEGMENT_EXECUTABLE;
+    else
+        state.attributes |= I386_SEGMENT_WRITABLE;
+
+    UpdateSegmentFastPaths();
+}
+
+void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
+{
+    SetRealModeSegment(segment, selector);
+    m_segments[segment].attributes &= ~(I386_SEGMENT_TYPE_MASK | I386_SEGMENT_ACCESSED);
+    m_segments[segment].attributes |= I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
+    m_segments[segment].dpl = 3;
+    UpdateSegmentFastPaths();
+}
+
+void I386::UpdateExecutionMode()
+{
+    if ((m_eflags & I386_FLAG_VM) != 0)
+    {
+        m_execution_mode = I386_MODE_VM86;
+        m_current_privilege_level = 3;
+    }
+    else if ((m_cr0 & 1) != 0)
+    {
+        m_execution_mode = I386_MODE_PROTECTED;
+        m_current_privilege_level = m_segments[I386_SEGMENT_CS].selector & 3;
+    }
+    else
+    {
+        m_execution_mode = I386_MODE_REAL;
+        m_current_privilege_level = 0;
+    }
+
+    UpdateUserMode();
+    UpdateSegmentFastPaths();
+}
+
+bool I386::CheckInstructionBreakpoint()
+{
+    u32 linear = m_segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
+    u8 matches = 0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        u32 enable = (m_debug_registers[7] >> (i * 2)) & 3;
+        u32 operation = (m_debug_registers[7] >> (16 + i * 4)) & 3;
+
+        if (enable != 0 && operation == 0 && m_debug_registers[i] == linear)
+            matches |= 1U << i;
+    }
+
+    if (matches == 0)
+        return true;
+
+    m_debug_registers[6] |= matches;
+    return RaiseException(1, I386_EXCEPTION_FAULT);
+}
+
+bool I386::LoadRealSegment(int segment, u16 selector)
+{
+    if (segment < 0 || segment >= I386_SEGMENT_COUNT)
+        return RaiseException(6, I386_EXCEPTION_FAULT);
+
+    SetRealModeSegment((I386_Segment_Register)segment, selector);
+    return true;
+}
+
+bool I386::FarTransfer(u16 selector, u32 offset, int width)
+{
+    u32 target = width == 16 ? (u16)offset : offset;
+
+    if (target > 0xFFFF)
+        return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+
+    SetRealModeSegment(I386_SEGMENT_CS, selector);
+    m_eip = target;
+    m_repeat.active = false;
+    return true;
+}
+
+bool I386::RaiseException(u8 vector, u8 exception_class, bool has_error_code, u32 error_code)
+{
+    if (m_exception.pending)
+        return false;
+
+    m_exception.pending = true;
+    m_exception.has_error_code = has_error_code;
+    m_exception.has_return_eip = false;
+    m_exception.vector = vector;
+    m_exception.exception_class = exception_class;
+    m_exception.error_code = (m_external_event && has_error_code && vector >= 10 && vector <= 13) ?
+        error_code | 1 : error_code;
+    m_exception.return_eip = 0;
+    m_last_exception_vector = vector;
+    return false;
+}
+
+bool I386::ResolveException(GT_Bus_Access_Context& context, I386_Run_Result& result)
+{
+    if (!m_exception.pending)
+        return true;
+
+    I386_Pending_Exception exception = m_exception;
+    memset(&m_exception, 0, sizeof(m_exception));
+
+    u32 return_eip = exception.has_return_eip ? exception.return_eip :
+        exception.exception_class == I386_EXCEPTION_FAULT ? m_instruction.start_eip : m_instruction.next_eip;
+
+    m_repeat.active = false;
+    return DeliverException(exception, return_eip, context, result);
+}
+
+bool I386::CausesDoubleFault(u8 first, u8 second) const
+{
+    bool first_contributory = first == 0 || first == 9 || (first >= 10 && first <= 13);
+    bool second_contributory = second == 0 || second == 9 || (second >= 10 && second <= 13);
+
+    if (first == 14)
+        return second_contributory || second == 14;
+
+    return first_contributory && second_contributory;
+}
+
+bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_eip,
+    GT_Bus_Access_Context& context, I386_Run_Result& result)
+{
+    I386_Pending_Exception current = exception;
+    u32 current_return_eip = return_eip;
+
+    while (true)
+    {
+        u64 entry_clocks = k_i386_real_interrupt_entry_clocks;
+        bool ok = EnterInterrupt(current.vector, current_return_eip, context, false, current.has_error_code,
+            current.error_code, current.exception_class == I386_EXCEPTION_FAULT, false, &entry_clocks, &result);
+
+        result.clocks += entry_clocks;
+
+        if (ok)
+        {
+            result.exception = true;
+            result.exception_vector = current.vector;
+            result.end_batch = true;
+            m_last_exception_vector = current.vector;
+            return true;
+        }
+
+        if (!m_exception.pending)
+        {
+            m_shutdown = true;
+            return false;
+        }
+
+        I386_Pending_Exception next = m_exception;
+        memset(&m_exception, 0, sizeof(m_exception));
+
+        if (current.vector == 8)
+        {
+            m_shutdown = true;
+            return false;
+        }
+
+        if (CausesDoubleFault(current.vector, next.vector))
+        {
+            memset(&current, 0, sizeof(current));
+            current.pending = true;
+            current.has_error_code = true;
+            current.vector = 8;
+            current.exception_class = I386_EXCEPTION_ABORT;
+            current.error_code = 0;
+        }
+        else
+        {
+            current = next;
+
+            if (next.has_return_eip)
+                current_return_eip = next.return_eip;
+        }
+    }
+}
+
+bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& context, bool software,
+    bool has_error_code, u32 error_code, bool fault, bool external, u64* clocks, I386_Run_Result* run_result)
+{
+    u16 return_cs = m_segments[I386_SEGMENT_CS].selector;
+    u32 return_base = m_segments[I386_SEGMENT_CS].base;
+    u32 source_eip = m_eip;
+
+    if (m_execution_mode != I386_MODE_REAL)
+    {
+        bool previous_external = m_external_event;
+        m_external_event = external;
+
+        bool result = EnterProtectedInterrupt(vector, return_eip, context, software, has_error_code, error_code,
+            fault, clocks, run_result);
+
+        m_external_event = previous_external;
+
+        if (result && IsValidPointer(run_result))
+        {
+            run_result->exception_return_cs = return_cs;
+            run_result->exception_return_base = return_base;
+            run_result->exception_source_eip = source_eip;
+        }
+
+        return result;
+    }
+
+    UNUSED(software);
+    UNUSED(has_error_code);
+    UNUSED(error_code);
+    UNUSED(fault);
+    UNUSED(external);
+
+    u32 table_offset = (u32)vector * 4;
+
+    if ((u64)table_offset + 3 > m_idtr.limit)
+        return RaiseException(8, I386_EXCEPTION_ABORT);
+
+    u32 address = m_idtr.base + table_offset;
+    u32 physical = 0;
+
+    if (!TranslateLinear(address, false, context, physical))
+        return false;
+
+    u16 new_ip = m_memory->Read16Physical(physical, context);
+    u16 new_cs = m_memory->Read16Physical(physical + 2, context);
+
+    if (!StackPushSized(m_eflags, 16, context))
+        return false;
+
+    if (!StackPushSized(m_segments[I386_SEGMENT_CS].selector, 16, context))
+        return false;
+
+    if (!StackPushSized(return_eip, 16, context))
+        return false;
+
+    m_eflags &= ~(I386_FLAG_IF | I386_FLAG_TF);
+    SetRealModeSegment(I386_SEGMENT_CS, new_cs);
+    m_eip = new_ip;
+    m_halted = false;
+
+    if (IsValidPointer(run_result))
+    {
+        run_result->exception_return_cs = return_cs;
+        run_result->exception_return_eip = (u16)return_eip;
+        run_result->exception_return_base = return_base;
+        run_result->exception_source_eip = source_eip;
+    }
+
+    return true;
+}
+
+void I386::RecordTrace(const I386_State& before)
+{
+    if (!m_trace_enabled)
+        return;
+
+    if (m_trace_count == GT_I386_TRACE_SIZE)
+    {
+        memmove(&m_trace[0], &m_trace[1], sizeof(I386_Trace_Entry) * (GT_I386_TRACE_SIZE - 1));
+        m_trace_count--;
+    }
+
+    I386_Trace_Entry& entry = m_trace[m_trace_count++];
+
+    CopyDecodeState(entry.instruction);
+    entry.before = before;
+    CopyState(entry.after);
+}
+
+bool I386::CopyDebugState(I386_Debug_State& state) const
+{
+    UpdateDebugState();
+    state = m_debug_state;
+    return true;
+}
+
+bool I386::GetDebugRegisterValue(const char* name, u32& value) const
+{
+    UpdateDebugState();
+
+    if (EqualName(name, "EAX"))
+        value = m_debug_state.eax;
+    else if (EqualName(name, "EBX"))
+        value = m_debug_state.ebx;
+    else if (EqualName(name, "ECX"))
+        value = m_debug_state.ecx;
+    else if (EqualName(name, "EDX"))
+        value = m_debug_state.edx;
+    else if (EqualName(name, "ESI"))
+        value = m_debug_state.esi;
+    else if (EqualName(name, "EDI"))
+        value = m_debug_state.edi;
+    else if (EqualName(name, "EBP"))
+        value = m_debug_state.ebp;
+    else if (EqualName(name, "ESP"))
+        value = m_debug_state.esp;
+    else if (EqualName(name, "EIP"))
+        value = m_debug_state.eip;
+    else if (EqualName(name, "EFLAGS"))
+        value = m_debug_state.eflags;
+    else if (EqualName(name, "CR0"))
+        value = m_debug_state.cr0;
+    else if (EqualName(name, "CR2"))
+        value = m_debug_state.cr2;
+    else if (EqualName(name, "CR3"))
+        value = m_debug_state.cr3;
+    else
+        return false;
+
+    return true;
+}
+
+bool I386::EqualName(const char* left, const char* right)
 {
     if (!IsValidPointer(left) || !IsValidPointer(right))
         return false;
@@ -29,263 +1114,107 @@ static bool equal_name(const char* left, const char* right)
     {
         if (toupper((unsigned char)*left) != toupper((unsigned char)*right))
             return false;
+
         left++;
         right++;
     }
+
     return *left == 0 && *right == 0;
 }
 
-I386::I386()
-{
-    InitPointer(m_memory);
-    memset(&m_debug_state, 0, sizeof(m_debug_state));
-}
-
-I386::~I386()
-{
-}
-
-void I386::Init(Memory* memory)
-{
-    m_memory = memory;
-    Reset();
-}
-
-void I386::Reset()
+void I386::UpdateDebugState() const
 {
     memset(&m_debug_state, 0, sizeof(m_debug_state));
-    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
-        m_debug_state.segment[i].limit = 0xFFFF;
-    m_debug_state.segment[I386_SEGMENT_CS].selector = 0xF000;
-    m_debug_state.segment[I386_SEGMENT_CS].base = 0xFFFF0000;
-    m_debug_state.eip = 0xFFF0;
-    m_debug_state.available = false;
-}
 
-bool I386::TryPeekLogical(I386_Segment_Register segment, u32 offset,
-    u8& value) const
-{
-    if (!m_debug_state.available || segment < 0 || segment >= I386_SEGMENT_COUNT)
-        return false;
+    m_debug_state.eax = m_registers[I386_REG_EAX].value;
+    m_debug_state.ebx = m_registers[I386_REG_EBX].value;
+    m_debug_state.ecx = m_registers[I386_REG_ECX].value;
+    m_debug_state.edx = m_registers[I386_REG_EDX].value;
+    m_debug_state.esi = m_registers[I386_REG_ESI].value;
+    m_debug_state.edi = m_registers[I386_REG_EDI].value;
+    m_debug_state.ebp = m_registers[I386_REG_EBP].value;
+    m_debug_state.esp = m_registers[I386_REG_ESP].value;
+    m_debug_state.eip = m_eip;
+    m_debug_state.eflags = m_eflags;
+    m_debug_state.cr0 = m_cr0;
+    m_debug_state.cr2 = m_cr2;
+    m_debug_state.cr3 = m_cr3;
 
-    const I386_Debug_Segment_State& state = m_debug_state.segment[segment];
-    if (!state.present || offset > state.limit)
-        return false;
-    return TryPeekLinear(state.base + offset, value);
-}
-
-bool I386::TryPeekLogical(u16 selector, u32 offset, u8& value) const
-{
-    const I386_Debug_Segment_State* state = FindSegment(selector);
-    if (!IsValidPointer(state) || !state->present || offset > state->limit)
-        return false;
-    return TryPeekLinear(state->base + offset, value);
-}
-
-bool I386::TryPeekCode(u32 eip, u8& value) const
-{
-    return TryPeekLogical(I386_SEGMENT_CS, eip, value);
-}
-
-bool I386::TryPeekLinear(u32 linear, u8& value) const
-{
-    u32 physical = 0;
-    return TryTranslateLinear(linear, physical) && IsValidPointer(m_memory) &&
-        m_memory->TryPeekPhysical(physical, value);
-}
-
-bool I386::TryTranslateLinear(u32 linear, u32& physical) const
-{
-    u32 pde_address = 0;
-    u32 pte_address = 0;
-    u32 page_flags = 0;
-    char reason[GT_DEBUG_MEMORY_REASON_SIZE];
-    return TranslateLinearPassive(linear, physical, pde_address, pte_address,
-        page_flags, reason, sizeof(reason));
-}
-
-bool I386::DebugTranslateLogical(I386_Segment_Register segment, u32 offset,
-    GT_Debug_Memory_Translation& translation) const
-{
-    if (!m_debug_state.available)
-    {
-        strncpy_fit(translation.reason, "I386 execution state is not available",
-            sizeof(translation.reason));
-        return false;
-    }
-    if (segment < 0 || segment >= I386_SEGMENT_COUNT)
-    {
-        strncpy_fit(translation.reason, "Invalid segment register",
-            sizeof(translation.reason));
-        return false;
-    }
-
-    const I386_Debug_Segment_State& state = m_debug_state.segment[segment];
-    translation.segment = state.selector;
-    translation.offset = offset;
-    translation.segment_base = state.base;
-    translation.segment_limit = state.limit;
-    translation.logical_valid = state.present && offset <= state.limit;
-    if (!translation.logical_valid)
-    {
-        strncpy_fit(translation.reason, state.present ?
-            "Offset exceeds segment limit" : "Segment is not present",
-            sizeof(translation.reason));
-        return false;
-    }
-
-    translation.linear = state.base + offset;
-    translation.linear_valid = true;
-    return DebugTranslateLinear(translation.linear, translation);
-}
-
-bool I386::DebugTranslateLogical(u16 selector, u32 offset,
-    GT_Debug_Memory_Translation& translation) const
-{
-    const I386_Debug_Segment_State* state = FindSegment(selector);
-    if (!IsValidPointer(state))
-    {
-        strncpy_fit(translation.reason, m_debug_state.available ?
-            "Selector is not in a cached segment" :
-            "I386 execution state is not available", sizeof(translation.reason));
-        return false;
-    }
-
-    translation.segment = selector;
-    translation.offset = offset;
-    translation.segment_base = state->base;
-    translation.segment_limit = state->limit;
-    translation.logical_valid = state->present && offset <= state->limit;
-    if (!translation.logical_valid)
-    {
-        strncpy_fit(translation.reason, state->present ?
-            "Offset exceeds segment limit" : "Segment is not present",
-            sizeof(translation.reason));
-        return false;
-    }
-
-    translation.linear = state->base + offset;
-    translation.linear_valid = true;
-    return DebugTranslateLinear(translation.linear, translation);
-}
-
-bool I386::DebugTranslateLinear(u32 linear,
-    GT_Debug_Memory_Translation& translation) const
-{
-    translation.linear = linear;
-    translation.linear_valid = m_debug_state.available;
-    if (!m_debug_state.available)
-    {
-        strncpy_fit(translation.reason, "I386 execution state is not available",
-            sizeof(translation.reason));
-        return false;
-    }
-
-    if (!TranslateLinearPassive(linear, translation.physical,
-        translation.page_directory_entry, translation.page_table_entry,
-        translation.page_flags, translation.reason, sizeof(translation.reason)))
-        return false;
-
-    translation.physical_valid = true;
-    return IsValidPointer(m_memory) &&
-        m_memory->DebugTranslatePhysical(translation.physical, translation);
-}
-
-bool I386::CopyDebugState(I386_Debug_State& state) const
-{
-    state = m_debug_state;
-    return state.available;
-}
-
-bool I386::GetDebugRegisterValue(const char* name, u32& value) const
-{
-    if (!m_debug_state.available)
-        return false;
-
-    if (equal_name(name, "EAX")) value = m_debug_state.eax;
-    else if (equal_name(name, "EBX")) value = m_debug_state.ebx;
-    else if (equal_name(name, "ECX")) value = m_debug_state.ecx;
-    else if (equal_name(name, "EDX")) value = m_debug_state.edx;
-    else if (equal_name(name, "ESI")) value = m_debug_state.esi;
-    else if (equal_name(name, "EDI")) value = m_debug_state.edi;
-    else if (equal_name(name, "EBP")) value = m_debug_state.ebp;
-    else if (equal_name(name, "ESP")) value = m_debug_state.esp;
-    else if (equal_name(name, "EIP")) value = m_debug_state.eip;
-    else if (equal_name(name, "EFLAGS")) value = m_debug_state.eflags;
-    else if (equal_name(name, "CR0")) value = m_debug_state.cr0;
-    else if (equal_name(name, "CR2")) value = m_debug_state.cr2;
-    else if (equal_name(name, "CR3")) value = m_debug_state.cr3;
-    else return false;
-    return true;
-}
-
-void I386::SetDebugState(const I386_Debug_State& state)
-{
-    m_debug_state = state;
-}
-
-bool I386::TranslateLinearPassive(u32 linear, u32& physical,
-    u32& pde_address, u32& pte_address, u32& page_flags,
-    char* reason, size_t reason_size) const
-{
-    if (!m_debug_state.available)
-    {
-        strncpy_fit(reason, "I386 execution state is not available", reason_size);
-        return false;
-    }
-
-    if ((m_debug_state.cr0 & 0x80000000U) == 0)
-    {
-        physical = linear;
-        pde_address = 0;
-        pte_address = 0;
-        page_flags = 0;
-        reason[0] = 0;
-        return true;
-    }
-
-    pde_address = (m_debug_state.cr3 & 0xFFFFF000U) +
-        (((linear >> 22) & 0x3FFU) * 4);
-    u32 pde = 0;
-    if (!ReadPhysical32(pde_address, pde) || (pde & 0x01) == 0)
-    {
-        strncpy_fit(reason, "Page-directory entry is unavailable",
-            reason_size);
-        return false;
-    }
-
-    pte_address = (pde & 0xFFFFF000U) + (((linear >> 12) & 0x3FFU) * 4);
-    u32 pte = 0;
-    if (!ReadPhysical32(pte_address, pte) || (pte & 0x01) == 0)
-    {
-        strncpy_fit(reason, "Page-table entry is unavailable", reason_size);
-        return false;
-    }
-
-    physical = (pte & 0xFFFFF000U) | (linear & 0xFFFU);
-    page_flags = (pde & 0xFFFU) | ((pte & 0xFFFU) << 12);
-    reason[0] = 0;
-    return true;
-}
-
-bool I386::ReadPhysical32(u32 physical, u32& value) const
-{
-    u8 data[4];
-    if (!IsValidPointer(m_memory) ||
-        !m_memory->TryPeekPhysicalBlock(physical, data, sizeof(data)))
-        return false;
-    value = read_u32_le(data);
-    return true;
-}
-
-const I386_Debug_Segment_State* I386::FindSegment(u16 selector) const
-{
-    if (!m_debug_state.available)
-        return NULL;
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (m_debug_state.segment[i].selector == selector)
-            return &m_debug_state.segment[i];
+        m_debug_state.segment[i].selector = m_segments[i].selector;
+        m_debug_state.segment[i].base = m_segments[i].base;
+        m_debug_state.segment[i].limit = m_segments[i].limit;
+        m_debug_state.segment[i].access = m_segments[i].attributes;
+        m_debug_state.segment[i].dpl = m_segments[i].dpl;
+        m_debug_state.segment[i].present = (m_segments[i].attributes & I386_SEGMENT_PRESENT) != 0;
     }
-    return NULL;
+
+    m_debug_state.available = true;
+}
+
+void I386::FillDecodeState(const InstructionContext& instruction, const u8* bytes, u32 length,
+    I386_Decode_State& state) const
+{
+    memset(&state, 0, sizeof(state));
+
+    state.start_eip = instruction.start_eip;
+    state.next_eip = instruction.next_eip;
+    state.length = (u8)length;
+    memcpy(state.bytes, bytes, length);
+    state.opcode = instruction.opcode;
+    state.opcode2 = instruction.two_byte ? instruction.opcode2 : 0;
+    state.operand_size = instruction.operand_size;
+    state.address_size = instruction.address_size;
+    state.repeat = instruction.repeat;
+    state.two_byte = instruction.two_byte;
+    state.lock = instruction.lock;
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    state.segment_override = instruction.segment_override;
+#endif
+
+    // ModR/M is only reported when its byte was fetched
+    u32 position = 0;
+
+    while (position < length && (bytes[position] == 0x26 || bytes[position] == 0x2E || bytes[position] == 0x36 ||
+        bytes[position] == 0x3E || bytes[position] == 0x64 || bytes[position] == 0x65 || bytes[position] == 0x66 ||
+        bytes[position] == 0x67 || bytes[position] == 0xF0 || bytes[position] == 0xF2 || bytes[position] == 0xF3))
+        position++;
+
+    position += instruction.two_byte ? 2 : 1;
+
+    state.has_modrm = length > position &&
+        OPCodeHasModRM(instruction.two_byte, instruction.two_byte ? instruction.opcode2 : instruction.opcode);
+
+    if (state.has_modrm)
+    {
+        state.modrm = instruction.modrm;
+        state.mod = instruction.modrm >> 6;
+        state.reg = instruction.reg;
+        state.rm = instruction.rm;
+        state.memory_operand = instruction.memory_operand;
+        state.segment = instruction.memory_operand ? instruction.segment : (u8)I386_SEGMENT_DS;
+
+        if (instruction.memory_operand)
+        {
+            state.displacement = instruction.displacement;
+            state.effective_offset = instruction.effective_offset;
+            state.has_sib = instruction.address_size == 4 && instruction.rm == 4;
+
+            if (state.has_sib)
+            {
+                state.sib = instruction.sib;
+                state.sib_scale = instruction.sib >> 6;
+                state.sib_index = (instruction.sib >> 3) & 7;
+                state.sib_base = instruction.sib & 7;
+            }
+        }
+    }
+
+    if (GetImmediateSize(state.two_byte, state.two_byte ? state.opcode2 : state.opcode, state.reg,
+        state.operand_size, state.address_size) != 0)
+        state.immediate = instruction.immediate;
+
+    if (!state.two_byte && (state.opcode == 0xC8 || state.opcode == 0x9A || state.opcode == 0xEA))
+        state.immediate2 = instruction.immediate2;
 }

@@ -27,6 +27,7 @@ void gui_debug_memory_init(void);
 void gui_debug_memory_destroy(void);
 void gui_debug_memory_reset(void);
 void gui_debug_memory_update(void);
+void gui_debug_memory_goto(const GT_Debug_Memory_Address& address);
 void gui_debug_window_memory(void);
 void gui_debug_memory_auxiliary_windows(void);
 void gui_debug_memory_copy(void);

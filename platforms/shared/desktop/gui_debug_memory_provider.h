@@ -36,14 +36,11 @@ public:
     bool GetRegion(int index, GT_Debug_Memory_Region& region) const;
     bool GetRegionById(int id, GT_Debug_Memory_Region& region) const;
     u32 GetAddressLimit(const GT_Debug_Memory_Address& address) const;
-    void ReadBlock(const GT_Debug_Memory_Address& address, u8* data,
-        GT_Debug_Memory_Status* status, u32 size,
+    void ReadBlock(const GT_Debug_Memory_Address& address, u8* data, GT_Debug_Memory_Status* status, u32 size,
         GT_Debug_Memory_Block_Info* info) const;
-    bool Translate(const GT_Debug_Memory_Address& address,
-        GT_Debug_Memory_Translation& translation) const;
+    bool Translate(const GT_Debug_Memory_Address& address, GT_Debug_Memory_Translation& translation) const;
 
-    bool QueueWrite(const GT_Debug_Memory_Address& address,
-        const u8* data, u32 size);
+    bool QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
     void RequestUndo();
     void RequestRedo();
     bool CanUndo() const;
@@ -65,10 +62,8 @@ private:
     };
 
     bool GetExternalRegion(int index, GT_Debug_Memory_Region& region) const;
-    bool ReadExternalRegion(int id, u32 offset, u8* data,
-        GT_Debug_Memory_Status* status, u32 size) const;
-    bool WriteNow(const GT_Debug_Memory_Address& address,
-        const u8* data, u32 size);
+    bool ReadExternalRegion(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
+    bool WriteBlock(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
     bool ApplyTransaction(WriteTransaction& transaction, bool capture_before);
     bool ValidateWritable(const GT_Debug_Memory_Address& address, u32 size) const;
     u64 GetSnapshotId() const;
@@ -76,10 +71,12 @@ private:
     void SetMessage(const char* message);
 
 private:
-    std::vector<WriteTransaction> m_pending;
-    std::vector<WriteTransaction> m_undo;
-    std::vector<WriteTransaction> m_redo;
+    std::vector<WriteTransaction> m_pending_writes;
+    std::vector<WriteTransaction> m_undo_history;
+    std::vector<WriteTransaction> m_redo_history;
+
     char m_last_message[GT_DEBUG_MEMORY_REASON_SIZE];
+
     bool m_request_undo;
     bool m_request_redo;
     bool m_changed;

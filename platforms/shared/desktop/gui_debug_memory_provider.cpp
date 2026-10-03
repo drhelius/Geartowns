@@ -73,9 +73,10 @@ void DebugMemoryProvider::Init()
 
 void DebugMemoryProvider::Reset()
 {
-    m_pending.clear();
-    m_undo.clear();
-    m_redo.clear();
+    m_pending_writes.clear();
+    m_undo_history.clear();
+    m_redo_history.clear();
+
     m_last_message[0] = 0;
     m_request_undo = false;
     m_request_redo = false;
@@ -87,16 +88,18 @@ void DebugMemoryProvider::Update()
     if (m_request_undo)
     {
         m_request_undo = false;
-        if (!m_undo.empty())
+
+        if (!m_undo_history.empty())
         {
-            WriteTransaction transaction = m_undo.back();
-            m_undo.pop_back();
+            WriteTransaction transaction = m_undo_history.back();
+            m_undo_history.pop_back();
             std::vector<u8> after = transaction.after;
             transaction.after = transaction.before;
+
             if (ApplyTransaction(transaction, false))
             {
                 transaction.after = after;
-                m_redo.push_back(transaction);
+                m_redo_history.push_back(transaction);
                 SetMessage("Memory edit undone");
             }
         }
@@ -105,93 +108,108 @@ void DebugMemoryProvider::Update()
     if (m_request_redo)
     {
         m_request_redo = false;
-        if (!m_redo.empty())
+
+        if (!m_redo_history.empty())
         {
-            WriteTransaction transaction = m_redo.back();
-            m_redo.pop_back();
+            WriteTransaction transaction = m_redo_history.back();
+            m_redo_history.pop_back();
+
             if (ApplyTransaction(transaction, false))
             {
-                m_undo.push_back(transaction);
+                m_undo_history.push_back(transaction);
                 SetMessage("Memory edit redone");
             }
         }
     }
 
-    for (size_t i = 0; i < m_pending.size(); i++)
+    for (size_t i = 0; i < m_pending_writes.size(); i++)
     {
-        WriteTransaction transaction = m_pending[i];
+        WriteTransaction transaction = m_pending_writes[i];
+
         if (ApplyTransaction(transaction, true))
         {
-            m_undo.push_back(transaction);
-            m_redo.clear();
+            m_undo_history.push_back(transaction);
+            m_redo_history.clear();
             SetMessage("Memory edit applied at an emulation safe point");
         }
     }
-    m_pending.clear();
+
+    m_pending_writes.clear();
 }
 
 int DebugMemoryProvider::GetRegionCount() const
 {
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core))
         return 0;
 
     int count = 0;
     Memory* memory = core->GetMemory();
+
     if (IsValidPointer(memory))
         count += memory->GetDebugRegionCount();
 
     Firmware* firmware = core->GetFirmware();
+
     if (IsValidPointer(firmware) && firmware->IsReady())
         count += GT_FIRMWARE_COUNT;
 
     Media* media = core->GetMedia();
+
     if (!emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
         count++;
+
     return count;
 }
 
 bool DebugMemoryProvider::GetRegion(int index, GT_Debug_Memory_Region& region) const
 {
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core) || index < 0)
         return false;
 
     Memory* memory = core->GetMemory();
     int memory_count = IsValidPointer(memory) ? memory->GetDebugRegionCount() : 0;
+
     if (index < memory_count)
         return memory->GetDebugRegion(index, region);
+
     return GetExternalRegion(index - memory_count, region);
 }
 
 bool DebugMemoryProvider::GetRegionById(int id, GT_Debug_Memory_Region& region) const
 {
     int count = GetRegionCount();
+
     for (int i = 0; i < count; i++)
     {
         if (GetRegion(i, region) && region.id == id)
             return true;
     }
+
     return false;
 }
 
-u32 DebugMemoryProvider::GetAddressLimit(
-    const GT_Debug_Memory_Address& address) const
+u32 DebugMemoryProvider::GetAddressLimit(const GT_Debug_Memory_Address& address) const
 {
     if (address.space == GT_DEBUG_MEMORY_IO)
         return 0xFFFF;
+
     if (address.space != GT_DEBUG_MEMORY_REGION)
         return 0xFFFFFFFF;
 
     GT_Debug_Memory_Region region;
+
     if (!GetRegionById(address.region, region) || region.size == 0)
         return 0;
+
     return region.size - 1;
 }
 
-void DebugMemoryProvider::ReadBlock(const GT_Debug_Memory_Address& address,
-    u8* data, GT_Debug_Memory_Status* status, u32 size,
-    GT_Debug_Memory_Block_Info* info) const
+void DebugMemoryProvider::ReadBlock(const GT_Debug_Memory_Address& address, u8* data, GT_Debug_Memory_Status* status,
+    u32 size, GT_Debug_Memory_Block_Info* info) const
 {
     if (!IsValidPointer(data) || !IsValidPointer(status))
         return;
@@ -203,10 +221,12 @@ void DebugMemoryProvider::ReadBlock(const GT_Debug_Memory_Address& address,
     }
 
     memset(data, 0, size);
+
     for (u32 i = 0; i < size; i++)
         status[i] = GT_DEBUG_MEMORY_UNAVAILABLE;
 
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core))
         return;
 
@@ -214,46 +234,53 @@ void DebugMemoryProvider::ReadBlock(const GT_Debug_Memory_Address& address,
     {
         Memory* memory = core->GetMemory();
         bool memory_region = false;
+
         if (IsValidPointer(memory))
         {
             int region_count = memory->GetDebugRegionCount();
+
             for (int i = 0; i < region_count; i++)
             {
                 GT_Debug_Memory_Region region;
-                if (memory->GetDebugRegion(i, region) &&
-                    region.id == address.region)
+
+                if (memory->GetDebugRegion(i, region) && region.id == address.region)
                 {
                     memory_region = true;
                     break;
                 }
             }
         }
+
         if (memory_region)
-            memory->DebugReadRegionBlock(address.region, address.address,
-                data, status, size);
+            memory->DebugReadRegionBlock(address.region, address.address, data, status, size);
         else
             ReadExternalRegion(address.region, address.address, data, status, size);
+
         return;
     }
 
     Memory* memory = core->GetMemory();
     I386* cpu = core->GetI386();
+
     if (address.space == GT_DEBUG_MEMORY_PHYSICAL && IsValidPointer(memory))
     {
         memory->DebugReadPhysicalBlock(address.address, data, status, size);
         return;
     }
+
     if (address.space == GT_DEBUG_MEMORY_BUS && IsValidPointer(memory))
     {
         memory->DebugReadBusBlock(address.address, data, status, size);
         return;
     }
+
     if (!IsValidPointer(cpu))
         return;
 
     for (u32 i = 0; i < size; i++)
     {
         u64 current = (u64)address.address + i;
+
         if (current > 0xFFFFFFFFULL)
         {
             status[i] = GT_DEBUG_MEMORY_UNMAPPED;
@@ -261,88 +288,90 @@ void DebugMemoryProvider::ReadBlock(const GT_Debug_Memory_Address& address,
         }
 
         bool valid = false;
+
         if (address.space == GT_DEBUG_MEMORY_LINEAR)
             valid = cpu->TryPeekLinear((u32)current, data[i]);
         else if (address.space == GT_DEBUG_MEMORY_LOGICAL)
         {
             if (address.segment_register >= 0)
             {
-                valid = cpu->TryPeekLogical(
-                    (I386_Segment_Register)address.segment_register,
-                    (u32)current, data[i]);
+                valid = cpu->TryPeekLogical((I386_Segment_Register)address.segment_register, (u32)current, data[i]);
             }
             else
                 valid = cpu->TryPeekLogical(address.segment, (u32)current, data[i]);
         }
+
         status[i] = valid ? GT_DEBUG_MEMORY_VALID : GT_DEBUG_MEMORY_UNAVAILABLE;
     }
 }
 
-bool DebugMemoryProvider::Translate(const GT_Debug_Memory_Address& address,
-    GT_Debug_Memory_Translation& translation) const
+bool DebugMemoryProvider::Translate(const GT_Debug_Memory_Address& address, GT_Debug_Memory_Translation& translation) const
 {
     memset(&translation, 0, sizeof(translation));
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core))
     {
-        strncpy_fit(translation.reason, "Core is not available",
-            sizeof(translation.reason));
+        strncpy_fit(translation.reason, "Core is not available", sizeof(translation.reason));
         return false;
     }
 
     if (address.space == GT_DEBUG_MEMORY_REGION)
     {
         GT_Debug_Memory_Region region;
+
         if (!GetRegionById(address.region, region) || address.address >= region.size)
         {
-            strncpy_fit(translation.reason, "Region offset is outside the region",
-                sizeof(translation.reason));
+            strncpy_fit(translation.reason, "Region offset is outside the region", sizeof(translation.reason));
             return false;
         }
+
         translation.region_valid = true;
         translation.region = region.id;
         translation.region_offset = address.address;
-        strncpy_fit(translation.region_name, region.name,
-            sizeof(translation.region_name));
+        strncpy_fit(translation.region_name, region.name, sizeof(translation.region_name));
+
         if ((region.flags & GT_DEBUG_REGION_MAPPED) != 0)
         {
             translation.bus_valid = true;
             translation.bus = region.physical_base + address.address;
         }
+
         return true;
     }
 
     Memory* memory = core->GetMemory();
     I386* cpu = core->GetI386();
+
     if (address.space == GT_DEBUG_MEMORY_PHYSICAL && IsValidPointer(memory))
         return memory->DebugTranslatePhysical(address.address, translation);
+
     if (address.space == GT_DEBUG_MEMORY_BUS && IsValidPointer(memory))
         return memory->DebugTranslateBus(address.address, translation);
+
     if (address.space == GT_DEBUG_MEMORY_LINEAR && IsValidPointer(cpu))
         return cpu->DebugTranslateLinear(address.address, translation);
+
     if (address.space == GT_DEBUG_MEMORY_LOGICAL && IsValidPointer(cpu))
     {
         if (address.segment_register >= 0)
         {
-            return cpu->DebugTranslateLogical(
-                (I386_Segment_Register)address.segment_register,
-                address.address, translation);
+            return cpu->DebugTranslateLogical((I386_Segment_Register)address.segment_register, address.address,
+                translation);
         }
-        return cpu->DebugTranslateLogical(address.segment, address.address,
-            translation);
+
+        return cpu->DebugTranslateLogical(address.segment, address.address, translation);
     }
 
-    strncpy_fit(translation.reason, address.space == GT_DEBUG_MEMORY_IO ?
-        "Passive I/O inspection is not implemented" :
-        "Address translation is unavailable", sizeof(translation.reason));
+    strncpy_fit(translation.reason,
+        address.space == GT_DEBUG_MEMORY_IO ? "Passive I/O inspection is not implemented" : "Address translation is unavailable",
+        sizeof(translation.reason));
     return false;
 }
 
-bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address,
-    const u8* data, u32 size)
+bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size)
 {
-    if (!IsValidPointer(data) || size == 0 ||
-        size > DEBUG_MEMORY_MAX_TRANSACTION_SIZE)
+    if (!IsValidPointer(data) || size == 0 || size > DEBUG_MEMORY_MAX_TRANSACTION_SIZE)
     {
         SetMessage("Invalid or oversized memory edit");
         return false;
@@ -352,7 +381,7 @@ bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address,
     transaction.address = address;
     transaction.after.assign(data, data + size);
     transaction.map_generation = GetMapGeneration();
-    m_pending.push_back(transaction);
+    m_pending_writes.push_back(transaction);
     SetMessage("Memory edit queued for the next safe point");
     return true;
 }
@@ -371,12 +400,12 @@ void DebugMemoryProvider::RequestRedo()
 
 bool DebugMemoryProvider::CanUndo() const
 {
-    return !m_undo.empty();
+    return !m_undo_history.empty();
 }
 
 bool DebugMemoryProvider::CanRedo() const
 {
-    return !m_redo.empty();
+    return !m_redo_history.empty();
 }
 
 bool DebugMemoryProvider::ConsumeChanged()
@@ -424,14 +453,15 @@ const char* DebugMemoryProvider::GetStatusName(GT_Debug_Memory_Status status)
     }
 }
 
-bool DebugMemoryProvider::GetExternalRegion(int index,
-    GT_Debug_Memory_Region& region) const
+bool DebugMemoryProvider::GetExternalRegion(int index, GT_Debug_Memory_Region& region) const
 {
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core) || index < 0)
         return false;
 
     Firmware* firmware = core->GetFirmware();
+
     if (IsValidPointer(firmware) && firmware->IsReady())
     {
         if (index < GT_FIRMWARE_COUNT)
@@ -439,19 +469,18 @@ bool DebugMemoryProvider::GetExternalRegion(int index,
             GT_Firmware_Type type = (GT_Firmware_Type)index;
             memset(&region, 0, sizeof(region));
             region.id = firmware_region_id(type);
-            strncpy_fit(region.name, Firmware::GetComponentName(type),
-                sizeof(region.name));
+            strncpy_fit(region.name, Firmware::GetComponentName(type), sizeof(region.name));
             region.size = (u32)Firmware::GetExpectedSize(type);
-            region.flags = GT_DEBUG_REGION_READABLE |
-                GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM;
+            region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM;
             return true;
         }
+
         index -= GT_FIRMWARE_COUNT;
     }
 
     Media* media = core->GetMedia();
-    if (index == 0 && !emu_is_media_loading() && IsValidPointer(media) &&
-        media->IsReady())
+
+    if (index == 0 && !emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
     {
         memset(&region, 0, sizeof(region));
         region.id = GT_DEBUG_REGION_MEDIA_IMAGE;
@@ -460,24 +489,27 @@ bool DebugMemoryProvider::GetExternalRegion(int index,
         region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM;
         return true;
     }
+
     return false;
 }
 
-bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data,
-    GT_Debug_Memory_Status* status, u32 size) const
+bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const
 {
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core))
         return false;
 
     const u8* source = NULL;
     u32 source_size = 0;
     Firmware* firmware = core->GetFirmware();
+
     if (IsValidPointer(firmware) && firmware->IsReady())
     {
         for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
         {
             GT_Firmware_Type type = (GT_Firmware_Type)i;
+
             if (firmware_region_id(type) == id)
             {
                 source = firmware_region_data(firmware, type);
@@ -490,6 +522,7 @@ bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data,
     if (id == GT_DEBUG_REGION_MEDIA_IMAGE && !emu_is_media_loading())
     {
         Media* media = core->GetMedia();
+
         if (IsValidPointer(media) && media->IsReady())
         {
             source = media->GetData();
@@ -500,6 +533,7 @@ bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data,
     for (u32 i = 0; i < size; i++)
     {
         u64 current = (u64)offset + i;
+
         if (IsValidPointer(source) && current < source_size)
         {
             data[i] = source[current];
@@ -511,35 +545,41 @@ bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data,
             status[i] = GT_DEBUG_MEMORY_UNMAPPED;
         }
     }
+
     return IsValidPointer(source);
 }
 
-bool DebugMemoryProvider::WriteNow(const GT_Debug_Memory_Address& address,
-    const u8* data, u32 size)
+bool DebugMemoryProvider::WriteBlock(const GT_Debug_Memory_Address& address, const u8* data, u32 size)
 {
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core) || !IsValidPointer(core->GetMemory()))
         return false;
 
     Memory* memory = core->GetMemory();
+
     if (address.space == GT_DEBUG_MEMORY_REGION)
         return memory->DebugWriteRegionBlock(address.region, address.address, data, size);
+
     if (address.space == GT_DEBUG_MEMORY_PHYSICAL)
         return memory->DebugWritePhysicalBlock(address.address, data, size);
+
     if (address.space == GT_DEBUG_MEMORY_BUS)
         return memory->DebugWriteBusBlock(address.address, data, size);
+
     return false;
 }
 
-bool DebugMemoryProvider::ApplyTransaction(WriteTransaction& transaction,
-    bool capture_before)
+bool DebugMemoryProvider::ApplyTransaction(WriteTransaction& transaction, bool capture_before)
 {
     u32 size = (u32)transaction.after.size();
+
     if (size == 0 || !ValidateWritable(transaction.address, size))
     {
         SetMessage("Memory edit rejected: range is read-only or unavailable");
         return false;
     }
+
     if (transaction.map_generation != GetMapGeneration())
     {
         SetMessage("Memory edit rejected: the memory map changed");
@@ -552,49 +592,54 @@ bool DebugMemoryProvider::ApplyTransaction(WriteTransaction& transaction,
         std::vector<GT_Debug_Memory_Status> status(size);
         ReadBlock(transaction.address, &transaction.before[0], &status[0], size, NULL);
     }
-    if (!WriteNow(transaction.address, &transaction.after[0], size))
+
+    if (!WriteBlock(transaction.address, &transaction.after[0], size))
     {
         SetMessage("Memory edit was not accepted by the selected source");
         return false;
     }
+
     m_changed = true;
     return true;
 }
 
-bool DebugMemoryProvider::ValidateWritable(
-    const GT_Debug_Memory_Address& address, u32 size) const
+bool DebugMemoryProvider::ValidateWritable(const GT_Debug_Memory_Address& address, u32 size) const
 {
     std::vector<u8> data(size);
     std::vector<GT_Debug_Memory_Status> status(size);
     ReadBlock(address, &data[0], &status[0], size, NULL);
+
     for (u32 i = 0; i < size; i++)
     {
         if (status[i] != GT_DEBUG_MEMORY_VALID)
             return false;
     }
+
     return true;
 }
 
 u64 DebugMemoryProvider::GetSnapshotId() const
 {
     GeartownsCore* core = emu_get_core();
+
     if (!IsValidPointer(core))
         return 0;
 
     u64 id = 0;
+
     if (IsValidPointer(core->GetMemory()))
         id = core->GetMemory()->GetDebugSnapshotId();
-    if (!emu_is_media_loading() && IsValidPointer(core->GetMedia()) &&
-        core->GetMedia()->IsReady())
+
+    if (!emu_is_media_loading() && IsValidPointer(core->GetMedia()) && core->GetMedia()->IsReady())
         id ^= ((u64)core->GetMedia()->GetCRC() << 32);
+
     return id;
 }
 
 u32 DebugMemoryProvider::GetMapGeneration() const
 {
     GeartownsCore* core = emu_get_core();
-    return IsValidPointer(core) && IsValidPointer(core->GetMemory()) ?
-        core->GetMemory()->GetMapGeneration() : 0;
+    return IsValidPointer(core) && IsValidPointer(core->GetMemory()) ? core->GetMemory()->GetMapGeneration() : 0;
 }
 
 void DebugMemoryProvider::SetMessage(const char* message)

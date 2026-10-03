@@ -47,6 +47,7 @@ public:
     bool DebugWriteRegionBlock(int id, u32 offset, const u8* data, u32 size);
 
     bool TryPeekPhysical(u32 physical, u8& value) const;
+    const u8* GetPhysicalReadSpan(u32 physical, u32 size) const;
     bool TryPeekPhysicalBlock(u32 physical, u8* data, u32 size) const;
     bool TryPeekBus(u32 bus_address, u8& value) const;
     void DebugReadPhysicalBlock(u32 physical, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
@@ -56,9 +57,14 @@ public:
     bool DebugTranslatePhysical(u32 physical, GT_Debug_Memory_Translation& translation) const;
     bool DebugTranslateBus(u32 bus_address, GT_Debug_Memory_Translation& translation) const;
 
+    void PrepareCPUMap();
+    const u8* const* GetCPUReadPages() const;
+    u8* const* GetCPUWritePages() const;
+
     void SetPhysicalAddressMask(u32 mask);
     u32 GetMapGeneration() const;
     u64 GetDebugSnapshotId() const;
+    void InvalidateDebugSnapshot();
 
     u8* GetWorkingRAM();
     size_t GetWorkingRAMSize() const;
@@ -78,6 +84,7 @@ private:
     DebugRegion* FindRegion(int id);
     const DebugRegion* FindMappedRegion(u32 bus_address) const;
     DebugRegion* FindMappedRegion(u32 bus_address);
+    const DebugRegion* FindMappedSpan(u32 physical, u32 size) const;
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
@@ -85,6 +92,10 @@ private:
     void UpdateRAMRegions();
 
 private:
+    const u8** m_cpu_read_pages;
+    u8** m_cpu_write_pages;
+    u32 m_cpu_map_generation;
+
     DebugRegion m_debug_regions[GT_DEBUG_MEMORY_MAX_REGIONS];
     int m_debug_region_count;
     u32 m_physical_address_mask;
@@ -98,5 +109,7 @@ private:
     u8* m_video_ram;
     size_t m_video_ram_size;
 };
+
+#include "memory_inline.h"
 
 #endif /* MEMORY_H */

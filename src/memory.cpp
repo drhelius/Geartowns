@@ -17,10 +17,14 @@
  *
  */
 
+#include <stdint.h>
 #include "memory.h"
 
 Memory::Memory()
 {
+    InitPointer(m_cpu_read_pages);
+    InitPointer(m_cpu_write_pages);
+    m_cpu_map_generation = 0;
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
     m_map_generation = 1;
@@ -35,6 +39,8 @@ Memory::Memory()
 
 Memory::~Memory()
 {
+    SafeDeleteArray(m_cpu_read_pages);
+    SafeDeleteArray(m_cpu_write_pages);
     SafeDeleteArray(m_main_ram);
 }
 
@@ -55,9 +61,58 @@ void Memory::Reset()
         memset(m_main_ram, 0, GT_MAIN_RAM_SIZE);
 }
 
+INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size) const
+{
+    if (size == 0 || (u64)physical + size > 0x100000000ULL)
+        return NULL;
+
+    u32 masked_bits = ~m_physical_address_mask;
+
+    if (masked_bits != 0)
+    {
+        u32 boundary = masked_bits & (0U - masked_bits);
+
+        if ((u64)(physical & (boundary - 1)) + size > boundary)
+            return NULL;
+    }
+
+    u32 bus_address = NormalizePhysicalAddress(physical);
+    u64 span_end = (u64)bus_address + size;
+    u64 next_boundary = 0x100000000ULL;
+
+    for (int i = 0; i < m_debug_region_count; i++)
+    {
+        const DebugRegion& region = m_debug_regions[i];
+
+        if ((region.info.flags & GT_DEBUG_REGION_MAPPED) == 0)
+            continue;
+
+        u64 start = region.info.physical_base;
+        u64 end = start + region.info.size;
+
+        if (bus_address >= start && bus_address < end)
+        {
+            if (span_end <= end && span_end <= next_boundary)
+                return &region;
+
+            return NULL;
+        }
+
+        // An earlier region has priority if it starts inside this span
+        if (start > bus_address && start < next_boundary)
+            next_boundary = start;
+    }
+
+    return NULL;
+}
+
 u8 Memory::Read8Physical(u32 physical, GT_Bus_Access_Context& context)
 {
     UNUSED(context);
+
+    if (m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages[physical >> 12]))
+        return m_cpu_read_pages[physical >> 12][physical & 0xFFF];
+
     u8 value = 0xFF;
     DebugReadBus(NormalizePhysicalAddress(physical), value);
     return value;
@@ -65,6 +120,11 @@ u8 Memory::Read8Physical(u32 physical, GT_Bus_Access_Context& context)
 
 u16 Memory::Read16Physical(u32 physical, GT_Bus_Access_Context& context)
 {
+    const u8* data = GetPhysicalReadSpan(physical, 2);
+
+    if (IsValidPointer(data))
+        return (u16)data[0] | ((u16)data[1] << 8);
+
     u16 value = Read8Physical(physical, context);
     value |= (u16)Read8Physical(physical + 1, context) << 8;
     return value;
@@ -72,6 +132,11 @@ u16 Memory::Read16Physical(u32 physical, GT_Bus_Access_Context& context)
 
 u32 Memory::Read32Physical(u32 physical, GT_Bus_Access_Context& context)
 {
+    const u8* data = GetPhysicalReadSpan(physical, 4);
+
+    if (IsValidPointer(data))
+        return (u32)data[0] | ((u32)data[1] << 8) | ((u32)data[2] << 16) | ((u32)data[3] << 24);
+
     u32 value = Read16Physical(physical, context);
     value |= (u32)Read16Physical(physical + 2, context) << 16;
     return value;
@@ -84,12 +149,48 @@ void Memory::Write8Physical(u32 physical, u8 value, GT_Bus_Access_Context& conte
 
 void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& context)
 {
+    if (!IsValidPointer(context.observe_memory_write))
+    {
+        const DebugRegion* region = FindMappedSpan(physical, 2);
+
+        if (IsValidPointer(region) && IsValidPointer(region->write_data) &&
+            (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
+        {
+            u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+            u8* data = region->write_data + offset;
+
+            data[0] = (u8)value;
+            data[1] = (u8)(value >> 8);
+            m_debug_snapshot_id += 2;
+            return;
+        }
+    }
+
     Write8Physical(physical, (u8)value, context);
     Write8Physical(physical + 1, (u8)(value >> 8), context);
 }
 
 void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& context)
 {
+    if (!IsValidPointer(context.observe_memory_write))
+    {
+        const DebugRegion* region = FindMappedSpan(physical, 4);
+
+        if (IsValidPointer(region) && IsValidPointer(region->write_data) &&
+            (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
+        {
+            u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+            u8* data = region->write_data + offset;
+
+            data[0] = (u8)value;
+            data[1] = (u8)(value >> 8);
+            data[2] = (u8)(value >> 16);
+            data[3] = (u8)(value >> 24);
+            m_debug_snapshot_id += 4;
+            return;
+        }
+    }
+
     Write16Physical(physical, (u16)value, context);
     Write16Physical(physical + 2, (u16)(value >> 16), context);
 }
@@ -193,14 +294,51 @@ bool Memory::DebugWriteRegionBlock(int id, u32 offset, const u8* data, u32 size)
 
 bool Memory::TryPeekPhysical(u32 physical, u8& value) const
 {
+    if (m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages[physical >> 12]))
+    {
+        value = m_cpu_read_pages[physical >> 12][physical & 0xFFF];
+        return true;
+    }
+
     GT_Debug_Memory_Status status = DebugReadBus(NormalizePhysicalAddress(physical), value);
     return status == GT_DEBUG_MEMORY_VALID || status == GT_DEBUG_MEMORY_READ_ONLY;
+}
+
+const u8* Memory::GetPhysicalReadSpan(u32 physical, u32 size) const
+{
+    if (size != 0 && (u64)(physical & 0xFFF) + size <= 0x1000 && m_cpu_map_generation == m_map_generation &&
+        IsValidPointer(m_cpu_read_pages[physical >> 12]))
+        return m_cpu_read_pages[physical >> 12] + (physical & 0xFFF);
+
+    const DebugRegion* region = FindMappedSpan(physical, size);
+
+    if (!IsValidPointer(region) || !IsValidPointer(region->read_data) ||
+        (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
+        return NULL;
+
+    return region->read_data + (NormalizePhysicalAddress(physical) - region->info.physical_base);
 }
 
 bool Memory::TryPeekPhysicalBlock(u32 physical, u8* data, u32 size) const
 {
     if (!IsValidPointer(data))
         return false;
+
+    const u8* source = GetPhysicalReadSpan(physical, size);
+
+    if (IsValidPointer(source))
+    {
+        uintptr_t source_address = (uintptr_t)source;
+        uintptr_t destination_address = (uintptr_t)data;
+        uintptr_t distance = source_address > destination_address ?
+            source_address - destination_address : destination_address - source_address;
+
+        if (distance >= size)
+        {
+            memcpy(data, source, size);
+            return true;
+        }
+    }
 
     for (u32 i = 0; i < size; i++)
     {
@@ -357,11 +495,6 @@ void Memory::SetPhysicalAddressMask(u32 mask)
     }
 }
 
-u32 Memory::GetMapGeneration() const
-{
-    return m_map_generation;
-}
-
 u64 Memory::GetDebugSnapshotId() const
 {
     return m_debug_snapshot_id;
@@ -508,4 +641,45 @@ void Memory::UpdateRAMRegions()
     DebugRegion* vram = FindRegion(GT_DEBUG_REGION_VRAM);
     m_video_ram = IsValidPointer(vram) ? vram->write_data : NULL;
     m_video_ram_size = IsValidPointer(vram) ? vram->info.size : 0;
+}
+
+void Memory::PrepareCPUMap()
+{
+    if (m_cpu_map_generation == m_map_generation)
+        return;
+
+    const u32 page_count = 1U << 20;
+
+    if (!IsValidPointer(m_cpu_read_pages))
+    {
+        m_cpu_read_pages = new const u8*[page_count];
+        m_cpu_write_pages = new u8*[page_count];
+    }
+
+    memset(m_cpu_read_pages, 0, page_count * sizeof(m_cpu_read_pages[0]));
+    memset(m_cpu_write_pages, 0, page_count * sizeof(m_cpu_write_pages[0]));
+
+    // A mask inside a page cannot be represented by a contiguous host pointer
+    if ((m_physical_address_mask & 0xFFF) == 0xFFF)
+    {
+        for (u32 page = 0; page < page_count; page++)
+        {
+            u32 physical = page << 12;
+            const DebugRegion* region = FindMappedSpan(physical, 0x1000);
+
+            if (!IsValidPointer(region) ||
+                (region->info.flags & (GT_DEBUG_REGION_MMIO | GT_DEBUG_REGION_VIDEO | GT_DEBUG_REGION_AUDIO)) != 0)
+                continue;
+
+            u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+
+            if ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && IsValidPointer(region->read_data))
+                m_cpu_read_pages[page] = region->read_data + offset;
+
+            if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data))
+                m_cpu_write_pages[page] = region->write_data + offset;
+        }
+    }
+
+    m_cpu_map_generation = m_map_generation;
 }

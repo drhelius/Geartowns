@@ -47,6 +47,7 @@ public:
 private:
     void UpdateGamePadState(int port);
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
     bool m_keys[GT_KEY_COUNT];

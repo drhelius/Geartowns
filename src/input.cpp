@@ -55,6 +55,7 @@ void Input::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
+    SanitizeState();
 }
 
 void Input::Serialize(StateSerializer& serializer)
@@ -65,14 +66,14 @@ void Input::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_mouse_left);
     G_SERIALIZE(serializer, m_mouse_right);
     G_SERIALIZE_ARRAY(serializer, m_gamepads, GT_MAX_GAMEPADS);
+}
 
-    if (serializer.IsLoading())
+void Input::SanitizeState()
+{
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
     {
-        for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        {
-            m_physical_gamepads[i] = m_gamepads[i];
-            memset(&m_injected_gamepads[i], 0, sizeof(m_injected_gamepads[i]));
-        }
+        m_physical_gamepads[i] = m_gamepads[i];
+        memset(&m_injected_gamepads[i], 0, sizeof(m_injected_gamepads[i]));
     }
 }
 

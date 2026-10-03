@@ -1,17 +1,17 @@
 /*
  * Geartowns - FM Towns Emulator
  * Copyright (C) 2026  Ignacio Sanchez
- *
+
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * any later version.
- *
+
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- *
+
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see http://www.gnu.org/licenses/
  *
@@ -35,6 +35,7 @@
 #include "gui_menus.h"
 #include "gui_popups.h"
 #include "gui_actions.h"
+#include "gui_debug_disassembler.h"
 #include "gui_debug.h"
 
 static bool status_message_active = false;
@@ -104,22 +105,7 @@ bool gui_init(void)
         gui_default_fonts[i] = io.Fonts->AddFontDefault(&font_cfg);
     }
 
-    gui_default_font = gui_default_fonts[config_debug.font_size];
-
-    set_style();
-
-    emu_audio_mute(!config_audio.enable);
-    emu_audio_set_master_volume(config_audio.master_volume);
-    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        emu_set_pad_type((GT_Controllers)i,
-            (GT_Controller_Type)config_input.controller_type[i]);
-
-    strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
-    strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
-
-    strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
-    strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(),
-        sizeof(gui_mcp_http_address));
+    gui_apply_settings();
 
     if (gui_bios_path[0] != '\0')
         gui_load_bios(gui_bios_path);
@@ -128,6 +114,27 @@ bool gui_init(void)
     gui_init_menus();
 
     return true;
+}
+
+void gui_apply_settings(void)
+{
+    gui_default_font = gui_default_fonts[config_debug.font_size];
+
+    set_style();
+
+    emu_audio_sync = config_audio.sync;
+
+    emu_audio_mute(!config_audio.enable);
+    emu_audio_set_master_volume(config_audio.master_volume);
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+        emu_set_pad_type((GT_Controllers)i, (GT_Controller_Type)config_input.controller_type[i]);
+
+    strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
+    strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
+
+    strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
+    strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
 }
 
 void gui_destroy(void)
@@ -171,7 +178,7 @@ void gui_render(void)
 void gui_shortcut(gui_ShortCutEvent event)
 {
     switch (event)
-    {  
+    {
     case gui_ShortcutOpenROM:
         gui_shortcut_open_rom = true;
         break;
@@ -200,6 +207,7 @@ void gui_shortcut(gui_ShortCutEvent event)
         emu_save_state_slot(config_emulator.save_slot + 1);
         break;
     }
+
     case gui_ShortcutLoadState:
     {
         std::string message("Loading state from slot ");
@@ -208,6 +216,7 @@ void gui_shortcut(gui_ShortCutEvent event)
         emu_load_state_slot(config_emulator.save_slot + 1);
         break;
     }
+
     case gui_ShortcutSelectSlot1:
         config_emulator.save_slot = 0;
         break;
@@ -236,26 +245,47 @@ void gui_shortcut(gui_ShortCutEvent event)
     case gui_ShortcutDebugStepOver:
         if (config_debug.debug)
             emu_debug_step_over();
+
         break;
     case gui_ShortcutDebugStepInto:
         if (config_debug.debug)
             emu_debug_step_into();
+
         break;
     case gui_ShortcutDebugStepOut:
         if (config_debug.debug)
             emu_debug_step_out();
+
         break;
     case gui_ShortcutDebugStepFrame:
         if (config_debug.debug)
             emu_debug_step_frame();
+
         break;
     case gui_ShortcutDebugBreak:
         if (config_debug.debug)
             emu_debug_break();
+
         break;
     case gui_ShortcutDebugContinue:
         if (config_debug.debug)
             emu_debug_continue();
+
+        break;
+    case gui_ShortcutDebugRunToCursor:
+        if (config_debug.debug)
+            gui_debug_runtocursor();
+
+        break;
+    case gui_ShortcutDebugBreakpoint:
+        if (config_debug.debug)
+            gui_debug_toggle_breakpoint();
+
+        break;
+    case gui_ShortcutDebugGoBack:
+        if (config_debug.debug)
+            gui_debug_go_back();
+
         break;
     case gui_ShortcutShowMainMenu:
         config_emulator.always_show_menu = !config_emulator.always_show_menu;
@@ -274,15 +304,16 @@ void gui_load_bios(const char* path)
         gui_set_error_message(message.c_str());
 
         const char* active_directory = emu_get_core()->GetFirmware()->GetDirectory();
+
         if (active_directory[0] != '\0')
         {
             strncpy_fit(gui_bios_path, active_directory, sizeof(gui_bios_path));
         }
         else
         {
-            strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(),
-                sizeof(gui_bios_path));
+            strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
         }
+
         return;
     }
 
@@ -302,6 +333,7 @@ bool gui_load_rom(const char* path, const char* symbol_path)
 
     strncpy(loading_rom_path, path, sizeof(loading_rom_path) - 1);
     loading_rom_path[sizeof(loading_rom_path) - 1] = '\0';
+
     if (IsValidPointer(symbol_path) && (strlen(symbol_path) > 0))
     {
         strncpy(loading_symbol_path, symbol_path, sizeof(loading_symbol_path) - 1);
@@ -309,6 +341,7 @@ bool gui_load_rom(const char* path, const char* symbol_path)
     }
     else
         loading_symbol_path[0] = '\0';
+
     loading_rom_active = true;
 
     emu_load_media_async(path);
@@ -371,6 +404,7 @@ static void update_window_visibility_padding(void)
     static ImVec2 previous_work_size(0.0f, 0.0f);
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
+
     if (!viewport || viewport->WorkSize.x <= 0.0f || viewport->WorkSize.y <= 0.0f)
         return;
 
@@ -396,6 +430,7 @@ static void main_window(void)
 
     if (framebuffer_scale_x <= 0.0f)
         framebuffer_scale_x = 1.0f;
+
     if (framebuffer_scale_y <= 0.0f)
         framebuffer_scale_y = 1.0f;
 
@@ -458,6 +493,7 @@ static void main_window(void)
         scale_multiplier = (factor_w < factor_h) ? factor_w : factor_h;
         break;
     }
+
     case 1:
         scale_multiplier = config_video.scale_manual;
         break;
@@ -497,6 +533,7 @@ static void main_window(void)
 
     if (image_physical_width < 1)
         image_physical_width = 1;
+
     if (image_physical_height < 1)
         image_physical_height = 1;
 
@@ -507,10 +544,9 @@ static void main_window(void)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
-    
+
     float window_x = (logical_w - image_w) * 0.5f;
-    float window_y = ((logical_h - image_h) * 0.5f) +
-        (application_show_menu ? (float)gui_main_menu_height : 0.0f);
+    float window_y = ((logical_h - image_h) * 0.5f) + (application_show_menu ? (float)gui_main_menu_height : 0.0f);
 
     window_x = roundf(window_x * framebuffer_scale_x) / framebuffer_scale_x;
     window_y = roundf(window_y * framebuffer_scale_y) / framebuffer_scale_y;
@@ -519,9 +555,8 @@ static void main_window(void)
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(window_x, window_y));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
-    flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
+    flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
     ImGui::Begin(GT_TITLE, 0, flags);
     gui_main_window_hovered = ImGui::IsWindowHovered();
@@ -556,6 +591,7 @@ static void show_status_message(void)
     if (status_message_active)
     {
         Uint64 current_time = SDL_GetTicks();
+
         if ((current_time - status_message_start_time) > status_message_duration)
             status_message_active = false;
         else
@@ -643,8 +679,10 @@ static bool finish_loading_rom(void)
     {
         std::string symbol_path(loading_rom_path);
         size_t extension = symbol_path.find_last_of('.');
+
         if (extension != std::string::npos)
             symbol_path.resize(extension);
+
         gui_debug_load_symbols_file((symbol_path + ".sym").c_str());
     }
 
@@ -669,14 +707,17 @@ static void show_error_window(void)
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
     if (ImGui::BeginPopupModal("Error", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("%s\n\n", error_message);
         ImGui::Separator();
+
         if (ImGui::Button("OK"))
         {
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
@@ -801,8 +842,7 @@ static void set_style_light(ImGuiStyle& style)
     style.Colors[ImGuiCol_ModalWindowDimBg] = make_color(0x21201C, 0.30f);
 
     style.Colors[ImGuiCol_DockingPreview] = make_color(0x0091F5, 0.45f);
-    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(
-        config_video.background_color_debugger[config_Theme_Light][0],
+    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(config_video.background_color_debugger[config_Theme_Light][0],
         config_video.background_color_debugger[config_Theme_Light][1],
         config_video.background_color_debugger[config_Theme_Light][2], 1.0f);
     style.Colors[ImGuiCol_TabSelected] = accent_selected;

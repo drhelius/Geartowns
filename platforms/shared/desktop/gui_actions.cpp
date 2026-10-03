@@ -26,10 +26,38 @@
 #include "config.h"
 #include "display.h"
 #include "emu.h"
+#include "ogl_renderer.h"
 #include "events.h"
 #include "gui.h"
+#include "gui_debug.h"
 #include "rewind.h"
 #include "utils.h"
+
+void gui_action_load_defaults(void)
+{
+    if (gui_is_rom_loading() || emu_is_media_loading())
+        return;
+
+    GeartownsCore* core = emu_get_core();
+    gui_debug_auto_save_settings();
+    core->GetMedia()->Reset();
+    application_update_title_with_rom(NULL);
+    core->UnloadBios();
+
+    config_load_defaults();
+    gui_apply_settings();
+
+    emu_resume();
+    emu_reset();
+
+    gui_debug_reset();
+    update_savestates_data();
+    events_sync_input();
+    ogl_renderer_unload_shader_preset();
+    application_apply_settings();
+
+    config_write();
+}
 
 void gui_action_reset(void)
 {
@@ -39,6 +67,7 @@ void gui_action_reset(void)
     gui_set_status_message("Resetting...", 3000);
     emu_resume();
     emu_reset();
+
     if (config_emulator.start_paused)
         emu_pause();
 }
@@ -49,8 +78,7 @@ void gui_action_reload_rom(void)
         return;
 
     char media_path[GT_MAX_PATH];
-    strncpy_fit(media_path, emu_get_core()->GetMedia()->GetFilePath(),
-        sizeof(media_path));
+    strncpy_fit(media_path, emu_get_core()->GetMedia()->GetFilePath(), sizeof(media_path));
     gui_load_rom(media_path);
 }
 
@@ -92,6 +120,7 @@ void gui_action_rewind_pressed(void)
 {
     if (emu_is_empty() || !config_rewind.enabled)
         return;
+
     if (rewind_get_snapshot_count() < 1 || rewind_is_active())
         return;
 
@@ -109,10 +138,12 @@ void gui_action_rewind_released(void)
     rewind_set_active(false);
     events_sync_input();
     emu_reset_rewind_timing();
+
     if (config_emulator.ffwd)
         display_disable_vsync();
     else
         display_use_vsync_if_enabled();
+
     emu_audio_reset();
 }
 
@@ -124,13 +155,16 @@ void gui_action_save_screenshot(const char* path)
     time_t now = time(NULL);
     struct tm time_info;
     char date_time[32] = { };
+
     if (get_local_time(now, &time_info))
         strftime(date_time, sizeof(date_time), "%Y-%m-%d %H%M%S", &time_info);
 
     std::string file_path;
+
     if (IsValidPointer(path) && path[0] != '\0')
     {
         file_path = path;
+
         if (file_path.find_last_of('.') == std::string::npos)
             file_path += ".png";
     }
@@ -142,13 +176,13 @@ void gui_action_save_screenshot(const char* path)
         if (!emu_is_empty())
         {
             media_name = emu_get_core()->GetMedia()->GetFileName();
+
             if (config_emulator.screenshots_dir_option == Directory_Location_ROM &&
                 emu_get_core()->GetMedia()->GetFileDirectory()[0] != '\0')
             {
                 base_path = emu_get_core()->GetMedia()->GetFileDirectory();
             }
-            else if (config_emulator.screenshots_dir_option ==
-                Directory_Location_Custom)
+            else if (config_emulator.screenshots_dir_option == Directory_Location_Custom)
             {
                 base_path = config_emulator.screenshots_path.c_str();
             }

@@ -66,6 +66,7 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
         return;
 
     size_t saved_size = runahead_buffer_size;
+
     if (!core->SaveState(runahead_buffer, saved_size, false))
     {
         // The state outgrew the buffer. Grow it once
@@ -89,6 +90,7 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
     // without interruption.
     if (!core->LoadState(runahead_buffer, saved_size))
     {
+        emu_debug_state_restored();
         Log("Run-ahead: failed to restore state, disabling run-ahead");
         config_emulator.runahead = 0;
     }
@@ -97,6 +99,7 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
 static bool ensure_buffer(void)
 {
     size_t needed = 0;
+
     if (!emu_get_core()->SaveState(NULL, needed, false) || (needed == 0))
         return false;
 
@@ -106,6 +109,7 @@ static bool ensure_buffer(void)
         return true;
 
     u8* new_buffer = new (std::nothrow) u8[needed];
+
     if (!IsValidPointer(new_buffer))
     {
         Log("Run-ahead: failed to allocate %zu bytes, disabling run-ahead", needed);

@@ -1,17 +1,17 @@
 /*
  * Geartowns - FM Towns Emulator
  * Copyright (C) 2026  Ignacio Sanchez
- *
+
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * any later version.
- *
+
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- *
+
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see http://www.gnu.org/licenses/
  *
@@ -55,6 +55,9 @@ enum gui_ShortCutEvent
     gui_ShortcutDebugStepFrame,
     gui_ShortcutDebugBreak,
     gui_ShortcutDebugContinue,
+    gui_ShortcutDebugRunToCursor,
+    gui_ShortcutDebugBreakpoint,
+    gui_ShortcutDebugGoBack,
     gui_ShortcutShowMainMenu
 };
 
@@ -65,7 +68,7 @@ struct gui_HotkeyMapping
     bool allow_repeat;
 };
 
-#define GUI_HOTKEY_MAP_COUNT 23
+#define GUI_HOTKEY_MAP_COUNT 26
 
 const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutOpenROM, config_HotkeyIndex_OpenROM, false},
@@ -91,6 +94,9 @@ const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutDebugStepFrame, config_HotkeyIndex_DebugStepFrame, true},
     {gui_ShortcutDebugContinue, config_HotkeyIndex_DebugContinue, true},
     {gui_ShortcutDebugBreak, config_HotkeyIndex_DebugBreak, true},
+    {gui_ShortcutDebugRunToCursor, config_HotkeyIndex_DebugRunToCursor, true},
+    {gui_ShortcutDebugBreakpoint, config_HotkeyIndex_DebugBreakpoint, true},
+    {gui_ShortcutDebugGoBack, config_HotkeyIndex_DebugGoBack, true},
 };
 
 EXTERN bool gui_in_use;
@@ -110,6 +116,7 @@ EXTERN bool gui_dialog_in_use;
 EXTERN bool gui_shortcut_open_rom;
 
 EXTERN bool gui_init(void);
+EXTERN void gui_apply_settings(void);
 EXTERN void gui_destroy(void);
 EXTERN void gui_render(void);
 EXTERN void gui_shortcut(gui_ShortCutEvent event);

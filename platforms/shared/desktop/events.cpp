@@ -33,10 +33,8 @@ static bool input_updated = false;
 static bool mouse_left = false;
 static bool mouse_right = false;
 
-static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey,
-    bool allow_repeat);
-static bool events_match_hotkey_scancode(const SDL_Event* event,
-    const config_Hotkey& hotkey);
+static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey, bool allow_repeat);
+static bool events_match_hotkey_scancode(const SDL_Event* event, const config_Hotkey& hotkey);
 static void input_update(bool check_shortcuts);
 static GT_GamePad_State input_build_state(int controller);
 static u16 input_filter_opposing_directions(int controller, u16 buttons);
@@ -45,11 +43,11 @@ void events_shortcuts(const SDL_Event* event)
 {
     if (event->type == SDL_EVENT_KEY_UP)
     {
-        if (events_match_hotkey_scancode(event,
-            config_hotkeys[config_HotkeyIndex_Rewind]))
+        if (events_match_hotkey_scancode(event, config_hotkeys[config_HotkeyIndex_Rewind]))
         {
             gui_action_rewind_released();
         }
+
         return;
     }
 
@@ -71,8 +69,8 @@ void events_shortcuts(const SDL_Event* event)
     for (int i = 0; i < GUI_HOTKEY_MAP_COUNT; i++)
     {
         const gui_HotkeyMapping& mapping = gui_hotkey_map[i];
-        if (events_check_hotkey(event, config_hotkeys[mapping.config_index],
-            mapping.allow_repeat))
+
+        if (events_check_hotkey(event, config_hotkeys[mapping.config_index], mapping.allow_repeat))
         {
             gui_shortcut(mapping.shortcut);
             return;
@@ -101,10 +99,12 @@ void events_emu(const SDL_Event* event)
             emu_set_mouse_delta(x, y);
             break;
         }
+
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
             bool pressed = event->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+
             if (event->button.button == SDL_BUTTON_LEFT)
                 mouse_left = pressed;
             else if (event->button.button == SDL_BUTTON_RIGHT)
@@ -113,6 +113,7 @@ void events_emu(const SDL_Event* event)
             emu_set_mouse_buttons(mouse_left, mouse_right);
             break;
         }
+
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
@@ -123,6 +124,7 @@ void events_emu(const SDL_Event* event)
             input_updated = true;
             break;
         }
+
         default:
             break;
     }
@@ -159,12 +161,14 @@ static void input_update(bool check_shortcuts)
     for (int controller = 0; controller < GT_MAX_GAMEPADS; controller++)
     {
         GT_GamePad_State state = { 0, 0, 0 };
+
         if (config_input.controller_type[controller] != GT_CONTROLLER_NONE)
             state = input_build_state(controller);
 
         state.buttons = input_filter_opposing_directions(controller, state.buttons);
         emu_set_gamepad_state((GT_Controllers)controller, state);
         input_last_buttons[controller] = state.buttons;
+
         if (check_shortcuts)
             gamepad_check_shortcuts(controller);
     }
@@ -195,10 +199,12 @@ static GT_GamePad_State input_build_state(int controller)
     }
 
     SDL_Gamepad* gamepad = gamepad_controller[controller];
+
     if (!IsValidPointer(gamepad))
         return state;
 
     const config_Input_Gamepad& mapping = config_input_gamepad[controller];
+
     if (gamepad_get_button(gamepad, mapping.gamepad_start)) state.buttons |= GT_GAMEPAD_START;
     if (gamepad_get_button(gamepad, mapping.gamepad_run)) state.buttons |= GT_GAMEPAD_RUN;
     if (gamepad_get_button(gamepad, mapping.gamepad_A)) state.buttons |= GT_GAMEPAD_A;
@@ -212,13 +218,17 @@ static GT_GamePad_State input_build_state(int controller)
     {
         if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT))
             state.buttons |= GT_GAMEPAD_LEFT;
+
         if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
             state.buttons |= GT_GAMEPAD_RIGHT;
+
         if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP))
             state.buttons |= GT_GAMEPAD_UP;
+
         if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN))
             state.buttons |= GT_GAMEPAD_DOWN;
     }
+
     if (mapping.gamepad_directional == 1 || mapping.gamepad_directional == 2)
     {
         int x = SDL_GetGamepadAxis(gamepad, (SDL_GamepadAxis)mapping.gamepad_x_axis);
@@ -231,6 +241,7 @@ static GT_GamePad_State input_build_state(int controller)
         state.axis_y = (s16)y;
 
         const int dead_zone = 8000;
+
         if (x < -dead_zone) state.buttons |= GT_GAMEPAD_LEFT;
         if (x > dead_zone) state.buttons |= GT_GAMEPAD_RIGHT;
         if (y < -dead_zone) state.buttons |= GT_GAMEPAD_UP;
@@ -270,13 +281,14 @@ static u16 input_filter_opposing_directions(int controller, u16 buttons)
     return buttons;
 }
 
-static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey,
-    bool allow_repeat)
+static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey, bool allow_repeat)
 {
     if (event->type != SDL_EVENT_KEY_DOWN)
         return false;
+
     if (!allow_repeat && event->key.repeat != 0)
         return false;
+
     if (event->key.scancode != hotkey.key)
         return false;
 
@@ -287,31 +299,38 @@ static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hot
 
     if (mods & (SDL_KMOD_LCTRL | SDL_KMOD_RCTRL))
         normalized = (SDL_Keymod)(normalized | SDL_KMOD_CTRL);
+
     if (mods & (SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT))
         normalized = (SDL_Keymod)(normalized | SDL_KMOD_SHIFT);
+
     if (mods & (SDL_KMOD_LALT | SDL_KMOD_RALT))
         normalized = (SDL_Keymod)(normalized | SDL_KMOD_ALT);
+
     if (mods & (SDL_KMOD_LGUI | SDL_KMOD_RGUI))
         normalized = (SDL_Keymod)(normalized | SDL_KMOD_GUI);
 
     if (expected & (SDL_KMOD_CTRL | SDL_KMOD_LCTRL | SDL_KMOD_RCTRL))
         expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_CTRL);
+
     if (expected & (SDL_KMOD_SHIFT | SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT))
         expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_SHIFT);
+
     if (expected & (SDL_KMOD_ALT | SDL_KMOD_LALT | SDL_KMOD_RALT))
         expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_ALT);
+
     if (expected & (SDL_KMOD_GUI | SDL_KMOD_LGUI | SDL_KMOD_RGUI))
         expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_GUI);
 
     return normalized == expected_normalized;
 }
 
-static bool events_match_hotkey_scancode(const SDL_Event* event,
-    const config_Hotkey& hotkey)
+static bool events_match_hotkey_scancode(const SDL_Event* event, const config_Hotkey& hotkey)
 {
     if (event->type != SDL_EVENT_KEY_UP && event->type != SDL_EVENT_KEY_DOWN)
         return false;
+
     if (hotkey.key == SDL_SCANCODE_UNKNOWN)
         return false;
+
     return event->key.scancode == hotkey.key;
 }

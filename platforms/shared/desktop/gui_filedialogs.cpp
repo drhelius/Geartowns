@@ -57,8 +57,7 @@ static bool was_exclusive_fullscreen = false;
 #endif
 
 static bool begin_dialog(void);
-static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist,
-    int filter);
+static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int filter);
 static void process_dialog_result(FileDialogID id, const char* path);
 
 void gui_file_dialog_open_rom(void)
@@ -69,11 +68,9 @@ void gui_file_dialog_open_rom(void)
     SDL_DialogFileFilter filters[] = {
         { "FM Towns Media", "d77;rdd;cue;chd;iso;bin;zip" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL :
-        config_emulator.last_open_path.c_str();
-    SDL_ShowOpenFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_OpenMedia, application_sdl_window, filters, 1,
-        default_path, false);
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_OpenMedia, application_sdl_window,
+        filters, 1, default_path, false);
 }
 
 void gui_file_dialog_choose_screenshot_path(void)
@@ -81,11 +78,10 @@ void gui_file_dialog_choose_screenshot_path(void)
     if (!begin_dialog())
         return;
 
-    const char* default_path = config_emulator.screenshots_path.empty() ? NULL :
-        config_emulator.screenshots_path.c_str();
-    SDL_ShowOpenFolderDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_ChooseScreenshotPath, application_sdl_window,
-        default_path, false);
+    const char* default_path =
+        config_emulator.screenshots_path.empty() ? NULL : config_emulator.screenshots_path.c_str();
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseScreenshotPath,
+        application_sdl_window, default_path, false);
 }
 
 void gui_file_dialog_save_screenshot(void)
@@ -94,9 +90,8 @@ void gui_file_dialog_save_screenshot(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "PNG Files", "png" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_SaveScreenshot, application_sdl_window, filters,
-        1, NULL);
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveScreenshot, application_sdl_window,
+        filters, 1, NULL);
 }
 
 void gui_file_dialog_load_state(void)
@@ -107,11 +102,9 @@ void gui_file_dialog_load_state(void)
     SDL_DialogFileFilter filters[] = {
         { "Save State Files", "state;state1;state2;state3;state4;state5" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL :
-        config_emulator.last_open_path.c_str();
-    SDL_ShowOpenFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_LoadState, application_sdl_window, filters, 1,
-        default_path, false);
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadState, application_sdl_window,
+        filters, 1, default_path, false);
 }
 
 void gui_file_dialog_save_state(void)
@@ -120,11 +113,9 @@ void gui_file_dialog_save_state(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Save State Files", "state" } };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL :
-        config_emulator.last_open_path.c_str();
-    SDL_ShowSaveFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_SaveState, application_sdl_window, filters, 1,
-        default_path);
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveState, application_sdl_window,
+        filters, 1, default_path);
 }
 
 void gui_file_dialog_choose_savestate_path(void)
@@ -132,11 +123,9 @@ void gui_file_dialog_choose_savestate_path(void)
     if (!begin_dialog())
         return;
 
-    const char* default_path = config_emulator.savestates_path.empty() ? NULL :
-        config_emulator.savestates_path.c_str();
-    SDL_ShowOpenFolderDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_ChooseSavestatePath, application_sdl_window,
-        default_path, false);
+    const char* default_path = config_emulator.savestates_path.empty() ? NULL : config_emulator.savestates_path.c_str();
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseSavestatePath,
+        application_sdl_window, default_path, false);
 }
 
 void gui_file_dialog_load_bios(void)
@@ -144,11 +133,9 @@ void gui_file_dialog_load_bios(void)
     if (!begin_dialog())
         return;
 
-    const char* default_path = config_emulator.bios_path.empty() ? NULL :
-        config_emulator.bios_path.c_str();
-    SDL_ShowOpenFolderDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_LoadBIOS, application_sdl_window, default_path,
-        false);
+    const char* default_path = config_emulator.bios_path.empty() ? NULL : config_emulator.bios_path.c_str();
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadBIOS, application_sdl_window,
+        default_path, false);
 }
 
 void gui_file_dialog_save_memory_dump(void)
@@ -157,8 +144,7 @@ void gui_file_dialog_save_memory_dump(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Binary Files", "bin" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_SaveMemoryDump, application_sdl_window,
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveMemoryDump, application_sdl_window,
         filters, 1, NULL);
 }
 
@@ -168,8 +154,7 @@ void gui_file_dialog_load_memory_dump(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Binary Files", "bin;rom;dat" } };
-    SDL_ShowOpenFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_LoadMemoryDump, application_sdl_window,
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadMemoryDump, application_sdl_window,
         filters, 1, NULL, false);
 }
 
@@ -179,8 +164,7 @@ void gui_file_dialog_save_debug_settings(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Geartowns Debug Settings", "gtdebug" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_SaveDebugSettings, application_sdl_window,
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveDebugSettings, application_sdl_window,
         filters, 1, config_root_path);
 }
 
@@ -190,8 +174,7 @@ void gui_file_dialog_load_debug_settings(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Geartowns Debug Settings", "gtdebug" } };
-    SDL_ShowOpenFileDialog(file_dialog_callback,
-        (void*)(intptr_t)FileDialog_LoadDebugSettings, application_sdl_window,
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadDebugSettings, application_sdl_window,
         filters, 1, config_root_path, false);
 }
 
@@ -246,8 +229,7 @@ static bool begin_dialog(void)
     return true;
 }
 
-static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist,
-    int filter)
+static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int filter)
 {
     UNUSED(filter);
     dialog_active = false;
@@ -278,11 +260,11 @@ static void process_dialog_result(FileDialogID id, const char* path)
         {
             std::string full_path(path);
             size_t separator = full_path.find_last_of("/\\");
-            config_emulator.last_open_path = separator == std::string::npos ? "" :
-                full_path.substr(0, separator + 1);
+            config_emulator.last_open_path = separator == std::string::npos ? "" : full_path.substr(0, separator + 1);
             gui_load_rom(path);
             break;
         }
+
         case FileDialog_ChooseScreenshotPath:
             strncpy_fit(gui_screenshots_path, path, sizeof(gui_screenshots_path));
             config_emulator.screenshots_path = path;
@@ -295,6 +277,7 @@ static void process_dialog_result(FileDialogID id, const char* path)
             emu_load_state_file(path);
             break;
         }
+
         case FileDialog_SaveState:
         {
             std::string message("Saving state to ");
@@ -303,6 +286,7 @@ static void process_dialog_result(FileDialogID id, const char* path)
             emu_save_state_file(path);
             break;
         }
+
         case FileDialog_ChooseSavestatePath:
             strncpy_fit(gui_savestates_path, path, sizeof(gui_savestates_path));
             config_emulator.savestates_path = path;

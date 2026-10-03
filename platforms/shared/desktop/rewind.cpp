@@ -67,6 +67,7 @@ void rewind_reset(void)
     frame_accum = 0;
     active = false;
     seek_age = -1;
+
     for (int i = 0; i < REWIND_MAX_SNAPSHOTS; i++)
         sizes[i] = 0;
 
@@ -91,18 +92,23 @@ void rewind_push(void)
 {
     if (!config_rewind.enabled)
         return;
+
     if (!IsValidPointer(buffer))
         return;
+
     if (emu_is_empty() || emu_is_paused())
         return;
+
     if (active)
         return;
 
     refresh_capacity();
 
     frame_accum++;
+
     if (frame_accum < config_rewind.frames_per_snapshot)
         return;
+
     frame_accum = 0;
 
     u8* slot = buffer + (size_t)head * slot_size;
@@ -113,6 +119,7 @@ void rewind_push(void)
 
     sizes[head] = size;
     head = (head + 1) % capacity;
+
     if (count < capacity)
         count++;
 }
@@ -121,6 +128,7 @@ bool rewind_pop(void)
 {
     if (count == 0)
         return false;
+
     if (!IsValidPointer(buffer))
         return false;
 
@@ -131,7 +139,10 @@ bool rewind_pop(void)
     bool ok = emu_get_core()->LoadState(slot, size);
 
     if (ok)
+    {
+        emu_debug_state_restored();
         events_sync_input();
+    }
 
     head = idx;
     count--;
@@ -147,6 +158,7 @@ void rewind_commit_seek(void)
 void rewind_set_active(bool a)
 {
     active = a;
+
     if (!a)
         frame_accum = 0;
 }
@@ -170,6 +182,7 @@ bool rewind_seek(int age)
 {
     if (age < 0 || age >= count)
         return false;
+
     if (!IsValidPointer(buffer))
         return false;
 
@@ -181,6 +194,7 @@ bool rewind_seek(int age)
 
     if (ok)
     {
+        emu_debug_state_restored();
         events_sync_input();
         seek_age = age;
     }
@@ -201,22 +215,28 @@ int rewind_get_frames_per_snapshot(void)
 static int slot_at(int age)
 {
     int idx = head - 1 - age;
+
     while (idx < 0)
         idx += capacity;
+
     return idx;
 }
 
 static int get_target_capacity(void)
 {
     int fps = config_rewind.frames_per_snapshot;
+
     if (fps < 1)
         fps = 1;
 
     int target = (config_rewind.buffer_seconds * 60 + fps - 1) / fps;
+
     if (target < 1)
         target = 1;
+
     if (target > REWIND_MAX_SNAPSHOTS)
         target = REWIND_MAX_SNAPSHOTS;
+
     if (slot_size > 0)
         target = MIN(target, (int)(REWIND_MAX_MEMORY_SIZE / slot_size));
 
@@ -236,6 +256,7 @@ static bool ensure_storage(void)
 
     size_t target_size = REWIND_MAX_MEMORY_SIZE;
     u8* new_buffer = new (std::nothrow) u8[target_size];
+
     if (!IsValidPointer(new_buffer))
     {
         Log("Rewind: failed to allocate %zu bytes", target_size);
@@ -244,8 +265,7 @@ static bool ensure_storage(void)
 
     buffer = new_buffer;
 
-    Log("Rewind: allocated %.1f MB ring buffer",
-        (double)target_size / (1024.0 * 1024.0));
+    Log("Rewind: allocated %.1f MB ring buffer", (double)target_size / (1024.0 * 1024.0));
 
     return true;
 }

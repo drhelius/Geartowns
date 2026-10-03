@@ -44,6 +44,7 @@
 
 static bool running = true;
 static bool paused_when_focus_lost = false;
+static bool window_settings_pending = false;
 static Uint64 mouse_last_motion_time = 0;
 static const Uint64 mouse_hide_timeout_ms = 1500;
 static SDL_DisplayID current_display_id = 0;
@@ -59,6 +60,7 @@ static void handle_mouse_cursor(void);
 static void handle_menu(void);
 static void handle_single_instance(void);
 static void run_emulator(void);
+static void apply_window_settings(void);
 static void save_window_size(void);
 
 #if defined(__APPLE__)
@@ -125,8 +127,7 @@ int application_init(const ApplicationParams& params)
         return 6;
     }
 
-    if (config_emulator.fullscreen)
-        application_trigger_fullscreen(true);
+    application_apply_settings();
 
     bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
     bool symbol_file_argument = IsValidPointer(params.symbol_file) && (strlen(params.symbol_file) > 0);
@@ -134,8 +135,10 @@ int application_init(const ApplicationParams& params)
     if (rom_file_argument)
     {
         Log("Media file argument: %s", params.rom_file);
+
         if (symbol_file_argument)
             Log("Symbol file argument: %s", params.symbol_file);
+
         gui_load_rom(params.rom_file, params.symbol_file);
     }
 
@@ -149,10 +152,12 @@ int application_init(const ApplicationParams& params)
     if (params.mcp_mode >= 0)
     {
         const char* mcp_http_address = params.mcp_http_address.empty() ? "127.0.0.1" : params.mcp_http_address.c_str();
+
         if (params.mcp_mode == 0)
             Log("Auto-starting MCP server (mode: stdio)...");
         else
             Log("Auto-starting MCP server (mode: http, address: %s, port: %d)...", mcp_http_address, params.mcp_tcp_port);
+
         config_debug.debug = true;
         emu_mcp_set_transport(params.mcp_mode, params.mcp_tcp_port, mcp_http_address);
         emu_mcp_start();
@@ -161,6 +166,25 @@ int application_init(const ApplicationParams& params)
     application_refocus_window();
 
     return 0;
+}
+
+void application_apply_settings(void)
+{
+    if (config_emulator.allow_screensaver)
+        SDL_EnableScreenSaver();
+    else
+        SDL_DisableScreenSaver();
+
+    paused_when_focus_lost = false;
+    window_settings_pending = !config_emulator.fullscreen;
+
+    bool was_fullscreen = (SDL_GetWindowFlags(application_sdl_window) & SDL_WINDOW_FULLSCREEN) != 0;
+    application_trigger_fullscreen(config_emulator.fullscreen);
+
+    if (!was_fullscreen)
+        apply_window_settings();
+
+    display_use_vsync_if_enabled();
 }
 
 void application_destroy(void)
@@ -247,6 +271,7 @@ void application_trigger_fullscreen(bool fullscreen)
         SDL_SetWindowFullscreen(application_sdl_window, false);
         SDL_ERROR("SDL_SetWindowFullscreen");
     }
+
     config_emulator.fullscreen = fullscreen;
 #endif
 
@@ -373,6 +398,7 @@ static bool sdl_init(void)
         window_flags = (SDL_WindowFlags)(window_flags | SDL_WINDOW_MAXIMIZED);
 
     float content_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+
     if (content_scale <= 0.0f)
         content_scale = 1.0f;
 
@@ -410,6 +436,7 @@ static bool sdl_init(void)
 
 #if defined(__APPLE__)
     void* nswindow = (void*)SDL_GetPointerProperty(SDL_GetWindowProperties(application_sdl_window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+
     if (nswindow)
     {
         macos_nswindow = nswindow;
@@ -478,6 +505,7 @@ static void handle_single_instance(void)
 
     static char s_pending_rom_path[4096];
     static char s_pending_symbol_path[4096];
+
     if (single_instance_get_pending_load(s_pending_rom_path, sizeof(s_pending_rom_path), s_pending_symbol_path, sizeof(s_pending_symbol_path)))
     {
         if (s_pending_rom_path[0] != '\0')
@@ -542,30 +570,48 @@ static void sdl_events_app(const SDL_Event* event)
             application_refocus_window();
             break;
         }
+
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
         {
             display_use_vsync_if_enabled();
+
             if (config_emulator.pause_when_inactive && !paused_when_focus_lost)
                 emu_resume();
+
             break;
         }
+
         case SDL_EVENT_WINDOW_FOCUS_LOST:
         {
             display_disable_vsync();
+
             if (config_emulator.pause_when_inactive)
             {
                 paused_when_focus_lost = emu_is_paused();
                 emu_pause();
             }
+
             break;
         }
+
+        case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+        case SDL_EVENT_WINDOW_RESTORED:
+        {
+            if (event->window.windowID == SDL_GetWindowID(application_sdl_window))
+                apply_window_settings();
+
+            break;
+        }
+
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
         {
             SDL_DisplayID new_display = SDL_GetDisplayForWindow(application_sdl_window);
+
             if (new_display != current_display_id)
             {
                 current_display_id = new_display;
                 display_check_mixed_refresh_rates();
+
                 if (config_video.sync_mode != config_VideoSync_Disabled && !display_is_vsync_forced_off())
                     display_recreate_gl_context();
                 else
@@ -574,24 +620,29 @@ static void sdl_events_app(const SDL_Event* event)
                     display_update_frame_pacing();
                 }
             }
+
             break;
         }
+
         case SDL_EVENT_DISPLAY_ADDED:
         case SDL_EVENT_DISPLAY_REMOVED:
         {
             display_check_mixed_refresh_rates();
             break;
         }
+
         case (SDL_EVENT_MOUSE_MOTION):
         {
             mouse_last_motion_time = SDL_GetTicks();
             break;
         }
+
         case SDL_EVENT_GAMEPAD_ADDED:
         {
             gamepad_add();
             break;
         }
+
         case SDL_EVENT_GAMEPAD_REMOVED:
         {
             gamepad_remove(event->gdevice.which);
@@ -615,15 +666,60 @@ static void run_emulator(void)
     events_reset_input();
 }
 
+static void apply_window_settings(void)
+{
+    if (!window_settings_pending)
+        return;
+
+    SDL_WindowFlags flags = SDL_GetWindowFlags(application_sdl_window);
+
+    if (flags & SDL_WINDOW_FULLSCREEN)
+        return;
+
+    if (config_emulator.maximized)
+    {
+        window_settings_pending = false;
+        SDL_MaximizeWindow(application_sdl_window);
+        SDL_ERROR("SDL_MaximizeWindow");
+        return;
+    }
+
+    if (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED))
+    {
+        if (!SDL_RestoreWindow(application_sdl_window))
+        {
+            SDL_ERROR("SDL_RestoreWindow");
+            window_settings_pending = false;
+        }
+
+        return;
+    }
+
+    window_settings_pending = false;
+
+    float content_scale = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(application_sdl_window));
+
+    if (content_scale <= 0.0f)
+        content_scale = 1.0f;
+
+    int width = (int)(config_emulator.window_width * content_scale);
+    int height = (int)(config_emulator.window_height * content_scale);
+
+    SDL_SetWindowSize(application_sdl_window, width, height);
+    SDL_ERROR("SDL_SetWindowSize");
+}
+
 static void save_window_size(void)
 {
-    if (!config_emulator.fullscreen)
+    if (!config_emulator.fullscreen && !window_settings_pending)
     {
         int width, height;
         SDL_GetWindowSize(application_sdl_window, &width, &height);
         float content_scale = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(application_sdl_window));
+
         if (content_scale <= 0.0f)
             content_scale = 1.0f;
+
         config_emulator.window_width = (int)(width / content_scale);
         config_emulator.window_height = (int)(height / content_scale);
         config_emulator.maximized = (SDL_GetWindowFlags(application_sdl_window) & SDL_WINDOW_MAXIMIZED);

@@ -134,6 +134,7 @@ static void menu_geartowns(void)
                 if (config_emulator.recent_roms[i].length() > 0)
                 {
                     const char* shortcut = (i == 0) ? config_hotkeys[config_HotkeyIndex_ReloadROM].str : NULL;
+
                     if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), shortcut))
                     {
                         char media_path[4096];
@@ -175,8 +176,7 @@ static void menu_geartowns(void)
 
         if (ImGui::BeginMenu("Rewind"))
         {
-            if (ImGui::MenuItem("Enabled", config_hotkeys[config_HotkeyIndex_Rewind].str,
-                &config_rewind.enabled))
+            if (ImGui::MenuItem("Enabled", config_hotkeys[config_HotkeyIndex_Rewind].str, &config_rewind.enabled))
             {
                 rewind_reset();
             }
@@ -190,8 +190,7 @@ static void menu_geartowns(void)
         if (ImGui::BeginMenu("Run-Ahead"))
         {
             ImGui::PushItemWidth(140.0f);
-            ImGui::Combo("##runahead", &config_emulator.runahead,
-                "Disabled\0" "1 Frame\0" "2 Frames\0" "3 Frames\0\0");
+            ImGui::Combo("##runahead", &config_emulator.runahead, "Disabled\0" "1 Frame\0" "2 Frames\0" "3 Frames\0\0");
             ImGui::PopItemWidth();
 
             if (ImGui::IsItemHovered())
@@ -219,8 +218,7 @@ static void menu_geartowns(void)
         if (ImGui::BeginMenu("Save State Slot"))
         {
             ImGui::PushItemWidth(100.0f);
-            ImGui::Combo("##slot", &config_emulator.save_slot,
-                "Slot 1\0Slot 2\0Slot 3\0Slot 4\0Slot 5\0\0");
+            ImGui::Combo("##slot", &config_emulator.save_slot, "Slot 1\0Slot 2\0Slot 3\0Slot 4\0Slot 5\0\0");
             ImGui::PopItemWidth();
 
             ImGui::Separator();
@@ -228,8 +226,7 @@ static void menu_geartowns(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem("Save State",
-            config_hotkeys[config_HotkeyIndex_SaveState].str, false,
+        if (ImGui::MenuItem("Save State", config_hotkeys[config_HotkeyIndex_SaveState].str, false,
             media_actions_enabled))
         {
             std::string message("Saving state to slot ");
@@ -238,8 +235,7 @@ static void menu_geartowns(void)
             emu_save_state_slot(config_emulator.save_slot + 1);
         }
 
-        if (ImGui::MenuItem("Load State",
-            config_hotkeys[config_HotkeyIndex_LoadState].str, false,
+        if (ImGui::MenuItem("Load State", config_hotkeys[config_HotkeyIndex_LoadState].str, false,
             media_actions_enabled))
         {
             std::string message("Loading state from slot ");
@@ -247,6 +243,7 @@ static void menu_geartowns(void)
             gui_set_status_message(message.c_str(), 3000);
             emu_load_state_slot(config_emulator.save_slot + 1);
         }
+
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -270,7 +267,7 @@ static void menu_geartowns(void)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Load Default Settings"))
+        if (ImGui::MenuItem("Load Default Settings", NULL, false, !gui_is_rom_loading() && !emu_is_media_loading()))
         {
             open_load_defaults = true;
         }
@@ -332,6 +329,7 @@ static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type 
                 ImGui::Text("%s", info.database_name);
             else
                 ImGui::Text("Custom or unknown firmware");
+
             ImGui::Text("%s", info.path);
             ImGui::Text("CRC: %08X", info.crc);
         }
@@ -349,8 +347,8 @@ static void menu_emulator(void)
         if (ImGui::BeginMenu("Save States Dir"))
         {
             ImGui::PushItemWidth(220.0f);
-            if (ImGui::Combo("##savestate_option",
-                &config_emulator.savestates_dir_option,
+
+            if (ImGui::Combo("##savestate_option", &config_emulator.savestates_dir_option,
                 "Default Location\0Same as ROM\0Custom Location\0\0"))
             {
                 update_savestates_data();
@@ -363,25 +361,29 @@ static void menu_emulator(void)
                     ImGui::Text("%s", config_root_path);
                     break;
                 }
+
                 case Directory_Location_ROM:
                 {
                     if (!emu_is_empty())
                         ImGui::Text("%s", get_current_media_directory_text());
+
                     break;
                 }
+
                 case Directory_Location_Custom:
                 {
                     if (ImGui::MenuItem("Choose..."))
                         choose_savestates_path = true;
 
                     ImGui::PushItemWidth(450);
-                    if (ImGui::InputText("##savestate_path", gui_savestates_path,
-                        IM_ARRAYSIZE(gui_savestates_path),
+
+                    if (ImGui::InputText("##savestate_path", gui_savestates_path, IM_ARRAYSIZE(gui_savestates_path),
                         ImGuiInputTextFlags_AutoSelectAll))
                     {
                         config_emulator.savestates_path.assign(gui_savestates_path);
                         update_savestates_data();
                     }
+
                     ImGui::PopItemWidth();
                     break;
                 }
@@ -402,12 +404,15 @@ static void menu_emulator(void)
                     ImGui::Text("%s", config_root_path);
                     break;
                 }
+
                 case Directory_Location_ROM:
                 {
                     if (!emu_is_empty())
                         ImGui::Text("%s", get_current_media_directory_text());
+
                     break;
                 }
+
                 case Directory_Location_Custom:
                 {
                     if (ImGui::MenuItem("Choose..."))
@@ -416,10 +421,12 @@ static void menu_emulator(void)
                     }
 
                     ImGui::PushItemWidth(450);
+
                     if (ImGui::InputText("##screenshots_path", gui_screenshots_path, IM_ARRAYSIZE(gui_screenshots_path), ImGuiInputTextFlags_AutoSelectAll))
                     {
                         config_emulator.screenshots_path.assign(gui_screenshots_path);
                     }
+
                     ImGui::PopItemWidth();
                     break;
                 }
@@ -434,12 +441,13 @@ static void menu_emulator(void)
                 open_bios = true;
 
             ImGui::PushItemWidth(450);
-            if (ImGui::InputText("##bios_path", gui_bios_path,
-                IM_ARRAYSIZE(gui_bios_path), ImGuiInputTextFlags_AutoSelectAll |
-                ImGuiInputTextFlags_EnterReturnsTrue))
+
+            if (ImGui::InputText("##bios_path", gui_bios_path, IM_ARRAYSIZE(gui_bios_path),
+                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue))
             {
                 gui_load_bios(gui_bios_path);
             }
+
             ImGui::PopItemWidth();
 
             Firmware* firmware = emu_get_core()->GetFirmware();
@@ -465,6 +473,7 @@ static void menu_emulator(void)
 
         ImGui::MenuItem("Start Paused", "", &config_emulator.start_paused);
         ImGui::MenuItem("Pause When Inactive", "", &config_emulator.pause_when_inactive);
+
         if (ImGui::MenuItem("Allow Screen Saver", "", &config_emulator.allow_screensaver))
         {
             if (config_emulator.allow_screensaver)
@@ -517,6 +526,7 @@ static void menu_emulator(void)
         ImGui::Separator();
 
         ImGui::MenuItem("Single Instance", "", &config_debug.single_instance);
+
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -556,6 +566,7 @@ static void menu_video(void)
         ImGui::Separator();
 
         ImGui::MenuItem("Always Show Menu", config_hotkeys[config_HotkeyIndex_ShowMainMenu].str, &config_emulator.always_show_menu);
+
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -577,9 +588,13 @@ static void menu_video(void)
         if (ImGui::BeginMenu("Scale"))
         {
             ImGui::PushItemWidth(250.0f);
-            ImGui::Combo("##scale", &config_video.scale, "Integer Scale (Auto)\0Integer Scale (Manual)\0Scale to Window Height\0Scale to Window Width & Height\0\0");
+            ImGui::Combo("##scale", &config_video.scale,
+                "Integer Scale (Auto)\0Integer Scale (Manual)\0"
+                "Scale to Window Height\0Scale to Window Width & Height\0\0");
+
             if (config_video.scale == 1)
                 ImGui::SliderInt("##scale_manual", &config_video.scale_manual, 1, 20);
+
             ImGui::PopItemWidth();
             ImGui::EndMenu();
         }
@@ -600,9 +615,11 @@ static void menu_video(void)
         {
 #if defined(_WIN32)
             ImGui::PushItemWidth(220.0f);
+
             if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Fixed Vertical Sync\0Variable Refresh Rate (VRR)\0\0"))
 #else
             ImGui::PushItemWidth(100.0f);
+
             if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Enabled\0\0"))
 #endif
             {
@@ -615,6 +632,7 @@ static void menu_video(void)
 
                 display_use_vsync_if_enabled();
             }
+
             ImGui::PopItemWidth();
 
 #if defined(_WIN32)
@@ -643,10 +661,12 @@ static void menu_video(void)
         if (ImGui::BeginMenu("Theme"))
         {
             ImGui::PushItemWidth(100.0f);
+
             if (ImGui::Combo("##theme", &config_emulator.theme, "Light\0Dark\0\0"))
             {
                 gui_set_style();
             }
+
             ImGui::PopItemWidth();
             ImGui::EndMenu();
         }
@@ -680,6 +700,7 @@ static void draw_background_color_menu(const char* label, int theme)
             if (config_emulator.theme == theme)
                 gui_set_style();
         }
+
         ImGui::SameLine();
         ImGui::Text("Debugger Background");
 
@@ -710,9 +731,11 @@ static void menu_shader(void)
 
     const char* preview = selected_index == 0 ? "Pixel Perfect" : shader_presets[selected_index - 1].name;
     ImGui::PushItemWidth(240.0f);
+
     if (ImGui::BeginCombo("##ShaderPreset", preview))
     {
         bool selected = selected_index == 0;
+
         if (ImGui::Selectable("Pixel Perfect", selected))
         {
             if (selected_index != 0)
@@ -721,12 +744,14 @@ static void menu_shader(void)
                 gui_set_status_message("Shader preset: Pixel Perfect", 3000);
             }
         }
+
         if (selected)
             ImGui::SetItemDefaultFocus();
 
         for (int i = 0; i < shader_preset_count; i++)
         {
             selected = selected_index == i + 1;
+
             if (ImGui::Selectable(shader_presets[i].name, selected))
             {
                 if (selected_index != i + 1)
@@ -745,11 +770,14 @@ static void menu_shader(void)
                     }
                 }
             }
+
             if (selected)
                 ImGui::SetItemDefaultFocus();
         }
+
         ImGui::EndCombo();
     }
+
     ImGui::PopItemWidth();
 
     has_preset = ogl_shader_chain_has_preset();
@@ -774,6 +802,7 @@ static void menu_shader(void)
 static void draw_shader_parameters(void)
 {
     int count = ogl_shader_chain_get_parameter_count();
+
     if (count <= 0)
         return;
 
@@ -793,6 +822,7 @@ static void draw_shader_parameters(void)
     for (int i = 0; i < count; i++)
     {
         const ShaderPresetParameter* parameter = ogl_shader_chain_get_parameter(i);
+
         if (!parameter)
             continue;
 
@@ -803,11 +833,13 @@ static void draw_shader_parameters(void)
         if (shader_parameter_is_toggle(parameter))
         {
             bool enabled = value >= 0.5f;
+
             if (ImGui::Checkbox(label, &enabled))
             {
                 ogl_shader_chain_set_parameter(i, enabled ? 1.0f : 0.0f);
                 ogl_renderer_save_shader_parameter_config();
             }
+
             continue;
         }
 
@@ -816,11 +848,13 @@ static void draw_shader_parameters(void)
             int int_value = shader_parameter_round_to_int(value);
             int min_value = shader_parameter_round_to_int(parameter->minimum);
             int max_value = shader_parameter_round_to_int(parameter->maximum);
+
             if (ImGui::SliderInt(label, &int_value, min_value, max_value))
             {
                 ogl_shader_chain_set_parameter(i, (float)int_value);
                 ogl_renderer_save_shader_parameter_config();
             }
+
             continue;
         }
 
@@ -866,22 +900,25 @@ static void menu_input(void)
                 if (ImGui::BeginMenu(player_name))
                 {
                     ImGui::PushItemWidth(200.0f);
+
                     if (ImGui::Combo("##controller", &config_input.controller_type[i],
                         "None\0Original Gamepad\0" "6 Button Gamepad\0\0"))
                     {
-                        emu_set_pad_type((GT_Controllers)i,
-                            (GT_Controller_Type)config_input.controller_type[i]);
+                        emu_set_pad_type((GT_Controllers)i, (GT_Controller_Type)config_input.controller_type[i]);
                     }
+
                     ImGui::PopItemWidth();
                     ImGui::EndMenu();
                 }
             }
+
             ImGui::EndMenu();
         }
 
         if (ImGui::BeginMenu("Mouse"))
         {
             ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse);
+
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
@@ -929,6 +966,7 @@ static void menu_input(void)
                     ImGui::EndMenu();
                 }
             }
+
             ImGui::EndMenu();
         }
 
@@ -945,6 +983,7 @@ static void menu_input(void)
                         ImGui::TextDisabled("This gamepad is not detected");
                     else
                         ImGui::TextDisabled("Gamepad detected for Player %d", i + 1);
+
                     ImGui::Separator();
 
                     if (ImGui::BeginMenu("Device"))
@@ -1004,12 +1043,14 @@ static void menu_input(void)
                     ImGui::EndMenu();
                 }
             }
+
             ImGui::EndMenu();
         }
 
         ImGui::Separator();
 
         ImGui::MenuItem("Allow Up+Down / Left+Right", "", &config_input.allow_up_down);
+
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -1039,17 +1080,21 @@ static void menu_audio(void)
         if (ImGui::BeginMenu("Master Volume", config_audio.enable))
         {
             ImGui::PushItemWidth(200.0f);
+
             if (ImGui::SliderFloat("##master_volume", &config_audio.master_volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))
             {
                 emu_audio_set_master_volume(config_audio.master_volume);
             }
+
             ImGui::PopItemWidth();
+
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
                 ImGui::Text("Anything above 1.00 may cause clipping.");
                 ImGui::EndTooltip();
             }
+
             ImGui::EndMenu();
         }
 
@@ -1062,11 +1107,14 @@ static void menu_audio(void)
         if (ImGui::BeginMenu("Buffer Size", config_audio.enable))
         {
             ImGui::PushItemWidth(150.0f);
+
             if (ImGui::SliderInt("##buffer_count", &config_audio.buffer_count, 2, 5, "Buffers = %d"))
             {
                 emu_audio_reset();
             }
+
             ImGui::PopItemWidth();
+
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
@@ -1095,10 +1143,14 @@ static void menu_debug(void)
 
         ImGui::Separator();
 
-        ImGui::MenuItem("Show Memory Workspace", "", &config_debug.show_memory,
-            config_debug.debug);
-        ImGui::MenuItem("Auto Save/Load Debug Settings", "",
-            &config_debug.auto_debug_settings, config_debug.debug);
+        ImGui::MenuItem("Show Intel 80386", "", &config_debug.show_processor, config_debug.debug);
+        ImGui::MenuItem("Show 80386 System State", "", &config_debug.show_processor_details, config_debug.debug);
+        ImGui::MenuItem("Show Memory Workspace", "", &config_debug.show_memory, config_debug.debug);
+        ImGui::MenuItem("Show Disassembler", "", &config_debug.show_disassembler, config_debug.debug);
+        ImGui::MenuItem("Show Call Stack", "", &config_debug.show_call_stack, config_debug.debug);
+        ImGui::MenuItem("Show Execution Breakpoints", "", &config_debug.show_breakpoints, config_debug.debug);
+        ImGui::MenuItem("Show Symbols", "", &config_debug.show_symbols, config_debug.debug);
+        ImGui::MenuItem("Auto Save/Load Debug Settings", "", &config_debug.auto_debug_settings, config_debug.debug);
 
         ImGui::Separator();
 
@@ -1120,6 +1172,7 @@ static void menu_debug(void)
             {
                 if (strlen(gui_mcp_http_address) == 0)
                     strncpy_fit(gui_mcp_http_address, "127.0.0.1", sizeof(gui_mcp_http_address));
+
                 config_emulator.mcp_http_address = gui_mcp_http_address;
                 emu_mcp_set_transport(1, config_emulator.mcp_tcp_port, config_emulator.mcp_http_address.c_str());
                 emu_mcp_start();
@@ -1135,8 +1188,8 @@ static void menu_debug(void)
             if (stdio_running)
                 ImGui::TextColored(service_mcp_stdio_color, "STDIO mode active");
             else if (http_running)
-                ImGui::TextColored(service_mcp_http_color, "Listening on %s:%d",
-                    emu_mcp_get_http_address(), emu_mcp_get_http_port());
+                ImGui::TextColored(service_mcp_http_color, "Listening on %s:%d", emu_mcp_get_http_address(),
+                    emu_mcp_get_http_port());
             else
                 ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "Stopped");
 
@@ -1145,16 +1198,19 @@ static void menu_debug(void)
             ImGui::Text("HTTP Address:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(120);
+
             if (ImGui::InputText("##mcp_address", gui_mcp_http_address, IM_ARRAYSIZE(gui_mcp_http_address), ImGuiInputTextFlags_AutoSelectAll))
                 config_emulator.mcp_http_address = gui_mcp_http_address;
 
             ImGui::Text("HTTP Port:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(50);
+
             if (ImGui::InputInt("##mcp_port", &config_emulator.mcp_tcp_port, 0, 0))
             {
                 if (config_emulator.mcp_tcp_port < 1)
                     config_emulator.mcp_tcp_port = 1;
+
                 if (config_emulator.mcp_tcp_port > 65535)
                     config_emulator.mcp_tcp_port = 65535;
             }
@@ -1166,6 +1222,7 @@ static void menu_debug(void)
 
 #if defined(__APPLE__) || defined(_WIN32)
         ImGui::MenuItem("Multi-Viewport", "", &config_debug.multi_viewport, config_debug.debug);
+
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -1181,10 +1238,12 @@ static void menu_debug(void)
         if (ImGui::BeginMenu("Font Size", config_debug.debug))
         {
             ImGui::PushItemWidth(110.0f);
+
             if (ImGui::Combo("##font", &config_debug.font_size, "Very Small\0Small\0Medium\0Large\0\0"))
             {
                 gui_default_font = gui_default_fonts[config_debug.font_size];
             }
+
             ImGui::PopItemWidth();
             ImGui::EndMenu();
         }
@@ -1203,6 +1262,7 @@ static void menu_about(void)
         {
             open_about = true;
         }
+
         ImGui::EndMenu();
     }
 }
@@ -1223,8 +1283,7 @@ static void draw_mcp_status(void)
     }
     else
     {
-        snprintf(status, sizeof(status), "MCP: HTTP (%s:%d)",
-            emu_mcp_get_http_address(), emu_mcp_get_http_port());
+        snprintf(status, sizeof(status), "MCP: HTTP (%s:%d)", emu_mcp_get_http_address(), emu_mcp_get_http_port());
     }
 
     ImGuiStyle& style = ImGui::GetStyle();
@@ -1250,18 +1309,25 @@ static void file_dialogs(void)
         gui_shortcut_open_rom = false;
         gui_file_dialog_open_rom();
     }
+
     if (open_state)
         gui_file_dialog_load_state();
+
     if (save_state)
         gui_file_dialog_save_state();
+
     if (save_screenshot)
         gui_file_dialog_save_screenshot();
+
     if (choose_savestates_path)
         gui_file_dialog_choose_savestate_path();
+
     if (open_bios)
         gui_file_dialog_load_bios();
+
     if (choose_screenshots_path)
         gui_file_dialog_choose_screenshot_path();
+
     if (open_about)
     {
         gui_dialog_in_use = true;
@@ -1327,6 +1393,7 @@ static void gamepad_configuration_item(const char* text, int* button, int player
     else if (*button >= GAMEPAD_VBTN_AXIS_BASE)
     {
         int axis = *button - GAMEPAD_VBTN_AXIS_BASE;
+
         if (axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER)
             button_name = "L2";
         else if (axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
@@ -1401,6 +1468,7 @@ static void gamepad_device_selector(int player)
     int num_detected = gamepad_get_detected(detected, max_detected_gamepads);
 
     SDL_JoystickID current_id = 0;
+
     if (IsValidPointer(gamepad_controller[player]))
         current_id = SDL_GetJoystickID(SDL_GetGamepadJoystick(gamepad_controller[player]));
 
@@ -1409,6 +1477,7 @@ static void gamepad_device_selector(int player)
     for (int i = 0; i < num_detected && count < max_detected_gamepads; i++)
     {
         const char* name = detected[i].name;
+
         if (!IsValidPointer(name))
             name = "Unknown Gamepad";
 
@@ -1447,16 +1516,17 @@ static void draw_savestate_slot_info(int slot)
 
     if (emu_savestates[slot].rom_name[0] != 0)
     {
-        if (emu_savestates[slot].version < GT_SAVESTATE_MIN_VERSION ||
-            emu_savestates[slot].version > GT_SAVESTATE_VERSION)
+        if (emu_savestates[slot].version != GT_SAVESTATE_VERSION)
         {
             ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f),
                 "This savestate is from an older version and will not work");
+
             if (emu_savestates[slot].emu_build[0] != 0)
             {
-                ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f),
-                    "Use %s - %s", GT_TITLE, emu_savestates[slot].emu_build);
+                ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "Use %s - %s", GT_TITLE,
+                    emu_savestates[slot].emu_build);
             }
+
             ImGui::Separator();
         }
 
@@ -1469,15 +1539,12 @@ static void draw_savestate_slot_info(int slot)
         {
             float width = (float)emu_savestates_screenshots[slot].width;
             float height = (float)emu_savestates_screenshots[slot].height;
-            ImGui::Image((ImTextureID)(intptr_t)ogl_renderer_emu_savestates,
-                ImVec2(width * 0.5f, height * 0.5f), ImVec2(0, 0),
-                ImVec2(width / (float)SYSTEM_TEXTURE_WIDTH,
-                    height / (float)SYSTEM_TEXTURE_HEIGHT));
+            ImGui::Image((ImTextureID)(intptr_t)ogl_renderer_emu_savestates, ImVec2(width * 0.5f, height * 0.5f),
+                ImVec2(0, 0), ImVec2(width / (float)SYSTEM_TEXTURE_WIDTH, height / (float)SYSTEM_TEXTURE_HEIGHT));
         }
     }
     else
     {
-        ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.50f, 1.0f),
-            "Slot %d is empty", slot + 1);
+        ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.50f, 1.0f), "Slot %d is empty", slot + 1);
     }
 }

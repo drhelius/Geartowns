@@ -6,12 +6,12 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * any later version.
- *
+
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- *
+
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see http://www.gnu.org/licenses/
  *
@@ -29,7 +29,23 @@ static inline void process(config_Operation operation)
     // Debugger
     CONFIG_BOOL("Debug", "Debug", config_debug.debug, false);
     CONFIG_BOOL("Debug", "Memory", config_debug.show_memory, false);
+    CONFIG_BOOL("Debug", "Disassembler", config_debug.show_disassembler, true);
+    CONFIG_BOOL("Debug", "Processor", config_debug.show_processor, true);
+    CONFIG_BOOL("Debug", "ProcessorDetails", config_debug.show_processor_details, false);
+    CONFIG_BOOL("Debug", "CallStack", config_debug.show_call_stack, false);
+    CONFIG_BOOL("Debug", "Breakpoints", config_debug.show_breakpoints, false);
+    CONFIG_BOOL("Debug", "Symbols", config_debug.show_symbols, false);
     CONFIG_BOOL("Debug", "AutoDebugSettings", config_debug.auto_debug_settings, false);
+    CONFIG_BOOL("Debug", "DisBytes", config_debug.dis_show_bytes, true);
+    CONFIG_BOOL("Debug", "DisSymbols", config_debug.dis_show_symbols, true);
+    CONFIG_BOOL("Debug", "DisSegment", config_debug.dis_show_segment, true);
+    CONFIG_BOOL("Debug", "DisAutoSymbols", config_debug.dis_show_auto_symbols, true);
+    CONFIG_BOOL("Debug", "DisDimAutoSymbols", config_debug.dis_dim_auto_symbols, false);
+    CONFIG_BOOL("Debug", "DisReplaceSymbols", config_debug.dis_replace_symbols, true);
+    CONFIG_BOOL("Debug", "DisReplaceLabels", config_debug.dis_replace_labels, true);
+    CONFIG_INT_RANGE("Debug", "DisSyntax", config_debug.dis_syntax, 0, 0, 0);
+    CONFIG_INT_RANGE("Debug", "DisLookAheadCount", config_debug.dis_look_ahead_count, 20, 0, 100);
+    CONFIG_BOOL("Debug", "StepSkipInterrupts", config_debug.step_skip_interrupts, false);
 
     // Interface
     CONFIG_INT_RANGE("Debug", "FontSize", config_debug.font_size, 0, 0, 3);

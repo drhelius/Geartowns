@@ -125,7 +125,6 @@ void config_load_defaults(void)
     Log("Loading default settings");
 
     on_config_defaults();
-    config_write();
 }
 
 void config_push_recent_media(const std::string& path)
@@ -134,6 +133,7 @@ void config_push_recent_media(const std::string& path)
         return;
 
     int slot = 0;
+
     for (slot = 0; slot < config_max_recent_roms; slot++)
     {
         if (config_emulator.recent_roms[slot].compare(path) == 0)
@@ -202,6 +202,7 @@ static void process_bool(config_Operation operation, const char* section, const 
     if (operation == config_Operation_Read)
     {
         std::string stored;
+
         if (!get_setting(section, key, &stored) || !parse_bool_string(stored, &processed))
             processed = default_value;
     }
@@ -224,6 +225,7 @@ static void process_int(config_Operation operation, const char* section, const c
 {
     if (has_minimum && has_maximum && minimum > maximum)
         Error("Invalid integer setting range: [%s][%s]=%d..%d", section, key, minimum, maximum);
+
     if ((has_minimum && default_value < minimum) || (has_maximum && default_value > maximum))
         Error("Invalid integer setting default: [%s][%s]=%d", section, key, default_value);
 
@@ -232,6 +234,7 @@ static void process_int(config_Operation operation, const char* section, const c
     if (operation == config_Operation_Read)
     {
         std::string stored;
+
         if (!get_setting(section, key, &stored) || !parse_int_string(stored, &processed))
             processed = default_value;
     }
@@ -242,6 +245,7 @@ static void process_int(config_Operation operation, const char* section, const c
 
     if (has_minimum && processed < minimum)
         processed = minimum;
+
     if (has_maximum && processed > maximum)
         processed = maximum;
 
@@ -262,6 +266,7 @@ static void process_float(config_Operation operation, const char* section, const
     {
         Error("Invalid float setting range: [%s][%s]", section, key);
     }
+
     if (!std::isfinite(default_value) || (has_minimum && default_value < minimum) ||
         (has_maximum && default_value > maximum))
     {
@@ -273,18 +278,21 @@ static void process_float(config_Operation operation, const char* section, const
     if (operation == config_Operation_Read)
     {
         std::string stored;
+
         if (!get_setting(section, key, &stored) || !parse_float_string(stored, &processed))
             processed = default_value;
     }
     else if (operation == config_Operation_Write)
     {
         processed = *value;
+
         if (!std::isfinite(processed))
             processed = default_value;
     }
 
     if (has_minimum && processed < minimum)
         processed = minimum;
+
     if (has_maximum && processed > maximum)
         processed = maximum;
 
@@ -300,6 +308,7 @@ static void process_string(config_Operation operation, const char* section, cons
                            std::string* value, const char* default_value, bool allow_empty)
 {
     const char* default_string = default_value ? default_value : "";
+
     if (!allow_empty && default_string[0] == '\0')
         Error("Invalid empty string setting default: [%s][%s]", section, key);
 
@@ -422,6 +431,7 @@ static void on_config_write(void)
 static char* get_portable_path(bool force_portable)
 {
     const char* base_path = SDL_GetBasePath();
+
     if (base_path == NULL)
         return NULL;
 
@@ -477,6 +487,7 @@ static bool get_setting(const char* group, const char* key, std::string* value)
         return false;
 
     mINI::INIMap<std::string> section = config_ini_data.get(group);
+
     if (!section.has(key))
         return false;
 
@@ -494,8 +505,10 @@ static bool parse_int_string(const std::string& value, int* result)
     long long parsed = 0;
 
     converter >> std::ws;
+
     if (!(converter >> parsed))
         return false;
+
     converter >> std::ws;
 
     if (!converter.eof() || parsed < INT_MIN || parsed > INT_MAX)
@@ -515,8 +528,10 @@ static bool parse_float_string(const std::string& value, float* result)
     float parsed = 0.0f;
 
     converter >> std::ws;
+
     if (!(converter >> parsed))
         return false;
+
     converter >> std::ws;
 
     if (!converter.eof() || !std::isfinite(parsed))
@@ -536,8 +551,10 @@ static bool parse_bool_string(const std::string& value, bool* result)
     bool parsed = false;
 
     converter >> std::ws;
+
     if (!(converter >> std::boolalpha >> parsed))
         return false;
+
     converter >> std::ws;
 
     if (!converter.eof())
@@ -615,10 +632,12 @@ bool config_read_shader_parameter(const char* preset_file, const char* parameter
         return false;
 
     std::string section = shader_preset_section_name(preset_file);
+
     if (!config_ini_data.has(section))
         return false;
 
     mINI::INIMap<std::string> parameters = config_ini_data.get(section);
+
     if (!parameters.has(parameter_name))
         return false;
 
@@ -646,14 +665,18 @@ void config_update_hotkey_string(config_Hotkey* hotkey)
 
     if (hotkey->mod & (SDL_KMOD_CTRL | SDL_KMOD_LCTRL | SDL_KMOD_RCTRL))
         result += "Ctrl+";
+
     if (hotkey->mod & (SDL_KMOD_SHIFT | SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT))
         result += "Shift+";
+
     if (hotkey->mod & (SDL_KMOD_ALT | SDL_KMOD_LALT | SDL_KMOD_RALT))
         result += "Alt+";
+
     if (hotkey->mod & (SDL_KMOD_GUI | SDL_KMOD_LGUI | SDL_KMOD_RGUI))
         result += "Cmd+";
 
     const char* key_name = SDL_GetScancodeName(hotkey->key);
+
     if (key_name && strlen(key_name) > 0)
         result += key_name;
     else

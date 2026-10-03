@@ -32,6 +32,7 @@ enum Debug_Command
 {
     Debug_Command_Continue,
     Debug_Command_Step,
+    Debug_Command_StepOver,
     Debug_Command_StepFrame,
     Debug_Command_None
 };
@@ -50,6 +51,7 @@ EXTERN u32 emu_savestates_generation;
 EXTERN Debug_Command emu_debug_command;
 EXTERN bool emu_debug_pc_changed;
 EXTERN int emu_debug_step_frames_pending;
+EXTERN bool emu_debug_disable_breakpoints;
 EXTERN u64 emu_frame_counter;
 EXTERN bool emu_audio_sync;
 
@@ -59,8 +61,7 @@ EXTERN void emu_update(void);
 EXTERN void emu_load_media_async(const char* file_path);
 EXTERN bool emu_is_media_loading(void);
 EXTERN bool emu_finish_media_loading(void);
-EXTERN void emu_set_gamepad_state(GT_Controllers controller,
-    const GT_GamePad_State& state);
+EXTERN void emu_set_gamepad_state(GT_Controllers controller, const GT_GamePad_State& state);
 EXTERN void emu_key_pressed(GT_Keys key);
 EXTERN void emu_key_released(GT_Keys key);
 EXTERN void emu_set_mouse_delta(int x, int y);
@@ -96,6 +97,7 @@ EXTERN void emu_debug_step_frame(void);
 EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);
 EXTERN void emu_debug_continue(void);
+EXTERN void emu_debug_state_restored(void);
 EXTERN void emu_set_disassembler_syntax(int syntax);
 
 EXTERN void emu_set_pad_type(GT_Controllers controller, GT_Controller_Type type);

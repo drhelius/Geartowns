@@ -6,12 +6,12 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * any later version.
- *
+
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- *
+
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see http://www.gnu.org/licenses/
  *
@@ -197,7 +197,23 @@ struct config_Debug
 {
     bool debug;
     bool show_memory;
+    bool show_disassembler;
+    bool show_processor;
+    bool show_processor_details;
+    bool show_call_stack;
+    bool show_breakpoints;
+    bool show_symbols;
     bool auto_debug_settings;
+    bool dis_show_bytes;
+    bool dis_show_symbols;
+    bool dis_show_segment;
+    bool dis_show_auto_symbols;
+    bool dis_dim_auto_symbols;
+    bool dis_replace_symbols;
+    bool dis_replace_labels;
+    int dis_syntax;
+    int dis_look_ahead_count;
+    bool step_skip_interrupts;
     int font_size;
     bool multi_viewport;
     bool single_instance;

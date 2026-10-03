@@ -74,8 +74,10 @@ int application_headless_init(const ApplicationParams& params)
     if (rom_file_argument)
     {
         Log("Media file argument: %s", params.rom_file);
+
         if (symbol_file_argument)
             Log("Symbol file argument: %s", params.symbol_file);
+
         gui_load_rom(params.rom_file, params.symbol_file);
     }
 
@@ -93,8 +95,7 @@ int application_headless_init(const ApplicationParams& params)
         if (params.mcp_mode == 0)
             Log("Starting MCP server (mode: stdio)...");
         else
-            Log("Starting MCP server (mode: http, address: %s, port: %d)...",
-                mcp_http_address, params.mcp_tcp_port);
+            Log("Starting MCP server (mode: http, address: %s, port: %d)...", mcp_http_address, params.mcp_tcp_port);
 
         emu_mcp_set_transport(params.mcp_mode, params.mcp_tcp_port, mcp_http_address);
         emu_mcp_start();

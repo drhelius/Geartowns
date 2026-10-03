@@ -23,6 +23,7 @@
 #define GUI_POPUPS_IMPORT
 #include "gui_popups.h"
 #include "gui.h"
+#include "gui_actions.h"
 #include "gui_menus.h"
 #include "config.h"
 #include "application.h"
@@ -52,6 +53,7 @@ void gui_popup_modal_keyboard()
         ImGui::Separator();
 
         SDL_Scancode scancode = keyboard_get_first_pressed_scancode();
+
         if (scancode != SDL_SCANCODE_UNKNOWN)
         {
             *gui_configured_key = scancode;
@@ -64,6 +66,7 @@ void gui_popup_modal_keyboard()
             gui_dialog_in_use = false;
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
@@ -117,6 +120,7 @@ void gui_popup_modal_gamepad(int pad)
             gui_dialog_in_use = false;
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
@@ -132,6 +136,7 @@ void gui_popup_modal_hotkey()
 
         SDL_Keymod mods = (SDL_Keymod)(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI));
         SDL_Scancode scancode = keyboard_get_first_pressed_scancode();
+
         if (scancode != SDL_SCANCODE_UNKNOWN)
         {
             gui_configured_hotkey->key = scancode;
@@ -147,6 +152,7 @@ void gui_popup_modal_hotkey()
             gui_dialog_in_use = false;
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
@@ -270,6 +276,7 @@ void gui_popup_modal_about(void)
 
                 ImGui::EndTabItem();
             }
+
             if (ImGui::BeginTabItem("Special thanks to"))
             {
                 ImGui::BeginChild("backers", ImVec2(0, 100), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -277,6 +284,7 @@ void gui_popup_modal_about(void)
                 ImGui::EndChild();
                 ImGui::EndTabItem();
             }
+
             if (ImGui::BeginTabItem("LICENSE"))
             {
                 ImGui::BeginChild("license", ImVec2(0, 100), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -284,6 +292,7 @@ void gui_popup_modal_about(void)
                 ImGui::EndChild();
                 ImGui::EndTabItem();
             }
+
             ImGui::EndTabBar();
         }
 
@@ -301,11 +310,12 @@ void gui_popup_modal_about(void)
         ImGui::Separator();
         ImGui::NewLine();
 
-        if (ImGui::Button("OK", ImVec2(120, 0))) 
+        if (ImGui::Button("OK", ImVec2(120, 0)))
         {
             ImGui::CloseCurrentPopup();
             gui_dialog_in_use = false;
         }
+
         ImGui::SetItemDefaultFocus();
 
         ImGui::EndPopup();
@@ -317,16 +327,20 @@ void gui_popup_modal_load_defaults(void)
     if (ImGui::BeginPopupModal("Load Default Settings", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("Are you sure you want to load default settings?\n\n");
+        ImGui::Text("Current content will close and BIOS configuration will be cleared.\n\n");
         ImGui::Text("This action cannot be reverted.\n\n");
         ImGui::Separator();
 
+        ImGui::BeginDisabled(gui_is_rom_loading() || emu_is_media_loading());
+
         if (ImGui::Button("Yes", ImVec2(120, 0)))
         {
-            config_load_defaults();
-            gui_set_style();
             ImGui::CloseCurrentPopup();
             gui_dialog_in_use = false;
+            gui_action_load_defaults();
         }
+
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
 
@@ -379,6 +393,7 @@ static void add_build_info(const char* fmt, ...)
         info_pos = (int)sizeof(build_info) - 1;
         build_info[info_pos] = '\0';
     }
+
     va_end(args);
 }
 
@@ -394,8 +409,7 @@ static void check_hotkey_duplicates_popup(config_Hotkey* current_hotkey)
         if (other == current_hotkey)
             continue;
 
-        if (other->key == current_hotkey->key &&
-            other->mod == current_hotkey->mod)
+        if (other->key == current_hotkey->key && other->mod == current_hotkey->mod)
         {
             other->key = SDL_SCANCODE_UNKNOWN;
             other->mod = SDL_KMOD_NONE;

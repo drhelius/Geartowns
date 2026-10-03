@@ -98,11 +98,13 @@ int main(int argc, char* argv[])
 
                 char* end = NULL;
                 long port = strtol(argv[++i], &end, 10);
+
                 if (!end || *end != '\0' || port <= 0 || port > 65535)
                 {
                     fprintf(stderr, "Invalid port number: %s\n", argv[i]);
                     return -1;
                 }
+
                 app_params.mcp_tcp_port = (int)port;
                 app_params.mcp_tcp_port_set = true;
             }
@@ -127,12 +129,14 @@ int main(int argc, char* argv[])
     }
 
     int non_option_count = 0;
+
     for (int i = 1; i < argc; i++)
     {
         if ((strcmp(argv[i], "--mcp-http-port") == 0) || (strcmp(argv[i], "--mcp-http-address") == 0))
         {
             if (i + 1 < argc)
                 i++;
+
             continue;
         }
 

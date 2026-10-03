@@ -67,8 +67,7 @@ static int get_rewind_pop_budget(void);
 
 bool emu_init(void)
 {
-    size_t frame_buffer_size = (size_t)GT_MAX_FRAME_BUFFER_WIDTH *
-        GT_MAX_FRAME_BUFFER_HEIGHT * 4;
+    size_t frame_buffer_size = (size_t)GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4;
     emu_frame_buffer = new (std::nothrow) u8[frame_buffer_size];
     audio_buffer = new (std::nothrow) s16[GT_AUDIO_BUFFER_SIZE];
 
@@ -83,6 +82,7 @@ bool emu_init(void)
     reset_buffers();
 
     geartowns = new (std::nothrow) GeartownsCore();
+
     if (!IsValidPointer(geartowns))
     {
         Error("Unable to allocate Geartowns core");
@@ -103,10 +103,12 @@ bool emu_init(void)
     emu_debug_command = Debug_Command_None;
     emu_debug_pc_changed = false;
     emu_debug_step_frames_pending = 0;
+    emu_debug_disable_breakpoints = false;
     rewind_init();
     runahead_init();
 
     mcp_manager = new (std::nothrow) McpManager();
+
     if (!IsValidPointer(mcp_manager))
     {
         runahead_destroy();
@@ -117,6 +119,7 @@ bool emu_init(void)
         SafeDeleteArray(emu_frame_buffer);
         return false;
     }
+
     mcp_manager->Init(geartowns);
 
     emu_frame_counter = 0;
@@ -180,23 +183,51 @@ void emu_update(void)
 
     if (config_debug.debug)
     {
+        bool stopped = false;
+        bool frames_stepped = false;
+
         if (emu_debug_command != Debug_Command_None && !geartowns->IsPaused())
         {
+            GeartownsCore::GT_Debug_Run debug_run;
+
+            debug_run.step_debugger = emu_debug_command == Debug_Command_Step;
+            debug_run.step_over = emu_debug_command == Debug_Command_StepOver;
+            debug_run.stop_on_breakpoint = !emu_debug_disable_breakpoints;
+            debug_run.stop_on_run_to_breakpoint = true;
+            debug_run.stopped = false;
+            debug_run.breakpoint_hit = false;
+
             rewind_commit_seek();
-            GT_Run_Result result = geartowns->RunToFrame(emu_frame_buffer,
-                audio_buffer, &sample_count);
+
+            GT_Run_Result result = geartowns->RunToFrame(emu_frame_buffer, audio_buffer, &sample_count, &debug_run);
             frame_executed = result != GT_RUN_NOT_READY;
-            frame_completed = result == GT_RUN_FRAME_READY;
+            frame_completed = result == GT_RUN_FRAME_READY && !debug_run.stopped;
+            stopped = debug_run.stopped;
+
+            if (emu_debug_command == Debug_Command_StepOver && !debug_run.step_over)
+                emu_debug_command = Debug_Command_Continue;
         }
 
-        if (emu_debug_command == Debug_Command_StepFrame &&
-            emu_debug_step_frames_pending > 0)
+        // Frame steps run whole frames with breakpoints active; a breakpoint ends the remaining frames
+        if (stopped)
+            emu_debug_step_frames_pending = 0;
+        else if (emu_debug_command == Debug_Command_StepFrame && frame_completed)
         {
             emu_debug_step_frames_pending--;
-            if (emu_debug_step_frames_pending == 0)
-                emu_debug_command = Debug_Command_None;
+            frames_stepped = emu_debug_step_frames_pending <= 0;
         }
-        else if (emu_debug_command != Debug_Command_Continue)
+
+        if (stopped || emu_debug_command == Debug_Command_Step || frames_stepped)
+        {
+            emu_debug_command = Debug_Command_None;
+            emu_debug_step_frames_pending = 0;
+            emu_debug_pc_changed = true;
+
+            if (config_debug.dis_look_ahead_count > 0)
+                geartowns->GetI386()->DisassembleAhead(config_debug.dis_look_ahead_count);
+        }
+        else if (emu_debug_command != Debug_Command_Continue && emu_debug_command != Debug_Command_StepFrame &&
+            frame_executed)
             emu_debug_command = Debug_Command_None;
     }
     else if (!geartowns->IsPaused())
@@ -204,8 +235,7 @@ void emu_update(void)
         rewind_commit_seek();
 
         GT_Run_Result result = GT_RUN_NOT_READY;
-        int runahead = geartowns->GetFirmware()->IsReady() ?
-            runahead_get_frames() : 0;
+        int runahead = geartowns->GetFirmware()->IsReady() ? runahead_get_frames() : 0;
 
         if (runahead > 0)
         {
@@ -213,8 +243,7 @@ void emu_update(void)
             result = GT_RUN_FRAME_READY;
         }
         else
-            result = geartowns->RunToFrame(emu_frame_buffer, audio_buffer,
-                &sample_count);
+            result = geartowns->RunToFrame(emu_frame_buffer, audio_buffer, &sample_count);
 
         frame_executed = result != GT_RUN_NOT_READY;
         frame_completed = result == GT_RUN_FRAME_READY;
@@ -224,6 +253,7 @@ void emu_update(void)
     {
         if (frame_completed)
             emu_frame_counter++;
+
         rewind_push();
     }
 
@@ -239,8 +269,7 @@ void emu_update(void)
 
 void emu_load_media_async(const char* file_path)
 {
-    if (!IsValidPointer(file_path) || file_path[0] == '\0' ||
-        loading_state.load() != Loading_State_None)
+    if (!IsValidPointer(file_path) || file_path[0] == '\0' || loading_state.load() != Loading_State_None)
     {
         return;
     }
@@ -275,6 +304,7 @@ bool emu_finish_media_loading(void)
     }
 
     loading_state.store(Loading_State_None);
+
     if (!loading_result)
         return false;
 
@@ -345,7 +375,7 @@ bool emu_is_empty(void)
     if (loading_state.load() != Loading_State_None)
         return true;
 
-    return !IsValidPointer(geartowns) || !geartowns->GetMedia()->IsReady();
+    return !IsValidPointer(geartowns) || !geartowns->GetFirmware()->IsReady();
 }
 
 void emu_reset(void)
@@ -355,6 +385,7 @@ void emu_reset(void)
 
     geartowns->ResetMedia();
     emu_debug_command = Debug_Command_None;
+    emu_debug_pc_changed = true;
     emu_frame_counter = 0;
     reset_buffers();
     emu_audio_reset();
@@ -364,8 +395,10 @@ void emu_reset(void)
 void emu_audio_mute(bool mute)
 {
     audio_enabled = !mute;
+
     if (IsValidPointer(geartowns))
         geartowns->GetAudio()->Mute(mute);
+
     emu_audio_reset();
 }
 
@@ -383,8 +416,7 @@ void emu_audio_reset(void)
         geartowns->ResetSound();
 
     if (audio_enabled)
-        sound_queue_start(GT_AUDIO_SAMPLE_RATE, 2, GT_AUDIO_QUEUE_SIZE,
-            config_audio.buffer_count);
+        sound_queue_start(GT_AUDIO_SAMPLE_RATE, 2, GT_AUDIO_QUEUE_SIZE, config_audio.buffer_count);
 }
 
 bool emu_is_audio_enabled(void)
@@ -414,8 +446,10 @@ void emu_load_state_slot(int index)
     {
         const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
             config_emulator.savestates_path.c_str());
+
         if (geartowns->LoadState(dir, index))
         {
+            emu_debug_state_restored();
             events_sync_input();
             rewind_reset();
         }
@@ -432,17 +466,23 @@ void emu_load_state_file(const char* file_path)
 {
     if (!emu_is_empty() && geartowns->LoadState(file_path))
     {
+        emu_debug_state_restored();
         events_sync_input();
         rewind_reset();
     }
 }
 
+void emu_debug_state_restored(void)
+{
+    geartowns->GetI386()->ResetDebuggerExecutionState();
+    emu_debug_command = Debug_Command_None;
+    emu_debug_step_frames_pending = 0;
+    emu_debug_pc_changed = true;
+}
+
 void update_savestates_data(void)
 {
     emu_savestates_generation++;
-
-    if (emu_is_empty())
-        return;
 
     for (int i = 0; i < 5; i++)
     {
@@ -451,7 +491,13 @@ void update_savestates_data(void)
         emu_savestates_screenshots[i].width = 0;
         emu_savestates_screenshots[i].height = 0;
         emu_savestates_screenshots[i].size = 0;
+    }
 
+    if (emu_is_empty())
+        return;
+
+    for (int i = 0; i < 5; i++)
+    {
         const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
             config_emulator.savestates_path.c_str());
 
@@ -460,15 +506,13 @@ void update_savestates_data(void)
 
         if (emu_savestates[i].screenshot_size > 0)
         {
-            emu_savestates_screenshots[i].data =
-                new (std::nothrow) u8[emu_savestates[i].screenshot_size];
+            emu_savestates_screenshots[i].data = new (std::nothrow) u8[emu_savestates[i].screenshot_size];
 
             if (!IsValidPointer(emu_savestates_screenshots[i].data))
                 continue;
 
             emu_savestates_screenshots[i].size = emu_savestates[i].screenshot_size;
-            geartowns->GetSaveStateScreenshot(i + 1, dir,
-                &emu_savestates_screenshots[i]);
+            geartowns->GetSaveStateScreenshot(i + 1, dir, &emu_savestates_screenshots[i]);
         }
     }
 }
@@ -506,8 +550,7 @@ void emu_get_info(char* info, int buffer_size)
 
     Media* media = geartowns->GetMedia();
     Firmware* firmware = geartowns->GetFirmware();
-    snprintf(info, (size_t)buffer_size,
-        "File Name: %s\nPath: %s\nSize: %d bytes\nCRC: %08X\nFirmware Ready: %s",
+    snprintf(info, (size_t)buffer_size, "File Name: %s\nPath: %s\nSize: %d bytes\nCRC: %08X\nFirmware Ready: %s",
         media->GetFileName(), media->GetFilePath(), media->GetSize(), media->GetCRC(),
         firmware->IsReady() ? "Yes" : "No");
 }
@@ -519,17 +562,36 @@ GeartownsCore* emu_get_core(void)
 
 void emu_debug_step_over(void)
 {
-    emu_debug_command = Debug_Command_Step;
+    if (!IsValidPointer(geartowns))
+        return;
+
+    emu_debug_command = Debug_Command_StepOver;
+    emu_resume();
 }
 
 void emu_debug_step_into(void)
 {
     emu_debug_command = Debug_Command_Step;
+    emu_resume();
 }
 
 void emu_debug_step_out(void)
 {
-    emu_debug_command = Debug_Command_Step;
+    if (!IsValidPointer(geartowns))
+        return;
+
+    I386* cpu = geartowns->GetI386();
+    const std::vector<I386_CallStackEntry>& call_stack = cpu->GetDisassemblerCallStack();
+
+    if (!call_stack.empty())
+    {
+        cpu->AddRunToBreakpoint(call_stack.back().back_linear);
+        emu_debug_command = Debug_Command_Continue;
+    }
+    else
+        emu_debug_command = Debug_Command_Step;
+
+    emu_resume();
 }
 
 void emu_debug_step_frame(void)
@@ -539,21 +601,29 @@ void emu_debug_step_frame(void)
 
 void emu_debug_step_frames(int frames)
 {
-    if (frames <= 0)
-        return;
+    if (frames < 1)
+        frames = 1;
 
-    emu_debug_step_frames_pending = frames;
+    emu_debug_step_frames_pending += frames;
     emu_debug_command = Debug_Command_StepFrame;
+    emu_resume();
 }
 
 void emu_debug_break(void)
 {
-    emu_debug_command = Debug_Command_None;
+    emu_resume();
+    emu_debug_step_frames_pending = 0;
+
+    if (emu_debug_command == Debug_Command_Continue || emu_debug_command == Debug_Command_StepFrame)
+        emu_debug_command = Debug_Command_Step;
+    else
+        emu_debug_command = Debug_Command_None;
 }
 
 void emu_debug_continue(void)
 {
     emu_debug_command = Debug_Command_Continue;
+    emu_resume();
 }
 
 void emu_set_disassembler_syntax(int syntax)
@@ -577,16 +647,15 @@ GT_Controller_Type emu_get_pad_type(GT_Controllers controller)
 
 bool emu_save_screenshot(const char* file_path)
 {
-    if (!IsValidPointer(file_path) || file_path[0] == '\0' ||
-        !IsValidPointer(emu_frame_buffer))
+    if (!IsValidPointer(file_path) || file_path[0] == '\0' || !IsValidPointer(emu_frame_buffer))
     {
         return false;
     }
 
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
-    int result = stbi_write_png(file_path, runtime.screen_width, runtime.screen_height,
-        4, emu_frame_buffer, runtime.screen_width * 4);
+    int result = stbi_write_png(file_path, runtime.screen_width, runtime.screen_height, 4, emu_frame_buffer,
+        runtime.screen_width * 4);
 
     if (result != 0)
         Log("Screenshot saved to %s", file_path);
@@ -605,8 +674,8 @@ int emu_get_screenshot_png(unsigned char** out_buffer)
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
     int size = 0;
-    *out_buffer = stbi_write_png_to_mem(emu_frame_buffer, runtime.screen_width * 4,
-        runtime.screen_width, runtime.screen_height, 4, &size);
+    *out_buffer = stbi_write_png_to_mem(emu_frame_buffer, runtime.screen_width * 4, runtime.screen_width,
+        runtime.screen_height, 4, &size);
     return size;
 }
 
@@ -675,8 +744,7 @@ static void load_media_thread_func(void)
 
 static void reset_buffers(void)
 {
-    size_t frame_buffer_size = (size_t)GT_MAX_FRAME_BUFFER_WIDTH *
-        GT_MAX_FRAME_BUFFER_HEIGHT * 4;
+    size_t frame_buffer_size = (size_t)GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4;
     memset(emu_frame_buffer, 0, frame_buffer_size);
     memset(audio_buffer, 0, GT_AUDIO_BUFFER_SIZE * sizeof(s16));
 }
@@ -711,8 +779,7 @@ static int get_rewind_pop_budget(void)
         return 0;
     }
 
-    double elapsed = (double)(now - rewind_last_counter) /
-        (double)SDL_GetPerformanceFrequency();
+    double elapsed = (double)(now - rewind_last_counter) / (double)SDL_GetPerformanceFrequency();
     rewind_last_counter = now;
 
     if (elapsed < 0.0)
@@ -721,14 +788,15 @@ static int get_rewind_pop_budget(void)
         elapsed = 0.25;
 
     int frames_per_snapshot = rewind_get_frames_per_snapshot();
+
     if (frames_per_snapshot < 1)
         frames_per_snapshot = 1;
 
-    double snapshots_per_second = (60.0 * (double)config_rewind.speed) /
-        (double)frames_per_snapshot;
+    double snapshots_per_second = (60.0 * (double)config_rewind.speed) / (double)frames_per_snapshot;
     rewind_pop_accumulator += elapsed * snapshots_per_second;
 
     int to_pop = (int)rewind_pop_accumulator;
+
     if (to_pop > 0)
         rewind_pop_accumulator -= (double)to_pop;
 

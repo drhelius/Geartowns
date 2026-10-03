@@ -54,5 +54,10 @@ INLINE Memory* GeartownsCore::GetMemory()
 
 INLINE I386* GeartownsCore::GetI386()
 {
-    return m_cpu;
+    return m_i386;
+}
+
+INLINE TownsIO* GeartownsCore::GetIO()
+{
+    return m_towns_io;
 }

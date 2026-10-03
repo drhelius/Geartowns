@@ -28,6 +28,7 @@
 #include "media.h"
 #include "memory.h"
 #include "i386.h"
+#include "towns_io.h"
 
 GeartownsCore::GeartownsCore()
 {
@@ -36,8 +37,10 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_input);
     InitPointer(m_media);
     InitPointer(m_memory);
-    InitPointer(m_cpu);
+    InitPointer(m_i386);
+    InitPointer(m_towns_io);
     InitPointer(m_frame_buffer);
+
     m_paused = false;
     m_pixel_format = GT_PIXEL_RGBA8888;
 }
@@ -47,7 +50,8 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_audio);
     SafeDelete(m_input);
     SafeDelete(m_media);
-    SafeDelete(m_cpu);
+    SafeDelete(m_i386);
+    SafeDelete(m_towns_io);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
 }
@@ -58,41 +62,146 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
 
     if (!IsValidPointer(m_audio))
         m_audio = new Audio();
+
     if (!IsValidPointer(m_firmware))
         m_firmware = new Firmware();
+
     if (!IsValidPointer(m_input))
         m_input = new Input();
+
     if (!IsValidPointer(m_media))
         m_media = new Media();
+
     if (!IsValidPointer(m_memory))
         m_memory = new Memory();
-    if (!IsValidPointer(m_cpu))
-        m_cpu = new I386();
+
+    if (!IsValidPointer(m_i386))
+        m_i386 = new I386();
+
+    if (!IsValidPointer(m_towns_io))
+        m_towns_io = new TownsIO();
 
     m_firmware->Init();
     m_memory->Init();
-    m_cpu->Init(m_memory);
+    m_towns_io->Init();
+    m_i386->Init(m_memory, m_towns_io);
     m_audio->Init();
     m_input->Init();
     m_media->Init();
     Reset();
 }
 
-GT_Run_Result GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer,
-    int* sample_count, bool render)
+GT_Run_Result GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, bool render)
+{
+    return RunToFrameTemplate<false>(frame_buffer, sample_buffer, sample_count, NULL, render);
+}
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+GT_Run_Result GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
+    bool render)
+{
+    return RunToFrameTemplate<true>(frame_buffer, sample_buffer, sample_count, debug, render);
+}
+#endif
+
+template<bool debugger>
+GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count,
+    GT_Debug_Run* debug, bool render)
 {
     m_frame_buffer = frame_buffer;
     UNUSED(render);
+
+    if (sample_count != NULL)
+        *sample_count = 0;
+
+    if (m_paused)
+        return GT_RUN_PAUSED;
+
+    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
+        return GT_RUN_NOT_READY;
+
+    u64 elapsed_clocks = 0;
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (debugger && IsValidPointer(debug))
+    {
+        debug->stopped = false;
+        debug->breakpoint_hit = false;
+
+        while (elapsed_clocks < GT_CPU_CLOCKS_PER_FRAME)
+        {
+            I386_Debug_State debug_state;
+            m_i386->CopyDebugState(debug_state);
+            m_i386->Disassemble(debug_state.eip);
+
+            if (m_i386->CheckDebuggerBreakpoints(debug->stop_on_breakpoint, debug->stop_on_run_to_breakpoint))
+            {
+                debug->stopped = true;
+                debug->breakpoint_hit = true;
+                break;
+            }
+
+            I386_State before;
+            m_i386->CopyState(before);
+
+            GT_Bus_Access_Context context = {};
+            context.origin = GT_BUS_ORIGIN_CPU;
+            m_i386->RunInstruction(context);
+
+            I386_Run_Result result = m_i386->GetStepInfo();
+            u32 call_return_linear = 0;
+            bool call = m_i386->DebugInstructionCompleted(before, result, &call_return_linear);
+
+            if (debug->step_over)
+            {
+                debug->step_over = false;
+                debug->step_debugger = !call;
+
+                if (call)
+                    m_i386->AddRunToBreakpoint(call_return_linear);
+            }
+
+            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
+            elapsed_clocks += step_clocks;
+            m_audio->Clock(step_clocks);
+
+            if (debug->step_debugger || result.steps == 0 || m_i386->Shutdown())
+            {
+                debug->stopped = true;
+                break;
+            }
+        }
+    }
+    else
+#else
+    UNUSED(debug);
+#endif
+    {
+        while (elapsed_clocks < GT_CPU_CLOCKS_PER_FRAME)
+        {
+            GT_Bus_Access_Context context = {};
+            context.origin = GT_BUS_ORIGIN_CPU;
+
+            u32 budget = (u32)(GT_CPU_CLOCKS_PER_FRAME - elapsed_clocks);
+            I386_Run_Result result = m_i386->RunFor(budget, context, false, false);
+
+            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
+            elapsed_clocks += step_clocks;
+            m_audio->Clock(step_clocks);
+
+            if (result.steps == 0 || m_i386->Shutdown())
+                break;
+        }
+    }
+
+    // Debugger memory views refresh once per executed frame or debugger step
+    if (elapsed_clocks != 0)
+        m_memory->InvalidateDebugSnapshot();
 
     if (IsValidPointer(m_audio))
         m_audio->EndFrame(sample_buffer, sample_count);
     else if (sample_count != NULL)
         *sample_count = 0;
-
-    if (m_paused)
-        return GT_RUN_PAUSED;
-    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
-        return GT_RUN_NOT_READY;
 
     return GT_RUN_FRAME_READY;
 }
@@ -102,6 +211,11 @@ bool GeartownsCore::LoadBios(const char* directory_path)
     if (!IsValidPointer(m_firmware) || !m_firmware->LoadDirectory(directory_path))
         return false;
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (IsValidPointer(m_i386))
+        m_i386->ResetDisassembler();
+#endif
+
     Reset();
     return true;
 }
@@ -110,6 +224,11 @@ void GeartownsCore::UnloadBios()
 {
     if (IsValidPointer(m_firmware))
         m_firmware->Unload();
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (IsValidPointer(m_i386))
+        m_i386->ResetDisassembler();
+#endif
 }
 
 bool GeartownsCore::LoadMedia(const char* file_path)
@@ -157,6 +276,7 @@ bool GeartownsCore::SaveState(const char* path, int index, bool screenshot)
     }
 
     size_t size = 0;
+
     if (!SaveState(stream, size, screenshot))
     {
         stream.close();
@@ -191,11 +311,13 @@ bool GeartownsCore::SaveState(u8* buffer, size_t& size, bool screenshot)
     if (!IsValidPointer(buffer))
     {
         stringstream stream;
+
         if (!SaveState(stream, size, screenshot))
         {
             Error("Failed to save state to stream to calculate size");
             return false;
         }
+
         return true;
     }
 
@@ -232,6 +354,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     Debug("Serializing save state...");
 
+    m_i386->SaveState(stream);
     m_audio->SaveState(stream);
     m_input->SaveState(stream);
 
@@ -284,6 +407,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 #endif
 
     std::streampos position = stream.tellp();
+
     if (position == std::streampos(-1))
     {
         Error("Failed to calculate save state size");
@@ -374,6 +498,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
     size_t size = static_cast<size_t>(stream.tellg());
 
     GT_SaveState_Header desktop_header = {};
+
     if (size >= sizeof(desktop_header))
     {
         stream.seekg(size - sizeof(desktop_header), ios::beg);
@@ -408,7 +533,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
         return false;
     }
 
-    if (header.version < GT_SAVESTATE_MIN_VERSION || header.version > GT_SAVESTATE_VERSION)
+    if (header.version != GT_SAVESTATE_VERSION)
     {
         Error("Invalid save state version: %u", header.version);
         return false;
@@ -442,6 +567,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
 
     Debug("Unserializing save state...");
 
+    m_i386->LoadState(stream);
     m_audio->LoadState(stream);
     m_input->LoadState(stream);
 
@@ -511,8 +637,7 @@ bool GeartownsCore::GetSaveStateHeader(int index, const char* path, GT_SaveState
     return true;
 }
 
-bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path,
-    GT_SaveState_Screenshot* screenshot)
+bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveState_Screenshot* screenshot)
 {
     using namespace std;
 
@@ -536,6 +661,7 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path,
     }
 
     GT_SaveState_Header header;
+
     if (!GetSaveStateHeader(index, path, &header))
     {
         Error("Invalid save state header");
@@ -631,10 +757,43 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_memory))
         m_memory->Reset();
-    if (IsValidPointer(m_cpu))
-        m_cpu->Reset();
+
+    if (IsValidPointer(m_towns_io))
+        m_towns_io->Reset();
+
+    InitMemoryMap();
+
+    if (IsValidPointer(m_i386))
+        m_i386->Reset();
+
     if (IsValidPointer(m_audio))
         m_audio->Reset();
+
     if (IsValidPointer(m_input))
         m_input->Reset();
+}
+
+void GeartownsCore::InitMemoryMap()
+{
+    if (!IsValidPointer(m_memory) || !IsValidPointer(m_firmware) || !m_firmware->IsReady())
+        return;
+
+    u32 rom_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED;
+    u32 ram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_EXECUTABLE |
+        GT_DEBUG_REGION_MAPPED;
+    const u8* system_rom = m_firmware->GetSystemRom();
+    const u8* boot_rom = system_rom + GT_FIRMWARE_SYSTEM_SIZE - GT_FIRMWARE_SYSTEM_BOOT_SIZE;
+    u8* main_ram = m_memory->GetMainRAM();
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM, "System ROM", system_rom, NULL,
+        GT_FIRMWARE_SYSTEM_SIZE, 0xFFFC0000U, rom_flags))
+        Error("Unable to map the system ROM");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM_LOW_ALIAS, "System ROM (low boot window)", boot_rom,
+        NULL, GT_FIRMWARE_SYSTEM_BOOT_SIZE, 0x000F8000U, rom_flags))
+        Error("Unable to map the low system ROM alias");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_MAIN_RAM, "Main RAM", main_ram, main_ram, GT_MAIN_RAM_SIZE, 0,
+        ram_flags))
+        Error("Unable to map main RAM");
 }

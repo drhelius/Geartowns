@@ -29,23 +29,41 @@ class I386;
 class Input;
 class Media;
 class Memory;
+class TownsIO;
 
 class GeartownsCore
 {
 public:
+    struct GT_Debug_Run
+    {
+        bool step_debugger;
+        bool step_over;
+        bool stop_on_breakpoint;
+        bool stop_on_run_to_breakpoint;
+        bool stopped;
+        bool breakpoint_hit;
+    };
+
+public:
     GeartownsCore();
     ~GeartownsCore();
     void Init(GT_Pixel_Format pixel_format = GT_PIXEL_RGBA8888);
-    GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count,
+    GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, bool render = true);
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
         bool render = true);
+#endif
+
     bool LoadBios(const char* directory_path);
     void UnloadBios();
     bool LoadMedia(const char* file_path);
     void ResetMedia();
+
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
     void Pause(bool paused);
     bool IsPaused();
+
     bool SaveState(const char* path = NULL, int index = -1, bool screenshot = false);
     bool SaveState(u8* buffer, size_t& size, bool screenshot = false);
     bool GetMaxSaveStateSize(size_t& size);
@@ -53,17 +71,25 @@ public:
     bool LoadState(const u8* buffer, size_t size);
     bool GetSaveStateHeader(int index, const char* path, GT_SaveState_Header* header);
     bool GetSaveStateScreenshot(int index, const char* path, GT_SaveState_Screenshot* screenshot);
+
     void ResetSound();
     void GetRuntimeInfo(GT_Runtime_Info& runtime_info);
+
     Firmware* GetFirmware();
     Media* GetMedia();
     Audio* GetAudio();
     Input* GetInput();
     Memory* GetMemory();
     I386* GetI386();
+    TownsIO* GetIO();
 
 private:
+    template<bool debugger>
+    GT_Run_Result RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
+        bool render);
     void Reset();
+    void InitMemoryMap();
+
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot);
     bool LoadState(std::istream& stream);
     std::string GetSaveStatePath(const char* path, int index);
@@ -74,9 +100,12 @@ private:
     Input* m_input;
     Media* m_media;
     Memory* m_memory;
-    I386* m_cpu;
+    I386* m_i386;
+    TownsIO* m_towns_io;
+
     bool m_paused;
     GT_Pixel_Format m_pixel_format;
+
     u8* m_frame_buffer;
 };
 

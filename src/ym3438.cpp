@@ -132,7 +132,7 @@ void YM3438::Init()
 void YM3438::ResetOperator(YM3438_Operator& op)
 {
     memset(&op, 0, sizeof(op));
-    op.envelope = YM3438_ENVELOPE_MAX;
+    op.envelope = k_ym3438_envelope_max;
     op.state = YM3438_ENVELOPE_RELEASE;
 }
 
@@ -212,8 +212,8 @@ void YM3438::Sample(s16& left, s16& right)
     s32 phase = (s32)m_native_cycle;
     s32 left_delta = m_left_sample - m_previous_left_sample;
     s32 right_delta = m_right_sample - m_previous_right_sample;
-    left = (s16)(m_previous_left_sample + (left_delta * phase) / YM3438_NATIVE_SAMPLE_CYCLES);
-    right = (s16)(m_previous_right_sample + (right_delta * phase) / YM3438_NATIVE_SAMPLE_CYCLES);
+    left = (s16)(m_previous_left_sample + (left_delta * phase) / k_ym3438_native_sample_cycles);
+    right = (s16)(m_previous_right_sample + (right_delta * phase) / k_ym3438_native_sample_cycles);
 }
 
 void YM3438::RunCycles(u64 cycles)
@@ -223,9 +223,9 @@ void YM3438::RunCycles(u64 cycles)
     else
         m_busy_cycles = 0;
 
-    while (cycles >= YM3438_NATIVE_SAMPLE_CYCLES - m_native_cycle)
+    while (cycles >= k_ym3438_native_sample_cycles - m_native_cycle)
     {
-        cycles -= YM3438_NATIVE_SAMPLE_CYCLES - m_native_cycle;
+        cycles -= k_ym3438_native_sample_cycles - m_native_cycle;
         m_native_cycle = 0;
         m_previous_left_sample = m_left_sample;
         m_previous_right_sample = m_right_sample;
@@ -382,14 +382,14 @@ void YM3438::UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index
     bool key_event = op.key_on_pending != 0;
     op.key_on_pending = 0;
     bool repeat = HandleSSGEnvelope(op);
-    bool envelope_off = ssg_enabled ? op.envelope >= YM3438_SSG_ENVELOPE_MAX : op.envelope >= 0x3F0;
+    bool envelope_off = ssg_enabled ? op.envelope >= k_ym3438_ssg_envelope_max : op.envelope >= 0x3F0;
 
     // Key and SSG control above still run when the attenuation is stationary
     if (!repeat &&
         !key_event &&
         !(channel == 2 && m_csm_key_active) &&
         ((op.state == YM3438_ENVELOPE_SUSTAIN && op.key_on && op.sustain_rate == 0 && !envelope_off) ||
-         (op.state == YM3438_ENVELOPE_RELEASE && op.envelope == YM3438_ENVELOPE_MAX)))
+         (op.state == YM3438_ENVELOPE_RELEASE && op.envelope == k_ym3438_envelope_max)))
     {
         return;
     }
@@ -461,11 +461,11 @@ void YM3438::UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index
 
     if (!key_event && !repeat && !hold_up && old_state != YM3438_ENVELOPE_ATTACK && envelope_off)
     {
-        op.envelope = YM3438_ENVELOPE_MAX;
+        op.envelope = k_ym3438_envelope_max;
         op.state = YM3438_ENVELOPE_RELEASE;
     }
 
-    op.envelope = (u16)(((s32)op.envelope + change) & YM3438_ENVELOPE_MAX);
+    op.envelope = (u16)(((s32)op.envelope + change) & k_ym3438_envelope_max);
 }
 
 u8 YM3438::GetEnvelopeIncrement(u8 rate) const
@@ -535,7 +535,7 @@ u16 YM3438::GetEnvelopeOutput(const YM3438_Operator& op) const
 
     if ((op.ssg_envelope & 0x08) && op.key_on && (op.ssg_direction ^ ((op.ssg_envelope >> 2) & 0x01)))
     {
-        envelope = (YM3438_SSG_ENVELOPE_MAX - envelope) & YM3438_ENVELOPE_MAX;
+        envelope = (k_ym3438_ssg_envelope_max - envelope) & k_ym3438_envelope_max;
     }
 
     return envelope;
@@ -549,7 +549,7 @@ bool YM3438::HandleSSGEnvelope(YM3438_Operator& op)
         return false;
     }
 
-    if (!op.key_on || op.envelope < YM3438_SSG_ENVELOPE_MAX)
+    if (!op.key_on || op.envelope < k_ym3438_ssg_envelope_max)
         return false;
 
     u8 shape = op.ssg_envelope & 0x03;
@@ -594,7 +594,7 @@ void YM3438::SetKeyState(YM3438_Operator& op, bool key_on, int channel, int oper
     {
         if ((op.ssg_envelope & 0x08) && (op.ssg_direction ^ ((op.ssg_envelope >> 2) & 0x01)))
         {
-            op.envelope = (YM3438_SSG_ENVELOPE_MAX - op.envelope) & YM3438_ENVELOPE_MAX;
+            op.envelope = (k_ym3438_ssg_envelope_max - op.envelope) & k_ym3438_envelope_max;
         }
 
         op.key_on = 0;
@@ -646,7 +646,7 @@ s16 YM3438::CalculateChannel(int channel_index)
 
     for (int i = 0; i < YM3438_OPERATOR_COUNT; i++)
     {
-        if (channel.operators[i].key_on || channel.operators[i].envelope != YM3438_ENVELOPE_MAX)
+        if (channel.operators[i].key_on || channel.operators[i].envelope != k_ym3438_envelope_max)
         {
             silent = false;
             break;
@@ -754,7 +754,7 @@ s16 YM3438::CalculateChannel(int channel_index)
     for (int i = 0; i < YM3438_OPERATOR_COUNT; i++)
     {
         YM3438_Operator& op = channel.operators[i];
-        op.phase = (op.phase + op.phase_increment) & YM3438_PHASE_MASK;
+        op.phase = (op.phase + op.phase_increment) & k_ym3438_phase_mask;
     }
 
     output = CLAMP(output, -256, 255);
@@ -778,7 +778,7 @@ s16 YM3438::CalculateOperator(int channel_index, int operator_index, s32 modulat
     if (op.amplitude_modulation_enabled)
         attenuation += GetLFOAmplitude() >> k_ym3438_am_shift[channel.amplitude_modulation];
 
-    attenuation = MIN(attenuation, (u32)YM3438_ENVELOPE_MAX);
+    attenuation = MIN(attenuation, (u32)k_ym3438_envelope_max);
 
     // At this level even the largest exponential-table value shifts to zero
     if (attenuation >= 832)
@@ -857,7 +857,7 @@ u32 YM3438::CalculatePhaseIncrement(int channel_index, int operator_index) const
     else
         base_frequency *= op.multiple;
 
-    return base_frequency & YM3438_PHASE_MASK;
+    return base_frequency & k_ym3438_phase_mask;
 }
 
 void YM3438::GetOperatorFrequency(int channel_index, int operator_index, u16& f_number, u8& block, u8& key_code) const
@@ -915,7 +915,7 @@ void YM3438::Write(u8 port, u8 value)
         return;
     }
 
-    m_busy_cycles = YM3438_BUSY_CYCLES;
+    m_busy_cycles = k_ym3438_busy_cycles;
 
     // FM data uses the address latch's bank; mode data must be written through bank 0
     if ((port & 0x02) && m_address < 0x30)
@@ -1272,8 +1272,8 @@ void YM3438::SanitizeState()
     m_csm_key_active &= 0x01;
     m_envelope_counter &= 0x0FFF;
     m_envelope_divider %= 3;
-    m_native_cycle %= YM3438_NATIVE_SAMPLE_CYCLES;
-    m_busy_cycles = MIN(m_busy_cycles, (u32)YM3438_BUSY_CYCLES);
+    m_native_cycle %= k_ym3438_native_sample_cycles;
+    m_busy_cycles = MIN(m_busy_cycles, (u32)k_ym3438_busy_cycles);
     m_status &= 0x83;
 
     for (int channel = 0; channel < YM3438_CHANNEL_COUNT; channel++)
@@ -1302,8 +1302,8 @@ void YM3438::SanitizeState()
         for (int operator_index = 0; operator_index < YM3438_OPERATOR_COUNT; operator_index++)
         {
             YM3438_Operator& op = ch.operators[operator_index];
-            op.phase &= YM3438_PHASE_MASK;
-            op.envelope = MIN(op.envelope, (u16)YM3438_ENVELOPE_MAX);
+            op.phase &= k_ym3438_phase_mask;
+            op.envelope = MIN(op.envelope, (u16)k_ym3438_envelope_max);
 
             if (op.state > YM3438_ENVELOPE_RELEASE)
                 op.state = YM3438_ENVELOPE_RELEASE;

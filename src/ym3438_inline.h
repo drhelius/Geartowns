@@ -55,7 +55,7 @@ INLINE u64 YM3438::GetCyclesToTimerFlag() const
     if (samples == 0xFFFFFFFF)
         return 0xFFFFFFFFFFFFFFFFULL;
 
-    return ((u64)(samples - 1) * YM3438_NATIVE_SAMPLE_CYCLES) + (YM3438_NATIVE_SAMPLE_CYCLES - m_native_cycle);
+    return ((u64)(samples - 1) * k_ym3438_native_sample_cycles) + (k_ym3438_native_sample_cycles - m_native_cycle);
 }
 
 INLINE u16 YM3438::GetSelectedAddress() const

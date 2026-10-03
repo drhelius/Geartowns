@@ -23,6 +23,9 @@
 #include <iostream>
 #include "common.h"
 
+#define YM3438_CHANNEL_COUNT 6
+#define YM3438_OPERATOR_COUNT 4
+
 class StateSerializer;
 
 class YM3438
@@ -46,17 +49,6 @@ public:
     u8 GetRegister(u16 address) const;
 
 private:
-    enum
-    {
-        YM3438_CHANNEL_COUNT = 6,
-        YM3438_OPERATOR_COUNT = 4,
-        YM3438_NATIVE_SAMPLE_CYCLES = 144,
-        YM3438_BUSY_CYCLES = 192,
-        YM3438_PHASE_MASK = 0xFFFFF,
-        YM3438_ENVELOPE_MAX = 0x3FF,
-        YM3438_SSG_ENVELOPE_MAX = 0x200
-    };
-
     enum YM3438_Envelope_State
     {
         YM3438_ENVELOPE_ATTACK = 0,
@@ -208,6 +200,12 @@ private:
     s16 m_previous_left_sample;
     s16 m_previous_right_sample;
 };
+
+static const int k_ym3438_native_sample_cycles = 144;
+static const int k_ym3438_busy_cycles = 192;
+static const u32 k_ym3438_phase_mask = 0xFFFFF;
+static const int k_ym3438_envelope_max = 0x3FF;
+static const int k_ym3438_ssg_envelope_max = 0x200;
 
 #include "ym3438_inline.h"
 

@@ -33,21 +33,35 @@ public:
 
     void Pause();
     void Resume();
+    void StepInto();
+    void StepOver();
+    void StepOut();
+    void StepFrame();
     void Reset();
     json GetDebugStatus();
+    json SetBreakpoint(u32 address);
+    json SetBreakpointRange(u32 start_address, u32 end_address);
+    json RemoveBreakpoint(u32 address, u32 end_address);
+    json ListBreakpoints();
+    json GetDisassembly(u32 start_address, u32 end_address, bool resolve_symbols, bool detailed);
+    json ListSymbols();
+    json LookupSymbolByName(const std::string& name);
+    json LookupSymbolAtAddress(u32 address);
+    json ListCallStack();
     json GetScreenshot();
     json GetMediaInfo();
+    json LoadBios(const std::string& directory_path);
     json StartLoadMedia(const std::string& file_path);
     bool IsMediaLoading() const;
     json FinishLoadMedia(const std::string& file_path);
-    json ControllerButton(int player, const std::string& button,
-        const std::string& action);
+    json ControllerButton(int player, const std::string& button, const std::string& action);
     json GetInputState();
     void ClearControllerState();
 
 private:
     u16 ButtonMask(const std::string& button) const;
     void ApplyControllerState(int player);
+    std::string Hex32(u32 value) const;
 
 private:
     GeartownsCore* m_core;

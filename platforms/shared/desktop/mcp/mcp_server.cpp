@@ -22,15 +22,39 @@
 #include <sstream>
 #include <iomanip>
 #include <fstream>
+#include <stdlib.h>
 #include "log.h"
 
 bool g_mcp_router_enabled = false;
+
+static bool parse_hex_address(const std::string& text, u32& value)
+{
+    const char* begin = text.c_str();
+
+    if (begin[0] == '$')
+        begin++;
+    else if (begin[0] == '0' && (begin[1] == 'x' || begin[1] == 'X'))
+        begin += 2;
+
+    if (*begin == 0)
+        return false;
+
+    char* end = NULL;
+    unsigned long parsed = strtoul(begin, &end, 16);
+
+    if (end == begin || *end != 0 || parsed > 0xFFFFFFFFUL)
+        return false;
+
+    value = (u32)parsed;
+    return true;
+}
 
 void McpServer::ReaderLoop()
 {
     while (m_running.load())
     {
         std::string line;
+
         if (m_transport->recv(line))
         {
             if (!line.empty())
@@ -52,6 +76,7 @@ void McpServer::Run()
     while (m_running.load())
     {
         DebugResponse* resp = m_responseQueue.WaitAndPop();
+
         if (resp == NULL)
             break;
 
@@ -105,6 +130,7 @@ void McpServer::HandleLine(const std::string& line)
     {
         if (!m_transport->validate_protocol_version(""))
             return;
+
         SendError(json(), MCP_ERROR_PARSE, "Parse error: Invalid JSON");
         return;
     }
@@ -115,11 +141,13 @@ void McpServer::HandleLine(const std::string& line)
     {
         if (!m_transport->validate_protocol_version(""))
             return;
+
         SendError(json(), MCP_ERROR_INVALID_REQUEST, "Invalid Request: expected an object");
         return;
     }
 
     std::string method;
+
     if (request.contains("method") && request["method"].is_string())
         method = request["method"];
 
@@ -214,6 +242,7 @@ static bool ValidateInitializeParams(const json& params, std::string& error)
         error = "Missing required parameter 'protocolVersion'";
         return false;
     }
+
     if (!params["protocolVersion"].is_string())
     {
         error = "Parameter 'protocolVersion' must be a string";
@@ -225,6 +254,7 @@ static bool ValidateInitializeParams(const json& params, std::string& error)
         error = "Missing required parameter 'capabilities'";
         return false;
     }
+
     if (!params["capabilities"].is_object())
     {
         error = "Parameter 'capabilities' must be an object";
@@ -236,6 +266,7 @@ static bool ValidateInitializeParams(const json& params, std::string& error)
         error = "Missing required parameter 'clientInfo'";
         return false;
     }
+
     if (!params["clientInfo"].is_object())
     {
         error = "Parameter 'clientInfo' must be an object";
@@ -243,21 +274,25 @@ static bool ValidateInitializeParams(const json& params, std::string& error)
     }
 
     const json& client_info = params["clientInfo"];
+
     if (!client_info.contains("name"))
     {
         error = "Missing required parameter 'clientInfo.name'";
         return false;
     }
+
     if (!client_info["name"].is_string())
     {
         error = "Parameter 'clientInfo.name' must be a string";
         return false;
     }
+
     if (!client_info.contains("version"))
     {
         error = "Missing required parameter 'clientInfo.version'";
         return false;
     }
+
     if (!client_info["version"].is_string())
     {
         error = "Parameter 'clientInfo.version' must be a string";
@@ -278,6 +313,7 @@ void McpServer::HandleInitialize(const json& request)
     }
 
     std::string validation_error;
+
     if (!ValidateInitializeParams(request["params"], validation_error))
     {
         SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: " + validation_error);
@@ -297,14 +333,17 @@ void McpServer::HandleInitialize(const json& request)
         {"serverInfo", {
             {"name", "geartowns-mcp-server"},
             {"title", GT_TITLE " MCP Server"},
-            {"description", "Control the " GT_TITLE " FM Towns emulator through basic execution, media, screenshot, and controller tools."},
+            {"description", "Debug and control the " GT_TITLE
+                " FM Towns emulator: Intel 80386 stepping, execution breakpoints, disassembly, automatic symbols, "
+                "call stack, media, and input."},
             {"version", GT_VERSION}
         }}
     };
 
     response["result"]["instructions"] =
-        "Use this server to pause, continue, reset, load media or BIOS files, capture screenshots, "
-        "and inspect or update the two controller ports.";
+        "Use this server to step the Intel 80386 through the FM Towns BIOS, pause or continue, set "
+        "linear execution breakpoints, inspect Intel-syntax disassembly, automatic symbols and the "
+        "call stack, load firmware or media, capture screenshots, and control input.";
 
     if (g_mcp_router_enabled)
     {
@@ -349,6 +388,54 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "debug_step_into"},
+        {"title", "Step Into"},
+        {"description", "Step the next Intel 80386 instruction, entering calls."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "debug_step_over"},
+        {"title", "Step Over"},
+        {"description", "Step the next Intel 80386 instruction, running through calls."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "debug_step_out"},
+        {"title", "Step Out"},
+        {"description", "Run to the return address at the top of the debugger call stack."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "debug_step_frame"},
+        {"title", "Step Frame"},
+        {"description", "Run one complete frame with breakpoints active, then pause."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "debug_reset"},
         {"title", "Debug Reset"},
         {"description", "Reset the emulated FM Towns system."},
@@ -373,6 +460,138 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "set_breakpoint"},
+        {"title", "Set Execution Breakpoint"},
+        {"description", "Add an Intel 80386 linear execution breakpoint."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"address", {{"type", "string"}, {"description", "Linear hex address, for example FFFFFFF0 or 0xFFFFFFF0."}}}
+            }},
+            {"required", json::array({"address"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "set_breakpoint_range"},
+        {"title", "Set Execution Breakpoint Range"},
+        {"description", "Add an inclusive Intel 80386 linear execution breakpoint range."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"start_address", {{"type", "string"}, {"description", "Start linear hex address."}}},
+                {"end_address", {{"type", "string"}, {"description", "End linear hex address."}}}
+            }},
+            {"required", json::array({"start_address", "end_address"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "remove_breakpoint"},
+        {"title", "Remove Execution Breakpoint"},
+        {"description", "Remove a matching single or range execution breakpoint."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"address", {{"type", "string"}, {"description", "Breakpoint start linear hex address."}}},
+                {"end_address", {{"type", "string"}, {"description", "Range end linear hex address, when removing a range."}}}
+            }},
+            {"required", json::array({"address"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "list_breakpoints"},
+        {"title", "List Execution Breakpoints"},
+        {"description", "List Intel 80386 linear execution breakpoints."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "get_disassembly"},
+        {"title", "Get Disassembly"},
+        {"description", "Passively decode Intel-syntax 80386 instructions in a linear address range "
+            "using the execution decoder."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"start_address", {{"type", "string"}, {"description", "Start linear hex address."}}},
+                {"end_address", {{"type", "string"}, {"description", "End linear hex address, inclusive."}}},
+                {"resolve_symbols", {{"type", "boolean"}, {"description", "Include automatic target symbols. Default false."}}},
+                {"detailed", {{"type", "boolean"}, {"description", "Include bytes and control-flow metadata. Default false."}}}
+            }},
+            {"required", json::array({"start_address", "end_address"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "list_symbols"},
+        {"title", "List Automatic Symbols"},
+        {"description", "List automatic call and branch target symbols discovered by the 80386 disassembler."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "lookup_symbol_by_name"},
+        {"title", "Lookup Automatic Symbol by Name"},
+        {"description", "Find an exact automatic symbol name."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"name", {{"type", "string"}, {"description", "Exact automatic symbol name."}}}
+            }},
+            {"required", json::array({"name"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "lookup_symbol_at_address"},
+        {"title", "Lookup Automatic Symbol at Address"},
+        {"description", "Find an automatic symbol at a linear address."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"address", {{"type", "string"}, {"description", "Linear hex address."}}}
+            }},
+            {"required", json::array({"address"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "get_call_stack"},
+        {"title", "Get Call Stack"},
+        {"description", "List the current Intel 80386 debugger call and interrupt stack."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "get_media_info"},
         {"title", "Get Media Info"},
         {"description", "Read loaded media metadata and firmware status."},
@@ -380,6 +599,21 @@ json McpServer::BuildToolList()
         {"inputSchema", {
             {"type", "object"},
             {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "load_bios"},
+        {"title", "Load BIOS"},
+        {"description", "Load the FM Towns firmware set from a local directory, reset, and stop at the reset vector."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", true}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"directory_path", {{"type", "string"}, {"description", "Absolute directory containing FMT_SYS.ROM and companion firmware files."}}}
+            }},
+            {"required", json::array({"directory_path"})},
             {"additionalProperties", false}
         }}
     });
@@ -493,7 +727,9 @@ void McpServer::AddRouterTools(json& tools)
     tools.push_back({
         {"name", "get_category_tools"},
         {"title", "Get Category Tools"},
-        {"description", "List routed tools in a category with compact descriptions. Use category names returned by list_tool_categories, then call get_tool_info for one tool's input schema."},
+        {"description", "List routed tools in a category with compact descriptions. "
+            "Use category names returned by list_tool_categories, "
+            "then call get_tool_info for one tool's input schema."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -508,7 +744,9 @@ void McpServer::AddRouterTools(json& tools)
     tools.push_back({
         {"name", "get_tool_info"},
         {"title", "Get Tool Info"},
-        {"description", "Return one MCP tool's title, description, category, direct/routed status, and real input schema. Use this after search_tools or get_category_tools before execute_tool."},
+        {"description", "Return one MCP tool's title, description, category, direct/routed status, "
+            "and real input schema. "
+            "Use this after search_tools or get_category_tools before execute_tool."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -523,7 +761,8 @@ void McpServer::AddRouterTools(json& tools)
     tools.push_back({
         {"name", "search_tools"},
         {"title", "Search Tools"},
-        {"description", "Search direct and routed MCP tools by keyword, category, title, description, and aliases. Use this when you know what you want to do but not the tool name."},
+        {"description", "Search direct and routed MCP tools by keyword, category, title, description, and aliases. "
+            "Use this when you know what you want to do but not the tool name."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -653,6 +892,7 @@ void McpServer::HandleToolsCall(const json& request)
     }
 
     std::string toolName = request["params"]["name"];
+
     if (request["params"].contains("arguments") && !request["params"]["arguments"].is_object())
     {
         SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: arguments must be an object");
@@ -670,6 +910,7 @@ void McpServer::HandleToolsCall(const json& request)
             SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: list_tool_categories takes no arguments");
             return;
         }
+
         SendToolResult(id, HandleRouterListCategories());
         return;
     }
@@ -681,6 +922,7 @@ void McpServer::HandleToolsCall(const json& request)
             SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: category must be a string");
             return;
         }
+
         SendToolResult(id, HandleRouterGetCategoryTools(arguments));
         return;
     }
@@ -692,6 +934,7 @@ void McpServer::HandleToolsCall(const json& request)
             SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: name must be a string");
             return;
         }
+
         SendToolResult(id, HandleRouterGetToolInfo(arguments));
         return;
     }
@@ -703,6 +946,7 @@ void McpServer::HandleToolsCall(const json& request)
             SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: query must be a string");
             return;
         }
+
         SendToolResult(id, HandleRouterSearchTools(arguments));
         return;
     }
@@ -737,6 +981,7 @@ void McpServer::HandleToolsCall(const json& request)
     }
 
     std::string validation_error;
+
     if (!m_toolRegistry.ValidateArguments(toolName, arguments, validation_error))
     {
         SendError(id, MCP_ERROR_INVALID_PARAMS, "Invalid params: " + validation_error);
@@ -747,6 +992,7 @@ void McpServer::HandleToolsCall(const json& request)
     cmd->requestId = id;
     cmd->toolName = toolName;
     cmd->arguments = arguments;
+
     if (!m_commandQueue.Push(cmd))
     {
         SafeDelete(cmd);
@@ -759,6 +1005,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
 {
     std::string normalizedTool = toolName;
     size_t pos = 0;
+
     while ((pos = normalizedTool.find('.', pos)) != std::string::npos)
     {
         normalizedTool[pos] = '_';
@@ -775,6 +1022,26 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         m_debugAdapter.Resume();
         return {{"success", true}};
     }
+    else if (normalizedTool == "debug_step_into")
+    {
+        m_debugAdapter.StepInto();
+        return {{"success", true}, {"pending", true}};
+    }
+    else if (normalizedTool == "debug_step_over")
+    {
+        m_debugAdapter.StepOver();
+        return {{"success", true}, {"pending", true}};
+    }
+    else if (normalizedTool == "debug_step_out")
+    {
+        m_debugAdapter.StepOut();
+        return {{"success", true}, {"pending", true}};
+    }
+    else if (normalizedTool == "debug_step_frame")
+    {
+        m_debugAdapter.StepFrame();
+        return {{"success", true}, {"pending", true}};
+    }
     else if (normalizedTool == "debug_reset")
     {
         m_debugAdapter.Reset();
@@ -784,8 +1051,87 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         return m_debugAdapter.GetDebugStatus();
     }
+    else if (normalizedTool == "set_breakpoint")
+    {
+        u32 address = 0;
+
+        if (!parse_hex_address(arguments["address"], address))
+            return {{"error", "Invalid address format"}};
+
+        return m_debugAdapter.SetBreakpoint(address);
+    }
+    else if (normalizedTool == "set_breakpoint_range")
+    {
+        u32 start_address = 0;
+        u32 end_address = 0;
+
+        if (!parse_hex_address(arguments["start_address"], start_address))
+            return {{"error", "Invalid start_address format"}};
+
+        if (!parse_hex_address(arguments["end_address"], end_address))
+            return {{"error", "Invalid end_address format"}};
+
+        if (start_address > end_address)
+            return {{"error", "start_address must be <= end_address"}};
+
+        return m_debugAdapter.SetBreakpointRange(start_address, end_address);
+    }
+    else if (normalizedTool == "remove_breakpoint")
+    {
+        u32 address = 0;
+        u32 end_address = 0;
+
+        if (!parse_hex_address(arguments["address"], address))
+            return {{"error", "Invalid address format"}};
+
+        if (arguments.contains("end_address") && !parse_hex_address(arguments["end_address"], end_address))
+            return {{"error", "Invalid end_address format"}};
+
+        return m_debugAdapter.RemoveBreakpoint(address, end_address);
+    }
+    else if (normalizedTool == "list_breakpoints")
+        return m_debugAdapter.ListBreakpoints();
+    else if (normalizedTool == "get_disassembly")
+    {
+        u32 start_address = 0;
+        u32 end_address = 0;
+
+        if (!parse_hex_address(arguments["start_address"], start_address))
+            return {{"error", "Invalid start_address format"}};
+
+        if (!parse_hex_address(arguments["end_address"], end_address))
+            return {{"error", "Invalid end_address format"}};
+
+        if (start_address > end_address)
+            return {{"error", "start_address must be <= end_address"}};
+
+        u64 range = (u64)end_address - start_address + 1;
+
+        if (range > 0x10000)
+            return {{"error", "Address range too large; maximum is 0x10000 bytes"}};
+
+        return m_debugAdapter.GetDisassembly(start_address, end_address,
+            arguments.value("resolve_symbols", false), arguments.value("detailed", false));
+    }
+    else if (normalizedTool == "list_symbols")
+        return m_debugAdapter.ListSymbols();
+    else if (normalizedTool == "lookup_symbol_by_name")
+        return m_debugAdapter.LookupSymbolByName(arguments["name"]);
+    else if (normalizedTool == "lookup_symbol_at_address")
+    {
+        u32 address = 0;
+
+        if (!parse_hex_address(arguments["address"], address))
+            return {{"error", "Invalid address format"}};
+
+        return m_debugAdapter.LookupSymbolAtAddress(address);
+    }
+    else if (normalizedTool == "get_call_stack")
+        return m_debugAdapter.ListCallStack();
     else if (normalizedTool == "get_media_info")
         return m_debugAdapter.GetMediaInfo();
+    else if (normalizedTool == "load_bios")
+        return m_debugAdapter.LoadBios(arguments["directory_path"]);
     else if (normalizedTool == "get_screenshot")
     {
         return m_debugAdapter.GetScreenshot();
@@ -826,8 +1172,7 @@ void McpServer::SendError(const json& id, int code, const std::string& message, 
     SendResponse(error);
 }
 
-void McpServer::RejectOrSendError(bool notification, const json& id, int code,
-    const std::string& message)
+void McpServer::RejectOrSendError(bool notification, const json& id, int code, const std::string& message)
 {
     if (notification)
         m_transport->reject_notification();
@@ -849,6 +1194,7 @@ static bool IsValidResourceName(const std::string& name)
     for (size_t i = 0; i < name.size(); i++)
     {
         unsigned char character = (unsigned char)name[i];
+
         if (character < 0x20 || character == 0x7F || character == '/' || character == '\\')
             return false;
     }
@@ -859,6 +1205,7 @@ static bool IsValidResourceName(const std::string& name)
 void McpServer::LoadResourcesFromCategory(const std::string& category, const std::string& tocPath)
 {
     std::ifstream file(tocPath);
+
     if (!file.is_open())
     {
         Log("[MCP] Warning: Resources TOC file not found: %s", tocPath.c_str());
@@ -896,6 +1243,7 @@ void McpServer::LoadResourcesFromCategory(const std::string& category, const std
     for (size_t i = 0; i < toc["toc"].size(); i++)
     {
         const json& item = toc["toc"][i];
+
         if (!item.is_object() || !item.contains("uri") || !item["uri"].is_string() ||
             !item.contains("title") || !item["title"].is_string() ||
             (item.contains("description") && !item["description"].is_string()) ||
@@ -906,6 +1254,7 @@ void McpServer::LoadResourcesFromCategory(const std::string& category, const std
         }
 
         std::string name = item["uri"].get<std::string>();
+
         if (!IsValidResourceName(name))
         {
             Log("[MCP] Warning: Invalid resource name in TOC file: %s", tocPath.c_str());
@@ -935,6 +1284,7 @@ bool McpServer::ReadFileContents(const std::string& filePath, std::string& conte
 {
     content.clear();
     std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+
     if (!file.is_open())
     {
         Log("[MCP] Warning: Failed to open resource file: %s", filePath.c_str());
@@ -942,6 +1292,7 @@ bool McpServer::ReadFileContents(const std::string& filePath, std::string& conte
     }
 
     std::streamoff file_size = file.tellg();
+
     if (file_size < 0)
     {
         Log("[MCP] Warning: Failed to read resource file: %s", filePath.c_str());
@@ -950,6 +1301,7 @@ bool McpServer::ReadFileContents(const std::string& filePath, std::string& conte
 
     content.resize((size_t)file_size);
     file.seekg(0, std::ios::beg);
+
     if (!file || (!content.empty() && !file.read(&content[0], (std::streamsize)content.size())))
     {
         Log("[MCP] Warning: Failed to read resource file: %s", filePath.c_str());
@@ -1001,6 +1353,7 @@ void McpServer::HandleResourcesRead(const json& request)
     std::string uri = request["params"]["uri"];
 
     std::map<std::string, ResourceInfo>::const_iterator it = m_resourceMap.find(uri);
+
     if (it == m_resourceMap.end())
     {
         SendError(id, MCP_ERROR_RESOURCE_NOT_FOUND, "Resource not found", {{"uri", uri}});

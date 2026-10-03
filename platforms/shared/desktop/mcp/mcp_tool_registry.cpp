@@ -58,6 +58,7 @@ static bool validate_json_schema(const json& value, const json& schema, const st
     if (schema.contains("type") && schema["type"].is_string())
     {
         std::string type = schema["type"].get<std::string>();
+
         if (!json_type_matches(value, type))
         {
             error = "Parameter '" + path + "' must be " + type + ", got " + json_type_name(value);
@@ -68,6 +69,7 @@ static bool validate_json_schema(const json& value, const json& schema, const st
     if (schema.contains("enum") && schema["enum"].is_array())
     {
         bool found = false;
+
         for (json::const_iterator it = schema["enum"].begin(); it != schema["enum"].end(); ++it)
         {
             if (value == *it)
@@ -87,11 +89,13 @@ static bool validate_json_schema(const json& value, const json& schema, const st
     if (value.is_number())
     {
         double number = value.get<double>();
+
         if (schema.contains("minimum") && schema["minimum"].is_number() && number < schema["minimum"].get<double>())
         {
             error = "Parameter '" + path + "' is below the minimum";
             return false;
         }
+
         if (schema.contains("maximum") && schema["maximum"].is_number() && number > schema["maximum"].get<double>())
         {
             error = "Parameter '" + path + "' is above the maximum";
@@ -101,22 +105,27 @@ static bool validate_json_schema(const json& value, const json& schema, const st
 
     if (value.is_array())
     {
-        if (schema.contains("minItems") && schema["minItems"].is_number_integer() && value.size() < schema["minItems"].get<size_t>())
+        if (schema.contains("minItems") && schema["minItems"].is_number_integer() &&
+            value.size() < schema["minItems"].get<size_t>())
         {
             error = "Parameter '" + path + "' has too few items";
             return false;
         }
-        if (schema.contains("maxItems") && schema["maxItems"].is_number_integer() && value.size() > schema["maxItems"].get<size_t>())
+
+        if (schema.contains("maxItems") && schema["maxItems"].is_number_integer() &&
+            value.size() > schema["maxItems"].get<size_t>())
         {
             error = "Parameter '" + path + "' has too many items";
             return false;
         }
+
         if (schema.contains("items") && schema["items"].is_object())
         {
             for (size_t i = 0; i < value.size(); i++)
             {
                 std::ostringstream item_path;
                 item_path << path << "[" << i << "]";
+
                 if (!validate_json_schema(value[i], schema["items"], item_path.str(), error))
                     return false;
             }
@@ -138,18 +147,21 @@ static bool validate_json_schema(const json& value, const json& schema, const st
         }
 
         const json* properties = NULL;
+
         if (schema.contains("properties") && schema["properties"].is_object())
             properties = &schema["properties"];
 
         for (json::const_iterator it = value.begin(); it != value.end(); ++it)
         {
             std::string child_path = json_path_child(path, it.key());
+
             if (properties && properties->contains(it.key()))
             {
                 if (!validate_json_schema(it.value(), (*properties)[it.key()], child_path, error))
                     return false;
             }
-            else if (schema.contains("additionalProperties") && schema["additionalProperties"].is_boolean() && !schema["additionalProperties"].get<bool>())
+            else if (schema.contains("additionalProperties") && schema["additionalProperties"].is_boolean() &&
+                !schema["additionalProperties"].get<bool>())
             {
                 error = "Unexpected parameter '" + child_path + "'";
                 return false;
@@ -184,6 +196,8 @@ struct McpToolCategoryTools
 static const McpToolCategory kMcpToolCategories[] =
 {
     {"execution", "Execution", "Pause, continue, reset, and inspect execution."},
+    {"breakpoints", "Breakpoints", "Manage Intel 80386 execution breakpoints."},
+    {"disassembly", "Disassembly", "Inspect Intel 80386 code, symbols, and call stack."},
     {"media", "Media", "Load BIOS or media files and inspect loaded media."},
     {"capture", "Capture", "Capture the current emulator screenshot."},
     {"input", "Input", "Inspect and control the two gamepad ports."},
@@ -192,12 +206,25 @@ static const McpToolCategory kMcpToolCategories[] =
 
 static const char* const kMcpExecutionTools[] =
 {
-    "debug_pause", "debug_continue", "debug_reset", "debug_get_status"
+    "debug_pause", "debug_continue", "debug_step_into", "debug_step_over",
+    "debug_step_out", "debug_step_frame", "debug_reset", "debug_get_status"
+};
+
+static const char* const kMcpBreakpointTools[] =
+{
+    "set_breakpoint", "set_breakpoint_range", "remove_breakpoint",
+    "list_breakpoints"
+};
+
+static const char* const kMcpDisassemblyTools[] =
+{
+    "get_disassembly", "list_symbols", "lookup_symbol_by_name",
+    "lookup_symbol_at_address", "get_call_stack"
 };
 
 static const char* const kMcpMediaTools[] =
 {
-    "load_media", "get_media_info"
+    "load_media", "load_bios", "get_media_info"
 };
 
 static const char* const kMcpCaptureTools[] =
@@ -213,6 +240,8 @@ static const char* const kMcpInputTools[] =
 static const McpToolCategoryTools kMcpToolCategoryTools[] =
 {
     {"execution", kMcpExecutionTools, MCP_ARRAY_COUNT(kMcpExecutionTools)},
+    {"breakpoints", kMcpBreakpointTools, MCP_ARRAY_COUNT(kMcpBreakpointTools)},
+    {"disassembly", kMcpDisassemblyTools, MCP_ARRAY_COUNT(kMcpDisassemblyTools)},
     {"media", kMcpMediaTools, MCP_ARRAY_COUNT(kMcpMediaTools)},
     {"capture", kMcpCaptureTools, MCP_ARRAY_COUNT(kMcpCaptureTools)},
     {"input", kMcpInputTools, MCP_ARRAY_COUNT(kMcpInputTools)}
@@ -270,6 +299,7 @@ bool McpToolRegistry::HasCategory(const std::string& category) const
 bool McpToolRegistry::ValidateArguments(const std::string& tool_name, const json& arguments, std::string& error) const
 {
     const json* tool = FindTool(tool_name);
+
     if (!tool)
     {
         error = "Unknown tool '" + tool_name + "'";
@@ -366,6 +396,7 @@ json McpToolRegistry::GetDirectTools() const
     for (json::const_iterator it = m_tools.begin(); it != m_tools.end(); ++it)
     {
         std::string name = (*it)["name"].get<std::string>();
+
         if (IsDirectToolName(name))
             tools.push_back(*it);
     }
@@ -502,15 +533,16 @@ bool McpToolRegistry::IsRouterToolName(const std::string& tool_name) const
     std::string name = NormalizeToolName(tool_name);
 
     return (name == "list_tool_categories") ||
-           (name == "get_category_tools") ||
-           (name == "get_tool_info") ||
-           (name == "search_tools") ||
-           (name == "execute_tool");
+        (name == "get_category_tools") ||
+        (name == "get_tool_info") ||
+        (name == "search_tools") ||
+        (name == "execute_tool");
 }
 
 std::string McpToolRegistry::NormalizeToolName(std::string tool_name) const
 {
     size_t pos = 0;
+
     while ((pos = tool_name.find('.', pos)) != std::string::npos)
     {
         tool_name[pos] = '_';
@@ -551,11 +583,17 @@ bool McpToolRegistry::IsDirectToolName(const std::string& tool_name) const
     std::string name = NormalizeToolName(tool_name);
 
     return (name == "load_media") ||
-           (name == "get_media_info") ||
-           (name == "debug_pause") ||
-           (name == "debug_continue") ||
-           (name == "get_screenshot") ||
-           (name == "controller_button");
+        (name == "load_bios") ||
+        (name == "get_media_info") ||
+        (name == "debug_pause") ||
+        (name == "debug_continue") ||
+        (name == "debug_step_into") ||
+        (name == "debug_step_over") ||
+        (name == "debug_step_out") ||
+        (name == "get_disassembly") ||
+        (name == "set_breakpoint") ||
+        (name == "get_screenshot") ||
+        (name == "controller_button");
 }
 
 std::string McpToolRegistry::ToolCategoryForName(const std::string& tool_name) const
@@ -590,6 +628,7 @@ const json* McpToolRegistry::FindTool(const std::string& tool_name) const
     for (json::const_iterator it = m_tools.begin(); it != m_tools.end(); ++it)
     {
         std::string name = (*it)["name"].get<std::string>();
+
         if (NormalizeToolName(name) == normalized_name)
             return &(*it);
     }

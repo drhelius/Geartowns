@@ -68,13 +68,11 @@ public:
         m_debug_adapter = new DebugAdapter(core);
     }
 
-    void SetTransportMode(McpTransportMode mode, int tcp_port = 7777,
-        const char* tcp_address = "127.0.0.1")
+    void SetTransportMode(McpTransportMode mode, int tcp_port = 7777, const char* tcp_address = "127.0.0.1")
     {
         m_transport_mode = mode;
         m_tcp_port = tcp_port;
-        m_tcp_address = IsValidPointer(tcp_address) && tcp_address[0] ?
-            tcp_address : "127.0.0.1";
+        m_tcp_address = IsValidPointer(tcp_address) && tcp_address[0] ? tcp_address : "127.0.0.1";
     }
 
     void Start()
@@ -83,6 +81,7 @@ public:
         {
             if (m_server->IsRunning())
                 return;
+
             SafeDelete(m_server);
         }
 
@@ -95,11 +94,11 @@ public:
         m_debug_adapter->ClearControllerState();
 
         McpTransportInterface* transport = NULL;
+
         if (m_transport_mode == MCP_TRANSPORT_TCP)
         {
             g_mcp_stdio_mode = false;
-            Log("[MCP] Starting HTTP transport on %s:%d", m_tcp_address.c_str(),
-                m_tcp_port);
+            Log("[MCP] Starting HTTP transport on %s:%d", m_tcp_address.c_str(), m_tcp_port);
             transport = new HttpTransport(m_tcp_address, m_tcp_port);
         }
         else
@@ -108,8 +107,7 @@ public:
             transport = new StdioTransport();
         }
 
-        m_server = new McpServer(transport, *m_debug_adapter, m_command_queue,
-            m_response_queue);
+        m_server = new McpServer(transport, *m_debug_adapter, m_command_queue, m_response_queue);
         m_server->Start();
     }
 
@@ -154,8 +152,8 @@ public:
         {
             if (m_pump_count >= m_delayed_releases[i].release_at_pump)
             {
-                m_debug_adapter->ControllerButton(m_delayed_releases[i].player,
-                    m_delayed_releases[i].button, "release");
+                m_debug_adapter->ControllerButton(m_delayed_releases[i].player, m_delayed_releases[i].button,
+                    "release");
                 m_delayed_releases.erase(m_delayed_releases.begin() + i);
             }
             else
@@ -169,8 +167,7 @@ public:
 
             DebugResponse* response = new DebugResponse();
             response->requestId = m_pending_media_load_request_id;
-            response->result =
-                m_debug_adapter->FinishLoadMedia(m_pending_media_load_file_path);
+            response->result = m_debug_adapter->FinishLoadMedia(m_pending_media_load_file_path);
             UpdateResponseError(response);
 
             m_pending_media_load = false;
@@ -179,6 +176,7 @@ public:
         }
 
         DebugCommand* command = NULL;
+
         while ((command = m_command_queue.Pop()) != NULL)
         {
             if (NormalizeToolName(command->toolName) == "load_media")
@@ -208,8 +206,7 @@ public:
 
             DebugResponse* response = new DebugResponse();
             response->requestId = command->requestId;
-            response->result = m_server->ExecuteCommand(command->toolName,
-                command->arguments);
+            response->result = m_server->ExecuteCommand(command->toolName, command->arguments);
             UpdateResponseError(response);
             HandleControllerSideEffects(response->result);
 
@@ -222,6 +219,7 @@ private:
     std::string NormalizeToolName(std::string tool_name) const
     {
         size_t position = 0;
+
         while ((position = tool_name.find('.', position)) != std::string::npos)
         {
             tool_name[position] = '_';
@@ -242,8 +240,7 @@ private:
 
     void HandleControllerSideEffects(json& result)
     {
-        if (!result.contains("__delayed_release") ||
-            result["__delayed_release"] != true)
+        if (!result.contains("__delayed_release") || result["__delayed_release"] != true)
         {
             return;
         }

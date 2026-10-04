@@ -68,6 +68,7 @@ static int current_screen_width = 0;
 static int current_screen_height = 0;
 static int current_width_scale = 1;
 static float current_aspect_ratio = 0.0f;
+static float current_fps = 60.0f;
 
 static float aspect_ratio = 0.0f;
 static bool allow_up_down = false;
@@ -237,6 +238,7 @@ void retro_deinit(void)
     current_width_scale = 1;
     current_aspect_ratio = 0.0f;
     aspect_ratio = 0.0f;
+    current_fps = 60.0f;
     libretro_supports_bitmasks = false;
 
     reset_controller_devices();
@@ -284,16 +286,28 @@ void retro_get_system_info(struct retro_system_info *info)
     info->valid_extensions = "d77|rdd|cue|chd|iso|bin|zip";
 }
 
-void retro_get_system_av_info(struct retro_system_av_info *info)
+static void get_system_av_info(struct retro_system_av_info* info)
 {
+    runtime_info.frame_time = 0.0f;
+    if (core)
+        core->GetRuntimeInfo(runtime_info);
+
     info->geometry.base_width   = runtime_info.screen_width;
     info->geometry.base_height  = runtime_info.screen_height;
     info->geometry.max_width    = MAX_SCREEN_WIDTH;
     info->geometry.max_height   = MAX_SCREEN_HEIGHT;
     info->geometry.aspect_ratio = aspect_ratio == 0.0f ?
         (float)runtime_info.screen_width / (float)runtime_info.screen_height / (float)runtime_info.width_scale : aspect_ratio;
-    info->timing.fps            = 60.0;
+    info->timing.fps            = runtime_info.frame_time > 0.0f ? 1000.0f / runtime_info.frame_time : 60.0f;
     info->timing.sample_rate    = GT_AUDIO_SAMPLE_RATE;
+}
+
+void retro_get_system_av_info(struct retro_system_av_info *info)
+{
+    get_system_av_info(info);
+    if (runtime_info.frame_time > 0.0f)
+        current_fps = (float)info->timing.fps;
+    info->timing.fps = current_fps;
 }
 
 void retro_run(void)
@@ -311,27 +325,31 @@ void retro_run(void)
     audio_sample_count = 0;
     core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count);
 
-    core->GetRuntimeInfo(runtime_info);
+    retro_system_av_info info;
+    get_system_av_info(&info);
+    bool fps_changed = fabsf((float)info.timing.fps - current_fps) > 0.1f;
+    bool geometry_changed = (runtime_info.screen_width != current_screen_width) ||
+                            (runtime_info.screen_height != current_screen_height) ||
+                            (runtime_info.width_scale != current_width_scale) ||
+                            (aspect_ratio != current_aspect_ratio);
 
-    if ((runtime_info.screen_width != current_screen_width) ||
-        (runtime_info.screen_height != current_screen_height) ||
-        (runtime_info.width_scale != current_width_scale) ||
-        (aspect_ratio != current_aspect_ratio))
+    if (fps_changed || geometry_changed)
     {
         current_screen_width = runtime_info.screen_width;
         current_screen_height = runtime_info.screen_height;
         current_width_scale = runtime_info.width_scale;
         current_aspect_ratio = aspect_ratio;
+        current_fps = (float)info.timing.fps;
 
-        retro_system_av_info info;
-        info.geometry.base_width = runtime_info.screen_width;
-        info.geometry.base_height = runtime_info.screen_height;
-        info.geometry.max_width = MAX_SCREEN_WIDTH;
-        info.geometry.max_height = MAX_SCREEN_HEIGHT;
-        info.geometry.aspect_ratio = aspect_ratio == 0.0f ?
-            ((float)runtime_info.screen_width / (float)runtime_info.width_scale) / (float)runtime_info.screen_height : aspect_ratio;
-
-        environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &info.geometry);
+        if (fps_changed)
+        {
+            log_cb(RETRO_LOG_INFO, "Refresh rate changed to %.2f Hz\n", current_fps);
+            environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+        }
+        else
+        {
+            environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &info.geometry);
+        }
     }
 
     video_cb(frame_buffer, runtime_info.screen_width, runtime_info.screen_height, runtime_info.screen_width * sizeof(u16));
@@ -389,6 +407,7 @@ void retro_unload_game(void)
         core->GetMedia()->Reset();
 
     retro_game_path[0] = 0;
+    current_fps = 60.0f;
 
     if (frame_buffer)
         memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16));

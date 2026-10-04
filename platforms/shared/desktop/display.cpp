@@ -37,6 +37,7 @@ static double content_frame_rate = 60.0;
 static double vsync_frame_accumulator = 0.0;
 static int last_vsync_state = -1;
 static bool multi_monitor_mixed_refresh = false;
+static bool last_vsync_forced_off = false;
 static bool fixed_vsync_fallback_logged = false;
 static bool pending_gl_context_recreate = false;
 
@@ -75,6 +76,13 @@ void display_frame_throttle(void)
 
         float min = 16.666f;
 
+        if (!emu_is_audio_open())
+        {
+            GT_Runtime_Info runtime;
+            emu_get_runtime(runtime);
+            min = runtime.frame_time;
+        }
+
         if (config_emulator.ffwd)
         {
             switch (config_emulator.ffwd_speed)
@@ -82,7 +90,7 @@ void display_frame_throttle(void)
                 case 0:
                     min = 16.666f / 1.5f;
                     break;
-                case 1: 
+                case 1:
                     min = 16.666f / 2.0f;
                     break;
                 case 2:
@@ -113,41 +121,103 @@ bool display_should_run_emu_frame(void)
         && !emu_is_empty() && !emu_is_paused()
         && !emu_is_debug_idle() && emu_is_audio_open() && !config_emulator.ffwd)
     {
-        if (!display_fixed_vsync_supported() || content_frame_rate + 0.000001 >= monitor_refresh_rate)
-            return true;
-
-        vsync_frame_accumulator += display_get_pacing_frame_rate();
-
-        if (vsync_frame_accumulator + 0.000001 >= monitor_refresh_rate)
+        if (display_should_use_vsync())
         {
-            vsync_frame_accumulator -= monitor_refresh_rate;
-            if (vsync_frame_accumulator < 0.0)
-                vsync_frame_accumulator = 0.0;
-            return true;
-        }
+            if (!display_fixed_vsync_supported() || content_frame_rate + 0.000001 >= monitor_refresh_rate)
+                return true;
 
-        return false;
+            vsync_frame_accumulator += display_get_pacing_frame_rate();
+
+            if (vsync_frame_accumulator + 0.000001 >= monitor_refresh_rate)
+            {
+                vsync_frame_accumulator -= monitor_refresh_rate;
+                if (vsync_frame_accumulator < 0.0)
+                    vsync_frame_accumulator = 0.0;
+                return true;
+            }
+
+            return false;
+        }
     }
 
     return true;
 }
 
+bool display_should_use_vsync(void)
+{
+    if (display_is_vsync_forced_off())
+        return false;
+
+    if (config_video.sync_mode == config_VideoSync_Disabled)
+        return false;
+
+    if (emu_is_empty())
+        return false;
+
+    if (display_is_vrr_enabled())
+        return true;
+
+    display_update_content_frame_rate();
+    if (!display_fixed_vsync_supported())
+        return false;
+
+    int emu_fps = (int)content_frame_rate;
+    return emu_fps >= 58 && emu_fps <= 62;
+}
+
 void display_use_vsync_if_enabled(void)
 {
     display_update_frame_pacing();
-
-    bool effective = config_video.sync_mode != config_VideoSync_Disabled && !display_is_vsync_forced_off();
-
-    if (config_video.sync_mode == config_VideoSync_Fixed && !display_fixed_vsync_supported())
-        effective = false;
-
-    display_set_swap_interval(effective);
+    display_set_swap_interval(display_should_use_vsync());
 }
 
 void display_disable_vsync(void)
 {
     display_set_swap_interval(false);
     display_update_frame_pacing();
+}
+
+void display_update_vsync_state(void)
+{
+    bool forced_off = display_is_vsync_forced_off();
+
+    if (forced_off)
+    {
+        if (!last_vsync_forced_off || last_vsync_state != 0)
+        {
+            display_set_swap_interval(false);
+            last_vsync_forced_off = true;
+            Debug("Vsync forced off: multi-viewport with mixed refresh rate monitors");
+        }
+        return;
+    }
+
+    if (last_vsync_forced_off)
+    {
+        last_vsync_forced_off = false;
+
+        if (pending_gl_context_recreate && config_video.sync_mode != config_VideoSync_Disabled)
+        {
+            pending_gl_context_recreate = false;
+            display_recreate_gl_context();
+        }
+        else
+        {
+            display_use_vsync_if_enabled();
+        }
+        return;
+    }
+
+    if (config_video.sync_mode != config_VideoSync_Disabled && !config_emulator.ffwd && !emu_is_empty())
+    {
+        int current_state = display_should_use_vsync() ? 1 : 0;
+
+        if (current_state != last_vsync_state)
+        {
+            display_set_swap_interval(current_state != 0);
+            Debug("Game FPS changed, vsync %s", current_state ? "enabled" : "disabled");
+        }
+    }
 }
 
 void display_update_frame_pacing(void)
@@ -318,8 +388,9 @@ static bool display_update_content_frame_rate(void)
     if (frame_rate >= content_frame_rate - 0.000001 && frame_rate <= content_frame_rate + 0.000001)
         return false;
 
+    // CRTC reprogramming can change the frame rate, so preserve the elapsed phase.
+    vsync_frame_accumulator *= frame_rate / content_frame_rate;
     content_frame_rate = frame_rate;
-    display_reset_vsync_accumulator();
     return true;
 }
 

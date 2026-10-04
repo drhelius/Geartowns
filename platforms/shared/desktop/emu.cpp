@@ -534,7 +534,13 @@ void emu_get_runtime(GT_Runtime_Info& runtime)
 
 double emu_get_frame_rate(void)
 {
-    return 60.0;
+    if (!IsValidPointer(geartowns))
+        return 60.0;
+
+    GT_Runtime_Info runtime;
+    emu_get_runtime(runtime);
+
+    return runtime.frame_time > 0.0f ? 1000.0 / runtime.frame_time : 60.0;
 }
 
 void emu_get_info(char* info, int buffer_size)

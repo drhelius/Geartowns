@@ -34,6 +34,8 @@ EXTERN void display_begin_frame(void);
 EXTERN void display_render(void);
 EXTERN void display_frame_throttle(void);
 EXTERN bool display_should_run_emu_frame(void);
+EXTERN bool display_should_use_vsync(void);
+EXTERN void display_update_vsync_state(void);
 EXTERN void display_use_vsync_if_enabled(void);
 EXTERN void display_disable_vsync(void);
 EXTERN void display_update_frame_pacing(void);

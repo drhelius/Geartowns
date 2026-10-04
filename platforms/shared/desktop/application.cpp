@@ -664,6 +664,8 @@ static void run_emulator(void)
     emu_update();
 
     events_reset_input();
+
+    display_update_vsync_state();
 }
 
 static void apply_window_settings(void)

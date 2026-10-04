@@ -29,6 +29,7 @@
 #include "system/memory.h"
 #include "i386/i386.h"
 #include "system/towns_io.h"
+#include "system/towns_pic.h"
 
 GeartownsCore::GeartownsCore()
 {
@@ -39,6 +40,7 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_memory);
     InitPointer(m_i386);
     InitPointer(m_towns_io);
+    InitPointer(m_pic);
     InitPointer(m_frame_buffer);
 
     m_paused = false;
@@ -52,6 +54,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_media);
     SafeDelete(m_i386);
     SafeDelete(m_towns_io);
+    SafeDelete(m_pic);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
 }
@@ -81,10 +84,14 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_towns_io))
         m_towns_io = new TownsIO();
 
+    if (!IsValidPointer(m_pic))
+        m_pic = new TownsPIC();
+
     m_firmware->Init();
     m_memory->Init();
     m_audio->Init();
-    m_towns_io->Init(m_audio);
+    m_pic->Init();
+    m_towns_io->Init(m_audio, m_pic);
     m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
     m_media->Init();
@@ -161,11 +168,17 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
                     m_i386->AddRunToBreakpoint(call_return_linear);
             }
 
-            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
+            u32 interrupt_clocks = 0;
+            bool interrupted = m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt();
+
+            if (interrupted)
+                interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+
+            u32 step_clocks = (u32)(result.clocks + interrupt_clocks + context.wait_clocks);
             elapsed_clocks += step_clocks;
             m_audio->Clock(step_clocks);
 
-            if (debug->step_debugger || result.steps == 0 || m_i386->Shutdown())
+            if (debug->step_debugger || (result.steps == 0 && !interrupted) || m_i386->Shutdown())
             {
                 debug->stopped = true;
                 break;
@@ -183,13 +196,19 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
             context.origin = GT_BUS_ORIGIN_CPU;
 
             u32 budget = (u32)(GT_CPU_CLOCKS_PER_FRAME - elapsed_clocks);
-            I386_Run_Result result = m_i386->RunFor(budget, context, false, false);
+            I386_Run_Result result = m_i386->RunFor(budget, context, false, m_pic->IsInterruptPending());
 
-            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
+            u32 interrupt_clocks = 0;
+            bool interrupted = m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt();
+
+            if (interrupted)
+                interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+
+            u32 step_clocks = (u32)(result.clocks + interrupt_clocks + context.wait_clocks);
             elapsed_clocks += step_clocks;
             m_audio->Clock(step_clocks);
 
-            if (result.steps == 0 || m_i386->Shutdown())
+            if ((result.steps == 0 && !interrupted) || m_i386->Shutdown())
                 break;
         }
     }
@@ -357,6 +376,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_i386->SaveState(stream);
     m_audio->SaveState(stream);
     m_input->SaveState(stream);
+    m_pic->SaveState(stream);
 
     if (stream.fail())
     {
@@ -570,6 +590,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
     m_i386->LoadState(stream);
     m_audio->LoadState(stream);
     m_input->LoadState(stream);
+    m_pic->LoadState(stream);
 
     if (stream.fail())
     {
@@ -760,6 +781,9 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_towns_io))
         m_towns_io->Reset();
+
+    if (IsValidPointer(m_pic))
+        m_pic->Reset();
 
     InitMemoryMap();
 

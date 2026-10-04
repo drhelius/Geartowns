@@ -555,7 +555,8 @@ private:
     void SanitizeState();
 
     u32 RunCheckedStep();
-    bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool interrupt_pending);
+    bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
+    bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
     void CopyStepException(I386_Run_Result& total) const;

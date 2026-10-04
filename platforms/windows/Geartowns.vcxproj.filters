@@ -151,6 +151,12 @@
     <ClCompile Include="..\..\src\system\towns_io.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\system\towns_pic.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\system\i8259.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\media\media.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -217,6 +223,10 @@
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_io.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_io_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_pic.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_pic_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\i8259.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\i8259_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\rf5c68.h"><Filter>src</Filter></ClInclude>

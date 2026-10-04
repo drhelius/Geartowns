@@ -30,6 +30,7 @@ class Input;
 class Media;
 class Memory;
 class TownsIO;
+class TownsPIC;
 
 class GeartownsCore
 {
@@ -82,6 +83,7 @@ public:
     Memory* GetMemory();
     I386* GetI386();
     TownsIO* GetIO();
+    TownsPIC* GetPIC();
 
 private:
     template<bool debugger>
@@ -102,6 +104,7 @@ private:
     Memory* m_memory;
     I386* m_i386;
     TownsIO* m_towns_io;
+    TownsPIC* m_pic;
 
     bool m_paused;
     GT_Pixel_Format m_pixel_format;

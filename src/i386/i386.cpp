@@ -324,7 +324,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
                 break;
             }
 
-            if (unlikely(interrupt_pending))
+            if (unlikely(interrupt_pending) && IsInterruptReady(nmi_pending, intr_pending))
                 break;
         }
         else
@@ -333,7 +333,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
             total.steps = steps;
             total.instruction_completed = completed;
 
-            bool more = RunForSlowStep(total, cycle_budget, interrupt_pending);
+            bool more = RunForSlowStep(total, cycle_budget, nmi_pending, intr_pending);
 
             clocks = total.clocks;
             steps = total.steps;
@@ -353,11 +353,11 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 
 // Debug, trace, halt and REP continuation steps
 // returns false when the batch must end
-NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool interrupt_pending)
+NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending)
 {
     GT_Bus_Access_Context& context = *m_bus_context;
 
-    if (m_repeat.active && !interrupt_pending && !m_halted && !m_shutdown)
+    if (m_repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_halted && !m_shutdown)
     {
         u32 clocks = 0;
         u32 steps = RunRepeatBatch((u32)(cycle_budget - total.clocks - context.wait_clocks), clocks);
@@ -382,7 +382,8 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
     if (step.exception)
         CopyStepException(total);
 
-    return !(step.steps == 0 || step.end_batch || m_halted || m_shutdown || interrupt_pending);
+    return !(step.steps == 0 || step.end_batch || m_halted || m_shutdown ||
+        IsInterruptReady(nmi_pending, intr_pending));
 }
 
 void I386::CopyStepException(I386_Run_Result& total) const

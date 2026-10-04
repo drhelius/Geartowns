@@ -42,6 +42,8 @@
     <ClCompile Include="..\..\src\system\memory.cpp" />
     <ClCompile Include="..\..\src\audio\rf5c68.cpp" />
     <ClCompile Include="..\..\src\system\towns_io.cpp" />
+    <ClCompile Include="..\..\src\system\towns_pic.cpp" />
+    <ClCompile Include="..\..\src\system\i8259.cpp" />
     <ClCompile Include="..\..\src\audio\ym3438.cpp" />
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
@@ -124,6 +126,10 @@
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h" />
     <ClInclude Include="..\..\src\system\towns_io.h" />
     <ClInclude Include="..\..\src\system\towns_io_inline.h" />
+    <ClInclude Include="..\..\src\system\towns_pic.h" />
+    <ClInclude Include="..\..\src\system\towns_pic_inline.h" />
+    <ClInclude Include="..\..\src\system\i8259.h" />
+    <ClInclude Include="..\..\src\system\i8259_inline.h" />
     <ClInclude Include="..\..\src\media\firmware_inline.h" />
     <ClInclude Include="..\..\src\media\game_db.h" />
     <ClInclude Include="..\..\src\geartowns.h" />

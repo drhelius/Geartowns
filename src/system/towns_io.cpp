@@ -21,21 +21,24 @@
 #include "../audio/audio.h"
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
+#include "towns_pic.h"
 
 TownsIO::TownsIO()
 {
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
+    InitPointer(m_pic);
 }
 
 TownsIO::~TownsIO()
 {
 }
 
-void TownsIO::Init(Audio* audio)
+void TownsIO::Init(Audio* audio, TownsPIC* pic)
 {
     m_ym3438 = audio->GetYM3438();
     m_rf5c68 = audio->GetRF5C68();
+    m_pic = pic;
     Reset();
 }
 
@@ -57,7 +60,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // PIC slave status
         case 0x0012:
             // PIC slave mask
-            break;
+            return m_pic->Read(port);
         case 0x0020:
             // Reset reason
         case 0x0022:
@@ -356,6 +359,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // PIC slave command
         case 0x0012:
             // PIC slave data
+            m_pic->Write(port, value);
             break;
         case 0x0020:
             // Reset and power control

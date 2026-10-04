@@ -85,4 +85,11 @@ INLINE void I386::CountInterruptShadow()
         m_interrupt_shadow = I386_SHADOW_NONE;
 }
 
+// A pending INTR only ends the batch where it can be taken
+// so CLI sections still run in batches
+INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
+{
+    return nmi_pending || (intr_pending && CanAcceptMaskableInterrupt());
+}
+
 #endif /* I386_RUN_INLINE_H */

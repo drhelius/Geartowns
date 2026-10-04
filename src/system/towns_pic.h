@@ -17,52 +17,38 @@
  *
  */
 
-INLINE void GeartownsCore::Pause(bool paused)
-{
-    m_paused = paused;
-}
+#ifndef TOWNS_PIC_H
+#define TOWNS_PIC_H
 
-INLINE bool GeartownsCore::IsPaused()
-{
-    return m_paused;
-}
+#include <iostream>
+#include "../common/common.h"
+#include "i8259.h"
 
-INLINE Firmware* GeartownsCore::GetFirmware()
+class TownsPIC
 {
-    return m_firmware;
-}
+public:
+    void Init();
+    void Reset();
+    u8 Read(u16 port);
+    void Write(u16 port, u8 value);
+    void SetIRQLine(int irq, bool high);
+    bool IsInterruptPending() const;
+    u8 AcknowledgeInterrupt();
+    I8259* GetMaster();
+    I8259* GetSlave();
+    void SaveState(std::ostream& stream);
+    void LoadState(std::istream& stream);
 
-INLINE Media* GeartownsCore::GetMedia()
-{
-    return m_media;
-}
+private:
+    void UpdateCascade();
 
-INLINE Audio* GeartownsCore::GetAudio()
-{
-    return m_audio;
-}
+private:
+    I8259 m_master;
+    I8259 m_slave;
+};
 
-INLINE Input* GeartownsCore::GetInput()
-{
-    return m_input;
-}
+static const int k_towns_pic_cascade_line = 7;
 
-INLINE Memory* GeartownsCore::GetMemory()
-{
-    return m_memory;
-}
+#include "towns_pic_inline.h"
 
-INLINE I386* GeartownsCore::GetI386()
-{
-    return m_i386;
-}
-
-INLINE TownsIO* GeartownsCore::GetIO()
-{
-    return m_towns_io;
-}
-
-INLINE TownsPIC* GeartownsCore::GetPIC()
-{
-    return m_pic;
-}
+#endif /* TOWNS_PIC_H */

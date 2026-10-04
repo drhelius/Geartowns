@@ -17,52 +17,42 @@
  *
  */
 
-INLINE void GeartownsCore::Pause(bool paused)
+#ifndef TOWNS_PIC_INLINE_H
+#define TOWNS_PIC_INLINE_H
+
+#include "towns_pic.h"
+
+INLINE void TownsPIC::SetIRQLine(int irq, bool high)
 {
-    m_paused = paused;
+    if (irq >= 8)
+    {
+        m_slave.SetInputLine(irq - 8, high);
+        UpdateCascade();
+    }
+    else if (irq != k_towns_pic_cascade_line)
+        m_master.SetInputLine(irq, high);
+    else
+        Debug("PIC: IRQ 7 is the slave cascade input");
 }
 
-INLINE bool GeartownsCore::IsPaused()
+INLINE bool TownsPIC::IsInterruptPending() const
 {
-    return m_paused;
+    return m_master.IsIRQAsserted();
 }
 
-INLINE Firmware* GeartownsCore::GetFirmware()
+INLINE I8259* TownsPIC::GetMaster()
 {
-    return m_firmware;
+    return &m_master;
 }
 
-INLINE Media* GeartownsCore::GetMedia()
+INLINE I8259* TownsPIC::GetSlave()
 {
-    return m_media;
+    return &m_slave;
 }
 
-INLINE Audio* GeartownsCore::GetAudio()
+INLINE void TownsPIC::UpdateCascade()
 {
-    return m_audio;
+    m_master.SetInputLine(k_towns_pic_cascade_line, m_slave.IsIRQAsserted());
 }
 
-INLINE Input* GeartownsCore::GetInput()
-{
-    return m_input;
-}
-
-INLINE Memory* GeartownsCore::GetMemory()
-{
-    return m_memory;
-}
-
-INLINE I386* GeartownsCore::GetI386()
-{
-    return m_i386;
-}
-
-INLINE TownsIO* GeartownsCore::GetIO()
-{
-    return m_towns_io;
-}
-
-INLINE TownsPIC* GeartownsCore::GetPIC()
-{
-    return m_pic;
-}
+#endif /* TOWNS_PIC_INLINE_H */

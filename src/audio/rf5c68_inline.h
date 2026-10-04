@@ -24,21 +24,21 @@
 
 INLINE void RF5C68::Clock(u32 cycles)
 {
-    m_elapsed_cycles += cycles;
+    m_state.elapsed_cycles += cycles;
 }
 
 INLINE bool RF5C68::IsIRQAsserted()
 {
     // Cause bits are only cleared by ReadIRQFlags, which synchronizes first
-    if (m_irq_flags != 0)
+    if (m_state.irq_flags != 0)
         return true;
 
     // Masked regions and a stopped IC never raise a cause bit, so there is nothing to catch up on
-    if (m_irq_mask == 0 || !m_enabled)
+    if (m_state.irq_mask == 0 || !m_state.enabled)
         return false;
 
     Synchronize();
-    return m_irq_flags != 0;
+    return m_state.irq_flags != 0;
 }
 
 INLINE u8 RF5C68::Read(u16 address)
@@ -46,8 +46,8 @@ INLINE u8 RF5C68::Read(u16 address)
     address &= 0x1FFF;
 
     // CPU Wave RAM reads are only available while global playback is stopped
-    if (address >= 0x1000 && !m_enabled)
-        return m_wave_ram[((u16)m_wave_bank << 12) | (address & 0x0FFF)];
+    if (address >= 0x1000 && !m_state.enabled)
+        return m_state.wave_ram[((u16)m_state.wave_bank << 12) | (address & 0x0FFF)];
 
     return 0xFF;
 }
@@ -63,55 +63,60 @@ INLINE void RF5C68::Write(u16 address, u8 value)
     }
 
     // Playback only reads Wave RAM while sounding, so pending samples can't observe a write otherwise
-    if (m_enabled)
+    if (m_state.enabled)
         Synchronize();
 
-    m_wave_ram[((u16)m_wave_bank << 12) | (address & 0x0FFF)] = value;
+    m_state.wave_ram[((u16)m_state.wave_bank << 12) | (address & 0x0FFF)] = value;
+}
+
+INLINE RF5C68::RF5C68_State* RF5C68::GetState()
+{
+    return &m_state;
 }
 
 INLINE const RF5C68::RF5C68_Channel* RF5C68::GetChannels() const
 {
-    return m_channels;
+    return m_state.channels;
 }
 
 INLINE const u8* RF5C68::GetWaveRAM() const
 {
-    return m_wave_ram;
+    return m_state.wave_ram;
 }
 
 INLINE u8 RF5C68::GetChannelBank() const
 {
-    return m_channel_bank;
+    return m_state.channel_bank;
 }
 
 INLINE u8 RF5C68::GetWaveBank() const
 {
-    return m_wave_bank;
+    return m_state.wave_bank;
 }
 
 INLINE bool RF5C68::IsEnabled() const
 {
-    return m_enabled;
+    return m_state.enabled;
 }
 
 INLINE u8 RF5C68::GetIRQMask() const
 {
-    return m_irq_mask;
+    return m_state.irq_mask;
 }
 
 INLINE u8 RF5C68::GetIRQFlags() const
 {
-    return m_irq_flags;
+    return m_state.irq_flags;
 }
 
 INLINE s16 RF5C68::GetLeftSample() const
 {
-    return m_left_sample;
+    return m_state.left_sample;
 }
 
 INLINE s16 RF5C68::GetRightSample() const
 {
-    return m_right_sample;
+    return m_state.right_sample;
 }
 
 #endif /* RF5C68_INLINE_H */

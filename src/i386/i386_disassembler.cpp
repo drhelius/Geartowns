@@ -831,7 +831,7 @@ static void set_auto_symbol(I386_Disassembler_Record& record, bool subroutine)
 
 I386_Disassembler_Record* I386::Disassemble(u32 eip)
 {
-    return Disassemble(m_segments[I386_SEGMENT_CS], eip);
+    return Disassemble(m_state.segments[I386_SEGMENT_CS], eip);
 }
 
 I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u32 eip)
@@ -895,7 +895,7 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
     context.record = &record;
     context.cs = record.cs;
     context.cs_base = code_segment.base;
-    context.mode = m_execution_mode;
+    context.mode = m_state.execution_mode;
     context.default32 = (code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0;
 
     format_instruction(context, record.name, sizeof(record.name));
@@ -923,7 +923,7 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
 
 void I386::DisassembleAhead(int count)
 {
-    DisassembleAhead(m_eip, count);
+    DisassembleAhead(m_state.eip, count);
 }
 
 void I386::DisassembleAhead(u32 start_eip, int count, int depth)
@@ -931,7 +931,7 @@ void I386::DisassembleAhead(u32 start_eip, int count, int depth)
     // Retain the main span and share one extra span across all branch paths
     int branch_budget = count;
 
-    DisassembleAhead(m_segments[I386_SEGMENT_CS], start_eip, count, depth, branch_budget);
+    DisassembleAhead(m_state.segments[I386_SEGMENT_CS], start_eip, count, depth, branch_budget);
 }
 
 void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int count, int depth, int& branch_budget)
@@ -962,8 +962,8 @@ void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int
         u16 jump_cs = record->jump_cs;
         u32 jump_eip = record->jump_eip;
         u32 instruction_size = (u32)record->size;
-        const I386_Segment& current_code = m_segments[I386_SEGMENT_CS];
-        bool current_instruction = eip == m_eip && code_segment.selector == current_code.selector &&
+        const I386_Segment& current_code = m_state.segments[I386_SEGMENT_CS];
+        bool current_instruction = eip == m_state.eip && code_segment.selector == current_code.selector &&
             code_segment.base == current_code.base && code_segment.limit == current_code.limit &&
             code_segment.attributes == current_code.attributes;
 
@@ -971,7 +971,7 @@ void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int
         {
             int branch_count = count / 2;
 
-            if (jump_far && current_instruction && m_execution_mode != I386_MODE_PROTECTED)
+            if (jump_far && current_instruction && m_state.execution_mode != I386_MODE_PROTECTED)
             {
                 I386_Segment target_segment = {};
 
@@ -980,7 +980,7 @@ void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int
                 target_segment.limit = 0xFFFF;
                 target_segment.attributes = I386_SEGMENT_PRESENT | I386_SEGMENT_READABLE | I386_SEGMENT_EXECUTABLE;
 
-                if (m_execution_mode == I386_MODE_VM86)
+                if (m_state.execution_mode == I386_MODE_VM86)
                 {
                     target_segment.attributes |= I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
                     target_segment.dpl = 3;
@@ -1276,7 +1276,7 @@ bool I386::DebugInstructionCompleted(const I386_State& before, const I386_Run_Re
 
 u32 I386::GetCurrentLinearPC() const
 {
-    return m_segments[I386_SEGMENT_CS].base + m_eip;
+    return m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
 }
 
 #endif

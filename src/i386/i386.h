@@ -155,7 +155,7 @@ struct I386_Repeat_State
 
 struct I386_State
 {
-    u32 registers[I386_REG_COUNT];
+    u32_union registers[I386_REG_COUNT];
     u32 eip;
     u32 eflags;
 
@@ -173,9 +173,9 @@ struct I386_State
     u32 debug_registers[8];
     u32 test_registers[2];
 
-    u8 execution_mode;
+    I386_Execution_Mode execution_mode;
     u8 current_privilege_level;
-    u8 interrupt_shadow;
+    I386_Interrupt_Shadow interrupt_shadow;
     u8 interrupt_shadow_steps;
     u8 last_exception_vector;
 
@@ -353,6 +353,7 @@ public:
     u32 EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context);
     u32 EnterNMI(GT_Bus_Access_Context& context);
 
+    I386_State* GetState();
     void CopyState(I386_State& state) const;
     bool SetState(const I386_State& state);
 
@@ -557,6 +558,7 @@ private:
     u32 RunCheckedStep();
     bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
+    bool DeferIO();
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
     void CopyStepException(I386_Run_Result& total) const;
@@ -977,6 +979,7 @@ private:
     u8* const* m_write_pages;
     u32 m_memory_generation;
     bool m_batch_mode;
+    u32 m_batch_start_pc;
     bool m_slow_memory;
     bool m_user_mode;
     u8 m_default_size;
@@ -987,41 +990,12 @@ private:
     GT_Bus_Access_Context* m_bus_context;
     StepState m_step;
 
-    u32_union m_registers[I386_REG_COUNT];
-    u32 m_eip;
-    u32 m_eflags;
-
-    I386_Segment m_segments[I386_SEGMENT_COUNT];
-
-    I386_Descriptor_Table m_gdtr;
-    I386_Descriptor_Table m_idtr;
-    I386_Segment m_ldtr;
-    I386_Segment m_task_register;
-
-    u32 m_cr0;
-    u32 m_cr2;
-    u32 m_cr3;
-
-    u32 m_debug_registers[8];
-    u32 m_test_registers[2];
-
-    I386_Execution_Mode m_execution_mode;
-    u8 m_current_privilege_level;
-
-    I386_Interrupt_Shadow m_interrupt_shadow;
-    u8 m_interrupt_shadow_steps;
-
-    bool m_halted;
-    bool m_shutdown;
-    bool m_nmi_blocked;
+    I386_State m_state;
     bool m_external_event;
 
     u8 m_debug_data_breakpoints;
 
     I386_Pending_Exception m_exception;
-    u8 m_last_exception_vector;
-
-    I386_Repeat_State m_repeat;
     StringContext m_string;
 
     const u8* m_code_window;

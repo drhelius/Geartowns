@@ -68,7 +68,9 @@ SOURCES_CXX := \
     $(SRC_DIR)/media/media.cpp \
     $(SRC_DIR)/media/media_file.cpp \
     $(SRC_DIR)/media/media_file_native.cpp \
+    $(SRC_DIR)/system/i8253.cpp \
     $(SRC_DIR)/system/i8259.cpp \
     $(SRC_DIR)/system/memory.cpp \
     $(SRC_DIR)/system/towns_io.cpp \
-    $(SRC_DIR)/system/towns_pic.cpp
+    $(SRC_DIR)/system/towns_pic.cpp \
+    $(SRC_DIR)/system/towns_pit.cpp

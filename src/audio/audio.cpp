@@ -61,10 +61,10 @@ void Audio::Reset()
     m_ym3438->Reset();
     m_rf5c68->Reset();
 
-    m_sound_clock_remainder = 0;
-    m_sample_clock_counter = 0;
-    m_pcm_lowpass_left = 0;
-    m_pcm_lowpass_right = 0;
+    m_state.sound_clock_remainder = 0;
+    m_state.sample_clock_counter = 0;
+    m_state.pcm_lowpass_left = 0;
+    m_state.pcm_lowpass_right = 0;
     m_buffer_index = 0;
     m_buffer_overflow = false;
 }
@@ -134,10 +134,10 @@ void Audio::LoadState(std::istream& stream)
     StateSerializer serializer(stream);
     Serialize(serializer);
 
-    m_sound_clock_remainder %= k_audio_cpu_clocks_per_sound_clock;
-    m_sample_clock_counter %= GT_CPU_CLOCK_RATE;
-    m_pcm_lowpass_left = CLAMP(m_pcm_lowpass_left, -32768, 32767);
-    m_pcm_lowpass_right = CLAMP(m_pcm_lowpass_right, -32768, 32767);
+    m_state.sound_clock_remainder %= k_audio_cpu_clocks_per_sound_clock;
+    m_state.sample_clock_counter %= GT_CPU_CLOCK_RATE;
+    m_state.pcm_lowpass_left = CLAMP(m_state.pcm_lowpass_left, -32768, 32767);
+    m_state.pcm_lowpass_right = CLAMP(m_state.pcm_lowpass_right, -32768, 32767);
 
     m_ym3438->LoadState(stream);
     m_rf5c68->LoadState(stream);
@@ -145,8 +145,8 @@ void Audio::LoadState(std::istream& stream)
 
 void Audio::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE(serializer, m_sound_clock_remainder);
-    G_SERIALIZE(serializer, m_sample_clock_counter);
-    G_SERIALIZE(serializer, m_pcm_lowpass_left);
-    G_SERIALIZE(serializer, m_pcm_lowpass_right);
+    G_SERIALIZE(serializer, m_state.sound_clock_remainder);
+    G_SERIALIZE(serializer, m_state.sample_clock_counter);
+    G_SERIALIZE(serializer, m_state.pcm_lowpass_left);
+    G_SERIALIZE(serializer, m_state.pcm_lowpass_right);
 }

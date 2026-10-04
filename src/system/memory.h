@@ -27,6 +27,12 @@
 class Memory
 {
 public:
+    struct Memory_State
+    {
+        u8* main_ram;
+    };
+
+public:
     Memory();
     ~Memory();
     void Init();
@@ -71,6 +77,7 @@ public:
     u8* GetMainRAM();
     u8* GetVideoRAM();
     size_t GetVideoRAMSize() const;
+    Memory_State* GetState();
 
 private:
     struct DebugRegion
@@ -104,7 +111,7 @@ private:
 
     u8* m_working_ram;
     size_t m_working_ram_size;
-    u8* m_main_ram;
+    Memory_State m_state;
 
     u8* m_video_ram;
     size_t m_video_ram_size;

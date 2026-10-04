@@ -20,13 +20,13 @@
 INLINE void Input::KeyPressed(GT_Keys key)
 {
     if (key > GT_KEY_NONE && key < GT_KEY_COUNT)
-        m_keys[key] = true;
+        m_state.keys[key] = true;
 }
 
 INLINE void Input::KeyReleased(GT_Keys key)
 {
     if (key > GT_KEY_NONE && key < GT_KEY_COUNT)
-        m_keys[key] = false;
+        m_state.keys[key] = false;
 }
 
 INLINE bool Input::IsKeyPressed(GT_Keys key) const
@@ -34,19 +34,19 @@ INLINE bool Input::IsKeyPressed(GT_Keys key) const
     if (key <= GT_KEY_NONE || key >= GT_KEY_COUNT)
         return false;
 
-    return m_keys[key];
+    return m_state.keys[key];
 }
 
 INLINE void Input::SetMouseDelta(s32 x, s32 y)
 {
-    m_mouse_x += x;
-    m_mouse_y += y;
+    m_state.mouse_x += x;
+    m_state.mouse_y += y;
 }
 
 INLINE void Input::SetMouseButtons(bool left, bool right)
 {
-    m_mouse_left = left;
-    m_mouse_right = right;
+    m_state.mouse_left = left;
+    m_state.mouse_right = right;
 }
 
 INLINE void Input::SetGamePadState(int port, const GT_GamePad_State& state)
@@ -74,7 +74,7 @@ INLINE const GT_GamePad_State& Input::GetGamePadState(int port) const
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return empty;
 
-    return m_gamepads[port];
+    return m_state.gamepads[port];
 }
 
 INLINE void Input::SetControllerType(int port, GT_Controller_Type type)
@@ -91,4 +91,9 @@ INLINE GT_Controller_Type Input::GetControllerType(int port) const
         return GT_CONTROLLER_NONE;
 
     return m_controller_type[port];
+}
+
+INLINE Input::Input_State* Input::GetState()
+{
+    return &m_state;
 }

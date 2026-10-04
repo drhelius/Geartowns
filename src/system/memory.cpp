@@ -31,7 +31,7 @@ Memory::Memory()
     m_debug_snapshot_id = 1;
     InitPointer(m_working_ram);
     m_working_ram_size = 0;
-    InitPointer(m_main_ram);
+    InitPointer(m_state.main_ram);
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     memset(m_debug_regions, 0, sizeof(m_debug_regions));
@@ -41,13 +41,13 @@ Memory::~Memory()
 {
     SafeDeleteArray(m_cpu_read_pages);
     SafeDeleteArray(m_cpu_write_pages);
-    SafeDeleteArray(m_main_ram);
+    SafeDeleteArray(m_state.main_ram);
 }
 
 void Memory::Init()
 {
-    if (!IsValidPointer(m_main_ram))
-        m_main_ram = new u8[GT_MAIN_RAM_SIZE];
+    if (!IsValidPointer(m_state.main_ram))
+        m_state.main_ram = new u8[GT_MAIN_RAM_SIZE];
 
     Reset();
 }
@@ -57,8 +57,8 @@ void Memory::Reset()
     ClearDebugRegions();
     m_physical_address_mask = 0xFFFFFFFF;
 
-    if (IsValidPointer(m_main_ram))
-        memset(m_main_ram, 0, GT_MAIN_RAM_SIZE);
+    if (IsValidPointer(m_state.main_ram))
+        memset(m_state.main_ram, 0, GT_MAIN_RAM_SIZE);
 }
 
 INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size) const
@@ -512,7 +512,7 @@ size_t Memory::GetWorkingRAMSize() const
 
 u8* Memory::GetMainRAM()
 {
-    return m_main_ram;
+    return m_state.main_ram;
 }
 
 u8* Memory::GetVideoRAM()

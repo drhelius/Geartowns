@@ -22,50 +22,56 @@
 
 INLINE void YM3438::Clock(u32 cycles)
 {
-    m_elapsed_cycles += cycles;
+    m_state.elapsed_cycles += cycles;
 }
 
 INLINE bool YM3438::IsIRQAsserted()
 {
     // Flags are only cleared by register writes, which synchronize first
-    if (m_timer_a_flag || m_timer_b_flag)
+    if (m_state.timer_a_flag || m_state.timer_b_flag)
         return true;
 
     // No catch-up is needed until the next enabled timer can overflow
-    if (m_elapsed_cycles < GetCyclesToTimerFlag())
+    if (m_state.elapsed_cycles < GetCyclesToTimerFlag())
         return false;
 
     Synchronize();
-    return m_timer_a_flag || m_timer_b_flag;
+    return m_state.timer_a_flag || m_state.timer_b_flag;
+}
+
+INLINE YM3438::YM3438_State* YM3438::GetState()
+{
+    return &m_state;
 }
 
 INLINE u64 YM3438::GetCyclesToTimerFlag() const
 {
     u32 samples = 0xFFFFFFFF;
 
-    if (m_timer_a_load && m_timer_a_enable)
-        samples = 1024 - m_timer_a_counter;
+    if (m_state.timer_a_load && m_state.timer_a_enable)
+        samples = 1024 - m_state.timer_a_counter;
 
-    if (m_timer_b_load && m_timer_b_enable)
+    if (m_state.timer_b_load && m_state.timer_b_enable)
     {
-        u32 timer_b_samples = (16 - m_timer_b_prescaler) + ((255 - m_timer_b_counter) << 4);
+        u32 timer_b_samples = (16 - m_state.timer_b_prescaler) + ((255 - m_state.timer_b_counter) << 4);
         samples = MIN(samples, timer_b_samples);
     }
 
     if (samples == 0xFFFFFFFF)
         return 0xFFFFFFFFFFFFFFFFULL;
 
-    return ((u64)(samples - 1) * k_ym3438_native_sample_cycles) + (k_ym3438_native_sample_cycles - m_native_cycle);
+    return ((u64)(samples - 1) * k_ym3438_native_sample_cycles) +
+        (k_ym3438_native_sample_cycles - m_state.native_cycle);
 }
 
 INLINE u16 YM3438::GetSelectedAddress() const
 {
-    return m_address;
+    return m_state.address;
 }
 
 INLINE u8 YM3438::GetRegister(u16 address) const
 {
-    return m_registers[(address >> 8) & 0x01][address & 0xFF];
+    return m_state.registers[(address >> 8) & 0x01][address & 0xFF];
 }
 
 #endif /* YM3438_INLINE_H */

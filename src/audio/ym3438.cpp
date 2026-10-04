@@ -150,58 +150,58 @@ void YM3438::ResetChannel(YM3438_Channel& channel)
 
 void YM3438::Reset()
 {
-    memset(m_registers, 0, sizeof(m_registers));
+    memset(m_state.registers, 0, sizeof(m_state.registers));
 
     for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
-        ResetChannel(m_channels[i]);
+        ResetChannel(m_state.channels[i]);
 
-    m_address = 0;
-    m_f_number_high = 0;
-    m_special_f_number_high = 0;
-    m_channel_3_mode = 0;
+    m_state.address = 0;
+    m_state.f_number_high = 0;
+    m_state.special_f_number_high = 0;
+    m_state.channel_3_mode = 0;
 
-    m_dac_enabled = 0;
-    m_dac_data = 0;
+    m_state.dac_enabled = 0;
+    m_state.dac_data = 0;
 
-    m_lfo_enabled = 0;
-    m_lfo_frequency = 0;
-    m_lfo_counter = 0;
-    m_lfo_quotient = 0;
-    m_lfo_phase_changed = 0;
+    m_state.lfo_enabled = 0;
+    m_state.lfo_frequency = 0;
+    m_state.lfo_counter = 0;
+    m_state.lfo_quotient = 0;
+    m_state.lfo_phase_changed = 0;
 
-    m_timer_a_register = 0;
-    m_timer_a_counter = 0;
-    m_timer_b_register = 0;
-    m_timer_b_counter = 0;
-    m_timer_b_prescaler = 0;
-    m_timer_a_load = 0;
-    m_timer_b_load = 0;
-    m_timer_a_enable = 0;
-    m_timer_b_enable = 0;
-    m_timer_a_flag = 0;
-    m_timer_b_flag = 0;
+    m_state.timer_a_register = 0;
+    m_state.timer_a_counter = 0;
+    m_state.timer_b_register = 0;
+    m_state.timer_b_counter = 0;
+    m_state.timer_b_prescaler = 0;
+    m_state.timer_a_load = 0;
+    m_state.timer_b_load = 0;
+    m_state.timer_a_enable = 0;
+    m_state.timer_b_enable = 0;
+    m_state.timer_a_flag = 0;
+    m_state.timer_b_flag = 0;
 
-    m_csm_key_pending = 0;
-    m_csm_key_active = 0;
+    m_state.csm_key_pending = 0;
+    m_state.csm_key_active = 0;
 
-    m_envelope_counter = 0;
-    m_envelope_divider = 0;
+    m_state.envelope_counter = 0;
+    m_state.envelope_divider = 0;
 
-    m_native_cycle = 0;
-    m_elapsed_cycles = 0;
-    m_busy_cycles = 0;
-    m_status = 0;
+    m_state.native_cycle = 0;
+    m_state.elapsed_cycles = 0;
+    m_state.busy_cycles = 0;
+    m_state.status = 0;
 
-    m_left_sample = 0;
-    m_right_sample = 0;
-    m_previous_left_sample = 0;
-    m_previous_right_sample = 0;
+    m_state.left_sample = 0;
+    m_state.right_sample = 0;
+    m_state.previous_left_sample = 0;
+    m_state.previous_right_sample = 0;
 }
 
 void YM3438::Synchronize()
 {
-    u64 cycles = m_elapsed_cycles;
-    m_elapsed_cycles = 0;
+    u64 cycles = m_state.elapsed_cycles;
+    m_state.elapsed_cycles = 0;
     RunCycles(cycles);
 }
 
@@ -209,70 +209,70 @@ void YM3438::Sample(s16& left, s16& right)
 {
     Synchronize();
 
-    s32 phase = (s32)m_native_cycle;
-    s32 left_delta = m_left_sample - m_previous_left_sample;
-    s32 right_delta = m_right_sample - m_previous_right_sample;
-    left = (s16)(m_previous_left_sample + (left_delta * phase) / k_ym3438_native_sample_cycles);
-    right = (s16)(m_previous_right_sample + (right_delta * phase) / k_ym3438_native_sample_cycles);
+    s32 phase = (s32)m_state.native_cycle;
+    s32 left_delta = m_state.left_sample - m_state.previous_left_sample;
+    s32 right_delta = m_state.right_sample - m_state.previous_right_sample;
+    left = (s16)(m_state.previous_left_sample + (left_delta * phase) / k_ym3438_native_sample_cycles);
+    right = (s16)(m_state.previous_right_sample + (right_delta * phase) / k_ym3438_native_sample_cycles);
 }
 
 void YM3438::RunCycles(u64 cycles)
 {
-    if (m_busy_cycles > cycles)
-        m_busy_cycles -= (u32)cycles;
+    if (m_state.busy_cycles > cycles)
+        m_state.busy_cycles -= (u32)cycles;
     else
-        m_busy_cycles = 0;
+        m_state.busy_cycles = 0;
 
-    while (cycles >= k_ym3438_native_sample_cycles - m_native_cycle)
+    while (cycles >= k_ym3438_native_sample_cycles - m_state.native_cycle)
     {
-        cycles -= k_ym3438_native_sample_cycles - m_native_cycle;
-        m_native_cycle = 0;
-        m_previous_left_sample = m_left_sample;
-        m_previous_right_sample = m_right_sample;
+        cycles -= k_ym3438_native_sample_cycles - m_state.native_cycle;
+        m_state.native_cycle = 0;
+        m_state.previous_left_sample = m_state.left_sample;
+        m_state.previous_right_sample = m_state.right_sample;
         GenerateNativeSample();
     }
 
-    m_native_cycle += (u32)cycles;
+    m_state.native_cycle += (u32)cycles;
 }
 
 void YM3438::ClockTimers()
 {
     // Both timers count once per native sample, like the chip's 24-slot frame
-    if (m_timer_a_load)
+    if (m_state.timer_a_load)
     {
-        m_timer_a_counter++;
+        m_state.timer_a_counter++;
 
-        if (m_timer_a_counter >= 1024)
+        if (m_state.timer_a_counter >= 1024)
         {
-            m_timer_a_counter = m_timer_a_register;
+            m_state.timer_a_counter = m_state.timer_a_register;
             TimerAOverflow();
         }
     }
 
     // Timer B's divide-by-16 prescaler keeps running while its counter is stopped
-    m_timer_b_prescaler = (m_timer_b_prescaler + 1) & 0x0F;
+    m_state.timer_b_prescaler = (m_state.timer_b_prescaler + 1) & 0x0F;
 
-    if (m_timer_b_load && m_timer_b_prescaler == 0)
+    if (m_state.timer_b_load && m_state.timer_b_prescaler == 0)
     {
-        m_timer_b_counter++;
+        m_state.timer_b_counter++;
 
-        if (m_timer_b_counter >= 256)
+        if (m_state.timer_b_counter >= 256)
         {
-            m_timer_b_counter = m_timer_b_register;
+            m_state.timer_b_counter = m_state.timer_b_register;
 
-            if (m_timer_b_enable)
-                m_timer_b_flag = 1;
+            if (m_state.timer_b_enable)
+                m_state.timer_b_flag = 1;
         }
     }
 }
 
 void YM3438::TimerAOverflow()
 {
-    if (m_timer_a_enable)
-        m_timer_a_flag = 1;
+    if (m_state.timer_a_enable)
+        m_state.timer_a_flag = 1;
 
-    if (m_channel_3_mode == 2)
-        m_csm_key_pending = 1;
+    if (m_state.channel_3_mode == 2)
+        m_state.csm_key_pending = 1;
 }
 
 void YM3438::GenerateNativeSample()
@@ -288,19 +288,19 @@ void YM3438::GenerateNativeSample()
     {
         s16 output = CalculateChannel(i);
 
-        if (m_channels[i].pan_left)
+        if (m_state.channels[i].pan_left)
             left += output;
 
-        if (m_channels[i].pan_right)
+        if (m_state.channels[i].pan_right)
             right += output;
     }
 
-    m_lfo_phase_changed = 0;
+    m_state.lfo_phase_changed = 0;
 
     left = CLAMP(left * 16, -32768, 32767);
     right = CLAMP(right * 16, -32768, 32767);
-    m_left_sample = (s16)left;
-    m_right_sample = (s16)right;
+    m_state.left_sample = (s16)left;
+    m_state.right_sample = (s16)right;
 
     UpdateLFO();
 }
@@ -308,13 +308,13 @@ void YM3438::GenerateNativeSample()
 void YM3438::UpdateKeyStates()
 {
     // A Timer A overflow in CSM mode keys on channel 3 within the same sample, and only for that sample
-    m_csm_key_active = m_csm_key_pending;
-    m_csm_key_pending = 0;
+    m_state.csm_key_active = m_state.csm_key_pending;
+    m_state.csm_key_pending = 0;
 
     for (int channel_index = 0; channel_index < YM3438_CHANNEL_COUNT; channel_index++)
     {
-        YM3438_Channel& channel = m_channels[channel_index];
-        bool csm_key_on = channel_index == 2 && m_csm_key_active;
+        YM3438_Channel& channel = m_state.channels[channel_index];
+        bool csm_key_on = channel_index == 2 && m_state.csm_key_active;
 
         // S1 samples the key register just before a 0x28 write lands, so it follows S2-S4 one sample later
         channel.operators[0].manual_key_on = channel.s1_key_register;
@@ -334,43 +334,45 @@ void YM3438::UpdateLFO()
 {
     u8 lfo_phase = GetLFOPhase();
 
-    if (!m_lfo_enabled)
-        m_lfo_counter = 0;
+    if (!m_state.lfo_enabled)
+        m_state.lfo_counter = 0;
 
-    m_lfo_quotient++;
+    m_state.lfo_quotient++;
 
-    if ((m_lfo_quotient & k_ym3438_lfo_cycles[m_lfo_frequency]) == k_ym3438_lfo_cycles[m_lfo_frequency])
+    u8 lfo_cycles = k_ym3438_lfo_cycles[m_state.lfo_frequency];
+
+    if ((m_state.lfo_quotient & lfo_cycles) == lfo_cycles)
     {
-        m_lfo_quotient = 0;
+        m_state.lfo_quotient = 0;
 
-        if (m_lfo_enabled)
-            m_lfo_counter = (m_lfo_counter + 1) & 0x7F;
+        if (m_state.lfo_enabled)
+            m_state.lfo_counter = (m_state.lfo_counter + 1) & 0x7F;
     }
 
     if (GetLFOPhase() != lfo_phase)
-        m_lfo_phase_changed = 1;
+        m_state.lfo_phase_changed = 1;
 }
 
 void YM3438::UpdateEnvelopes()
 {
     // Rate increments advance every three samples; key/SSG control runs each sample
-    m_envelope_divider++;
+    m_state.envelope_divider++;
 
-    if (m_envelope_divider == 3)
+    if (m_state.envelope_divider == 3)
     {
-        m_envelope_divider = 0;
-        m_envelope_counter++;
+        m_state.envelope_divider = 0;
+        m_state.envelope_counter++;
 
         // The 12-bit timer adds its overflow carry back in, skipping zero
-        if (m_envelope_counter >= 0x1000)
-            m_envelope_counter = 1;
+        if (m_state.envelope_counter >= 0x1000)
+            m_state.envelope_counter = 1;
     }
 
     for (int channel = 0; channel < YM3438_CHANNEL_COUNT; channel++)
     {
         for (int operator_index = 0; operator_index < YM3438_OPERATOR_COUNT; operator_index++)
         {
-            UpdateEnvelope(m_channels[channel].operators[operator_index], channel, operator_index);
+            UpdateEnvelope(m_state.channels[channel].operators[operator_index], channel, operator_index);
         }
     }
 }
@@ -387,15 +389,15 @@ void YM3438::UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index
     // Key and SSG control above still run when the attenuation is stationary
     if (!repeat &&
         !key_event &&
-        !(channel == 2 && m_csm_key_active) &&
+        !(channel == 2 && m_state.csm_key_active) &&
         ((op.state == YM3438_ENVELOPE_SUSTAIN && op.key_on && op.sustain_rate == 0 && !envelope_off) ||
          (op.state == YM3438_ENVELOPE_RELEASE && op.envelope == k_ym3438_envelope_max)))
     {
         return;
     }
 
-    u8 rate = m_envelope_divider == 0 || repeat ? GetEnvelopeRate(op, channel, operator_index) : 0;
-    u8 increment = m_envelope_divider == 0 ? GetEnvelopeIncrement(rate) : 0;
+    u8 rate = m_state.envelope_divider == 0 || repeat ? GetEnvelopeRate(op, channel, operator_index) : 0;
+    u8 increment = m_state.envelope_divider == 0 ? GetEnvelopeIncrement(rate) : 0;
     s32 change = 0;
 
     // A new key-on precedes attack/decay progression, including CSM TL
@@ -454,7 +456,7 @@ void YM3438::UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index
     }
 
     // CSM incorporates TL into the envelope, rather than adding it at the output
-    if (channel == 2 && m_csm_key_active)
+    if (channel == 2 && m_state.csm_key_active)
         op.envelope |= op.total_level << 3;
 
     bool hold_up = op.key_on && ssg_enabled && ((op.ssg_envelope & 0x07) == 3 || (op.ssg_envelope & 0x07) == 5);
@@ -490,11 +492,11 @@ u8 YM3438::GetEnvelopeIncrement(u8 rate) const
         pattern = 16;
     }
 
-    if (shift > 0 && (m_envelope_counter & ((1U << shift) - 1)) != 0)
+    if (shift > 0 && (m_state.envelope_counter & ((1U << shift) - 1)) != 0)
         return 0;
 
     // Fast rates walk their step pattern backwards through the counter's low bits
-    int cycle = rate < 48 ? (m_envelope_counter >> shift) & 0x07 : (~m_envelope_counter) & 0x07;
+    int cycle = rate < 48 ? (m_state.envelope_counter >> shift) & 0x07 : (~m_state.envelope_counter) & 0x07;
 
     return k_ym3438_envelope_increment[pattern][cycle];
 }
@@ -609,36 +611,36 @@ void YM3438::KeyOnChannel(int channel, u8 slots)
         return;
 
     // S1 picks this up one sample later, in UpdateKeyStates
-    m_channels[channel].s1_key_written = slots & 0x01;
+    m_state.channels[channel].s1_key_written = slots & 0x01;
 
     for (int i = 1; i < YM3438_OPERATOR_COUNT; i++)
     {
-        YM3438_Operator& op = m_channels[channel].operators[i];
+        YM3438_Operator& op = m_state.channels[channel].operators[i];
         op.manual_key_on = (slots >> i) & 0x01;
-        bool key_on = op.manual_key_on || (channel == 2 && m_csm_key_active);
+        bool key_on = op.manual_key_on || (channel == 2 && m_state.csm_key_active);
         SetKeyState(op, key_on, channel, i);
     }
 }
 
 void YM3438::KeyOffCSM()
 {
-    m_csm_key_active = 0;
+    m_state.csm_key_active = 0;
 
-    m_csm_key_pending = 0;
+    m_state.csm_key_pending = 0;
 
     for (int i = 0; i < YM3438_OPERATOR_COUNT; i++)
     {
-        YM3438_Operator& op = m_channels[2].operators[i];
+        YM3438_Operator& op = m_state.channels[2].operators[i];
         SetKeyState(op, op.manual_key_on != 0, 2, i);
     }
 }
 
 s16 YM3438::CalculateChannel(int channel_index)
 {
-    YM3438_Channel& channel = m_channels[channel_index];
+    YM3438_Channel& channel = m_state.channels[channel_index];
 
     // Increments only change on frequency writes, or on LFO PM steps for channels using PM
-    if (channel.phase_modulation && m_lfo_phase_changed)
+    if (channel.phase_modulation && m_state.lfo_phase_changed)
         channel.phase_dirty = 1;
 
     // Keyed-off operators at full attenuation output nothing, and key-on restarts their phase
@@ -658,7 +660,7 @@ s16 YM3438::CalculateChannel(int channel_index)
         channel.memory_output = 0;
         channel.feedback_output[1] = channel.feedback_output[0];
         channel.feedback_output[0] = 0;
-        channel.output = (channel_index == 5 && m_dac_enabled) ? m_dac_data : 0;
+        channel.output = (channel_index == 5 && m_state.dac_enabled) ? m_state.dac_data : 0;
         return channel.output;
     }
 
@@ -759,8 +761,8 @@ s16 YM3438::CalculateChannel(int channel_index)
 
     output = CLAMP(output, -256, 255);
 
-    if (channel_index == 5 && m_dac_enabled)
-        output = m_dac_data;
+    if (channel_index == 5 && m_state.dac_enabled)
+        output = m_state.dac_data;
 
     channel.output = (s16)output;
     return channel.output;
@@ -768,11 +770,11 @@ s16 YM3438::CalculateChannel(int channel_index)
 
 s16 YM3438::CalculateOperator(int channel_index, int operator_index, s32 modulation)
 {
-    YM3438_Channel& channel = m_channels[channel_index];
+    YM3438_Channel& channel = m_state.channels[channel_index];
     YM3438_Operator& op = channel.operators[operator_index];
     u32 attenuation = GetEnvelopeOutput(op);
 
-    if (!(channel_index == 2 && m_channel_3_mode == 2))
+    if (!(channel_index == 2 && m_state.channel_3_mode == 2))
         attenuation += op.total_level << 3;
 
     if (op.amplitude_modulation_enabled)
@@ -800,7 +802,7 @@ s16 YM3438::CalculateOperator(int channel_index, int operator_index, s32 modulat
 
 u32 YM3438::CalculatePhaseIncrement(int channel_index, int operator_index) const
 {
-    const YM3438_Channel& channel = m_channels[channel_index];
+    const YM3438_Channel& channel = m_state.channels[channel_index];
     const YM3438_Operator& op = channel.operators[operator_index];
     u16 f_number = 0;
     u8 block = 0;
@@ -809,7 +811,7 @@ u32 YM3438::CalculatePhaseIncrement(int channel_index, int operator_index) const
 
     u32 adjusted_f_number = f_number << 1;
 
-    if (m_lfo_enabled && channel.phase_modulation)
+    if (m_state.lfo_enabled && channel.phase_modulation)
     {
         u32 f_number_high = f_number >> 4;
         u8 lfo = GetLFOPhase();
@@ -862,9 +864,9 @@ u32 YM3438::CalculatePhaseIncrement(int channel_index, int operator_index) const
 
 void YM3438::GetOperatorFrequency(int channel_index, int operator_index, u16& f_number, u8& block, u8& key_code) const
 {
-    const YM3438_Channel& channel = m_channels[channel_index];
+    const YM3438_Channel& channel = m_state.channels[channel_index];
 
-    if (channel_index == 2 && m_channel_3_mode != 0 && operator_index < 3)
+    if (channel_index == 2 && m_state.channel_3_mode != 0 && operator_index < 3)
     {
         f_number = channel.special_f_number[operator_index];
         block = channel.special_block[operator_index];
@@ -880,9 +882,9 @@ void YM3438::GetOperatorFrequency(int channel_index, int operator_index, u16& f_
 
 u8 YM3438::GetOperatorKeyCode(int channel_index, int operator_index) const
 {
-    const YM3438_Channel& channel = m_channels[channel_index];
+    const YM3438_Channel& channel = m_state.channels[channel_index];
 
-    if (channel_index == 2 && m_channel_3_mode != 0 && operator_index < 3)
+    if (channel_index == 2 && m_state.channel_3_mode != 0 && operator_index < 3)
         return channel.special_key_code[operator_index];
 
     return channel.key_code;
@@ -895,13 +897,13 @@ u8 YM3438::CalculateKeyCode(u16 f_number, u8 block) const
 
 u8 YM3438::GetLFOAmplitude() const
 {
-    u8 amplitude = m_lfo_counter & 0x40 ? m_lfo_counter & 0x3F : m_lfo_counter ^ 0x3F;
+    u8 amplitude = m_state.lfo_counter & 0x40 ? m_state.lfo_counter & 0x3F : m_state.lfo_counter ^ 0x3F;
     return amplitude << 1;
 }
 
 u8 YM3438::GetLFOPhase() const
 {
-    return m_lfo_enabled ? m_lfo_counter >> 2 : 0;
+    return m_state.lfo_enabled ? m_state.lfo_counter >> 2 : 0;
 }
 
 void YM3438::Write(u8 port, u8 value)
@@ -911,17 +913,17 @@ void YM3438::Write(u8 port, u8 value)
 
     if ((port & 0x01) == 0)
     {
-        m_address = ((port & 0x02) << 7) | value;
+        m_state.address = ((port & 0x02) << 7) | value;
         return;
     }
 
-    m_busy_cycles = k_ym3438_busy_cycles;
+    m_state.busy_cycles = k_ym3438_busy_cycles;
 
     // FM data uses the address latch's bank; mode data must be written through bank 0
-    if ((port & 0x02) && m_address < 0x30)
+    if ((port & 0x02) && m_state.address < 0x30)
         return;
 
-    WriteRegister(m_address, value);
+    WriteRegister(m_state.address, value);
 }
 
 u8 YM3438::Read(u8 port)
@@ -930,10 +932,10 @@ u8 YM3438::Read(u8 port)
     if ((port & 0x01) == 0)
     {
         Synchronize();
-        m_status = (m_busy_cycles ? 0x80 : 0) | (m_timer_b_flag << 1) | m_timer_a_flag;
+        m_state.status = (m_state.busy_cycles ? 0x80 : 0) | (m_state.timer_b_flag << 1) | m_state.timer_a_flag;
     }
 
-    return m_status;
+    return m_state.status;
 }
 
 void YM3438::WriteRegister(u16 address, u8 value)
@@ -943,7 +945,7 @@ void YM3438::WriteRegister(u16 address, u8 value)
 
     if (bank == 0 && reg >= 0x21 && reg <= 0x2C)
     {
-        m_registers[0][reg] = value;
+        m_state.registers[0][reg] = value;
         WriteModeRegister(reg, value);
         return;
     }
@@ -953,7 +955,7 @@ void YM3438::WriteRegister(u16 address, u8 value)
         if ((reg & 0x03) == 0x03)
             return;
 
-        m_registers[bank][reg] = value;
+        m_state.registers[bank][reg] = value;
         WriteOperatorRegister(bank, reg, value);
         return;
     }
@@ -963,7 +965,7 @@ void YM3438::WriteRegister(u16 address, u8 value)
         if ((reg & 0x03) == 0x03)
             return;
 
-        m_registers[bank][reg] = value;
+        m_state.registers[bank][reg] = value;
         WriteChannelRegister(bank, reg, value);
     }
 }
@@ -973,22 +975,22 @@ void YM3438::WriteModeRegister(u8 address, u8 value)
     switch (address)
     {
         case 0x22:
-            m_lfo_enabled = (value >> 3) & 0x01;
-            m_lfo_frequency = value & 0x07;
+            m_state.lfo_enabled = (value >> 3) & 0x01;
+            m_state.lfo_frequency = value & 0x07;
 
-            if (!m_lfo_enabled)
-                m_lfo_counter = 0;
+            if (!m_state.lfo_enabled)
+                m_state.lfo_counter = 0;
 
-            m_lfo_phase_changed = 1;
+            m_state.lfo_phase_changed = 1;
             break;
         case 0x24:
-            m_timer_a_register = (m_timer_a_register & 0x0003) | ((u16)value << 2);
+            m_state.timer_a_register = (m_state.timer_a_register & 0x0003) | ((u16)value << 2);
             break;
         case 0x25:
-            m_timer_a_register = (m_timer_a_register & 0x03FC) | (value & 0x03);
+            m_state.timer_a_register = (m_state.timer_a_register & 0x03FC) | (value & 0x03);
             break;
         case 0x26:
-            m_timer_b_register = value;
+            m_state.timer_b_register = value;
             break;
         case 0x27:
             WriteTimerControl(value);
@@ -1008,10 +1010,10 @@ void YM3438::WriteModeRegister(u8 address, u8 value)
         }
 
         case 0x2A:
-            m_dac_data = ((s16)value - 128) * 2;
+            m_state.dac_data = ((s16)value - 128) * 2;
             break;
         case 0x2B:
-            m_dac_enabled = (value >> 7) & 0x01;
+            m_state.dac_enabled = (value >> 7) & 0x01;
             break;
         default:
             break;
@@ -1022,14 +1024,14 @@ void YM3438::WriteOperatorRegister(int bank, u8 address, u8 value)
 {
     int channel = (address & 0x03) + bank * 3;
     int slot = k_ym3438_slot_map[(address >> 2) & 0x03];
-    YM3438_Operator& op = m_channels[channel].operators[slot];
+    YM3438_Operator& op = m_state.channels[channel].operators[slot];
 
     switch (address & 0xF0)
     {
         case 0x30:
             op.detune = (value >> 4) & 0x07;
             op.multiple = value & 0x0F;
-            m_channels[channel].phase_dirty = 1;
+            m_state.channels[channel].phase_dirty = 1;
             break;
         case 0x40:
             op.total_level = value & 0x7F;
@@ -1065,13 +1067,14 @@ void YM3438::WriteChannelRegister(int bank, u8 address, u8 value)
     switch (group)
     {
         case 0xA0:
-            m_channels[channel].f_number = value | ((m_f_number_high & 0x07) << 8);
-            m_channels[channel].block = (m_f_number_high >> 3) & 0x07;
-            m_channels[channel].key_code = CalculateKeyCode(m_channels[channel].f_number, m_channels[channel].block);
-            m_channels[channel].phase_dirty = 1;
+            m_state.channels[channel].f_number = value | ((m_state.f_number_high & 0x07) << 8);
+            m_state.channels[channel].block = (m_state.f_number_high >> 3) & 0x07;
+            m_state.channels[channel].key_code =
+                CalculateKeyCode(m_state.channels[channel].f_number, m_state.channels[channel].block);
+            m_state.channels[channel].phase_dirty = 1;
             break;
         case 0xA4:
-            m_f_number_high = value;
+            m_state.f_number_high = value;
             break;
         case 0xA8:
         {
@@ -1087,28 +1090,28 @@ void YM3438::WriteChannelRegister(int bank, u8 address, u8 value)
             else
                 special_slot = 1;
 
-            u16 f_number = value | ((m_special_f_number_high & 0x07) << 8);
-            u8 block = (m_special_f_number_high >> 3) & 0x07;
-            m_channels[2].special_f_number[special_slot] = f_number;
-            m_channels[2].special_block[special_slot] = block;
-            m_channels[2].special_key_code[special_slot] = CalculateKeyCode(f_number, block);
-            m_channels[2].phase_dirty = 1;
+            u16 f_number = value | ((m_state.special_f_number_high & 0x07) << 8);
+            u8 block = (m_state.special_f_number_high >> 3) & 0x07;
+            m_state.channels[2].special_f_number[special_slot] = f_number;
+            m_state.channels[2].special_block[special_slot] = block;
+            m_state.channels[2].special_key_code[special_slot] = CalculateKeyCode(f_number, block);
+            m_state.channels[2].phase_dirty = 1;
             break;
         }
 
         case 0xAC:
-            m_special_f_number_high = value;
+            m_state.special_f_number_high = value;
             break;
         case 0xB0:
-            m_channels[channel].algorithm = value & 0x07;
-            m_channels[channel].feedback = (value >> 3) & 0x07;
+            m_state.channels[channel].algorithm = value & 0x07;
+            m_state.channels[channel].feedback = (value >> 3) & 0x07;
             break;
         case 0xB4:
-            m_channels[channel].phase_modulation = value & 0x07;
-            m_channels[channel].amplitude_modulation = (value >> 4) & 0x03;
-            m_channels[channel].pan_right = (value >> 6) & 0x01;
-            m_channels[channel].pan_left = (value >> 7) & 0x01;
-            m_channels[channel].phase_dirty = 1;
+            m_state.channels[channel].phase_modulation = value & 0x07;
+            m_state.channels[channel].amplitude_modulation = (value >> 4) & 0x03;
+            m_state.channels[channel].pan_right = (value >> 6) & 0x01;
+            m_state.channels[channel].pan_left = (value >> 7) & 0x01;
+            m_state.channels[channel].phase_dirty = 1;
             break;
         default:
             break;
@@ -1121,37 +1124,37 @@ void YM3438::WriteTimerControl(u8 value)
     u8 timer_b_load = (value >> 1) & 0x01;
 
     if (value & 0x10)
-        m_timer_a_flag = 0;
+        m_state.timer_a_flag = 0;
 
     if (value & 0x20)
-        m_timer_b_flag = 0;
+        m_state.timer_b_flag = 0;
 
-    m_timer_a_enable = (value >> 2) & 0x01;
-    m_timer_b_enable = (value >> 3) & 0x01;
+    m_state.timer_a_enable = (value >> 2) & 0x01;
+    m_state.timer_b_enable = (value >> 3) & 0x01;
 
-    if (timer_a_load && !m_timer_a_load)
+    if (timer_a_load && !m_state.timer_a_load)
     {
-        m_timer_a_counter = m_timer_a_register;
+        m_state.timer_a_counter = m_state.timer_a_register;
 
         if ((value & 0xC0) == 0x80)
-            m_csm_key_pending = 1;
+            m_state.csm_key_pending = 1;
     }
 
-    if (timer_b_load && !m_timer_b_load)
+    if (timer_b_load && !m_state.timer_b_load)
     {
-        m_timer_b_counter = m_timer_b_register;
+        m_state.timer_b_counter = m_state.timer_b_register;
     }
 
-    m_timer_a_load = timer_a_load;
-    m_timer_b_load = timer_b_load;
+    m_state.timer_a_load = timer_a_load;
+    m_state.timer_b_load = timer_b_load;
 
-    u8 old_mode = m_channel_3_mode;
-    m_channel_3_mode = (value >> 6) & 0x03;
+    u8 old_mode = m_state.channel_3_mode;
+    m_state.channel_3_mode = (value >> 6) & 0x03;
 
-    if (old_mode != m_channel_3_mode)
-        m_channels[2].phase_dirty = 1;
+    if (old_mode != m_state.channel_3_mode)
+        m_state.channels[2].phase_dirty = 1;
 
-    if (old_mode == 2 && m_channel_3_mode != 2)
+    if (old_mode == 2 && m_state.channel_3_mode != 2)
         KeyOffCSM();
 }
 
@@ -1170,44 +1173,44 @@ void YM3438::LoadState(std::istream& stream)
 
 void YM3438::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_registers[0], sizeof(m_registers));
-    G_SERIALIZE(serializer, m_address);
-    G_SERIALIZE(serializer, m_f_number_high);
-    G_SERIALIZE(serializer, m_special_f_number_high);
-    G_SERIALIZE(serializer, m_channel_3_mode);
-    G_SERIALIZE(serializer, m_dac_enabled);
-    G_SERIALIZE(serializer, m_dac_data);
-    G_SERIALIZE(serializer, m_lfo_enabled);
-    G_SERIALIZE(serializer, m_lfo_frequency);
-    G_SERIALIZE(serializer, m_lfo_counter);
-    G_SERIALIZE(serializer, m_lfo_quotient);
-    G_SERIALIZE(serializer, m_timer_a_register);
-    G_SERIALIZE(serializer, m_timer_a_counter);
-    G_SERIALIZE(serializer, m_timer_b_register);
-    G_SERIALIZE(serializer, m_timer_b_counter);
-    G_SERIALIZE(serializer, m_timer_b_prescaler);
-    G_SERIALIZE(serializer, m_timer_a_load);
-    G_SERIALIZE(serializer, m_timer_b_load);
-    G_SERIALIZE(serializer, m_timer_a_enable);
-    G_SERIALIZE(serializer, m_timer_b_enable);
-    G_SERIALIZE(serializer, m_timer_a_flag);
-    G_SERIALIZE(serializer, m_timer_b_flag);
-    G_SERIALIZE(serializer, m_csm_key_pending);
-    G_SERIALIZE(serializer, m_csm_key_active);
-    G_SERIALIZE(serializer, m_envelope_counter);
-    G_SERIALIZE(serializer, m_envelope_divider);
-    G_SERIALIZE(serializer, m_native_cycle);
-    G_SERIALIZE(serializer, m_elapsed_cycles);
-    G_SERIALIZE(serializer, m_busy_cycles);
-    G_SERIALIZE(serializer, m_status);
-    G_SERIALIZE(serializer, m_left_sample);
-    G_SERIALIZE(serializer, m_right_sample);
-    G_SERIALIZE(serializer, m_previous_left_sample);
-    G_SERIALIZE(serializer, m_previous_right_sample);
+    G_SERIALIZE_ARRAY(serializer, m_state.registers[0], sizeof(m_state.registers));
+    G_SERIALIZE(serializer, m_state.address);
+    G_SERIALIZE(serializer, m_state.f_number_high);
+    G_SERIALIZE(serializer, m_state.special_f_number_high);
+    G_SERIALIZE(serializer, m_state.channel_3_mode);
+    G_SERIALIZE(serializer, m_state.dac_enabled);
+    G_SERIALIZE(serializer, m_state.dac_data);
+    G_SERIALIZE(serializer, m_state.lfo_enabled);
+    G_SERIALIZE(serializer, m_state.lfo_frequency);
+    G_SERIALIZE(serializer, m_state.lfo_counter);
+    G_SERIALIZE(serializer, m_state.lfo_quotient);
+    G_SERIALIZE(serializer, m_state.timer_a_register);
+    G_SERIALIZE(serializer, m_state.timer_a_counter);
+    G_SERIALIZE(serializer, m_state.timer_b_register);
+    G_SERIALIZE(serializer, m_state.timer_b_counter);
+    G_SERIALIZE(serializer, m_state.timer_b_prescaler);
+    G_SERIALIZE(serializer, m_state.timer_a_load);
+    G_SERIALIZE(serializer, m_state.timer_b_load);
+    G_SERIALIZE(serializer, m_state.timer_a_enable);
+    G_SERIALIZE(serializer, m_state.timer_b_enable);
+    G_SERIALIZE(serializer, m_state.timer_a_flag);
+    G_SERIALIZE(serializer, m_state.timer_b_flag);
+    G_SERIALIZE(serializer, m_state.csm_key_pending);
+    G_SERIALIZE(serializer, m_state.csm_key_active);
+    G_SERIALIZE(serializer, m_state.envelope_counter);
+    G_SERIALIZE(serializer, m_state.envelope_divider);
+    G_SERIALIZE(serializer, m_state.native_cycle);
+    G_SERIALIZE(serializer, m_state.elapsed_cycles);
+    G_SERIALIZE(serializer, m_state.busy_cycles);
+    G_SERIALIZE(serializer, m_state.status);
+    G_SERIALIZE(serializer, m_state.left_sample);
+    G_SERIALIZE(serializer, m_state.right_sample);
+    G_SERIALIZE(serializer, m_state.previous_left_sample);
+    G_SERIALIZE(serializer, m_state.previous_right_sample);
 
     for (int channel = 0; channel < YM3438_CHANNEL_COUNT; channel++)
     {
-        YM3438_Channel& ch = m_channels[channel];
+        YM3438_Channel& ch = m_state.channels[channel];
         G_SERIALIZE(serializer, ch.f_number);
         G_SERIALIZE(serializer, ch.block);
         G_SERIALIZE_ARRAY(serializer, ch.special_f_number, 3);
@@ -1251,34 +1254,34 @@ void YM3438::Serialize(StateSerializer& serializer)
 
 void YM3438::SanitizeState()
 {
-    m_address &= 0x01FF;
-    m_channel_3_mode &= 0x03;
-    m_dac_enabled &= 0x01;
-    m_lfo_enabled &= 0x01;
-    m_lfo_frequency &= 0x07;
-    m_lfo_counter &= 0x7F;
-    m_lfo_phase_changed = 0;
-    m_timer_a_register &= 0x03FF;
-    m_timer_a_counter &= 0x03FF;
-    m_timer_b_counter &= 0x00FF;
-    m_timer_b_prescaler &= 0x0F;
-    m_timer_a_load &= 0x01;
-    m_timer_b_load &= 0x01;
-    m_timer_a_enable &= 0x01;
-    m_timer_b_enable &= 0x01;
-    m_timer_a_flag &= 0x01;
-    m_timer_b_flag &= 0x01;
-    m_csm_key_pending &= 0x01;
-    m_csm_key_active &= 0x01;
-    m_envelope_counter &= 0x0FFF;
-    m_envelope_divider %= 3;
-    m_native_cycle %= k_ym3438_native_sample_cycles;
-    m_busy_cycles = MIN(m_busy_cycles, (u32)k_ym3438_busy_cycles);
-    m_status &= 0x83;
+    m_state.address &= 0x01FF;
+    m_state.channel_3_mode &= 0x03;
+    m_state.dac_enabled &= 0x01;
+    m_state.lfo_enabled &= 0x01;
+    m_state.lfo_frequency &= 0x07;
+    m_state.lfo_counter &= 0x7F;
+    m_state.lfo_phase_changed = 0;
+    m_state.timer_a_register &= 0x03FF;
+    m_state.timer_a_counter &= 0x03FF;
+    m_state.timer_b_counter &= 0x00FF;
+    m_state.timer_b_prescaler &= 0x0F;
+    m_state.timer_a_load &= 0x01;
+    m_state.timer_b_load &= 0x01;
+    m_state.timer_a_enable &= 0x01;
+    m_state.timer_b_enable &= 0x01;
+    m_state.timer_a_flag &= 0x01;
+    m_state.timer_b_flag &= 0x01;
+    m_state.csm_key_pending &= 0x01;
+    m_state.csm_key_active &= 0x01;
+    m_state.envelope_counter &= 0x0FFF;
+    m_state.envelope_divider %= 3;
+    m_state.native_cycle %= k_ym3438_native_sample_cycles;
+    m_state.busy_cycles = MIN(m_state.busy_cycles, (u32)k_ym3438_busy_cycles);
+    m_state.status &= 0x83;
 
     for (int channel = 0; channel < YM3438_CHANNEL_COUNT; channel++)
     {
-        YM3438_Channel& ch = m_channels[channel];
+        YM3438_Channel& ch = m_state.channels[channel];
         ch.f_number &= 0x07FF;
         ch.block &= 0x07;
         ch.key_code = CalculateKeyCode(ch.f_number, ch.block);

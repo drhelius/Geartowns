@@ -24,7 +24,7 @@
 
 INLINE bool I386::OPCodes_INS(int width, u32 destination_offset)
 {
-    u16 port = m_registers[I386_REG_EDX].low;
+    u16 port = m_state.registers[I386_REG_EDX].low;
     u32 value = width == 8 ? 0xFF : width == 16 ? 0xFFFF : 0xFFFFFFFFU;
 
     if (IsValidPointer(m_towns_io))
@@ -49,7 +49,7 @@ INLINE bool I386::OPCodes_OUTS(int width, int source_segment, u32 source_offset)
 
     if (ok && IsValidPointer(m_towns_io))
     {
-        u16 port = m_registers[I386_REG_EDX].low;
+        u16 port = m_state.registers[I386_REG_EDX].low;
 
         if (width == 8)
             m_towns_io->Write8(port, (u8)value, *m_bus_context);
@@ -117,6 +117,9 @@ INLINE bool I386::OPCodes_SCAS(int width, u32 destination_offset)
 
 bool I386::OPCodes_String()
 {
+    if (m_instruction.opcode >= 0x6C && m_instruction.opcode <= 0x6F && DeferIO())
+        return true;
+
     if (!DecodeOperands(false, 0))
         return false;
 
@@ -137,24 +140,24 @@ bool I386::ContinueRepeat()
 
     if (repeat)
     {
-        if (!m_repeat.active)
+        if (!m_state.repeat.active)
         {
-            m_repeat.start_eip = m_instruction.start_eip;
-            m_repeat.next_eip = m_instruction.next_eip;
-            m_repeat.opcode = m_instruction.opcode;
-            m_repeat.operand_size = m_instruction.operand_size;
-            m_repeat.address_size = m_instruction.address_size;
-            m_repeat.repeat = m_instruction.repeat;
-            m_repeat.segment_override = m_instruction.segment_override;
-            m_repeat.active = true;
+            m_state.repeat.start_eip = m_instruction.start_eip;
+            m_state.repeat.next_eip = m_instruction.next_eip;
+            m_state.repeat.opcode = m_instruction.opcode;
+            m_state.repeat.operand_size = m_instruction.operand_size;
+            m_state.repeat.address_size = m_instruction.address_size;
+            m_state.repeat.repeat = m_instruction.repeat;
+            m_state.repeat.segment_override = m_instruction.segment_override;
+            m_state.repeat.active = true;
         }
 
-        m_eip = m_instruction.start_eip;
+        m_state.eip = m_instruction.start_eip;
         m_step.instruction_completed = false;
     }
     else
     {
-        m_repeat.active = false;
+        m_state.repeat.active = false;
         CommitEIP(m_instruction);
         m_step.instruction_completed = true;
     }
@@ -185,7 +188,7 @@ bool I386::ExecuteStringElement(bool& repeat)
     {
         bool allowed = false;
 
-        if (!CheckIOPermission(m_registers[I386_REG_EDX].low, width, *m_bus_context, allowed))
+        if (!CheckIOPermission(m_state.registers[I386_REG_EDX].low, width, *m_bus_context, allowed))
             return false;
 
         if (!allowed)
@@ -238,7 +241,7 @@ bool I386::ExecuteStringElement(bool& repeat)
 
     u32 delta = (u32)width >> 3;
 
-    if ((m_eflags & I386_FLAG_DF) != 0)
+    if ((m_state.eflags & I386_FLAG_DF) != 0)
         delta = 0 - delta;
 
     if ((m_string.index_mask & 1) != 0)
@@ -260,7 +263,7 @@ bool I386::ExecuteStringElement(bool& repeat)
 
     if (repeat && (opcode == 0xA6 || opcode == 0xA7 || opcode == 0xAE || opcode == 0xAF))
     {
-        bool zf = (m_eflags & I386_FLAG_ZF) != 0;
+        bool zf = (m_state.eflags & I386_FLAG_ZF) != 0;
         repeat = m_instruction.repeat == 3 ? zf : !zf;
     }
 
@@ -269,25 +272,25 @@ bool I386::ExecuteStringElement(bool& repeat)
 
 u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 {
-    u8 opcode = m_repeat.opcode;
+    u8 opcode = m_state.repeat.opcode;
     bool move = opcode == 0xA4 || opcode == 0xA5;
 
-    if ((!move && opcode != 0xAA && opcode != 0xAB) || (m_cr0 & 0x80000000U) != 0 || m_trace_enabled ||
-        m_interrupt_shadow_steps != 0 || (m_debug_registers[7] & 0xFF) != 0 ||
-        (m_eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0 || IsValidPointer(m_bus_context->observe_memory_write) ||
+    if ((!move && opcode != 0xAA && opcode != 0xAB) || (m_state.cr0 & 0x80000000U) != 0 || m_trace_enabled ||
+        m_state.interrupt_shadow_steps != 0 || (m_state.debug_registers[7] & 0xFF) != 0 ||
+        (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0 || IsValidPointer(m_bus_context->observe_memory_write) ||
         m_bus_context->end_batch)
         return 0;
 
-    int address_width = m_repeat.address_size * 8;
+    int address_width = m_state.repeat.address_size * 8;
     u32 count = GetRegister(I386_REG_ECX, address_width);
 
     if (count == 0 || budget == 0)
         return 0;
 
-    u32 size = (opcode & 1) != 0 ? m_repeat.operand_size : 1;
+    u32 size = (opcode & 1) != 0 ? m_state.repeat.operand_size : 1;
     u32 source = GetRegister(I386_REG_ESI, address_width);
     u32 destination = GetRegister(I386_REG_EDI, address_width);
-    int segment = m_repeat.segment_override == 0xFF ? I386_SEGMENT_DS : m_repeat.segment_override;
+    int segment = m_state.repeat.segment_override == 0xFF ? I386_SEGMENT_DS : m_state.repeat.segment_override;
     s64 destination_end = (s64)((u64)destination + size - 1);
 
     if (destination_end > m_write_limits[I386_SEGMENT_ES])
@@ -296,13 +299,13 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     if (move && (s64)((u64)source + size - 1) > m_read_limits[segment])
         return 0;
 
-    u32 destination_linear = m_segments[I386_SEGMENT_ES].base + destination;
+    u32 destination_linear = m_state.segments[I386_SEGMENT_ES].base + destination;
     u8* output = GetWriteHost(destination_linear, size);
 
     if (!IsValidPointer(output))
         return 0;
 
-    u32 source_linear = m_segments[segment].base + source;
+    u32 source_linear = m_state.segments[segment].base + source;
     const u8* input = move ? GetReadHost(source_linear, size) : NULL;
 
     if (move && !IsValidPointer(input))
@@ -311,7 +314,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     u32 iteration_clocks = move ? 4 : 5;
     u32 elements = (u32)MIN((u64)count, ((u64)budget + iteration_clocks - 1) / iteration_clocks);
     u32 address_mask = address_width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
-    bool reverse = (m_eflags & I386_FLAG_DF) != 0;
+    bool reverse = (m_state.eflags & I386_FLAG_DF) != 0;
 
     if (reverse)
     {
@@ -373,7 +376,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     }
     else
     {
-        u32 value = m_registers[I386_REG_EAX].value;
+        u32 value = m_state.registers[I386_REG_EAX].value;
         u8* start = reverse ? output - (elements - 1) * size : output;
 
         if (size == 1)
@@ -393,12 +396,12 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     SetRegister(I386_REG_EDI, address_width, destination + delta);
     SetRegister(I386_REG_ECX, address_width, count - elements);
 
-    m_repeat.active = count != elements;
-    m_eip = m_repeat.active ? m_repeat.start_eip : m_repeat.next_eip;
+    m_state.repeat.active = count != elements;
+    m_state.eip = m_state.repeat.active ? m_state.repeat.start_eip : m_state.repeat.next_eip;
 
     m_step.clocks = iteration_clocks;
     m_step.steps = 1;
-    m_step.instruction_completed = !m_repeat.active;
+    m_step.instruction_completed = !m_state.repeat.active;
     m_step.end_batch = false;
     m_step.exception = false;
 
@@ -480,9 +483,9 @@ u32 I386::GetStringClocks(bool continuation) const
     }
 
     bool input = opcode <= 0x6D;
-    bool real = m_execution_mode == I386_MODE_REAL;
+    bool real = m_state.execution_mode == I386_MODE_REAL;
     bool permission_check =
-        !real && (m_execution_mode == I386_MODE_VM86 || m_current_privilege_level > GetIOPrivilegeLevel());
+        !real && (m_state.execution_mode == I386_MODE_VM86 || m_state.current_privilege_level > GetIOPrivilegeLevel());
 
     if (!m_string.repeated)
         return real ? (input ? 15 : 14) : permission_check ? (input ? 29 : 28) : (input ? 9 : 8);

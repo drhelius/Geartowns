@@ -87,23 +87,24 @@ void I386::Reset()
     InitPointer(m_bus_context);
     m_memory_generation = 0;
     m_batch_mode = false;
-    m_execution_mode = I386_MODE_REAL;
+    m_batch_start_pc = 0;
+    m_state.execution_mode = I386_MODE_REAL;
 
     memset(&m_step, 0, sizeof(m_step));
     memset(&m_step_exception, 0, sizeof(m_step_exception));
-    memset(m_registers, 0, sizeof(m_registers));
-    memset(m_segments, 0, sizeof(m_segments));
-    memset(&m_gdtr, 0, sizeof(m_gdtr));
-    memset(&m_idtr, 0, sizeof(m_idtr));
-    memset(&m_ldtr, 0, sizeof(m_ldtr));
-    memset(&m_task_register, 0, sizeof(m_task_register));
+    memset(m_state.registers, 0, sizeof(m_state.registers));
+    memset(m_state.segments, 0, sizeof(m_state.segments));
+    memset(&m_state.gdtr, 0, sizeof(m_state.gdtr));
+    memset(&m_state.idtr, 0, sizeof(m_state.idtr));
+    memset(&m_state.ldtr, 0, sizeof(m_state.ldtr));
+    memset(&m_state.task_register, 0, sizeof(m_state.task_register));
 
-    memset(m_debug_registers, 0, sizeof(m_debug_registers));
-    memset(m_test_registers, 0, sizeof(m_test_registers));
+    memset(m_state.debug_registers, 0, sizeof(m_state.debug_registers));
+    memset(m_state.test_registers, 0, sizeof(m_state.test_registers));
 
     memset(&m_exception, 0, sizeof(m_exception));
 
-    memset(&m_repeat, 0, sizeof(m_repeat));
+    memset(&m_state.repeat, 0, sizeof(m_state.repeat));
     memset(&m_string, 0, sizeof(m_string));
     memset(&m_instruction, 0, sizeof(m_instruction));
     memset(&m_instruction_defaults, 0, sizeof(m_instruction_defaults));
@@ -146,33 +147,33 @@ void I386::Reset()
         SetRealModeSegment((I386_Segment_Register)i, 0);
 
     SetRealModeSegment(I386_SEGMENT_CS, 0xF000);
-    m_segments[I386_SEGMENT_CS].base = 0xFFFF0000;
+    m_state.segments[I386_SEGMENT_CS].base = 0xFFFF0000;
 
-    m_eip = 0x0000FFF0;
-    m_eflags = I386_FLAG_FIXED;
-    m_idtr.limit = 0x03FF;
+    m_state.eip = 0x0000FFF0;
+    m_state.eflags = I386_FLAG_FIXED;
+    m_state.idtr.limit = 0x03FF;
 
-    m_cr0 = 0x00000010;
-    m_cr2 = 0;
-    m_cr3 = 0;
+    m_state.cr0 = 0x00000010;
+    m_state.cr2 = 0;
+    m_state.cr3 = 0;
 
-    m_registers[I386_REG_EDX].value = 0x00000300;
-    m_debug_registers[6] = 0xFFFF1FF0;
-    m_debug_registers[7] = 0x00000400;
+    m_state.registers[I386_REG_EDX].value = 0x00000300;
+    m_state.debug_registers[6] = 0xFFFF1FF0;
+    m_state.debug_registers[7] = 0x00000400;
 
-    m_execution_mode = I386_MODE_REAL;
-    m_current_privilege_level = 0;
+    m_state.execution_mode = I386_MODE_REAL;
+    m_state.current_privilege_level = 0;
 
-    m_interrupt_shadow = I386_SHADOW_NONE;
-    m_interrupt_shadow_steps = 0;
+    m_state.interrupt_shadow = I386_SHADOW_NONE;
+    m_state.interrupt_shadow_steps = 0;
 
-    m_halted = false;
-    m_shutdown = false;
-    m_nmi_blocked = false;
+    m_state.halted = false;
+    m_state.shutdown = false;
+    m_state.nmi_blocked = false;
     m_external_event = false;
 
     m_debug_data_breakpoints = 0;
-    m_last_exception_vector = 0xFF;
+    m_state.last_exception_vector = 0xFF;
 
     UpdateSegmentFastPaths();
     UpdateDebugState();
@@ -181,7 +182,7 @@ void I386::Reset()
 NO_INLINE bool I386::ExecuteOPCodeDebug(const I386_State& before)
 {
     m_debug_step = true;
-    u16 old_task = m_task_register.selector;
+    u16 old_task = m_state.task_register.selector;
 
     m_debug_data_breakpoints = 0;
 
@@ -191,34 +192,34 @@ NO_INLINE bool I386::ExecuteOPCodeDebug(const I386_State& before)
     if (!completed)
         return false;
 
-    if (m_step.instruction_completed && (m_eflags & I386_FLAG_RF) != 0)
+    if (m_step.instruction_completed && (m_state.eflags & I386_FLAG_RF) != 0)
     {
         bool preserve = !m_instruction.two_byte && (m_instruction.opcode == 0x9D || m_instruction.opcode == 0xCF);
 
-        if (m_task_register.selector != old_task)
+        if (m_state.task_register.selector != old_task)
             preserve = true;
 
         if (!preserve)
-            m_eflags &= ~I386_FLAG_RF;
+            m_state.eflags &= ~I386_FLAG_RF;
     }
 
     if (!m_step.exception)
     {
         bool single_step = m_step.instruction_completed &&
             (before.eflags & I386_FLAG_TF) != 0 &&
-            m_task_register.selector == old_task &&
-            (m_interrupt_shadow != I386_SHADOW_MOV_SS || m_interrupt_shadow_steps == 1);
+            m_state.task_register.selector == old_task &&
+            (m_state.interrupt_shadow != I386_SHADOW_MOV_SS || m_state.interrupt_shadow_steps == 1);
 
         if (m_debug_data_breakpoints != 0 || single_step)
         {
-            m_debug_registers[6] |= m_debug_data_breakpoints;
+            m_state.debug_registers[6] |= m_debug_data_breakpoints;
 
             if (single_step)
-                m_debug_registers[6] |= 0x00004000U;
+                m_state.debug_registers[6] |= 0x00004000U;
 
             RaiseException(1, I386_EXCEPTION_TRAP);
             m_exception.has_return_eip = true;
-            m_exception.return_eip = m_eip;
+            m_exception.return_eip = m_state.eip;
             return false;
         }
     }
@@ -237,7 +238,7 @@ void I386::CompleteFault(u16 old_task)
     m_step_exception.instruction_completed = result.instruction_completed;
     m_step_exception.end_batch = result.end_batch;
     m_step_exception.exception_after_instruction =
-        m_exception.exception_class == I386_EXCEPTION_TRAP || m_task_register.selector != old_task;
+        m_exception.exception_class == I386_EXCEPTION_TRAP || m_state.task_register.selector != old_task;
 
     ResolveException(*m_bus_context, m_step_exception);
 
@@ -283,6 +284,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     total.exception_vector = 0xFF;
 
     m_batch_mode = true;
+    m_batch_start_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
     m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
@@ -296,9 +298,9 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 
     while (clocks + context.wait_clocks < cycle_budget)
     {
-        if (likely(!m_step_slow && !m_repeat.active && (m_eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
+        if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
-            u16 old_task = m_task_register.selector;
+            u16 old_task = m_state.task_register.selector;
             m_step.clocks = 0;
             m_step.instruction_completed = true;
             m_step.end_batch = false;
@@ -307,14 +309,14 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
             if (unlikely(!ExecuteOPCode()))
                 CompleteFault(old_task);
 
-            if (unlikely(m_interrupt_shadow_steps > 0) && m_step.instruction_completed)
+            if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
                 CountInterruptShadow();
 
             clocks += m_step.clocks;
             steps++;
             completed = m_step.instruction_completed;
 
-            if (unlikely(m_step.end_batch || context.end_batch || m_halted || m_shutdown))
+            if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
             {
                 // Exceptions and software interrupts always end the batch
                 if (m_step.exception)
@@ -357,7 +359,7 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
 {
     GT_Bus_Access_Context& context = *m_bus_context;
 
-    if (m_repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_halted && !m_shutdown)
+    if (m_state.repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_state.halted && !m_state.shutdown)
     {
         u32 clocks = 0;
         u32 steps = RunRepeatBatch((u32)(cycle_budget - total.clocks - context.wait_clocks), clocks);
@@ -382,7 +384,7 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
     if (step.exception)
         CopyStepException(total);
 
-    return !(step.steps == 0 || step.end_batch || m_halted || m_shutdown ||
+    return !(step.steps == 0 || step.end_batch || m_state.halted || m_state.shutdown ||
         IsInterruptReady(nmi_pending, intr_pending));
 }
 
@@ -399,39 +401,39 @@ void I386::CopyStepException(I386_Run_Result& total) const
 
 void I386::UpdateStepMode()
 {
-    m_step_slow = m_halted || m_shutdown || m_trace_enabled || (m_debug_registers[7] & 0xFF) != 0;
+    m_step_slow = m_state.halted || m_state.shutdown || m_trace_enabled || (m_state.debug_registers[7] & 0xFF) != 0;
 }
 
 bool I386::Halted() const
 {
-    return m_halted;
+    return m_state.halted;
 }
 
 bool I386::Shutdown() const
 {
-    return m_shutdown;
+    return m_state.shutdown;
 }
 
 bool I386::CanAcceptMaskableInterrupt() const
 {
-    return !m_shutdown && (m_eflags & I386_FLAG_IF) != 0 && m_interrupt_shadow == I386_SHADOW_NONE;
+    return !m_state.shutdown && (m_state.eflags & I386_FLAG_IF) != 0 && m_state.interrupt_shadow == I386_SHADOW_NONE;
 }
 
 bool I386::CanAcceptNMI() const
 {
-    return !m_shutdown && !m_nmi_blocked && m_interrupt_shadow != I386_SHADOW_MOV_SS;
+    return !m_state.shutdown && !m_state.nmi_blocked && m_state.interrupt_shadow != I386_SHADOW_MOV_SS;
 }
 
 u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context)
 {
     SetBusContext(context);
-    m_halted = false;
-    m_repeat.active = false;
-    m_last_exception_vector = vector;
+    m_state.halted = false;
+    m_state.repeat.active = false;
+    m_state.last_exception_vector = vector;
 
     u64 clocks = k_i386_real_interrupt_entry_clocks;
 
-    if (EnterInterrupt(vector, m_eip, context, false, false, 0, false, true, &clocks))
+    if (EnterInterrupt(vector, m_state.eip, context, false, false, 0, false, true, &clocks))
         return clocks;
 
     if (m_exception.pending)
@@ -444,11 +446,11 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context)
         result.instruction_completed = true;
         result.exception_vector = 0xFF;
 
-        DeliverException(exception, m_eip, context, result);
+        DeliverException(exception, m_state.eip, context, result);
         return (u32)result.clocks;
     }
     else
-        m_shutdown = true;
+        m_state.shutdown = true;
 
     return clocks;
 }
@@ -458,73 +460,18 @@ u32 I386::EnterNMI(GT_Bus_Access_Context& context)
     if (!CanAcceptNMI())
         return 0;
 
-    m_nmi_blocked = true;
+    m_state.nmi_blocked = true;
     return EnterExternalInterrupt(2, context);
 }
 
 void I386::CopyState(I386_State& state) const
 {
-    memset(&state, 0, sizeof(state));
-
-    for (int i = 0; i < I386_REG_COUNT; i++)
-        state.registers[i] = m_registers[i].value;
-
-    state.eip = m_eip;
-    state.eflags = m_eflags;
-    memcpy(state.segments, m_segments, sizeof(m_segments));
-    state.gdtr = m_gdtr;
-    state.idtr = m_idtr;
-    state.ldtr = m_ldtr;
-    state.task_register = m_task_register;
-    state.cr0 = m_cr0;
-    state.cr2 = m_cr2;
-    state.cr3 = m_cr3;
-    memcpy(state.debug_registers, m_debug_registers, sizeof(m_debug_registers));
-    memcpy(state.test_registers, m_test_registers, sizeof(m_test_registers));
-    state.execution_mode = (u8)m_execution_mode;
-    state.current_privilege_level = m_current_privilege_level;
-    state.interrupt_shadow = (u8)m_interrupt_shadow;
-    state.interrupt_shadow_steps = m_interrupt_shadow_steps;
-    state.last_exception_vector = m_last_exception_vector;
-    state.halted = m_halted;
-    state.shutdown = m_shutdown;
-    state.nmi_blocked = m_nmi_blocked;
-    state.repeat.active = m_repeat.active;
-    state.repeat.start_eip = m_repeat.start_eip;
-    state.repeat.next_eip = m_repeat.next_eip;
-    state.repeat.opcode = m_repeat.opcode;
-    state.repeat.operand_size = m_repeat.operand_size;
-    state.repeat.address_size = m_repeat.address_size;
-    state.repeat.repeat = m_repeat.repeat;
-    state.repeat.segment_override = m_repeat.segment_override;
+    state = m_state;
 }
 
 bool I386::SetState(const I386_State& state)
 {
-    for (int i = 0; i < I386_REG_COUNT; i++)
-        m_registers[i].value = state.registers[i];
-
-    m_eip = state.eip;
-    m_eflags = state.eflags;
-    memcpy(m_segments, state.segments, sizeof(m_segments));
-    m_gdtr = state.gdtr;
-    m_idtr = state.idtr;
-    m_ldtr = state.ldtr;
-    m_task_register = state.task_register;
-    m_cr0 = state.cr0;
-    m_cr2 = state.cr2;
-    m_cr3 = state.cr3;
-    memcpy(m_debug_registers, state.debug_registers, sizeof(m_debug_registers));
-    memcpy(m_test_registers, state.test_registers, sizeof(m_test_registers));
-    m_current_privilege_level = state.current_privilege_level;
-    m_interrupt_shadow = (I386_Interrupt_Shadow)state.interrupt_shadow;
-    m_interrupt_shadow_steps = state.interrupt_shadow_steps;
-    m_last_exception_vector = state.last_exception_vector;
-    m_halted = state.halted;
-    m_shutdown = state.shutdown;
-    m_nmi_blocked = state.nmi_blocked;
-    m_repeat = state.repeat;
-
+    m_state = state;
     SanitizeState();
     FlushTLB();
     return true;
@@ -561,38 +508,38 @@ void I386::SerializeDescriptorTable(StateSerializer& serializer, I386_Descriptor
 void I386::Serialize(StateSerializer& serializer)
 {
     for (int i = 0; i < I386_REG_COUNT; i++)
-        G_SERIALIZE(serializer, m_registers[i].value);
+        G_SERIALIZE(serializer, m_state.registers[i].value);
 
-    G_SERIALIZE(serializer, m_eip);
-    G_SERIALIZE(serializer, m_eflags);
+    G_SERIALIZE(serializer, m_state.eip);
+    G_SERIALIZE(serializer, m_state.eflags);
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
-        SerializeSegment(serializer, m_segments[i]);
+        SerializeSegment(serializer, m_state.segments[i]);
 
-    SerializeDescriptorTable(serializer, m_gdtr);
-    SerializeDescriptorTable(serializer, m_idtr);
-    SerializeSegment(serializer, m_ldtr);
-    SerializeSegment(serializer, m_task_register);
-    G_SERIALIZE(serializer, m_cr0);
-    G_SERIALIZE(serializer, m_cr2);
-    G_SERIALIZE(serializer, m_cr3);
-    G_SERIALIZE_ARRAY(serializer, m_debug_registers, 8);
-    G_SERIALIZE_ARRAY(serializer, m_test_registers, 2);
-    G_SERIALIZE(serializer, m_current_privilege_level);
-    G_SERIALIZE(serializer, m_interrupt_shadow);
-    G_SERIALIZE(serializer, m_interrupt_shadow_steps);
-    G_SERIALIZE(serializer, m_last_exception_vector);
-    G_SERIALIZE(serializer, m_halted);
-    G_SERIALIZE(serializer, m_shutdown);
-    G_SERIALIZE(serializer, m_nmi_blocked);
-    G_SERIALIZE(serializer, m_repeat.active);
-    G_SERIALIZE(serializer, m_repeat.start_eip);
-    G_SERIALIZE(serializer, m_repeat.next_eip);
-    G_SERIALIZE(serializer, m_repeat.opcode);
-    G_SERIALIZE(serializer, m_repeat.operand_size);
-    G_SERIALIZE(serializer, m_repeat.address_size);
-    G_SERIALIZE(serializer, m_repeat.repeat);
-    G_SERIALIZE(serializer, m_repeat.segment_override);
+    SerializeDescriptorTable(serializer, m_state.gdtr);
+    SerializeDescriptorTable(serializer, m_state.idtr);
+    SerializeSegment(serializer, m_state.ldtr);
+    SerializeSegment(serializer, m_state.task_register);
+    G_SERIALIZE(serializer, m_state.cr0);
+    G_SERIALIZE(serializer, m_state.cr2);
+    G_SERIALIZE(serializer, m_state.cr3);
+    G_SERIALIZE_ARRAY(serializer, m_state.debug_registers, 8);
+    G_SERIALIZE_ARRAY(serializer, m_state.test_registers, 2);
+    G_SERIALIZE(serializer, m_state.current_privilege_level);
+    G_SERIALIZE(serializer, m_state.interrupt_shadow);
+    G_SERIALIZE(serializer, m_state.interrupt_shadow_steps);
+    G_SERIALIZE(serializer, m_state.last_exception_vector);
+    G_SERIALIZE(serializer, m_state.halted);
+    G_SERIALIZE(serializer, m_state.shutdown);
+    G_SERIALIZE(serializer, m_state.nmi_blocked);
+    G_SERIALIZE(serializer, m_state.repeat.active);
+    G_SERIALIZE(serializer, m_state.repeat.start_eip);
+    G_SERIALIZE(serializer, m_state.repeat.next_eip);
+    G_SERIALIZE(serializer, m_state.repeat.opcode);
+    G_SERIALIZE(serializer, m_state.repeat.operand_size);
+    G_SERIALIZE(serializer, m_state.repeat.address_size);
+    G_SERIALIZE(serializer, m_state.repeat.repeat);
+    G_SERIALIZE(serializer, m_state.repeat.segment_override);
 
     for (int i = 0; i < I386_TLB_SIZE; i++)
     {
@@ -606,13 +553,13 @@ void I386::Serialize(StateSerializer& serializer)
 
 void I386::SanitizeState()
 {
-    m_eflags |= I386_FLAG_FIXED;
-    m_current_privilege_level &= 3;
+    m_state.eflags |= I386_FLAG_FIXED;
+    m_state.current_privilege_level &= 3;
 
-    if (m_interrupt_shadow > I386_SHADOW_MOV_SS)
-        m_interrupt_shadow = I386_SHADOW_NONE;
+    if (m_state.interrupt_shadow > I386_SHADOW_MOV_SS)
+        m_state.interrupt_shadow = I386_SHADOW_NONE;
 
-    m_interrupt_shadow_steps = MIN(m_interrupt_shadow_steps, (u8)2);
+    m_state.interrupt_shadow_steps = MIN(m_state.interrupt_shadow_steps, (u8)2);
     m_external_event = false;
 
     m_debug_data_breakpoints = 0;
@@ -623,28 +570,28 @@ void I386::SanitizeState()
     memset(&m_string, 0, sizeof(m_string));
     memset(&m_instruction, 0, sizeof(m_instruction));
 
-    if (m_repeat.active)
+    if (m_state.repeat.active)
     {
-        if (m_repeat.operand_size != 4)
-            m_repeat.operand_size = 2;
+        if (m_state.repeat.operand_size != 4)
+            m_state.repeat.operand_size = 2;
 
-        if (m_repeat.address_size != 4)
-            m_repeat.address_size = 2;
+        if (m_state.repeat.address_size != 4)
+            m_state.repeat.address_size = 2;
 
-        if (m_repeat.segment_override >= I386_SEGMENT_COUNT)
-            m_repeat.segment_override = 0xFF;
+        if (m_state.repeat.segment_override >= I386_SEGMENT_COUNT)
+            m_state.repeat.segment_override = 0xFF;
 
-        m_instruction.start_eip = m_repeat.start_eip;
-        m_instruction.next_eip = m_repeat.next_eip;
-        m_instruction.opcode = m_repeat.opcode;
-        m_instruction.operand_size = m_repeat.operand_size;
-        m_instruction.address_size = m_repeat.address_size;
-        m_instruction.repeat = m_repeat.repeat;
-        m_instruction.segment_override = m_repeat.segment_override;
+        m_instruction.start_eip = m_state.repeat.start_eip;
+        m_instruction.next_eip = m_state.repeat.next_eip;
+        m_instruction.opcode = m_state.repeat.opcode;
+        m_instruction.operand_size = m_state.repeat.operand_size;
+        m_instruction.address_size = m_state.repeat.address_size;
+        m_instruction.repeat = m_state.repeat.repeat;
+        m_instruction.segment_override = m_state.repeat.segment_override;
     }
 
     // A restored REP continuation has no fetched bytes to report until the next decode
-    m_instruction_restored = m_repeat.active;
+    m_instruction_restored = m_state.repeat.active;
     m_checked_valid = false;
     m_fetch_remaining = 0;
     m_address_clocks = 0;
@@ -673,7 +620,7 @@ void I386::SanitizeState()
     UpdateMemoryMode();
     UpdateExecutionMode();
 
-    if (m_repeat.active)
+    if (m_state.repeat.active)
         PrepareString();
 
     UpdateDebugState();
@@ -681,15 +628,15 @@ void I386::SanitizeState()
 
 u8 I386::GetLastExceptionVector() const
 {
-    return m_last_exception_vector;
+    return m_state.last_exception_vector;
 }
 
 // Passive copy of the bytes at CS:EIP before a single step executes them
 void I386::CaptureCheckedBytes()
 {
-    u32 linear = m_segments[I386_SEGMENT_CS].base + m_eip;
+    u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
 
-    m_checked_eip = m_eip;
+    m_checked_eip = m_state.eip;
     m_checked_count = 0;
 
     while (m_checked_count < GT_I386_MAX_INSTRUCTION_LENGTH &&
@@ -711,7 +658,7 @@ bool I386::CopyDecodeState(I386_Decode_State& state)
     }
     else
     {
-        u32 linear = m_segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
+        u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
 
         for (u32 i = 0; i < length; i++)
         {
@@ -784,7 +731,7 @@ int I386::CopyTraceEntries(I386_Trace_Entry* entries, int capacity) const
 
 void I386::SetRealModeSegment(I386_Segment_Register segment, u16 selector)
 {
-    I386_Segment& state = m_segments[segment];
+    I386_Segment& state = m_state.segments[segment];
     state.selector = selector;
     state.base = (u32)selector << 4;
     state.limit = 0xFFFF;
@@ -802,28 +749,28 @@ void I386::SetRealModeSegment(I386_Segment_Register segment, u16 selector)
 void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
 {
     SetRealModeSegment(segment, selector);
-    m_segments[segment].attributes &= ~(I386_SEGMENT_TYPE_MASK | I386_SEGMENT_ACCESSED);
-    m_segments[segment].attributes |= I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
-    m_segments[segment].dpl = 3;
+    m_state.segments[segment].attributes &= ~(I386_SEGMENT_TYPE_MASK | I386_SEGMENT_ACCESSED);
+    m_state.segments[segment].attributes |= I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
+    m_state.segments[segment].dpl = 3;
     UpdateSegmentFastPaths();
 }
 
 void I386::UpdateExecutionMode()
 {
-    if ((m_eflags & I386_FLAG_VM) != 0)
+    if ((m_state.eflags & I386_FLAG_VM) != 0)
     {
-        m_execution_mode = I386_MODE_VM86;
-        m_current_privilege_level = 3;
+        m_state.execution_mode = I386_MODE_VM86;
+        m_state.current_privilege_level = 3;
     }
-    else if ((m_cr0 & 1) != 0)
+    else if ((m_state.cr0 & 1) != 0)
     {
-        m_execution_mode = I386_MODE_PROTECTED;
-        m_current_privilege_level = m_segments[I386_SEGMENT_CS].selector & 3;
+        m_state.execution_mode = I386_MODE_PROTECTED;
+        m_state.current_privilege_level = m_state.segments[I386_SEGMENT_CS].selector & 3;
     }
     else
     {
-        m_execution_mode = I386_MODE_REAL;
-        m_current_privilege_level = 0;
+        m_state.execution_mode = I386_MODE_REAL;
+        m_state.current_privilege_level = 0;
     }
 
     UpdateUserMode();
@@ -832,22 +779,22 @@ void I386::UpdateExecutionMode()
 
 bool I386::CheckInstructionBreakpoint()
 {
-    u32 linear = m_segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
+    u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
     u8 matches = 0;
 
     for (int i = 0; i < 4; i++)
     {
-        u32 enable = (m_debug_registers[7] >> (i * 2)) & 3;
-        u32 operation = (m_debug_registers[7] >> (16 + i * 4)) & 3;
+        u32 enable = (m_state.debug_registers[7] >> (i * 2)) & 3;
+        u32 operation = (m_state.debug_registers[7] >> (16 + i * 4)) & 3;
 
-        if (enable != 0 && operation == 0 && m_debug_registers[i] == linear)
+        if (enable != 0 && operation == 0 && m_state.debug_registers[i] == linear)
             matches |= 1U << i;
     }
 
     if (matches == 0)
         return true;
 
-    m_debug_registers[6] |= matches;
+    m_state.debug_registers[6] |= matches;
     return RaiseException(1, I386_EXCEPTION_FAULT);
 }
 
@@ -868,8 +815,8 @@ bool I386::FarTransfer(u16 selector, u32 offset, int width)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     SetRealModeSegment(I386_SEGMENT_CS, selector);
-    m_eip = target;
-    m_repeat.active = false;
+    m_state.eip = target;
+    m_state.repeat.active = false;
     return true;
 }
 
@@ -886,7 +833,7 @@ bool I386::RaiseException(u8 vector, u8 exception_class, bool has_error_code, u3
     m_exception.error_code = (m_external_event && has_error_code && vector >= 10 && vector <= 13) ?
         error_code | 1 : error_code;
     m_exception.return_eip = 0;
-    m_last_exception_vector = vector;
+    m_state.last_exception_vector = vector;
     return false;
 }
 
@@ -901,7 +848,7 @@ bool I386::ResolveException(GT_Bus_Access_Context& context, I386_Run_Result& res
     u32 return_eip = exception.has_return_eip ? exception.return_eip :
         exception.exception_class == I386_EXCEPTION_FAULT ? m_instruction.start_eip : m_instruction.next_eip;
 
-    m_repeat.active = false;
+    m_state.repeat.active = false;
     return DeliverException(exception, return_eip, context, result);
 }
 
@@ -935,13 +882,13 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
             result.exception = true;
             result.exception_vector = current.vector;
             result.end_batch = true;
-            m_last_exception_vector = current.vector;
+            m_state.last_exception_vector = current.vector;
             return true;
         }
 
         if (!m_exception.pending)
         {
-            m_shutdown = true;
+            m_state.shutdown = true;
             return false;
         }
 
@@ -950,7 +897,7 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
 
         if (current.vector == 8)
         {
-            m_shutdown = true;
+            m_state.shutdown = true;
             return false;
         }
 
@@ -976,11 +923,11 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
 bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& context, bool software,
     bool has_error_code, u32 error_code, bool fault, bool external, u64* clocks, I386_Run_Result* run_result)
 {
-    u16 return_cs = m_segments[I386_SEGMENT_CS].selector;
-    u32 return_base = m_segments[I386_SEGMENT_CS].base;
-    u32 source_eip = m_eip;
+    u16 return_cs = m_state.segments[I386_SEGMENT_CS].selector;
+    u32 return_base = m_state.segments[I386_SEGMENT_CS].base;
+    u32 source_eip = m_state.eip;
 
-    if (m_execution_mode != I386_MODE_REAL)
+    if (m_state.execution_mode != I386_MODE_REAL)
     {
         bool previous_external = m_external_event;
         m_external_event = external;
@@ -1008,10 +955,10 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
 
     u32 table_offset = (u32)vector * 4;
 
-    if ((u64)table_offset + 3 > m_idtr.limit)
+    if ((u64)table_offset + 3 > m_state.idtr.limit)
         return RaiseException(8, I386_EXCEPTION_ABORT);
 
-    u32 address = m_idtr.base + table_offset;
+    u32 address = m_state.idtr.base + table_offset;
     u32 physical = 0;
 
     if (!TranslateLinear(address, false, context, physical))
@@ -1020,19 +967,19 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
     u16 new_ip = m_memory->Read16Physical(physical, context);
     u16 new_cs = m_memory->Read16Physical(physical + 2, context);
 
-    if (!StackPushSized(m_eflags, 16, context))
+    if (!StackPushSized(m_state.eflags, 16, context))
         return false;
 
-    if (!StackPushSized(m_segments[I386_SEGMENT_CS].selector, 16, context))
+    if (!StackPushSized(m_state.segments[I386_SEGMENT_CS].selector, 16, context))
         return false;
 
     if (!StackPushSized(return_eip, 16, context))
         return false;
 
-    m_eflags &= ~(I386_FLAG_IF | I386_FLAG_TF);
+    m_state.eflags &= ~(I386_FLAG_IF | I386_FLAG_TF);
     SetRealModeSegment(I386_SEGMENT_CS, new_cs);
-    m_eip = new_ip;
-    m_halted = false;
+    m_state.eip = new_ip;
+    m_state.halted = false;
 
     if (IsValidPointer(run_result))
     {
@@ -1127,28 +1074,28 @@ void I386::UpdateDebugState() const
 {
     memset(&m_debug_state, 0, sizeof(m_debug_state));
 
-    m_debug_state.eax = m_registers[I386_REG_EAX].value;
-    m_debug_state.ebx = m_registers[I386_REG_EBX].value;
-    m_debug_state.ecx = m_registers[I386_REG_ECX].value;
-    m_debug_state.edx = m_registers[I386_REG_EDX].value;
-    m_debug_state.esi = m_registers[I386_REG_ESI].value;
-    m_debug_state.edi = m_registers[I386_REG_EDI].value;
-    m_debug_state.ebp = m_registers[I386_REG_EBP].value;
-    m_debug_state.esp = m_registers[I386_REG_ESP].value;
-    m_debug_state.eip = m_eip;
-    m_debug_state.eflags = m_eflags;
-    m_debug_state.cr0 = m_cr0;
-    m_debug_state.cr2 = m_cr2;
-    m_debug_state.cr3 = m_cr3;
+    m_debug_state.eax = m_state.registers[I386_REG_EAX].value;
+    m_debug_state.ebx = m_state.registers[I386_REG_EBX].value;
+    m_debug_state.ecx = m_state.registers[I386_REG_ECX].value;
+    m_debug_state.edx = m_state.registers[I386_REG_EDX].value;
+    m_debug_state.esi = m_state.registers[I386_REG_ESI].value;
+    m_debug_state.edi = m_state.registers[I386_REG_EDI].value;
+    m_debug_state.ebp = m_state.registers[I386_REG_EBP].value;
+    m_debug_state.esp = m_state.registers[I386_REG_ESP].value;
+    m_debug_state.eip = m_state.eip;
+    m_debug_state.eflags = m_state.eflags;
+    m_debug_state.cr0 = m_state.cr0;
+    m_debug_state.cr2 = m_state.cr2;
+    m_debug_state.cr3 = m_state.cr3;
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        m_debug_state.segment[i].selector = m_segments[i].selector;
-        m_debug_state.segment[i].base = m_segments[i].base;
-        m_debug_state.segment[i].limit = m_segments[i].limit;
-        m_debug_state.segment[i].access = m_segments[i].attributes;
-        m_debug_state.segment[i].dpl = m_segments[i].dpl;
-        m_debug_state.segment[i].present = (m_segments[i].attributes & I386_SEGMENT_PRESENT) != 0;
+        m_debug_state.segment[i].selector = m_state.segments[i].selector;
+        m_debug_state.segment[i].base = m_state.segments[i].base;
+        m_debug_state.segment[i].limit = m_state.segments[i].limit;
+        m_debug_state.segment[i].access = m_state.segments[i].attributes;
+        m_debug_state.segment[i].dpl = m_state.segments[i].dpl;
+        m_debug_state.segment[i].present = (m_state.segments[i].attributes & I386_SEGMENT_PRESENT) != 0;
     }
 
     m_debug_state.available = true;

@@ -22,23 +22,26 @@
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
 #include "towns_pic.h"
+#include "towns_pit.h"
 
 TownsIO::TownsIO()
 {
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
     InitPointer(m_pic);
+    InitPointer(m_pit);
 }
 
 TownsIO::~TownsIO()
 {
 }
 
-void TownsIO::Init(Audio* audio, TownsPIC* pic)
+void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit)
 {
     m_ym3438 = audio->GetYM3438();
     m_rf5c68 = audio->GetRF5C68();
     m_pic = pic;
+    m_pit = pit;
     Reset();
 }
 
@@ -48,8 +51,6 @@ void TownsIO::Reset()
 
 u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
 {
-    UNUSED(context);
-
     switch (port)
     {
         case 0x0000:
@@ -93,7 +94,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // PIT 3-5 control
         case 0x0060:
             // Timer interrupt status
-            break;
+            return m_pit->Read(port, context.time_ns);
         case 0x0070:
             // RTC data
         case 0x0080:
@@ -347,8 +348,6 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
 
 void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
 {
-    UNUSED(context);
-
     switch (port)
     {
         case 0x0000:
@@ -392,6 +391,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // PIT 3-5 control
         case 0x0060:
             // Timer interrupt control
+            m_pit->Write(port, value, context.time_ns);
             break;
         case 0x0070:
             // RTC data

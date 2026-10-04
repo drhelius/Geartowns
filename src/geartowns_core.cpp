@@ -25,11 +25,13 @@
 #include "media/firmware.h"
 #include "input/input.h"
 #include "common/memory_stream.h"
+#include "common/state_serializer.h"
 #include "media/media.h"
 #include "system/memory.h"
 #include "i386/i386.h"
 #include "system/towns_io.h"
 #include "system/towns_pic.h"
+#include "system/towns_pit.h"
 
 GeartownsCore::GeartownsCore()
 {
@@ -41,8 +43,11 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_i386);
     InitPointer(m_towns_io);
     InitPointer(m_pic);
+    InitPointer(m_pit);
     InitPointer(m_frame_buffer);
 
+    m_machine_time = 0;
+    m_machine_time_remainder = 0;
     m_paused = false;
     m_pixel_format = GT_PIXEL_RGBA8888;
 }
@@ -55,6 +60,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_i386);
     SafeDelete(m_towns_io);
     SafeDelete(m_pic);
+    SafeDelete(m_pit);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
 }
@@ -87,11 +93,15 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_pic))
         m_pic = new TownsPIC();
 
+    if (!IsValidPointer(m_pit))
+        m_pit = new TownsPIT();
+
     m_firmware->Init();
     m_memory->Init();
     m_audio->Init();
     m_pic->Init();
-    m_towns_io->Init(m_audio, m_pic);
+    m_pit->Init(m_pic);
+    m_towns_io->Init(m_audio, m_pic, m_pit);
     m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
     m_media->Init();
@@ -153,6 +163,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
 
             GT_Bus_Access_Context context = {};
             context.origin = GT_BUS_ORIGIN_CPU;
+            context.time_ns = m_machine_time;
             m_i386->RunInstruction(context);
 
             I386_Run_Result result = m_i386->GetStepInfo();
@@ -168,17 +179,15 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
                     m_i386->AddRunToBreakpoint(call_return_linear);
             }
 
-            u32 interrupt_clocks = 0;
-            bool interrupted = m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt();
+            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
 
-            if (interrupted)
-                interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+            // A halted CPU idles until the next event
+            if (result.steps == 0 && m_i386->Halted())
+                step_clocks = GetBatchBudget(elapsed_clocks);
 
-            u32 step_clocks = (u32)(result.clocks + interrupt_clocks + context.wait_clocks);
-            elapsed_clocks += step_clocks;
-            m_audio->Clock(step_clocks);
+            elapsed_clocks += CompleteBatch(step_clocks, context);
 
-            if (debug->step_debugger || (result.steps == 0 && !interrupted) || m_i386->Shutdown())
+            if (debug->step_debugger || m_i386->Shutdown())
             {
                 debug->stopped = true;
                 break;
@@ -194,21 +203,19 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         {
             GT_Bus_Access_Context context = {};
             context.origin = GT_BUS_ORIGIN_CPU;
+            context.time_ns = m_machine_time;
 
-            u32 budget = (u32)(GT_CPU_CLOCKS_PER_FRAME - elapsed_clocks);
+            u32 budget = GetBatchBudget(elapsed_clocks);
             I386_Run_Result result = m_i386->RunFor(budget, context, false, m_pic->IsInterruptPending());
+            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
 
-            u32 interrupt_clocks = 0;
-            bool interrupted = m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt();
+            // A halted CPU idles until the next event
+            if (result.steps == 0 && m_i386->Halted())
+                step_clocks = budget;
 
-            if (interrupted)
-                interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+            elapsed_clocks += CompleteBatch(step_clocks, context);
 
-            u32 step_clocks = (u32)(result.clocks + interrupt_clocks + context.wait_clocks);
-            elapsed_clocks += step_clocks;
-            m_audio->Clock(step_clocks);
-
-            if ((result.steps == 0 && !interrupted) || m_i386->Shutdown())
+            if (m_i386->Shutdown())
                 break;
         }
     }
@@ -223,6 +230,50 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         *sample_count = 0;
 
     return GT_RUN_FRAME_READY;
+}
+
+// Batches stop at the next device event so its IRQ is sampled on time
+u32 GeartownsCore::GetBatchBudget(u64 elapsed_clocks) const
+{
+    u64 budget = GT_CPU_CLOCKS_PER_FRAME - elapsed_clocks;
+    u64 next_event = m_pit->GetNextEventTime();
+
+    if (next_event == GT_NO_EVENT)
+        return (u32)budget;
+
+    u64 clocks = 1;
+
+    if (next_event > m_machine_time)
+    {
+        u64 scaled = (next_event - m_machine_time) * GT_CPU_CLOCK_RATE - m_machine_time_remainder;
+        clocks = (scaled + 999999999ULL) / 1000000000ULL;
+    }
+
+    return (u32)MIN(budget, clocks);
+}
+
+void GeartownsCore::AdvanceMachineTime(u32 clocks)
+{
+    u64 scaled = (u64)clocks * 1000000000ULL + m_machine_time_remainder;
+    m_machine_time += scaled / GT_CPU_CLOCK_RATE;
+    m_machine_time_remainder = (u32)(scaled % GT_CPU_CLOCK_RATE);
+}
+
+// Devices catch up with the batch before the CPU samples INTR at its boundary
+u32 GeartownsCore::CompleteBatch(u32 clocks, GT_Bus_Access_Context& context)
+{
+    AdvanceMachineTime(clocks);
+    m_pit->Synchronize(m_machine_time);
+
+    if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
+    {
+        u32 interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+        AdvanceMachineTime(interrupt_clocks);
+        clocks += interrupt_clocks;
+    }
+
+    m_audio->Clock(clocks);
+    return clocks;
 }
 
 bool GeartownsCore::LoadBios(const char* directory_path)
@@ -373,10 +424,13 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     Debug("Serializing save state...");
 
+    StateSerializer serializer(stream);
+    Serialize(serializer);
     m_i386->SaveState(stream);
     m_audio->SaveState(stream);
     m_input->SaveState(stream);
     m_pic->SaveState(stream);
+    m_pit->SaveState(stream);
 
     if (stream.fail())
     {
@@ -587,10 +641,14 @@ bool GeartownsCore::LoadState(std::istream& stream)
 
     Debug("Unserializing save state...");
 
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+    m_machine_time_remainder %= GT_CPU_CLOCK_RATE;
     m_i386->LoadState(stream);
     m_audio->LoadState(stream);
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
+    m_pit->LoadState(stream);
 
     if (stream.fail())
     {
@@ -722,6 +780,12 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
     return success;
 }
 
+void GeartownsCore::Serialize(StateSerializer& serializer)
+{
+    G_SERIALIZE(serializer, m_machine_time);
+    G_SERIALIZE(serializer, m_machine_time_remainder);
+}
+
 std::string GeartownsCore::GetSaveStatePath(const char* path, int index)
 {
     using namespace std;
@@ -775,6 +839,8 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 void GeartownsCore::Reset()
 {
     m_paused = false;
+    m_machine_time = 0;
+    m_machine_time_remainder = 0;
 
     if (IsValidPointer(m_memory))
         m_memory->Reset();
@@ -784,6 +850,9 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_pic))
         m_pic->Reset();
+
+    if (IsValidPointer(m_pit))
+        m_pit->Reset();
 
     InitMemoryMap();
 

@@ -253,14 +253,14 @@ static void I386WriteCallback32(u16 reg_id, u32 value, void* user_data)
     {
         switch (reg_id)
         {
-            case I386RegId_EAX: state.registers[I386_REG_EAX] = value; break;
-            case I386RegId_ECX: state.registers[I386_REG_ECX] = value; break;
-            case I386RegId_EDX: state.registers[I386_REG_EDX] = value; break;
-            case I386RegId_EBX: state.registers[I386_REG_EBX] = value; break;
-            case I386RegId_ESP: state.registers[I386_REG_ESP] = value; break;
-            case I386RegId_EBP: state.registers[I386_REG_EBP] = value; break;
-            case I386RegId_ESI: state.registers[I386_REG_ESI] = value; break;
-            case I386RegId_EDI: state.registers[I386_REG_EDI] = value; break;
+            case I386RegId_EAX: state.registers[I386_REG_EAX].value = value; break;
+            case I386RegId_ECX: state.registers[I386_REG_ECX].value = value; break;
+            case I386RegId_EDX: state.registers[I386_REG_EDX].value = value; break;
+            case I386RegId_EBX: state.registers[I386_REG_EBX].value = value; break;
+            case I386RegId_ESP: state.registers[I386_REG_ESP].value = value; break;
+            case I386RegId_EBP: state.registers[I386_REG_EBP].value = value; break;
+            case I386RegId_ESI: state.registers[I386_REG_ESI].value = value; break;
+            case I386RegId_EDI: state.registers[I386_REG_EDI].value = value; break;
             case I386RegId_EIP:
                 state.eip = value;
                 state.halted = false;
@@ -677,15 +677,15 @@ void gui_debug_window_i386(void)
         ImGui::TextUnformatted(":");
         ImGui::SameLine(0.0f, 0.0f);
         ImGui::PushID("stack_esp");
-        EditableRegister32(NULL, NULL, I386RegId_ESP, state.registers[I386_REG_ESP], I386WriteCallback32, cpu,
+        EditableRegister32(NULL, NULL, I386RegId_ESP, state.registers[I386_REG_ESP].value, I386WriteCallback32, cpu,
             EditableRegisterFlags_None);
 
         if (ImGui::IsItemClicked())
             goto_memory(GT_DEBUG_MEMORY_LOGICAL,
-                stack_32 ? state.registers[I386_REG_ESP] : (u16)state.registers[I386_REG_ESP], I386_SEGMENT_SS);
+                stack_32 ? state.registers[I386_REG_ESP].value : (u16)state.registers[I386_REG_ESP].value, I386_SEGMENT_SS);
 
         if (ImGui::IsItemHovered())
-            draw_register_tooltip("ESP", state.registers[I386_REG_ESP]);
+            draw_register_tooltip("ESP", state.registers[I386_REG_ESP].value);
 
         ImGui::PopID();
 
@@ -696,7 +696,7 @@ void gui_debug_window_i386(void)
             ImGuiTableFlags_NoHostExtendX))
         {
             for (int i = 0; i < (int)(sizeof(k_registers) / sizeof(k_registers[0])); i++)
-                draw_register(cpu, k_registers[i].name, k_registers[i].id, state.registers[k_registers[i].index], cyan);
+                draw_register(cpu, k_registers[i].name, k_registers[i].id, state.registers[k_registers[i].index].value, cyan);
 
             draw_register(cpu, "EFL", I386RegId_EFLAGS, state.eflags, orange);
             draw_register(cpu, "CR0", I386RegId_CR0, state.cr0, violet);

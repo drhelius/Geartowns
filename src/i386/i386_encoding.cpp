@@ -218,7 +218,7 @@ NO_INLINE bool I386::DecodeOperandsSlow(bool modrm, int immediate_size)
 #if !defined(GT_DISABLE_DISASSEMBLER)
 bool I386::DecodeInstructionForDebugger(u32 eip, I386_Decode_State& state)
 {
-    return DecodeInstructionForDebugger(m_segments[I386_SEGMENT_CS], eip, state);
+    return DecodeInstructionForDebugger(m_state.segments[I386_SEGMENT_CS], eip, state);
 }
 
 bool I386::DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 eip, I386_Decode_State& state)
@@ -339,13 +339,13 @@ template bool I386::DecodeImmediate<true>(InstructionContext&);
 // Passive translation for branch timing: page tables are read without TLB use, A/D updates or faults
 INLINE bool I386::TranslateCodePassive(u32 linear, u32& physical) const
 {
-    if (likely((m_cr0 & 0x80000000U) == 0))
+    if (likely((m_state.cr0 & 0x80000000U) == 0))
     {
         physical = linear;
         return true;
     }
 
-    u32 pde_address = (m_cr3 & 0xFFFFF000U) + ((linear >> 20) & 0xFFCU);
+    u32 pde_address = (m_state.cr3 & 0xFFFFF000U) + ((linear >> 20) & 0xFFCU);
     const u8* directory = m_read_pages[pde_address >> 12];
 
     if (IsValidPointer(directory))
@@ -379,7 +379,7 @@ INLINE bool I386::TranslateCodePassive(u32 linear, u32& physical) const
 
 u32 I386::GetNextInstructionComponents() const
 {
-    u32 window_offset = m_eip - m_code_window_eip;
+    u32 window_offset = m_state.eip - m_code_window_eip;
 
     // Window path: most near transfers land inside the code window, which holds the bytes the target fetches
     if (window_offset < m_code_window_size)
@@ -392,22 +392,22 @@ u32 I386::GetNextInstructionComponents() const
             return components;
     }
 
-    const I386_Segment& code = m_segments[I386_SEGMENT_CS];
+    const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
 
     // Direct path: the target bytes sit inside one mapped page and the CS limit
     if ((code.attributes & (I386_SEGMENT_PRESENT | I386_SEGMENT_EXPAND_DOWN)) == I386_SEGMENT_PRESENT &&
-        m_eip <= code.limit)
+        m_state.eip <= code.limit)
     {
-        u32 linear = code.base + m_eip;
+        u32 linear = code.base + m_state.eip;
         u32 physical = linear;
 
-        if ((m_cr0 & 0x80000000U) == 0 || TranslateCodePassive(linear, physical))
+        if ((m_state.cr0 & 0x80000000U) == 0 || TranslateCodePassive(linear, physical))
         {
             const u8* page = m_read_pages[physical >> 12];
 
             if (IsValidPointer(page))
             {
-                u64 available = MIN((u64)code.limit - m_eip + 1, (u64)(0x1000 - (linear & 0xFFF)));
+                u64 available = MIN((u64)code.limit - m_state.eip + 1, (u64)(0x1000 - (linear & 0xFFF)));
                 u32 count = (u32)MIN(available, (u64)GT_I386_MAX_INSTRUCTION_LENGTH);
                 bool truncated = true;
                 u32 components = CountInstructionComponents(page + (physical & 0xFFF), count, truncated);
@@ -425,7 +425,7 @@ u32 I386::GetNextInstructionComponents() const
 NO_INLINE u32 I386::GetNextInstructionComponentsChecked() const
 {
     TimingCursor cursor;
-    cursor.eip = m_eip;
+    cursor.eip = m_state.eip;
     cursor.length = 0;
     cursor.remaining = 0;
     cursor.translated = false;
@@ -452,9 +452,9 @@ INLINE bool I386::FetchTimingByte(TimingCursor& cursor, u8& value) const
     }
     else
     {
-        const I386_Segment& code = m_segments[I386_SEGMENT_CS];
+        const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
 
-        if (!IsValidSegmentOffset(code, cursor.eip, m_execution_mode == I386_MODE_PROTECTED))
+        if (!IsValidSegmentOffset(code, cursor.eip, m_state.execution_mode == I386_MODE_PROTECTED))
             return false;
 
         u32 linear = code.base + cursor.eip;
@@ -475,7 +475,7 @@ INLINE bool I386::FetchTimingByte(TimingCursor& cursor, u8& value) const
         u32 physical = cursor.physical_page | (linear & 0xFFF);
         u32 upper_limit = code.limit;
 
-        if (m_execution_mode == I386_MODE_PROTECTED && (code.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)
+        if (m_state.execution_mode == I386_MODE_PROTECTED && (code.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)
             upper_limit = (code.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 0xFFFFFFFFU : 0xFFFFU;
 
         u64 available = MIN((u64)upper_limit - cursor.eip + 1, (u64)(0x1000 - (linear & 0xFFF)));

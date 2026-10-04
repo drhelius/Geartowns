@@ -22,15 +22,20 @@
 
 #include "i386.h"
 
+INLINE I386_State* I386::GetState()
+{
+    return &m_state;
+}
+
 INLINE u32 I386::GetRegister(int index, int width) const
 {
     if (width == 8)
         return GetRegister8(index);
 
     if (width == 16)
-        return m_registers[index].low;
+        return m_state.registers[index].low;
 
-    return m_registers[index].value;
+    return m_state.registers[index].value;
 }
 
 INLINE void I386::SetRegister(int index, int width, u32 value)
@@ -38,20 +43,20 @@ INLINE void I386::SetRegister(int index, int width, u32 value)
     if (width == 8)
         SetRegister8(index, (u8)value);
     else if (width == 16)
-        m_registers[index].low = (u16)value;
+        m_state.registers[index].low = (u16)value;
     else
-        m_registers[index].value = value;
+        m_state.registers[index].value = value;
 }
 
 INLINE u8 I386::GetRegister8(int index) const
 {
-    const u8* bytes = (const u8*)&m_registers[index & 3];
+    const u8* bytes = (const u8*)&m_state.registers[index & 3];
     return bytes[index >> 2];
 }
 
 INLINE void I386::SetRegister8(int index, u8 value)
 {
-    u8* bytes = (u8*)&m_registers[index & 3];
+    u8* bytes = (u8*)&m_state.registers[index & 3];
     bytes[index >> 2] = value;
 }
 
@@ -117,7 +122,7 @@ INLINE bool I386::WriteRM(const InstructionContext& instruction, int width, u32 
 
 INLINE bool I386::LogicalToLinear(int segment, u32 offset, u32 size, bool write, bool stack, u32& linear, bool execute)
 {
-    if (unlikely(m_execution_mode == I386_MODE_PROTECTED))
+    if (unlikely(m_state.execution_mode == I386_MODE_PROTECTED))
     {
         if (segment >= 0 && segment < I386_SEGMENT_COUNT && size != 0)
         {
@@ -140,7 +145,7 @@ INLINE bool I386::LogicalToLinear(int segment, u32 offset, u32 size, bool write,
     if (segment < 0 || segment >= I386_SEGMENT_COUNT || size == 0)
         return RaiseException(stack ? 12 : 13, I386_EXCEPTION_FAULT, true, 0);
 
-    const I386_Segment& state = m_segments[segment];
+    const I386_Segment& state = m_state.segments[segment];
     u64 end = (u64)offset + size - 1;
 
     if ((state.attributes & I386_SEGMENT_PRESENT) == 0 || end > state.limit)
@@ -152,7 +157,7 @@ INLINE bool I386::LogicalToLinear(int segment, u32 offset, u32 size, bool write,
 
 INLINE bool I386::TranslateLinear(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor)
 {
-    if (likely((m_cr0 & 0x80000000U) == 0))
+    if (likely((m_state.cr0 & 0x80000000U) == 0))
     {
         physical = linear;
         return true;
@@ -163,40 +168,40 @@ INLINE bool I386::TranslateLinear(u32 linear, bool write, GT_Bus_Access_Context&
 
 INLINE u32 I386::GetStackPointer() const
 {
-    return GetStackAddressSize() == 32 ? m_registers[I386_REG_ESP].value : m_registers[I386_REG_ESP].low;
+    return GetStackAddressSize() == 32 ? m_state.registers[I386_REG_ESP].value : m_state.registers[I386_REG_ESP].low;
 }
 
 INLINE void I386::SetStackPointer(u32 value)
 {
     if (GetStackAddressSize() == 32)
-        m_registers[I386_REG_ESP].value = value;
+        m_state.registers[I386_REG_ESP].value = value;
     else
-        m_registers[I386_REG_ESP].low = (u16)value;
+        m_state.registers[I386_REG_ESP].low = (u16)value;
 }
 
 INLINE int I386::GetStackAddressSize() const
 {
-    return (m_segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 32 : 16;
+    return (m_state.segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 32 : 16;
 }
 
 INLINE bool I386::BranchTo(u32 target, int width)
 {
     u32 checked_target = width == 16 ? (u16)target : target;
 
-    if (checked_target > m_segments[I386_SEGMENT_CS].limit)
+    if (checked_target > m_state.segments[I386_SEGMENT_CS].limit)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    m_eip = checked_target;
+    m_state.eip = checked_target;
     return true;
 }
 
 INLINE bool I386::CheckCondition(int condition) const
 {
-    bool cf = (m_eflags & I386_FLAG_CF) != 0;
-    bool pf = (m_eflags & I386_FLAG_PF) != 0;
-    bool zf = (m_eflags & I386_FLAG_ZF) != 0;
-    bool sf = (m_eflags & I386_FLAG_SF) != 0;
-    bool of = (m_eflags & I386_FLAG_OF) != 0;
+    bool cf = (m_state.eflags & I386_FLAG_CF) != 0;
+    bool pf = (m_state.eflags & I386_FLAG_PF) != 0;
+    bool zf = (m_state.eflags & I386_FLAG_ZF) != 0;
+    bool sf = (m_state.eflags & I386_FLAG_SF) != 0;
+    bool of = (m_state.eflags & I386_FLAG_OF) != 0;
 
     switch (condition & 15)
     {
@@ -253,7 +258,7 @@ INLINE bool I386::CheckCondition(int condition) const
 
 INLINE void I386::CommitEIP(const InstructionContext& instruction)
 {
-    m_eip = instruction.next_eip;
+    m_state.eip = instruction.next_eip;
 }
 
 INLINE int I386::GetEncodedImmediateSize(u8 encoding, u8 opcode, u8 reg, int operand_size, int address_size)
@@ -287,7 +292,7 @@ INLINE int I386::GetImmediateSize(bool two_byte, u8 opcode, u8 reg, int operand_
 
 INLINE bool I386::TryTranslateLinear(u32 linear, u32& physical) const
 {
-    if (likely((m_cr0 & 0x80000000U) == 0))
+    if (likely((m_state.cr0 & 0x80000000U) == 0))
     {
         physical = linear;
         return true;

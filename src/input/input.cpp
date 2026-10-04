@@ -35,14 +35,14 @@ void Input::Init()
 
 void Input::Reset()
 {
-    memset(m_keys, 0, sizeof(m_keys));
-    m_mouse_x = 0;
-    m_mouse_y = 0;
-    m_mouse_left = false;
-    m_mouse_right = false;
+    memset(m_state.keys, 0, sizeof(m_state.keys));
+    m_state.mouse_x = 0;
+    m_state.mouse_y = 0;
+    m_state.mouse_left = false;
+    m_state.mouse_right = false;
     memset(m_physical_gamepads, 0, sizeof(m_physical_gamepads));
     memset(m_injected_gamepads, 0, sizeof(m_injected_gamepads));
-    memset(m_gamepads, 0, sizeof(m_gamepads));
+    memset(m_state.gamepads, 0, sizeof(m_state.gamepads));
 }
 
 void Input::SaveState(std::ostream& stream)
@@ -60,19 +60,19 @@ void Input::LoadState(std::istream& stream)
 
 void Input::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_keys, GT_KEY_COUNT);
-    G_SERIALIZE(serializer, m_mouse_x);
-    G_SERIALIZE(serializer, m_mouse_y);
-    G_SERIALIZE(serializer, m_mouse_left);
-    G_SERIALIZE(serializer, m_mouse_right);
-    G_SERIALIZE_ARRAY(serializer, m_gamepads, GT_MAX_GAMEPADS);
+    G_SERIALIZE_ARRAY(serializer, m_state.keys, GT_KEY_COUNT);
+    G_SERIALIZE(serializer, m_state.mouse_x);
+    G_SERIALIZE(serializer, m_state.mouse_y);
+    G_SERIALIZE(serializer, m_state.mouse_left);
+    G_SERIALIZE(serializer, m_state.mouse_right);
+    G_SERIALIZE_ARRAY(serializer, m_state.gamepads, GT_MAX_GAMEPADS);
 }
 
 void Input::SanitizeState()
 {
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
     {
-        m_physical_gamepads[i] = m_gamepads[i];
+        m_physical_gamepads[i] = m_state.gamepads[i];
         memset(&m_injected_gamepads[i], 0, sizeof(m_injected_gamepads[i]));
     }
 }
@@ -82,6 +82,6 @@ void Input::UpdateGamePadState(int port)
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return;
 
-    m_gamepads[port] = m_physical_gamepads[port];
-    m_gamepads[port].buttons |= m_injected_gamepads[port].buttons;
+    m_state.gamepads[port] = m_physical_gamepads[port];
+    m_state.gamepads[port].buttons |= m_injected_gamepads[port].buttons;
 }

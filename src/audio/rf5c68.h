@@ -42,6 +42,23 @@ public:
         u32 address;
     };
 
+    struct RF5C68_State
+    {
+        RF5C68_Channel channels[RF5C68_CHANNEL_COUNT];
+        u8 wave_ram[RF5C68_WAVE_RAM_SIZE];
+        u8 channel_bank;
+        u8 wave_bank;
+        bool enabled;
+        u8 irq_mask;
+        u8 irq_flags;
+        u64 elapsed_cycles;
+        u32 cycle_counter;
+        s16 left_sample;
+        s16 right_sample;
+        s16 previous_left_sample;
+        s16 previous_right_sample;
+    };
+
 public:
     RF5C68();
     ~RF5C68();
@@ -55,6 +72,7 @@ public:
     void WriteIRQMask(u8 value);
     u8 ReadIRQFlags();
     bool IsIRQAsserted();
+    RF5C68_State* GetState();
 
     const RF5C68_Channel* GetChannels() const;
     const u8* GetWaveRAM() const;
@@ -82,21 +100,7 @@ private:
     void SanitizeState();
 
 private:
-    RF5C68_Channel m_channels[RF5C68_CHANNEL_COUNT];
-    u8 m_wave_ram[RF5C68_WAVE_RAM_SIZE];
-    u8 m_channel_bank;
-    u8 m_wave_bank;
-    bool m_enabled;
-    u8 m_irq_mask;
-    u8 m_irq_flags;
-
-    u64 m_elapsed_cycles;
-    u32 m_cycle_counter;
-
-    s16 m_left_sample;
-    s16 m_right_sample;
-    s16 m_previous_left_sample;
-    s16 m_previous_right_sample;
+    RF5C68_State m_state;
 };
 
 static const int k_rf5c68_cycles_per_sample = 384;

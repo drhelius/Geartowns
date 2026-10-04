@@ -31,6 +31,8 @@ class Media;
 class Memory;
 class TownsIO;
 class TownsPIC;
+class TownsPIT;
+class StateSerializer;
 
 class GeartownsCore
 {
@@ -84,6 +86,7 @@ public:
     I386* GetI386();
     TownsIO* GetIO();
     TownsPIC* GetPIC();
+    TownsPIT* GetPIT();
 
 private:
     template<bool debugger>
@@ -91,9 +94,13 @@ private:
         bool render);
     void Reset();
     void InitMemoryMap();
+    u32 GetBatchBudget(u64 elapsed_clocks) const;
+    void AdvanceMachineTime(u32 clocks);
+    u32 CompleteBatch(u32 clocks, GT_Bus_Access_Context& context);
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot);
     bool LoadState(std::istream& stream);
+    void Serialize(StateSerializer& serializer);
     std::string GetSaveStatePath(const char* path, int index);
 
 private:
@@ -105,7 +112,10 @@ private:
     I386* m_i386;
     TownsIO* m_towns_io;
     TownsPIC* m_pic;
+    TownsPIT* m_pit;
 
+    u64 m_machine_time;
+    u32 m_machine_time_remainder;
     bool m_paused;
     GT_Pixel_Format m_pixel_format;
 

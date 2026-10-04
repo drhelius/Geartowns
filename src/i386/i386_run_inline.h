@@ -22,7 +22,7 @@
 
 INLINE bool I386::ExecuteOPCode()
 {
-    if (m_repeat.active)
+    if (m_state.repeat.active)
     {
         m_step.clocks = GetStringClocks(true);
         return ContinueRepeat();
@@ -42,7 +42,7 @@ INLINE u32 I386::RunCheckedStep()
     result.exception = false;
     result.instruction_completed = true;
 
-    if (m_shutdown || m_halted)
+    if (m_state.shutdown || m_state.halted)
         return (u32)result.clocks;
 
     m_debug_step = false;
@@ -51,25 +51,26 @@ INLINE u32 I386::RunCheckedStep()
     if (unlikely(m_checked_valid))
         CaptureCheckedBytes();
 
-    u16 old_task = m_task_register.selector;
-    bool debug_active = unlikely((m_debug_registers[7] & 0xFF) != 0 || (m_eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0);
+    u16 old_task = m_state.task_register.selector;
+    bool debug_active = unlikely((m_state.debug_registers[7] & 0xFF) != 0 ||
+        (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0);
     I386_State before;
 
     if (m_trace_enabled)
         CopyState(before);
     else if (debug_active)
-        before.eflags = m_eflags;
+        before.eflags = m_state.eflags;
 
     bool completed = debug_active ? ExecuteOPCodeDebug(before) : ExecuteOPCode();
 
     if (!completed)
         CompleteFault(old_task);
 
-    if (m_interrupt_shadow_steps > 0 && result.instruction_completed)
+    if (m_state.interrupt_shadow_steps > 0 && result.instruction_completed)
         CountInterruptShadow();
 
     result.steps = 1;
-    result.end_batch = result.end_batch || context.end_batch || m_halted || m_shutdown;
+    result.end_batch = result.end_batch || context.end_batch || m_state.halted || m_state.shutdown;
 
     if (unlikely(m_trace_enabled))
         RecordTrace(before);
@@ -79,10 +80,10 @@ INLINE u32 I386::RunCheckedStep()
 
 INLINE void I386::CountInterruptShadow()
 {
-    m_interrupt_shadow_steps--;
+    m_state.interrupt_shadow_steps--;
 
-    if (m_interrupt_shadow_steps == 0)
-        m_interrupt_shadow = I386_SHADOW_NONE;
+    if (m_state.interrupt_shadow_steps == 0)
+        m_state.interrupt_shadow = I386_SHADOW_NONE;
 }
 
 // A pending INTR only ends the batch where it can be taken
@@ -90,6 +91,18 @@ INLINE void I386::CountInterruptShadow()
 INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
 {
     return nmi_pending || (intr_pending && CanAcceptMaskableInterrupt());
+}
+
+// Port accesses only run as the first step of a batch, where the context time is their access time
+// Elsewhere the batch ends before the instruction and the next batch starts with it
+INLINE bool I386::DeferIO()
+{
+    if (!m_batch_mode || m_state.segments[I386_SEGMENT_CS].base + m_state.eip == m_batch_start_pc)
+        return false;
+
+    m_step.instruction_completed = false;
+    m_bus_context->end_batch = true;
+    return true;
 }
 
 #endif /* I386_RUN_INLINE_H */

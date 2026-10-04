@@ -42,4 +42,9 @@ INLINE void Memory::InvalidateDebugSnapshot()
     m_debug_snapshot_id++;
 }
 
+INLINE Memory::Memory_State* Memory::GetState()
+{
+    return &m_state;
+}
+
 #endif /* MEMORY_INLINE_H */

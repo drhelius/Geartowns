@@ -31,32 +31,6 @@ class StateSerializer;
 class YM3438
 {
 public:
-    YM3438();
-    ~YM3438();
-    void Init();
-    void Reset();
-    void Clock(u32 cycles);
-    void Synchronize();
-    void Sample(s16& left, s16& right);
-    void Write(u8 port, u8 value);
-    u8 Read(u8 port);
-    bool IsIRQAsserted();
-
-    void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
-
-    u16 GetSelectedAddress() const;
-    u8 GetRegister(u16 address) const;
-
-private:
-    enum YM3438_Envelope_State
-    {
-        YM3438_ENVELOPE_ATTACK = 0,
-        YM3438_ENVELOPE_DECAY,
-        YM3438_ENVELOPE_SUSTAIN,
-        YM3438_ENVELOPE_RELEASE
-    };
-
     struct YM3438_Operator
     {
         u32 phase;
@@ -114,6 +88,81 @@ private:
         s16 output;
     };
 
+    struct YM3438_State
+    {
+        YM3438_Channel channels[YM3438_CHANNEL_COUNT];
+        u8 registers[2][256];
+        u16 address;
+        u8 f_number_high;
+        u8 special_f_number_high;
+        u8 channel_3_mode;
+
+        u8 dac_enabled;
+        s16 dac_data;
+
+        u8 lfo_enabled;
+        u8 lfo_frequency;
+        u8 lfo_counter;
+        u8 lfo_quotient;
+        u8 lfo_phase_changed;
+
+        u16 timer_a_register;
+        u16 timer_a_counter;
+        u8 timer_b_register;
+        u16 timer_b_counter;
+        u8 timer_b_prescaler;
+        u8 timer_a_load;
+        u8 timer_b_load;
+        u8 timer_a_enable;
+        u8 timer_b_enable;
+        u8 timer_a_flag;
+        u8 timer_b_flag;
+
+        u8 csm_key_pending;
+        u8 csm_key_active;
+
+        u32 envelope_counter;
+        u8 envelope_divider;
+
+        u32 native_cycle;
+        u64 elapsed_cycles;
+        u32 busy_cycles;
+        u8 status;
+
+        s16 left_sample;
+        s16 right_sample;
+        s16 previous_left_sample;
+        s16 previous_right_sample;
+    };
+
+public:
+    YM3438();
+    ~YM3438();
+    void Init();
+    void Reset();
+    void Clock(u32 cycles);
+    void Synchronize();
+    void Sample(s16& left, s16& right);
+    void Write(u8 port, u8 value);
+    u8 Read(u8 port);
+    bool IsIRQAsserted();
+    YM3438_State* GetState();
+
+    void SaveState(std::ostream& stream);
+    void LoadState(std::istream& stream);
+
+    u16 GetSelectedAddress() const;
+    u8 GetRegister(u16 address) const;
+
+private:
+    enum YM3438_Envelope_State
+    {
+        YM3438_ENVELOPE_ATTACK = 0,
+        YM3438_ENVELOPE_DECAY,
+        YM3438_ENVELOPE_SUSTAIN,
+        YM3438_ENVELOPE_RELEASE
+    };
+
 private:
     void ResetOperator(YM3438_Operator& op);
     void ResetChannel(YM3438_Channel& channel);
@@ -156,49 +205,7 @@ private:
     void SanitizeState();
 
 private:
-    YM3438_Channel m_channels[YM3438_CHANNEL_COUNT];
-    u8 m_registers[2][256];
-    u16 m_address;
-    u8 m_f_number_high;
-    u8 m_special_f_number_high;
-    u8 m_channel_3_mode;
-
-    u8 m_dac_enabled;
-    s16 m_dac_data;
-
-    u8 m_lfo_enabled;
-    u8 m_lfo_frequency;
-    u8 m_lfo_counter;
-    u8 m_lfo_quotient;
-    u8 m_lfo_phase_changed;
-
-    u16 m_timer_a_register;
-    u16 m_timer_a_counter;
-    u8 m_timer_b_register;
-    u16 m_timer_b_counter;
-    u8 m_timer_b_prescaler;
-    u8 m_timer_a_load;
-    u8 m_timer_b_load;
-    u8 m_timer_a_enable;
-    u8 m_timer_b_enable;
-    u8 m_timer_a_flag;
-    u8 m_timer_b_flag;
-
-    u8 m_csm_key_pending;
-    u8 m_csm_key_active;
-
-    u32 m_envelope_counter;
-    u8 m_envelope_divider;
-
-    u32 m_native_cycle;
-    u64 m_elapsed_cycles;
-    u32 m_busy_cycles;
-    u8 m_status;
-
-    s16 m_left_sample;
-    s16 m_right_sample;
-    s16 m_previous_left_sample;
-    s16 m_previous_right_sample;
+    YM3438_State m_state;
 };
 
 static const int k_ym3438_native_sample_cycles = 144;

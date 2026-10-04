@@ -28,6 +28,17 @@ class StateSerializer;
 class Input
 {
 public:
+    struct Input_State
+    {
+        bool keys[GT_KEY_COUNT];
+        s32 mouse_x;
+        s32 mouse_y;
+        bool mouse_left;
+        bool mouse_right;
+        GT_GamePad_State gamepads[GT_MAX_GAMEPADS];
+    };
+
+public:
     Input();
     void Init();
     void Reset();
@@ -41,6 +52,7 @@ public:
     const GT_GamePad_State& GetGamePadState(int port) const;
     void SetControllerType(int port, GT_Controller_Type type);
     GT_Controller_Type GetControllerType(int port) const;
+    Input_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
@@ -50,14 +62,9 @@ private:
     void SanitizeState();
 
 private:
-    bool m_keys[GT_KEY_COUNT];
-    s32 m_mouse_x;
-    s32 m_mouse_y;
-    bool m_mouse_left;
-    bool m_mouse_right;
+    Input_State m_state;
     GT_GamePad_State m_physical_gamepads[GT_MAX_GAMEPADS];
     GT_GamePad_State m_injected_gamepads[GT_MAX_GAMEPADS];
-    GT_GamePad_State m_gamepads[GT_MAX_GAMEPADS];
     GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
 };
 

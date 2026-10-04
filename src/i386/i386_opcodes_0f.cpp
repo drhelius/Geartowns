@@ -427,18 +427,18 @@ INLINE bool I386::StoreSystemSelector(InstructionContext& instruction, GT_Bus_Ac
 
 INLINE bool I386::OPCodes_SLDT()
 {
-    return StoreSystemSelector(m_instruction, *m_bus_context, m_ldtr.selector);
+    return StoreSystemSelector(m_instruction, *m_bus_context, m_state.ldtr.selector);
 }
 
 INLINE bool I386::OPCodes_STR()
 {
-    return StoreSystemSelector(m_instruction, *m_bus_context, m_task_register.selector);
+    return StoreSystemSelector(m_instruction, *m_bus_context, m_state.task_register.selector);
 }
 
 INLINE bool I386::LoadSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context,
     bool load_task_register)
 {
-    if (m_current_privilege_level != 0)
+    if (m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 value = 0;
@@ -450,7 +450,7 @@ INLINE bool I386::LoadSystemSelector(InstructionContext& instruction, GT_Bus_Acc
 
     if (!load_task_register && (selector & 0xFFFC) == 0)
     {
-        ClearSegmentCache(selector, m_ldtr);
+        ClearSegmentCache(selector, m_state.ldtr);
         CommitEIP(instruction);
         return true;
     }
@@ -484,10 +484,10 @@ INLINE bool I386::LoadSystemSelector(InstructionContext& instruction, GT_Bus_Acc
         descriptor.attributes |= (u16)busy_type << I386_SEGMENT_TYPE_SHIFT;
         descriptor.attributes |= I386_SEGMENT_ACCESSED;
 
-        LoadDescriptorCache(selector, descriptor, m_task_register);
+        LoadDescriptorCache(selector, descriptor, m_state.task_register);
     }
     else
-        LoadDescriptorCache(selector, descriptor, m_ldtr);
+        LoadDescriptorCache(selector, descriptor, m_state.ldtr);
 
     CommitEIP(instruction);
     return true;
@@ -520,7 +520,7 @@ INLINE bool I386::VerifySegmentPermission(InstructionContext& instruction, GT_Bu
     {
         bool executable = (descriptor.attributes & I386_SEGMENT_EXECUTABLE) != 0;
         bool conforming = (descriptor.attributes & I386_SEGMENT_CONFORMING) != 0;
-        bool privilege_allowed = conforming || descriptor.dpl >= MAX(m_current_privilege_level, value & 3);
+        bool privilege_allowed = conforming || descriptor.dpl >= MAX(m_state.current_privilege_level, value & 3);
 
         if (descriptor.system || !privilege_allowed)
             valid = false;
@@ -531,9 +531,9 @@ INLINE bool I386::VerifySegmentPermission(InstructionContext& instruction, GT_Bu
     }
 
     if (valid)
-        m_eflags |= I386_FLAG_ZF;
+        m_state.eflags |= I386_FLAG_ZF;
     else
-        m_eflags &= ~I386_FLAG_ZF;
+        m_state.eflags &= ~I386_FLAG_ZF;
 
     CommitEIP(instruction);
     return true;
@@ -555,7 +555,7 @@ INLINE bool I386::StoreDescriptorTable(InstructionContext& instruction, GT_Bus_A
     if (!instruction.memory_operand)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
-    const I386_Descriptor_Table& table = !interrupt_table ? m_gdtr : m_idtr;
+    const I386_Descriptor_Table& table = !interrupt_table ? m_state.gdtr : m_state.idtr;
     u32 base_offset = Truncate(instruction.effective_offset + 2, instruction.address_size * 8);
 
     if (!CheckMemoryAccess(instruction.segment, instruction.effective_offset, 2, true, context))
@@ -580,7 +580,7 @@ INLINE bool I386::LoadDescriptorTable(InstructionContext& instruction, GT_Bus_Ac
     if (!instruction.memory_operand)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
-    if (m_execution_mode != I386_MODE_REAL && m_current_privilege_level != 0)
+    if (m_state.execution_mode != I386_MODE_REAL && m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 limit = 0;
@@ -596,7 +596,7 @@ INLINE bool I386::LoadDescriptorTable(InstructionContext& instruction, GT_Bus_Ac
     if (instruction.operand_size == 2)
         base &= 0x00FFFFFFU;
 
-    I386_Descriptor_Table& table = !interrupt_table ? m_gdtr : m_idtr;
+    I386_Descriptor_Table& table = !interrupt_table ? m_state.gdtr : m_state.idtr;
 
     table.limit = (u16)limit;
     table.base = base;
@@ -629,7 +629,7 @@ INLINE bool I386::OPCodes_SMSW()
 {
     int result_width = m_instruction.memory_operand ? 16 : m_instruction.operand_size * 8;
 
-    if (!WriteRM(m_instruction, result_width, m_cr0, *m_bus_context))
+    if (!WriteRM(m_instruction, result_width, m_state.cr0, *m_bus_context))
         return false;
 
     CommitEIP(m_instruction);
@@ -638,7 +638,7 @@ INLINE bool I386::OPCodes_SMSW()
 
 INLINE bool I386::OPCodes_LMSW()
 {
-    if (m_execution_mode != I386_MODE_REAL && m_current_privilege_level != 0)
+    if (m_state.execution_mode != I386_MODE_REAL && m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 value = 0;
@@ -646,14 +646,14 @@ INLINE bool I386::OPCodes_LMSW()
     if (!ReadRM(m_instruction, 16, *m_bus_context, value))
         return false;
 
-    u32 old_pe = m_cr0 & 1;
+    u32 old_pe = m_state.cr0 & 1;
 
-    m_cr0 = (m_cr0 & ~0x0FU) | (value & 0x0F) | old_pe;
+    m_state.cr0 = (m_state.cr0 & ~0x0FU) | (value & 0x0F) | old_pe;
     UpdateExecutionMode();
 
-    if (old_pe == 0 && (m_cr0 & 1) != 0)
+    if (old_pe == 0 && (m_state.cr0 & 1) != 0)
     {
-        m_current_privilege_level = 0;
+        m_state.current_privilege_level = 0;
         UpdateUserMode();
     }
 
@@ -666,11 +666,11 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
     if (special_index != 0 && special_index != 2 && special_index != 3)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
-    u32* control_register = special_index == 0 ? &m_cr0 : special_index == 2 ? &m_cr2 : &m_cr3;
+    u32* control_register = special_index == 0 ? &m_state.cr0 : special_index == 2 ? &m_state.cr2 : &m_state.cr3;
 
     if (write_special)
     {
-        u32 old_cr0 = m_cr0;
+        u32 old_cr0 = m_state.cr0;
 
         if (special_index == 0 && (value & 0x80000000U) != 0 && (value & 1) == 0)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -681,9 +681,9 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
         {
             UpdateExecutionMode();
 
-            if ((old_cr0 & 1) == 0 && (m_cr0 & 1) != 0)
+            if ((old_cr0 & 1) == 0 && (m_state.cr0 & 1) != 0)
             {
-                m_current_privilege_level = 0;
+                m_state.current_privilege_level = 0;
                 UpdateUserMode();
             }
         }
@@ -704,12 +704,12 @@ INLINE bool I386::MoveDebugRegister(u8 special_index, u8 general_index, bool wri
 
     if (write_special)
     {
-        m_debug_registers[special_index] = value;
+        m_state.debug_registers[special_index] = value;
         UpdateStepMode();
         UpdateMemoryMode();
     }
     else
-        SetRegister(general_index, 32, m_debug_registers[special_index]);
+        SetRegister(general_index, 32, m_state.debug_registers[special_index]);
 
     return true;
 }
@@ -721,14 +721,14 @@ INLINE bool I386::MoveTestRegister(u8 special_index, u8 general_index, bool writ
 
     if (write_special)
     {
-        m_test_registers[special_index - 6] = value;
+        m_state.test_registers[special_index - 6] = value;
 
         // Writing TR6 issues the TLB test command
         if (special_index == 6)
             TestTLB();
     }
     else
-        SetRegister(general_index, 32, m_test_registers[special_index - 6]);
+        SetRegister(general_index, 32, m_state.test_registers[special_index - 6]);
 
     return true;
 }
@@ -757,9 +757,9 @@ bool I386::OPCodes0F_BitOperation(int operation, u32 bit_index)
         return false;
 
     if ((value & (1U << bit)) != 0)
-        m_eflags |= I386_FLAG_CF;
+        m_state.eflags |= I386_FLAG_CF;
     else
-        m_eflags &= ~I386_FLAG_CF;
+        m_state.eflags &= ~I386_FLAG_CF;
 
     if (operation != 0)
     {
@@ -790,7 +790,7 @@ bool I386::OPCodes0F_Group6()
     if (!StartExecution(m_instruction.memory_operand ? k_group6_memory_clocks[reg] : k_group6_register_clocks[reg]))
         return false;
 
-    if (m_execution_mode != I386_MODE_PROTECTED)
+    if (m_state.execution_mode != I386_MODE_PROTECTED)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
     switch (m_instruction.reg)
@@ -855,7 +855,7 @@ bool I386::OPCodes0F_LAR_LSL()
     u8 opcode = m_instruction.opcode2;
     int width = m_instruction.operand_size * 8;
 
-    if (m_execution_mode != I386_MODE_PROTECTED)
+    if (m_state.execution_mode != I386_MODE_PROTECTED)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
     u32 selector = 0;
@@ -874,7 +874,7 @@ bool I386::OPCodes0F_LAR_LSL()
         bool conforming = !descriptor.system && (descriptor.attributes & I386_SEGMENT_EXECUTABLE) != 0 &&
             (descriptor.attributes & I386_SEGMENT_CONFORMING) != 0;
 
-        if (!conforming && descriptor.dpl < MAX(m_current_privilege_level, selector & 3))
+        if (!conforming && descriptor.dpl < MAX(m_state.current_privilege_level, selector & 3))
             valid = false;
     }
 
@@ -897,10 +897,10 @@ bool I386::OPCodes0F_LAR_LSL()
             m_step.clocks += 5;
 
         SetRegister(m_instruction.reg, width, value);
-        m_eflags |= I386_FLAG_ZF;
+        m_state.eflags |= I386_FLAG_ZF;
     }
     else
-        m_eflags &= ~I386_FLAG_ZF;
+        m_state.eflags &= ~I386_FLAG_ZF;
 
     CommitEIP(m_instruction);
     return true;
@@ -911,10 +911,10 @@ bool I386::OPCodes0F_CLTS()
     if (!DecodeAndStart(false, 0, 5, 5))
         return false;
 
-    if (m_execution_mode != I386_MODE_REAL && m_current_privilege_level != 0)
+    if (m_state.execution_mode != I386_MODE_REAL && m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    m_cr0 &= ~0x08U;
+    m_state.cr0 &= ~0x08U;
     CommitEIP(m_instruction);
     return true;
 }
@@ -952,14 +952,14 @@ bool I386::OPCodes0F_MOV_Special()
     if (m_instruction.memory_operand)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
-    if ((opcode == 0x21 || opcode == 0x23) && (m_debug_registers[7] & 0x00002000U) != 0)
+    if ((opcode == 0x21 || opcode == 0x23) && (m_state.debug_registers[7] & 0x00002000U) != 0)
     {
-        m_debug_registers[7] &= ~0x00002000U;
-        m_debug_registers[6] |= 0x00002000U;
+        m_state.debug_registers[7] &= ~0x00002000U;
+        m_state.debug_registers[6] |= 0x00002000U;
         return RaiseException(1, I386_EXCEPTION_FAULT);
     }
 
-    if (m_execution_mode != I386_MODE_REAL && m_current_privilege_level != 0)
+    if (m_state.execution_mode != I386_MODE_REAL && m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u8 special_index = m_instruction.reg;
@@ -991,7 +991,7 @@ bool I386::OPCodes0F_PUSH_FS_GS()
     int width = m_instruction.operand_size * 8;
     int segment = opcode == 0xA0 ? I386_SEGMENT_FS : I386_SEGMENT_GS;
 
-    if (!StackPushSized(m_segments[segment].selector, width, *m_bus_context, width == 32 ? 16 : 0))
+    if (!StackPushSized(m_state.segments[segment].selector, width, *m_bus_context, width == 32 ? 16 : 0))
         return false;
 
     CommitEIP(m_instruction);
@@ -1005,7 +1005,7 @@ bool I386::OPCodes0F_POP_FS_GS()
 
     u8 opcode = m_instruction.opcode2;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         m_step.clocks = 21;
 
     int segment = opcode == 0xA1 ? I386_SEGMENT_FS : I386_SEGMENT_GS;
@@ -1020,9 +1020,9 @@ bool I386::OPCodes0F_POP_FS_GS()
         return false;
 
     if (old_stack_size == 32)
-        m_registers[I386_REG_ESP].value = old_stack + m_instruction.operand_size;
+        m_state.registers[I386_REG_ESP].value = old_stack + m_instruction.operand_size;
     else
-        m_registers[I386_REG_ESP].low = (u16)(old_stack + m_instruction.operand_size);
+        m_state.registers[I386_REG_ESP].low = (u16)(old_stack + m_instruction.operand_size);
 
     CommitEIP(m_instruction);
     return true;
@@ -1058,7 +1058,7 @@ bool I386::OPCodes0F_DoubleShift()
         return false;
 
     int width = m_instruction.operand_size * 8;
-    u32 count = (immediate_count ? m_instruction.immediate : m_registers[I386_REG_ECX].byte0) & 0x1F;
+    u32 count = (immediate_count ? m_instruction.immediate : m_state.registers[I386_REG_ECX].byte0) & 0x1F;
     u32 destination = 0;
 
     if (!ReadRM(m_instruction, width, *m_bus_context, destination))
@@ -1094,7 +1094,7 @@ bool I386::OPCodes0F_DoubleShift()
         }
 
         value &= 0xFFFF;
-        m_eflags = carry ? m_eflags | I386_FLAG_CF : m_eflags & ~I386_FLAG_CF;
+        m_state.eflags = carry ? m_state.eflags | I386_FLAG_CF : m_state.eflags & ~I386_FLAG_CF;
     }
     else if (!right)
     {
@@ -1106,7 +1106,7 @@ bool I386::OPCodes0F_DoubleShift()
         u32 position = (u32)(width * 2) - count;
         bool carry = position < 64 && ((pair >> position) & 1) != 0;
 
-        m_eflags = carry ? m_eflags | I386_FLAG_CF : m_eflags & ~I386_FLAG_CF;
+        m_state.eflags = carry ? m_state.eflags | I386_FLAG_CF : m_state.eflags & ~I386_FLAG_CF;
     }
     else
     {
@@ -1114,21 +1114,21 @@ bool I386::OPCodes0F_DoubleShift()
         bool carry = ((pair >> (count - 1)) & 1) != 0;
 
         value = (u32)(pair >> count) & mask;
-        m_eflags = carry ? m_eflags | I386_FLAG_CF : m_eflags & ~I386_FLAG_CF;
+        m_state.eflags = carry ? m_state.eflags | I386_FLAG_CF : m_state.eflags & ~I386_FLAG_CF;
     }
 
     SetSZP(value, width);
 
     if (count == 1)
     {
-        m_eflags &= ~I386_FLAG_OF;
+        m_state.eflags &= ~I386_FLAG_OF;
 
         bool sign = (value & GetSignBit(width)) != 0;
-        bool carry = (m_eflags & I386_FLAG_CF) != 0;
+        bool carry = (m_state.eflags & I386_FLAG_CF) != 0;
         bool next_sign = (value & (GetSignBit(width) >> 1)) != 0;
 
         if ((!right && sign != carry) || (right && sign != next_sign))
-            m_eflags |= I386_FLAG_OF;
+            m_state.eflags |= I386_FLAG_OF;
     }
 
     if (!WriteRM(m_instruction, width, value, *m_bus_context))
@@ -1158,10 +1158,10 @@ bool I386::OPCodes0F_IMUL()
 
     bool overflow = product != (s64)SignExtend(value, width);
 
-    m_eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+    m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
 
     if (overflow)
-        m_eflags |= I386_FLAG_CF | I386_FLAG_OF;
+        m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
 
     CommitEIP(m_instruction);
     return true;
@@ -1178,7 +1178,7 @@ bool I386::OPCodes0F_LoadFarPointer()
     if (!m_instruction.memory_operand)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         m_step.clocks = (opcode == 0xB2 ? 22 : 25) + m_address_clocks;
 
     u32 offset = 0;
@@ -1201,8 +1201,8 @@ bool I386::OPCodes0F_LoadFarPointer()
 
     if (segment == I386_SEGMENT_SS)
     {
-        m_interrupt_shadow = I386_SHADOW_MOV_SS;
-        m_interrupt_shadow_steps = 2;
+        m_state.interrupt_shadow = I386_SHADOW_MOV_SS;
+        m_state.interrupt_shadow_steps = 2;
     }
 
     CommitEIP(m_instruction);
@@ -1263,10 +1263,10 @@ bool I386::OPCodes0F_BitScan()
     m_step.clocks = GetBitScanClocks(source, width, opcode == 0xBD) + m_address_clocks;
 
     if (source == 0)
-        m_eflags |= I386_FLAG_ZF;
+        m_state.eflags |= I386_FLAG_ZF;
     else
     {
-        m_eflags &= ~I386_FLAG_ZF;
+        m_state.eflags &= ~I386_FLAG_ZF;
 
         int bit = opcode == 0xBC ? 0 : width - 1;
 

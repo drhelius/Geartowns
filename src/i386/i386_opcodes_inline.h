@@ -45,8 +45,9 @@ INLINE u32 I386::Add(u32 left, u32 right, u32 carry, int width)
     flags |= (left ^ right ^ value) & I386_FLAG_AF;
     flags |= (((~(left ^ right) & (left ^ value)) >> (width - 1)) & 1) << 11;
 
-    m_eflags = (m_eflags & ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) |
-        flags | GetSZP(value, width);
+    m_state.eflags = (m_state.eflags &
+        ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) | flags |
+        GetSZP(value, width);
     return value;
 }
 
@@ -63,27 +64,28 @@ INLINE u32 I386::Sub(u32 left, u32 right, u32 borrow, int width)
     flags |= (left ^ right ^ value) & I386_FLAG_AF;
     flags |= ((((left ^ right) & (left ^ value)) >> (width - 1)) & 1) << 11;
 
-    m_eflags = (m_eflags & ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) |
-        flags | GetSZP(value, width);
+    m_state.eflags = (m_state.eflags &
+        ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) | flags |
+        GetSZP(value, width);
     return value;
 }
 
 INLINE u32 I386::Logic(u32 value, int width)
 {
     value &= GetMask(width);
-    m_eflags = (m_eflags & ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) |
+    m_state.eflags = (m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) |
         GetSZP(value, width);
     return value;
 }
 
 INLINE void I386::SetSZP(u32 value, int width)
 {
-    m_eflags = (m_eflags & ~(I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF)) | GetSZP(value, width);
+    m_state.eflags = (m_state.eflags & ~(I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF)) | GetSZP(value, width);
 }
 
 INLINE u32 I386::ALU(int operation, u32 left, u32 right, int width)
 {
-    u32 carry = (m_eflags & I386_FLAG_CF) != 0 ? 1 : 0;
+    u32 carry = (m_state.eflags & I386_FLAG_CF) != 0 ? 1 : 0;
 
     switch (operation)
     {
@@ -279,11 +281,11 @@ INLINE bool I386::OPCodes_INC_DEC_Register()
         return false;
 
     int reg = m_instruction.opcode & 7;
-    u32 old_cf = m_eflags & I386_FLAG_CF;
+    u32 old_cf = m_state.eflags & I386_FLAG_CF;
     u32 operand = GetRegister(reg, width);
     u32 value = decrement ? Sub(operand, 1, 0, width) : Add(operand, 1, 0, width);
 
-    m_eflags = (m_eflags & ~I386_FLAG_CF) | old_cf;
+    m_state.eflags = (m_state.eflags & ~I386_FLAG_CF) | old_cf;
     SetRegister(reg, width, value);
     CommitEIP(m_instruction);
     return true;
@@ -375,13 +377,13 @@ INLINE bool I386::OPCodes_CALL_Near()
     if (width == 16)
         target &= 0xFFFF;
 
-    if (target > m_segments[I386_SEGMENT_CS].limit)
+    if (target > m_state.segments[I386_SEGMENT_CS].limit)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     if (!StackPush<width>(m_instruction.next_eip))
         return false;
 
-    m_eip = target;
+    m_state.eip = target;
     m_step.clocks += GetNextInstructionComponents();
     return true;
 }
@@ -394,7 +396,7 @@ INLINE bool I386::OPCodes_RET_Near()
     if (!DecodeAndStart(false, release_stack ? 2 : 0, 10, 10))
         return false;
 
-    u32 old_stack = m_stack32 ? m_registers[I386_REG_ESP].value : m_registers[I386_REG_ESP].low;
+    u32 old_stack = m_stack32 ? m_state.registers[I386_REG_ESP].value : m_state.registers[I386_REG_ESP].low;
     u32 value = 0;
 
     if (!ReadMemory(I386_SEGMENT_SS, old_stack, width, *m_bus_context, value, true))
@@ -402,17 +404,17 @@ INLINE bool I386::OPCodes_RET_Near()
 
     u32 target = width == 16 ? (u16)value : value;
 
-    if (target > m_segments[I386_SEGMENT_CS].limit)
+    if (target > m_state.segments[I386_SEGMENT_CS].limit)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 stack = old_stack + width / 8 + (release_stack ? (u16)m_instruction.immediate : 0);
 
     if (m_stack32)
-        m_registers[I386_REG_ESP].value = stack;
+        m_state.registers[I386_REG_ESP].value = stack;
     else
-        m_registers[I386_REG_ESP].low = (u16)stack;
+        m_state.registers[I386_REG_ESP].low = (u16)stack;
 
-    m_eip = target;
+    m_state.eip = target;
     m_step.clocks += GetNextInstructionComponents();
     return true;
 }

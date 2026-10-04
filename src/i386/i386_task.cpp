@@ -105,7 +105,7 @@ bool I386::ReadTaskState(const Descriptor& descriptor, TaskState& state, GT_Bus_
             return false;
 
         state.ldtr = (u16)value;
-        state.cr3 = m_cr3;
+        state.cr3 = m_state.cr3;
     }
 
     return true;
@@ -130,13 +130,13 @@ bool I386::SaveTaskState(const I386_Segment& task, u32 return_eip, u32 saved_efl
 
         for (int i = 0; i < I386_REG_COUNT; i++)
         {
-            if (!WriteLinear(task.base + k_tss32_register_offsets[i], 32, m_registers[i].value, context, true))
+            if (!WriteLinear(task.base + k_tss32_register_offsets[i], 32, m_state.registers[i].value, context, true))
                 return false;
         }
 
         for (int i = 0; i < I386_SEGMENT_COUNT; i++)
         {
-            if (!WriteLinear(task.base + k_tss32_segment_offsets[i], 16, m_segments[i].selector, context, true))
+            if (!WriteLinear(task.base + k_tss32_segment_offsets[i], 16, m_state.segments[i].selector, context, true))
                 return false;
         }
 
@@ -151,13 +151,13 @@ bool I386::SaveTaskState(const I386_Segment& task, u32 return_eip, u32 saved_efl
 
     for (int i = 0; i < I386_REG_COUNT; i++)
     {
-        if (!WriteLinear(task.base + k_tss16_register_offsets[i], 16, m_registers[i].low, context, true))
+        if (!WriteLinear(task.base + k_tss16_register_offsets[i], 16, m_state.registers[i].low, context, true))
             return false;
     }
 
     for (int i = 0; i < 4; i++)
     {
-        u16 selector = m_segments[k_tss16_segment_indices[i]].selector;
+        u16 selector = m_state.segments[k_tss16_segment_indices[i]].selector;
 
         if (!WriteLinear(task.base + k_tss16_segment_offsets[i], 16, selector, context, true))
             return false;
@@ -168,10 +168,10 @@ bool I386::SaveTaskState(const I386_Segment& task, u32 return_eip, u32 saved_efl
 
 bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& context)
 {
-    ClearSegmentCache(state.ldtr, m_ldtr);
+    ClearSegmentCache(state.ldtr, m_state.ldtr);
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
-        ClearSegmentCache(state.segments[i], m_segments[i]);
+        ClearSegmentCache(state.segments[i], m_state.segments[i]);
 
     UpdateExecutionMode();
 
@@ -185,16 +185,16 @@ bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& conte
         if (!ldt.system || ldt.type != 2 || !ldt.present)
             return RaiseException(10, I386_EXCEPTION_FAULT, true, state.ldtr & 0xFFFC);
 
-        LoadDescriptorCache(state.ldtr, ldt, m_ldtr);
+        LoadDescriptorCache(state.ldtr, ldt, m_state.ldtr);
     }
 
-    if ((m_eflags & I386_FLAG_VM) != 0)
+    if ((m_state.eflags & I386_FLAG_VM) != 0)
     {
         for (int i = 0; i < I386_SEGMENT_COUNT; i++)
             SetVM86Segment((I386_Segment_Register)i, state.segments[i]);
 
-        m_current_privilege_level = 3;
-        m_execution_mode = I386_MODE_VM86;
+        m_state.current_privilege_level = 3;
+        m_state.execution_mode = I386_MODE_VM86;
 
         UpdateUserMode();
         UpdateSegmentFastPaths();
@@ -224,9 +224,9 @@ bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& conte
     if (!SetDescriptorAccessed(code, context))
         return false;
 
-    LoadDescriptorCache((code_selector & 0xFFFC) | privilege, code, m_segments[I386_SEGMENT_CS]);
+    LoadDescriptorCache((code_selector & 0xFFFC) | privilege, code, m_state.segments[I386_SEGMENT_CS]);
 
-    m_segments[I386_SEGMENT_CS].dpl = privilege;
+    m_state.segments[I386_SEGMENT_CS].dpl = privilege;
 
     u16 stack_selector = state.segments[I386_SEGMENT_SS];
 
@@ -248,10 +248,10 @@ bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& conte
     if (!SetDescriptorAccessed(stack, context))
         return false;
 
-    LoadDescriptorCache(stack_selector, stack, m_segments[I386_SEGMENT_SS]);
+    LoadDescriptorCache(stack_selector, stack, m_state.segments[I386_SEGMENT_SS]);
 
-    m_current_privilege_level = privilege;
-    m_execution_mode = I386_MODE_PROTECTED;
+    m_state.current_privilege_level = privilege;
+    m_state.execution_mode = I386_MODE_PROTECTED;
     UpdateUserMode();
     UpdateSegmentFastPaths();
 
@@ -264,7 +264,7 @@ bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& conte
 
         if ((selector & 0xFFFC) == 0)
         {
-            ClearSegmentCache(selector, m_segments[segment]);
+            ClearSegmentCache(selector, m_state.segments[segment]);
             continue;
         }
 
@@ -287,7 +287,7 @@ bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& conte
         if (!SetDescriptorAccessed(descriptor, context))
             return false;
 
-        LoadDescriptorCache(selector, descriptor, m_segments[segment]);
+        LoadDescriptorCache(selector, descriptor, m_state.segments[segment]);
     }
 
     return true;
@@ -296,9 +296,9 @@ bool I386::LoadTaskSegments(const TaskState& state, GT_Bus_Access_Context& conte
 u32 I386::GetTaskSwitchClocks(const Descriptor& descriptor, const TaskState& state, int switch_type,
     bool via_gate) const
 {
-    u8 old_type = (m_task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
+    u8 old_type = (m_state.task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
     bool old_386 = old_type == 9 || old_type == 11;
-    bool old_vm = m_execution_mode == I386_MODE_VM86;
+    bool old_vm = m_state.execution_mode == I386_MODE_VM86;
     bool new_386 = descriptor.type == 9 || descriptor.type == 11;
     bool new_vm = new_386 && (state.eflags & I386_FLAG_VM) != 0;
     u32 clocks = 0;
@@ -360,19 +360,19 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
 
     Descriptor old_descriptor;
 
-    if (!ReadGDTDescriptor(m_task_register.selector, old_descriptor, context, 10))
+    if (!ReadGDTDescriptor(m_state.task_register.selector, old_descriptor, context, 10))
         return false;
 
     if (switch_type == I386_TASK_SWITCH_IRET)
-        m_eflags &= ~I386_FLAG_NT;
+        m_state.eflags &= ~I386_FLAG_NT;
 
-    u32 saved_eflags = m_eflags | (fault ? I386_FLAG_RF : 0);
+    u32 saved_eflags = m_state.eflags | (fault ? I386_FLAG_RF : 0);
 
-    if (!SaveTaskState(m_task_register, return_eip, saved_eflags, context))
+    if (!SaveTaskState(m_state.task_register, return_eip, saved_eflags, context))
         return false;
 
     // Nested switches store the back link to the old task
-    if (nested && !WriteLinear(descriptor.base, 16, m_task_register.selector, context, true))
+    if (nested && !WriteLinear(descriptor.base, 16, m_state.task_register.selector, context, true))
         return false;
 
     if (switch_type != I386_TASK_SWITCH_IRET && !SetDescriptorType(descriptor, descriptor.type | 2, context))
@@ -388,34 +388,34 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
     busy_descriptor.attributes |= (u16)busy_descriptor.type << I386_SEGMENT_TYPE_SHIFT;
     busy_descriptor.attributes |= I386_SEGMENT_ACCESSED;
 
-    LoadDescriptorCache(selector, busy_descriptor, m_task_register);
+    LoadDescriptorCache(selector, busy_descriptor, m_state.task_register);
 
-    m_cr0 |= 0x08;
+    m_state.cr0 |= 0x08;
 
     if (new_state.tss32)
     {
-        m_cr3 = new_state.cr3;
+        m_state.cr3 = new_state.cr3;
         FlushTLB();
     }
 
-    m_debug_registers[7] &= ~0x00000155U;
+    m_state.debug_registers[7] &= ~0x00000155U;
     UpdateMemoryMode();
 
     for (int i = 0; i < I386_REG_COUNT; i++)
-        m_registers[i].value = new_state.registers[i];
+        m_state.registers[i].value = new_state.registers[i];
 
-    m_eip = new_state.eip;
-    m_eflags = new_state.eflags | I386_FLAG_FIXED;
+    m_state.eip = new_state.eip;
+    m_state.eflags = new_state.eflags | I386_FLAG_FIXED;
 
     if (nested)
-        m_eflags |= I386_FLAG_NT;
+        m_state.eflags |= I386_FLAG_NT;
 
-    m_repeat.active = false;
-    m_halted = false;
+    m_state.repeat.active = false;
+    m_state.halted = false;
 
     bool ok = LoadTaskSegments(new_state, context);
 
-    if (ok && m_eip > m_segments[I386_SEGMENT_CS].limit)
+    if (ok && m_state.eip > m_state.segments[I386_SEGMENT_CS].limit)
         ok = RaiseException(switch_type == I386_TASK_SWITCH_CALL ? 10 : 13, I386_EXCEPTION_FAULT, true, 0);
 
     if (ok && has_error_code)
@@ -423,7 +423,7 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
 
     if (ok && new_state.debug_trap)
     {
-        m_debug_registers[6] |= 0x00008000U;
+        m_state.debug_registers[6] |= 0x00008000U;
         ok = RaiseException(1, I386_EXCEPTION_TRAP);
     }
 
@@ -431,7 +431,7 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
     if (!ok && m_exception.pending)
     {
         m_exception.has_return_eip = true;
-        m_exception.return_eip = m_eip;
+        m_exception.return_eip = m_state.eip;
     }
 
     return ok;
@@ -441,7 +441,7 @@ bool I386::TaskReturn(u32 return_eip, GT_Bus_Access_Context& context, u64& clock
 {
     u32 backlink = 0;
 
-    if (!ReadLinear(m_task_register.base, 16, context, backlink, true))
+    if (!ReadLinear(m_state.task_register.base, 16, context, backlink, true))
         return false;
 
     u16 selector = (u16)backlink;

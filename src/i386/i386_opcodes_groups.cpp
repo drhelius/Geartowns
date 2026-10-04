@@ -106,33 +106,33 @@ INLINE bool I386::OPCodes_MUL_RM(int width, u32 operand)
     {
         u16 product = (u16)GetRegister8(0) * (u8)operand;
 
-        m_registers[I386_REG_EAX].low = product;
-        m_eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+        m_state.registers[I386_REG_EAX].low = product;
+        m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
 
         if ((product & 0xFF00) != 0)
-            m_eflags |= I386_FLAG_CF | I386_FLAG_OF;
+            m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
     }
     else if (width == 16)
     {
-        u32 product = (u32)m_registers[I386_REG_EAX].low * (u16)operand;
+        u32 product = (u32)m_state.registers[I386_REG_EAX].low * (u16)operand;
 
-        m_registers[I386_REG_EAX].low = (u16)product;
-        m_registers[I386_REG_EDX].low = (u16)(product >> 16);
-        m_eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+        m_state.registers[I386_REG_EAX].low = (u16)product;
+        m_state.registers[I386_REG_EDX].low = (u16)(product >> 16);
+        m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
 
         if ((product >> 16) != 0)
-            m_eflags |= I386_FLAG_CF | I386_FLAG_OF;
+            m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
     }
     else
     {
-        u64 product = (u64)m_registers[I386_REG_EAX].value * operand;
+        u64 product = (u64)m_state.registers[I386_REG_EAX].value * operand;
 
-        m_registers[I386_REG_EAX].value = (u32)product;
-        m_registers[I386_REG_EDX].value = (u32)(product >> 32);
-        m_eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+        m_state.registers[I386_REG_EAX].value = (u32)product;
+        m_state.registers[I386_REG_EDX].value = (u32)(product >> 32);
+        m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
 
         if ((product >> 32) != 0)
-            m_eflags |= I386_FLAG_CF | I386_FLAG_OF;
+            m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
     }
 
     return true;
@@ -147,26 +147,29 @@ INLINE bool I386::OPCodes_IMUL_RM(int width, u32 operand)
         s16 product = (s16)(s8)GetRegister8(0) * (s8)(u8)operand;
         bool overflow = product < -128 || product > 127;
 
-        m_registers[I386_REG_EAX].low = (u16)product;
-        m_eflags = overflow ? m_eflags | I386_FLAG_CF | I386_FLAG_OF : m_eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+        m_state.registers[I386_REG_EAX].low = (u16)product;
+        m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
+            m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
     }
     else if (width == 16)
     {
-        s32 product = (s32)(s16)m_registers[I386_REG_EAX].low * (s16)(u16)operand;
+        s32 product = (s32)(s16)m_state.registers[I386_REG_EAX].low * (s16)(u16)operand;
         bool overflow = product < -32768 || product > 32767;
 
-        m_registers[I386_REG_EAX].low = (u16)product;
-        m_registers[I386_REG_EDX].low = (u16)((u32)product >> 16);
-        m_eflags = overflow ? m_eflags | I386_FLAG_CF | I386_FLAG_OF : m_eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+        m_state.registers[I386_REG_EAX].low = (u16)product;
+        m_state.registers[I386_REG_EDX].low = (u16)((u32)product >> 16);
+        m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
+            m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
     }
     else
     {
-        s64 product = (s64)(s32)m_registers[I386_REG_EAX].value * (s32)operand;
+        s64 product = (s64)(s32)m_state.registers[I386_REG_EAX].value * (s32)operand;
         bool overflow = product < (s64)INT_MIN || product > (s64)INT_MAX;
 
-        m_registers[I386_REG_EAX].value = (u32)product;
-        m_registers[I386_REG_EDX].value = (u32)((u64)product >> 32);
-        m_eflags = overflow ? m_eflags | I386_FLAG_CF | I386_FLAG_OF : m_eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+        m_state.registers[I386_REG_EAX].value = (u32)product;
+        m_state.registers[I386_REG_EDX].value = (u32)((u64)product >> 32);
+        m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
+            m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
     }
 
     return true;
@@ -179,7 +182,7 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
 
     if (width == 8)
     {
-        u16 dividend = m_registers[I386_REG_EAX].low;
+        u16 dividend = m_state.registers[I386_REG_EAX].low;
         u32 quotient = dividend / (u8)operand;
 
         if (quotient > 0xFF)
@@ -190,25 +193,25 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
     }
     else if (width == 16)
     {
-        u32 dividend = ((u32)m_registers[I386_REG_EDX].low << 16) | m_registers[I386_REG_EAX].low;
+        u32 dividend = ((u32)m_state.registers[I386_REG_EDX].low << 16) | m_state.registers[I386_REG_EAX].low;
         u32 quotient = dividend / (u16)operand;
 
         if (quotient > 0xFFFF)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
-        m_registers[I386_REG_EAX].low = (u16)quotient;
-        m_registers[I386_REG_EDX].low = (u16)(dividend % (u16)operand);
+        m_state.registers[I386_REG_EAX].low = (u16)quotient;
+        m_state.registers[I386_REG_EDX].low = (u16)(dividend % (u16)operand);
     }
     else
     {
-        u64 dividend = ((u64)m_registers[I386_REG_EDX].value << 32) | m_registers[I386_REG_EAX].value;
+        u64 dividend = ((u64)m_state.registers[I386_REG_EDX].value << 32) | m_state.registers[I386_REG_EAX].value;
         u64 quotient = dividend / operand;
 
         if (quotient > 0xFFFFFFFFULL)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
-        m_registers[I386_REG_EAX].value = (u32)quotient;
-        m_registers[I386_REG_EDX].value = (u32)(dividend % operand);
+        m_state.registers[I386_REG_EAX].value = (u32)quotient;
+        m_state.registers[I386_REG_EDX].value = (u32)(dividend % operand);
     }
 
     return true;
@@ -221,7 +224,7 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
 
     if (width == 8)
     {
-        s16 dividend = (s16)m_registers[I386_REG_EAX].low;
+        s16 dividend = (s16)m_state.registers[I386_REG_EAX].low;
         s16 divisor = (s8)(u8)operand;
         s16 quotient = dividend / divisor;
 
@@ -251,7 +254,7 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
     }
     else if (width == 16)
     {
-        s32 dividend = (s32)(((u32)m_registers[I386_REG_EDX].low << 16) | m_registers[I386_REG_EAX].low);
+        s32 dividend = (s32)(((u32)m_state.registers[I386_REG_EDX].low << 16) | m_state.registers[I386_REG_EAX].low);
         s32 divisor = (s16)(u16)operand;
 
         if (dividend == INT_MIN && divisor == -1)
@@ -262,12 +265,13 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
         if (quotient < -32768 || quotient > 32767)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
-        m_registers[I386_REG_EAX].low = (u16)quotient;
-        m_registers[I386_REG_EDX].low = (u16)(dividend % divisor);
+        m_state.registers[I386_REG_EAX].low = (u16)quotient;
+        m_state.registers[I386_REG_EDX].low = (u16)(dividend % divisor);
     }
     else
     {
-        s64 dividend = (s64)(((u64)m_registers[I386_REG_EDX].value << 32) | m_registers[I386_REG_EAX].value);
+        s64 dividend = (s64)(((u64)m_state.registers[I386_REG_EDX].value << 32) |
+            m_state.registers[I386_REG_EAX].value);
         s64 divisor = (s32)operand;
 
         if (dividend == (s64)0x8000000000000000ULL && divisor == -1)
@@ -278,8 +282,8 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
         if (quotient < (s64)INT_MIN || quotient > (s64)INT_MAX)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
-        m_registers[I386_REG_EAX].value = (u32)quotient;
-        m_registers[I386_REG_EDX].value = (u32)(dividend % divisor);
+        m_state.registers[I386_REG_EAX].value = (u32)quotient;
+        m_state.registers[I386_REG_EDX].value = (u32)(dividend % divisor);
     }
 
     return true;
@@ -292,10 +296,10 @@ INLINE bool I386::OPCodes_INC_DEC_RM(int width, bool decrement)
     if (!ReadRM(m_instruction, width, *m_bus_context, value))
         return false;
 
-    u32 old_cf = m_eflags & I386_FLAG_CF;
+    u32 old_cf = m_state.eflags & I386_FLAG_CF;
 
     value = !decrement ? Add(value, 1, 0, width) : Sub(value, 1, 0, width);
-    m_eflags = (m_eflags & ~I386_FLAG_CF) | old_cf;
+    m_state.eflags = (m_state.eflags & ~I386_FLAG_CF) | old_cf;
 
     if (!WriteRM(m_instruction, width, value, *m_bus_context))
         return false;
@@ -325,13 +329,13 @@ INLINE bool I386::OPCodes_Near_Transfer_RM(int width, bool call)
     {
         target = Truncate(target, width);
 
-        if (target > m_segments[I386_SEGMENT_CS].limit)
+        if (target > m_state.segments[I386_SEGMENT_CS].limit)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
         if (!StackPushSized(m_instruction.next_eip, width, *m_bus_context))
             return false;
 
-        m_eip = target;
+        m_state.eip = target;
     }
     else if (!BranchTo(target, width))
         return false;
@@ -366,7 +370,7 @@ INLINE bool I386::OPCodes_Far_Transfer_Memory(int width, bool call)
     if (!ReadMemory(m_instruction.segment, selector_offset, 16, *m_bus_context, selector))
         return false;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         return ProtectedFarTransfer((u16)selector, target, width, call, m_instruction.next_eip, *m_bus_context,
             m_step.clocks, true);
 
@@ -377,7 +381,7 @@ INLINE bool I386::OPCodes_Far_Transfer_Memory(int width, bool call)
 
     if (call)
     {
-        if (!StackPushSized(m_segments[I386_SEGMENT_CS].selector, width, *m_bus_context))
+        if (!StackPushSized(m_state.segments[I386_SEGMENT_CS].selector, width, *m_bus_context))
             return false;
 
         if (!StackPushSized(m_instruction.next_eip, width, *m_bus_context))
@@ -429,7 +433,7 @@ INLINE u32 I386::RotateShift(u32 value, int shift_operation, u32 count)
         return value;
 
     u32 original_value = value;
-    bool carry = (m_eflags & I386_FLAG_CF) != 0;
+    bool carry = (m_state.eflags & I386_FLAG_CF) != 0;
     bool overflow = false;
 
     switch (shift_operation)
@@ -520,14 +524,14 @@ INLINE u32 I386::RotateShift(u32 value, int shift_operation, u32 count)
             break;
     }
 
-    u32 flags = m_eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+    u32 flags = m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
     flags |= carry ? I386_FLAG_CF : 0;
     flags |= overflow ? I386_FLAG_OF : 0;
 
     if (shift_operation >= I386_SHIFT_SHL)
         flags = (flags & ~(I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF)) | GetSZP(value, width);
 
-    m_eflags = flags;
+    m_state.eflags = flags;
     return value;
 }
 
@@ -539,7 +543,7 @@ bool I386::OPCodes_Group2()
         return false;
 
     u32 count = source == I386_SHIFT_COUNT_IMMEDIATE ? m_instruction.immediate :
-        source == I386_SHIFT_COUNT_ONE ? 1 : m_registers[I386_REG_ECX].byte0;
+        source == I386_SHIFT_COUNT_ONE ? 1 : m_state.registers[I386_REG_ECX].byte0;
     bool through_carry = m_instruction.reg == 2 || m_instruction.reg == 3;
     u32 clocks = through_carry ? (m_instruction.memory_operand ? 10 : 9) : (m_instruction.memory_operand ? 7 : 3);
 

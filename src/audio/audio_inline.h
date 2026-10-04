@@ -57,24 +57,29 @@ INLINE RF5C68* Audio::GetRF5C68()
     return m_rf5c68;
 }
 
+INLINE Audio::Audio_State* Audio::GetState()
+{
+    return &m_state;
+}
+
 INLINE void Audio::Clock(u32 clocks)
 {
     if (clocks == 0)
         return;
 
-    u64 sample_clock_counter = m_sample_clock_counter + (u64)clocks * GT_AUDIO_SAMPLE_RATE;
+    u64 sample_clock_counter = m_state.sample_clock_counter + (u64)clocks * GT_AUDIO_SAMPLE_RATE;
 
     if (sample_clock_counter < GT_CPU_CLOCK_RATE)
     {
         ClockSources(clocks);
-        m_sample_clock_counter = sample_clock_counter;
+        m_state.sample_clock_counter = sample_clock_counter;
         return;
     }
 
     while (clocks > 0)
     {
         u32 step = clocks;
-        u64 remaining = GT_CPU_CLOCK_RATE - m_sample_clock_counter;
+        u64 remaining = GT_CPU_CLOCK_RATE - m_state.sample_clock_counter;
         u64 clocks_to_sample = (remaining + GT_AUDIO_SAMPLE_RATE - 1) / GT_AUDIO_SAMPLE_RATE;
 
         if ((clocks_to_sample > 0) && (clocks_to_sample < step))
@@ -82,12 +87,12 @@ INLINE void Audio::Clock(u32 clocks)
 
         ClockSources(step);
 
-        m_sample_clock_counter += (u64)step * GT_AUDIO_SAMPLE_RATE;
+        m_state.sample_clock_counter += (u64)step * GT_AUDIO_SAMPLE_RATE;
         clocks -= step;
 
-        while (m_sample_clock_counter >= GT_CPU_CLOCK_RATE)
+        while (m_state.sample_clock_counter >= GT_CPU_CLOCK_RATE)
         {
-            m_sample_clock_counter -= GT_CPU_CLOCK_RATE;
+            m_state.sample_clock_counter -= GT_CPU_CLOCK_RATE;
             SampleSources();
         }
     }
@@ -95,9 +100,9 @@ INLINE void Audio::Clock(u32 clocks)
 
 INLINE void Audio::ClockSources(u32 clocks)
 {
-    u32 total_clocks = m_sound_clock_remainder + clocks;
+    u32 total_clocks = m_state.sound_clock_remainder + clocks;
     u32 sound_clocks = total_clocks / k_audio_cpu_clocks_per_sound_clock;
-    m_sound_clock_remainder = total_clocks % k_audio_cpu_clocks_per_sound_clock;
+    m_state.sound_clock_remainder = total_clocks % k_audio_cpu_clocks_per_sound_clock;
 
     m_ym3438->Clock(sound_clocks);
     m_rf5c68->Clock(sound_clocks);
@@ -115,8 +120,8 @@ INLINE void Audio::SampleSources()
 
     // The PCM DAC output passes a smoothing filter of about 4 kHz before the mixer
     //FM feeds it directly
-    m_pcm_lowpass_left += ((s32)m_pcm_lowpass_alpha_q15 * (pcm_left - m_pcm_lowpass_left)) >> 15;
-    m_pcm_lowpass_right += ((s32)m_pcm_lowpass_alpha_q15 * (pcm_right - m_pcm_lowpass_right)) >> 15;
+    m_state.pcm_lowpass_left += ((s32)m_pcm_lowpass_alpha_q15 * (pcm_left - m_state.pcm_lowpass_left)) >> 15;
+    m_state.pcm_lowpass_right += ((s32)m_pcm_lowpass_alpha_q15 * (pcm_right - m_state.pcm_lowpass_right)) >> 15;
 
     // Keep the samples already buffered for this frame and drop the excess
     if (m_buffer_index + 1 >= GT_AUDIO_BUFFER_SIZE)
@@ -130,8 +135,8 @@ INLINE void Audio::SampleSources()
 
     m_fm_buffer[m_buffer_index + 0] = fm_left;
     m_fm_buffer[m_buffer_index + 1] = fm_right;
-    m_pcm_buffer[m_buffer_index + 0] = (s16)m_pcm_lowpass_left;
-    m_pcm_buffer[m_buffer_index + 1] = (s16)m_pcm_lowpass_right;
+    m_pcm_buffer[m_buffer_index + 0] = (s16)m_state.pcm_lowpass_left;
+    m_pcm_buffer[m_buffer_index + 1] = (s16)m_state.pcm_lowpass_right;
     m_buffer_index += 2;
 }
 

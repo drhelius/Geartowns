@@ -64,7 +64,7 @@ INLINE void I386::SetBusContext(GT_Bus_Access_Context& context)
 // Data breakpoints and write observers disable the memory fast paths
 INLINE void I386::UpdateMemoryMode()
 {
-    bool slow = (m_debug_registers[7] & 0xFF) != 0 ||
+    bool slow = (m_state.debug_registers[7] & 0xFF) != 0 ||
         (IsValidPointer(m_bus_context) && IsValidPointer(m_bus_context->observe_memory_write));
 
     if (unlikely(slow != m_slow_memory))
@@ -74,7 +74,7 @@ INLINE void I386::UpdateMemoryMode()
 // Cached TLB host pages are only valid for the privilege level they were checked against
 INLINE void I386::UpdateUserMode()
 {
-    bool user = m_execution_mode == I386_MODE_VM86 || m_current_privilege_level == 3;
+    bool user = m_state.execution_mode == I386_MODE_VM86 || m_state.current_privilege_level == 3;
 
     if (unlikely(user != m_user_mode))
         SetUserMode(user);
@@ -115,7 +115,7 @@ INLINE const u8* I386::GetReadHost(u32 linear, u32 size)
 
     const u8* page;
 
-    if ((m_cr0 & 0x80000000U) == 0)
+    if ((m_state.cr0 & 0x80000000U) == 0)
         page = m_read_pages[linear >> 12];
     else
     {
@@ -137,7 +137,7 @@ INLINE u8* I386::GetWriteHost(u32 linear, u32 size)
 
     u8* page;
 
-    if ((m_cr0 & 0x80000000U) == 0)
+    if ((m_state.cr0 & 0x80000000U) == 0)
         page = m_write_pages[linear >> 12];
     else
     {
@@ -195,7 +195,7 @@ INLINE bool I386::ReadMemory(int segment, u32 offset, int width, GT_Bus_Access_C
 
     if (likely((s64)((u64)offset + size - 1) <= m_read_limits[segment]))
     {
-        const u8* data = GetReadHost(m_segments[segment].base + offset, size);
+        const u8* data = GetReadHost(m_state.segments[segment].base + offset, size);
 
         if (likely(IsValidPointer(data)))
         {
@@ -213,7 +213,7 @@ INLINE bool I386::WriteMemory(int segment, u32 offset, int width, u32 value, GT_
 
     if (likely((s64)((u64)offset + size - 1) <= m_write_limits[segment]))
     {
-        u8* data = GetWriteHost(m_segments[segment].base + offset, size);
+        u8* data = GetWriteHost(m_state.segments[segment].base + offset, size);
 
         if (likely(IsValidPointer(data)))
         {
@@ -233,7 +233,7 @@ INLINE u8* I386::GetRMWHost(int segment, u32 offset, int width)
     if (end > m_read_limits[segment] || end > m_write_limits[segment])
         return NULL;
 
-    u32 linear = m_segments[segment].base + offset;
+    u32 linear = m_state.segments[segment].base + offset;
     const u8* read = GetReadHost(linear, size);
     u8* write = GetWriteHost(linear, size);
     return read == write ? write : NULL;
@@ -243,7 +243,7 @@ INLINE u8* I386::GetRMWHost(int segment, u32 offset, int width)
 template<int width>
 INLINE bool I386::StackPush(u32 value)
 {
-    u32 offset = m_registers[I386_REG_ESP].value - width / 8;
+    u32 offset = m_state.registers[I386_REG_ESP].value - width / 8;
 
     if (!m_stack32)
         offset &= 0xFFFF;
@@ -252,9 +252,9 @@ INLINE bool I386::StackPush(u32 value)
         return false;
 
     if (m_stack32)
-        m_registers[I386_REG_ESP].value = offset;
+        m_state.registers[I386_REG_ESP].value = offset;
     else
-        m_registers[I386_REG_ESP].low = (u16)offset;
+        m_state.registers[I386_REG_ESP].low = (u16)offset;
 
     return true;
 }
@@ -262,7 +262,7 @@ INLINE bool I386::StackPush(u32 value)
 template<int width>
 INLINE bool I386::StackPop(u32& value)
 {
-    u32 offset = m_stack32 ? m_registers[I386_REG_ESP].value : m_registers[I386_REG_ESP].low;
+    u32 offset = m_stack32 ? m_state.registers[I386_REG_ESP].value : m_state.registers[I386_REG_ESP].low;
 
     if (!ReadMemory(I386_SEGMENT_SS, offset, width, *m_bus_context, value, true))
         return false;
@@ -270,9 +270,9 @@ INLINE bool I386::StackPop(u32& value)
     offset += width / 8;
 
     if (m_stack32)
-        m_registers[I386_REG_ESP].value = offset;
+        m_state.registers[I386_REG_ESP].value = offset;
     else
-        m_registers[I386_REG_ESP].low = (u16)offset;
+        m_state.registers[I386_REG_ESP].low = (u16)offset;
 
     return true;
 }

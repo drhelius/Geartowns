@@ -85,37 +85,37 @@ bool I386::ReadGDTDescriptor(u16 selector, Descriptor& descriptor, GT_Bus_Access
     u32 offset = (u32)(selector & 0xFFF8);
     u32 error_code = selector & 0xFFFC;
 
-    if ((selector & 4) != 0 || (u64)offset + 7 > m_gdtr.limit)
+    if ((selector & 4) != 0 || (u64)offset + 7 > m_state.gdtr.limit)
         return RaiseException(fault_vector, I386_EXCEPTION_FAULT, true, error_code);
 
     u32 low = 0;
     u32 high = 0;
 
-    if (!ReadLinear(m_gdtr.base + offset, 32, context, low, true))
+    if (!ReadLinear(m_state.gdtr.base + offset, 32, context, low, true))
         return false;
 
-    if (!ReadLinear(m_gdtr.base + offset + 4, 32, context, high, true))
+    if (!ReadLinear(m_state.gdtr.base + offset + 4, 32, context, high, true))
         return false;
 
-    DecodeDescriptor(selector, m_gdtr.base + offset, low, high, descriptor);
+    DecodeDescriptor(selector, m_state.gdtr.base + offset, low, high, descriptor);
     return true;
 }
 
 bool I386::ReadDescriptor(u16 selector, Descriptor& descriptor, GT_Bus_Access_Context& context, u8 fault_vector)
 {
-    const I386_Descriptor_Table* table = &m_gdtr;
+    const I386_Descriptor_Table* table = &m_state.gdtr;
 
     if ((selector & 4) != 0)
     {
-        u8 type = (m_ldtr.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
+        u8 type = (m_state.ldtr.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
 
-        if ((m_ldtr.selector & 0xFFFC) == 0 || (m_ldtr.attributes & I386_SEGMENT_PRESENT) == 0 ||
-            (m_ldtr.attributes & I386_SEGMENT_SYSTEM) == 0 || type != 2)
+        if ((m_state.ldtr.selector & 0xFFFC) == 0 || (m_state.ldtr.attributes & I386_SEGMENT_PRESENT) == 0 ||
+            (m_state.ldtr.attributes & I386_SEGMENT_SYSTEM) == 0 || type != 2)
             return RaiseException(fault_vector, I386_EXCEPTION_FAULT, true, selector & 0xFFFC);
     }
 
-    u32 table_base = (selector & 4) != 0 ? m_ldtr.base : table->base;
-    u32 table_limit = (selector & 4) != 0 ? m_ldtr.limit : table->limit;
+    u32 table_base = (selector & 4) != 0 ? m_state.ldtr.base : table->base;
+    u32 table_limit = (selector & 4) != 0 ? m_state.ldtr.limit : table->limit;
     u32 offset = (u32)(selector & 0xFFF8);
     u32 error_code = selector & 0xFFFC;
 
@@ -142,19 +142,19 @@ bool I386::ReadDescriptorNoFault(u16 selector, Descriptor& descriptor, GT_Bus_Ac
     if ((selector & 0xFFFC) == 0)
         return true;
 
-    u32 table_base = m_gdtr.base;
-    u32 table_limit = m_gdtr.limit;
+    u32 table_base = m_state.gdtr.base;
+    u32 table_limit = m_state.gdtr.limit;
 
     if ((selector & 4) != 0)
     {
-        u8 type = (m_ldtr.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
+        u8 type = (m_state.ldtr.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
 
-        if ((m_ldtr.selector & 0xFFFC) == 0 || (m_ldtr.attributes & I386_SEGMENT_PRESENT) == 0 ||
-            (m_ldtr.attributes & I386_SEGMENT_SYSTEM) == 0 || type != 2)
+        if ((m_state.ldtr.selector & 0xFFFC) == 0 || (m_state.ldtr.attributes & I386_SEGMENT_PRESENT) == 0 ||
+            (m_state.ldtr.attributes & I386_SEGMENT_SYSTEM) == 0 || type != 2)
             return true;
 
-        table_base = m_ldtr.base;
-        table_limit = m_ldtr.limit;
+        table_base = m_state.ldtr.base;
+        table_limit = m_state.ldtr.limit;
     }
 
     u32 offset = selector & 0xFFF8;
@@ -209,7 +209,7 @@ bool I386::SetDescriptorType(const Descriptor& descriptor, u8 type, GT_Bus_Acces
 
 bool I386::LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context)
 {
-    if (m_execution_mode != I386_MODE_PROTECTED)
+    if (m_state.execution_mode != I386_MODE_PROTECTED)
         return LoadRealSegment(segment, selector);
 
     return LoadProtectedSegment(segment, selector, context);
@@ -227,7 +227,7 @@ bool I386::LoadProtectedSegment(int segment, u16 selector, GT_Bus_Access_Context
         if (segment == I386_SEGMENT_SS)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-        ClearSegmentCache(selector, m_segments[segment]);
+        ClearSegmentCache(selector, m_state.segments[segment]);
         return true;
     }
 
@@ -239,8 +239,8 @@ bool I386::LoadProtectedSegment(int segment, u16 selector, GT_Bus_Access_Context
     if (segment == I386_SEGMENT_SS)
     {
         if (descriptor.system || (descriptor.attributes & I386_SEGMENT_EXECUTABLE) != 0 ||
-            (descriptor.attributes & I386_SEGMENT_WRITABLE) == 0 || descriptor.dpl != m_current_privilege_level ||
-            (selector & 3) != m_current_privilege_level)
+            (descriptor.attributes & I386_SEGMENT_WRITABLE) == 0 || descriptor.dpl != m_state.current_privilege_level ||
+            (selector & 3) != m_state.current_privilege_level)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, error_code);
 
         if (!descriptor.present)
@@ -251,7 +251,7 @@ bool I386::LoadProtectedSegment(int segment, u16 selector, GT_Bus_Access_Context
         bool executable = (descriptor.attributes & I386_SEGMENT_EXECUTABLE) != 0;
         bool readable = (descriptor.attributes & I386_SEGMENT_READABLE) != 0;
         bool conforming = (descriptor.attributes & I386_SEGMENT_CONFORMING) != 0;
-        u8 effective_privilege = MAX(m_current_privilege_level, selector & 3);
+        u8 effective_privilege = MAX(m_state.current_privilege_level, selector & 3);
 
         if (descriptor.system || (executable && !readable) || (!conforming && effective_privilege > descriptor.dpl))
             return RaiseException(13, I386_EXCEPTION_FAULT, true, error_code);
@@ -263,7 +263,7 @@ bool I386::LoadProtectedSegment(int segment, u16 selector, GT_Bus_Access_Context
     if (!SetDescriptorAccessed(descriptor, context))
         return false;
 
-    LoadDescriptorCache(selector, descriptor, m_segments[segment]);
+    LoadDescriptorCache(selector, descriptor, m_state.segments[segment]);
     return true;
 }
 
@@ -285,7 +285,7 @@ bool I386::StackHasRoom(u32 limit, u16 attributes, u32 stack, u32 bytes) const
 bool I386::CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
     GT_Bus_Access_Context& context)
 {
-    if ((m_cr0 & 0x80000000U) == 0)
+    if ((m_state.cr0 & 0x80000000U) == 0)
         return true;
 
     u32 mask = (attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 0xFFFFFFFFU : 0xFFFFU;
@@ -307,46 +307,47 @@ bool I386::ReadInterruptDescriptor(u8 vector, Descriptor& descriptor, GT_Bus_Acc
     u32 offset = (u32)vector * 8;
     u32 error_code = offset | 2;
 
-    if ((u64)offset + 7 > m_idtr.limit)
+    if ((u64)offset + 7 > m_state.idtr.limit)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, error_code);
 
     u32 low = 0;
     u32 high = 0;
 
-    if (!ReadLinear(m_idtr.base + offset, 32, context, low, true))
+    if (!ReadLinear(m_state.idtr.base + offset, 32, context, low, true))
         return false;
 
-    if (!ReadLinear(m_idtr.base + offset + 4, 32, context, high, true))
+    if (!ReadLinear(m_state.idtr.base + offset + 4, 32, context, high, true))
         return false;
 
-    DecodeDescriptor((u16)error_code, m_idtr.base + offset, low, high, descriptor);
+    DecodeDescriptor((u16)error_code, m_state.idtr.base + offset, low, high, descriptor);
     return true;
 }
 
 bool I386::ReadPrivilegeStack(u8 privilege, u32& stack, u16& selector, GT_Bus_Access_Context& context)
 {
-    u8 type = (m_task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
+    u8 type = (m_state.task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
     bool tss32 = type == 9 || type == 11;
     bool tss16 = type == 1 || type == 3;
 
-    if ((m_task_register.selector & 0xFFFC) == 0 || (m_task_register.attributes & I386_SEGMENT_PRESENT) == 0 ||
-        (m_task_register.attributes & I386_SEGMENT_SYSTEM) == 0 || (!tss32 && !tss16) || privilege > 2)
-        return RaiseException(10, I386_EXCEPTION_FAULT, true, m_task_register.selector & 0xFFFC);
+    if ((m_state.task_register.selector & 0xFFFC) == 0 ||
+        (m_state.task_register.attributes & I386_SEGMENT_PRESENT) == 0 ||
+        (m_state.task_register.attributes & I386_SEGMENT_SYSTEM) == 0 || (!tss32 && !tss16) || privilege > 2)
+        return RaiseException(10, I386_EXCEPTION_FAULT, true, m_state.task_register.selector & 0xFFFC);
 
     u32 offset = tss32 ? 4 + (u32)privilege * 8 : 2 + (u32)privilege * 4;
     u32 bytes = tss32 ? 6 : 4;
 
-    if ((u64)offset + bytes - 1 > m_task_register.limit)
-        return RaiseException(10, I386_EXCEPTION_FAULT, true, m_task_register.selector & 0xFFFC);
+    if ((u64)offset + bytes - 1 > m_state.task_register.limit)
+        return RaiseException(10, I386_EXCEPTION_FAULT, true, m_state.task_register.selector & 0xFFFC);
 
     u32 value = 0;
 
-    if (!ReadLinear(m_task_register.base + offset, tss32 ? 32 : 16, context, value, true))
+    if (!ReadLinear(m_state.task_register.base + offset, tss32 ? 32 : 16, context, value, true))
         return false;
 
     stack = tss32 ? value : (u16)value;
 
-    if (!ReadLinear(m_task_register.base + offset + (tss32 ? 4 : 2), 16, context, value, true))
+    if (!ReadLinear(m_state.task_register.base + offset + (tss32 ? 4 : 2), 16, context, value, true))
         return false;
 
     selector = (u16)value;
@@ -366,7 +367,7 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     if (!gate.system || (gate.type != 5 && gate.type != 6 && gate.type != 7 && gate.type != 14 && gate.type != 15))
         return RaiseException(13, I386_EXCEPTION_FAULT, true, idt_error);
 
-    if (software && m_current_privilege_level > gate.dpl)
+    if (software && m_state.current_privilege_level > gate.dpl)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, idt_error);
 
     if (!gate.present)
@@ -387,7 +388,7 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
             return RaiseException(11, I386_EXCEPTION_FAULT, true, task_selector & 0xFFFC);
 
         u64 task_clocks = 0;
-        u8 old_type = (m_task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
+        u8 old_type = (m_state.task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
         bool ok = TaskSwitch(task_selector, task, I386_TASK_SWITCH_INTERRUPT, return_eip, context, task_clocks, true,
             has_error_code, error_code, fault);
 
@@ -417,10 +418,10 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
 
     bool conforming = (code.attributes & I386_SEGMENT_CONFORMING) != 0;
 
-    if (m_execution_mode == I386_MODE_VM86 && (conforming || code.dpl != 0))
+    if (m_state.execution_mode == I386_MODE_VM86 && (conforming || code.dpl != 0))
         return RaiseException(13, I386_EXCEPTION_FAULT, true, target_selector & 0xFFFC);
 
-    u8 old_privilege = m_execution_mode == I386_MODE_VM86 ? 3 : m_current_privilege_level;
+    u8 old_privilege = m_state.execution_mode == I386_MODE_VM86 ? 3 : m_state.current_privilege_level;
 
     if (code.dpl > old_privilege)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, target_selector & 0xFFFC);
@@ -430,12 +431,12 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     if (!code.present)
         return RaiseException(11, I386_EXCEPTION_FAULT, true, target_selector & 0xFFFC);
 
-    u32 old_flags = m_eflags | (fault ? I386_FLAG_RF : 0);
-    u16 old_cs = m_segments[I386_SEGMENT_CS].selector;
-    u16 old_ss = m_segments[I386_SEGMENT_SS].selector;
+    u32 old_flags = m_state.eflags | (fault ? I386_FLAG_RF : 0);
+    u16 old_cs = m_state.segments[I386_SEGMENT_CS].selector;
+    u16 old_ss = m_state.segments[I386_SEGMENT_SS].selector;
     u32 old_stack = GetStackPointer();
-    u32 old_esp = m_registers[I386_REG_ESP].value;
-    bool vm86 = m_execution_mode == I386_MODE_VM86;
+    u32 old_esp = m_state.registers[I386_REG_ESP].value;
+    bool vm86 = m_state.execution_mode == I386_MODE_VM86;
     int width = gate32 ? 32 : 16;
 
     if (IsValidPointer(clocks))
@@ -490,27 +491,27 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
             context))
             return false;
 
-        LoadDescriptorCache((new_ss & 0xFFFC) | new_privilege, stack_descriptor, m_segments[I386_SEGMENT_SS]);
+        LoadDescriptorCache((new_ss & 0xFFFC) | new_privilege, stack_descriptor, m_state.segments[I386_SEGMENT_SS]);
 
-        m_current_privilege_level = new_privilege;
-        m_eflags &= ~I386_FLAG_VM;
-        m_execution_mode = I386_MODE_PROTECTED;
+        m_state.current_privilege_level = new_privilege;
+        m_state.eflags &= ~I386_FLAG_VM;
+        m_state.execution_mode = I386_MODE_PROTECTED;
         UpdateUserMode();
         UpdateSegmentFastPaths();
         SetStackPointer(new_stack);
 
         if (vm86)
         {
-            if (!StackPushSized(m_segments[I386_SEGMENT_GS].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_GS].selector, width, context))
                 return false;
 
-            if (!StackPushSized(m_segments[I386_SEGMENT_FS].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_FS].selector, width, context))
                 return false;
 
-            if (!StackPushSized(m_segments[I386_SEGMENT_DS].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_DS].selector, width, context))
                 return false;
 
-            if (!StackPushSized(m_segments[I386_SEGMENT_ES].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_ES].selector, width, context))
                 return false;
         }
 
@@ -522,7 +523,7 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     }
     else
     {
-        const I386_Segment& stack_segment = m_segments[I386_SEGMENT_SS];
+        const I386_Segment& stack_segment = m_state.segments[I386_SEGMENT_SS];
         u32 frame_items = 3 + (has_error_code ? 1 : 0);
         u32 frame_bytes = frame_items * ((u32)width >> 3);
 
@@ -552,27 +553,27 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     if (has_error_code && !StackPushSized(error_code, width, context))
         return false;
 
-    LoadDescriptorCache((target_selector & 0xFFFC) | new_privilege, code, m_segments[I386_SEGMENT_CS]);
+    LoadDescriptorCache((target_selector & 0xFFFC) | new_privilege, code, m_state.segments[I386_SEGMENT_CS]);
 
-    m_segments[I386_SEGMENT_CS].dpl = new_privilege;
-    m_current_privilege_level = new_privilege;
+    m_state.segments[I386_SEGMENT_CS].dpl = new_privilege;
+    m_state.current_privilege_level = new_privilege;
     UpdateUserMode();
-    m_eip = gate32 ? target_offset : (u16)target_offset;
-    m_eflags &= ~(I386_FLAG_TF | I386_FLAG_NT | I386_FLAG_RF | I386_FLAG_VM);
+    m_state.eip = gate32 ? target_offset : (u16)target_offset;
+    m_state.eflags &= ~(I386_FLAG_TF | I386_FLAG_NT | I386_FLAG_RF | I386_FLAG_VM);
 
     if (gate.type == 6 || gate.type == 14)
-        m_eflags &= ~I386_FLAG_IF;
+        m_state.eflags &= ~I386_FLAG_IF;
 
     if (vm86)
     {
-        ClearSegmentCache(0, m_segments[I386_SEGMENT_ES]);
-        ClearSegmentCache(0, m_segments[I386_SEGMENT_DS]);
-        ClearSegmentCache(0, m_segments[I386_SEGMENT_FS]);
-        ClearSegmentCache(0, m_segments[I386_SEGMENT_GS]);
+        ClearSegmentCache(0, m_state.segments[I386_SEGMENT_ES]);
+        ClearSegmentCache(0, m_state.segments[I386_SEGMENT_DS]);
+        ClearSegmentCache(0, m_state.segments[I386_SEGMENT_FS]);
+        ClearSegmentCache(0, m_state.segments[I386_SEGMENT_GS]);
     }
 
-    m_execution_mode = I386_MODE_PROTECTED;
-    m_halted = false;
+    m_state.execution_mode = I386_MODE_PROTECTED;
+    m_state.halted = false;
     UpdateUserMode();
     UpdateSegmentFastPaths();
 
@@ -584,31 +585,32 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
 
 u8 I386::GetIOPrivilegeLevel() const
 {
-    return (m_eflags >> 12) & 3;
+    return (m_state.eflags >> 12) & 3;
 }
 
 bool I386::CheckIOPermission(u16 port, int width, GT_Bus_Access_Context& context, bool& allowed)
 {
     allowed = true;
 
-    if (m_execution_mode == I386_MODE_REAL)
+    if (m_state.execution_mode == I386_MODE_REAL)
         return true;
 
-    if (m_execution_mode != I386_MODE_VM86 && m_current_privilege_level <= GetIOPrivilegeLevel())
+    if (m_state.execution_mode != I386_MODE_VM86 && m_state.current_privilege_level <= GetIOPrivilegeLevel())
         return true;
 
     allowed = false;
 
-    u8 type = (m_task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
+    u8 type = (m_state.task_register.attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT;
 
-    if ((m_task_register.selector & 0xFFFC) == 0 || (m_task_register.attributes & I386_SEGMENT_PRESENT) == 0 ||
-        (m_task_register.attributes & I386_SEGMENT_SYSTEM) == 0 || (type != 9 && type != 11) ||
-        m_task_register.limit < 0x67)
+    if ((m_state.task_register.selector & 0xFFFC) == 0 ||
+        (m_state.task_register.attributes & I386_SEGMENT_PRESENT) == 0 ||
+        (m_state.task_register.attributes & I386_SEGMENT_SYSTEM) == 0 || (type != 9 && type != 11) ||
+        m_state.task_register.limit < 0x67)
         return true;
 
     u32 bitmap_offset = 0;
 
-    if (!ReadLinear(m_task_register.base + 0x66, 16, context, bitmap_offset, true))
+    if (!ReadLinear(m_state.task_register.base + 0x66, 16, context, bitmap_offset, true))
         return false;
 
     u32 bytes = (u32)width >> 3;
@@ -618,12 +620,12 @@ bool I386::CheckIOPermission(u16 port, int width, GT_Bus_Access_Context& context
         u32 current_port = (u32)port + i;
         u32 byte_offset = bitmap_offset + (current_port >> 3);
 
-        if (byte_offset > m_task_register.limit)
+        if (byte_offset > m_state.task_register.limit)
             return true;
 
         u32 permission = 0;
 
-        if (!ReadLinear(m_task_register.base + byte_offset, 8, context, permission, true))
+        if (!ReadLinear(m_state.task_register.base + byte_offset, 8, context, permission, true))
             return false;
 
         if ((permission & (1U << (current_port & 7))) != 0)

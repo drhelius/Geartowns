@@ -42,18 +42,18 @@ void I386::UpdateSegmentFastPaths()
 {
     // Code fetches only need the execute check and the limit
     // debug state never affects them
-    const I386_Segment& code = m_segments[I386_SEGMENT_CS];
+    const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
 
     m_default_size = (code.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 4 : 2;
     m_instruction_defaults.operand_size = m_default_size;
     m_instruction_defaults.address_size = m_default_size;
-    m_stack32 = (m_segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0;
+    m_stack32 = (m_state.segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0;
     m_code_limit = -1;
     CloseCodeWindow();
 
     if ((code.attributes & I386_SEGMENT_PRESENT) != 0)
     {
-        if (m_execution_mode != I386_MODE_PROTECTED)
+        if (m_state.execution_mode != I386_MODE_PROTECTED)
             m_code_limit = code.limit;
         else if ((code.selector & 0xFFFC) != 0 && (code.attributes & I386_SEGMENT_EXECUTABLE) != 0 &&
             (code.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
@@ -62,7 +62,7 @@ void I386::UpdateSegmentFastPaths()
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        const I386_Segment& segment = m_segments[i];
+        const I386_Segment& segment = m_state.segments[i];
         bool executable = (segment.attributes & I386_SEGMENT_EXECUTABLE) != 0;
 
         m_read_limits[i] = -1;
@@ -70,7 +70,7 @@ void I386::UpdateSegmentFastPaths()
 
         if (!m_slow_memory && (segment.attributes & I386_SEGMENT_PRESENT) != 0)
         {
-            if (m_execution_mode != I386_MODE_PROTECTED)
+            if (m_state.execution_mode != I386_MODE_PROTECTED)
                 m_read_limits[i] = m_write_limits[i] = segment.limit;
             else if ((segment.selector & 0xFFFC) != 0 &&
                 (segment.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
@@ -123,7 +123,7 @@ bool I386::LogicalToLinearProtected(int segment, u32 offset, u32 size, bool writ
     if (segment < 0 || segment >= I386_SEGMENT_COUNT || size == 0)
         return RaiseException(stack ? 12 : 13, I386_EXCEPTION_FAULT, true, 0);
 
-    const I386_Segment& state = m_segments[segment];
+    const I386_Segment& state = m_state.segments[segment];
     u8 fault = stack || segment == I386_SEGMENT_SS ? 12 : 13;
 
     if ((state.selector & 0xFFFC) == 0 || (state.attributes & I386_SEGMENT_PRESENT) == 0)
@@ -203,9 +203,9 @@ bool I386::ReadMemorySlow(int segment, u32 offset, int width, GT_Bus_Access_Cont
     u32 linear = 0;
     u32 bytes = (u32)width >> 3;
 
-    if ((m_cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_read_limits[segment])
+    if ((m_state.cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_read_limits[segment])
     {
-        linear = m_segments[segment].base + offset;
+        linear = m_state.segments[segment].base + offset;
 
         if ((linear & 0xFFF) + bytes <= 0x1000)
         {
@@ -233,7 +233,7 @@ bool I386::ReadMemorySlow(int segment, u32 offset, int width, GT_Bus_Access_Cont
     if (!LogicalToLinear(segment, offset, bytes, false, stack, linear))
         return false;
 
-    bool paging = (m_cr0 & 0x80000000U) != 0;
+    bool paging = (m_state.cr0 & 0x80000000U) != 0;
     bool single_page = (linear & 0xFFF) + bytes <= 0x1000;
 
     if (!paging || single_page)
@@ -263,7 +263,7 @@ bool I386::ReadMemorySlow(int segment, u32 offset, int width, GT_Bus_Access_Cont
         }
     }
 
-    if (unlikely((m_debug_registers[7] & 0xFF) != 0))
+    if (unlikely((m_state.debug_registers[7] & 0xFF) != 0))
         RecordDataBreakpoints(linear, bytes, false);
 
     return true;
@@ -274,9 +274,9 @@ bool I386::WriteMemorySlow(int segment, u32 offset, int width, u32 value, GT_Bus
     u32 linear = 0;
     u32 bytes = (u32)width >> 3;
 
-    if ((m_cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_write_limits[segment])
+    if ((m_state.cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_write_limits[segment])
     {
-        linear = m_segments[segment].base + offset;
+        linear = m_state.segments[segment].base + offset;
 
         if ((linear & 0xFFF) + bytes <= 0x1000)
         {
@@ -304,7 +304,7 @@ bool I386::WriteMemorySlow(int segment, u32 offset, int width, u32 value, GT_Bus
     if (!LogicalToLinear(segment, offset, bytes, true, stack, linear))
         return false;
 
-    bool paging = (m_cr0 & 0x80000000U) != 0;
+    bool paging = (m_state.cr0 & 0x80000000U) != 0;
     bool single_page = (linear & 0xFFF) + bytes <= 0x1000;
 
     if (!paging || single_page)
@@ -333,7 +333,7 @@ bool I386::WriteMemorySlow(int segment, u32 offset, int width, u32 value, GT_Bus
             m_memory->Write8Physical(physical[i], (u8)(value >> (i * 8)), context);
     }
 
-    if (unlikely((m_debug_registers[7] & 0xFF) != 0))
+    if (unlikely((m_state.debug_registers[7] & 0xFF) != 0))
         RecordDataBreakpoints(linear, bytes, true);
 
     return true;
@@ -343,20 +343,20 @@ void I386::RecordDataBreakpoints(u32 linear, u32 size, bool write)
 {
     for (int i = 0; i < 4; i++)
     {
-        u32 enable = (m_debug_registers[7] >> (i * 2)) & 3;
-        u32 operation = (m_debug_registers[7] >> (16 + i * 4)) & 3;
+        u32 enable = (m_state.debug_registers[7] >> (i * 2)) & 3;
+        u32 operation = (m_state.debug_registers[7] >> (16 + i * 4)) & 3;
 
         if (enable == 0 || operation == 0 || operation == 2 || (operation == 1 && !write))
             continue;
 
-        u32 length_code = (m_debug_registers[7] >> (18 + i * 4)) & 3;
+        u32 length_code = (m_state.debug_registers[7] >> (18 + i * 4)) & 3;
         u32 length = length_code == 0 ? 1 : length_code == 1 ? 2 : length_code == 3 ? 4 : 0;
 
         for (u32 access_byte = 0; access_byte < size && length != 0; access_byte++)
         {
             for (u32 breakpoint_byte = 0; breakpoint_byte < length; breakpoint_byte++)
             {
-                if (linear + access_byte == m_debug_registers[i] + breakpoint_byte)
+                if (linear + access_byte == m_state.debug_registers[i] + breakpoint_byte)
                 {
                     m_debug_data_breakpoints |= 1U << i;
                     length = 0;
@@ -379,7 +379,7 @@ bool I386::CheckMemoryAccess(int segment, u32 offset, u32 size, bool write, GT_B
 
 bool I386::CheckLinearAccess(u32 linear, u32 size, bool write, GT_Bus_Access_Context& context, bool supervisor)
 {
-    if ((m_cr0 & 0x80000000U) == 0)
+    if ((m_state.cr0 & 0x80000000U) == 0)
         return true;
 
     while (size != 0)
@@ -415,7 +415,7 @@ bool I386::ProbeMemory(int segment, u32 offset, u32 size, bool write, GT_Bus_Acc
             m_memory->Read8Physical(physical, context);
     }
 
-    if (!write && unlikely((m_debug_registers[7] & 0xFF) != 0))
+    if (!write && unlikely((m_state.debug_registers[7] & 0xFF) != 0))
         RecordDataBreakpoints(linear, size, false);
 
     return true;
@@ -515,7 +515,7 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
     if (unlikely(m_memory_generation != m_memory->GetMapGeneration()))
         RefreshMemoryPointers();
 
-    bool user = !supervisor && (m_execution_mode == I386_MODE_VM86 || m_current_privilege_level == 3);
+    bool user = !supervisor && (m_state.execution_mode == I386_MODE_VM86 || m_state.current_privilege_level == 3);
     u32 linear_page = linear & 0xFFFFF000U;
     TLBEntry* ways = &m_tlb[set * I386_TLB_WAYS];
 
@@ -525,7 +525,7 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
 
         if (user && (((entry.flags & k_i386_tlb_user) == 0) || (write && (entry.flags & k_i386_tlb_writable) == 0)))
         {
-            m_cr2 = linear;
+            m_state.cr2 = linear;
             return RaiseException(14, I386_EXCEPTION_FAULT, true, 1 | (write ? 2 : 0) | 4);
         }
 
@@ -541,12 +541,12 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
         }
     }
 
-    u32 pde_address = (m_cr3 & 0xFFFFF000U) + ((linear >> 20) & 0xFFCU);
+    u32 pde_address = (m_state.cr3 & 0xFFFFF000U) + ((linear >> 20) & 0xFFCU);
     u32 pde = ReadPhysical(pde_address, 4, context);
 
     if ((pde & 1) == 0)
     {
-        m_cr2 = linear;
+        m_state.cr2 = linear;
         return RaiseException(14, I386_EXCEPTION_FAULT, true, (write ? 2 : 0) | (user ? 4 : 0));
     }
 
@@ -555,13 +555,13 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
 
     if ((pte & 1) == 0)
     {
-        m_cr2 = linear;
+        m_state.cr2 = linear;
         return RaiseException(14, I386_EXCEPTION_FAULT, true, (write ? 2 : 0) | (user ? 4 : 0));
     }
 
     if (user && (((pde & pte) & 4) == 0 || (write && ((pde & pte) & 2) == 0)))
     {
-        m_cr2 = linear;
+        m_state.cr2 = linear;
         return RaiseException(14, I386_EXCEPTION_FAULT, true, 1 | (write ? 2 : 0) | 4);
     }
 
@@ -635,8 +635,8 @@ void I386::ResetTLBReplacement()
 // Test operations leave the replacement state unchanged
 void I386::TestTLB()
 {
-    u32 command = m_test_registers[0];
-    u32 data = m_test_registers[1];
+    u32 command = m_state.test_registers[0];
+    u32 data = m_state.test_registers[1];
     u32 linear_page = command & 0xFFFFF000U;
     u32 set = (command >> 12) & (I386_TLB_SETS - 1);
     bool valid = (command & 0x800) != 0;
@@ -686,12 +686,12 @@ void I386::TestTLB()
         for (int i = 0; i < 3; i++)
             attributes |= (entry.flags & k_attribute_flags[i]) != 0 ? k_attribute_bits[i] : k_attribute_bits[i] >> 1;
 
-        m_test_registers[0] = (command & ~0x7E0U) | attributes;
-        m_test_registers[1] = entry.physical_page | 0x10 | (way << 2);
+        m_state.test_registers[0] = (command & ~0x7E0U) | attributes;
+        m_state.test_registers[1] = entry.physical_page | 0x10 | (way << 2);
         return;
     }
 
-    m_test_registers[1] = data & ~0x10U;
+    m_state.test_registers[1] = data & ~0x10U;
 }
 
 // Opens the code window over the code page of EIP when it has host memory
@@ -706,10 +706,10 @@ NO_INLINE void I386::OpenCodeWindow(u32 eip)
     if ((s64)eip > m_code_limit)
         return;
 
-    u32 linear = m_segments[I386_SEGMENT_CS].base + eip;
+    u32 linear = m_state.segments[I386_SEGMENT_CS].base + eip;
     const u8* page;
 
-    if ((m_cr0 & 0x80000000U) == 0)
+    if ((m_state.cr0 & 0x80000000U) == 0)
         page = m_read_pages[linear >> 12];
     else
     {
@@ -747,7 +747,7 @@ NO_INLINE bool I386::FetchCodeSlow8(InstructionContext& instruction, u8& value)
 
     // The cached CS execute limit already proves the access when it covers the cursor
     if (likely((s64)cursor <= m_code_limit))
-        linear = m_segments[I386_SEGMENT_CS].base + cursor;
+        linear = m_state.segments[I386_SEGMENT_CS].base + cursor;
     else if (!LogicalToLinear(I386_SEGMENT_CS, cursor, 1, false, false, linear, true))
         return false;
 
@@ -756,7 +756,7 @@ NO_INLINE bool I386::FetchCodeSlow8(InstructionContext& instruction, u8& value)
     const u8* page = NULL;
 
     // A TLB entry with a cached host page is valid for this privilege level, so no walk or fault is possible
-    if ((m_cr0 & 0x80000000U) != 0)
+    if ((m_state.cr0 & 0x80000000U) != 0)
     {
         const TLBEntry* entry = FindTLBHost(linear, false);
 
@@ -776,10 +776,10 @@ NO_INLINE bool I386::FetchCodeSlow8(InstructionContext& instruction, u8& value)
         return true;
     }
 
-    const I386_Segment& code = m_segments[I386_SEGMENT_CS];
+    const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
     u32 upper_limit = code.limit;
 
-    if (m_execution_mode == I386_MODE_PROTECTED && (code.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)
+    if (m_state.execution_mode == I386_MODE_PROTECTED && (code.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)
         upper_limit = (code.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 0xFFFFFFFFU : 0xFFFFU;
 
     u64 available = (u64)upper_limit - cursor + 1;
@@ -800,9 +800,9 @@ bool I386::TryPeekLogical(I386_Segment_Register segment, u32 offset, u8& value) 
     if (segment < 0 || segment >= I386_SEGMENT_COUNT)
         return false;
 
-    const I386_Segment& state = m_segments[segment];
+    const I386_Segment& state = m_state.segments[segment];
 
-    if (!IsValidSegmentOffset(state, offset, m_execution_mode == I386_MODE_PROTECTED))
+    if (!IsValidSegmentOffset(state, offset, m_state.execution_mode == I386_MODE_PROTECTED))
         return false;
 
     return TryPeekLinear(state.base + offset, value);
@@ -812,7 +812,7 @@ bool I386::TryPeekLogical(u16 selector, u32 offset, u8& value) const
 {
     const I386_Segment* state = FindSegment(selector);
 
-    if (!IsValidPointer(state) || !IsValidSegmentOffset(*state, offset, m_execution_mode == I386_MODE_PROTECTED))
+    if (!IsValidPointer(state) || !IsValidSegmentOffset(*state, offset, m_state.execution_mode == I386_MODE_PROTECTED))
         return false;
 
     return TryPeekLinear(state->base + offset, value);
@@ -846,7 +846,7 @@ NO_INLINE bool I386::TranslatePagedPassive(u32 linear, u32& physical) const
 bool I386::TranslateLinearForDebugger(u32 linear, u32& physical, u32& pde_address, u32& pte_address, u32& page_flags,
     char* reason, size_t reason_size) const
 {
-    if ((m_cr0 & 0x80000000U) == 0)
+    if ((m_state.cr0 & 0x80000000U) == 0)
     {
         physical = linear;
         pde_address = 0;
@@ -857,7 +857,7 @@ bool I386::TranslateLinearForDebugger(u32 linear, u32& physical, u32& pde_addres
     }
 
     u32 pde = 0;
-    pde_address = (m_cr3 & 0xFFFFF000U) + ((linear >> 20) & 0xFFCU);
+    pde_address = (m_state.cr3 & 0xFFFFF000U) + ((linear >> 20) & 0xFFCU);
 
     if (!ReadPhysical32Passive(pde_address, pde) || (pde & 1) == 0)
     {
@@ -911,13 +911,13 @@ bool I386::DebugTranslateLogical(I386_Segment_Register segment, u32 offset,
         return false;
     }
 
-    const I386_Segment& state = m_segments[segment];
+    const I386_Segment& state = m_state.segments[segment];
 
     translation.segment = state.selector;
     translation.offset = offset;
     translation.segment_base = state.base;
     translation.segment_limit = state.limit;
-    translation.logical_valid = IsValidSegmentOffset(state, offset, m_execution_mode == I386_MODE_PROTECTED);
+    translation.logical_valid = IsValidSegmentOffset(state, offset, m_state.execution_mode == I386_MODE_PROTECTED);
 
     if (!translation.logical_valid)
     {
@@ -944,7 +944,7 @@ bool I386::DebugTranslateLogical(u16 selector, u32 offset, GT_Debug_Memory_Trans
     translation.offset = offset;
     translation.segment_base = state->base;
     translation.segment_limit = state->limit;
-    translation.logical_valid = IsValidSegmentOffset(*state, offset, m_execution_mode == I386_MODE_PROTECTED);
+    translation.logical_valid = IsValidSegmentOffset(*state, offset, m_state.execution_mode == I386_MODE_PROTECTED);
 
     if (!translation.logical_valid)
     {
@@ -988,8 +988,8 @@ const I386_Segment* I386::FindSegment(u16 selector) const
 {
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (m_segments[i].selector == selector)
-            return &m_segments[i];
+        if (m_state.segments[i].selector == selector)
+            return &m_state.segments[i];
     }
 
     return NULL;

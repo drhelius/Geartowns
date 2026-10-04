@@ -26,19 +26,19 @@ INLINE void I8259::SetInputLine(int line, bool high)
 {
     u8 mask = (u8)(1 << line);
 
-    if (high == ((m_input_levels & mask) != 0))
+    if (high == ((m_state.input_levels & mask) != 0))
         return;
 
     // A request only stands while its input is high, in both trigger modes
     if (high)
     {
-        m_input_levels |= mask;
-        m_irr |= mask;
+        m_state.input_levels |= mask;
+        m_state.irr |= mask;
     }
     else
     {
-        m_input_levels &= ~mask;
-        m_irr &= ~mask;
+        m_state.input_levels &= ~mask;
+        m_state.irr &= ~mask;
     }
 
     UpdateOutput();
@@ -46,44 +46,29 @@ INLINE void I8259::SetInputLine(int line, bool high)
 
 INLINE bool I8259::IsIRQAsserted() const
 {
-    return m_int_output;
+    return m_state.int_output;
 }
 
 INLINE u8 I8259::GetVector(int line) const
 {
-    return (u8)((m_icw2 & 0xF8) | line);
+    return (u8)((m_state.icw2 & 0xF8) | line);
 }
 
 INLINE bool I8259::IsCascadeLine(int line) const
 {
-    return m_is_master && (m_icw1 & k_i8259_icw1_sngl) == 0 && (m_icw3 & (1 << line)) != 0;
+    return m_is_master && (m_state.icw1 & k_i8259_icw1_sngl) == 0 && (m_state.icw3 & (1 << line)) != 0;
 }
 
-INLINE u8 I8259::GetIRR() const
+INLINE I8259::I8259_State* I8259::GetState()
 {
-    return m_irr;
-}
-
-INLINE u8 I8259::GetISR() const
-{
-    return m_isr;
-}
-
-INLINE u8 I8259::GetIMR() const
-{
-    return m_imr;
-}
-
-INLINE u8 I8259::GetInputLevels() const
-{
-    return m_input_levels;
+    return &m_state;
 }
 
 INLINE int I8259::FindHighest(u8 bits) const
 {
     for (int rank = 0; rank < 8; rank++)
     {
-        int line = (m_lowest_priority + 1 + rank) & 7;
+        int line = (m_state.lowest_priority + 1 + rank) & 7;
 
         if ((bits & (1 << line)) != 0)
             return line;
@@ -94,21 +79,21 @@ INLINE int I8259::FindHighest(u8 bits) const
 
 INLINE int I8259::GetRequestLine() const
 {
-    u8 requests = m_irr & ~m_imr;
+    u8 requests = m_state.irr & ~m_state.imr;
 
     if (requests == 0)
         return -1;
 
-    u8 blocking = m_isr;
+    u8 blocking = m_state.isr;
 
-    if (m_special_mask)
-        blocking &= ~m_imr;
+    if (m_state.special_mask)
+        blocking &= ~m_state.imr;
 
-    bool nested = m_is_master && (m_icw4 & k_i8259_icw4_sfnm) != 0;
+    bool nested = m_is_master && (m_state.icw4 & k_i8259_icw4_sfnm) != 0;
 
     for (int rank = 0; rank < 8; rank++)
     {
-        int line = (m_lowest_priority + 1 + rank) & 7;
+        int line = (m_state.lowest_priority + 1 + rank) & 7;
         u8 mask = (u8)(1 << line);
         bool in_service = (blocking & mask) != 0;
 
@@ -128,7 +113,7 @@ INLINE int I8259::GetRequestLine() const
 
 INLINE void I8259::UpdateOutput()
 {
-    m_int_output = m_init_step == I8259_INIT_READY && GetRequestLine() >= 0;
+    m_state.int_output = m_state.init_step == I8259_INIT_READY && GetRequestLine() >= 0;
 }
 
 #endif /* I8259_INLINE_H */

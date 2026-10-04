@@ -30,7 +30,8 @@ bool I386::OPCodes_PUSH_Segment()
     int segment = opcode == 0x06 ? I386_SEGMENT_ES : opcode == 0x0E ? I386_SEGMENT_CS :
         opcode == 0x16 ? I386_SEGMENT_SS : I386_SEGMENT_DS;
 
-    if (!StackPushSized(m_segments[segment].selector, operand_width, *m_bus_context, operand_width == 32 ? 16 : 0))
+    if (!StackPushSized(m_state.segments[segment].selector, operand_width, *m_bus_context,
+        operand_width == 32 ? 16 : 0))
         return false;
 
     CommitEIP(m_instruction);
@@ -44,7 +45,7 @@ bool I386::OPCodes_POP_Segment()
 
     u8 opcode = m_instruction.opcode;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         m_step.clocks = 21;
 
     int segment = opcode == 0x07 ? I386_SEGMENT_ES : opcode == 0x17 ? I386_SEGMENT_SS : I386_SEGMENT_DS;
@@ -59,14 +60,14 @@ bool I386::OPCodes_POP_Segment()
         return false;
 
     if (old_stack_size == 32)
-        m_registers[I386_REG_ESP].value = old_stack + m_instruction.operand_size;
+        m_state.registers[I386_REG_ESP].value = old_stack + m_instruction.operand_size;
     else
-        m_registers[I386_REG_ESP].low = (u16)(old_stack + m_instruction.operand_size);
+        m_state.registers[I386_REG_ESP].low = (u16)(old_stack + m_instruction.operand_size);
 
     if (segment == I386_SEGMENT_SS)
     {
-        m_interrupt_shadow = I386_SHADOW_MOV_SS;
-        m_interrupt_shadow_steps = 2;
+        m_state.interrupt_shadow = I386_SHADOW_MOV_SS;
+        m_state.interrupt_shadow_steps = 2;
     }
 
     CommitEIP(m_instruction);
@@ -132,7 +133,7 @@ bool I386::OPCodes_POPA()
         if (k_popa_registers[i] >= 0)
             SetRegister(k_popa_registers[i], operand_width, value);
         else if (operand_width == 32 && GetStackAddressSize() == 16)
-            m_registers[I386_REG_ESP].high = (u16)(value >> 16);
+            m_state.registers[I386_REG_ESP].high = (u16)(value >> 16);
 
         stack = (stack + m_instruction.operand_size) & stack_mask;
     }
@@ -190,14 +191,14 @@ bool I386::OPCodes_CALL_Far()
     int operand_width = m_instruction.operand_size * 8;
     u32 target = m_instruction.immediate;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         return ProtectedFarTransfer((u16)m_instruction.immediate2, target, operand_width, true, m_instruction.next_eip,
             *m_bus_context, m_step.clocks, false);
 
     if ((operand_width == 16 ? (u32)(u16)target : target) > 0xFFFF)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    if (!StackPushSized(m_segments[I386_SEGMENT_CS].selector, operand_width, *m_bus_context))
+    if (!StackPushSized(m_state.segments[I386_SEGMENT_CS].selector, operand_width, *m_bus_context))
         return false;
 
     if (!StackPushSized(m_instruction.next_eip, operand_width, *m_bus_context))
@@ -217,10 +218,10 @@ bool I386::OPCodes_PUSHF()
 
     int operand_width = m_instruction.operand_size * 8;
 
-    if (m_execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
+    if (m_state.execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    u32 flags = operand_width == 32 ? m_eflags & 0x0000FFFFU : m_eflags;
+    u32 flags = operand_width == 32 ? m_state.eflags & 0x0000FFFFU : m_state.eflags;
 
     if (!StackPushSized(flags, operand_width, *m_bus_context))
         return false;
@@ -236,7 +237,7 @@ bool I386::OPCodes_POPF()
 
     int operand_width = m_instruction.operand_size * 8;
 
-    if (m_execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
+    if (m_state.execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 value = 0;
@@ -246,16 +247,16 @@ bool I386::OPCodes_POPF()
 
     u32 mask = operand_width == 32 ? 0x00014FD5U : 0x00004FD5U;
 
-    if (m_execution_mode == I386_MODE_REAL || m_current_privilege_level == 0)
+    if (m_state.execution_mode == I386_MODE_REAL || m_state.current_privilege_level == 0)
         mask |= I386_FLAG_IOPL;
 
-    if (m_execution_mode == I386_MODE_PROTECTED && m_current_privilege_level > GetIOPrivilegeLevel())
+    if (m_state.execution_mode == I386_MODE_PROTECTED && m_state.current_privilege_level > GetIOPrivilegeLevel())
         mask &= ~I386_FLAG_IF;
 
     if (operand_width == 16)
         mask &= 0xFFFF;
 
-    m_eflags = (m_eflags & ~mask) | (value & mask) | I386_FLAG_FIXED;
+    m_state.eflags = (m_state.eflags & ~mask) | (value & mask) | I386_FLAG_FIXED;
     CommitEIP(m_instruction);
     return true;
 }
@@ -281,7 +282,7 @@ bool I386::OPCodes_ENTER()
         return false;
 
     u32 frame_pointer = frame_address_width == 16 && operand_width == 32 ?
-        (m_registers[I386_REG_ESP].value & 0xFFFF0000U) | stack : stack;
+        (m_state.registers[I386_REG_ESP].value & 0xFFFF0000U) | stack : stack;
 
     for (u32 i = 1; i < nesting; i++)
     {
@@ -356,7 +357,7 @@ bool I386::OPCodes_RET_Far()
     int operand_width = m_instruction.operand_size * 8;
     u16 release_bytes = opcode == 0xCA ? (u16)m_instruction.immediate : 0;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         return ProtectedFarReturn(operand_width, release_bytes, *m_bus_context, m_step.clocks);
 
     u32 old_stack = GetStackPointer();
@@ -394,10 +395,10 @@ bool I386::OPCodes_INT()
     if (!DecodeOperands(false, opcode == 0xCD ? 1 : 0))
         return false;
 
-    if (!StartExecution(opcode == 0xCC ? 33 : opcode == 0xCD ? 37 : (m_eflags & I386_FLAG_OF) != 0 ? 35 : 3))
+    if (!StartExecution(opcode == 0xCC ? 33 : opcode == 0xCD ? 37 : (m_state.eflags & I386_FLAG_OF) != 0 ? 35 : 3))
         return false;
 
-    if (opcode == 0xCE && (m_eflags & I386_FLAG_OF) == 0)
+    if (opcode == 0xCE && (m_state.eflags & I386_FLAG_OF) == 0)
     {
         CommitEIP(m_instruction);
         return true;
@@ -405,10 +406,10 @@ bool I386::OPCodes_INT()
 
     u8 vector = opcode == 0xCC ? 3 : opcode == 0xCE ? 4 : (u8)m_instruction.immediate;
 
-    if (opcode == 0xCD && m_execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
+    if (opcode == 0xCD && m_state.execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    m_last_exception_vector = vector;
+    m_state.last_exception_vector = vector;
     m_step_exception = {};
 
     if (!EnterInterrupt(vector, m_instruction.next_eip, *m_bus_context, true, false, 0, false, false, &m_step.clocks,
@@ -429,10 +430,10 @@ bool I386::OPCodes_IRET()
 
     int operand_width = m_instruction.operand_size * 8;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         return ProtectedInterruptReturn(operand_width, *m_bus_context, m_step.clocks);
 
-    if (m_execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
+    if (m_state.execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 old_stack = GetStackPointer();
@@ -464,8 +465,8 @@ bool I386::OPCodes_IRET()
 
     u32 mask = operand_width == 16 ? 0x00007FD5U : 0x00017FD5U;
 
-    m_eflags = (m_eflags & ~mask) | (flags & mask) | I386_FLAG_FIXED;
-    m_nmi_blocked = false;
+    m_state.eflags = (m_state.eflags & ~mask) | (flags & mask) | I386_FLAG_FIXED;
+    m_state.nmi_blocked = false;
     UpdateExecutionMode();
     return true;
 }
@@ -485,9 +486,9 @@ bool I386::OPCodes_LOOP()
     bool taken = count != 0;
 
     if (opcode == 0xE0)
-        taken = taken && (m_eflags & I386_FLAG_ZF) == 0;
+        taken = taken && (m_state.eflags & I386_FLAG_ZF) == 0;
     else if (opcode == 0xE1)
-        taken = taken && (m_eflags & I386_FLAG_ZF) != 0;
+        taken = taken && (m_state.eflags & I386_FLAG_ZF) != 0;
 
     if (taken)
     {
@@ -549,7 +550,7 @@ bool I386::OPCodes_JMP_Far()
 
     int operand_width = m_instruction.operand_size * 8;
 
-    if (m_execution_mode == I386_MODE_PROTECTED)
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
         return ProtectedFarTransfer((u16)m_instruction.immediate2, m_instruction.immediate, operand_width, false,
             m_instruction.next_eip, *m_bus_context, m_step.clocks, false);
 

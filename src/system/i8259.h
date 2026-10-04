@@ -28,6 +28,34 @@ class StateSerializer;
 class I8259
 {
 public:
+    enum I8259_Init_Step
+    {
+        I8259_INIT_READY = 0,
+        I8259_INIT_ICW2,
+        I8259_INIT_ICW3,
+        I8259_INIT_ICW4
+    };
+
+    struct I8259_State
+    {
+        u8 irr;
+        u8 isr;
+        u8 imr;
+        u8 input_levels;
+        u8 icw1;
+        u8 icw2;
+        u8 icw3;
+        u8 icw4;
+        I8259_Init_Step init_step;
+        u8 lowest_priority;
+        bool read_isr;
+        bool poll_pending;
+        bool special_mask;
+        bool rotate_on_aeoi;
+        bool int_output;
+    };
+
+public:
     I8259();
     ~I8259();
     void Init(bool is_master);
@@ -39,23 +67,9 @@ public:
     int Acknowledge();
     u8 GetVector(int line) const;
     bool IsCascadeLine(int line) const;
-
-    u8 GetIRR() const;
-    u8 GetISR() const;
-    u8 GetIMR() const;
-    u8 GetInputLevels() const;
-
+    I8259_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
-
-private:
-    enum I8259_Init_Step
-    {
-        I8259_INIT_READY = 0,
-        I8259_INIT_ICW2,
-        I8259_INIT_ICW3,
-        I8259_INIT_ICW4
-    };
 
 private:
     void WriteICW1(u8 value);
@@ -70,22 +84,8 @@ private:
     void SanitizeState();
 
 private:
+    I8259_State m_state;
     bool m_is_master;
-    u8 m_irr;
-    u8 m_isr;
-    u8 m_imr;
-    u8 m_input_levels;
-    u8 m_icw1;
-    u8 m_icw2;
-    u8 m_icw3;
-    u8 m_icw4;
-    I8259_Init_Step m_init_step;
-    u8 m_lowest_priority;
-    bool m_read_isr;
-    bool m_poll_pending;
-    bool m_special_mask;
-    bool m_rotate_on_aeoi;
-    bool m_int_output;
 };
 
 static const u8 k_i8259_icw1_ic4 = 0x01;

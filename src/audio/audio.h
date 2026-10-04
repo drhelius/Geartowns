@@ -30,6 +30,15 @@ class StateSerializer;
 class Audio
 {
 public:
+    struct Audio_State
+    {
+        u32 sound_clock_remainder;
+        u64 sample_clock_counter;
+        s32 pcm_lowpass_left;
+        s32 pcm_lowpass_right;
+    };
+
+public:
     Audio();
     ~Audio();
     void Init();
@@ -43,6 +52,7 @@ public:
     void EndFrame(s16* sample_buffer, int* sample_count);
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
+    Audio_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
@@ -58,11 +68,8 @@ private:
     float m_master_volume;
     float m_fm_volume;
     float m_pcm_volume;
-    u32 m_sound_clock_remainder;
-    u64 m_sample_clock_counter;
+    Audio_State m_state;
     u16 m_pcm_lowpass_alpha_q15;
-    s32 m_pcm_lowpass_left;
-    s32 m_pcm_lowpass_right;
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];
     int m_buffer_index;

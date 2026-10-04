@@ -66,3 +66,8 @@ INLINE TownsPIC* GeartownsCore::GetPIC()
 {
     return m_pic;
 }
+
+INLINE TownsPIT* GeartownsCore::GetPIT()
+{
+    return m_pit;
+}

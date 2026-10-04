@@ -111,42 +111,42 @@ INLINE void I386::CalculateEffectiveOffset(InstructionContext& instruction)
         {
             case 0:
                 // [BX+SI]
-                offset += m_registers[I386_REG_EBX].low + m_registers[I386_REG_ESI].low;
+                offset += m_state.registers[I386_REG_EBX].low + m_state.registers[I386_REG_ESI].low;
                 break;
             case 1:
                 // [BX+DI]
-                offset += m_registers[I386_REG_EBX].low + m_registers[I386_REG_EDI].low;
+                offset += m_state.registers[I386_REG_EBX].low + m_state.registers[I386_REG_EDI].low;
                 break;
             case 2:
                 // [BP+SI]
-                offset += m_registers[I386_REG_EBP].low + m_registers[I386_REG_ESI].low;
+                offset += m_state.registers[I386_REG_EBP].low + m_state.registers[I386_REG_ESI].low;
                 stack = true;
                 break;
             case 3:
                 // [BP+DI]
-                offset += m_registers[I386_REG_EBP].low + m_registers[I386_REG_EDI].low;
+                offset += m_state.registers[I386_REG_EBP].low + m_state.registers[I386_REG_EDI].low;
                 stack = true;
                 break;
             case 4:
                 // [SI]
-                offset += m_registers[I386_REG_ESI].low;
+                offset += m_state.registers[I386_REG_ESI].low;
                 break;
             case 5:
                 // [DI]
-                offset += m_registers[I386_REG_EDI].low;
+                offset += m_state.registers[I386_REG_EDI].low;
                 break;
             case 6:
                 // [disp16] for mod 0, otherwise [BP]
                 if (mod != 0)
                 {
-                    offset += m_registers[I386_REG_EBP].low;
+                    offset += m_state.registers[I386_REG_EBP].low;
                     stack = true;
                 }
 
                 break;
             default:
                 // [BX]
-                offset += m_registers[I386_REG_EBX].low;
+                offset += m_state.registers[I386_REG_EBX].low;
                 break;
         }
 
@@ -158,13 +158,13 @@ INLINE void I386::CalculateEffectiveOffset(InstructionContext& instruction)
         u8 index = (instruction.sib >> 3) & 7;
         u8 scale = instruction.sib >> 6;
         bool has_base = mod != 0 || base != 5;
-        u32 base_value = has_base ? m_registers[base].value : 0;
+        u32 base_value = has_base ? m_state.registers[base].value : 0;
 
         stack = has_base && (base == I386_REG_EBP || base == I386_REG_ESP);
 
         // Without an index register a non-zero scale applies to the base
         if (index != 4)
-            offset += base_value + (m_registers[index].value << scale);
+            offset += base_value + (m_state.registers[index].value << scale);
         else if (scale != 0 && has_base)
             offset += base_value << scale;
         else
@@ -172,7 +172,7 @@ INLINE void I386::CalculateEffectiveOffset(InstructionContext& instruction)
     }
     else if (mod != 0 || rm != 5)
     {
-        offset += m_registers[rm].value;
+        offset += m_state.registers[rm].value;
         stack = rm == I386_REG_EBP;
     }
 
@@ -385,13 +385,13 @@ INLINE bool I386::StartExecution(u32 clocks)
 {
     m_step.clocks = clocks + m_address_clocks;
 
-    if (unlikely(m_debug_step && (m_debug_registers[7] & 0xFF) != 0 && (m_eflags & I386_FLAG_RF) == 0))
+    if (unlikely(m_debug_step && (m_state.debug_registers[7] & 0xFF) != 0 && (m_state.eflags & I386_FLAG_RF) == 0))
     {
         if (!CheckInstructionBreakpoint())
             return false;
     }
 
-    if (unlikely(m_instruction.lock && m_execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3))
+    if (unlikely(m_instruction.lock && m_state.execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3))
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     return true;
@@ -410,7 +410,7 @@ INLINE bool I386::DecodeAndStart(bool modrm, int immediate_size, u32 register_cl
 INLINE bool I386::StartInstruction()
 {
     InstructionContext& instruction = m_instruction;
-    u32 eip = m_eip;
+    u32 eip = m_state.eip;
 
     instruction.start_eip = eip;
     instruction.immediate = 0;

@@ -28,6 +28,8 @@
 #define VIDEO_CRTC_REGISTER_COUNT 32
 
 class TownsPIC;
+class TownsPIT;
+class Scheduler;
 class StateSerializer;
 
 class Video
@@ -56,23 +58,34 @@ public:
         u32 frame_half_lines;
         u32 frame_clock_rate;
         u32 frame_count;
+        u8 fmr_mask;
+        bool fmr_page;
+        u8 fmr_display_planes;
+        bool fmr_display_page;
+        bool fmr_ank;
+        bool fmr_text_written;
+        u8 kanji_high;
+        u8 kanji_low;
+        u8 kanji_row;
     };
 
 public:
     Video();
     ~Video();
-    void Init(TownsPIC* pic, GT_Pixel_Format pixel_format);
+    void Init(TownsPIC* pic, TownsPIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format);
     void Reset();
-    u8 Read(u16 port, u64 time_ns);
-    void Write(u16 port, u8 value, u64 time_ns);
-    void Synchronize(u64 time_ns);
-    u64 GetNextEventTime() const;
+    void ResetFMRView();
+    u8 Read(u16 port, u64 time);
+    void Write(u16 port, u8 value, u64 time);
+    void Synchronize(u64 time);
+    void HandleEvent(u64 time);
     void BeginFrame(u8* frame_buffer, bool render);
     void EndFrame();
     bool IsFrameReady() const;
     bool IsRunning() const;
     int GetFrameWidth() const;
     int GetFrameHeight() const;
+    float GetFrameTime() const;
     u8* GetVRAM();
     u8* GetSpriteRAM();
     Video_State* GetState();
@@ -83,6 +96,13 @@ public:
     static void WriteVRAMTwoPage(void* device, u32 offset, u8 value);
     static u8 ReadVRAMSinglePage(void* device, u32 offset);
     static void WriteVRAMSinglePage(void* device, u32 offset, u8 value);
+    static u8 ReadFMRPlanes(void* device, u32 offset);
+    static void WriteFMRPlanes(void* device, u32 offset, u8 value);
+    static u8 ReadFMRText(void* device, u32 offset);
+    static void WriteFMRText(void* device, u32 offset, u8 value);
+    static u8 ReadFMRRegisters(void* device, u32 offset);
+    static u8 PeekFMRRegisters(void* device, u32 offset);
+    static void WriteFMRRegisters(void* device, u32 offset, u8 value);
 
 private:
     enum Video_Layer_Format
@@ -94,25 +114,28 @@ private:
     };
 
 private:
-    void WriteCRTC(u8 value, bool high, u64 time_ns);
-    u8 ReadCRTC(bool high, u64 time_ns);
+    void WriteCRTC(u8 value, bool high, u64 time);
+    u8 ReadCRTC(bool high, u64 time);
     void WritePalette(int component, u8 value);
     u8 ReadPalette(int component) const;
-    void StartFrame(u64 time_ns);
+    void StartFrame(u64 time);
     void CompleteFrame();
     void UpdateGeometry();
     void UpdateNextEvent();
     void UpdateIRQ();
-    u8 GetSyncStatus(u64 time_ns) const;
-    u32 GetBeamHalfLine(u64 time_ns) const;
-    u32 GetBeamClock(u64 time_ns) const;
-    void RenderUpTo(u64 time_ns);
+    u8 GetSyncStatus(u64 time) const;
+    u32 GetBeamHalfLine(u64 time) const;
+    u32 GetBeamClock(u64 time) const;
+    void RenderUpTo(u64 time);
     void RenderRow(int row);
     void RenderLayerRow(int layer, int row, bool opaque);
     Video_Layer_Format GetLayerFormat(int layer) const;
     bool IsTwoPage() const;
     u8 ReadVRAM(u32 offset, bool two_page) const;
     u32 SinglePageToCanonical(u32 offset) const;
+    u32 FMRToCanonical(u32 offset) const;
+    u8 ReadFMRRegister(u32 offset, bool peek);
+    u32 GetKanjiOffset() const;
     u32 MakeColor(u8 red, u8 green, u8 blue) const;
     u8 Expand5(u32 value) const;
     void UpdatePaletteColor(int bank, int index);
@@ -123,6 +146,9 @@ private:
 private:
     Video_State m_state;
     TownsPIC* m_pic;
+    TownsPIT* m_pit;
+    Scheduler* m_scheduler;
+    const u8* m_font_rom;
     GT_Pixel_Format m_pixel_format;
     u8* m_frame_buffer;
     bool m_render;

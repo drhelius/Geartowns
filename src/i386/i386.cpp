@@ -52,13 +52,15 @@ I386::I386()
     m_trace_enabled = false;
     m_trace_count = 0;
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
+    m_disassembler_cache = new I386_Disassembler_Record*[k_i386_disassembler_cache_size];
+    ClearDisassemblerCache();
     m_run_to_breakpoint = 0;
     m_breakpoint_hit_address = 0;
+    m_step_call_return_linear = 0;
+    m_step_call = false;
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
-#endif
 
     Reset();
 }
@@ -66,6 +68,7 @@ I386::I386()
 I386::~I386()
 {
     SafeDeleteArray(m_trace);
+    SafeDeleteArray(m_disassembler_cache);
 }
 
 void I386::Init(Memory* memory, TownsIO* towns_io)
@@ -73,9 +76,8 @@ void I386::Init(Memory* memory, TownsIO* towns_io)
     m_memory = memory;
     m_towns_io = towns_io;
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     m_disassembler_records.clear();
-#endif
+    ClearDisassemblerCache();
 
     Reset();
 }
@@ -134,14 +136,12 @@ void I386::Reset()
     ResetTLBReplacement();
     m_trace_count = 0;
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     // Decoded rows are debugger history and survive a machine reset
     m_disassembler_call_stack.clear();
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
     m_breakpoint_hit_address = 0;
-#endif
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
         SetRealModeSegment((I386_Segment_Register)i, 0);
@@ -300,6 +300,9 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
+#if !defined(GT_DISABLE_DISASSEMBLER)
+            DisassembleNextInstruction();
+#endif
             u16 old_task = m_state.task_register.selector;
             m_step.clocks = 0;
             m_step.instruction_completed = true;
@@ -944,6 +947,11 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
             run_result->exception_source_eip = source_eip;
         }
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+        if (result)
+            PushCallStack(return_cs, return_base, source_eip, return_eip, true, vector);
+#endif
+
         return result;
     }
 
@@ -988,6 +996,10 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
         run_result->exception_return_base = return_base;
         run_result->exception_source_eip = source_eip;
     }
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    PushCallStack(return_cs, return_base, source_eip, (u16)return_eip, true, vector);
+#endif
 
     return true;
 }
@@ -1117,9 +1129,7 @@ void I386::FillDecodeState(const InstructionContext& instruction, const u8* byte
     state.repeat = instruction.repeat;
     state.two_byte = instruction.two_byte;
     state.lock = instruction.lock;
-#if !defined(GT_DISABLE_DISASSEMBLER)
     state.segment_override = instruction.segment_override;
-#endif
 
     // ModR/M is only reported when its byte was fetched
     u32 position = 0;

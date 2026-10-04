@@ -19,7 +19,6 @@
 
 #include "i386.h"
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -837,6 +836,12 @@ I386_Disassembler_Record* I386::Disassemble(u32 eip)
 I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u32 eip)
 {
     u32 linear = code_segment.base + eip;
+
+    I386_Disassembler_Record* current = GetDisassemblerRecord(linear);
+
+    if (IsValidPointer(current) && current->eip == eip && IsDisassemblerRecordCurrent(*current, code_segment))
+        return current;
+
     I386_Decode_State state;
 
     if (!DecodeInstructionForDebugger(code_segment, eip, state))
@@ -865,7 +870,14 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
         bool overlaps = existing->first != linear && existing->second.size > 0 && existing_end > linear;
 
         if (overlaps)
+        {
+            I386_Disassembler_Record*& cached = m_disassembler_cache[existing->first & (k_i386_disassembler_cache_size - 1)];
+
+            if (cached == &existing->second)
+                InitPointer(cached);
+
             existing = m_disassembler_records.erase(existing);
+        }
         else
             existing++;
     }
@@ -897,6 +909,9 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
     context.cs_base = code_segment.base;
     context.mode = m_state.execution_mode;
     context.default32 = (code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0;
+
+    record.mode = m_state.execution_mode;
+    record.default32 = context.default32;
 
     format_instruction(context, record.name, sizeof(record.name));
     uppercase_intel_identifiers(record.name);
@@ -999,6 +1014,41 @@ void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int
     }
 }
 
+void I386::ClearDisassemblerCache()
+{
+    memset(m_disassembler_cache, 0, k_i386_disassembler_cache_size * sizeof(m_disassembler_cache[0]));
+}
+
+// Same selector, decoding mode and bytes as when the record was formatted
+bool I386::IsDisassemblerRecordCurrent(const I386_Disassembler_Record& record, const I386_Segment& code_segment) const
+{
+    if (record.size <= 0 || record.cs != code_segment.selector || record.mode != m_state.execution_mode ||
+        record.default32 != ((code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0) ||
+        (code_segment.attributes & I386_SEGMENT_PRESENT) == 0 || (u64)record.eip + record.size - 1 > code_segment.limit)
+        return false;
+
+    u32 physical = 0;
+
+    // An instruction inside one page is checked through a single translation
+    if ((record.linear & 0xFFF) + (u32)record.size <= 0x1000 && TryTranslateLinear(record.linear, physical))
+    {
+        const u8* bytes = m_memory->GetPhysicalReadSpan(physical, (u32)record.size);
+
+        if (IsValidPointer(bytes))
+            return memcmp(bytes, record.opcodes, (size_t)record.size) == 0;
+    }
+
+    for (int i = 0; i < record.size; i++)
+    {
+        u8 value = 0;
+
+        if (!TryPeekLinear(record.linear + (u32)i, value) || value != record.opcodes[i])
+            return false;
+    }
+
+    return true;
+}
+
 I386_Disassembler_Record* I386::GetDisassemblerRecord(u32 linear)
 {
     std::map<u32, I386_Disassembler_Record>::iterator record = m_disassembler_records.find(linear);
@@ -1017,6 +1067,7 @@ const std::map<u32, I386_Disassembler_Record>& I386::GetDisassemblerRecords() co
 void I386::ResetDisassembler()
 {
     m_disassembler_records.clear();
+    ClearDisassemblerCache();
     ResetDebuggerExecutionState();
 }
 
@@ -1185,98 +1236,60 @@ const std::vector<I386_CallStackEntry>& I386::GetDisassemblerCallStack() const
     return m_disassembler_call_stack;
 }
 
-bool I386::DebugInstructionCompleted(const I386_State& before, const I386_Run_Result& result, u32* call_return_linear)
+void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, bool interrupt, u8 vector)
 {
-    if (result.steps == 0)
-        return false;
+    I386_CallStackEntry entry;
 
-    I386_Decode_State instruction;
-    CopyDecodeState(instruction);
+    entry.interrupt = interrupt;
+    entry.src_cs = src_cs;
+    entry.src = src;
+    entry.src_linear = src_base + src;
+    entry.dest_cs = m_state.segments[I386_SEGMENT_CS].selector;
+    entry.dest = m_state.eip;
+    entry.dest_linear = m_state.segments[I386_SEGMENT_CS].base + entry.dest;
+    entry.back_cs = src_cs;
+    entry.back = back;
+    entry.back_linear = src_base + back;
 
-    u8 opcode = instruction.opcode;
-    bool exception_entry = result.exception;
-    bool completed = !exception_entry || result.exception_after_instruction;
-    bool call = completed && !instruction.two_byte &&
-        (opcode == 0x9A || opcode == 0xE8 || (opcode == 0xFF && (instruction.reg == 2 || instruction.reg == 3)));
-    bool returns = completed && !instruction.two_byte &&
-        (opcode == 0xC2 || opcode == 0xC3 || opcode == 0xCA || opcode == 0xCB || opcode == 0xCF);
+    if (m_disassembler_call_stack.size() == 256)
+        m_disassembler_call_stack.erase(m_disassembler_call_stack.begin());
 
-    if (returns && !m_disassembler_call_stack.empty())
-        m_disassembler_call_stack.pop_back();
+    m_disassembler_call_stack.push_back(entry);
 
-    if (!call && !exception_entry)
-        return false;
-
-    I386_State after;
-    CopyState(after);
-
-    int entries = (call ? 1 : 0) + (exception_entry ? 1 : 0);
-    int return_size = m_instruction.call_return_size != 0 ? m_instruction.call_return_size : instruction.operand_size;
-
-    for (int i = 0; i < entries; i++)
+    if (!interrupt)
     {
-        I386_CallStackEntry entry;
-
-        entry.interrupt = exception_entry && (!call || i != 0);
-        entry.src_cs = before.segments[I386_SEGMENT_CS].selector;
-        entry.src = instruction.start_eip;
-        entry.src_linear = before.segments[I386_SEGMENT_CS].base + entry.src;
-        entry.dest_cs = after.segments[I386_SEGMENT_CS].selector;
-        entry.dest = after.eip;
-        entry.dest_linear = after.segments[I386_SEGMENT_CS].base + entry.dest;
-        entry.back_cs = entry.src_cs;
-        entry.back = Truncate(instruction.next_eip, return_size * 8);
-        entry.back_linear = before.segments[I386_SEGMENT_CS].base + entry.back;
-
-        if (entry.interrupt)
-        {
-            entry.src_cs = result.exception_return_cs;
-            entry.src = result.exception_source_eip;
-            entry.src_linear = result.exception_return_base + entry.src;
-            entry.back_cs = result.exception_return_cs;
-            entry.back = result.exception_return_eip;
-            entry.back_linear = result.exception_return_base + entry.back;
-        }
-        else if (exception_entry)
-        {
-            // Record the completed CALL before its following debug trap
-            entry.dest_cs = result.exception_return_cs;
-            entry.dest = result.exception_source_eip;
-            entry.dest_linear = result.exception_return_base + entry.dest;
-        }
-
-        if (!entry.interrupt && IsValidPointer(call_return_linear))
-            *call_return_linear = entry.back_linear;
-
-        if (m_disassembler_call_stack.size() == 256)
-            m_disassembler_call_stack.erase(m_disassembler_call_stack.begin());
-
-        m_disassembler_call_stack.push_back(entry);
-
-        I386_Disassembler_Record& target = m_disassembler_records[entry.dest_linear];
-
-        if (target.linear == 0)
-        {
-            target.cs = entry.dest_cs;
-            target.eip = entry.dest;
-            target.linear = entry.dest_linear;
-        }
-
-        if (entry.interrupt)
-        {
-            if (target.auto_symbol[0] == 0)
-                snprintf(target.auto_symbol, sizeof(target.auto_symbol), "INT_%02X", result.exception_vector);
-        }
-        else
-            set_auto_symbol(target, true);
+        m_step_call = true;
+        m_step_call_return_linear = entry.back_linear;
     }
 
-    return call;
+    // The destination gets its symbol, through the record cache when it already ran
+    I386_Disassembler_Record* target = m_disassembler_cache[entry.dest_linear & (k_i386_disassembler_cache_size - 1)];
+
+    if (!IsValidPointer(target) || target->linear != entry.dest_linear)
+    {
+        target = &m_disassembler_records[entry.dest_linear];
+
+        if (target->linear == 0)
+        {
+            target->cs = entry.dest_cs;
+            target->eip = entry.dest;
+            target->linear = entry.dest_linear;
+        }
+    }
+
+    if (!interrupt)
+        set_auto_symbol(*target, true);
+    else if (target->auto_symbol[0] == 0)
+        snprintf(target->auto_symbol, sizeof(target->auto_symbol), "INT_%02X", vector);
+}
+
+bool I386::GetStepCall(u32& return_linear) const
+{
+    return_linear = m_step_call_return_linear;
+    return m_step_call;
 }
 
 u32 I386::GetCurrentLinearPC() const
 {
     return m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
 }
-
-#endif

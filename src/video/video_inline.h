@@ -23,16 +23,16 @@
 #include "video.h"
 #include "../system/scheduler.h"
 
-INLINE void Video::Synchronize(u64 time)
+INLINE void Video::Synchronize(u64 clocks)
 {
-    while (time >= m_next_event_time)
+    while (clocks >= m_next_event_clocks)
         CompleteFrame();
 }
 
-INLINE void Video::HandleEvent(u64 time)
+INLINE void Video::HandleEvent(u64 clocks)
 {
-    Synchronize(time);
-    m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_time);
+    Synchronize(clocks);
+    m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
 }
 
 INLINE bool Video::IsFrameReady() const
@@ -164,17 +164,17 @@ INLINE u32 Video::GetKanjiOffset() const
     return (glyph & 0x1FFF) * 32 + m_state.kanji_row * 2;
 }
 
-INLINE u32 Video::GetBeamHalfLine(u64 time) const
+INLINE u32 Video::GetBeamHalfLine(u64 clocks) const
 {
-    u64 clocks = ((time - m_state.frame_start_time) * m_state.frame_clock_rate) / GT_CPU_CLOCK_RATE;
-    return m_state.crtc[k_video_crtc_vst1] + (u32)((clocks * 2) / m_state.frame_line_clocks);
+    u64 elapsed = ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_CPU_CLOCK_RATE;
+    return m_state.crtc[k_video_crtc_vst1] + (u32)((elapsed * 2) / m_state.frame_line_clocks);
 }
 
-INLINE u32 Video::GetBeamClock(u64 time) const
+INLINE u32 Video::GetBeamClock(u64 clocks) const
 {
-    u64 clocks = ((time - m_state.frame_start_time) * m_state.frame_clock_rate) / GT_CPU_CLOCK_RATE;
+    u64 elapsed = ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_CPU_CLOCK_RATE;
     u64 origin = ((u64)m_state.crtc[k_video_crtc_vst1] * m_state.frame_line_clocks) / 2;
-    return (u32)((origin + clocks) % m_state.frame_line_clocks);
+    return (u32)((origin + elapsed) % m_state.frame_line_clocks);
 }
 
 INLINE u32 Video::MakeColor(u8 red, u8 green, u8 blue) const

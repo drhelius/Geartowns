@@ -21,10 +21,8 @@
 #define I386_H
 
 #include <iostream>
-#if !defined(GT_DISABLE_DISASSEMBLER)
 #include <map>
 #include <vector>
-#endif
 #include "../common/common.h"
 #include "../common/debug_memory.h"
 
@@ -257,9 +255,7 @@ struct I386_Decode_State
     u8 operand_size;
     u8 address_size;
     u8 segment;
-#if !defined(GT_DISABLE_DISASSEMBLER)
     u8 segment_override;
-#endif
     u8 repeat;
 
     u8 sib_scale;
@@ -271,9 +267,7 @@ struct I386_Decode_State
     bool has_modrm;
     bool has_sib;
     bool memory_operand;
-#if !defined(GT_DISABLE_DISASSEMBLER)
     bool invalid_lock;
-#endif
 };
 
 struct I386_Trace_Entry
@@ -283,7 +277,6 @@ struct I386_Trace_Entry
     I386_State after;
 };
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
 struct I386_Disassembler_Record
 {
     u16 cs;
@@ -294,6 +287,8 @@ struct I386_Disassembler_Record
     char segment[16];
     u8 opcodes[GT_I386_MAX_INSTRUCTION_LENGTH];
     int size;
+    I386_Execution_Mode mode;
+    bool default32;
 
     bool jump;
     bool jump_far;
@@ -330,7 +325,6 @@ struct I386_CallStackEntry
     u32 back_linear;
     bool interrupt;
 };
-#endif
 
 class StateSerializer;
 
@@ -379,12 +373,12 @@ public:
     bool CopyDebugState(I386_Debug_State& state) const;
     bool GetDebugRegisterValue(const char* name, u32& value) const;
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     bool DecodeInstructionForDebugger(u32 eip, I386_Decode_State& state);
     I386_Disassembler_Record* Disassemble(u32 eip);
     void DisassembleAhead(int count);
     void DisassembleAhead(u32 start_eip, int count, int depth = 0);
     I386_Disassembler_Record* GetDisassemblerRecord(u32 linear);
+    bool IsDisassemblerRecordCurrent(const I386_Disassembler_Record& record, const I386_Segment& code_segment) const;
     const std::map<u32, I386_Disassembler_Record>& GetDisassemblerRecords() const;
     void ResetDisassembler();
     void ResetDebuggerExecutionState();
@@ -401,10 +395,8 @@ public:
     bool RunToBreakpointHit() const;
 
     const std::vector<I386_CallStackEntry>& GetDisassemblerCallStack() const;
-    bool DebugInstructionCompleted(const I386_State& before, const I386_Run_Result& result,
-        u32* call_return_linear = NULL);
+    bool GetStepCall(u32& return_linear) const;
     u32 GetCurrentLinearPC() const;
-#endif
 
 private:
     struct StepState
@@ -558,6 +550,11 @@ private:
     u32 RunCheckedStep();
     bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
+    void DisassembleNextInstruction();
+    void ClearDisassemblerCache();
+    void PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, bool interrupt, u8 vector);
+    bool TrackCall(bool completed, u16 cs, u32 base);
+    bool TrackReturn(bool completed);
     bool DeferIO();
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
@@ -743,11 +740,9 @@ private:
     bool CheckInstructionBreakpoint();
     void RecordDataBreakpoints(u32 linear, u32 size, bool write);
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     bool DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 eip, I386_Decode_State& state);
     I386_Disassembler_Record* Disassemble(const I386_Segment& code_segment, u32 eip);
     void DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int count, int depth, int& branch_budget);
-#endif
 
     template<int operation, int form, int width> bool OPCodes_ALU();
     template<int width, bool sign_extend> bool OPCodes_ALU_Immediate();
@@ -1036,18 +1031,21 @@ private:
     u8 m_tlb_plru[I386_TLB_SETS];
     u8 m_tlb_mru[I386_TLB_SETS];
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;
+    I386_Disassembler_Record** m_disassembler_cache;
     std::vector<I386_Breakpoint> m_breakpoints;
     std::vector<I386_CallStackEntry> m_disassembler_call_stack;
 
     u32 m_run_to_breakpoint;
     u32 m_breakpoint_hit_address;
+    u32 m_step_call_return_linear;
+    bool m_step_call;
     bool m_run_to_breakpoint_enabled;
     bool m_breakpoint_hit;
     bool m_run_to_hit;
-#endif
 };
+
+static const u32 k_i386_disassembler_cache_size = 0x4000;
 
 static const u8 k_i386_segment_fast_read = 0x01;
 static const u8 k_i386_segment_fast_write = 0x02;

@@ -24,6 +24,7 @@
 #include "common/common.h"
 
 class Audio;
+class CDROMMock;
 class Firmware;
 class I386;
 class Input;
@@ -32,8 +33,9 @@ class Memory;
 class TownsIO;
 class TownsPIC;
 class TownsPIT;
+class TownsSystem;
+class Scheduler;
 class Video;
-class StateSerializer;
 
 class GeartownsCore
 {
@@ -53,10 +55,8 @@ public:
     ~GeartownsCore();
     void Init(GT_Pixel_Format pixel_format = GT_PIXEL_RGBA8888);
     GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, bool render = true);
-#if !defined(GT_DISABLE_DISASSEMBLER)
     GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
         bool render = true);
-#endif
 
     bool LoadBios(const char* directory_path);
     void UnloadBios();
@@ -88,22 +88,24 @@ public:
     TownsIO* GetIO();
     TownsPIC* GetPIC();
     TownsPIT* GetPIT();
+    TownsSystem* GetSystem();
+    Scheduler* GetScheduler();
     Video* GetVideo();
+    CDROMMock* GetCDROM();
 
 private:
     template<bool debugger>
     GT_Run_Result RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
         bool render);
     void Reset();
+    void ResetCPU();
     void InitMemoryMap();
     u64 GetFrameClockLimit() const;
-    u32 GetBatchBudget(u64 elapsed_clocks) const;
-    void AdvanceMachineTime(u32 clocks);
-    u32 CompleteBatch(u32 clocks, GT_Bus_Access_Context& context);
+    void CompleteSlice(u32 clocks, GT_Bus_Access_Context& context);
+    void DispatchEvents();
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot);
     bool LoadState(std::istream& stream);
-    void Serialize(StateSerializer& serializer);
     std::string GetSaveStatePath(const char* path, int index);
 
 private:
@@ -116,10 +118,11 @@ private:
     TownsIO* m_towns_io;
     TownsPIC* m_pic;
     TownsPIT* m_pit;
+    TownsSystem* m_system;
+    Scheduler* m_scheduler;
     Video* m_video;
+    CDROMMock* m_cdrom;
 
-    u64 m_machine_time;
-    u32 m_machine_time_remainder;
     bool m_paused;
     GT_Pixel_Format m_pixel_format;
 

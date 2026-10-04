@@ -23,10 +23,13 @@
 #include "../common/common.h"
 
 class Audio;
+class CDROMMock;
 class YM3438;
 class RF5C68;
+class Memory;
 class TownsPIC;
 class TownsPIT;
+class TownsSystem;
 class Video;
 
 class TownsIO
@@ -34,7 +37,8 @@ class TownsIO
 public:
     TownsIO();
     ~TownsIO();
-    void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video);
+    void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
+        CDROMMock* cdrom);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -44,11 +48,15 @@ public:
     void Write32(u16 port, u32 value, GT_Bus_Access_Context& context);
 
 private:
+    Audio* m_audio;
     YM3438* m_ym3438;
     RF5C68* m_rf5c68;
     TownsPIC* m_pic;
     TownsPIT* m_pit;
     Video* m_video;
+    Memory* m_memory;
+    TownsSystem* m_system;
+    CDROMMock* m_cdrom;
 };
 
 #include "towns_io_inline.h"

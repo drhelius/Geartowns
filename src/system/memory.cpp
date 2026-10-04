@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "memory.h"
+#include "../common/state_serializer.h"
 
 Memory::Memory()
 {
@@ -32,6 +33,11 @@ Memory::Memory()
     InitPointer(m_working_ram);
     m_working_ram_size = 0;
     InitPointer(m_state.main_ram);
+    memset(m_state.cmos, 0, sizeof(m_state.cmos));
+    m_state.main_memory = false;
+    m_state.boot_ram = false;
+    m_state.dictionary = false;
+    m_state.dictionary_bank = 0;
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     memset(m_debug_regions, 0, sizeof(m_debug_regions));
@@ -52,6 +58,7 @@ void Memory::Init()
     Reset();
 }
 
+// Power-on reset, backup RAM keeps its contents
 void Memory::Reset()
 {
     ClearDebugRegions();
@@ -78,44 +85,54 @@ INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size)
 
     u32 bus_address = NormalizePhysicalAddress(physical);
     u64 span_end = (u64)bus_address + size;
-    u64 next_boundary = 0x100000000ULL;
+    const DebugRegion* found = FindMappedRegion(bus_address);
 
+    if (!IsValidPointer(found) || span_end > (u64)found->info.physical_base + found->info.size)
+        return NULL;
+
+    bool found_overlay = (found->info.flags & GT_DEBUG_REGION_OVERLAY) != 0;
+
+    // A region with priority over the one found must not start inside this span
     for (int i = 0; i < m_debug_region_count; i++)
     {
         const DebugRegion& region = m_debug_regions[i];
 
+        if (&region == found)
+            break;
+
         if ((region.info.flags & GT_DEBUG_REGION_MAPPED) == 0)
             continue;
 
+        bool overlay = (region.info.flags & GT_DEBUG_REGION_OVERLAY) != 0;
         u64 start = region.info.physical_base;
-        u64 end = start + region.info.size;
 
-        if (bus_address >= start && bus_address < end)
-        {
-            if (span_end <= end && span_end <= next_boundary)
-                return &region;
-
+        if (overlay == found_overlay && start < span_end && start + region.info.size > bus_address)
             return NULL;
-        }
-
-        // An earlier region has priority if it starts inside this span
-        if (start > bus_address && start < next_boundary)
-            next_boundary = start;
     }
 
-    return NULL;
+    if (!found_overlay)
+    {
+        for (int i = 0; i < m_debug_region_count; i++)
+        {
+            const DebugRegion& region = m_debug_regions[i];
+            u64 start = region.info.physical_base;
+
+            if ((region.info.flags & (GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_OVERLAY)) ==
+                (GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_OVERLAY) &&
+                start < span_end && start + region.info.size > bus_address)
+                return NULL;
+        }
+    }
+
+    return found;
 }
 
 u8 Memory::Read8Physical(u32 physical, GT_Bus_Access_Context& context)
 {
-    UNUSED(context);
-
     if (m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages[physical >> 12]))
         return m_cpu_read_pages[physical >> 12][physical & 0xFFF];
 
-    u8 value = 0xFF;
-    DebugReadBus(NormalizePhysicalAddress(physical), value);
-    return value;
+    return ReadBus(NormalizePhysicalAddress(physical), context);
 }
 
 u16 Memory::Read16Physical(u32 physical, GT_Bus_Access_Context& context)
@@ -223,7 +240,7 @@ bool Memory::RegisterDebugRegion(int id, const char* name, const u8* read_data, 
     if ((flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(write_data))
         return false;
 
-    if ((flags & GT_DEBUG_REGION_MAPPED) != 0 && (u64)physical_base + size > 0x100000000ULL)
+    if ((flags & (GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_OVERLAY)) != 0 && (u64)physical_base + size > 0x100000000ULL)
         return false;
 
     DebugRegion& region = m_debug_regions[m_debug_region_count++];
@@ -243,9 +260,9 @@ bool Memory::RegisterDebugRegion(int id, const char* name, const u8* read_data, 
 }
 
 // Handler regions never get host pages, so every CPU access reaches the device
-// Their read handler must be free of side effects unless the region is flagged as MMIO
+// A read handler with side effects needs a peek handler for passive reads
 bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
-    GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8)
+    GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8, GT_Memory_Read8_Fn peek8)
 {
     if (id <= 0 ||
         !IsValidPointer(name) ||
@@ -261,7 +278,7 @@ bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physi
     if ((flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(write8))
         return false;
 
-    if ((flags & GT_DEBUG_REGION_MAPPED) != 0 && (u64)physical_base + size > 0x100000000ULL)
+    if ((flags & (GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_OVERLAY)) != 0 && (u64)physical_base + size > 0x100000000ULL)
         return false;
 
     DebugRegion& region = m_debug_regions[m_debug_region_count++];
@@ -274,9 +291,53 @@ bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physi
     region.device = device;
     region.read8 = read8;
     region.write8 = write8;
+    region.peek8 = peek8;
 
     m_map_generation++;
     m_debug_snapshot_id++;
+    return true;
+}
+
+// A banked view switches on or off, only the host pages it covers are rebuilt
+bool Memory::SetRegionMapped(int id, bool mapped)
+{
+    DebugRegion* region = FindRegion(id);
+
+    if (!IsValidPointer(region))
+        return false;
+
+    if (((region->info.flags & GT_DEBUG_REGION_MAPPED) != 0) == mapped)
+        return true;
+
+    if (mapped)
+        region->info.flags |= GT_DEBUG_REGION_MAPPED;
+    else
+        region->info.flags &= ~GT_DEBUG_REGION_MAPPED;
+
+    RemapRange(region->info.physical_base, region->info.size);
+    return true;
+}
+
+bool Memory::SetRegionData(int id, const u8* read_data, u8* write_data)
+{
+    DebugRegion* region = FindRegion(id);
+
+    if (!IsValidPointer(region) ||
+        ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && !IsValidPointer(read_data)) ||
+        ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(write_data)))
+        return false;
+
+    if (region->read_data == read_data && region->write_data == write_data)
+        return true;
+
+    region->read_data = read_data;
+    region->write_data = write_data;
+
+    if ((region->info.flags & GT_DEBUG_REGION_MAPPED) != 0)
+        RemapRange(region->info.physical_base, region->info.size);
+    else
+        m_debug_snapshot_id++;
+
     return true;
 }
 
@@ -595,34 +656,51 @@ Memory::DebugRegion* Memory::FindRegion(int id)
     return NULL;
 }
 
+// Overlays win over the regions below them, then the earliest registered region wins
 const Memory::DebugRegion* Memory::FindMappedRegion(u32 bus_address) const
 {
+    const DebugRegion* found = NULL;
+
     for (int i = 0; i < m_debug_region_count; i++)
     {
         const DebugRegion& region = m_debug_regions[i];
         u64 start = region.info.physical_base;
         u64 end = start + region.info.size;
 
-        if ((region.info.flags & GT_DEBUG_REGION_MAPPED) != 0 && (u64)bus_address >= start && (u64)bus_address < end)
+        if ((region.info.flags & GT_DEBUG_REGION_MAPPED) == 0 || (u64)bus_address < start || (u64)bus_address >= end)
+            continue;
+
+        if ((region.info.flags & GT_DEBUG_REGION_OVERLAY) != 0)
             return &region;
+
+        if (!IsValidPointer(found))
+            found = &region;
     }
 
-    return NULL;
+    return found;
 }
 
 Memory::DebugRegion* Memory::FindMappedRegion(u32 bus_address)
 {
+    DebugRegion* found = NULL;
+
     for (int i = 0; i < m_debug_region_count; i++)
     {
         DebugRegion& region = m_debug_regions[i];
         u64 start = region.info.physical_base;
         u64 end = start + region.info.size;
 
-        if ((region.info.flags & GT_DEBUG_REGION_MAPPED) != 0 && (u64)bus_address >= start && (u64)bus_address < end)
+        if ((region.info.flags & GT_DEBUG_REGION_MAPPED) == 0 || (u64)bus_address < start || (u64)bus_address >= end)
+            continue;
+
+        if ((region.info.flags & GT_DEBUG_REGION_OVERLAY) != 0)
             return &region;
+
+        if (!IsValidPointer(found))
+            found = &region;
     }
 
-    return NULL;
+    return found;
 }
 
 GT_Debug_Memory_Status Memory::DebugReadRegion(int id, u32 offset, u8& value) const
@@ -652,7 +730,9 @@ GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset,
     if ((region.info.flags & GT_DEBUG_REGION_READABLE) == 0)
         return GT_DEBUG_MEMORY_UNAVAILABLE;
 
-    if (IsValidPointer(region.read8))
+    if (IsValidPointer(region.peek8))
+        value = region.peek8(region.device, offset);
+    else if (IsValidPointer(region.read8))
         value = region.read8(region.device, offset);
     else if (IsValidPointer(region.read_data))
         value = region.read_data[offset];
@@ -660,6 +740,29 @@ GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset,
         return GT_DEBUG_MEMORY_UNAVAILABLE;
 
     return (region.info.flags & GT_DEBUG_REGION_WRITABLE) != 0 ? GT_DEBUG_MEMORY_VALID : GT_DEBUG_MEMORY_READ_ONLY;
+}
+
+// Unmapped and unreadable addresses float high like the I/O space
+// Registers end the CPU batch, so polling them sees time move like a port does
+u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
+{
+    const DebugRegion* region = FindMappedRegion(bus_address);
+
+    if (!IsValidPointer(region) || (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
+        return 0xFF;
+
+    u32 offset = bus_address - region->info.physical_base;
+
+    if ((region->info.flags & GT_DEBUG_REGION_MMIO) != 0)
+        context.end_batch = true;
+
+    if (IsValidPointer(region->read8))
+        return region->read8(region->device, offset);
+
+    if (IsValidPointer(region->read_data))
+        return region->read_data[offset];
+
+    return 0xFF;
 }
 
 void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
@@ -670,6 +773,9 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
         (!IsValidPointer(region->write_data) && !IsValidPointer(region->write8)) ||
         (region->info.flags & GT_DEBUG_REGION_WRITABLE) == 0)
         return;
+
+    if ((region->info.flags & GT_DEBUG_REGION_MMIO) != 0)
+        context.end_batch = true;
 
     u32 offset = bus_address - region->info.physical_base;
 
@@ -724,23 +830,141 @@ void Memory::PrepareCPUMap()
     if ((m_physical_address_mask & 0xFFF) == 0xFFF)
     {
         for (u32 page = 0; page < page_count; page++)
-        {
-            u32 physical = page << 12;
-            const DebugRegion* region = FindMappedSpan(physical, 0x1000);
-
-            if (!IsValidPointer(region) ||
-                (region->info.flags & (GT_DEBUG_REGION_MMIO | GT_DEBUG_REGION_VIDEO | GT_DEBUG_REGION_AUDIO)) != 0)
-                continue;
-
-            u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
-
-            if ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && IsValidPointer(region->read_data))
-                m_cpu_read_pages[page] = region->read_data + offset;
-
-            if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data))
-                m_cpu_write_pages[page] = region->write_data + offset;
-        }
+            UpdateCPUPage(page);
     }
 
     m_cpu_map_generation = m_map_generation;
+}
+
+void Memory::UpdateCPUPage(u32 page)
+{
+    u32 physical = page << 12;
+    const DebugRegion* region = FindMappedSpan(physical, 0x1000);
+
+    InitPointer(m_cpu_read_pages[page]);
+    InitPointer(m_cpu_write_pages[page]);
+
+    if (!IsValidPointer(region) ||
+        (region->info.flags & (GT_DEBUG_REGION_MMIO | GT_DEBUG_REGION_VIDEO | GT_DEBUG_REGION_AUDIO)) != 0)
+        return;
+
+    u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+
+    if ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && IsValidPointer(region->read_data))
+        m_cpu_read_pages[page] = region->read_data + offset;
+
+    if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data))
+        m_cpu_write_pages[page] = region->write_data + offset;
+}
+
+// Up to date host pages are patched in place, the new generation makes the CPU drop its cached pointers
+void Memory::RemapRange(u32 base, u32 size)
+{
+    bool patch = m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages) &&
+        m_physical_address_mask == 0xFFFFFFFF && size != 0;
+
+    m_map_generation++;
+    m_debug_snapshot_id++;
+
+    if (!patch)
+        return;
+
+    u32 last = (u32)(((u64)base + size - 1) >> 12);
+
+    for (u32 page = base >> 12; page <= last; page++)
+        UpdateCPUPage(page);
+
+    m_cpu_map_generation = m_map_generation;
+}
+
+// Reset maps the boot ROM and the FM-R view, with the dictionary and CMOS window off
+void Memory::ResetMapping()
+{
+    m_state.main_memory = false;
+    m_state.boot_ram = false;
+    m_state.dictionary = false;
+    m_state.dictionary_bank = 0;
+    ApplyMapping();
+}
+
+u8 Memory::ReadMappingControl(u16 port) const
+{
+    switch (port)
+    {
+        case 0x0404:
+            return m_state.main_memory ? 0x80 : 0x00;
+        case 0x0480:
+            return (m_state.boot_ram ? 0x02 : 0x00) | (m_state.dictionary ? 0x01 : 0x00);
+        case 0x0484:
+            return m_state.dictionary_bank;
+        default:
+            return 0xFF;
+    }
+}
+
+void Memory::WriteMappingControl(u16 port, u8 value)
+{
+    switch (port)
+    {
+        case 0x0404:
+            m_state.main_memory = (value & 0x80) != 0;
+            break;
+        case 0x0480:
+            m_state.boot_ram = (value & 0x02) != 0;
+            m_state.dictionary = (value & 0x01) != 0;
+            break;
+        case 0x0484:
+            m_state.dictionary_bank = value & 0x0F;
+            break;
+        default:
+            return;
+    }
+
+    ApplyMapping();
+}
+
+// 0404h bit 7 swaps C0000-EFFFF between the FM-R view and RAM, 0480h bit 1 swaps the boot ROM at F8000
+// for RAM and 0480h bit 0 shows the dictionary and CMOS windows inside the FM-R view
+void Memory::ApplyMapping()
+{
+    bool fmr = !m_state.main_memory;
+    const DebugRegion* dictionary = FindRegion(GT_DEBUG_REGION_DICTIONARY_ROM);
+
+    if (IsValidPointer(dictionary))
+        SetRegionData(GT_DEBUG_REGION_DICTIONARY_ROM_LOW_WINDOW,
+            dictionary->read_data + m_state.dictionary_bank * 0x8000, NULL);
+
+    SetRegionMapped(GT_DEBUG_REGION_SYSTEM_ROM_LOW_ALIAS, !m_state.boot_ram);
+    SetRegionMapped(GT_DEBUG_REGION_FMR_PLANES, fmr);
+    SetRegionMapped(GT_DEBUG_REGION_FMR_TEXT, fmr);
+    SetRegionMapped(GT_DEBUG_REGION_FMR_REGISTERS, fmr);
+    SetRegionMapped(GT_DEBUG_REGION_FMR_VIEW, fmr);
+    SetRegionMapped(GT_DEBUG_REGION_DICTIONARY_ROM_LOW_WINDOW, fmr && m_state.dictionary);
+    SetRegionMapped(GT_DEBUG_REGION_CMOS_LOW_WINDOW, fmr && m_state.dictionary);
+}
+
+void Memory::SaveState(std::ostream& stream)
+{
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+}
+
+void Memory::LoadState(std::istream& stream)
+{
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+
+    m_state.dictionary_bank &= 0x0F;
+    ApplyMapping();
+    m_debug_snapshot_id++;
+}
+
+void Memory::Serialize(StateSerializer& serializer)
+{
+    G_SERIALIZE_ARRAY(serializer, m_state.main_ram, GT_MAIN_RAM_SIZE);
+    G_SERIALIZE_ARRAY(serializer, m_state.cmos, GT_CMOS_SIZE);
+    G_SERIALIZE(serializer, m_state.main_memory);
+    G_SERIALIZE(serializer, m_state.boot_ram);
+    G_SERIALIZE(serializer, m_state.dictionary);
+    G_SERIALIZE(serializer, m_state.dictionary_bank);
 }

@@ -54,6 +54,29 @@ static const u8* firmware_region_data(Firmware* firmware, GT_Firmware_Type type)
     }
 }
 
+// Firmware the memory map already exposes is listed once, as its mapped region
+static bool firmware_region_listed(GT_Firmware_Type type)
+{
+    GeartownsCore* core = emu_get_core();
+    Memory* memory = IsValidPointer(core) ? core->GetMemory() : NULL;
+
+    if (!IsValidPointer(memory))
+        return true;
+
+    int id = firmware_region_id(type);
+    int count = memory->GetDebugRegionCount();
+
+    for (int i = 0; i < count; i++)
+    {
+        GT_Debug_Memory_Region region;
+
+        if (memory->GetDebugRegion(i, region) && region.id == id)
+            return false;
+    }
+
+    return true;
+}
+
 DebugMemoryProvider::DebugMemoryProvider()
 {
     m_last_message[0] = 0;
@@ -153,7 +176,13 @@ int DebugMemoryProvider::GetRegionCount() const
     Firmware* firmware = core->GetFirmware();
 
     if (IsValidPointer(firmware) && firmware->IsReady())
-        count += GT_FIRMWARE_COUNT;
+    {
+        for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+        {
+            if (firmware_region_listed((GT_Firmware_Type)i))
+                count++;
+        }
+    }
 
     Media* media = core->GetMedia();
 
@@ -464,18 +493,25 @@ bool DebugMemoryProvider::GetExternalRegion(int index, GT_Debug_Memory_Region& r
 
     if (IsValidPointer(firmware) && firmware->IsReady())
     {
-        if (index < GT_FIRMWARE_COUNT)
+        for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
         {
-            GT_Firmware_Type type = (GT_Firmware_Type)index;
-            memset(&region, 0, sizeof(region));
-            region.id = firmware_region_id(type);
-            strncpy_fit(region.name, Firmware::GetComponentName(type), sizeof(region.name));
-            region.size = (u32)Firmware::GetExpectedSize(type);
-            region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM;
-            return true;
-        }
+            GT_Firmware_Type type = (GT_Firmware_Type)i;
 
-        index -= GT_FIRMWARE_COUNT;
+            if (!firmware_region_listed(type))
+                continue;
+
+            if (index == 0)
+            {
+                memset(&region, 0, sizeof(region));
+                region.id = firmware_region_id(type);
+                strncpy_fit(region.name, Firmware::GetComponentName(type), sizeof(region.name));
+                region.size = (u32)Firmware::GetExpectedSize(type);
+                region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM;
+                return true;
+            }
+
+            index--;
+        }
     }
 
     Media* media = core->GetMedia();

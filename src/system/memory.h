@@ -21,8 +21,11 @@
 #define MEMORY_H
 
 #include <stddef.h>
+#include <iostream>
 #include "../common/common.h"
 #include "../common/debug_memory.h"
+
+class StateSerializer;
 
 typedef u8 (*GT_Memory_Read8_Fn)(void* device, u32 offset);
 typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
@@ -33,6 +36,11 @@ public:
     struct Memory_State
     {
         u8* main_ram;
+        u8 cmos[GT_CMOS_SIZE];
+        bool main_memory;
+        bool boot_ram;
+        bool dictionary;
+        u8 dictionary_bank;
     };
 
 public:
@@ -40,6 +48,9 @@ public:
     ~Memory();
     void Init();
     void Reset();
+    void ResetMapping();
+    u8 ReadMappingControl(u16 port) const;
+    void WriteMappingControl(u16 port, u8 value);
 
     u8 Read8Physical(u32 physical, GT_Bus_Access_Context& context);
     u16 Read16Physical(u32 physical, GT_Bus_Access_Context& context);
@@ -51,7 +62,9 @@ public:
     void ClearDebugRegions();
     bool RegisterDebugRegion(int id, const char* name, const u8* read_data, u8* write_data, u32 size, u32 physical_base, u32 flags);
     bool RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
-        GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8);
+        GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8, GT_Memory_Read8_Fn peek8);
+    bool SetRegionMapped(int id, bool mapped);
+    bool SetRegionData(int id, const u8* read_data, u8* write_data);
     int GetDebugRegionCount() const;
     bool GetDebugRegion(int index, GT_Debug_Memory_Region& region) const;
     void DebugReadRegionBlock(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
@@ -80,9 +93,14 @@ public:
     u8* GetWorkingRAM();
     size_t GetWorkingRAMSize() const;
     u8* GetMainRAM();
+    u8* GetCMOS();
+    u8 ReadCMOS(u32 index) const;
+    void WriteCMOS(u32 index, u8 value);
     u8* GetVideoRAM();
     size_t GetVideoRAMSize() const;
     Memory_State* GetState();
+    void SaveState(std::ostream& stream);
+    void LoadState(std::istream& stream);
 
 private:
     struct DebugRegion
@@ -93,6 +111,7 @@ private:
         void* device;
         GT_Memory_Read8_Fn read8;
         GT_Memory_Write8_Fn write8;
+        GT_Memory_Read8_Fn peek8;
     };
 
     const DebugRegion* FindRegion(int id) const;
@@ -103,9 +122,14 @@ private:
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
     GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
+    u8 ReadBus(u32 bus_address, GT_Bus_Access_Context& context);
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
     u32 NormalizePhysicalAddress(u32 physical) const;
     void UpdateRAMRegions();
+    void UpdateCPUPage(u32 page);
+    void RemapRange(u32 base, u32 size);
+    void ApplyMapping();
+    void Serialize(StateSerializer& serializer);
 
 private:
     const u8** m_cpu_read_pages;

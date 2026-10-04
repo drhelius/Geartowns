@@ -24,20 +24,22 @@
 TownsPIT::TownsPIT()
 {
     InitPointer(m_pic);
+    InitPointer(m_scheduler);
     m_state.timer_latch = 0;
     m_state.timer_enable = 0;
     m_state.sound = false;
+    m_state.sound_memory = false;
     m_state.settled_tick = 0;
-    m_next_event_time = GT_NO_EVENT;
 }
 
 TownsPIT::~TownsPIT()
 {
 }
 
-void TownsPIT::Init(TownsPIC* pic)
+void TownsPIT::Init(TownsPIC* pic, Scheduler* scheduler)
 {
     m_pic = pic;
+    m_scheduler = scheduler;
     m_pit[0].Init();
     m_pit[1].Init();
     Reset();
@@ -50,14 +52,15 @@ void TownsPIT::Reset()
     m_state.timer_latch = 0;
     m_state.timer_enable = 0;
     m_state.sound = false;
+    m_state.sound_memory = false;
     m_state.settled_tick = 0;
     UpdateIRQ();
     UpdateNextEvent();
 }
 
-u8 TownsPIT::Read(u16 port, u64 time_ns)
+u8 TownsPIT::Read(u16 port, u64 clocks)
 {
-    Synchronize(time_ns);
+    Synchronize(clocks);
 
     if (port == 0x0060)
         return m_state.timer_latch | (m_state.timer_enable << 2) | (m_state.sound ? 0x10 : 0x00);
@@ -69,12 +72,12 @@ u8 TownsPIT::Read(u16 port, u64 time_ns)
     if (index == 3)
         return 0xFF;
 
-    return m_pit[chip].ReadCounter(index, GetTick(chip * 3 + index, time_ns));
+    return m_pit[chip].ReadCounter(index, GetTick(chip * 3 + index, clocks));
 }
 
-void TownsPIT::Write(u16 port, u8 value, u64 time_ns)
+void TownsPIT::Write(u16 port, u8 value, u64 clocks)
 {
-    Synchronize(time_ns);
+    Synchronize(clocks);
 
     if (port == 0x0060)
     {
@@ -91,7 +94,7 @@ void TownsPIT::Write(u16 port, u8 value, u64 time_ns)
     int chip = (port >> 4) & 0x01;
     int index = (port >> 1) & 0x03;
     int counter = index == 3 ? value >> 6 : index;
-    u64 tick = GetTick(chip * 3 + counter, time_ns);
+    u64 tick = GetTick(chip * 3 + counter, clocks);
     bool timeout = chip == 0 && counter < 2;
     bool output = timeout && m_pit[0].GetOutput(counter, tick);
 
@@ -119,7 +122,7 @@ void TownsPIT::UpdateIRQ()
 
 void TownsPIT::UpdateNextEvent()
 {
-    m_next_event_time = GT_NO_EVENT;
+    u64 next_event = GT_NO_EVENT;
 
     for (int i = 0; i < 2; i++)
     {
@@ -132,8 +135,10 @@ void TownsPIT::UpdateNextEvent()
         u64 edge = m_pit[0].GetNextRisingEdge(i, m_state.settled_tick);
 
         if (edge != k_i8253_no_edge)
-            m_next_event_time = MIN(m_next_event_time, GetTickTime(edge));
+            next_event = MIN(next_event, GetTickClocks(edge));
     }
+
+    m_scheduler->Schedule(SCHEDULER_EVENT_PIT, next_event);
 }
 
 void TownsPIT::SaveState(std::ostream& stream)
@@ -163,5 +168,6 @@ void TownsPIT::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.timer_latch);
     G_SERIALIZE(serializer, m_state.timer_enable);
     G_SERIALIZE(serializer, m_state.sound);
+    G_SERIALIZE(serializer, m_state.sound_memory);
     G_SERIALIZE(serializer, m_state.settled_tick);
 }

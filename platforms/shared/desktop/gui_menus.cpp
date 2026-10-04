@@ -1135,6 +1135,7 @@ static void menu_audio(void)
 
 static void menu_debug(void)
 {
+#if !defined(GT_DISABLE_DISASSEMBLER)
     if (ImGui::BeginMenu("Debug"))
     {
         gui_in_use = true;
@@ -1267,6 +1268,7 @@ static void menu_debug(void)
 
         ImGui::EndMenu();
     }
+#endif
 }
 
 static void menu_about(void)

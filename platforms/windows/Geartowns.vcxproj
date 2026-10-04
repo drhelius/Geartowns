@@ -45,6 +45,9 @@
     <ClCompile Include="..\..\src\system\towns_pic.cpp" />
     <ClCompile Include="..\..\src\system\i8259.cpp" />
     <ClCompile Include="..\..\src\system\towns_pit.cpp" />
+    <ClCompile Include="..\..\src\system\towns_system.cpp" />
+    <ClCompile Include="..\..\src\system\scheduler.cpp" />
+    <ClCompile Include="..\..\src\drive\cdrom_mock.cpp" />
     <ClCompile Include="..\..\src\system\i8253.cpp" />
     <ClCompile Include="..\..\src\video\video.cpp" />
     <ClCompile Include="..\..\src\audio\ym3438.cpp" />
@@ -135,6 +138,12 @@
     <ClInclude Include="..\..\src\system\i8259_inline.h" />
     <ClInclude Include="..\..\src\system\towns_pit.h" />
     <ClInclude Include="..\..\src\system\towns_pit_inline.h" />
+    <ClInclude Include="..\..\src\system\towns_system.h" />
+    <ClInclude Include="..\..\src\system\towns_system_inline.h" />
+    <ClInclude Include="..\..\src\system\scheduler.h" />
+    <ClInclude Include="..\..\src\system\scheduler_inline.h" />
+    <ClInclude Include="..\..\src\drive\cdrom_mock.h" />
+    <ClInclude Include="..\..\src\drive\cdrom_mock_inline.h" />
     <ClInclude Include="..\..\src\system\i8253.h" />
     <ClInclude Include="..\..\src\system\i8253_inline.h" />
     <ClInclude Include="..\..\src\video\video.h" />
@@ -241,6 +250,7 @@
     <RootNamespace>Geartowns</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <EmulatorBuild Condition="'$(EmulatorBuild)' == ''">undefined</EmulatorBuild>
+    <DisableDisassembler Condition="'$(DisableDisassembler)' == ''">false</DisableDisassembler>
     <EmulatorVersion>$([System.Text.RegularExpressions.Regex]::Match('$(EmulatorBuild)', '^[0-9]+\.[0-9]+\.[0-9]+').Value)</EmulatorVersion>
     <EmulatorVersion Condition="'$(EmulatorVersion)' == ''">0.0.0</EmulatorVersion>
     <EmulatorVersionResource>$([System.String]::Copy('$(EmulatorVersion)').Replace('.', ',')),0</EmulatorVersionResource>
@@ -488,6 +498,11 @@
     <ResourceCompile>
       <PreprocessorDefinitions>UNICODE;WIN32;WIN64;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(DisableDisassembler)' == 'true'">
+    <ClCompile>
+      <PreprocessorDefinitions>GT_DISABLE_DISASSEMBLER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

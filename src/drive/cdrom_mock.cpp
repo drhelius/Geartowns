@@ -49,9 +49,9 @@ void CDROMMock::Reset()
     UpdateNextEvent();
 }
 
-u8 CDROMMock::Read(u16 port, u64 time)
+u8 CDROMMock::Read(u16 port, u64 clocks)
 {
-    Synchronize(time);
+    Synchronize(clocks);
 
     switch (port)
     {
@@ -82,9 +82,9 @@ u8 CDROMMock::Read(u16 port, u64 time)
     }
 }
 
-void CDROMMock::Write(u16 port, u8 value, u64 time)
+void CDROMMock::Write(u16 port, u8 value, u64 clocks)
 {
-    Synchronize(time);
+    Synchronize(clocks);
 
     switch (port)
     {
@@ -105,7 +105,7 @@ void CDROMMock::Write(u16 port, u8 value, u64 time)
         case 0x04C2:
             m_state.command = value;
             m_state.command_received = true;
-            CheckCommand(time);
+            CheckCommand(clocks);
             break;
         case 0x04C4:
             if (m_state.param_count == 8)
@@ -115,7 +115,7 @@ void CDROMMock::Write(u16 port, u8 value, u64 time)
             }
 
             m_state.params[m_state.param_count++] = value;
-            CheckCommand(time);
+            CheckCommand(clocks);
             break;
         case 0x04C6:
             // Without a disc there is never a sector to transfer
@@ -130,13 +130,13 @@ void CDROMMock::ResetController()
     memset(m_state.params, 0, sizeof(m_state.params));
     m_state.param_count = 0;
     m_state.busy = false;
-    m_state.execute_time = 0;
+    m_state.execute_clocks = 0;
     m_state.queue_count = 0;
     m_state.sirq = false;
 }
 
 // The controller starts once it has the command and its eight parameters, a TOC read needs none
-void CDROMMock::CheckCommand(u64 time)
+void CDROMMock::CheckCommand(u64 clocks)
 {
     if (!m_state.command_received || (m_state.param_count < 8 && (m_state.command & 0x9F) != 0x05))
         return;
@@ -144,7 +144,7 @@ void CDROMMock::CheckCommand(u64 time)
     m_state.command_received = false;
     m_state.param_count = 0;
     m_state.busy = true;
-    m_state.execute_time = time + k_cdrom_mock_command_delay;
+    m_state.execute_clocks = clocks + k_cdrom_mock_command_delay;
     UpdateNextEvent();
 }
 
@@ -207,7 +207,7 @@ void CDROMMock::UpdateIRQ()
 
 void CDROMMock::UpdateNextEvent()
 {
-    m_scheduler->Schedule(SCHEDULER_EVENT_CDROM, m_state.busy ? m_state.execute_time : GT_NO_EVENT);
+    m_scheduler->Schedule(SCHEDULER_EVENT_CDROM, m_state.busy ? m_state.execute_clocks : GT_NO_EVENT);
 }
 
 void CDROMMock::SaveState(std::ostream& stream)
@@ -234,7 +234,7 @@ void CDROMMock::Serialize(StateSerializer& serializer)
     G_SERIALIZE_ARRAY(serializer, m_state.params, 8);
     G_SERIALIZE(serializer, m_state.param_count);
     G_SERIALIZE(serializer, m_state.busy);
-    G_SERIALIZE(serializer, m_state.execute_time);
+    G_SERIALIZE(serializer, m_state.execute_clocks);
     G_SERIALIZE_ARRAY(serializer, m_state.queue, CDROM_MOCK_QUEUE_SIZE);
     G_SERIALIZE(serializer, m_state.queue_count);
     G_SERIALIZE(serializer, m_state.sirq);

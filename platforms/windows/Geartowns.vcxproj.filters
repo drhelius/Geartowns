@@ -160,6 +160,15 @@
     <ClCompile Include="..\..\src\system\towns_pit.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\system\towns_system.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\system\scheduler.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\drive\cdrom_mock.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\system\i8253.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -238,6 +247,12 @@
     <ClInclude Include="..\..\src\system\i8259_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_pit.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_pit_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_system.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_system_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\scheduler.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\scheduler_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\cdrom_mock.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\cdrom_mock_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\video\video.h"><Filter>src</Filter></ClInclude>

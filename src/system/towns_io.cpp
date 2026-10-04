@@ -21,30 +21,42 @@
 #include "../audio/audio.h"
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
+#include "../drive/cdrom_mock.h"
+#include "memory.h"
 #include "towns_pic.h"
 #include "towns_pit.h"
+#include "towns_system.h"
 #include "../video/video.h"
 
 TownsIO::TownsIO()
 {
+    InitPointer(m_audio);
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
     InitPointer(m_pic);
     InitPointer(m_pit);
     InitPointer(m_video);
+    InitPointer(m_memory);
+    InitPointer(m_system);
+    InitPointer(m_cdrom);
 }
 
 TownsIO::~TownsIO()
 {
 }
 
-void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video)
+void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
+    CDROMMock* cdrom)
 {
+    m_audio = audio;
     m_ym3438 = audio->GetYM3438();
     m_rf5c68 = audio->GetRF5C68();
     m_pic = pic;
     m_pit = pit;
     m_video = video;
+    m_memory = memory;
+    m_system = system;
+    m_cdrom = cdrom;
     Reset();
 }
 
@@ -67,6 +79,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             return m_pic->Read(port);
         case 0x0020:
             // Reset reason
+            return m_system->Read(port);
         case 0x0022:
             // Power control
             break;
@@ -78,7 +91,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             return 0x01;
         case 0x0032:
             // Serial ID ROM
-            break;
+            return m_system->Read(port);
         case 0x0040:
             // PIT counter 0
         case 0x0042:
@@ -97,7 +110,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // PIT 3-5 control
         case 0x0060:
             // Timer interrupt status
-            return m_pit->Read(port, context.time_ns);
+            return m_pit->Read(port, context.clocks);
         case 0x0070:
             // RTC data
         case 0x0080:
@@ -156,7 +169,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             return 0xFE;
         case 0x0404:
             // FM-R VRAM mapping
-            break;
+            return m_memory->ReadMappingControl(port);
         case 0x0440:
             // CRTC address
         case 0x0442:
@@ -175,7 +188,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // VRAM mask low
         case 0x045B:
             // VRAM mask high
-            return m_video->Read(port, context.time_ns);
+            return m_video->Read(port, context.clocks);
         case 0x0450:
             // Sprite address
         case 0x0452:
@@ -185,7 +198,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // System ROM mapping
         case 0x0484:
             // Dictionary ROM bank
-            break;
+            return m_memory->ReadMappingControl(port);
         case 0x048A:
             // Memory card status
             return 0x06;
@@ -197,6 +210,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // CD-ROM data
         case 0x04C6:
             // CD-ROM transfer control
+            return m_cdrom->Read(port, context.clocks);
         case 0x04CC:
             // CD-ROM subcode status
         case 0x04CD:
@@ -221,6 +235,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // FM address bank 1
         case 0x04DE:
             // FM data bank 1
+            m_audio->Synchronize(context.clocks);
             return m_ym3438->Read((u8)((port - 0x04D8) >> 1));
         case 0x04E0:
             // Volume 1 data
@@ -237,12 +252,14 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x04E9:
             // Sound interrupt reason
+            m_audio->Synchronize(context.clocks);
             return (m_rf5c68->IsIRQAsserted() ? 0x08 : 0x00) | (m_ym3438->IsIRQAsserted() ? 0x01 : 0x00);
         case 0x04EA:
             // PCM interrupt mask
             return m_rf5c68->GetIRQMask();
         case 0x04EB:
             // PCM interrupt reason
+            m_audio->Synchronize(context.clocks);
             return m_rf5c68->ReadIRQFlags();
         case 0x04EC:
             // LED and output mute
@@ -273,12 +290,13 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x05C8:
             // Text VRAM written
+            return m_video->Read(port, context.clocks);
         case 0x05CA:
             // VSYNC interrupt clear
             break;
         case 0x05E0:
             // Main RAM wait
-            break;
+            return m_system->Read(port);
         case 0x0600:
             // Keyboard data
         case 0x0602:
@@ -337,11 +355,11 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // FM-R digital palette 7
         case 0xFDA0:
             // Sync status
-            return m_video->Read(port, context.time_ns);
+            return m_video->Read(port, context.clocks);
         default:
             // CMOS RAM, even ports
             if ((port & 0xF001) == 0x3000)
-                break;
+                return m_memory->ReadCMOS((port & 0x0FFF) >> 1);
 
             Debug("Unknown IO read at %04X", port);
             break;
@@ -368,6 +386,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Reset and power control
         case 0x0022:
             // Power off
+            m_system->Write(port, value);
             break;
         case 0x0030:
             // Machine ID low
@@ -376,6 +395,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x0032:
             // Serial ID ROM
+            m_system->Write(port, value);
             break;
         case 0x0040:
             // PIT counter 0
@@ -395,7 +415,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // PIT 3-5 control
         case 0x0060:
             // Timer interrupt control
-            m_pit->Write(port, value, context.time_ns);
+            m_pit->Write(port, value, context.clocks);
             break;
         case 0x0070:
             // RTC data
@@ -455,6 +475,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x0404:
             // FM-R VRAM mapping
+            m_memory->WriteMappingControl(port, value);
             break;
         case 0x0440:
             // CRTC address
@@ -474,7 +495,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // VRAM mask low
         case 0x045B:
             // VRAM mask high
-            m_video->Write(port, value, context.time_ns);
+            m_video->Write(port, value, context.clocks);
             break;
         case 0x0450:
             // Sprite address
@@ -485,6 +506,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // System ROM mapping
         case 0x0484:
             // Dictionary ROM bank
+            m_memory->WriteMappingControl(port, value);
             break;
         case 0x048A:
             // Memory card status
@@ -497,6 +519,8 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // CD-ROM parameter
         case 0x04C6:
             // CD-ROM transfer control
+            m_cdrom->Write(port, value, context.clocks);
+            break;
         case 0x04CC:
             // CD-ROM subcode status
         case 0x04CD:
@@ -521,6 +545,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // FM address bank 1
         case 0x04DE:
             // FM data bank 1
+            m_audio->Synchronize(context.clocks);
             m_ym3438->Write((u8)((port - 0x04D8) >> 1), value);
             break;
         case 0x04E0:
@@ -540,6 +565,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x04EA:
             // PCM interrupt mask
+            m_audio->Synchronize(context.clocks);
             m_rf5c68->WriteIRQMask(value);
             break;
         case 0x04EB:
@@ -565,6 +591,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // PCM control
         case 0x04F8:
             // PCM channel enable
+            m_audio->Synchronize(context.clocks);
             m_rf5c68->Write((u16)(port - 0x04F0), value);
             break;
         case 0x05C0:
@@ -577,10 +604,11 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x05CA:
             // VSYNC interrupt clear
-            m_video->Write(port, value, context.time_ns);
+            m_video->Write(port, value, context.clocks);
             break;
         case 0x05E0:
             // Main RAM wait
+            m_system->Write(port, value);
             break;
         case 0x0600:
             // Keyboard data
@@ -640,12 +668,15 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // FM-R digital palette 7
         case 0xFDA0:
             // CRT output control
-            m_video->Write(port, value, context.time_ns);
+            m_video->Write(port, value, context.clocks);
             break;
         default:
             // CMOS RAM, even ports
             if ((port & 0xF001) == 0x3000)
+            {
+                m_memory->WriteCMOS((port & 0x0FFF) >> 1, value);
                 break;
+            }
 
             Debug("Unknown IO write at %04X, value=%02X", port, value);
             break;

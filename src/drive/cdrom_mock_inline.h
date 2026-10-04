@@ -22,15 +22,15 @@
 
 #include "cdrom_mock.h"
 
-INLINE void CDROMMock::Synchronize(u64 time)
+INLINE void CDROMMock::Synchronize(u64 clocks)
 {
-    if (m_state.busy && time >= m_state.execute_time)
+    if (m_state.busy && clocks >= m_state.execute_clocks)
         ExecuteCommand();
 }
 
-INLINE void CDROMMock::HandleEvent(u64 time)
+INLINE void CDROMMock::HandleEvent(u64 clocks)
 {
-    Synchronize(time);
+    Synchronize(clocks);
     UpdateNextEvent();
 }
 

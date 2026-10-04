@@ -22,16 +22,18 @@
 #include <time.h>
 #include "geartowns_core.h"
 #include "audio/audio.h"
+#include "drive/cdrom_mock.h"
 #include "media/firmware.h"
 #include "input/input.h"
 #include "common/memory_stream.h"
-#include "common/state_serializer.h"
 #include "media/media.h"
 #include "system/memory.h"
 #include "i386/i386.h"
 #include "system/towns_io.h"
 #include "system/towns_pic.h"
 #include "system/towns_pit.h"
+#include "system/towns_system.h"
+#include "system/scheduler.h"
 #include "video/video.h"
 
 GeartownsCore::GeartownsCore()
@@ -45,11 +47,12 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_towns_io);
     InitPointer(m_pic);
     InitPointer(m_pit);
+    InitPointer(m_system);
+    InitPointer(m_scheduler);
     InitPointer(m_video);
+    InitPointer(m_cdrom);
     InitPointer(m_frame_buffer);
 
-    m_machine_time = 0;
-    m_machine_time_remainder = 0;
     m_paused = false;
     m_pixel_format = GT_PIXEL_RGBA8888;
 }
@@ -63,7 +66,10 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_towns_io);
     SafeDelete(m_pic);
     SafeDelete(m_pit);
+    SafeDelete(m_system);
+    SafeDelete(m_scheduler);
     SafeDelete(m_video);
+    SafeDelete(m_cdrom);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
 }
@@ -99,16 +105,28 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_pit))
         m_pit = new TownsPIT();
 
+    if (!IsValidPointer(m_system))
+        m_system = new TownsSystem();
+
+    if (!IsValidPointer(m_scheduler))
+        m_scheduler = new Scheduler();
+
     if (!IsValidPointer(m_video))
         m_video = new Video();
 
+    if (!IsValidPointer(m_cdrom))
+        m_cdrom = new CDROMMock();
+
     m_firmware->Init();
+    m_scheduler->Init();
     m_memory->Init();
-    m_audio->Init();
+    m_audio->Init(m_scheduler);
     m_pic->Init();
-    m_pit->Init(m_pic);
-    m_video->Init(m_pic, m_pixel_format);
-    m_towns_io->Init(m_audio, m_pic, m_pit, m_video);
+    m_pit->Init(m_pic, m_scheduler);
+    m_system->Init();
+    m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
+    m_cdrom->Init(m_pic, m_scheduler);
+    m_towns_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system, m_cdrom);
     m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
     m_media->Init();
@@ -120,13 +138,62 @@ GT_Run_Result GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer, in
     return RunToFrameTemplate<false>(frame_buffer, sample_buffer, sample_count, NULL, render);
 }
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
 GT_Run_Result GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
     bool render)
 {
+#if defined(GT_DISABLE_DISASSEMBLER)
+    return RunToFrameTemplate<false>(frame_buffer, sample_buffer, sample_count, debug, render);
+#else
     return RunToFrameTemplate<true>(frame_buffer, sample_buffer, sample_count, debug, render);
-}
 #endif
+}
+
+// Events due by the end of the slice run before the CPU samples INTR at its boundary
+INLINE void GeartownsCore::CompleteSlice(u32 clocks, GT_Bus_Access_Context& context)
+{
+    m_scheduler->AddClocks(clocks);
+
+    if (m_scheduler->IsEventDue())
+        DispatchEvents();
+
+    // The board answers a shutdown cycle by resetting the CPU
+    if (unlikely(m_i386->Shutdown()))
+        m_system->RequestCPUReset(k_towns_system_reset_shutdown);
+
+    if (unlikely(m_system->IsCPUResetPending()))
+        ResetCPU();
+    else if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
+    {
+        u32 interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+        m_scheduler->AddClocks(interrupt_clocks);
+
+        if (m_scheduler->IsEventDue())
+            DispatchEvents();
+    }
+}
+
+INLINE void GeartownsCore::DispatchEvents()
+{
+    while (m_scheduler->IsEventDue())
+    {
+        u64 clocks = m_scheduler->GetClocks();
+
+        switch (m_scheduler->PopEvent())
+        {
+            case SCHEDULER_EVENT_PIT:
+                m_pit->HandleEvent(clocks);
+                break;
+            case SCHEDULER_EVENT_VIDEO:
+                m_video->HandleEvent(clocks);
+                break;
+            case SCHEDULER_EVENT_CDROM:
+                m_cdrom->HandleEvent(clocks);
+                break;
+            default:
+                break;
+        }
+    }
+}
 
 template<bool debugger>
 GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count,
@@ -143,7 +210,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
         return GT_RUN_NOT_READY;
 
-    u64 elapsed_clocks = 0;
+    u64 frame_start = m_scheduler->GetClocks();
     m_video->BeginFrame(frame_buffer, render);
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
@@ -152,12 +219,8 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         debug->stopped = false;
         debug->breakpoint_hit = false;
 
-        while (!m_video->IsFrameReady() && elapsed_clocks < GetFrameClockLimit())
+        while (!m_video->IsFrameReady() && m_scheduler->GetClocks() - frame_start < GetFrameClockLimit())
         {
-            I386_Debug_State debug_state;
-            m_i386->CopyDebugState(debug_state);
-            m_i386->Disassemble(debug_state.eip);
-
             if (m_i386->CheckDebuggerBreakpoints(debug->stop_on_breakpoint, debug->stop_on_run_to_breakpoint))
             {
                 debug->stopped = true;
@@ -165,17 +228,14 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
                 break;
             }
 
-            I386_State before;
-            m_i386->CopyState(before);
-
             GT_Bus_Access_Context context = {};
             context.origin = GT_BUS_ORIGIN_CPU;
-            context.time_ns = m_machine_time;
+            context.clocks = m_scheduler->GetClocks();
             m_i386->RunInstruction(context);
 
             I386_Run_Result result = m_i386->GetStepInfo();
             u32 call_return_linear = 0;
-            bool call = m_i386->DebugInstructionCompleted(before, result, &call_return_linear);
+            bool call = m_i386->GetStepCall(call_return_linear);
 
             if (debug->step_over)
             {
@@ -186,15 +246,15 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
                     m_i386->AddRunToBreakpoint(call_return_linear);
             }
 
-            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
+            u32 clocks = (u32)(result.clocks + context.wait_clocks);
 
-            // A halted CPU idles until the next event
+            // A halted CPU idles through the slice
             if (result.steps == 0 && m_i386->Halted())
-                step_clocks = GetBatchBudget(elapsed_clocks);
+                clocks = m_scheduler->GetSliceClocks(frame_start + GetFrameClockLimit());
 
-            elapsed_clocks += CompleteBatch(step_clocks, context);
+            CompleteSlice(clocks, context);
 
-            if (debug->step_debugger || m_i386->Shutdown())
+            if (debug->step_debugger)
             {
                 debug->stopped = true;
                 break;
@@ -206,35 +266,40 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     UNUSED(debug);
 #endif
     {
-        while (!m_video->IsFrameReady() && elapsed_clocks < GetFrameClockLimit())
+        while (!m_video->IsFrameReady())
         {
+            u64 limit = frame_start + GetFrameClockLimit();
+
+            if (m_scheduler->GetClocks() >= limit)
+                break;
+
             GT_Bus_Access_Context context = {};
             context.origin = GT_BUS_ORIGIN_CPU;
-            context.time_ns = m_machine_time;
+            context.clocks = m_scheduler->GetClocks();
 
-            u32 budget = GetBatchBudget(elapsed_clocks);
-            I386_Run_Result result = m_i386->RunFor(budget, context, false, m_pic->IsInterruptPending());
-            u32 step_clocks = (u32)(result.clocks + context.wait_clocks);
+            u32 slice = m_scheduler->GetSliceClocks(limit);
+            I386_Run_Result result = m_i386->RunFor(slice, context, false, m_pic->IsInterruptPending());
+            u32 clocks = (u32)(result.clocks + context.wait_clocks);
 
-            // A halted CPU idles until the next event
+            // A halted CPU idles through the slice
             if (result.steps == 0 && m_i386->Halted())
-                step_clocks = budget;
+                clocks = slice;
 
-            elapsed_clocks += CompleteBatch(step_clocks, context);
-
-            if (m_i386->Shutdown())
-                break;
+            CompleteSlice(clocks, context);
         }
     }
 
     m_video->EndFrame();
 
     // Debugger memory views refresh once per executed frame or debugger step
-    if (elapsed_clocks != 0)
+    if (m_scheduler->GetClocks() != frame_start)
         m_memory->InvalidateDebugSnapshot();
 
     if (IsValidPointer(m_audio))
+    {
+        m_audio->Synchronize(m_scheduler->GetClocks());
         m_audio->EndFrame(sample_buffer, sample_count);
+    }
     else if (sample_count != NULL)
         *sample_count = 0;
 
@@ -248,65 +313,13 @@ u64 GeartownsCore::GetFrameClockLimit() const
     return m_video->IsRunning() ? GT_CPU_CLOCKS_PER_FRAME * 4 : GT_CPU_CLOCKS_PER_FRAME;
 }
 
-// Batches stop at the next device event so its IRQ is sampled on time
-u32 GeartownsCore::GetBatchBudget(u64 elapsed_clocks) const
-{
-    u64 limit = GetFrameClockLimit();
-
-    if (elapsed_clocks >= limit)
-        return 1;
-
-    u64 budget = limit - elapsed_clocks;
-    u64 next_event = MIN(m_pit->GetNextEventTime(), m_video->GetNextEventTime());
-
-    if (next_event == GT_NO_EVENT)
-        return (u32)budget;
-
-    u64 clocks = 1;
-
-    if (next_event > m_machine_time)
-    {
-        u64 scaled = (next_event - m_machine_time) * GT_CPU_CLOCK_RATE - m_machine_time_remainder;
-        clocks = (scaled + 999999999ULL) / 1000000000ULL;
-    }
-
-    return (u32)MIN(budget, clocks);
-}
-
-void GeartownsCore::AdvanceMachineTime(u32 clocks)
-{
-    u64 scaled = (u64)clocks * 1000000000ULL + m_machine_time_remainder;
-    m_machine_time += scaled / GT_CPU_CLOCK_RATE;
-    m_machine_time_remainder = (u32)(scaled % GT_CPU_CLOCK_RATE);
-}
-
-// Devices catch up with the batch before the CPU samples INTR at its boundary
-u32 GeartownsCore::CompleteBatch(u32 clocks, GT_Bus_Access_Context& context)
-{
-    AdvanceMachineTime(clocks);
-    m_pit->Synchronize(m_machine_time);
-    m_video->Synchronize(m_machine_time);
-
-    if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
-    {
-        u32 interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
-        AdvanceMachineTime(interrupt_clocks);
-        clocks += interrupt_clocks;
-    }
-
-    m_audio->Clock(clocks);
-    return clocks;
-}
-
 bool GeartownsCore::LoadBios(const char* directory_path)
 {
     if (!IsValidPointer(m_firmware) || !m_firmware->LoadDirectory(directory_path))
         return false;
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     if (IsValidPointer(m_i386))
         m_i386->ResetDisassembler();
-#endif
 
     Reset();
     return true;
@@ -317,10 +330,8 @@ void GeartownsCore::UnloadBios()
     if (IsValidPointer(m_firmware))
         m_firmware->Unload();
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
     if (IsValidPointer(m_i386))
         m_i386->ResetDisassembler();
-#endif
 }
 
 bool GeartownsCore::LoadMedia(const char* file_path)
@@ -446,14 +457,16 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     Debug("Serializing save state...");
 
-    StateSerializer serializer(stream);
-    Serialize(serializer);
+    m_scheduler->SaveState(stream);
+    m_memory->SaveState(stream);
     m_i386->SaveState(stream);
     m_audio->SaveState(stream);
     m_input->SaveState(stream);
     m_pic->SaveState(stream);
     m_pit->SaveState(stream);
+    m_system->SaveState(stream);
     m_video->SaveState(stream);
+    m_cdrom->SaveState(stream);
 
     if (stream.fail())
     {
@@ -664,15 +677,16 @@ bool GeartownsCore::LoadState(std::istream& stream)
 
     Debug("Unserializing save state...");
 
-    StateSerializer serializer(stream);
-    Serialize(serializer);
-    m_machine_time_remainder %= GT_CPU_CLOCK_RATE;
+    m_scheduler->LoadState(stream);
+    m_memory->LoadState(stream);
     m_i386->LoadState(stream);
     m_audio->LoadState(stream);
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
     m_pit->LoadState(stream);
+    m_system->LoadState(stream);
     m_video->LoadState(stream);
+    m_cdrom->LoadState(stream);
 
     if (stream.fail())
     {
@@ -804,12 +818,6 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
     return success;
 }
 
-void GeartownsCore::Serialize(StateSerializer& serializer)
-{
-    G_SERIALIZE(serializer, m_machine_time);
-    G_SERIALIZE(serializer, m_machine_time_remainder);
-}
-
 std::string GeartownsCore::GetSaveStatePath(const char* path, int index)
 {
     using namespace std;
@@ -854,6 +862,12 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
     runtime_info.screen_width = IsValidPointer(m_video) ? m_video->GetFrameWidth() : GT_FRAME_BUFFER_WIDTH;
     runtime_info.screen_height = IsValidPointer(m_video) ? m_video->GetFrameHeight() : GT_FRAME_BUFFER_HEIGHT;
     runtime_info.width_scale = 1;
+    runtime_info.frame_time = (float)((GT_CPU_CLOCKS_PER_FRAME * 1000.0) / GT_CPU_CLOCK_RATE);
+
+    // A running CRTC paces frames at its VSYNC rate
+    if (IsValidPointer(m_video) && m_video->IsRunning())
+        runtime_info.frame_time = m_video->GetFrameTime();
+
     runtime_info.sample_rate = GT_AUDIO_SAMPLE_RATE;
     runtime_info.media_ready = IsValidPointer(m_media) && m_media->IsReady();
     runtime_info.bios_ready = IsValidPointer(m_firmware) && m_firmware->IsReady();
@@ -863,8 +877,9 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 void GeartownsCore::Reset()
 {
     m_paused = false;
-    m_machine_time = 0;
-    m_machine_time_remainder = 0;
+
+    if (IsValidPointer(m_scheduler))
+        m_scheduler->Reset();
 
     if (IsValidPointer(m_memory))
         m_memory->Reset();
@@ -878,8 +893,14 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_pit))
         m_pit->Reset();
 
+    if (IsValidPointer(m_system))
+        m_system->Reset();
+
     if (IsValidPointer(m_video))
         m_video->Reset();
+
+    if (IsValidPointer(m_cdrom))
+        m_cdrom->Reset();
 
     InitMemoryMap();
 
@@ -891,6 +912,15 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_input))
         m_input->Reset();
+}
+
+// Only the CPU restarts and the low memory view returns to its boot setup, memory and devices keep their state
+void GeartownsCore::ResetCPU()
+{
+    m_system->AcknowledgeCPUReset();
+    m_memory->ResetMapping();
+    m_video->ResetFMRView();
+    m_i386->Reset();
 }
 
 void GeartownsCore::InitMemoryMap()
@@ -909,9 +939,11 @@ void GeartownsCore::InitMemoryMap()
         GT_FIRMWARE_SYSTEM_SIZE, 0xFFFC0000U, rom_flags))
         Error("Unable to map the system ROM");
 
+    u32 boot_rom_flags = (rom_flags & ~GT_DEBUG_REGION_MAPPED) | GT_DEBUG_REGION_OVERLAY;
+
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM_LOW_ALIAS, "System ROM (low boot window)", boot_rom,
-        NULL, GT_FIRMWARE_SYSTEM_BOOT_SIZE, 0x000F8000U, rom_flags))
-        Error("Unable to map the low system ROM alias");
+        NULL, GT_FIRMWARE_SYSTEM_BOOT_SIZE, 0x000F8000U, boot_rom_flags))
+        Error("Unable to register the low system ROM alias");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_MAIN_RAM, "Main RAM", main_ram, main_ram, GT_MAIN_RAM_SIZE, 0,
         ram_flags))
@@ -927,15 +959,73 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to register VRAM");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM (two-page view)", VIDEO_VRAM_SIZE,
-        0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPage, Video::WriteVRAMTwoPage))
+        0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPage, Video::WriteVRAMTwoPage,
+        NULL))
         Error("Unable to map the two-page VRAM view");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM (single-page view)", VIDEO_VRAM_SIZE,
         0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePage,
-        Video::WriteVRAMSinglePage))
+        Video::WriteVRAMSinglePage, NULL))
         Error("Unable to map the single-page VRAM view");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", sprite_ram, sprite_ram,
         VIDEO_SPRITE_RAM_SIZE, 0x81000000U, sprite_ram_flags))
         Error("Unable to map sprite RAM");
+
+    u32 data_rom_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED;
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_OS_ROM, "OS ROM", m_firmware->GetOsRom(), NULL,
+        GT_FIRMWARE_OS_SIZE, 0xC2000000U, rom_flags))
+        Error("Unable to map the OS ROM");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM, "Dictionary ROM", m_firmware->GetDictionaryRom(),
+        NULL, GT_FIRMWARE_DICTIONARY_SIZE, 0xC2080000U, data_rom_flags))
+        Error("Unable to map the dictionary ROM");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_FONT_ROM, "Font ROM", m_firmware->GetFontRom(), NULL,
+        GT_FIRMWARE_FONT_SIZE, 0xC2100000U, data_rom_flags))
+        Error("Unable to map the font ROM");
+
+    u8* cmos = m_memory->GetCMOS();
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_CMOS, "CMOS RAM", cmos, cmos, GT_CMOS_SIZE, 0xC2140000U,
+        GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED))
+        Error("Unable to map CMOS RAM");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM wave RAM window", 0x1000, 0xC2200000U,
+        GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_AUDIO,
+        m_audio, Audio::ReadWaveWindow, Audio::WriteWaveWindow, NULL))
+        Error("Unable to map the PCM wave RAM window");
+
+    // The low windows are overlays that the mapping latches switch on and off
+    u32 overlay_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_OVERLAY;
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM_LOW_WINDOW, "Dictionary ROM (low window)",
+        m_firmware->GetDictionaryRom(), NULL, 0x8000, 0x000D0000U,
+        GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_OVERLAY))
+        Error("Unable to register the low dictionary ROM window");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_CMOS_LOW_WINDOW, "CMOS RAM (low window)", cmos, cmos,
+        GT_CMOS_SIZE, 0x000D8000U, overlay_flags))
+        Error("Unable to register the low CMOS RAM window");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_PLANES, "FM-R VRAM planes", 0x8000, 0x000C0000U,
+        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRPlanes, Video::WriteFMRPlanes, NULL))
+        Error("Unable to register the FM-R VRAM planes");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_TEXT, "FM-R text RAM and ANK font", 0x7000, 0x000C8000U,
+        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRText, Video::WriteFMRText, NULL))
+        Error("Unable to register the FM-R text window");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_REGISTERS, "FM-R registers", 0x1000, 0x000CF000U,
+        overlay_flags | GT_DEBUG_REGION_MMIO, m_video, Video::ReadFMRRegisters, Video::WriteFMRRegisters,
+        Video::PeekFMRRegisters))
+        Error("Unable to register the FM-R registers");
+
+    // Registered after the dictionary and CMOS windows so they take priority over it
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_FMR_VIEW, "FM-R view (unmapped)", NULL, NULL, 0x20000,
+        0x000D0000U, GT_DEBUG_REGION_OVERLAY))
+        Error("Unable to register the FM-R view");
+
+    m_memory->ResetMapping();
 }

@@ -306,6 +306,9 @@ static void after_defaults(void)
 
 static void normalize(void)
 {
+#if defined(GT_DISABLE_DISASSEMBLER)
+    config_debug.debug = false;
+#endif
 #if !defined(_WIN32)
     if (config_video.sync_mode == config_VideoSync_VRR)
         config_video.sync_mode = config_VideoSync_Fixed;

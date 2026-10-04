@@ -21,10 +21,11 @@
 #define TOWNS_PIT_INLINE_H
 
 #include "towns_pit.h"
+#include "scheduler.h"
 
-INLINE void TownsPIT::Synchronize(u64 time_ns)
+INLINE void TownsPIT::Synchronize(u64 clocks)
 {
-    u64 tick = GetTick(0, time_ns);
+    u64 tick = GetTick(0, clocks);
 
     if (tick <= m_state.settled_tick)
         return;
@@ -49,9 +50,16 @@ INLINE void TownsPIT::Synchronize(u64 time_ns)
     }
 }
 
-INLINE u64 TownsPIT::GetNextEventTime() const
+INLINE void TownsPIT::HandleEvent(u64 clocks)
 {
-    return m_next_event_time;
+    Synchronize(clocks);
+    UpdateNextEvent();
+}
+
+// The CFF98 buzzer enable, the buzzer sounds with either this or SOUND
+INLINE void TownsPIT::SetMemoryBuzzer(bool enabled)
+{
+    m_state.sound_memory = enabled;
 }
 
 INLINE I8253* TownsPIT::GetPIT(int index)
@@ -64,15 +72,15 @@ INLINE TownsPIT::TownsPIT_State* TownsPIT::GetState()
     return &m_state;
 }
 
-INLINE u64 TownsPIT::GetTick(int channel, u64 time_ns) const
+INLINE u64 TownsPIT::GetTick(int channel, u64 clocks) const
 {
     u64 ticks = channel == k_towns_pit_serial_channel ? k_towns_pit_fast_ticks : k_towns_pit_base_ticks;
-    return (time_ns * ticks) / k_towns_pit_ns_divisor;
+    return (clocks * ticks) / k_towns_pit_clock_divisor;
 }
 
-INLINE u64 TownsPIT::GetTickTime(u64 tick) const
+INLINE u64 TownsPIT::GetTickClocks(u64 tick) const
 {
-    return (tick * k_towns_pit_ns_divisor + k_towns_pit_base_ticks - 1) / k_towns_pit_base_ticks;
+    return (tick * k_towns_pit_clock_divisor + k_towns_pit_base_ticks - 1) / k_towns_pit_base_ticks;
 }
 
 #endif /* TOWNS_PIT_INLINE_H */

@@ -30,6 +30,7 @@ Audio::Audio()
 {
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
+    InitPointer(m_scheduler);
     m_mute = false;
     m_master_volume = 1.0f;
     m_fm_volume = 1.0f;
@@ -43,8 +44,10 @@ Audio::~Audio()
     SafeDelete(m_ym3438);
 }
 
-void Audio::Init()
+void Audio::Init(Scheduler* scheduler)
 {
+    m_scheduler = scheduler;
+
     if (!IsValidPointer(m_ym3438))
         m_ym3438 = new YM3438();
 
@@ -65,6 +68,7 @@ void Audio::Reset()
     m_state.sample_clock_counter = 0;
     m_state.pcm_lowpass_left = 0;
     m_state.pcm_lowpass_right = 0;
+    m_state.clocks = m_scheduler->GetClocks();
     m_buffer_index = 0;
     m_buffer_overflow = false;
 }
@@ -75,6 +79,21 @@ void Audio::SetPCMLowpassCutoff(float cutoff)
     float alpha = 1.0f - expf(-2.0f * 3.14159265358979323846f * cutoff / (float)GT_AUDIO_SAMPLE_RATE);
     alpha = CLAMP(alpha, 0.0f, 0.9999f);
     m_pcm_lowpass_alpha_q15 = (u16)(alpha * 32768.0f + 0.5f);
+}
+
+// The CPU window shows the 4 KiB wave RAM bank selected by the PCM control register
+// Playback never writes wave RAM, so only writes need the chip caught up
+u8 Audio::ReadWaveWindow(void* device, u32 offset)
+{
+    Audio* audio = (Audio*)device;
+    return audio->m_rf5c68->Read((u16)(0x1000 | (offset & 0x0FFF)));
+}
+
+void Audio::WriteWaveWindow(void* device, u32 offset, u8 value)
+{
+    Audio* audio = (Audio*)device;
+    audio->Synchronize(audio->m_scheduler->GetClocks());
+    audio->m_rf5c68->Write((u16)(0x1000 | (offset & 0x0FFF)), value);
 }
 
 void Audio::EndFrame(s16* sample_buffer, int* sample_count)
@@ -149,4 +168,5 @@ void Audio::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.sample_clock_counter);
     G_SERIALIZE(serializer, m_state.pcm_lowpass_left);
     G_SERIALIZE(serializer, m_state.pcm_lowpass_right);
+    G_SERIALIZE(serializer, m_state.clocks);
 }

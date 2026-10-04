@@ -965,7 +965,9 @@ bool I386::OPCode0x99()
 bool I386::OPCode0x9A()
 {
     // CALL ptr16:16/32
-    return OPCodes_CALL_Far();
+    u16 cs = m_state.segments[I386_SEGMENT_CS].selector;
+    u32 base = m_state.segments[I386_SEGMENT_CS].base;
+    return TrackCall(OPCodes_CALL_Far(), cs, base);
 }
 
 bool I386::OPCode0x9B()
@@ -1206,13 +1208,13 @@ bool I386::OPCode0xC1()
 bool I386::OPCode0xC2()
 {
     // RET near imm16
-    return m_instruction.operand_size == 4 ? OPCodes_RET_Near<32>() : OPCodes_RET_Near<16>();
+    return TrackReturn(m_instruction.operand_size == 4 ? OPCodes_RET_Near<32>() : OPCodes_RET_Near<16>());
 }
 
 bool I386::OPCode0xC3()
 {
     // RET near
-    return m_instruction.operand_size == 4 ? OPCodes_RET_Near<32>() : OPCodes_RET_Near<16>();
+    return TrackReturn(m_instruction.operand_size == 4 ? OPCodes_RET_Near<32>() : OPCodes_RET_Near<16>());
 }
 
 bool I386::OPCode0xC4()
@@ -1254,13 +1256,13 @@ bool I386::OPCode0xC9()
 bool I386::OPCode0xCA()
 {
     // RET far imm16
-    return OPCodes_RET_Far();
+    return TrackReturn(OPCodes_RET_Far());
 }
 
 bool I386::OPCode0xCB()
 {
     // RET far
-    return OPCodes_RET_Far();
+    return TrackReturn(OPCodes_RET_Far());
 }
 
 bool I386::OPCode0xCC()
@@ -1284,7 +1286,7 @@ bool I386::OPCode0xCE()
 bool I386::OPCode0xCF()
 {
     // IRET/IRETD
-    return OPCodes_IRET();
+    return TrackReturn(OPCodes_IRET());
 }
 
 bool I386::OPCode0xD0()
@@ -1436,7 +1438,9 @@ bool I386::OPCode0xE7()
 bool I386::OPCode0xE8()
 {
     // CALL near rel16/32
-    return m_instruction.operand_size == 4 ? OPCodes_CALL_Near<32>() : OPCodes_CALL_Near<16>();
+    u16 cs = m_state.segments[I386_SEGMENT_CS].selector;
+    u32 base = m_state.segments[I386_SEGMENT_CS].base;
+    return TrackCall(m_instruction.operand_size == 4 ? OPCodes_CALL_Near<32>() : OPCodes_CALL_Near<16>(), cs, base);
 }
 
 bool I386::OPCode0xE9()
@@ -1572,7 +1576,15 @@ bool I386::OPCode0xFE()
 bool I386::OPCode0xFF()
 {
     // Group 5 r/m16/32
-    return m_instruction.operand_size == 4 ? OPCodes_Group5<32>() : OPCodes_Group5<16>();
+    u16 cs = m_state.segments[I386_SEGMENT_CS].selector;
+    u32 base = m_state.segments[I386_SEGMENT_CS].base;
+    bool completed = m_instruction.operand_size == 4 ? OPCodes_Group5<32>() : OPCodes_Group5<16>();
+
+    // CALL near and CALL far are the call stack entries of the group
+    if (m_instruction.reg != 2 && m_instruction.reg != 3)
+        return completed;
+
+    return TrackCall(completed, cs, base);
 }
 
 bool I386::IsLockAllowed(const InstructionContext& instruction) const

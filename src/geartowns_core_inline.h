@@ -72,7 +72,22 @@ INLINE TownsPIT* GeartownsCore::GetPIT()
     return m_pit;
 }
 
+INLINE TownsSystem* GeartownsCore::GetSystem()
+{
+    return m_system;
+}
+
+INLINE Scheduler* GeartownsCore::GetScheduler()
+{
+    return m_scheduler;
+}
+
 INLINE Video* GeartownsCore::GetVideo()
 {
     return m_video;
+}
+
+INLINE CDROMMock* GeartownsCore::GetCDROM()
+{
+    return m_cdrom;
 }

@@ -15,6 +15,7 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/audio/audio.cpp \
                 $(SOURCE_DIR)/audio/rf5c68.cpp \
                 $(SOURCE_DIR)/audio/ym3438.cpp \
+                $(SOURCE_DIR)/drive/cdrom_mock.cpp \
                 $(SOURCE_DIR)/i386/i386.cpp \
                 $(SOURCE_DIR)/i386/i386_disassembler.cpp \
                 $(SOURCE_DIR)/i386/i386_encoding.cpp \
@@ -37,7 +38,9 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/system/i8253.cpp \
                 $(SOURCE_DIR)/system/i8259.cpp \
                 $(SOURCE_DIR)/system/memory.cpp \
+                $(SOURCE_DIR)/system/scheduler.cpp \
                 $(SOURCE_DIR)/system/towns_io.cpp \
                 $(SOURCE_DIR)/system/towns_pic.cpp \
                 $(SOURCE_DIR)/system/towns_pit.cpp \
+                $(SOURCE_DIR)/system/towns_system.cpp \
                 $(SOURCE_DIR)/video/video.cpp

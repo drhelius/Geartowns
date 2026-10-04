@@ -53,7 +53,7 @@ public:
         u8 display_enable;
         bool vsync_irq;
         bool running;
-        u64 frame_start_time;
+        u64 frame_start_clocks;
         u32 frame_line_clocks;
         u32 frame_half_lines;
         u32 frame_clock_rate;
@@ -75,10 +75,10 @@ public:
     void Init(TownsPIC* pic, TownsPIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format);
     void Reset();
     void ResetFMRView();
-    u8 Read(u16 port, u64 time);
-    void Write(u16 port, u8 value, u64 time);
-    void Synchronize(u64 time);
-    void HandleEvent(u64 time);
+    u8 Read(u16 port, u64 clocks);
+    void Write(u16 port, u8 value, u64 clocks);
+    void Synchronize(u64 clocks);
+    void HandleEvent(u64 clocks);
     void BeginFrame(u8* frame_buffer, bool render);
     void EndFrame();
     bool IsFrameReady() const;
@@ -114,19 +114,19 @@ private:
     };
 
 private:
-    void WriteCRTC(u8 value, bool high, u64 time);
-    u8 ReadCRTC(bool high, u64 time);
+    void WriteCRTC(u8 value, bool high, u64 clocks);
+    u8 ReadCRTC(bool high, u64 clocks);
     void WritePalette(int component, u8 value);
     u8 ReadPalette(int component) const;
-    void StartFrame(u64 time);
+    void StartFrame(u64 clocks);
     void CompleteFrame();
     void UpdateGeometry();
     void UpdateNextEvent();
     void UpdateIRQ();
-    u8 GetSyncStatus(u64 time) const;
-    u32 GetBeamHalfLine(u64 time) const;
-    u32 GetBeamClock(u64 time) const;
-    void RenderUpTo(u64 time);
+    u8 GetSyncStatus(u64 clocks) const;
+    u32 GetBeamHalfLine(u64 clocks) const;
+    u32 GetBeamClock(u64 clocks) const;
+    void RenderUpTo(u64 clocks);
     void RenderRow(int row);
     void RenderLayerRow(int layer, int row, bool opaque);
     Video_Layer_Format GetLayerFormat(int layer) const;
@@ -153,7 +153,7 @@ private:
     u8* m_frame_buffer;
     bool m_render;
     bool m_frame_ready;
-    u64 m_next_event_time;
+    u64 m_next_event_clocks;
     int m_frame_width;
     int m_frame_height;
     int m_render_width;

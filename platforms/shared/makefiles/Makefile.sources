@@ -50,6 +50,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/audio/audio.cpp \
     $(SRC_DIR)/audio/rf5c68.cpp \
     $(SRC_DIR)/audio/ym3438.cpp \
+    $(SRC_DIR)/drive/cdrom_mock.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_disassembler.cpp \
     $(SRC_DIR)/i386/i386_encoding.cpp \
@@ -71,7 +72,9 @@ SOURCES_CXX := \
     $(SRC_DIR)/system/i8253.cpp \
     $(SRC_DIR)/system/i8259.cpp \
     $(SRC_DIR)/system/memory.cpp \
+    $(SRC_DIR)/system/scheduler.cpp \
     $(SRC_DIR)/system/towns_io.cpp \
     $(SRC_DIR)/system/towns_pic.cpp \
     $(SRC_DIR)/system/towns_pit.cpp \
+    $(SRC_DIR)/system/towns_system.cpp \
     $(SRC_DIR)/video/video.cpp

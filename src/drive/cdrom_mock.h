@@ -40,7 +40,7 @@ public:
         u8 params[8];
         u8 param_count;
         bool busy;
-        u64 execute_time;
+        u64 execute_clocks;
         u8 queue[CDROM_MOCK_QUEUE_SIZE];
         u8 queue_count;
         bool sirq;
@@ -53,17 +53,17 @@ public:
     ~CDROMMock();
     void Init(TownsPIC* pic, Scheduler* scheduler);
     void Reset();
-    u8 Read(u16 port, u64 time);
-    void Write(u16 port, u8 value, u64 time);
-    void Synchronize(u64 time);
-    void HandleEvent(u64 time);
+    u8 Read(u16 port, u64 clocks);
+    void Write(u16 port, u8 value, u64 clocks);
+    void Synchronize(u64 clocks);
+    void HandleEvent(u64 clocks);
     CDROMMock_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
 private:
     void ResetController();
-    void CheckCommand(u64 time);
+    void CheckCommand(u64 clocks);
     void ExecuteCommand();
     void PushStatus(u8 status0, u8 status1);
     void SetSIRQ();

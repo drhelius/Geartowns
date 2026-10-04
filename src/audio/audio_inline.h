@@ -23,6 +23,7 @@
 #include "audio.h"
 #include "ym3438.h"
 #include "rf5c68.h"
+#include "../system/scheduler.h"
 
 // FM and PCM both run from the 8 MHz sound clock, half the CPU clock
 static const u32 k_audio_cpu_clocks_per_sound_clock = GT_CPU_CLOCK_RATE / GT_SOUND_CLOCK_RATE;
@@ -60,6 +61,22 @@ INLINE RF5C68* Audio::GetRF5C68()
 INLINE Audio::Audio_State* Audio::GetState()
 {
     return &m_state;
+}
+
+INLINE void Audio::Synchronize(u64 clocks)
+{
+    if (clocks <= m_state.clocks)
+        return;
+
+    u64 elapsed = clocks - m_state.clocks;
+    m_state.clocks = clocks;
+
+    while (elapsed > 0)
+    {
+        u32 step = (u32)MIN(elapsed, 0x10000000ULL);
+        Clock(step);
+        elapsed -= step;
+    }
 }
 
 INLINE void Audio::Clock(u32 clocks)

@@ -42,6 +42,21 @@ INLINE void Memory::InvalidateDebugSnapshot()
     m_debug_snapshot_id++;
 }
 
+INLINE u8* Memory::GetCMOS()
+{
+    return m_state.cmos;
+}
+
+INLINE u8 Memory::ReadCMOS(u32 index) const
+{
+    return m_state.cmos[index & (GT_CMOS_SIZE - 1)];
+}
+
+INLINE void Memory::WriteCMOS(u32 index, u8 value)
+{
+    m_state.cmos[index & (GT_CMOS_SIZE - 1)] = value;
+}
+
 INLINE Memory::Memory_State* Memory::GetState()
 {
     return &m_state;

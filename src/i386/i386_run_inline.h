@@ -42,11 +42,20 @@ INLINE u32 I386::RunCheckedStep()
     result.exception = false;
     result.instruction_completed = true;
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    m_step_call = false;
+#endif
+
     if (m_state.shutdown || m_state.halted)
         return (u32)result.clocks;
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (!m_state.repeat.active)
+        DisassembleNextInstruction();
+#endif
+
     m_debug_step = false;
-    m_checked_valid = !m_batch_mode || m_trace_enabled;
+    m_checked_valid = m_trace_enabled;
 
     if (unlikely(m_checked_valid))
         CaptureCheckedBytes();
@@ -93,7 +102,61 @@ INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
     return nmi_pending || (intr_pending && CanAcceptMaskableInterrupt());
 }
 
-// Port accesses only run as the first step of a batch, where the context time is their access time
+INLINE void I386::DisassembleNextInstruction()
+{
+    const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
+    u32 eip = m_state.eip;
+    u32 linear = code.base + eip;
+    I386_Disassembler_Record*& cached = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
+    I386_Disassembler_Record* record = cached;
+
+    if (likely(IsValidPointer(record) && record->linear == linear && record->eip == eip && record->size > 0 &&
+        record->cs == code.selector && record->mode == m_state.execution_mode &&
+        record->default32 == ((code.attributes & I386_SEGMENT_DEFAULT_32) != 0)))
+    {
+        const u8* bytes = GetReadHost(linear, (u32)record->size);
+
+        if (likely(IsValidPointer(bytes)))
+        {
+            int i = 0;
+
+            while (i < record->size && bytes[i] == record->opcodes[i])
+                i++;
+
+            if (likely(i == record->size))
+                return;
+        }
+    }
+
+    cached = Disassemble(code, eip);
+}
+
+INLINE bool I386::TrackCall(bool completed, u16 cs, u32 base)
+{
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (completed)
+    {
+        int return_size = m_instruction.call_return_size != 0 ? m_instruction.call_return_size :
+            m_instruction.operand_size;
+        PushCallStack(cs, base, m_instruction.start_eip, Truncate(m_instruction.next_eip, return_size * 8), false, 0);
+    }
+#else
+    UNUSED(cs);
+    UNUSED(base);
+#endif
+    return completed;
+}
+
+INLINE bool I386::TrackReturn(bool completed)
+{
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (completed && !m_disassembler_call_stack.empty())
+        m_disassembler_call_stack.pop_back();
+#endif
+    return completed;
+}
+
+// Port accesses only run as the first step of a batch, where the context clocks are their access time
 // Elsewhere the batch ends before the instruction and the next batch starts with it
 INLINE bool I386::DeferIO()
 {

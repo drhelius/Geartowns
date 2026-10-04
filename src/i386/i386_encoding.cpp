@@ -215,7 +215,6 @@ NO_INLINE bool I386::DecodeOperandsSlow(bool modrm, int immediate_size)
     return ok;
 }
 
-#if !defined(GT_DISABLE_DISASSEMBLER)
 bool I386::DecodeInstructionForDebugger(u32 eip, I386_Decode_State& state)
 {
     return DecodeInstructionForDebugger(m_state.segments[I386_SEGMENT_CS], eip, state);
@@ -244,7 +243,6 @@ bool I386::DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 ei
     state.invalid_lock = instruction.lock && !IsLockAllowed(instruction);
     return true;
 }
-#endif
 
 bool I386::OPCodeHasModRM(bool two_byte, u8 opcode) const
 {

@@ -81,6 +81,7 @@ struct GT_Runtime_Info
     int screen_width;
     int screen_height;
     int width_scale;
+    float frame_time;
     int sample_rate;
     bool media_ready;
     bool bios_ready;
@@ -107,7 +108,7 @@ typedef void (*GT_Observe_Memory_Write_Fn)(void* observer, u32 bus_address, u8 p
 
 struct GT_Bus_Access_Context
 {
-    u64 time_ns;
+    u64 clocks;
     u32 elapsed_clocks;
     u32 synchronized_clocks;
     u32 wait_clocks;

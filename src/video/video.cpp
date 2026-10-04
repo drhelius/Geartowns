@@ -33,7 +33,7 @@ Video::Video()
     m_pixel_format = GT_PIXEL_RGBA8888;
     m_render = false;
     m_frame_ready = false;
-    m_next_event_time = GT_NO_EVENT;
+    m_next_event_clocks = GT_NO_EVENT;
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
     m_render_width = GT_FRAME_BUFFER_WIDTH;
@@ -84,18 +84,18 @@ void Video::ResetFMRView()
     m_state.fmr_ank = false;
 }
 
-u8 Video::Read(u16 port, u64 time)
+u8 Video::Read(u16 port, u64 clocks)
 {
-    Synchronize(time);
+    Synchronize(clocks);
 
     switch (port)
     {
         case 0x0440:
             return m_state.crtc_index;
         case 0x0442:
-            return ReadCRTC(false, time);
+            return ReadCRTC(false, clocks);
         case 0x0443:
-            return ReadCRTC(true, time);
+            return ReadCRTC(true, clocks);
         case 0x0448:
             return m_state.output_index;
         case 0x044A:
@@ -136,7 +136,7 @@ u8 Video::Read(u16 port, u64 time)
             return m_state.digital_palette[port - 0xFD98];
         case 0xFDA0:
         {
-            u8 status = GetSyncStatus(time);
+            u8 status = GetSyncStatus(clocks);
             return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x02 : 0x00);
         }
         default:
@@ -144,9 +144,9 @@ u8 Video::Read(u16 port, u64 time)
     }
 }
 
-void Video::Write(u16 port, u8 value, u64 time)
+void Video::Write(u16 port, u8 value, u64 clocks)
 {
-    Synchronize(time);
+    Synchronize(clocks);
 
     switch (port)
     {
@@ -154,16 +154,16 @@ void Video::Write(u16 port, u8 value, u64 time)
             m_state.crtc_index = value & 0x1F;
             break;
         case 0x0442:
-            WriteCRTC(value, false, time);
+            WriteCRTC(value, false, clocks);
             break;
         case 0x0443:
-            WriteCRTC(value, true, time);
+            WriteCRTC(value, true, clocks);
             break;
         case 0x0448:
             m_state.output_index = value & 0x03;
             break;
         case 0x044A:
-            RenderUpTo(time);
+            RenderUpTo(clocks);
             m_state.output[m_state.output_index] = value;
             break;
         case 0x0458:
@@ -185,7 +185,7 @@ void Video::Write(u16 port, u8 value, u64 time)
         case 0xFD92:
         case 0xFD94:
         case 0xFD96:
-            RenderUpTo(time);
+            RenderUpTo(clocks);
             WritePalette((port - 0xFD92) >> 1, value);
             break;
         case 0xFD98:
@@ -200,7 +200,7 @@ void Video::Write(u16 port, u8 value, u64 time)
             m_state.digital_palette_modified = true;
             break;
         case 0xFDA0:
-            RenderUpTo(time);
+            RenderUpTo(clocks);
             m_state.display_enable = value;
             break;
         default:
@@ -365,7 +365,7 @@ void Video::WriteFMRRegisters(void* device, u32 offset, u8 value)
             state.fmr_mask = value;
             break;
         case 0x0F82:
-            video->RenderUpTo(video->m_scheduler->GetTime());
+            video->RenderUpTo(video->m_scheduler->GetClocks());
             state.fmr_display_planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
             state.fmr_display_page = (value & 0x10) != 0;
             break;
@@ -407,7 +407,7 @@ u8 Video::ReadFMRRegister(u32 offset, bool peek)
             return 0x00;
         case 0x0F86:
         {
-            u8 status = GetSyncStatus(m_scheduler->GetTime());
+            u8 status = GetSyncStatus(m_scheduler->GetClocks());
             return 0x10 | ((status & 0x04) != 0 ? 0x04 : 0x00) | ((status & 0x02) != 0 ? 0x80 : 0x00);
         }
         case 0x0F94:
@@ -437,12 +437,12 @@ u8 Video::ReadFMRRegister(u32 offset, bool peek)
     }
 }
 
-void Video::WriteCRTC(u8 value, bool high, u64 time)
+void Video::WriteCRTC(u8 value, bool high, u64 clocks)
 {
     int index = m_state.crtc_index;
     u16 previous = m_state.crtc[index];
 
-    RenderUpTo(time);
+    RenderUpTo(clocks);
 
     if (high)
         m_state.crtc[index] = (u16)((previous & 0x00FF) | (value << 8));
@@ -455,7 +455,7 @@ void Video::WriteCRTC(u8 value, bool high, u64 time)
     bool start = (m_state.crtc[index] & 0x8000) != 0;
 
     if (start && !m_state.running)
-        StartFrame(time);
+        StartFrame(clocks);
     else if (!start && m_state.running)
     {
         m_state.running = false;
@@ -463,13 +463,13 @@ void Video::WriteCRTC(u8 value, bool high, u64 time)
     }
 }
 
-u8 Video::ReadCRTC(bool high, u64 time)
+u8 Video::ReadCRTC(bool high, u64 clocks)
 {
     int index = m_state.crtc_index;
 
     // FR reads the live sync and display status in its high byte
     if (index == k_video_crtc_fr && high)
-        return GetSyncStatus(time);
+        return GetSyncStatus(clocks);
 
     u16 value = m_state.crtc[index];
     return high ? (u8)(value >> 8) : (u8)value;
@@ -513,10 +513,10 @@ u8 Video::ReadPalette(int component) const
 
 // Timing registers are latched at each frame start
 // The vertical period counts VST + 1 half-lines, 525 lines on the VGA preset and 262.5 on 15 kHz ones
-void Video::StartFrame(u64 time)
+void Video::StartFrame(u64 clocks)
 {
     m_state.running = true;
-    m_state.frame_start_time = time;
+    m_state.frame_start_clocks = clocks;
     m_state.frame_line_clocks = MAX((u32)m_state.crtc[k_video_crtc_hst] + 1, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX((u32)m_state.crtc[k_video_crtc_vst] + 1, k_video_min_half_lines);
     m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
@@ -528,7 +528,7 @@ void Video::StartFrame(u64 time)
 // Frames run from VSYNC to VSYNC, so every displayed line has been scanned when the next one starts
 void Video::CompleteFrame()
 {
-    u64 vsync_time = m_next_event_time;
+    u64 vsync_clocks = m_next_event_clocks;
 
     for (; m_rendered_rows < m_render_height; m_rendered_rows++)
         RenderRow(m_rendered_rows);
@@ -539,7 +539,7 @@ void Video::CompleteFrame()
     m_state.frame_count++;
     m_state.vsync_irq = true;
     UpdateIRQ();
-    StartFrame(vsync_time);
+    StartFrame(vsync_clocks);
 }
 
 void Video::UpdateGeometry()
@@ -596,15 +596,15 @@ void Video::UpdateNextEvent()
 {
     if (!m_state.running)
     {
-        m_next_event_time = GT_NO_EVENT;
-        m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_time);
+        m_next_event_clocks = GT_NO_EVENT;
+        m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
         return;
     }
 
     u64 frame_clocks = ((u64)m_state.frame_half_lines * m_state.frame_line_clocks) / 2;
-    u64 frame_time = (frame_clocks * GT_CPU_CLOCK_RATE + m_state.frame_clock_rate - 1) / m_state.frame_clock_rate;
-    m_next_event_time = m_state.frame_start_time + frame_time;
-    m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_time);
+    u64 cpu_clocks = (frame_clocks * GT_CPU_CLOCK_RATE + m_state.frame_clock_rate - 1) / m_state.frame_clock_rate;
+    m_next_event_clocks = m_state.frame_start_clocks + cpu_clocks;
+    m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
 }
 
 void Video::UpdateIRQ()
@@ -613,14 +613,14 @@ void Video::UpdateIRQ()
 }
 
 // Same bit layout as the FR status byte
-u8 Video::GetSyncStatus(u64 time) const
+u8 Video::GetSyncStatus(u64 clocks) const
 {
     if (!m_state.running)
         return 0x00;
 
     const u16* crtc = m_state.crtc;
-    u32 half_line = GetBeamHalfLine(time);
-    u32 clock = GetBeamClock(time);
+    u32 half_line = GetBeamHalfLine(clocks);
+    u32 clock = GetBeamClock(clocks);
     u8 status = 0x00;
 
     if (clock < crtc[k_video_crtc_hsw1])
@@ -646,12 +646,12 @@ u8 Video::GetSyncStatus(u64 time) const
 
 // Rows already scanned are drawn before a register or palette change, so the change only affects later rows
 // VRAM writes are not tracked, they show up in every row not drawn yet
-void Video::RenderUpTo(u64 time)
+void Video::RenderUpTo(u64 clocks)
 {
     if (!m_state.running)
         return;
 
-    u32 half_line = GetBeamHalfLine(time);
+    u32 half_line = GetBeamHalfLine(clocks);
 
     if (half_line <= m_canvas_v_start)
         return;
@@ -853,7 +853,7 @@ void Video::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.display_enable);
     G_SERIALIZE(serializer, m_state.vsync_irq);
     G_SERIALIZE(serializer, m_state.running);
-    G_SERIALIZE(serializer, m_state.frame_start_time);
+    G_SERIALIZE(serializer, m_state.frame_start_clocks);
     G_SERIALIZE(serializer, m_state.frame_line_clocks);
     G_SERIALIZE(serializer, m_state.frame_half_lines);
     G_SERIALIZE(serializer, m_state.frame_clock_rate);

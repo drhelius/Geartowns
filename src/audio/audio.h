@@ -58,8 +58,8 @@ public:
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
-    static u8 ReadWaveWindow(void* device, u32 offset);
-    static void WriteWaveWindow(void* device, u32 offset, u8 value);
+    static u8 ReadWaveWindowCallback(void* device, u32 offset);
+    static void WriteWaveWindowCallback(void* device, u32 offset, u8 value);
 
 private:
     void Clock(u32 clocks);

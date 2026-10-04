@@ -1058,7 +1058,7 @@ void GeartownsCore::InitMemoryMap()
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM wave RAM window", 0x1000, 0xC2200000U,
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_AUDIO,
-        m_audio, Audio::ReadWaveWindow, Audio::WriteWaveWindow, NULL))
+        m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback, NULL))
         Error("Unable to map the PCM wave RAM window");
 
     // The low windows are overlays that the mapping latches switch on and off

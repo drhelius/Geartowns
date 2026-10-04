@@ -83,13 +83,13 @@ void Audio::SetPCMLowpassCutoff(float cutoff)
 
 // The CPU window shows the 4 KiB wave RAM bank selected by the PCM control register
 // Playback never writes wave RAM, so only writes need the chip caught up
-u8 Audio::ReadWaveWindow(void* device, u32 offset)
+u8 Audio::ReadWaveWindowCallback(void* device, u32 offset)
 {
     Audio* audio = (Audio*)device;
     return audio->m_rf5c68->Read((u16)(0x1000 | (offset & 0x0FFF)));
 }
 
-void Audio::WriteWaveWindow(void* device, u32 offset, u8 value)
+void Audio::WriteWaveWindowCallback(void* device, u32 offset, u8 value)
 {
     Audio* audio = (Audio*)device;
     audio->Synchronize(audio->m_scheduler->GetClocks());

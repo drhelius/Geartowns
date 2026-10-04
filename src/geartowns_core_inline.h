@@ -91,3 +91,23 @@ INLINE CDROMMock* GeartownsCore::GetCDROM()
 {
     return m_cdrom;
 }
+
+INLINE FDCMock* GeartownsCore::GetFDC()
+{
+    return m_fdc;
+}
+
+INLINE TownsKeyboard* GeartownsCore::GetKeyboard()
+{
+    return m_keyboard;
+}
+
+INLINE TownsRTC* GeartownsCore::GetRTC()
+{
+    return m_rtc;
+}
+
+INLINE UPD71071* GeartownsCore::GetDMA()
+{
+    return m_dma;
+}

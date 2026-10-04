@@ -85,6 +85,8 @@ struct MouseState
 };
 
 static MouseState mouse_current[MAX_PADS];
+static bool retro_key_down[RETROK_LAST];
+static int key_references[GT_KEY_COUNT];
 static unsigned input_device[MAX_PADS] = {
     RETRO_DEVICE_TOWNS_GAMEPAD,
     RETRO_DEVICE_TOWNS_GAMEPAD
@@ -97,6 +99,9 @@ static const retro_vfs_interface* vfs_interface = NULL;
 static void load_bios(void);
 static void set_controller_info(void);
 static void clear_input_state(void);
+static void clear_keyboard_state(void);
+static GT_Keys key_from_retro_key(unsigned keycode);
+static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint16_t key_modifiers);
 static void reset_controller_devices(void);
 static void apply_controller_device(unsigned port, unsigned device, bool log_device);
 static void release_controller_input(unsigned port);
@@ -253,6 +258,7 @@ void retro_reset(void)
     check_variables();
     load_bios();
     core->ResetMedia();
+    clear_keyboard_state();
 
     for (int i = 0; i < MAX_PADS; i++)
         apply_controller_device(i, input_device[i], false);
@@ -397,6 +403,10 @@ bool retro_load_game(const struct retro_game_info *info)
     }
 
     core->GetRuntimeInfo(runtime_info);
+    clear_keyboard_state();
+
+    struct retro_keyboard_callback keyboard = { keyboard_event };
+    environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &keyboard);
 
     return true;
 }
@@ -574,6 +584,8 @@ static void set_controller_info(void)
 
 static void clear_input_state(void)
 {
+    clear_keyboard_state();
+
     for (int i = 0; i < MAX_PADS; i++)
     {
         for (int j = 0; j < MAX_BUTTONS; j++)
@@ -587,6 +599,146 @@ static void clear_input_state(void)
         mouse_current[i].button_left = 0;
         mouse_current[i].button_right = 0;
         mouse_current[i].delta_applied = false;
+    }
+}
+
+static void clear_keyboard_state(void)
+{
+    memset(retro_key_down, 0, sizeof(retro_key_down));
+    memset(key_references, 0, sizeof(key_references));
+
+    if (core)
+        core->ReleaseAllKeys();
+}
+
+static GT_Keys key_from_retro_key(unsigned keycode)
+{
+    if (keycode >= RETROK_a && keycode <= RETROK_z)
+    {
+        static const GT_Keys letters[26] =
+        {
+            GT_KEY_A, GT_KEY_B, GT_KEY_C, GT_KEY_D, GT_KEY_E, GT_KEY_F, GT_KEY_G, GT_KEY_H, GT_KEY_I,
+            GT_KEY_J, GT_KEY_K, GT_KEY_L, GT_KEY_M, GT_KEY_N, GT_KEY_O, GT_KEY_P, GT_KEY_Q, GT_KEY_R,
+            GT_KEY_S, GT_KEY_T, GT_KEY_U, GT_KEY_V, GT_KEY_W, GT_KEY_X, GT_KEY_Y, GT_KEY_Z
+        };
+
+        return letters[keycode - RETROK_a];
+    }
+
+    if (keycode >= RETROK_1 && keycode <= RETROK_9)
+        return (GT_Keys)(GT_KEY_1 + (keycode - RETROK_1));
+
+    switch (keycode)
+    {
+        case RETROK_0: return GT_KEY_0;
+        case RETROK_RETURN: return GT_KEY_RETURN;
+        case RETROK_ESCAPE: return GT_KEY_BREAK;
+        case RETROK_BACKSPACE: return GT_KEY_BACKSPACE;
+        case RETROK_TAB: return GT_KEY_TAB;
+        case RETROK_SPACE: return GT_KEY_SPACE;
+        case RETROK_MINUS: return GT_KEY_MINUS;
+        case RETROK_EQUALS: return GT_KEY_CARET;
+        case RETROK_CARET: return GT_KEY_CARET;
+        case RETROK_LEFTBRACKET: return GT_KEY_AT;
+        case RETROK_AT: return GT_KEY_AT;
+        case RETROK_RIGHTBRACKET: return GT_KEY_LEFT_BRACKET;
+        case RETROK_BACKSLASH: return GT_KEY_YEN;
+        case RETROK_SEMICOLON: return GT_KEY_SEMICOLON;
+        case RETROK_QUOTE: return GT_KEY_COLON;
+        case RETROK_COLON: return GT_KEY_COLON;
+        case RETROK_BACKQUOTE: return GT_KEY_ESCAPE;
+        case RETROK_COMMA: return GT_KEY_COMMA;
+        case RETROK_PERIOD: return GT_KEY_PERIOD;
+        case RETROK_SLASH: return GT_KEY_SLASH;
+        case RETROK_UNDERSCORE: return GT_KEY_UNDERSCORE;
+        case RETROK_OEM_102: return GT_KEY_UNDERSCORE;
+        case RETROK_CAPSLOCK: return GT_KEY_CAPS;
+        case RETROK_F1: return GT_KEY_PF1;
+        case RETROK_F2: return GT_KEY_PF2;
+        case RETROK_F3: return GT_KEY_PF3;
+        case RETROK_F4: return GT_KEY_PF4;
+        case RETROK_F5: return GT_KEY_PF5;
+        case RETROK_F6: return GT_KEY_PF6;
+        case RETROK_F7: return GT_KEY_PF7;
+        case RETROK_F8: return GT_KEY_PF8;
+        case RETROK_F9: return GT_KEY_PF9;
+        case RETROK_F10: return GT_KEY_PF10;
+        case RETROK_F11: return GT_KEY_PF11;
+        case RETROK_F12: return GT_KEY_PF12;
+        case RETROK_F13: return GT_KEY_PF13;
+        case RETROK_F14: return GT_KEY_PF14;
+        case RETROK_F15: return GT_KEY_PF15;
+        case RETROK_PRINT: return GT_KEY_COPY;
+        case RETROK_PAUSE: return GT_KEY_BREAK;
+        case RETROK_BREAK: return GT_KEY_BREAK;
+        case RETROK_INSERT: return GT_KEY_INSERT;
+        case RETROK_HOME: return GT_KEY_HOME;
+        case RETROK_PAGEUP: return GT_KEY_PREVIOUS;
+        case RETROK_DELETE: return GT_KEY_DELETE;
+        case RETROK_PAGEDOWN: return GT_KEY_NEXT;
+        case RETROK_RIGHT: return GT_KEY_RIGHT;
+        case RETROK_LEFT: return GT_KEY_LEFT;
+        case RETROK_DOWN: return GT_KEY_DOWN;
+        case RETROK_UP: return GT_KEY_UP;
+        case RETROK_KP_DIVIDE: return GT_KEY_KP_DIVIDE;
+        case RETROK_KP_MULTIPLY: return GT_KEY_KP_MULTIPLY;
+        case RETROK_KP_MINUS: return GT_KEY_KP_MINUS;
+        case RETROK_KP_PLUS: return GT_KEY_KP_PLUS;
+        case RETROK_KP_ENTER: return GT_KEY_KP_ENTER;
+        case RETROK_KP1: return GT_KEY_KP_1;
+        case RETROK_KP2: return GT_KEY_KP_2;
+        case RETROK_KP3: return GT_KEY_KP_3;
+        case RETROK_KP4: return GT_KEY_KP_4;
+        case RETROK_KP5: return GT_KEY_KP_5;
+        case RETROK_KP6: return GT_KEY_KP_6;
+        case RETROK_KP7: return GT_KEY_KP_7;
+        case RETROK_KP8: return GT_KEY_KP_8;
+        case RETROK_KP9: return GT_KEY_KP_9;
+        case RETROK_KP0: return GT_KEY_KP_0;
+        case RETROK_KP_PERIOD: return GT_KEY_KP_PERIOD;
+        case RETROK_KP_EQUALS: return GT_KEY_KP_EQUALS;
+        case RETROK_LCTRL: return GT_KEY_CTRL;
+        case RETROK_RCTRL: return GT_KEY_CTRL;
+        case RETROK_LSHIFT: return GT_KEY_SHIFT;
+        case RETROK_RSHIFT: return GT_KEY_SHIFT;
+        case RETROK_LALT: return GT_KEY_ALT;
+        case RETROK_RALT: return GT_KEY_KANA_KANJI;
+        default: return GT_KEY_NONE;
+    }
+}
+
+static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint16_t key_modifiers)
+{
+    UNUSED(character);
+    UNUSED(key_modifiers);
+
+    if (!core || keycode >= RETROK_LAST)
+        return;
+
+    GT_Keys key = key_from_retro_key(keycode);
+
+    if (key == GT_KEY_NONE)
+        return;
+
+    if (down)
+    {
+        if (retro_key_down[keycode])
+            return;
+
+        retro_key_down[keycode] = true;
+
+        if (key_references[key]++ == 0)
+            core->KeyPressed(key);
+    }
+    else
+    {
+        if (!retro_key_down[keycode])
+            return;
+
+        retro_key_down[keycode] = false;
+
+        if (key_references[key] > 0 && --key_references[key] == 0)
+            core->KeyReleased(key);
     }
 }
 

@@ -30,7 +30,6 @@ class Input
 public:
     struct Input_State
     {
-        bool keys[GT_KEY_COUNT];
         s32 mouse_x;
         s32 mouse_y;
         bool mouse_left;
@@ -42,9 +41,6 @@ public:
     Input();
     void Init();
     void Reset();
-    void KeyPressed(GT_Keys key);
-    void KeyReleased(GT_Keys key);
-    bool IsKeyPressed(GT_Keys key) const;
     void SetMouseDelta(s32 x, s32 y);
     void SetMouseButtons(bool left, bool right);
     void SetGamePadState(int port, const GT_GamePad_State& state);

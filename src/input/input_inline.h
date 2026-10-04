@@ -17,26 +17,6 @@
  *
  */
 
-INLINE void Input::KeyPressed(GT_Keys key)
-{
-    if (key > GT_KEY_NONE && key < GT_KEY_COUNT)
-        m_state.keys[key] = true;
-}
-
-INLINE void Input::KeyReleased(GT_Keys key)
-{
-    if (key > GT_KEY_NONE && key < GT_KEY_COUNT)
-        m_state.keys[key] = false;
-}
-
-INLINE bool Input::IsKeyPressed(GT_Keys key) const
-{
-    if (key <= GT_KEY_NONE || key >= GT_KEY_COUNT)
-        return false;
-
-    return m_state.keys[key];
-}
-
 INLINE void Input::SetMouseDelta(s32 x, s32 y)
 {
     m_state.mouse_x += x;

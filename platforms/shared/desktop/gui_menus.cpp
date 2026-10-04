@@ -35,6 +35,7 @@
 #include "utils.h"
 #include "geartowns.h"
 #include "rewind.h"
+#include "events.h"
 
 static bool open_rom = false;
 static bool open_state = false;
@@ -908,6 +909,20 @@ static void menu_input(void)
                     }
 
                     ImGui::PopItemWidth();
+
+                    if (ImGui::MenuItem("Use Keyboard", "", &config_input.use_keyboard[i]))
+                    {
+                        events_sync_input();
+                    }
+
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::BeginTooltip();
+                        ImGui::Text("Uses the Player %d bindings from Input > Keyboard.", i + 1);
+                        ImGui::Text("Mapped keys control this gamepad,");
+                        ImGui::Text("other keys still type on the FM Towns keyboard.");
+                        ImGui::EndTooltip();
+                    }
                     ImGui::EndMenu();
                 }
             }

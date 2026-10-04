@@ -35,7 +35,6 @@ void Input::Init()
 
 void Input::Reset()
 {
-    memset(m_state.keys, 0, sizeof(m_state.keys));
     m_state.mouse_x = 0;
     m_state.mouse_y = 0;
     m_state.mouse_left = false;
@@ -60,7 +59,6 @@ void Input::LoadState(std::istream& stream)
 
 void Input::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_state.keys, GT_KEY_COUNT);
     G_SERIALIZE(serializer, m_state.mouse_x);
     G_SERIALIZE(serializer, m_state.mouse_y);
     G_SERIALIZE(serializer, m_state.mouse_left);

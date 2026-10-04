@@ -35,6 +35,7 @@
 #include "gui_menus.h"
 #include "gui_popups.h"
 #include "gui_actions.h"
+#include "events.h"
 #include "debug/gui_debug_disassembler.h"
 #include "debug/gui_debug.h"
 
@@ -148,6 +149,7 @@ void gui_destroy(void)
 
 void gui_render(void)
 {
+    bool keyboard_was_active = events_is_keyboard_active();
     ImGui::NewFrame();
 
     update_window_visibility_padding();
@@ -160,6 +162,8 @@ void gui_render(void)
     gui_main_menu();
 
     gui_main_window_hovered = false;
+    gui_main_window_focused = false;
+    gui_main_window_sdl_window_id = 0;
 
     if ((!config_debug.debug && !emu_is_empty()) || (config_debug.debug && config_debug.show_screen))
         main_window();
@@ -172,6 +176,16 @@ void gui_render(void)
     show_loading_popup();
     show_status_message();
     show_error_window();
+
+    if (!config_debug.debug && !emu_is_empty())
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        gui_main_window_focused = SDL_GetKeyboardFocus() == application_sdl_window && !io.WantCaptureKeyboard &&
+            !io.WantTextInput;
+    }
+
+    if (keyboard_was_active && !events_is_keyboard_active())
+        events_release_keyboard();
 
     ImGui::Render();
 }
@@ -565,6 +579,7 @@ static void main_window(void)
 
         window_visible = ImGui::Begin("Output###debug_output", &config_debug.show_screen, flags);
         gui_main_window_hovered = ImGui::IsWindowHovered();
+        gui_main_window_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     }
     else
     {
@@ -583,7 +598,16 @@ static void main_window(void)
 
         window_visible = ImGui::Begin(GT_TITLE, 0, flags);
         gui_main_window_hovered = ImGui::IsWindowHovered();
+        gui_main_window_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     }
+
+    ImGuiViewport* output_viewport = ImGui::GetWindowViewport();
+    SDL_Window* output_window = output_viewport ? (SDL_Window*)output_viewport->PlatformHandle : NULL;
+
+    if (output_window)
+        gui_main_window_sdl_window_id = SDL_GetWindowID(output_window);
+    else if (application_sdl_window)
+        gui_main_window_sdl_window_id = SDL_GetWindowID(application_sdl_window);
 
     OglRendererScreenGeometry screen_geometry;
     screen_geometry.logical_width = image_logical_width;

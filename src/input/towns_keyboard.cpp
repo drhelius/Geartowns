@@ -1,0 +1,331 @@
+/*
+ * Geartowns - FM Towns Emulator
+ * Copyright (C) 2026  Ignacio Sanchez
+
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+ *
+ */
+
+#include "towns_keyboard.h"
+#include "../system/towns_pic.h"
+#include "../system/scheduler.h"
+#include "../common/state_serializer.h"
+
+// Answer to a keyboard reset seen on a Towns II MX with a JIS keyboard
+static const u8 k_towns_keyboard_reset_response[4] = { 0xB0, 0x7F, 0xE8, 0x25 };
+
+TownsKeyboard::TownsKeyboard()
+{
+    InitPointer(m_pic);
+    InitPointer(m_scheduler);
+    memset(&m_state, 0, sizeof(m_state));
+}
+
+TownsKeyboard::~TownsKeyboard()
+{
+}
+
+void TownsKeyboard::Init(TownsPIC* pic, Scheduler* scheduler)
+{
+    m_pic = pic;
+    m_scheduler = scheduler;
+    Reset();
+}
+
+void TownsKeyboard::Reset()
+{
+    memset(&m_state, 0, sizeof(m_state));
+    m_state.repeat_delay = k_towns_keyboard_repeat_delay;
+    m_state.repeat_interval = k_towns_keyboard_repeat_interval;
+    UpdateIRQ();
+    UpdateNextEvent();
+}
+
+u8 TownsKeyboard::Read(u16 port, u64 clocks)
+{
+    Synchronize(clocks);
+
+    switch (port)
+    {
+        case 0x0600:
+        {
+            u8 value = 0x00;
+
+            if (m_state.fifo_count != 0)
+            {
+                value = m_state.fifo[m_state.fifo_read];
+                m_state.fifo_read = (m_state.fifo_read + 1) & (TOWNS_KEYBOARD_FIFO_SIZE - 1);
+                m_state.fifo_count--;
+            }
+
+            // Reading acknowledges the request, the next one comes a byte time later while data remains
+            m_state.kbint = false;
+            m_state.rearm_pending = m_state.fifo_count != 0 && m_state.irq_enabled;
+            m_state.rearm_clocks = clocks + k_towns_keyboard_rearm_clocks;
+            UpdateIRQ();
+            UpdateNextEvent();
+            return value;
+        }
+        case 0x0602:
+            return m_state.fifo_count != 0 ? 0x01 : 0x00;
+        case 0x0604:
+            return m_state.kbint ? 0x01 : 0x00;
+        default:
+            return 0xFF;
+    }
+}
+
+void TownsKeyboard::Write(u16 port, u8 value, u64 clocks)
+{
+    Synchronize(clocks);
+
+    switch (port)
+    {
+        case 0x0600:
+            // FM-OASYS and the keyboard BIOS reset the keyboard here, keeping the IRQ enable
+            if (value == 0xA1 || value == 0xA2)
+                SendResetResponse(4);
+            break;
+        case 0x0602:
+            WriteCommand(value);
+            break;
+        case 0x0604:
+            m_state.irq_enabled = (value & 0x01) != 0;
+
+            if (m_state.irq_enabled && m_state.fifo_count != 0 && !m_state.rearm_pending)
+                m_state.kbint = true;
+
+            UpdateIRQ();
+            break;
+    }
+}
+
+void TownsKeyboard::Synchronize(u64 clocks)
+{
+    bool changed = false;
+
+    if (m_state.rearm_pending && clocks >= m_state.rearm_clocks)
+    {
+        m_state.rearm_pending = false;
+        changed = true;
+
+        if (m_state.fifo_count != 0 && m_state.irq_enabled)
+        {
+            m_state.kbint = true;
+            UpdateIRQ();
+        }
+    }
+
+    // Typematic repeat sends the held key again as a plain make
+    if (m_state.repeat_key != GT_KEY_NONE && clocks >= m_state.repeat_clocks)
+    {
+        PushEvent(m_state.repeat_key, true);
+        m_state.repeat_clocks += ((u64)m_state.repeat_interval * GT_CPU_CLOCK_RATE) / 1000;
+        changed = true;
+    }
+
+    if (changed)
+        UpdateNextEvent();
+}
+
+void TownsKeyboard::KeyPressed(GT_Keys key)
+{
+    if (!IsValidKey(key) || m_state.keys[key])
+        return;
+
+    Synchronize(m_scheduler->GetClocks());
+    m_state.keys[key] = true;
+    PushEvent((u8)key, true);
+
+    if (IsRepeatKey((u8)key))
+    {
+        m_state.repeat_key = (u8)key;
+        m_state.repeat_clocks = m_scheduler->GetClocks() + ((u64)m_state.repeat_delay * GT_CPU_CLOCK_RATE) / 1000;
+    }
+
+    UpdateNextEvent();
+}
+
+void TownsKeyboard::KeyReleased(GT_Keys key)
+{
+    if (!IsValidKey(key) || !m_state.keys[key])
+        return;
+
+    Synchronize(m_scheduler->GetClocks());
+    m_state.keys[key] = false;
+    PushEvent((u8)key, false);
+
+    if (m_state.repeat_key == key)
+        m_state.repeat_key = GT_KEY_NONE;
+
+    UpdateNextEvent();
+}
+
+// Modifiers go last so the other breaks still carry them
+void TownsKeyboard::ReleaseAllKeys()
+{
+    for (int i = GT_KEY_NONE + 1; i < GT_KEY_COUNT; i++)
+    {
+        if (i != GT_KEY_CTRL && i != GT_KEY_SHIFT)
+            KeyReleased((GT_Keys)i);
+    }
+
+    KeyReleased(GT_KEY_CTRL);
+    KeyReleased(GT_KEY_SHIFT);
+}
+
+void TownsKeyboard::WriteCommand(u8 value)
+{
+    switch (value)
+    {
+        case 0xA0:
+            ResetController();
+            SendResetResponse(4);
+            break;
+        case 0xA1:
+            // Only a reset that follows A0h repeats the whole answer
+            ResetController();
+            SendResetResponse(m_state.last_command == 0xA0 ? 4 : 2);
+            break;
+        case 0xA9:
+            m_state.repeat_delay = 400;
+            break;
+        case 0xAA:
+            m_state.repeat_delay = 500;
+            break;
+        case 0xAB:
+            m_state.repeat_delay = 300;
+            break;
+        case 0xAC:
+            m_state.repeat_interval = 50;
+            break;
+        case 0xAD:
+            m_state.repeat_interval = 30;
+            break;
+        case 0xAE:
+            m_state.repeat_interval = 20;
+            break;
+        default:
+            break;
+    }
+
+    m_state.last_command = value;
+}
+
+void TownsKeyboard::ResetController()
+{
+    m_state.irq_enabled = false;
+    m_state.repeat_key = GT_KEY_NONE;
+    m_state.repeat_delay = k_towns_keyboard_repeat_delay;
+    m_state.repeat_interval = k_towns_keyboard_repeat_interval;
+}
+
+// The answer replaces anything still queued
+void TownsKeyboard::SendResetResponse(int count)
+{
+    memcpy(m_state.fifo, k_towns_keyboard_reset_response, count);
+    m_state.fifo_read = 0;
+    m_state.fifo_count = (u8)count;
+    m_state.rearm_pending = false;
+    m_state.kbint = true;
+    UpdateIRQ();
+    UpdateNextEvent();
+}
+
+// A JIS keyboard message: type and make or break flags with CTRL and SHIFT, then the key code
+void TownsKeyboard::PushEvent(u8 key, bool pressed)
+{
+    if (m_state.fifo_count + 2 > TOWNS_KEYBOARD_FIFO_SIZE)
+    {
+        m_state.dropped_events++;
+        return;
+    }
+
+    u8 flags = pressed ? 0xA0 : 0xB0;
+
+    if (m_state.keys[GT_KEY_CTRL])
+        flags |= 0x08;
+
+    if (m_state.keys[GT_KEY_SHIFT])
+        flags |= 0x04;
+
+    int write = m_state.fifo_read + m_state.fifo_count;
+    m_state.fifo[write & (TOWNS_KEYBOARD_FIFO_SIZE - 1)] = flags;
+    m_state.fifo[(write + 1) & (TOWNS_KEYBOARD_FIFO_SIZE - 1)] = key;
+    m_state.fifo_count += 2;
+    m_state.kbint = true;
+    UpdateIRQ();
+}
+
+bool TownsKeyboard::IsRepeatKey(u8 key) const
+{
+    return key != GT_KEY_CTRL && key != GT_KEY_SHIFT && key != GT_KEY_ALT;
+}
+
+void TownsKeyboard::UpdateIRQ()
+{
+    m_pic->SetIRQLine(k_towns_keyboard_irq, m_state.kbint && m_state.irq_enabled);
+}
+
+void TownsKeyboard::UpdateNextEvent()
+{
+    u64 next = GT_NO_EVENT;
+
+    if (m_state.rearm_pending)
+        next = m_state.rearm_clocks;
+
+    if (m_state.repeat_key != GT_KEY_NONE)
+        next = MIN(next, m_state.repeat_clocks);
+
+    m_scheduler->Schedule(SCHEDULER_EVENT_KEYBOARD, next);
+}
+
+void TownsKeyboard::SaveState(std::ostream& stream)
+{
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+}
+
+void TownsKeyboard::LoadState(std::istream& stream)
+{
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+
+    m_state.fifo_read &= TOWNS_KEYBOARD_FIFO_SIZE - 1;
+    m_state.fifo_count = (u8)MIN(m_state.fifo_count, TOWNS_KEYBOARD_FIFO_SIZE);
+
+    if (!IsValidKey((GT_Keys)m_state.repeat_key))
+        m_state.repeat_key = GT_KEY_NONE;
+
+    UpdateIRQ();
+    UpdateNextEvent();
+}
+
+void TownsKeyboard::Serialize(StateSerializer& serializer)
+{
+    G_SERIALIZE_ARRAY(serializer, m_state.fifo, TOWNS_KEYBOARD_FIFO_SIZE);
+    G_SERIALIZE(serializer, m_state.fifo_read);
+    G_SERIALIZE(serializer, m_state.fifo_count);
+    G_SERIALIZE(serializer, m_state.irq_enabled);
+    G_SERIALIZE(serializer, m_state.kbint);
+    G_SERIALIZE(serializer, m_state.last_command);
+    G_SERIALIZE(serializer, m_state.rearm_pending);
+    G_SERIALIZE(serializer, m_state.rearm_clocks);
+    G_SERIALIZE_ARRAY(serializer, m_state.keys, GT_KEY_COUNT);
+    G_SERIALIZE(serializer, m_state.repeat_key);
+    G_SERIALIZE(serializer, m_state.repeat_clocks);
+    G_SERIALIZE(serializer, m_state.repeat_delay);
+    G_SERIALIZE(serializer, m_state.repeat_interval);
+    G_SERIALIZE(serializer, m_state.dropped_events);
+}

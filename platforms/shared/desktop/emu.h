@@ -64,6 +64,7 @@ EXTERN bool emu_finish_media_loading(void);
 EXTERN void emu_set_gamepad_state(GT_Controllers controller, const GT_GamePad_State& state);
 EXTERN void emu_key_pressed(GT_Keys key);
 EXTERN void emu_key_released(GT_Keys key);
+EXTERN void emu_release_all_keys(void);
 EXTERN void emu_set_mouse_delta(int x, int y);
 EXTERN void emu_set_mouse_buttons(bool left, bool right);
 EXTERN void emu_pause(void);

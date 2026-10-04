@@ -336,6 +336,12 @@ void emu_key_released(GT_Keys key)
         geartowns->KeyReleased(key);
 }
 
+void emu_release_all_keys(void)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->ReleaseAllKeys();
+}
+
 void emu_set_mouse_delta(int x, int y)
 {
     if (IsValidPointer(geartowns))

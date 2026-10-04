@@ -535,11 +535,14 @@ static void sdl_events(void)
             if (!file_dialog_active)
                 ImGui_ImplSDL3_ProcessEvent(&event);
 
-            if (!gui_in_use && !file_dialog_active)
-                events_emu(&event);
+            bool keyboard_captured = file_dialog_active || ImGui::GetIO().WantCaptureKeyboard;
+            bool shortcut_consumed = false;
 
-            if (!file_dialog_active && !ImGui::GetIO().WantCaptureKeyboard)
-                events_shortcuts(&event);
+            if (!keyboard_captured)
+                shortcut_consumed = events_shortcuts(&event);
+
+            if (!file_dialog_active)
+                events_emu(&event, shortcut_consumed || keyboard_captured);
         }
     }
 }

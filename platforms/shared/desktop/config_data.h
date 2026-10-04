@@ -113,6 +113,7 @@ struct config_Input
 {
     bool allow_up_down;
     int controller_type[GT_MAX_GAMEPADS];
+    bool use_keyboard[GT_MAX_GAMEPADS];
 };
 
 struct config_Input_Keyboard

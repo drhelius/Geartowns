@@ -23,8 +23,10 @@
 #include "geartowns_core.h"
 #include "audio/audio.h"
 #include "drive/cdrom_mock.h"
+#include "drive/fdc_mock.h"
 #include "media/firmware.h"
 #include "input/input.h"
+#include "input/towns_keyboard.h"
 #include "common/memory_stream.h"
 #include "media/media.h"
 #include "system/memory.h"
@@ -32,8 +34,10 @@
 #include "system/towns_io.h"
 #include "system/towns_pic.h"
 #include "system/towns_pit.h"
+#include "system/towns_rtc.h"
 #include "system/towns_system.h"
 #include "system/scheduler.h"
+#include "system/upd71071.h"
 #include "video/video.h"
 
 GeartownsCore::GeartownsCore()
@@ -51,6 +55,10 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_scheduler);
     InitPointer(m_video);
     InitPointer(m_cdrom);
+    InitPointer(m_fdc);
+    InitPointer(m_keyboard);
+    InitPointer(m_rtc);
+    InitPointer(m_dma);
     InitPointer(m_frame_buffer);
 
     m_paused = false;
@@ -70,6 +78,10 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_scheduler);
     SafeDelete(m_video);
     SafeDelete(m_cdrom);
+    SafeDelete(m_fdc);
+    SafeDelete(m_keyboard);
+    SafeDelete(m_rtc);
+    SafeDelete(m_dma);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
 }
@@ -117,6 +129,18 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_cdrom))
         m_cdrom = new CDROMMock();
 
+    if (!IsValidPointer(m_fdc))
+        m_fdc = new FDCMock();
+
+    if (!IsValidPointer(m_keyboard))
+        m_keyboard = new TownsKeyboard();
+
+    if (!IsValidPointer(m_rtc))
+        m_rtc = new TownsRTC();
+
+    if (!IsValidPointer(m_dma))
+        m_dma = new UPD71071();
+
     m_firmware->Init();
     m_scheduler->Init();
     m_memory->Init();
@@ -126,7 +150,11 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_system->Init();
     m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
     m_cdrom->Init(m_pic, m_scheduler);
-    m_towns_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system, m_cdrom);
+    m_fdc->Init(m_pic, m_scheduler);
+    m_keyboard->Init(m_pic, m_scheduler);
+    m_rtc->Init();
+    m_dma->Init(m_memory, m_scheduler);
+    m_towns_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
     m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
     m_media->Init();
@@ -188,6 +216,16 @@ INLINE void GeartownsCore::DispatchEvents()
                 break;
             case SCHEDULER_EVENT_CDROM:
                 m_cdrom->HandleEvent(clocks);
+                break;
+            case SCHEDULER_EVENT_FDC:
+                m_fdc->HandleEvent(clocks);
+                break;
+            case SCHEDULER_EVENT_KEYBOARD:
+                m_keyboard->HandleEvent(clocks);
+                break;
+            case SCHEDULER_EVENT_DMA:
+                // The DMA owns the bus for each unit it moves, so the CPU loses that time
+                m_scheduler->AddClocks(m_dma->HandleEvent(clocks));
                 break;
             default:
                 break;
@@ -346,14 +384,20 @@ void GeartownsCore::ResetMedia()
 
 void GeartownsCore::KeyPressed(GT_Keys key)
 {
-    if (IsValidPointer(m_input))
-        m_input->KeyPressed(key);
+    if (IsValidPointer(m_keyboard))
+        m_keyboard->KeyPressed(key);
 }
 
 void GeartownsCore::KeyReleased(GT_Keys key)
 {
-    if (IsValidPointer(m_input))
-        m_input->KeyReleased(key);
+    if (IsValidPointer(m_keyboard))
+        m_keyboard->KeyReleased(key);
+}
+
+void GeartownsCore::ReleaseAllKeys()
+{
+    if (IsValidPointer(m_keyboard))
+        m_keyboard->ReleaseAllKeys();
 }
 
 void GeartownsCore::ResetSound()
@@ -467,6 +511,10 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_system->SaveState(stream);
     m_video->SaveState(stream);
     m_cdrom->SaveState(stream);
+    m_fdc->SaveState(stream);
+    m_keyboard->SaveState(stream);
+    m_rtc->SaveState(stream);
+    m_dma->SaveState(stream);
 
     if (stream.fail())
     {
@@ -687,6 +735,10 @@ bool GeartownsCore::LoadState(std::istream& stream)
     m_system->LoadState(stream);
     m_video->LoadState(stream);
     m_cdrom->LoadState(stream);
+    m_fdc->LoadState(stream);
+    m_keyboard->LoadState(stream);
+    m_rtc->LoadState(stream);
+    m_dma->LoadState(stream);
 
     if (stream.fail())
     {
@@ -902,6 +954,18 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_cdrom))
         m_cdrom->Reset();
 
+    if (IsValidPointer(m_fdc))
+        m_fdc->Reset();
+
+    if (IsValidPointer(m_keyboard))
+        m_keyboard->Reset();
+
+    if (IsValidPointer(m_rtc))
+        m_rtc->Reset(m_scheduler->GetClocks());
+
+    if (IsValidPointer(m_dma))
+        m_dma->Reset();
+
     InitMemoryMap();
 
     if (IsValidPointer(m_i386))
@@ -959,13 +1023,13 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to register VRAM");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM (two-page view)", VIDEO_VRAM_SIZE,
-        0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPage, Video::WriteVRAMTwoPage,
-        NULL))
+        0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPageCallback,
+        Video::WriteVRAMTwoPageCallback, NULL))
         Error("Unable to map the two-page VRAM view");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM (single-page view)", VIDEO_VRAM_SIZE,
-        0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePage,
-        Video::WriteVRAMSinglePage, NULL))
+        0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePageCallback,
+        Video::WriteVRAMSinglePageCallback, NULL))
         Error("Unable to map the single-page VRAM view");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", sprite_ram, sprite_ram,
@@ -1010,16 +1074,17 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to register the low CMOS RAM window");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_PLANES, "FM-R VRAM planes", 0x8000, 0x000C0000U,
-        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRPlanes, Video::WriteFMRPlanes, NULL))
+        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRPlanesCallback, Video::WriteFMRPlanesCallback,
+        NULL))
         Error("Unable to register the FM-R VRAM planes");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_TEXT, "FM-R text RAM and ANK font", 0x7000, 0x000C8000U,
-        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRText, Video::WriteFMRText, NULL))
+        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRTextCallback, Video::WriteFMRTextCallback, NULL))
         Error("Unable to register the FM-R text window");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_REGISTERS, "FM-R registers", 0x1000, 0x000CF000U,
-        overlay_flags | GT_DEBUG_REGION_MMIO, m_video, Video::ReadFMRRegisters, Video::WriteFMRRegisters,
-        Video::PeekFMRRegisters))
+        overlay_flags | GT_DEBUG_REGION_MMIO, m_video, Video::ReadFMRRegisterCallback, Video::WriteFMRRegisterCallback,
+        Video::PeekFMRRegisterCallback))
         Error("Unable to register the FM-R registers");
 
     // Registered after the dictionary and CMOS windows so they take priority over it

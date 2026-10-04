@@ -166,6 +166,7 @@ static inline void process(config_Operation operation)
         char section[32];
         snprintf(section, sizeof(section), "Input%d", i + 1);
         CONFIG_INT_RANGE(section, "ControllerType", config_input.controller_type[i], GT_CONTROLLER_ORIGINAL_GAMEPAD, GT_CONTROLLER_NONE, GT_CONTROLLER_6_BUTTON_GAMEPAD);
+        CONFIG_BOOL(section, "UseKeyboard", config_input.use_keyboard[i], i == 0);
     }
 
     // Keyboard

@@ -17,26 +17,31 @@
  *
  */
 
-#ifndef EVENTS_H
-#define EVENTS_H
+#ifndef TOWNS_KEYBOARD_INLINE_H
+#define TOWNS_KEYBOARD_INLINE_H
 
-#include <SDL3/SDL.h>
+#include "towns_keyboard.h"
 
-#ifdef EVENTS_IMPORT
-    #define EXTERN
-#else
-    #define EXTERN extern
-#endif
+INLINE void TownsKeyboard::HandleEvent(u64 clocks)
+{
+    Synchronize(clocks);
+    UpdateNextEvent();
+}
 
-EXTERN bool events_shortcuts(const SDL_Event* event);
-EXTERN void events_emu(const SDL_Event* event, bool shortcut_consumed);
-EXTERN void events_emu(void);
-EXTERN void events_sync_input(void);
-EXTERN void events_release_keyboard(void);
-EXTERN bool events_is_keyboard_active(void);
-EXTERN void events_reset_input(void);
-EXTERN bool events_input_updated(void);
+INLINE bool TownsKeyboard::IsKeyPressed(GT_Keys key) const
+{
+    return IsValidKey(key) && m_state.keys[key];
+}
 
-#undef EVENTS_IMPORT
-#undef EXTERN
-#endif /* EVENTS_H */
+// Code 7Fh only appears in reset responses
+INLINE bool TownsKeyboard::IsValidKey(GT_Keys key) const
+{
+    return key > GT_KEY_NONE && key < 0x7F;
+}
+
+INLINE TownsKeyboard::TownsKeyboard_State* TownsKeyboard::GetState()
+{
+    return &m_state;
+}
+
+#endif /* TOWNS_KEYBOARD_INLINE_H */

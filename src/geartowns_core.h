@@ -25,6 +25,10 @@
 
 class Audio;
 class CDROMMock;
+class FDCMock;
+class TownsKeyboard;
+class TownsRTC;
+class UPD71071;
 class Firmware;
 class I386;
 class Input;
@@ -65,6 +69,7 @@ public:
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
+    void ReleaseAllKeys();
     void Pause(bool paused);
     bool IsPaused();
 
@@ -92,6 +97,10 @@ public:
     Scheduler* GetScheduler();
     Video* GetVideo();
     CDROMMock* GetCDROM();
+    FDCMock* GetFDC();
+    TownsKeyboard* GetKeyboard();
+    TownsRTC* GetRTC();
+    UPD71071* GetDMA();
 
 private:
     template<bool debugger>
@@ -122,6 +131,10 @@ private:
     Scheduler* m_scheduler;
     Video* m_video;
     CDROMMock* m_cdrom;
+    FDCMock* m_fdc;
+    TownsKeyboard* m_keyboard;
+    TownsRTC* m_rtc;
+    UPD71071* m_dma;
 
     bool m_paused;
     GT_Pixel_Format m_pixel_format;

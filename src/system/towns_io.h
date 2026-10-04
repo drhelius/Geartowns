@@ -24,6 +24,10 @@
 
 class Audio;
 class CDROMMock;
+class FDCMock;
+class TownsKeyboard;
+class TownsRTC;
+class UPD71071;
 class YM3438;
 class RF5C68;
 class Memory;
@@ -38,7 +42,7 @@ public:
     TownsIO();
     ~TownsIO();
     void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
-        CDROMMock* cdrom);
+        CDROMMock* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -57,6 +61,10 @@ private:
     Memory* m_memory;
     TownsSystem* m_system;
     CDROMMock* m_cdrom;
+    FDCMock* m_fdc;
+    TownsKeyboard* m_keyboard;
+    TownsRTC* m_rtc;
+    UPD71071* m_dma;
 };
 
 #include "towns_io_inline.h"

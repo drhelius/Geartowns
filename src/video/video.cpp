@@ -241,40 +241,101 @@ void Video::EndFrame()
     }
 }
 
-u8 Video::ReadVRAMTwoPage(void* device, u32 offset)
+u8 Video::ReadVRAMTwoPageCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;
-    return video->m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
+    return video->ReadVRAMTwoPage(offset);
 }
 
-void Video::WriteVRAMTwoPage(void* device, u32 offset, u8 value)
+void Video::WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value)
 {
     Video* video = (Video*)device;
-    u8 mask = video->m_state.mask[offset & 0x03];
-    u8& data = video->m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
+    video->WriteVRAMTwoPage(offset, value);
+}
+
+u8 Video::ReadVRAMSinglePageCallback(void* device, u32 offset)
+{
+    Video* video = (Video*)device;
+    return video->ReadVRAMSinglePage(offset);
+}
+
+void Video::WriteVRAMSinglePageCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    video->WriteVRAMSinglePage(offset, value);
+}
+
+u8 Video::ReadFMRPlanesCallback(void* device, u32 offset)
+{
+    Video* video = (Video*)device;
+    return video->ReadFMRPlanes(offset);
+}
+
+void Video::WriteFMRPlanesCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    video->WriteFMRPlanes(offset, value);
+}
+
+u8 Video::ReadFMRTextCallback(void* device, u32 offset)
+{
+    Video* video = (Video*)device;
+    return video->ReadFMRText(offset);
+}
+
+void Video::WriteFMRTextCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    video->WriteFMRText(offset, value);
+}
+
+u8 Video::ReadFMRRegisterCallback(void* device, u32 offset)
+{
+    Video* video = (Video*)device;
+    return video->ReadFMRRegister(offset, false);
+}
+
+u8 Video::PeekFMRRegisterCallback(void* device, u32 offset)
+{
+    Video* video = (Video*)device;
+    return video->ReadFMRRegister(offset, true);
+}
+
+void Video::WriteFMRRegisterCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    video->WriteFMRRegister(offset, value);
+}
+
+u8 Video::ReadVRAMTwoPage(u32 offset) const
+{
+    return m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
+}
+
+void Video::WriteVRAMTwoPage(u32 offset, u8 value)
+{
+    u8 mask = m_state.mask[offset & 0x03];
+    u8& data = m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
     data = (u8)((data & ~mask) | (value & mask));
 }
 
-u8 Video::ReadVRAMSinglePage(void* device, u32 offset)
+u8 Video::ReadVRAMSinglePage(u32 offset) const
 {
-    Video* video = (Video*)device;
-    return video->m_state.vram[video->SinglePageToCanonical(offset)];
+    return m_state.vram[SinglePageToCanonical(offset)];
 }
 
-void Video::WriteVRAMSinglePage(void* device, u32 offset, u8 value)
+void Video::WriteVRAMSinglePage(u32 offset, u8 value)
 {
-    Video* video = (Video*)device;
-    u8 mask = video->m_state.mask[offset & 0x03];
-    u8& data = video->m_state.vram[video->SinglePageToCanonical(offset)];
+    u8 mask = m_state.mask[offset & 0x03];
+    u8& data = m_state.vram[SinglePageToCanonical(offset)];
     data = (u8)((data & ~mask) | (value & mask));
 }
 
 // C0000-C7FFF reads the plane picked by mask bits 7-6, one bit per pixel with the first pixel in bit 7
-u8 Video::ReadFMRPlanes(void* device, u32 offset)
+u8 Video::ReadFMRPlanes(u32 offset) const
 {
-    Video* video = (Video*)device;
-    const u8* bytes = &video->m_state.vram[video->FMRToCanonical(offset)];
-    int plane = (video->m_state.fmr_mask >> 6) & 0x03;
+    const u8* bytes = &m_state.vram[FMRToCanonical(offset)];
+    int plane = (m_state.fmr_mask >> 6) & 0x03;
     u8 result = 0;
 
     for (int i = 0; i < 4; i++)
@@ -290,11 +351,10 @@ u8 Video::ReadFMRPlanes(void* device, u32 offset)
 }
 
 // Writes set or clear every plane enabled in mask bits 3-0 and keep the others
-void Video::WriteFMRPlanes(void* device, u32 offset, u8 value)
+void Video::WriteFMRPlanes(u32 offset, u8 value)
 {
-    Video* video = (Video*)device;
-    u8* bytes = &video->m_state.vram[video->FMRToCanonical(offset)];
-    u8 planes = video->m_state.fmr_mask & 0x0F;
+    u8* bytes = &m_state.vram[FMRToCanonical(offset)];
+    u8 planes = m_state.fmr_mask & 0x0F;
     u8 enabled = (u8)(planes | (planes << 4));
 
     for (int i = 0; i < 4; i++)
@@ -312,81 +372,62 @@ void Video::WriteFMRPlanes(void* device, u32 offset, u8 value)
 }
 
 // C8000-CAFFF is text RAM at the start of sprite RAM, the ANK font covers CA000-CBFFF and hides C9000-C9FFF
-u8 Video::ReadFMRText(void* device, u32 offset)
+u8 Video::ReadFMRText(u32 offset) const
 {
-    Video* video = (Video*)device;
-
     if (offset < 0x1000)
-        return video->m_state.sprite_ram[offset];
+        return m_state.sprite_ram[offset];
 
-    if (video->m_state.fmr_ank)
+    if (m_state.fmr_ank)
     {
         if (offset >= 0x2000 && offset < 0x4000)
-            return video->m_font_rom[(offset < 0x3000 ? 0x3D000 : 0x3D800) + (offset & 0x0FFF)];
+            return m_font_rom[(offset < 0x3000 ? 0x3D000 : 0x3D800) + (offset & 0x0FFF)];
 
         return 0xFF;
     }
 
-    return offset < 0x3000 ? video->m_state.sprite_ram[offset] : 0xFF;
+    return offset < 0x3000 ? m_state.sprite_ram[offset] : 0xFF;
 }
 
-void Video::WriteFMRText(void* device, u32 offset, u8 value)
+void Video::WriteFMRText(u32 offset, u8 value)
 {
-    Video* video = (Video*)device;
-
     if (offset >= 0x3000)
         return;
 
-    video->m_state.sprite_ram[offset] = value;
-    video->m_state.fmr_text_written = true;
-}
-
-u8 Video::ReadFMRRegisters(void* device, u32 offset)
-{
-    Video* video = (Video*)device;
-    return video->ReadFMRRegister(offset, false);
-}
-
-u8 Video::PeekFMRRegisters(void* device, u32 offset)
-{
-    Video* video = (Video*)device;
-    return video->ReadFMRRegister(offset, true);
+    m_state.sprite_ram[offset] = value;
+    m_state.fmr_text_written = true;
 }
 
 // CF000-CFFFF, the registers sit at CFF80-CFFA0
-void Video::WriteFMRRegisters(void* device, u32 offset, u8 value)
+void Video::WriteFMRRegister(u32 offset, u8 value)
 {
-    Video* video = (Video*)device;
-    Video_State& state = video->m_state;
-
     switch (offset)
     {
         case 0x0F81:
-            state.fmr_mask = value;
+            m_state.fmr_mask = value;
             break;
         case 0x0F82:
-            video->RenderUpTo(video->m_scheduler->GetClocks());
-            state.fmr_display_planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
-            state.fmr_display_page = (value & 0x10) != 0;
+            RenderUpTo(m_scheduler->GetClocks());
+            m_state.fmr_display_planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
+            m_state.fmr_display_page = (value & 0x10) != 0;
             break;
         case 0x0F83:
-            state.fmr_page = (value & 0x10) != 0;
+            m_state.fmr_page = (value & 0x10) != 0;
             break;
         case 0x0F94:
-            state.kanji_high = value & 0x7F;
+            m_state.kanji_high = value & 0x7F;
             break;
         case 0x0F95:
-            state.kanji_low = value;
-            state.kanji_row = 0;
+            m_state.kanji_low = value;
+            m_state.kanji_row = 0;
             break;
         case 0x0F97:
-            state.kanji_row = (state.kanji_row + 1) & 0x0F;
+            m_state.kanji_row = (m_state.kanji_row + 1) & 0x0F;
             break;
         case 0x0F98:
-            video->m_pit->SetMemoryBuzzer(false);
+            m_pit->SetMemoryBuzzer(false);
             break;
         case 0x0F99:
-            state.fmr_ank = (value & 0x01) != 0;
+            m_state.fmr_ank = (value & 0x01) != 0;
             break;
         default:
             break;

@@ -22,10 +22,14 @@
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
 #include "../drive/cdrom_mock.h"
+#include "../drive/fdc_mock.h"
+#include "../input/towns_keyboard.h"
 #include "memory.h"
 #include "towns_pic.h"
 #include "towns_pit.h"
+#include "towns_rtc.h"
 #include "towns_system.h"
+#include "upd71071.h"
 #include "../video/video.h"
 
 TownsIO::TownsIO()
@@ -39,6 +43,10 @@ TownsIO::TownsIO()
     InitPointer(m_memory);
     InitPointer(m_system);
     InitPointer(m_cdrom);
+    InitPointer(m_fdc);
+    InitPointer(m_keyboard);
+    InitPointer(m_rtc);
+    InitPointer(m_dma);
 }
 
 TownsIO::~TownsIO()
@@ -46,7 +54,7 @@ TownsIO::~TownsIO()
 }
 
 void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
-    CDROMMock* cdrom)
+    CDROMMock* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma)
 {
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();
@@ -57,6 +65,10 @@ void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Mem
     m_memory = memory;
     m_system = system;
     m_cdrom = cdrom;
+    m_fdc = fdc;
+    m_keyboard = keyboard;
+    m_rtc = rtc;
+    m_dma = dma;
     Reset();
 }
 
@@ -115,7 +127,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // RTC data
         case 0x0080:
             // RTC command
-            break;
+            return m_rtc->Read(port, context.clocks);
         case 0x00A0:
             // DMA initialize
         case 0x00A1:
@@ -148,7 +160,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // DMA request
         case 0x00AF:
             // DMA mask
-            break;
+            return m_dma->Read(port);
         case 0x0200:
             // FDC status
         case 0x0202:
@@ -163,7 +175,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // FDC drive select
         case 0x020E:
             // FDC drive switch
-            break;
+            return m_fdc->Read(port, context.clocks);
         case 0x0400:
             // Resolution status
             return 0xFE;
@@ -303,7 +315,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // Keyboard status
         case 0x0604:
             // Keyboard interrupt
-            break;
+            return m_keyboard->Read(port, context.clocks);
         case 0x0800:
             // Printer status 1
         case 0x0802:
@@ -356,6 +368,9 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
         case 0xFDA0:
             // Sync status
             return m_video->Read(port, context.clocks);
+        case 0xFF81:
+            // FM-R plane mask
+            return m_video->ReadFMRRegister(0x0F81, false);
         default:
             // CMOS RAM, even ports
             if ((port & 0xF001) == 0x3000)
@@ -421,6 +436,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // RTC data
         case 0x0080:
             // RTC command
+            m_rtc->Write(port, value, context.clocks);
             break;
         case 0x00A0:
             // DMA initialize
@@ -454,6 +470,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // DMA request
         case 0x00AF:
             // DMA mask
+            m_dma->Write(port, value);
             break;
         case 0x0200:
             // FDC command
@@ -469,6 +486,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // FDC drive select
         case 0x020E:
             // FDC drive switch
+            m_fdc->Write(port, value, context.clocks);
             break;
         case 0x0400:
             // Resolution status
@@ -616,6 +634,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Keyboard command
         case 0x0604:
             // Keyboard interrupt
+            m_keyboard->Write(port, value, context.clocks);
             break;
         case 0x0800:
             // Printer data
@@ -669,6 +688,10 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0xFDA0:
             // CRT output control
             m_video->Write(port, value, context.clocks);
+            break;
+        case 0xFF81:
+            // FM-R plane mask
+            m_video->WriteFMRRegister(0x0F81, value);
             break;
         default:
             // CMOS RAM, even ports

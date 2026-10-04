@@ -163,6 +163,9 @@
     <ClCompile Include="..\..\src\system\i8253.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\video\video.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\media\media.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -237,6 +240,8 @@
     <ClInclude Include="..\..\src\system\towns_pit_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\video\video.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\video\video_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\rf5c68.h"><Filter>src</Filter></ClInclude>

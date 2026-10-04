@@ -71,3 +71,8 @@ INLINE TownsPIT* GeartownsCore::GetPIT()
 {
     return m_pit;
 }
+
+INLINE Video* GeartownsCore::GetVideo()
+{
+    return m_video;
+}

@@ -23,6 +23,7 @@
 #include "../audio/rf5c68.h"
 #include "towns_pic.h"
 #include "towns_pit.h"
+#include "../video/video.h"
 
 TownsIO::TownsIO()
 {
@@ -30,18 +31,20 @@ TownsIO::TownsIO()
     InitPointer(m_rf5c68);
     InitPointer(m_pic);
     InitPointer(m_pit);
+    InitPointer(m_video);
 }
 
 TownsIO::~TownsIO()
 {
 }
 
-void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit)
+void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video)
 {
     m_ym3438 = audio->GetYM3438();
     m_rf5c68 = audio->GetRF5C68();
     m_pic = pic;
     m_pit = pit;
+    m_video = video;
     Reset();
 }
 
@@ -166,16 +169,17 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // Video output data
         case 0x044C:
             // Palette and sprite status
-        case 0x0450:
-            // Sprite address
-        case 0x0452:
-            // Sprite data
         case 0x0458:
             // VRAM mask address
         case 0x045A:
             // VRAM mask low
         case 0x045B:
             // VRAM mask high
+            return m_video->Read(port, context.time_ns);
+        case 0x0450:
+            // Sprite address
+        case 0x0452:
+            // Sprite data
             break;
         case 0x0480:
             // System ROM mapping
@@ -333,7 +337,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // FM-R digital palette 7
         case 0xFDA0:
             // Sync status
-            break;
+            return m_video->Read(port, context.time_ns);
         default:
             // CMOS RAM, even ports
             if ((port & 0xF001) == 0x3000)
@@ -464,16 +468,18 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Video output data
         case 0x044C:
             // Palette and sprite status
-        case 0x0450:
-            // Sprite address
-        case 0x0452:
-            // Sprite data
         case 0x0458:
             // VRAM mask address
         case 0x045A:
             // VRAM mask low
         case 0x045B:
             // VRAM mask high
+            m_video->Write(port, value, context.time_ns);
+            break;
+        case 0x0450:
+            // Sprite address
+        case 0x0452:
+            // Sprite data
             break;
         case 0x0480:
             // System ROM mapping
@@ -568,8 +574,10 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x05C8:
             // Text VRAM written
+            break;
         case 0x05CA:
             // VSYNC interrupt clear
+            m_video->Write(port, value, context.time_ns);
             break;
         case 0x05E0:
             // Main RAM wait
@@ -632,6 +640,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // FM-R digital palette 7
         case 0xFDA0:
             // CRT output control
+            m_video->Write(port, value, context.time_ns);
             break;
         default:
             // CMOS RAM, even ports

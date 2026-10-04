@@ -32,6 +32,7 @@
 #include "system/towns_io.h"
 #include "system/towns_pic.h"
 #include "system/towns_pit.h"
+#include "video/video.h"
 
 GeartownsCore::GeartownsCore()
 {
@@ -44,6 +45,7 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_towns_io);
     InitPointer(m_pic);
     InitPointer(m_pit);
+    InitPointer(m_video);
     InitPointer(m_frame_buffer);
 
     m_machine_time = 0;
@@ -61,6 +63,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_towns_io);
     SafeDelete(m_pic);
     SafeDelete(m_pit);
+    SafeDelete(m_video);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
 }
@@ -96,12 +99,16 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_pit))
         m_pit = new TownsPIT();
 
+    if (!IsValidPointer(m_video))
+        m_video = new Video();
+
     m_firmware->Init();
     m_memory->Init();
     m_audio->Init();
     m_pic->Init();
     m_pit->Init(m_pic);
-    m_towns_io->Init(m_audio, m_pic, m_pit);
+    m_video->Init(m_pic, m_pixel_format);
+    m_towns_io->Init(m_audio, m_pic, m_pit, m_video);
     m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
     m_media->Init();
@@ -126,7 +133,6 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     GT_Debug_Run* debug, bool render)
 {
     m_frame_buffer = frame_buffer;
-    UNUSED(render);
 
     if (sample_count != NULL)
         *sample_count = 0;
@@ -138,6 +144,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         return GT_RUN_NOT_READY;
 
     u64 elapsed_clocks = 0;
+    m_video->BeginFrame(frame_buffer, render);
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
     if (debugger && IsValidPointer(debug))
@@ -145,7 +152,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         debug->stopped = false;
         debug->breakpoint_hit = false;
 
-        while (elapsed_clocks < GT_CPU_CLOCKS_PER_FRAME)
+        while (!m_video->IsFrameReady() && elapsed_clocks < GetFrameClockLimit())
         {
             I386_Debug_State debug_state;
             m_i386->CopyDebugState(debug_state);
@@ -199,7 +206,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     UNUSED(debug);
 #endif
     {
-        while (elapsed_clocks < GT_CPU_CLOCKS_PER_FRAME)
+        while (!m_video->IsFrameReady() && elapsed_clocks < GetFrameClockLimit())
         {
             GT_Bus_Access_Context context = {};
             context.origin = GT_BUS_ORIGIN_CPU;
@@ -220,6 +227,8 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         }
     }
 
+    m_video->EndFrame();
+
     // Debugger memory views refresh once per executed frame or debugger step
     if (elapsed_clocks != 0)
         m_memory->InvalidateDebugSnapshot();
@@ -232,11 +241,23 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     return GT_RUN_FRAME_READY;
 }
 
+// A running CRTC ends the frame at VSYNC
+// The limit only guards against a stalled or very long frame
+u64 GeartownsCore::GetFrameClockLimit() const
+{
+    return m_video->IsRunning() ? GT_CPU_CLOCKS_PER_FRAME * 4 : GT_CPU_CLOCKS_PER_FRAME;
+}
+
 // Batches stop at the next device event so its IRQ is sampled on time
 u32 GeartownsCore::GetBatchBudget(u64 elapsed_clocks) const
 {
-    u64 budget = GT_CPU_CLOCKS_PER_FRAME - elapsed_clocks;
-    u64 next_event = m_pit->GetNextEventTime();
+    u64 limit = GetFrameClockLimit();
+
+    if (elapsed_clocks >= limit)
+        return 1;
+
+    u64 budget = limit - elapsed_clocks;
+    u64 next_event = MIN(m_pit->GetNextEventTime(), m_video->GetNextEventTime());
 
     if (next_event == GT_NO_EVENT)
         return (u32)budget;
@@ -264,6 +285,7 @@ u32 GeartownsCore::CompleteBatch(u32 clocks, GT_Bus_Access_Context& context)
 {
     AdvanceMachineTime(clocks);
     m_pit->Synchronize(m_machine_time);
+    m_video->Synchronize(m_machine_time);
 
     if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
     {
@@ -431,6 +453,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_input->SaveState(stream);
     m_pic->SaveState(stream);
     m_pit->SaveState(stream);
+    m_video->SaveState(stream);
 
     if (stream.fail())
     {
@@ -649,6 +672,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
     m_pit->LoadState(stream);
+    m_video->LoadState(stream);
 
     if (stream.fail())
     {
@@ -827,8 +851,8 @@ std::string GeartownsCore::GetSaveStatePath(const char* path, int index)
 
 void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 {
-    runtime_info.screen_width = GT_FRAME_BUFFER_WIDTH;
-    runtime_info.screen_height = GT_FRAME_BUFFER_HEIGHT;
+    runtime_info.screen_width = IsValidPointer(m_video) ? m_video->GetFrameWidth() : GT_FRAME_BUFFER_WIDTH;
+    runtime_info.screen_height = IsValidPointer(m_video) ? m_video->GetFrameHeight() : GT_FRAME_BUFFER_HEIGHT;
     runtime_info.width_scale = 1;
     runtime_info.sample_rate = GT_AUDIO_SAMPLE_RATE;
     runtime_info.media_ready = IsValidPointer(m_media) && m_media->IsReady();
@@ -853,6 +877,9 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_pit))
         m_pit->Reset();
+
+    if (IsValidPointer(m_video))
+        m_video->Reset();
 
     InitMemoryMap();
 
@@ -889,4 +916,26 @@ void GeartownsCore::InitMemoryMap()
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_MAIN_RAM, "Main RAM", main_ram, main_ram, GT_MAIN_RAM_SIZE, 0,
         ram_flags))
         Error("Unable to map main RAM");
+
+    u32 vram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_VIDEO;
+    u32 sprite_ram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED;
+    u8* vram = m_video->GetVRAM();
+    u8* sprite_ram = m_video->GetSpriteRAM();
+
+    // Canonical VRAM for raw debugger access, the bus reaches it through the two views
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_VRAM, "VRAM", vram, vram, VIDEO_VRAM_SIZE, 0, vram_flags))
+        Error("Unable to register VRAM");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM (two-page view)", VIDEO_VRAM_SIZE,
+        0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPage, Video::WriteVRAMTwoPage))
+        Error("Unable to map the two-page VRAM view");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM (single-page view)", VIDEO_VRAM_SIZE,
+        0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePage,
+        Video::WriteVRAMSinglePage))
+        Error("Unable to map the single-page VRAM view");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", sprite_ram, sprite_ram,
+        VIDEO_SPRITE_RAM_SIZE, 0x81000000U, sprite_ram_flags))
+        Error("Unable to map sprite RAM");
 }

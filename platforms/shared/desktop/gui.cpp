@@ -161,7 +161,7 @@ void gui_render(void)
 
     gui_main_window_hovered = false;
 
-    if (!config_debug.debug && !emu_is_empty())
+    if ((!config_debug.debug && !emu_is_empty()) || (config_debug.debug && config_debug.show_screen))
         main_window();
 
     gui_debug_windows();
@@ -442,7 +442,7 @@ static void main_window(void)
     int physical_w = (int)floorf(logical_w * framebuffer_scale_x);
     int physical_h = (int)floorf(logical_h * framebuffer_scale_y);
 
-    int selected_ratio = config_video.ratio;
+    int selected_ratio = config_debug.debug ? 0 : config_video.ratio;
     float ratio = 0;
 
     switch (selected_ratio)
@@ -463,7 +463,7 @@ static void main_window(void)
             ratio = ((float)runtime.screen_width / (float)runtime.width_scale) / (float)runtime.screen_height;
     }
 
-    if (config_video.scale == 3)
+    if (!config_debug.debug && config_video.scale == 3)
     {
         ratio = logical_w / logical_h;
     }
@@ -474,54 +474,63 @@ static void main_window(void)
     int w_corrected, h_corrected;
     int scale_multiplier = 0;
 
-    if (selected_ratio == 0)
+    if (config_debug.debug)
     {
+        scale_multiplier = config_debug.scale;
         w_corrected = base_width;
         h_corrected = base_height;
     }
     else
     {
-        w_corrected = (int)round(base_height * ratio);
-        h_corrected = base_height;
-    }
+        if (selected_ratio == 0)
+        {
+            w_corrected = base_width;
+            h_corrected = base_height;
+        }
+        else
+        {
+            w_corrected = (int)round(base_height * ratio);
+            h_corrected = base_height;
+        }
 
-    switch (config_video.scale)
-    {
-    case 0:
-    {
-        int factor_w = physical_w / w_corrected;
-        int factor_h = physical_h / h_corrected;
-        scale_multiplier = (factor_w < factor_h) ? factor_w : factor_h;
-        break;
-    }
+        switch (config_video.scale)
+        {
+        case 0:
+        {
+            int factor_w = physical_w / w_corrected;
+            int factor_h = physical_h / h_corrected;
+            scale_multiplier = (factor_w < factor_h) ? factor_w : factor_h;
+            break;
+        }
 
-    case 1:
-        scale_multiplier = config_video.scale_manual;
-        break;
-    case 2:
-        scale_multiplier = 1;
-        h_corrected = h;
-        w_corrected = (int)round(h * ratio);
-        break;
-    case 3:
-        scale_multiplier = 1;
-        w_corrected = w;
-        h_corrected = h;
-        break;
-    default:
-        scale_multiplier = 1;
-        break;
-    }
+        case 1:
+            scale_multiplier = config_video.scale_manual;
+            break;
+        case 2:
+            scale_multiplier = 1;
+            h_corrected = h;
+            w_corrected = (int)round(h * ratio);
+            break;
+        case 3:
+            scale_multiplier = 1;
+            w_corrected = w;
+            h_corrected = h;
+            break;
+        default:
+            scale_multiplier = 1;
+            break;
+        }
 
-    if (config_video.scale <= 1 && scale_multiplier < 1)
-    {
-        scale_multiplier = 1;
+        if (config_video.scale <= 1 && scale_multiplier < 1)
+        {
+            scale_multiplier = 1;
+        }
     }
 
     float image_w = (float)(w_corrected * scale_multiplier);
     float image_h = (float)(h_corrected * scale_multiplier);
 
-    if (config_video.scale <= 1)
+    if (config_debug.debug || config_video.scale <= 1)
     {
         image_w /= framebuffer_scale_x;
         image_h /= framebuffer_scale_y;
@@ -547,21 +556,34 @@ static void main_window(void)
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar;
     bool window_visible = false;
 
-    float window_x = (logical_w - image_w) * 0.5f;
-    float window_y = ((logical_h - image_h) * 0.5f) + (application_show_menu ? (float)gui_main_menu_height : 0.0f);
+    if (config_debug.debug)
+    {
+        flags |= ImGuiWindowFlags_AlwaysAutoResize;
 
-    window_x = roundf(window_x * framebuffer_scale_x) / framebuffer_scale_x;
-    window_y = roundf(window_y * framebuffer_scale_y) / framebuffer_scale_y;
+        ImGui::SetNextWindowPos(ImVec2(631, 26), ImGuiCond_FirstUseEver);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
-    ImGui::SetNextWindowSize(ImVec2(image_w, image_h));
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(window_x, window_y));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        window_visible = ImGui::Begin("Output###debug_output", &config_debug.show_screen, flags);
+        gui_main_window_hovered = ImGui::IsWindowHovered();
+    }
+    else
+    {
+        float window_x = (logical_w - image_w) * 0.5f;
+        float window_y = ((logical_h - image_h) * 0.5f) + (application_show_menu ? (float)gui_main_menu_height : 0.0f);
 
-    flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+        window_x = roundf(window_x * framebuffer_scale_x) / framebuffer_scale_x;
+        window_y = roundf(window_y * framebuffer_scale_y) / framebuffer_scale_y;
 
-    window_visible = ImGui::Begin(GT_TITLE, 0, flags);
-    gui_main_window_hovered = ImGui::IsWindowHovered();
+        ImGui::SetNextWindowSize(ImVec2(image_w, image_h));
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(window_x, window_y));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+        flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        window_visible = ImGui::Begin(GT_TITLE, 0, flags);
+        gui_main_window_hovered = ImGui::IsWindowHovered();
+    }
 
     OglRendererScreenGeometry screen_geometry;
     screen_geometry.logical_width = image_logical_width;

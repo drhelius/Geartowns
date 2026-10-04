@@ -28,6 +28,7 @@ static inline void process(config_Operation operation)
 
     // Debugger
     CONFIG_BOOL("Debug", "Debug", config_debug.debug, false);
+    CONFIG_BOOL("Debug", "Screen", config_debug.show_screen, true);
     CONFIG_BOOL("Debug", "Memory", config_debug.show_memory, false);
     CONFIG_BOOL("Debug", "Disassembler", config_debug.show_disassembler, true);
     CONFIG_BOOL("Debug", "Processor", config_debug.show_processor, true);
@@ -49,6 +50,7 @@ static inline void process(config_Operation operation)
 
     // Interface
     CONFIG_INT_RANGE("Debug", "FontSize", config_debug.font_size, 0, 0, 3);
+    CONFIG_INT_RANGE("Debug", "Scale", config_debug.scale, 1, 1, 10);
     CONFIG_BOOL("Debug", "MultiViewport", config_debug.multi_viewport, false);
     CONFIG_BOOL("Debug", "SingleInstance", config_debug.single_instance, false);
 

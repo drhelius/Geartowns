@@ -32,6 +32,7 @@ class Memory;
 class TownsIO;
 class TownsPIC;
 class TownsPIT;
+class Video;
 class StateSerializer;
 
 class GeartownsCore
@@ -87,6 +88,7 @@ public:
     TownsIO* GetIO();
     TownsPIC* GetPIC();
     TownsPIT* GetPIT();
+    Video* GetVideo();
 
 private:
     template<bool debugger>
@@ -94,6 +96,7 @@ private:
         bool render);
     void Reset();
     void InitMemoryMap();
+    u64 GetFrameClockLimit() const;
     u32 GetBatchBudget(u64 elapsed_clocks) const;
     void AdvanceMachineTime(u32 clocks);
     u32 CompleteBatch(u32 clocks, GT_Bus_Access_Context& context);
@@ -113,6 +116,7 @@ private:
     TownsIO* m_towns_io;
     TownsPIC* m_pic;
     TownsPIT* m_pit;
+    Video* m_video;
 
     u64 m_machine_time;
     u32 m_machine_time_remainder;

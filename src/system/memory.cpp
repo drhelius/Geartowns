@@ -242,6 +242,44 @@ bool Memory::RegisterDebugRegion(int id, const char* name, const u8* read_data, 
     return true;
 }
 
+// Handler regions never get host pages, so every CPU access reaches the device
+// Their read handler must be free of side effects unless the region is flagged as MMIO
+bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
+    GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8)
+{
+    if (id <= 0 ||
+        !IsValidPointer(name) ||
+        name[0] == 0 ||
+        size == 0 ||
+        m_debug_region_count >= GT_DEBUG_MEMORY_MAX_REGIONS ||
+        IsValidPointer(FindRegion(id)))
+        return false;
+
+    if ((flags & GT_DEBUG_REGION_READABLE) != 0 && !IsValidPointer(read8))
+        return false;
+
+    if ((flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(write8))
+        return false;
+
+    if ((flags & GT_DEBUG_REGION_MAPPED) != 0 && (u64)physical_base + size > 0x100000000ULL)
+        return false;
+
+    DebugRegion& region = m_debug_regions[m_debug_region_count++];
+    memset(&region, 0, sizeof(region));
+    region.info.id = id;
+    strncpy_fit(region.info.name, name, sizeof(region.info.name));
+    region.info.size = size;
+    region.info.physical_base = physical_base;
+    region.info.flags = flags;
+    region.device = device;
+    region.read8 = read8;
+    region.write8 = write8;
+
+    m_map_generation++;
+    m_debug_snapshot_id++;
+    return true;
+}
+
 int Memory::GetDebugRegionCount() const
 {
     return m_debug_region_count;
@@ -409,7 +447,7 @@ bool Memory::DebugWritePhysicalBlock(u32 physical, const u8* data, u32 size)
         DebugRegion* region = FindMappedRegion(bus);
 
         if (!IsValidPointer(region) ||
-            !IsValidPointer(region->write_data) ||
+            (!IsValidPointer(region->write_data) && !IsValidPointer(region->write8)) ||
             (region->info.flags & GT_DEBUG_REGION_WRITABLE) == 0)
             return false;
     }
@@ -418,7 +456,12 @@ bool Memory::DebugWritePhysicalBlock(u32 physical, const u8* data, u32 size)
     {
         u32 bus = NormalizePhysicalAddress(physical + i);
         DebugRegion* region = FindMappedRegion(bus);
-        region->write_data[bus - region->info.physical_base] = data[i];
+        u32 offset = bus - region->info.physical_base;
+
+        if (IsValidPointer(region->write8))
+            region->write8(region->device, offset, data[i]);
+        else
+            region->write_data[offset] = data[i];
     }
 
     m_debug_snapshot_id++;
@@ -440,7 +483,7 @@ bool Memory::DebugWriteBusBlock(u32 bus_address, const u8* data, u32 size)
         DebugRegion* region = FindMappedRegion((u32)current);
 
         if (!IsValidPointer(region) ||
-            !IsValidPointer(region->write_data) ||
+            (!IsValidPointer(region->write_data) && !IsValidPointer(region->write8)) ||
             (region->info.flags & GT_DEBUG_REGION_WRITABLE) == 0)
             return false;
     }
@@ -448,7 +491,12 @@ bool Memory::DebugWriteBusBlock(u32 bus_address, const u8* data, u32 size)
     for (u32 i = 0; i < size; i++)
     {
         DebugRegion* region = FindMappedRegion(bus_address + i);
-        region->write_data[bus_address + i - region->info.physical_base] = data[i];
+        u32 offset = bus_address + i - region->info.physical_base;
+
+        if (IsValidPointer(region->write8))
+            region->write8(region->device, offset, data[i]);
+        else
+            region->write_data[offset] = data[i];
     }
 
     m_debug_snapshot_id++;
@@ -585,11 +633,7 @@ GT_Debug_Memory_Status Memory::DebugReadRegion(int id, u32 offset, u8& value) co
     if (!IsValidPointer(region) || offset >= region->info.size)
         return GT_DEBUG_MEMORY_UNMAPPED;
 
-    if ((region->info.flags & GT_DEBUG_REGION_READABLE) == 0 || !IsValidPointer(region->read_data))
-        return GT_DEBUG_MEMORY_UNAVAILABLE;
-
-    value = region->read_data[offset];
-    return (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 ? GT_DEBUG_MEMORY_VALID : GT_DEBUG_MEMORY_READ_ONLY;
+    return ReadRegion(*region, offset, value);
 }
 
 GT_Debug_Memory_Status Memory::DebugReadBus(u32 bus_address, u8& value) const
@@ -600,11 +644,22 @@ GT_Debug_Memory_Status Memory::DebugReadBus(u32 bus_address, u8& value) const
     if (!IsValidPointer(region))
         return GT_DEBUG_MEMORY_UNMAPPED;
 
-    if ((region->info.flags & GT_DEBUG_REGION_READABLE) == 0 || !IsValidPointer(region->read_data))
+    return ReadRegion(*region, bus_address - region->info.physical_base, value);
+}
+
+GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset, u8& value) const
+{
+    if ((region.info.flags & GT_DEBUG_REGION_READABLE) == 0)
         return GT_DEBUG_MEMORY_UNAVAILABLE;
 
-    value = region->read_data[bus_address - region->info.physical_base];
-    return (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 ? GT_DEBUG_MEMORY_VALID : GT_DEBUG_MEMORY_READ_ONLY;
+    if (IsValidPointer(region.read8))
+        value = region.read8(region.device, offset);
+    else if (IsValidPointer(region.read_data))
+        value = region.read_data[offset];
+    else
+        return GT_DEBUG_MEMORY_UNAVAILABLE;
+
+    return (region.info.flags & GT_DEBUG_REGION_WRITABLE) != 0 ? GT_DEBUG_MEMORY_VALID : GT_DEBUG_MEMORY_READ_ONLY;
 }
 
 void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
@@ -612,7 +667,7 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
     DebugRegion* region = FindMappedRegion(bus_address);
 
     if (!IsValidPointer(region) ||
-        !IsValidPointer(region->write_data) ||
+        (!IsValidPointer(region->write_data) && !IsValidPointer(region->write8)) ||
         (region->info.flags & GT_DEBUG_REGION_WRITABLE) == 0)
         return;
 
@@ -620,10 +675,16 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
 
     if (IsValidPointer(context.observe_memory_write))
     {
-        context.observe_memory_write(context.memory_write_context, bus_address, region->write_data[offset], value);
+        u8 previous = 0;
+        ReadRegion(*region, offset, previous);
+        context.observe_memory_write(context.memory_write_context, bus_address, previous, value);
     }
 
-    region->write_data[offset] = value;
+    if (IsValidPointer(region->write8))
+        region->write8(region->device, offset, value);
+    else
+        region->write_data[offset] = value;
+
     m_debug_snapshot_id++;
 }
 

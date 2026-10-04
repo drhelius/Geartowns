@@ -27,13 +27,14 @@ class YM3438;
 class RF5C68;
 class TownsPIC;
 class TownsPIT;
+class Video;
 
 class TownsIO
 {
 public:
     TownsIO();
     ~TownsIO();
-    void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit);
+    void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -47,6 +48,7 @@ private:
     RF5C68* m_rf5c68;
     TownsPIC* m_pic;
     TownsPIT* m_pit;
+    Video* m_video;
 };
 
 #include "towns_io_inline.h"

@@ -1143,6 +1143,23 @@ static void menu_debug(void)
 
         ImGui::Separator();
 
+        if (ImGui::BeginMenu("Debug Output Screen", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Output Screen", "", &config_debug.show_screen, config_debug.debug);
+
+            if (ImGui::BeginMenu("Scale", config_debug.debug))
+            {
+                ImGui::PushItemWidth(200.0f);
+                ImGui::SliderInt("##debug_scale", &config_debug.scale, 1, 10);
+                ImGui::PopItemWidth();
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+
         ImGui::MenuItem("Show Intel 80386", "", &config_debug.show_processor, config_debug.debug);
         ImGui::MenuItem("Show 80386 System State", "", &config_debug.show_processor_details, config_debug.debug);
         ImGui::MenuItem("Show Memory Workspace", "", &config_debug.show_memory, config_debug.debug);

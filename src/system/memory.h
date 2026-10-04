@@ -24,6 +24,9 @@
 #include "../common/common.h"
 #include "../common/debug_memory.h"
 
+typedef u8 (*GT_Memory_Read8_Fn)(void* device, u32 offset);
+typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
+
 class Memory
 {
 public:
@@ -47,6 +50,8 @@ public:
 
     void ClearDebugRegions();
     bool RegisterDebugRegion(int id, const char* name, const u8* read_data, u8* write_data, u32 size, u32 physical_base, u32 flags);
+    bool RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
+        GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8);
     int GetDebugRegionCount() const;
     bool GetDebugRegion(int index, GT_Debug_Memory_Region& region) const;
     void DebugReadRegionBlock(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
@@ -85,6 +90,9 @@ private:
         GT_Debug_Memory_Region info;
         const u8* read_data;
         u8* write_data;
+        void* device;
+        GT_Memory_Read8_Fn read8;
+        GT_Memory_Write8_Fn write8;
     };
 
     const DebugRegion* FindRegion(int id) const;
@@ -94,6 +102,7 @@ private:
     const DebugRegion* FindMappedSpan(u32 physical, u32 size) const;
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
+    GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
     u32 NormalizePhysicalAddress(u32 physical) const;
     void UpdateRAMRegions();

@@ -196,6 +196,7 @@ struct config_Hotkey
 struct config_Debug
 {
     bool debug;
+    bool show_screen;
     bool show_memory;
     bool show_disassembler;
     bool show_processor;
@@ -215,6 +216,7 @@ struct config_Debug
     int dis_look_ahead_count;
     bool step_skip_interrupts;
     int font_size;
+    int scale;
     bool multi_viewport;
     bool single_instance;
 };

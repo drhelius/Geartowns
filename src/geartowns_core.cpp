@@ -21,14 +21,14 @@
 #include <sstream>
 #include <time.h>
 #include "geartowns_core.h"
-#include "audio.h"
-#include "firmware.h"
-#include "input.h"
-#include "memory_stream.h"
-#include "media.h"
-#include "memory.h"
-#include "i386.h"
-#include "towns_io.h"
+#include "audio/audio.h"
+#include "media/firmware.h"
+#include "input/input.h"
+#include "common/memory_stream.h"
+#include "media/media.h"
+#include "system/memory.h"
+#include "i386/i386.h"
+#include "system/towns_io.h"
 
 GeartownsCore::GeartownsCore()
 {

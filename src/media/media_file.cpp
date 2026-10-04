@@ -19,7 +19,7 @@
 
 #include "media_file.h"
 #include "media_file_native.h"
-#include "common.h"
+#include "../common/common.h"
 
 #if defined(__LIBRETRO__)
 #include "media_file_libretro.h"

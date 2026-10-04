@@ -26,10 +26,10 @@
 #include <vector>
 #include "imgui.h"
 #include "fonts/IconsMaterialDesign.h"
-#include "config.h"
-#include "emu.h"
-#include "gui.h"
-#include "gui_actions.h"
+#include "../config.h"
+#include "../emu.h"
+#include "../gui.h"
+#include "../gui_actions.h"
 #include "gui_debug.h"
 #include "gui_debug_constants.h"
 

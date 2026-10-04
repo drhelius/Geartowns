@@ -18,7 +18,7 @@
  */
 
 #include "i386.h"
-#include "memory.h"
+#include "../system/memory.h"
 
 // Instruction encoding:
 // M = ModR/M byte, P = prefix, immediate I8 = byte,

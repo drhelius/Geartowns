@@ -27,8 +27,8 @@
 #include "emu.h"
 #include "gui.h"
 #include "gui_actions.h"
-#include "gui_debug.h"
-#include "gui_debug_memory.h"
+#include "debug/gui_debug.h"
+#include "debug/gui_debug_memory.h"
 #include "gui_menus.h"
 #include "utils.h"
 

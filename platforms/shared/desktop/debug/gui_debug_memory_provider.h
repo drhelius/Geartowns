@@ -21,7 +21,7 @@
 #define GUI_DEBUG_MEMORY_PROVIDER_H
 
 #include <vector>
-#include "debug_memory.h"
+#include "common/debug_memory.h"
 
 class DebugMemoryProvider
 {

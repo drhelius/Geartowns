@@ -12,27 +12,27 @@ SOURCES_C   :=  $(DEPS_DIR)/miniz/miniz.c \
 SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(CORE_DIR)/libretro_vfs_file.cpp \
                 $(SOURCE_DIR)/geartowns_core.cpp \
-                $(SOURCE_DIR)/audio.cpp \
-                $(SOURCE_DIR)/firmware.cpp \
-                $(SOURCE_DIR)/i386.cpp \
-                $(SOURCE_DIR)/i386_disassembler.cpp \
-                $(SOURCE_DIR)/i386_encoding.cpp \
-                $(SOURCE_DIR)/i386_functors.cpp \
-                $(SOURCE_DIR)/i386_memory.cpp \
-                $(SOURCE_DIR)/i386_opcodes.cpp \
-                $(SOURCE_DIR)/i386_opcodes_0f.cpp \
-                $(SOURCE_DIR)/i386_opcodes_groups.cpp \
-                $(SOURCE_DIR)/i386_opcodes_string.cpp \
-                $(SOURCE_DIR)/i386_opcodes_transfer.cpp \
-                $(SOURCE_DIR)/i386_protected.cpp \
-                $(SOURCE_DIR)/i386_protected_transfer.cpp \
-                $(SOURCE_DIR)/i386_task.cpp \
-                $(SOURCE_DIR)/input.cpp \
-                $(SOURCE_DIR)/media_file.cpp \
-                $(SOURCE_DIR)/media_file_libretro.cpp \
-                $(SOURCE_DIR)/media_file_native.cpp \
-                $(SOURCE_DIR)/media.cpp \
-                $(SOURCE_DIR)/memory.cpp \
-                $(SOURCE_DIR)/rf5c68.cpp \
-                $(SOURCE_DIR)/towns_io.cpp \
-                $(SOURCE_DIR)/ym3438.cpp
+                $(SOURCE_DIR)/audio/audio.cpp \
+                $(SOURCE_DIR)/audio/rf5c68.cpp \
+                $(SOURCE_DIR)/audio/ym3438.cpp \
+                $(SOURCE_DIR)/i386/i386.cpp \
+                $(SOURCE_DIR)/i386/i386_disassembler.cpp \
+                $(SOURCE_DIR)/i386/i386_encoding.cpp \
+                $(SOURCE_DIR)/i386/i386_functors.cpp \
+                $(SOURCE_DIR)/i386/i386_memory.cpp \
+                $(SOURCE_DIR)/i386/i386_opcodes.cpp \
+                $(SOURCE_DIR)/i386/i386_opcodes_0f.cpp \
+                $(SOURCE_DIR)/i386/i386_opcodes_groups.cpp \
+                $(SOURCE_DIR)/i386/i386_opcodes_string.cpp \
+                $(SOURCE_DIR)/i386/i386_opcodes_transfer.cpp \
+                $(SOURCE_DIR)/i386/i386_protected.cpp \
+                $(SOURCE_DIR)/i386/i386_protected_transfer.cpp \
+                $(SOURCE_DIR)/i386/i386_task.cpp \
+                $(SOURCE_DIR)/input/input.cpp \
+                $(SOURCE_DIR)/media/firmware.cpp \
+                $(SOURCE_DIR)/media/media.cpp \
+                $(SOURCE_DIR)/media/media_file.cpp \
+                $(SOURCE_DIR)/media/media_file_libretro.cpp \
+                $(SOURCE_DIR)/media/media_file_native.cpp \
+                $(SOURCE_DIR)/system/memory.cpp \
+                $(SOURCE_DIR)/system/towns_io.cpp

@@ -23,8 +23,8 @@
 #include "config.h"
 #include "emu.h"
 #include "gui.h"
-#include "gui_debug.h"
-#include "log.h"
+#include "debug/gui_debug.h"
+#include "common/log.h"
 
 static volatile bool headless_running = true;
 

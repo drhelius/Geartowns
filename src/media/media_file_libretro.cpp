@@ -21,7 +21,7 @@
 
 #if defined(__LIBRETRO__)
 
-#include "common.h"
+#include "../common/common.h"
 
 const retro_vfs_interface* MediaFileLibretro::s_vfs_interface = NULL;
 

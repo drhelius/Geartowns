@@ -20,7 +20,7 @@
 #ifndef LIBRETRO_VFS_FILE_H
 #define LIBRETRO_VFS_FILE_H
 
-#include "types.h"
+#include "common/types.h"
 #include "libretro.h"
 
 class LibretroVfsFile

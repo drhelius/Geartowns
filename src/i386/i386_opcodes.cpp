@@ -20,7 +20,7 @@
 #include <limits.h>
 #include "i386.h"
 #include "i386_opcodes_inline.h"
-#include "towns_io.h"
+#include "../system/towns_io.h"
 
 bool I386::OPCode0x00()
 {

@@ -21,7 +21,7 @@
 #define YM3438_H
 
 #include <iostream>
-#include "common.h"
+#include "../common/common.h"
 
 #define YM3438_CHANNEL_COUNT 6
 #define YM3438_OPERATOR_COUNT 4

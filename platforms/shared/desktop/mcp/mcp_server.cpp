@@ -23,7 +23,7 @@
 #include <iomanip>
 #include <fstream>
 #include <stdlib.h>
-#include "log.h"
+#include "common/log.h"
 
 bool g_mcp_router_enabled = false;
 

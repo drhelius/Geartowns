@@ -35,8 +35,8 @@
 #include "gui_menus.h"
 #include "gui_popups.h"
 #include "gui_actions.h"
-#include "gui_debug_disassembler.h"
-#include "gui_debug.h"
+#include "debug/gui_debug_disassembler.h"
+#include "debug/gui_debug.h"
 
 static bool status_message_active = false;
 static char status_message[4096] = "";

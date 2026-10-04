@@ -18,7 +18,7 @@
  */
 
 #include "input.h"
-#include "state_serializer.h"
+#include "../common/state_serializer.h"
 
 Input::Input()
 {

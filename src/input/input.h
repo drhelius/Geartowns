@@ -21,7 +21,7 @@
 #define INPUT_H
 
 #include <iostream>
-#include "common.h"
+#include "../common/common.h"
 
 class StateSerializer;
 

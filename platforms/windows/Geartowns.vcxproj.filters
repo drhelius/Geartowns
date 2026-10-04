@@ -28,22 +28,22 @@
     <ClCompile Include="..\shared\desktop\runahead.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug.cpp">
+    <ClCompile Include="..\shared\desktop\debug\gui_debug.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp">
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_disassembler.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_i386.cpp">
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_i386.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_memory_provider.cpp">
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_memory_provider.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_memeditor.cpp">
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_memeditor.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_memory.cpp">
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_memory.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_popups.cpp">
@@ -94,76 +94,76 @@
     <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\audio.cpp">
+    <ClCompile Include="..\..\src\audio\audio.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\firmware.cpp">
+    <ClCompile Include="..\..\src\media\firmware.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386.cpp">
+    <ClCompile Include="..\..\src\i386\i386.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_disassembler.cpp">
+    <ClCompile Include="..\..\src\i386\i386_disassembler.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_encoding.cpp">
+    <ClCompile Include="..\..\src\i386\i386_encoding.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_functors.cpp">
+    <ClCompile Include="..\..\src\i386\i386_functors.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_memory.cpp">
+    <ClCompile Include="..\..\src\i386\i386_memory.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_opcodes.cpp">
+    <ClCompile Include="..\..\src\i386\i386_opcodes.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_opcodes_0f.cpp">
+    <ClCompile Include="..\..\src\i386\i386_opcodes_0f.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_opcodes_groups.cpp">
+    <ClCompile Include="..\..\src\i386\i386_opcodes_groups.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_opcodes_string.cpp">
+    <ClCompile Include="..\..\src\i386\i386_opcodes_string.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_opcodes_transfer.cpp">
+    <ClCompile Include="..\..\src\i386\i386_opcodes_transfer.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_protected.cpp">
+    <ClCompile Include="..\..\src\i386\i386_protected.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_protected_transfer.cpp">
+    <ClCompile Include="..\..\src\i386\i386_protected_transfer.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\i386_task.cpp">
+    <ClCompile Include="..\..\src\i386\i386_task.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\memory.cpp">
+    <ClCompile Include="..\..\src\system\memory.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\rf5c68.cpp">
+    <ClCompile Include="..\..\src\audio\rf5c68.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\ym3438.cpp">
+    <ClCompile Include="..\..\src\audio\ym3438.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\towns_io.cpp">
+    <ClCompile Include="..\..\src\system\towns_io.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\media.cpp">
+    <ClCompile Include="..\..\src\media\media.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\media_file.cpp">
+    <ClCompile Include="..\..\src\media\media_file.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\media_file_native.cpp">
+    <ClCompile Include="..\..\src\media\media_file_native.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\geartowns_core.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\input.cpp">
+    <ClCompile Include="..\..\src\input\input.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
@@ -201,43 +201,43 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\audio.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\audio_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\bit_ops.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\common.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\crc.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\defines.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\firmware.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386_decode_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386_memory_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386_run_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386_names.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\towns_io.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\memory.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\memory_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\rf5c68.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\rf5c68_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\ym3438.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\ym3438_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\debug_memory.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\firmware_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\game_db.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\audio.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\audio_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\bit_ops.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\common.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\crc.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\defines.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\firmware.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_decode_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_memory_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_run_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_names.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_io.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\memory.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\rf5c68.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\rf5c68_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\ym3438.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\ym3438_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\debug_memory.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\firmware_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\game_db.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\geartowns.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\geartowns_core.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\geartowns_core_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\input.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\input_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\log.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\media.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\media_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\media_file.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\media_file_native.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\memory_stream.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\state_serializer.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\types.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\input.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\input_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\log.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\media.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\media_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\media_file.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\media_file_native.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\memory_stream.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\state_serializer.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\types.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\shared\desktop\application.h">
       <Filter>desktop</Filter>
     </ClInclude>
@@ -277,28 +277,28 @@
     <ClInclude Include="..\shared\desktop\runahead.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_disassembler.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_i386.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_i386.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_constants.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_constants.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_memory_provider.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_memory_provider.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_memeditor.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_memeditor.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_memory.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_memory.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_widgets.h">
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_widgets.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_popups.h">

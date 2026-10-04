@@ -18,7 +18,7 @@
  */
 
 #include "i386.h"
-#include "memory.h"
+#include "../system/memory.h"
 
 void I386::DecodeDescriptor(u16 selector, u32 address, u32 low, u32 high, Descriptor& descriptor) const
 {

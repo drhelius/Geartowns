@@ -26,13 +26,13 @@
 #include <vector>
 #include <SDL3/SDL.h>
 
-#include "config.h"
-#include "emu.h"
-#include "gui.h"
+#include "../config.h"
+#include "../emu.h"
+#include "../gui.h"
 #include "gui_debug_constants.h"
 #include "gui_debug_memeditor.h"
 #include "gui_debug_memory_provider.h"
-#include "gui_filedialogs.h"
+#include "../gui_filedialogs.h"
 #include "imgui.h"
 
 static const int MEMORY_VIEW_COUNT = 8;

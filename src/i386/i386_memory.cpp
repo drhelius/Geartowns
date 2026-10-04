@@ -18,7 +18,7 @@
  */
 
 #include "i386.h"
-#include "memory.h"
+#include "../system/memory.h"
 
 void I386::SetSlowMemory(bool slow)
 {

@@ -25,8 +25,8 @@
 #include <map>
 #include <vector>
 #endif
-#include "common.h"
-#include "debug_memory.h"
+#include "../common/common.h"
+#include "../common/debug_memory.h"
 
 #define I386_TLB_SETS 8
 #define I386_TLB_WAYS 4

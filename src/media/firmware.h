@@ -20,7 +20,7 @@
 #ifndef FIRMWARE_H
 #define FIRMWARE_H
 
-#include "common.h"
+#include "../common/common.h"
 
 class Firmware
 {

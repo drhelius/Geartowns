@@ -22,7 +22,7 @@
 #include <sstream>
 #include <stdlib.h>
 #include "mcp_debug_adapter.h"
-#include "log.h"
+#include "common/log.h"
 #include "../config.h"
 #include "../emu.h"
 #include "../gui.h"

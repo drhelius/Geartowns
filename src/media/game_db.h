@@ -20,7 +20,7 @@
 #ifndef GAME_DB_H
 #define GAME_DB_H
 
-#include "common.h"
+#include "../common/common.h"
 
 struct GT_DB_Entry
 {

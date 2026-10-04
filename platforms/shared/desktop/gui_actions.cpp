@@ -29,7 +29,7 @@
 #include "ogl_renderer.h"
 #include "events.h"
 #include "gui.h"
-#include "gui_debug.h"
+#include "debug/gui_debug.h"
 #include "rewind.h"
 #include "utils.h"
 

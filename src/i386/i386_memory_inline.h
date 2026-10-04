@@ -20,7 +20,7 @@
 #ifndef I386_MEMORY_INLINE_H
 #define I386_MEMORY_INLINE_H
 
-#include "memory.h"
+#include "../system/memory.h"
 
 INLINE u32 I386::LoadHost(const u8* data, int width) const
 {

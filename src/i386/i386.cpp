@@ -18,9 +18,9 @@
  */
 
 #include "i386.h"
-#include "memory.h"
-#include "towns_io.h"
-#include "state_serializer.h"
+#include "../system/memory.h"
+#include "../system/towns_io.h"
+#include "../common/state_serializer.h"
 
 const u8 I386::k_szp_flags[256] =
 {

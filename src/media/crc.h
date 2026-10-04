@@ -20,7 +20,7 @@
 #ifndef CRC_H
 #define CRC_H
 
-#include "common.h"
+#include "../common/common.h"
 
 const u32 k_crc32_tab[] =
 {

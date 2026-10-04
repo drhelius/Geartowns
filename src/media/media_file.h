@@ -20,7 +20,7 @@
 #ifndef MEDIA_FILE_H
 #define MEDIA_FILE_H
 
-#include "types.h"
+#include "../common/types.h"
 
 struct retro_vfs_interface;
 

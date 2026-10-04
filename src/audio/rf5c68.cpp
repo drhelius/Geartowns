@@ -18,7 +18,7 @@
  */
 
 #include "rf5c68.h"
-#include "state_serializer.h"
+#include "../common/state_serializer.h"
 
 RF5C68::RF5C68()
 {

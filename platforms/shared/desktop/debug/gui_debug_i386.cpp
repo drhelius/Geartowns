@@ -27,10 +27,10 @@
 #include "gui_debug_constants.h"
 #include "gui_debug_memory.h"
 #include "gui_debug_widgets.h"
-#include "gui.h"
-#include "config.h"
-#include "emu.h"
-#include "utils.h"
+#include "../gui.h"
+#include "../config.h"
+#include "../emu.h"
+#include "../utils.h"
 
 enum I386RegId
 {

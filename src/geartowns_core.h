@@ -21,7 +21,7 @@
 #define GEARTOWNS_CORE_H
 
 #include <iostream>
-#include "common.h"
+#include "common/common.h"
 
 class Audio;
 class Firmware;

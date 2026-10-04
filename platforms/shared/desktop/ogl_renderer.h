@@ -21,7 +21,7 @@
 #define OGL_RENDERER_H
 
 #include <stdint.h>
-#include "defines.h"
+#include "common/defines.h"
 
 #ifdef OGL_RENDERER_IMPORT
     #define EXTERN

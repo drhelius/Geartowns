@@ -22,8 +22,8 @@
 
 #include <fstream>
 #include <string>
-#include "config.h"
-#include "emu.h"
+#include "../config.h"
+#include "../emu.h"
 #include "gui_debug_disassembler.h"
 #include "gui_debug_i386.h"
 #include "gui_debug_memory.h"

@@ -18,7 +18,7 @@
  */
 
 #include "media_file_native.h"
-#include "common.h"
+#include "../common/common.h"
 
 MediaFileNative::MediaFileNative()
 {

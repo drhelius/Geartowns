@@ -19,7 +19,7 @@
 
 #include <string.h>
 #include "ym3438.h"
-#include "state_serializer.h"
+#include "../common/state_serializer.h"
 
 // Register order is slot 1, 3, 2, 4.
 static const u8 k_ym3438_slot_map[4] = { 0, 2, 1, 3 };

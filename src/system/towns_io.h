@@ -20,7 +20,7 @@
 #ifndef TOWNS_IO_H
 #define TOWNS_IO_H
 
-#include "common.h"
+#include "../common/common.h"
 
 typedef u8 (*GT_IO_Read8_Fn)(void* device, u16 port, GT_Bus_Access_Context& context);
 typedef void (*GT_IO_Write8_Fn)(void* device, u16 port, u8 value, GT_Bus_Access_Context& context);

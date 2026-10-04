@@ -20,13 +20,13 @@
 #ifndef GEARTOWNS_H
 #define GEARTOWNS_H
 
-#include "common.h"
-#include "firmware.h"
-#include "i386.h"
+#include "common/common.h"
+#include "media/firmware.h"
+#include "i386/i386.h"
 #include "geartowns_core.h"
-#include "input.h"
-#include "audio.h"
-#include "media.h"
-#include "memory.h"
+#include "input/input.h"
+#include "audio/audio.h"
+#include "media/media.h"
+#include "system/memory.h"
 
 #endif /* GEARTOWNS_H */

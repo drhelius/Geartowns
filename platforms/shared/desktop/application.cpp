@@ -24,7 +24,7 @@
 #include "config.h"
 #include "gui.h"
 #include "gui_filedialogs.h"
-#include "gui_debug.h"
+#include "debug/gui_debug.h"
 #include "ogl_renderer.h"
 #include "emu.h"
 #include "display.h"

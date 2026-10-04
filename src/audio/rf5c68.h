@@ -21,7 +21,7 @@
 #define RF5C68_H
 
 #include <iostream>
-#include "common.h"
+#include "../common/common.h"
 
 #define RF5C68_CHANNEL_COUNT 8
 #define RF5C68_WAVE_RAM_SIZE 0x10000

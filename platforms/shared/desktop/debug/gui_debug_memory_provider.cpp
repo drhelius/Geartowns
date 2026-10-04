@@ -19,8 +19,8 @@
 
 #include "gui_debug_memory_provider.h"
 
-#include "emu.h"
-#include "firmware.h"
+#include "../emu.h"
+#include "media/firmware.h"
 #include "geartowns.h"
 
 static const int DEBUG_MEMORY_MAX_TRANSACTION_SIZE = 0x100000;

@@ -22,7 +22,7 @@
 
 #include "imgui.h"
 #include "geartowns.h"
-#include "config.h"
+#include "../config.h"
 
 struct GuiDebugColor
 {

@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "i386.h"
 #include "i386_opcodes_inline.h"
-#include "towns_io.h"
+#include "../system/towns_io.h"
 
 INLINE bool I386::OPCodes_INS(int width, u32 destination_offset)
 {

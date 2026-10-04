@@ -24,7 +24,7 @@
 #include "imgui.h"
 #include "geartowns.h"
 #include "gui_debug_constants.h"
-#include "utils.h"
+#include "../utils.h"
 
 typedef void (*RegisterWriteCallback1)(u16 address, u8 bit_index, bool value, void* user_data);
 typedef void (*RegisterWriteCallback8)(u16 address, u8 value, void* user_data);

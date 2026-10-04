@@ -21,7 +21,7 @@
 #include "audio.h"
 #include "ym3438.h"
 #include "rf5c68.h"
-#include "state_serializer.h"
+#include "../common/state_serializer.h"
 
 // Data Book 5.1 puts an approximately 4 kHz reconstruction filter after the PCM DACs
 static const float k_audio_pcm_lowpass_cutoff = 4000.0f;

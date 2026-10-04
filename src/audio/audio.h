@@ -21,7 +21,7 @@
 #define AUDIO_H
 
 #include <iostream>
-#include "common.h"
+#include "../common/common.h"
 
 class YM3438;
 class RF5C68;

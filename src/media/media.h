@@ -20,7 +20,7 @@
 #ifndef MEDIA_H
 #define MEDIA_H
 
-#include "common.h"
+#include "../common/common.h"
 
 class Media
 {

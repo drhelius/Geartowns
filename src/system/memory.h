@@ -21,8 +21,8 @@
 #define MEMORY_H
 
 #include <stddef.h>
-#include "common.h"
-#include "debug_memory.h"
+#include "../common/common.h"
+#include "../common/debug_memory.h"
 
 class Memory
 {

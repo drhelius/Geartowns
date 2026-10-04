@@ -18,144 +18,623 @@
  */
 
 #include "towns_io.h"
+#include "../audio/audio.h"
+#include "../audio/ym3438.h"
+#include "../audio/rf5c68.h"
 
 TownsIO::TownsIO()
 {
-    Reset();
+    InitPointer(m_ym3438);
+    InitPointer(m_rf5c68);
 }
 
 TownsIO::~TownsIO()
 {
 }
 
-void TownsIO::Init()
+void TownsIO::Init(Audio* audio)
 {
+    m_ym3438 = audio->GetYM3438();
+    m_rf5c68 = audio->GetRF5C68();
     Reset();
 }
 
 void TownsIO::Reset()
 {
-    memset(m_port_handlers, 0, sizeof(m_port_handlers));
-    memset(m_handlers, 0, sizeof(m_handlers));
-    m_handler_count = 1;
-}
-
-bool TownsIO::RegisterPort(u16 port, const GT_IO_Handler& handler)
-{
-    return RegisterRange(port, port, handler);
-}
-
-bool TownsIO::RegisterRange(u16 start_port, u16 end_port, const GT_IO_Handler& handler)
-{
-    if (end_port < start_port)
-        return false;
-
-    for (u32 port = start_port; port <= end_port; port++)
-    {
-        if (m_port_handlers[port] != 0)
-            return false;
-    }
-
-    u16 handler_index = 0;
-
-    if (!FindHandler(handler, handler_index) && !AddHandler(handler, handler_index))
-        return false;
-
-    for (u32 port = start_port; port <= end_port; port++)
-        m_port_handlers[port] = handler_index;
-
-    return true;
 }
 
 u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
 {
-    GT_IO_Handler& handler = m_handlers[m_port_handlers[port]];
-    return IsValidPointer(handler.read8) ? handler.read8(handler.device, port, context) : 0xFF;
-}
+    UNUSED(context);
 
-u16 TownsIO::Read16(u16 port, GT_Bus_Access_Context& context)
-{
-    GT_IO_Handler& handler = m_handlers[m_port_handlers[port]];
+    switch (port)
+    {
+        case 0x0000:
+            // PIC master status
+        case 0x0002:
+            // PIC master mask
+        case 0x0010:
+            // PIC slave status
+        case 0x0012:
+            // PIC slave mask
+            break;
+        case 0x0020:
+            // Reset reason
+        case 0x0022:
+            // Power control
+            break;
+        case 0x0030:
+            // Machine ID low
+            return 0x01;
+        case 0x0031:
+            // Machine ID high
+            return 0x01;
+        case 0x0032:
+            // Serial ID ROM
+            break;
+        case 0x0040:
+            // PIT counter 0
+        case 0x0042:
+            // PIT counter 1
+        case 0x0044:
+            // PIT counter 2
+        case 0x0046:
+            // PIT 0-2 control
+        case 0x0050:
+            // PIT counter 3
+        case 0x0052:
+            // PIT counter 4
+        case 0x0054:
+            // PIT counter 5
+        case 0x0056:
+            // PIT 3-5 control
+        case 0x0060:
+            // Timer interrupt status
+            break;
+        case 0x0070:
+            // RTC data
+        case 0x0080:
+            // RTC command
+            break;
+        case 0x00A0:
+            // DMA initialize
+        case 0x00A1:
+            // DMA channel select
+        case 0x00A2:
+            // DMA count low
+        case 0x00A3:
+            // DMA count high
+        case 0x00A4:
+            // DMA address low
+        case 0x00A5:
+            // DMA address mid low
+        case 0x00A6:
+            // DMA address mid high
+        case 0x00A7:
+            // DMA address high
+        case 0x00A8:
+            // DMA device control low
+        case 0x00A9:
+            // DMA device control high
+        case 0x00AA:
+            // DMA mode control
+        case 0x00AB:
+            // DMA status
+        case 0x00AC:
+            // DMA temporary low
+        case 0x00AD:
+            // DMA temporary high
+        case 0x00AE:
+            // DMA request
+        case 0x00AF:
+            // DMA mask
+            break;
+        case 0x0200:
+            // FDC status
+        case 0x0202:
+            // FDC track
+        case 0x0204:
+            // FDC sector
+        case 0x0206:
+            // FDC data
+        case 0x0208:
+            // FDC drive status
+        case 0x020C:
+            // FDC drive select
+        case 0x020E:
+            // FDC drive switch
+            break;
+        case 0x0400:
+            // Resolution status
+            return 0xFE;
+        case 0x0404:
+            // FM-R VRAM mapping
+            break;
+        case 0x0440:
+            // CRTC address
+        case 0x0442:
+            // CRTC data low
+        case 0x0443:
+            // CRTC data high
+        case 0x0448:
+            // Video output address
+        case 0x044A:
+            // Video output data
+        case 0x044C:
+            // Palette and sprite status
+        case 0x0450:
+            // Sprite address
+        case 0x0452:
+            // Sprite data
+        case 0x0458:
+            // VRAM mask address
+        case 0x045A:
+            // VRAM mask low
+        case 0x045B:
+            // VRAM mask high
+            break;
+        case 0x0480:
+            // System ROM mapping
+        case 0x0484:
+            // Dictionary ROM bank
+            break;
+        case 0x048A:
+            // Memory card status
+            return 0x06;
+        case 0x04C0:
+            // CD-ROM master status
+        case 0x04C2:
+            // CD-ROM status
+        case 0x04C4:
+            // CD-ROM data
+        case 0x04C6:
+            // CD-ROM transfer control
+        case 0x04CC:
+            // CD-ROM subcode status
+        case 0x04CD:
+            // CD-ROM subcode data
+            break;
+        case 0x04D0:
+            // Game port A
+        case 0x04D2:
+            // Game port B
+            break;
+        case 0x04D5:
+            // Sound mute
+            break;
+        case 0x04D6:
+            // Game port output
+            break;
+        case 0x04D8:
+            // FM status
+        case 0x04DA:
+            // FM data bank 0
+        case 0x04DC:
+            // FM address bank 1
+        case 0x04DE:
+            // FM data bank 1
+            return m_ym3438->Read((u8)((port - 0x04D8) >> 1));
+        case 0x04E0:
+            // Volume 1 data
+        case 0x04E1:
+            // Volume 1 command
+        case 0x04E2:
+            // Volume 2 data
+        case 0x04E3:
+            // Volume 2 command
+        case 0x04E7:
+            // ADC sample data
+        case 0x04E8:
+            // ADC sample ready
+            break;
+        case 0x04E9:
+            // Sound interrupt reason
+            return (m_rf5c68->IsIRQAsserted() ? 0x08 : 0x00) | (m_ym3438->IsIRQAsserted() ? 0x01 : 0x00);
+        case 0x04EA:
+            // PCM interrupt mask
+            return m_rf5c68->GetIRQMask();
+        case 0x04EB:
+            // PCM interrupt reason
+            return m_rf5c68->ReadIRQFlags();
+        case 0x04EC:
+            // LED and output mute
+            break;
+        case 0x04F0:
+            // PCM envelope
+        case 0x04F1:
+            // PCM pan
+        case 0x04F2:
+            // PCM step low
+        case 0x04F3:
+            // PCM step high
+        case 0x04F4:
+            // PCM loop start low
+        case 0x04F5:
+            // PCM loop start high
+        case 0x04F6:
+            // PCM start address
+        case 0x04F7:
+            // PCM control
+        case 0x04F8:
+            // PCM channel enable
+            break;
+        case 0x05C0:
+            // Expansion NMI mask
+        case 0x05C2:
+            // Expansion NMI status
+            break;
+        case 0x05C8:
+            // Text VRAM written
+        case 0x05CA:
+            // VSYNC interrupt clear
+            break;
+        case 0x05E0:
+            // Main RAM wait
+            break;
+        case 0x0600:
+            // Keyboard data
+        case 0x0602:
+            // Keyboard status
+        case 0x0604:
+            // Keyboard interrupt
+            break;
+        case 0x0800:
+            // Printer status 1
+        case 0x0802:
+            // Printer status 2
+        case 0x0804:
+            // Printer interrupt enable
+            break;
+        case 0x0A00:
+            // Serial receive data
+        case 0x0A02:
+            // Serial status
+        case 0x0A04:
+            // Serial modem status
+        case 0x0A06:
+            // Serial interrupt reason
+        case 0x0A08:
+            // Serial interrupt control
+        case 0x0A0A:
+            // Serial modem control
+            break;
+        case 0x0C30:
+            // SCSI data
+        case 0x0C32:
+            // SCSI status
+            break;
+        case 0xFD90:
+            // Palette index
+        case 0xFD92:
+            // Palette blue
+        case 0xFD94:
+            // Palette red
+        case 0xFD96:
+            // Palette green
+        case 0xFD98:
+            // FM-R digital palette 0
+        case 0xFD99:
+            // FM-R digital palette 1
+        case 0xFD9A:
+            // FM-R digital palette 2
+        case 0xFD9B:
+            // FM-R digital palette 3
+        case 0xFD9C:
+            // FM-R digital palette 4
+        case 0xFD9D:
+            // FM-R digital palette 5
+        case 0xFD9E:
+            // FM-R digital palette 6
+        case 0xFD9F:
+            // FM-R digital palette 7
+        case 0xFDA0:
+            // Sync status
+            break;
+        default:
+            // CMOS RAM, even ports
+            if ((port & 0xF001) == 0x3000)
+                break;
 
-    if (IsValidPointer(handler.read16))
-        return handler.read16(handler.device, port, context);
+            Debug("Unknown IO read at %04X", port);
+            break;
+    }
 
-    u16 value = Read8(port, context);
-    value |= (u16)Read8((u16)(port + 1), context) << 8;
-    return value;
-}
-
-u32 TownsIO::Read32(u16 port, GT_Bus_Access_Context& context)
-{
-    GT_IO_Handler& handler = m_handlers[m_port_handlers[port]];
-
-    if (IsValidPointer(handler.read32))
-        return handler.read32(handler.device, port, context);
-
-    u32 value = Read16(port, context);
-    value |= (u32)Read16((u16)(port + 2), context) << 16;
-    return value;
+    return 0xFF;
 }
 
 void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
 {
-    GT_IO_Handler& handler = m_handlers[m_port_handlers[port]];
+    UNUSED(context);
 
-    if (IsValidPointer(handler.write8))
-        handler.write8(handler.device, port, value, context);
-}
-
-void TownsIO::Write16(u16 port, u16 value, GT_Bus_Access_Context& context)
-{
-    GT_IO_Handler& handler = m_handlers[m_port_handlers[port]];
-
-    if (IsValidPointer(handler.write16))
-        handler.write16(handler.device, port, value, context);
-    else
+    switch (port)
     {
-        Write8(port, (u8)value, context);
-        Write8((u16)(port + 1), (u8)(value >> 8), context);
+        case 0x0000:
+            // PIC master command
+        case 0x0002:
+            // PIC master data
+        case 0x0010:
+            // PIC slave command
+        case 0x0012:
+            // PIC slave data
+            break;
+        case 0x0020:
+            // Reset and power control
+        case 0x0022:
+            // Power off
+            break;
+        case 0x0030:
+            // Machine ID low
+        case 0x0031:
+            // Machine ID high
+            break;
+        case 0x0032:
+            // Serial ID ROM
+            break;
+        case 0x0040:
+            // PIT counter 0
+        case 0x0042:
+            // PIT counter 1
+        case 0x0044:
+            // PIT counter 2
+        case 0x0046:
+            // PIT 0-2 control
+        case 0x0050:
+            // PIT counter 3
+        case 0x0052:
+            // PIT counter 4
+        case 0x0054:
+            // PIT counter 5
+        case 0x0056:
+            // PIT 3-5 control
+        case 0x0060:
+            // Timer interrupt control
+            break;
+        case 0x0070:
+            // RTC data
+        case 0x0080:
+            // RTC command
+            break;
+        case 0x00A0:
+            // DMA initialize
+        case 0x00A1:
+            // DMA channel select
+        case 0x00A2:
+            // DMA count low
+        case 0x00A3:
+            // DMA count high
+        case 0x00A4:
+            // DMA address low
+        case 0x00A5:
+            // DMA address mid low
+        case 0x00A6:
+            // DMA address mid high
+        case 0x00A7:
+            // DMA address high
+        case 0x00A8:
+            // DMA device control low
+        case 0x00A9:
+            // DMA device control high
+        case 0x00AA:
+            // DMA mode control
+        case 0x00AB:
+            // DMA status
+        case 0x00AC:
+            // DMA temporary low
+        case 0x00AD:
+            // DMA temporary high
+        case 0x00AE:
+            // DMA request
+        case 0x00AF:
+            // DMA mask
+            break;
+        case 0x0200:
+            // FDC command
+        case 0x0202:
+            // FDC track
+        case 0x0204:
+            // FDC sector
+        case 0x0206:
+            // FDC data
+        case 0x0208:
+            // FDC drive control
+        case 0x020C:
+            // FDC drive select
+        case 0x020E:
+            // FDC drive switch
+            break;
+        case 0x0400:
+            // Resolution status
+            break;
+        case 0x0404:
+            // FM-R VRAM mapping
+            break;
+        case 0x0440:
+            // CRTC address
+        case 0x0442:
+            // CRTC data low
+        case 0x0443:
+            // CRTC data high
+        case 0x0448:
+            // Video output address
+        case 0x044A:
+            // Video output data
+        case 0x044C:
+            // Palette and sprite status
+        case 0x0450:
+            // Sprite address
+        case 0x0452:
+            // Sprite data
+        case 0x0458:
+            // VRAM mask address
+        case 0x045A:
+            // VRAM mask low
+        case 0x045B:
+            // VRAM mask high
+            break;
+        case 0x0480:
+            // System ROM mapping
+        case 0x0484:
+            // Dictionary ROM bank
+            break;
+        case 0x048A:
+            // Memory card status
+            break;
+        case 0x04C0:
+            // CD-ROM master control
+        case 0x04C2:
+            // CD-ROM command
+        case 0x04C4:
+            // CD-ROM parameter
+        case 0x04C6:
+            // CD-ROM transfer control
+        case 0x04CC:
+            // CD-ROM subcode status
+        case 0x04CD:
+            // CD-ROM subcode data
+            break;
+        case 0x04D0:
+            // Game port A
+        case 0x04D2:
+            // Game port B
+            break;
+        case 0x04D5:
+            // Sound mute
+            break;
+        case 0x04D6:
+            // Game port output
+            break;
+        case 0x04D8:
+            // FM address bank 0
+        case 0x04DA:
+            // FM data bank 0
+        case 0x04DC:
+            // FM address bank 1
+        case 0x04DE:
+            // FM data bank 1
+            m_ym3438->Write((u8)((port - 0x04D8) >> 1), value);
+            break;
+        case 0x04E0:
+            // Volume 1 data
+        case 0x04E1:
+            // Volume 1 command
+        case 0x04E2:
+            // Volume 2 data
+        case 0x04E3:
+            // Volume 2 command
+        case 0x04E7:
+            // ADC sample data
+        case 0x04E8:
+            // ADC sample clear
+        case 0x04E9:
+            // Sound interrupt reason
+            break;
+        case 0x04EA:
+            // PCM interrupt mask
+            m_rf5c68->WriteIRQMask(value);
+            break;
+        case 0x04EB:
+            // PCM interrupt reason
+        case 0x04EC:
+            // LED and output mute
+            break;
+        case 0x04F0:
+            // PCM envelope
+        case 0x04F1:
+            // PCM pan
+        case 0x04F2:
+            // PCM step low
+        case 0x04F3:
+            // PCM step high
+        case 0x04F4:
+            // PCM loop start low
+        case 0x04F5:
+            // PCM loop start high
+        case 0x04F6:
+            // PCM start address
+        case 0x04F7:
+            // PCM control
+        case 0x04F8:
+            // PCM channel enable
+            m_rf5c68->Write((u16)(port - 0x04F0), value);
+            break;
+        case 0x05C0:
+            // Expansion NMI mask
+        case 0x05C2:
+            // Expansion NMI status
+            break;
+        case 0x05C8:
+            // Text VRAM written
+        case 0x05CA:
+            // VSYNC interrupt clear
+            break;
+        case 0x05E0:
+            // Main RAM wait
+            break;
+        case 0x0600:
+            // Keyboard data
+        case 0x0602:
+            // Keyboard command
+        case 0x0604:
+            // Keyboard interrupt
+            break;
+        case 0x0800:
+            // Printer data
+        case 0x0802:
+            // Printer control
+        case 0x0804:
+            // Printer interrupt enable
+            break;
+        case 0x0A00:
+            // Serial transmit data
+        case 0x0A02:
+            // Serial command
+        case 0x0A04:
+            // Serial modem status
+        case 0x0A06:
+            // Serial interrupt reason
+        case 0x0A08:
+            // Serial interrupt control
+        case 0x0A0A:
+            // Serial modem control
+            break;
+        case 0x0C30:
+            // SCSI data
+        case 0x0C32:
+            // SCSI control
+            break;
+        case 0xFD90:
+            // Palette index
+        case 0xFD92:
+            // Palette blue
+        case 0xFD94:
+            // Palette red
+        case 0xFD96:
+            // Palette green
+        case 0xFD98:
+            // FM-R digital palette 0
+        case 0xFD99:
+            // FM-R digital palette 1
+        case 0xFD9A:
+            // FM-R digital palette 2
+        case 0xFD9B:
+            // FM-R digital palette 3
+        case 0xFD9C:
+            // FM-R digital palette 4
+        case 0xFD9D:
+            // FM-R digital palette 5
+        case 0xFD9E:
+            // FM-R digital palette 6
+        case 0xFD9F:
+            // FM-R digital palette 7
+        case 0xFDA0:
+            // CRT output control
+            break;
+        default:
+            // CMOS RAM, even ports
+            if ((port & 0xF001) == 0x3000)
+                break;
+
+            Debug("Unknown IO write at %04X, value=%02X", port, value);
+            break;
     }
-}
-
-void TownsIO::Write32(u16 port, u32 value, GT_Bus_Access_Context& context)
-{
-    GT_IO_Handler& handler = m_handlers[m_port_handlers[port]];
-
-    if (IsValidPointer(handler.write32))
-        handler.write32(handler.device, port, value, context);
-    else
-    {
-        Write16(port, (u16)value, context);
-        Write16((u16)(port + 2), (u16)(value >> 16), context);
-    }
-}
-
-bool TownsIO::FindHandler(const GT_IO_Handler& handler, u16& handler_index) const
-{
-    for (u16 i = 1; i < m_handler_count; i++)
-    {
-        const GT_IO_Handler& current = m_handlers[i];
-
-        if (current.device == handler.device &&
-            current.read8 == handler.read8 && current.write8 == handler.write8 &&
-            current.read16 == handler.read16 && current.write16 == handler.write16 &&
-            current.read32 == handler.read32 && current.write32 == handler.write32)
-        {
-            handler_index = i;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool TownsIO::AddHandler(const GT_IO_Handler& handler, u16& handler_index)
-{
-    if (m_handler_count >= GT_IO_MAX_HANDLERS)
-        return false;
-
-    handler_index = m_handler_count++;
-    m_handlers[handler_index] = handler;
-    return true;
 }

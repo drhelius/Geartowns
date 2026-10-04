@@ -22,33 +22,17 @@
 
 #include "../common/common.h"
 
-typedef u8 (*GT_IO_Read8_Fn)(void* device, u16 port, GT_Bus_Access_Context& context);
-typedef void (*GT_IO_Write8_Fn)(void* device, u16 port, u8 value, GT_Bus_Access_Context& context);
-typedef u16 (*GT_IO_Read16_Fn)(void* device, u16 port, GT_Bus_Access_Context& context);
-typedef void (*GT_IO_Write16_Fn)(void* device, u16 port, u16 value, GT_Bus_Access_Context& context);
-typedef u32 (*GT_IO_Read32_Fn)(void* device, u16 port, GT_Bus_Access_Context& context);
-typedef void (*GT_IO_Write32_Fn)(void* device, u16 port, u32 value, GT_Bus_Access_Context& context);
-
-struct GT_IO_Handler
-{
-    void* device;
-    GT_IO_Read8_Fn read8;
-    GT_IO_Write8_Fn write8;
-    GT_IO_Read16_Fn read16;
-    GT_IO_Write16_Fn write16;
-    GT_IO_Read32_Fn read32;
-    GT_IO_Write32_Fn write32;
-};
+class Audio;
+class YM3438;
+class RF5C68;
 
 class TownsIO
 {
 public:
     TownsIO();
     ~TownsIO();
-    void Init();
+    void Init(Audio* audio);
     void Reset();
-    bool RegisterPort(u16 port, const GT_IO_Handler& handler);
-    bool RegisterRange(u16 start_port, u16 end_port, const GT_IO_Handler& handler);
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
     u32 Read32(u16 port, GT_Bus_Access_Context& context);
@@ -57,13 +41,10 @@ public:
     void Write32(u16 port, u32 value, GT_Bus_Access_Context& context);
 
 private:
-    bool FindHandler(const GT_IO_Handler& handler, u16& handler_index) const;
-    bool AddHandler(const GT_IO_Handler& handler, u16& handler_index);
-
-private:
-    u16 m_port_handlers[0x10000];
-    GT_IO_Handler m_handlers[GT_IO_MAX_HANDLERS];
-    u16 m_handler_count;
+    YM3438* m_ym3438;
+    RF5C68* m_rf5c68;
 };
+
+#include "towns_io_inline.h"
 
 #endif /* TOWNS_IO_H */

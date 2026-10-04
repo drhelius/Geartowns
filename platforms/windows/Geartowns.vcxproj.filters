@@ -216,6 +216,7 @@
     <ClInclude Include="..\..\src\i386\i386_names.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_io.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_io_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\rf5c68.h"><Filter>src</Filter></ClInclude>

@@ -83,9 +83,9 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
 
     m_firmware->Init();
     m_memory->Init();
-    m_towns_io->Init();
-    m_i386->Init(m_memory, m_towns_io);
     m_audio->Init();
+    m_towns_io->Init(m_audio);
+    m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
     m_media->Init();
     Reset();

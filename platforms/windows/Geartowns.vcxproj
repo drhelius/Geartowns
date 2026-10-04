@@ -123,6 +123,7 @@
     <ClInclude Include="..\..\src\i386\i386_names.h" />
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h" />
     <ClInclude Include="..\..\src\system\towns_io.h" />
+    <ClInclude Include="..\..\src\system\towns_io_inline.h" />
     <ClInclude Include="..\..\src\media\firmware_inline.h" />
     <ClInclude Include="..\..\src\media\game_db.h" />
     <ClInclude Include="..\..\src\geartowns.h" />

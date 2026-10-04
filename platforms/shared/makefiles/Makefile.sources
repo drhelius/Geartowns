@@ -51,6 +51,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/audio/rf5c68.cpp \
     $(SRC_DIR)/audio/ym3438.cpp \
     $(SRC_DIR)/drive/cdrom_mock.cpp \
+    $(SRC_DIR)/drive/fdc_mock.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_disassembler.cpp \
     $(SRC_DIR)/i386/i386_encoding.cpp \
@@ -65,6 +66,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/i386/i386_protected_transfer.cpp \
     $(SRC_DIR)/i386/i386_task.cpp \
     $(SRC_DIR)/input/input.cpp \
+    $(SRC_DIR)/input/towns_keyboard.cpp \
     $(SRC_DIR)/media/firmware.cpp \
     $(SRC_DIR)/media/media.cpp \
     $(SRC_DIR)/media/media_file.cpp \
@@ -76,5 +78,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/system/towns_io.cpp \
     $(SRC_DIR)/system/towns_pic.cpp \
     $(SRC_DIR)/system/towns_pit.cpp \
+    $(SRC_DIR)/system/towns_rtc.cpp \
+    $(SRC_DIR)/system/upd71071.cpp \
     $(SRC_DIR)/system/towns_system.cpp \
     $(SRC_DIR)/video/video.cpp

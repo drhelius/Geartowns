@@ -92,17 +92,20 @@ public:
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
-    static u8 ReadVRAMTwoPage(void* device, u32 offset);
-    static void WriteVRAMTwoPage(void* device, u32 offset, u8 value);
-    static u8 ReadVRAMSinglePage(void* device, u32 offset);
-    static void WriteVRAMSinglePage(void* device, u32 offset, u8 value);
-    static u8 ReadFMRPlanes(void* device, u32 offset);
-    static void WriteFMRPlanes(void* device, u32 offset, u8 value);
-    static u8 ReadFMRText(void* device, u32 offset);
-    static void WriteFMRText(void* device, u32 offset, u8 value);
-    static u8 ReadFMRRegisters(void* device, u32 offset);
-    static u8 PeekFMRRegisters(void* device, u32 offset);
-    static void WriteFMRRegisters(void* device, u32 offset, u8 value);
+    u8 ReadFMRRegister(u32 offset, bool peek);
+    void WriteFMRRegister(u32 offset, u8 value);
+
+    static u8 ReadVRAMTwoPageCallback(void* device, u32 offset);
+    static void WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value);
+    static u8 ReadVRAMSinglePageCallback(void* device, u32 offset);
+    static void WriteVRAMSinglePageCallback(void* device, u32 offset, u8 value);
+    static u8 ReadFMRPlanesCallback(void* device, u32 offset);
+    static void WriteFMRPlanesCallback(void* device, u32 offset, u8 value);
+    static u8 ReadFMRTextCallback(void* device, u32 offset);
+    static void WriteFMRTextCallback(void* device, u32 offset, u8 value);
+    static u8 ReadFMRRegisterCallback(void* device, u32 offset);
+    static u8 PeekFMRRegisterCallback(void* device, u32 offset);
+    static void WriteFMRRegisterCallback(void* device, u32 offset, u8 value);
 
 private:
     enum Video_Layer_Format
@@ -134,7 +137,14 @@ private:
     u8 ReadVRAM(u32 offset, bool two_page) const;
     u32 SinglePageToCanonical(u32 offset) const;
     u32 FMRToCanonical(u32 offset) const;
-    u8 ReadFMRRegister(u32 offset, bool peek);
+    u8 ReadVRAMTwoPage(u32 offset) const;
+    void WriteVRAMTwoPage(u32 offset, u8 value);
+    u8 ReadVRAMSinglePage(u32 offset) const;
+    void WriteVRAMSinglePage(u32 offset, u8 value);
+    u8 ReadFMRPlanes(u32 offset) const;
+    void WriteFMRPlanes(u32 offset, u8 value);
+    u8 ReadFMRText(u32 offset) const;
+    void WriteFMRText(u32 offset, u8 value);
     u32 GetKanjiOffset() const;
     u32 MakeColor(u8 red, u8 green, u8 blue) const;
     u8 Expand5(u32 value) const;

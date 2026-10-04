@@ -160,6 +160,12 @@
     <ClCompile Include="..\..\src\system\towns_pit.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\system\towns_rtc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\system\upd71071.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\system\towns_system.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -167,6 +173,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\drive\cdrom_mock.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\drive\fdc_mock.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\system\i8253.cpp">
@@ -188,6 +197,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\input\input.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\input\towns_keyboard.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
@@ -247,12 +259,18 @@
     <ClInclude Include="..\..\src\system\i8259_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_pit.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_pit_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_rtc.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\towns_rtc_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\upd71071.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\upd71071_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_system.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\towns_system_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\cdrom_mock.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\cdrom_mock_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\fdc_mock.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\fdc_mock_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\video\video.h"><Filter>src</Filter></ClInclude>
@@ -271,6 +289,8 @@
     <ClInclude Include="..\..\src\geartowns_core_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\input.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\input_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\towns_keyboard.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\towns_keyboard_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\log.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\media.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\media_inline.h"><Filter>src</Filter></ClInclude>

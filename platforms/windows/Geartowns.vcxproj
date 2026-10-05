@@ -273,13 +273,13 @@
     <ClInclude Include="..\shared\desktop\mcp\mcp_tool_registry.h" />
     <ClInclude Include="..\shared\desktop\mcp\mcp_transport.h" />
     <ClInclude Include="..\shared\desktop\gui_actions.h" />
+    <ClInclude Include="..\shared\desktop\gui_colors.h" />
     <ClInclude Include="..\shared\desktop\rewind.h" />
     <ClInclude Include="..\shared\desktop\runahead.h" />
     <ClInclude Include="..\shared\desktop\video_recorder.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_disassembler.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_i386.h" />
-    <ClInclude Include="..\shared\desktop\debug\gui_debug_constants.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory_provider.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memeditor.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory.h" />

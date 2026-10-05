@@ -25,6 +25,7 @@
 #include "gui_popups.h"
 #include "gui.h"
 #include "gui_actions.h"
+#include "gui_colors.h"
 #include "gui_menus.h"
 #include "config.h"
 #include "application.h"
@@ -176,9 +177,9 @@ void gui_popup_modal_about(void)
     if (ImGui::BeginPopupModal("About " GT_TITLE, NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::PushFont(gui_default_font);
-        ImGui::TextColored(ImVec4(0.0f, 0.5686274509803922f, 0.9607843137254902f, 1.0f), "%s\n", GT_TITLE_ASCII);
+        ImGui::TextColored(accent, "%s\n", GT_TITLE_ASCII);
 
-        ImGui::TextColored(ImVec4(0.65f, 0.35f, 0.95f, 1.0f), "  By Ignacio Sánchez (DrHelius)");
+        ImGui::TextColored(violet, "  By Ignacio Sánchez (DrHelius)");
         ImGui::Text(" "); ImGui::SameLine();
         ImGui::TextLinkOpenURL("https://github.com/drhelius/" GT_TITLE);
         ImGui::Text(" "); ImGui::SameLine();

@@ -23,7 +23,7 @@
 #include <string.h>
 #include "imgui.h"
 #include "geartowns.h"
-#include "gui_debug_constants.h"
+#include "../gui_colors.h"
 #include "../utils.h"
 
 typedef void (*RegisterWriteCallback1)(u16 address, u8 bit_index, bool value, void* user_data);

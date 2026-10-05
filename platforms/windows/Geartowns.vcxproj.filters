@@ -412,6 +412,9 @@
     <ClInclude Include="..\shared\desktop\gui_actions.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_colors.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\desktop\rewind.h">
       <Filter>desktop</Filter>
     </ClInclude>
@@ -428,9 +431,6 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_i386.h">
-      <Filter>desktop</Filter>
-    </ClInclude>
-    <ClInclude Include="..\shared\desktop\debug\gui_debug_constants.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory_provider.h">

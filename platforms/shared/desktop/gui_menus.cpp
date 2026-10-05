@@ -23,6 +23,7 @@
 #include "gui_filedialogs.h"
 #include "gui_popups.h"
 #include "gui_actions.h"
+#include "gui_colors.h"
 #include "config.h"
 #include "application.h"
 #include "display.h"
@@ -51,9 +52,9 @@ static bool choose_video_recordings_path = false;
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 static bool open_physical_cdrom = false;
 #endif
-static const ImVec4 firmware_unknown_color(0.39f, 0.58f, 0.93f, 1.0f);
-static const ImVec4 service_mcp_http_color(0.10f, 0.90f, 0.10f, 1.0f);
-static const ImVec4 service_mcp_stdio_color(0.90f, 0.70f, 0.10f, 1.0f);
+static const GuiColor& firmware_unknown_color = cornflower;
+static const GuiColor& service_mcp_http_color = green;
+static const GuiColor& service_mcp_stdio_color = amber;
 static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
 
@@ -1043,7 +1044,7 @@ static void menu_shader(void)
     else if (ogl_shader_chain_get_last_error()[0] != '\0')
     {
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "%s", ogl_shader_chain_get_last_error());
+        ImGui::TextColored(red, "%s", ogl_shader_chain_get_last_error());
     }
 
     ImGui::EndMenu();
@@ -1472,7 +1473,7 @@ static void menu_debug(void)
                 ImGui::TextColored(service_mcp_http_color, "Listening on %s:%d", emu_mcp_get_http_address(),
                     emu_mcp_get_http_port());
             else
-                ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "Stopped");
+                ImGui::TextColored(red, "Stopped");
 
             ImGui::Separator();
 
@@ -1819,13 +1820,11 @@ static void draw_savestate_slot_info(int slot)
     {
         if (emu_savestates[slot].version != GT_SAVESTATE_VERSION)
         {
-            ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f),
-                "This savestate is from an older version and will not work");
+            ImGui::TextColored(red, "This savestate is from an older version and will not work");
 
             if (emu_savestates[slot].emu_build[0] != 0)
             {
-                ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "Use %s - %s", GT_TITLE,
-                    emu_savestates[slot].emu_build);
+                ImGui::TextColored(red, "Use %s - %s", GT_TITLE, emu_savestates[slot].emu_build);
             }
 
             ImGui::Separator();
@@ -1846,6 +1845,6 @@ static void draw_savestate_slot_info(int slot)
     }
     else
     {
-        ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.50f, 1.0f), "Slot %d is empty", slot + 1);
+        ImGui::TextColored(gray, "Slot %d is empty", slot + 1);
     }
 }

@@ -24,7 +24,7 @@
 #include <string.h>
 #include "imgui.h"
 #include "geartowns.h"
-#include "gui_debug_constants.h"
+#include "../gui_colors.h"
 #include "gui_debug_memory.h"
 #include "gui_debug_widgets.h"
 #include "../gui.h"

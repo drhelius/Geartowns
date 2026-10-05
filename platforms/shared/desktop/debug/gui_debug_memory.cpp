@@ -29,7 +29,7 @@
 #include "../config.h"
 #include "../emu.h"
 #include "../gui.h"
-#include "gui_debug_constants.h"
+#include "../gui_colors.h"
 #include "gui_debug_memeditor.h"
 #include "gui_debug_memory_provider.h"
 #include "../gui_filedialogs.h"

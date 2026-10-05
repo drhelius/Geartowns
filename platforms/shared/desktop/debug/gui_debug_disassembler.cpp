@@ -31,7 +31,7 @@
 #include "../gui.h"
 #include "../gui_actions.h"
 #include "gui_debug.h"
-#include "gui_debug_constants.h"
+#include "../gui_colors.h"
 
 struct DisassemblerLine
 {

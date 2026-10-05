@@ -130,6 +130,7 @@ private:
     void RemapRange(u32 base, u32 size);
     void ApplyMapping();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
     const u8** m_cpu_read_pages;

@@ -18,8 +18,8 @@
  */
 
 #include "video.h"
-#include "../system/towns_pic.h"
-#include "../system/towns_pit.h"
+#include "../system/pic.h"
+#include "../system/pit.h"
 #include "../system/scheduler.h"
 #include "../common/state_serializer.h"
 
@@ -49,8 +49,7 @@ Video::~Video()
 {
 }
 
-void Video::Init(TownsPIC* pic, TownsPIT* pit, Scheduler* scheduler, const u8* font_rom,
-    GT_Pixel_Format pixel_format)
+void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format)
 {
     m_pic = pic;
     m_pit = pit;

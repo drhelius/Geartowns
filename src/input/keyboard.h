@@ -17,25 +17,25 @@
  *
  */
 
-#ifndef TOWNS_KEYBOARD_H
-#define TOWNS_KEYBOARD_H
+#ifndef KEYBOARD_H
+#define KEYBOARD_H
 
 #include <iostream>
 #include "../common/common.h"
 
-#define TOWNS_KEYBOARD_FIFO_SIZE 32
+#define KEYBOARD_FIFO_SIZE 32
 
-class TownsPIC;
+class PIC;
 class Scheduler;
 class StateSerializer;
 
 // JIS keyboard behind the 8042 interface at 0600h-0604h
-class TownsKeyboard
+class Keyboard
 {
 public:
-    struct TownsKeyboard_State
+    struct Keyboard_State
     {
-        u8 fifo[TOWNS_KEYBOARD_FIFO_SIZE];
+        u8 fifo[KEYBOARD_FIFO_SIZE];
         u8 fifo_read;
         u8 fifo_count;
         bool irq_enabled;
@@ -52,9 +52,9 @@ public:
     };
 
 public:
-    TownsKeyboard();
-    ~TownsKeyboard();
-    void Init(TownsPIC* pic, Scheduler* scheduler);
+    Keyboard();
+    ~Keyboard();
+    void Init(PIC* pic, Scheduler* scheduler);
     void Reset();
     u8 Read(u16 port, u64 clocks);
     void Write(u16 port, u8 value, u64 clocks);
@@ -64,7 +64,7 @@ public:
     void KeyReleased(GT_Keys key);
     void ReleaseAllKeys();
     bool IsKeyPressed(GT_Keys key) const;
-    TownsKeyboard_State* GetState();
+    Keyboard_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
@@ -78,18 +78,19 @@ private:
     void UpdateIRQ();
     void UpdateNextEvent();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
-    TownsPIC* m_pic;
+    PIC* m_pic;
     Scheduler* m_scheduler;
-    TownsKeyboard_State m_state;
+    Keyboard_State m_state;
 };
 
-static const int k_towns_keyboard_irq = 1;
-static const u64 k_towns_keyboard_rearm_clocks = GT_CPU_CLOCK_RATE / 1200;
-static const u16 k_towns_keyboard_repeat_delay = 400;
-static const u16 k_towns_keyboard_repeat_interval = 30;
+static const int k_keyboard_irq = 1;
+static const u64 k_keyboard_rearm_clocks = GT_CPU_CLOCK_RATE / 1200;
+static const u16 k_keyboard_repeat_delay = 400;
+static const u16 k_keyboard_repeat_interval = 30;
 
-#include "towns_keyboard_inline.h"
+#include "keyboard_inline.h"
 
-#endif /* TOWNS_KEYBOARD_H */
+#endif /* KEYBOARD_H */

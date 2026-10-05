@@ -17,21 +17,21 @@
  *
  */
 
-#ifndef TOWNS_PIT_H
-#define TOWNS_PIT_H
+#ifndef PIT_H
+#define PIT_H
 
 #include <iostream>
 #include "../common/common.h"
 #include "i8253.h"
 
-class TownsPIC;
+class PIC;
 class Scheduler;
 class StateSerializer;
 
-class TownsPIT
+class PIT
 {
 public:
-    struct TownsPIT_State
+    struct PIT_State
     {
         u8 timer_latch;
         u8 timer_enable;
@@ -41,9 +41,9 @@ public:
     };
 
 public:
-    TownsPIT();
-    ~TownsPIT();
-    void Init(TownsPIC* pic, Scheduler* scheduler);
+    PIT();
+    ~PIT();
+    void Init(PIC* pic, Scheduler* scheduler);
     void Reset();
     u8 Read(u16 port, u64 clocks);
     void Write(u16 port, u8 value, u64 clocks);
@@ -51,7 +51,7 @@ public:
     void HandleEvent(u64 clocks);
     void SetMemoryBuzzer(bool enabled);
     I8253* GetPIT(int index);
-    TownsPIT_State* GetState();
+    PIT_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
@@ -61,20 +61,21 @@ private:
     void UpdateIRQ();
     void UpdateNextEvent();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
-    TownsPIC* m_pic;
+    PIC* m_pic;
     Scheduler* m_scheduler;
     I8253 m_pit[2];
-    TownsPIT_State m_state;
+    PIT_State m_state;
 };
 
 // 1,228,800 Hz and 307,200 Hz are 48 and 12 ticks every 625 clocks of the 16 MHz CPU
-static const u64 k_towns_pit_fast_ticks = 48;
-static const u64 k_towns_pit_base_ticks = 12;
-static const u64 k_towns_pit_clock_divisor = 625;
-static const int k_towns_pit_serial_channel = 4;
+static const u64 k_pit_fast_ticks = 48;
+static const u64 k_pit_base_ticks = 12;
+static const u64 k_pit_clock_divisor = 625;
+static const int k_pit_serial_channel = 4;
 
-#include "towns_pit_inline.h"
+#include "pit_inline.h"
 
-#endif /* TOWNS_PIT_H */
+#endif /* PIT_H */

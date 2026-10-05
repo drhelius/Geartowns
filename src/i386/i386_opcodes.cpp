@@ -20,7 +20,7 @@
 #include <limits.h>
 #include "i386.h"
 #include "i386_opcodes_inline.h"
-#include "../system/towns_io.h"
+#include "../system/io.h"
 
 bool I386::OPCode0x00()
 {
@@ -2248,14 +2248,14 @@ bool I386::OPCodes_IN()
 
     u32 value = width == 8 ? 0xFF : width == 16 ? 0xFFFF : 0xFFFFFFFFU;
 
-    if (IsValidPointer(m_towns_io))
+    if (IsValidPointer(m_io))
     {
         if (width == 8)
-            value = m_towns_io->Read8(port, *m_bus_context);
+            value = m_io->Read8(port, *m_bus_context);
         else if (width == 16)
-            value = m_towns_io->Read16(port, *m_bus_context);
+            value = m_io->Read16(port, *m_bus_context);
         else
-            value = m_towns_io->Read32(port, *m_bus_context);
+            value = m_io->Read32(port, *m_bus_context);
     }
 
     SetRegister(I386_REG_EAX, width, value);
@@ -2299,14 +2299,14 @@ bool I386::OPCodes_OUT()
 
     u32 value = GetRegister(I386_REG_EAX, width);
 
-    if (IsValidPointer(m_towns_io))
+    if (IsValidPointer(m_io))
     {
         if (width == 8)
-            m_towns_io->Write8(port, (u8)value, *m_bus_context);
+            m_io->Write8(port, (u8)value, *m_bus_context);
         else if (width == 16)
-            m_towns_io->Write16(port, (u16)value, *m_bus_context);
+            m_io->Write16(port, (u16)value, *m_bus_context);
         else
-            m_towns_io->Write32(port, value, *m_bus_context);
+            m_io->Write32(port, value, *m_bus_context);
     }
 
     m_bus_context->end_batch = true;

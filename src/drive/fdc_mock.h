@@ -25,7 +25,7 @@
 
 #define FDC_MOCK_DRIVES 4
 
-class TownsPIC;
+class PIC;
 class Scheduler;
 class StateSerializer;
 
@@ -53,7 +53,7 @@ public:
 public:
     FDCMock();
     ~FDCMock();
-    void Init(TownsPIC* pic, Scheduler* scheduler);
+    void Init(PIC* pic, Scheduler* scheduler);
     void Reset();
     u8 Read(u16 port, u64 clocks);
     void Write(u16 port, u8 value, u64 clocks);
@@ -73,9 +73,10 @@ private:
     void UpdateIRQ();
     void UpdateNextEvent();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
-    TownsPIC* m_pic;
+    PIC* m_pic;
     Scheduler* m_scheduler;
     FDCMock_State m_state;
 };

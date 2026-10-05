@@ -98,6 +98,7 @@ private:
     void CheckUnsupported();
     void UpdateNextEvent();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
     Memory* m_memory;

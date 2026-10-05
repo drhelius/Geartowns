@@ -17,30 +17,38 @@
  *
  */
 
-#ifndef TOWNS_SYSTEM_INLINE_H
-#define TOWNS_SYSTEM_INLINE_H
+#ifndef PIC_H
+#define PIC_H
 
-#include "towns_system.h"
+#include <iostream>
+#include "../common/common.h"
+#include "i8259.h"
 
-INLINE void TownsSystem::RequestCPUReset(u8 cause)
+class PIC
 {
-    m_state.reset_cause |= cause;
-    m_state.reset_pending = true;
-}
+public:
+    void Init();
+    void Reset();
+    u8 Read(u16 port);
+    void Write(u16 port, u8 value);
+    void SetIRQLine(int irq, bool high);
+    bool IsInterruptPending() const;
+    u8 AcknowledgeInterrupt();
+    I8259* GetMaster();
+    I8259* GetSlave();
+    void SaveState(std::ostream& stream);
+    void LoadState(std::istream& stream);
 
-INLINE bool TownsSystem::IsCPUResetPending() const
-{
-    return m_state.reset_pending;
-}
+private:
+    void UpdateCascade();
 
-INLINE void TownsSystem::AcknowledgeCPUReset()
-{
-    m_state.reset_pending = false;
-}
+private:
+    I8259 m_master;
+    I8259 m_slave;
+};
 
-INLINE TownsSystem::TownsSystem_State* TownsSystem::GetState()
-{
-    return &m_state;
-}
+static const int k_pic_cascade_line = 7;
 
-#endif /* TOWNS_SYSTEM_INLINE_H */
+#include "pic_inline.h"
+
+#endif /* PIC_H */

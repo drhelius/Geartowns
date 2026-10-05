@@ -416,19 +416,7 @@ void UPD71071::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    for (int i = 0; i < UPD71071_CHANNELS; i++)
-    {
-        m_state.channels[i].current_address &= 0x00FFFFFF;
-        m_state.channels[i].base_address &= 0x00FFFFFF;
-    }
-
-    m_state.selected_channel &= 0x03;
-
-    if (m_state.active_channel < -1 || m_state.active_channel >= UPD71071_CHANNELS)
-        m_state.active_channel = -1;
-
-    UpdateNextEvent();
+    SanitizeState();
 }
 
 void UPD71071::Serialize(StateSerializer& serializer)
@@ -455,4 +443,20 @@ void UPD71071::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.status_tc);
     G_SERIALIZE(serializer, m_state.active_channel);
     G_SERIALIZE(serializer, m_state.next_clocks);
+}
+
+void UPD71071::SanitizeState()
+{
+    for (int i = 0; i < UPD71071_CHANNELS; i++)
+    {
+        m_state.channels[i].current_address &= 0x00FFFFFF;
+        m_state.channels[i].base_address &= 0x00FFFFFF;
+    }
+
+    m_state.selected_channel &= 0x03;
+
+    if (m_state.active_channel < -1 || m_state.active_channel >= UPD71071_CHANNELS)
+        m_state.active_channel = -1;
+
+    UpdateNextEvent();
 }

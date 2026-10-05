@@ -78,6 +78,7 @@ private:
     void UpdateCDDAGain();
     s32 GetVolumeGain(int chip, int channel) const;
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
     YM3438* m_ym3438;

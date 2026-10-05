@@ -19,7 +19,7 @@
 
 #include "i386.h"
 #include "../system/memory.h"
-#include "../system/towns_io.h"
+#include "../system/io.h"
 #include "../common/state_serializer.h"
 
 const u8 I386::k_szp_flags[256] =
@@ -47,7 +47,7 @@ static const u32 k_i386_real_interrupt_entry_clocks = 33;
 I386::I386()
 {
     InitPointer(m_memory);
-    InitPointer(m_towns_io);
+    InitPointer(m_io);
     InitPointer(m_trace);
     m_trace_enabled = false;
     m_trace_count = 0;
@@ -71,10 +71,10 @@ I386::~I386()
     SafeDeleteArray(m_disassembler_cache);
 }
 
-void I386::Init(Memory* memory, TownsIO* towns_io)
+void I386::Init(Memory* memory, IO* io)
 {
     m_memory = memory;
-    m_towns_io = towns_io;
+    m_io = io;
 
     m_disassembler_records.clear();
     ClearDisassemblerCache();

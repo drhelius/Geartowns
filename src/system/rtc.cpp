@@ -18,50 +18,50 @@
  */
 
 #include <time.h>
-#include "towns_rtc.h"
+#include "rtc.h"
 #include "../common/state_serializer.h"
 
-TownsRTC::TownsRTC()
+RTC::RTC()
 {
     memset(&m_state, 0, sizeof(m_state));
 }
 
-TownsRTC::~TownsRTC()
+RTC::~RTC()
 {
 }
 
-void TownsRTC::Init()
+void RTC::Init()
 {
     Reset(0);
 }
 
 // Power on starts from the host local time in 24 hour mode, the year counter holds two digits
-void TownsRTC::Reset(u64 clocks)
+void RTC::Reset(u64 clocks)
 {
     memset(&m_state, 0, sizeof(m_state));
-    m_state.registers[k_towns_rtc_hours + 1] = k_towns_rtc_24_hour;
-    m_state.update_clocks = clocks + k_towns_rtc_second_clocks;
+    m_state.registers[k_rtc_hours + 1] = k_rtc_24_hour;
+    m_state.update_clocks = clocks + k_rtc_second_clocks;
 
     time_t now = time(NULL);
     struct tm* local = localtime(&now);
 
     if (!IsValidPointer(local))
     {
-        SetValue(k_towns_rtc_day, 0x03, 1);
-        SetValue(k_towns_rtc_month, 0x01, 1);
+        SetValue(k_rtc_day, 0x03, 1);
+        SetValue(k_rtc_month, 0x01, 1);
         return;
     }
 
-    SetValue(k_towns_rtc_seconds, 0x07, MIN(local->tm_sec, 59));
-    SetValue(k_towns_rtc_minutes, 0x07, local->tm_min);
-    SetValue(k_towns_rtc_hours, 0x03, local->tm_hour);
-    m_state.registers[k_towns_rtc_weekday] = (u8)local->tm_wday;
-    SetValue(k_towns_rtc_day, 0x03, local->tm_mday);
-    SetValue(k_towns_rtc_month, 0x01, local->tm_mon + 1);
-    SetValue(k_towns_rtc_year, 0x0F, local->tm_year % 100);
+    SetValue(k_rtc_seconds, 0x07, MIN(local->tm_sec, 59));
+    SetValue(k_rtc_minutes, 0x07, local->tm_min);
+    SetValue(k_rtc_hours, 0x03, local->tm_hour);
+    m_state.registers[k_rtc_weekday] = (u8)local->tm_wday;
+    SetValue(k_rtc_day, 0x03, local->tm_mday);
+    SetValue(k_rtc_month, 0x01, local->tm_mon + 1);
+    SetValue(k_rtc_year, 0x0F, local->tm_year % 100);
 }
 
-u8 TownsRTC::Read(u16 port, u64 clocks)
+u8 RTC::Read(u16 port, u64 clocks)
 {
     Synchronize(clocks);
 
@@ -70,7 +70,7 @@ u8 TownsRTC::Read(u16 port, u64 clocks)
         case 0x0070:
         {
             // READY drops for the 427 us before each counter update
-            u8 value = clocks + k_towns_rtc_busy_clocks < m_state.update_clocks ? 0x80 : 0x00;
+            u8 value = clocks + k_rtc_busy_clocks < m_state.update_clocks ? 0x80 : 0x00;
 
             if ((m_state.command & 0x84) == 0x84)
                 value |= ReadRegister(clocks);
@@ -83,7 +83,7 @@ u8 TownsRTC::Read(u16 port, u64 clocks)
 }
 
 // The strobes are levels, so a nibble written while one is held takes effect at once
-void TownsRTC::Write(u16 port, u8 value, u64 clocks)
+void RTC::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);
 
@@ -109,7 +109,7 @@ void TownsRTC::Write(u16 port, u8 value, u64 clocks)
         WriteRegister(m_state.data, clocks);
 }
 
-void TownsRTC::WriteRegister(u8 value, u64 clocks)
+void RTC::WriteRegister(u8 value, u64 clocks)
 {
     switch (m_state.address)
     {
@@ -120,14 +120,14 @@ void TownsRTC::WriteRegister(u8 value, u64 clocks)
             break;
         case 0x05:
             // Selecting 24 hour mode clears PM
-            m_state.registers[m_state.address] = (value & k_towns_rtc_24_hour) != 0 ? value & ~k_towns_rtc_pm : value;
+            m_state.registers[m_state.address] = (value & k_rtc_24_hour) != 0 ? value & ~k_rtc_pm : value;
             break;
         case 0x0A:
             m_state.registers[m_state.address] = value & 0x01;
             break;
-        case k_towns_rtc_divider_reset:
+        case k_rtc_divider_reset:
             // The divider restarts, so the next update comes a full second later
-            m_state.update_clocks = clocks + k_towns_rtc_second_clocks;
+            m_state.update_clocks = clocks + k_rtc_second_clocks;
             break;
         case 0x0E:
         case 0x0F:
@@ -138,11 +138,11 @@ void TownsRTC::WriteRegister(u8 value, u64 clocks)
     }
 }
 
-u8 TownsRTC::ReadRegister(u64 clocks) const
+u8 RTC::ReadRegister(u64 clocks) const
 {
     switch (m_state.address)
     {
-        case k_towns_rtc_divider_reset:
+        case k_rtc_divider_reset:
             return 0x00;
         case 0x0E:
         case 0x0F:
@@ -153,86 +153,86 @@ u8 TownsRTC::ReadRegister(u64 clocks) const
     }
 }
 
-void TownsRTC::AdvanceSecond()
+void RTC::AdvanceSecond()
 {
-    int second = GetValue(k_towns_rtc_seconds, 0x07) + 1;
+    int second = GetValue(k_rtc_seconds, 0x07) + 1;
 
     if (second < 60)
     {
-        SetValue(k_towns_rtc_seconds, 0x07, second);
+        SetValue(k_rtc_seconds, 0x07, second);
         return;
     }
 
-    SetValue(k_towns_rtc_seconds, 0x07, 0);
-    int minute = GetValue(k_towns_rtc_minutes, 0x07) + 1;
+    SetValue(k_rtc_seconds, 0x07, 0);
+    int minute = GetValue(k_rtc_minutes, 0x07) + 1;
 
     if (minute < 60)
     {
-        SetValue(k_towns_rtc_minutes, 0x07, minute);
+        SetValue(k_rtc_minutes, 0x07, minute);
         return;
     }
 
-    SetValue(k_towns_rtc_minutes, 0x07, 0);
-    int hour = GetValue(k_towns_rtc_hours, 0x03) + 1;
-    u8& hour_flags = m_state.registers[k_towns_rtc_hours + 1];
+    SetValue(k_rtc_minutes, 0x07, 0);
+    int hour = GetValue(k_rtc_hours, 0x03) + 1;
+    u8& hour_flags = m_state.registers[k_rtc_hours + 1];
 
     // 12 hour mode counts 0 to 11 and toggles PM at noon and midnight
-    if ((hour_flags & k_towns_rtc_24_hour) != 0)
+    if ((hour_flags & k_rtc_24_hour) != 0)
     {
         if (hour < 24)
         {
-            SetValue(k_towns_rtc_hours, 0x03, hour);
+            SetValue(k_rtc_hours, 0x03, hour);
             return;
         }
 
-        SetValue(k_towns_rtc_hours, 0x03, 0);
+        SetValue(k_rtc_hours, 0x03, 0);
     }
     else
     {
         if (hour < 12)
         {
-            SetValue(k_towns_rtc_hours, 0x03, hour);
+            SetValue(k_rtc_hours, 0x03, hour);
             return;
         }
 
-        SetValue(k_towns_rtc_hours, 0x03, 0);
-        hour_flags ^= k_towns_rtc_pm;
+        SetValue(k_rtc_hours, 0x03, 0);
+        hour_flags ^= k_rtc_pm;
 
-        if ((hour_flags & k_towns_rtc_pm) != 0)
+        if ((hour_flags & k_rtc_pm) != 0)
             return;
     }
 
-    m_state.registers[k_towns_rtc_weekday] = (u8)((m_state.registers[k_towns_rtc_weekday] + 1) % 7);
-    int day = GetValue(k_towns_rtc_day, 0x03) + 1;
+    m_state.registers[k_rtc_weekday] = (u8)((m_state.registers[k_rtc_weekday] + 1) % 7);
+    int day = GetValue(k_rtc_day, 0x03) + 1;
 
     if (day <= GetDaysInMonth())
     {
-        SetValue(k_towns_rtc_day, 0x03, day);
+        SetValue(k_rtc_day, 0x03, day);
         return;
     }
 
-    SetValue(k_towns_rtc_day, 0x03, 1);
-    int month = GetValue(k_towns_rtc_month, 0x01) + 1;
+    SetValue(k_rtc_day, 0x03, 1);
+    int month = GetValue(k_rtc_month, 0x01) + 1;
 
     if (month <= 12)
     {
-        SetValue(k_towns_rtc_month, 0x01, month);
+        SetValue(k_rtc_month, 0x01, month);
         return;
     }
 
-    SetValue(k_towns_rtc_month, 0x01, 1);
-    SetValue(k_towns_rtc_year, 0x0F, (GetValue(k_towns_rtc_year, 0x0F) + 1) % 100);
+    SetValue(k_rtc_month, 0x01, 1);
+    SetValue(k_rtc_year, 0x0F, (GetValue(k_rtc_year, 0x0F) + 1) % 100);
 }
 
 // February is leap when the year modulo 4 matches the phase in bits 2-3 of the day tens
-int TownsRTC::GetDaysInMonth() const
+int RTC::GetDaysInMonth() const
 {
-    int month = GetValue(k_towns_rtc_month, 0x01);
+    int month = GetValue(k_rtc_month, 0x01);
 
     if (month == 2)
     {
-        int phase = (m_state.registers[k_towns_rtc_day + 1] >> 2) & 0x03;
-        return (GetValue(k_towns_rtc_year, 0x0F) % 4) == phase ? 29 : 28;
+        int phase = (m_state.registers[k_rtc_day + 1] >> 2) & 0x03;
+        return (GetValue(k_rtc_year, 0x0F) % 4) == phase ? 29 : 28;
     }
 
     if (month == 4 || month == 6 || month == 9 || month == 11)
@@ -241,29 +241,33 @@ int TownsRTC::GetDaysInMonth() const
     return 31;
 }
 
-void TownsRTC::SaveState(std::ostream& stream)
+void RTC::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
 }
 
-void TownsRTC::LoadState(std::istream& stream)
+void RTC::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    for (int i = 0; i < TOWNS_RTC_REGISTERS; i++)
-        m_state.registers[i] &= 0x0F;
-
-    m_state.data &= 0x0F;
-    m_state.address &= 0x0F;
+    SanitizeState();
 }
 
-void TownsRTC::Serialize(StateSerializer& serializer)
+void RTC::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_state.registers, TOWNS_RTC_REGISTERS);
+    G_SERIALIZE_ARRAY(serializer, m_state.registers, RTC_REGISTERS);
     G_SERIALIZE(serializer, m_state.data);
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.address);
     G_SERIALIZE(serializer, m_state.update_clocks);
+}
+
+void RTC::SanitizeState()
+{
+    for (int i = 0; i < RTC_REGISTERS; i++)
+        m_state.registers[i] &= 0x0F;
+
+    m_state.data &= 0x0F;
+    m_state.address &= 0x0F;
 }

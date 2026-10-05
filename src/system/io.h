@@ -17,32 +17,32 @@
  *
  */
 
-#ifndef TOWNS_IO_H
-#define TOWNS_IO_H
+#ifndef IO_H
+#define IO_H
 
 #include "../common/common.h"
 
 class Audio;
 class CdRom;
 class FDCMock;
-class TownsKeyboard;
-class TownsRTC;
+class Keyboard;
+class RTC;
 class UPD71071;
 class YM3438;
 class RF5C68;
 class Memory;
-class TownsPIC;
-class TownsPIT;
-class TownsSystem;
+class PIC;
+class PIT;
+class SystemControl;
 class Video;
 
-class TownsIO
+class IO
 {
 public:
-    TownsIO();
-    ~TownsIO();
-    void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
-        CdRom* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma);
+    IO();
+    ~IO();
+    void Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
+        CdRom* cdrom, FDCMock* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -55,18 +55,18 @@ private:
     Audio* m_audio;
     YM3438* m_ym3438;
     RF5C68* m_rf5c68;
-    TownsPIC* m_pic;
-    TownsPIT* m_pit;
+    PIC* m_pic;
+    PIT* m_pit;
     Video* m_video;
     Memory* m_memory;
-    TownsSystem* m_system;
+    SystemControl* m_system_control;
     CdRom* m_cdrom;
     FDCMock* m_fdc;
-    TownsKeyboard* m_keyboard;
-    TownsRTC* m_rtc;
+    Keyboard* m_keyboard;
+    RTC* m_rtc;
     UPD71071* m_dma;
 };
 
-#include "towns_io_inline.h"
+#include "io_inline.h"
 
-#endif /* TOWNS_IO_H */
+#endif /* IO_H */

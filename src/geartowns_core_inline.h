@@ -57,24 +57,24 @@ INLINE I386* GeartownsCore::GetI386()
     return m_i386;
 }
 
-INLINE TownsIO* GeartownsCore::GetIO()
+INLINE IO* GeartownsCore::GetIO()
 {
-    return m_towns_io;
+    return m_io;
 }
 
-INLINE TownsPIC* GeartownsCore::GetPIC()
+INLINE PIC* GeartownsCore::GetPIC()
 {
     return m_pic;
 }
 
-INLINE TownsPIT* GeartownsCore::GetPIT()
+INLINE PIT* GeartownsCore::GetPIT()
 {
     return m_pit;
 }
 
-INLINE TownsSystem* GeartownsCore::GetSystem()
+INLINE SystemControl* GeartownsCore::GetSystemControl()
 {
-    return m_system;
+    return m_system_control;
 }
 
 INLINE Scheduler* GeartownsCore::GetScheduler()
@@ -107,12 +107,12 @@ INLINE FDCMock* GeartownsCore::GetFDC()
     return m_fdc;
 }
 
-INLINE TownsKeyboard* GeartownsCore::GetKeyboard()
+INLINE Keyboard* GeartownsCore::GetKeyboard()
 {
     return m_keyboard;
 }
 
-INLINE TownsRTC* GeartownsCore::GetRTC()
+INLINE RTC* GeartownsCore::GetRTC()
 {
     return m_rtc;
 }

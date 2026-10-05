@@ -27,8 +27,8 @@
 #define VIDEO_SPRITE_RAM_SIZE 0x20000
 #define VIDEO_CRTC_REGISTER_COUNT 32
 
-class TownsPIC;
-class TownsPIT;
+class PIC;
+class PIT;
 class Scheduler;
 class StateSerializer;
 
@@ -72,7 +72,7 @@ public:
 public:
     Video();
     ~Video();
-    void Init(TownsPIC* pic, TownsPIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format);
+    void Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format);
     void Reset();
     void ResetFMRView();
     u8 Read(u16 port, u64 clocks);
@@ -155,8 +155,8 @@ private:
 
 private:
     Video_State m_state;
-    TownsPIC* m_pic;
-    TownsPIT* m_pit;
+    PIC* m_pic;
+    PIT* m_pit;
     Scheduler* m_scheduler;
     const u8* m_font_rom;
     GT_Pixel_Format m_pixel_format;

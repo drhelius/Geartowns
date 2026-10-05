@@ -17,21 +17,21 @@
  *
  */
 
-#include "towns_pic.h"
+#include "pic.h"
 
-void TownsPIC::Init()
+void PIC::Init()
 {
     m_master.Init(true);
     m_slave.Init(false);
 }
 
-void TownsPIC::Reset()
+void PIC::Reset()
 {
     m_master.Reset();
     m_slave.Reset();
 }
 
-u8 TownsPIC::Read(u16 port)
+u8 PIC::Read(u16 port)
 {
     int a0 = (port >> 1) & 0x01;
 
@@ -43,7 +43,7 @@ u8 TownsPIC::Read(u16 port)
     return value;
 }
 
-void TownsPIC::Write(u16 port, u8 value)
+void PIC::Write(u16 port, u8 value)
 {
     int a0 = (port >> 1) & 0x01;
 
@@ -56,7 +56,7 @@ void TownsPIC::Write(u16 port, u8 value)
     }
 }
 
-u8 TownsPIC::AcknowledgeInterrupt()
+u8 PIC::AcknowledgeInterrupt()
 {
     int line = m_master.Acknowledge();
 
@@ -64,7 +64,7 @@ u8 TownsPIC::AcknowledgeInterrupt()
     if (line < 0)
     {
         Debug("PIC: spurious interrupt acknowledge");
-        line = k_towns_pic_cascade_line;
+        line = k_pic_cascade_line;
         return m_master.IsCascadeLine(line) ? m_slave.GetVector(7) : m_master.GetVector(line);
     }
 
@@ -83,13 +83,13 @@ u8 TownsPIC::AcknowledgeInterrupt()
     return m_slave.GetVector(slave_line);
 }
 
-void TownsPIC::SaveState(std::ostream& stream)
+void PIC::SaveState(std::ostream& stream)
 {
     m_master.SaveState(stream);
     m_slave.SaveState(stream);
 }
 
-void TownsPIC::LoadState(std::istream& stream)
+void PIC::LoadState(std::istream& stream)
 {
     m_master.LoadState(stream);
     m_slave.LoadState(stream);

@@ -17,36 +17,36 @@
  *
  */
 
-#ifndef TOWNS_RTC_INLINE_H
-#define TOWNS_RTC_INLINE_H
+#ifndef RTC_INLINE_H
+#define RTC_INLINE_H
 
-#include "towns_rtc.h"
+#include "rtc.h"
 
 // Nothing reads the clock between accesses, so it catches up one second at a time when the CPU looks
-INLINE void TownsRTC::Synchronize(u64 clocks)
+INLINE void RTC::Synchronize(u64 clocks)
 {
     while (clocks >= m_state.update_clocks)
     {
         AdvanceSecond();
-        m_state.update_clocks += k_towns_rtc_second_clocks;
+        m_state.update_clocks += k_rtc_second_clocks;
     }
 }
 
 // Tens digits share their nibble with the 24 hour, PM and leap phase flags
-INLINE int TownsRTC::GetValue(int ones, u8 tens_mask) const
+INLINE int RTC::GetValue(int ones, u8 tens_mask) const
 {
     return (m_state.registers[ones + 1] & tens_mask) * 10 + m_state.registers[ones];
 }
 
-INLINE void TownsRTC::SetValue(int ones, u8 tens_mask, int value)
+INLINE void RTC::SetValue(int ones, u8 tens_mask, int value)
 {
     m_state.registers[ones] = (u8)(value % 10);
     m_state.registers[ones + 1] = (u8)((m_state.registers[ones + 1] & ~tens_mask) | (value / 10));
 }
 
-INLINE TownsRTC::TownsRTC_State* TownsRTC::GetState()
+INLINE RTC::RTC_State* RTC::GetState()
 {
     return &m_state;
 }
 
-#endif /* TOWNS_RTC_INLINE_H */
+#endif /* RTC_INLINE_H */

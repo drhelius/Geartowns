@@ -38,7 +38,7 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/i386/i386_protected_transfer.cpp \
                 $(SOURCE_DIR)/i386/i386_task.cpp \
                 $(SOURCE_DIR)/input/input.cpp \
-                $(SOURCE_DIR)/input/towns_keyboard.cpp \
+                $(SOURCE_DIR)/input/keyboard.cpp \
                 $(SOURCE_DIR)/media/firmware.cpp \
                 $(SOURCE_DIR)/media/media.cpp \
                 $(SOURCE_DIR)/media/media_file.cpp \
@@ -47,12 +47,12 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/media/ogg_vorbis_decoder.cpp \
                 $(SOURCE_DIR)/system/i8253.cpp \
                 $(SOURCE_DIR)/system/i8259.cpp \
+                $(SOURCE_DIR)/system/io.cpp \
                 $(SOURCE_DIR)/system/memory.cpp \
+                $(SOURCE_DIR)/system/pic.cpp \
+                $(SOURCE_DIR)/system/pit.cpp \
+                $(SOURCE_DIR)/system/rtc.cpp \
                 $(SOURCE_DIR)/system/scheduler.cpp \
-                $(SOURCE_DIR)/system/towns_io.cpp \
-                $(SOURCE_DIR)/system/towns_pic.cpp \
-                $(SOURCE_DIR)/system/towns_pit.cpp \
-                $(SOURCE_DIR)/system/towns_rtc.cpp \
+                $(SOURCE_DIR)/system/system_control.cpp \
                 $(SOURCE_DIR)/system/upd71071.cpp \
-                $(SOURCE_DIR)/system/towns_system.cpp \
                 $(SOURCE_DIR)/video/video.cpp

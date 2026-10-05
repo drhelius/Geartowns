@@ -61,14 +61,18 @@ void Scheduler::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    for (int i = 0; i < SCHEDULER_EVENT_COUNT; i++)
-        m_state.events[i] = GT_NO_EVENT;
-
-    UpdateNextEvent();
+    SanitizeState();
 }
 
 void Scheduler::Serialize(StateSerializer& serializer)
 {
     G_SERIALIZE(serializer, m_state.clocks);
+}
+
+void Scheduler::SanitizeState()
+{
+    for (int i = 0; i < SCHEDULER_EVENT_COUNT; i++)
+        m_state.events[i] = GT_NO_EVENT;
+
+    UpdateNextEvent();
 }

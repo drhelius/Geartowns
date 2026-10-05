@@ -82,7 +82,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/i386/i386_protected_transfer.cpp \
     $(SRC_DIR)/i386/i386_task.cpp \
     $(SRC_DIR)/input/input.cpp \
-    $(SRC_DIR)/input/towns_keyboard.cpp \
+    $(SRC_DIR)/input/keyboard.cpp \
     $(SRC_DIR)/media/firmware.cpp \
     $(SRC_DIR)/media/media.cpp \
     $(SRC_DIR)/media/media_file.cpp \
@@ -90,12 +90,12 @@ SOURCES_CXX := \
     $(SRC_DIR)/media/ogg_vorbis_decoder.cpp \
     $(SRC_DIR)/system/i8253.cpp \
     $(SRC_DIR)/system/i8259.cpp \
+    $(SRC_DIR)/system/io.cpp \
     $(SRC_DIR)/system/memory.cpp \
+    $(SRC_DIR)/system/pic.cpp \
+    $(SRC_DIR)/system/pit.cpp \
+    $(SRC_DIR)/system/rtc.cpp \
     $(SRC_DIR)/system/scheduler.cpp \
-    $(SRC_DIR)/system/towns_io.cpp \
-    $(SRC_DIR)/system/towns_pic.cpp \
-    $(SRC_DIR)/system/towns_pit.cpp \
-    $(SRC_DIR)/system/towns_rtc.cpp \
+    $(SRC_DIR)/system/system_control.cpp \
     $(SRC_DIR)/system/upd71071.cpp \
-    $(SRC_DIR)/system/towns_system.cpp \
     $(SRC_DIR)/video/video.cpp

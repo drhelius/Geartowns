@@ -32,7 +32,7 @@ class CdRomAudio;
 class CdRomMedia;
 class Scheduler;
 class StateSerializer;
-class TownsPIC;
+class PIC;
 class UPD71071;
 
 class CdRom
@@ -107,7 +107,7 @@ public:
 public:
     CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio);
     ~CdRom();
-    void Init(TownsPIC* pic, Scheduler* scheduler, UPD71071* dma, Audio* audio);
+    void Init(PIC* pic, Scheduler* scheduler, UPD71071* dma, Audio* audio);
     void Reset();
     void NotifyMediaChanged();
     u8 Read(u16 port, u64 clocks);
@@ -165,9 +165,10 @@ private:
     void ScheduleEvent(CdRom_Event event, u64 clocks);
     void UpdateNextEvent();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
-    TownsPIC* m_pic;
+    PIC* m_pic;
     Scheduler* m_scheduler;
     UPD71071* m_dma;
     Audio* m_audio;

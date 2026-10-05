@@ -31,7 +31,7 @@
 #define I386_TLB_SIZE (I386_TLB_SETS * I386_TLB_WAYS)
 
 class Memory;
-class TownsIO;
+class IO;
 
 enum I386_Register
 {
@@ -333,7 +333,7 @@ class I386
 public:
     I386();
     ~I386();
-    void Init(Memory* memory, TownsIO* towns_io = NULL);
+    void Init(Memory* memory, IO* io = NULL);
     void Reset();
     u32 RunInstruction(GT_Bus_Access_Context& context);
     I386_Run_Result GetStepInfo() const;
@@ -1005,7 +1005,7 @@ private:
     InstructionContext m_instruction_defaults;
 
     Memory* m_memory;
-    TownsIO* m_towns_io;
+    IO* m_io;
 
     bool m_trace_enabled;
 

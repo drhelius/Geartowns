@@ -17,42 +17,42 @@
  *
  */
 
-#ifndef TOWNS_PIC_INLINE_H
-#define TOWNS_PIC_INLINE_H
+#ifndef PIC_INLINE_H
+#define PIC_INLINE_H
 
-#include "towns_pic.h"
+#include "pic.h"
 
-INLINE void TownsPIC::SetIRQLine(int irq, bool high)
+INLINE void PIC::SetIRQLine(int irq, bool high)
 {
     if (irq >= 8)
     {
         m_slave.SetInputLine(irq - 8, high);
         UpdateCascade();
     }
-    else if (irq != k_towns_pic_cascade_line)
+    else if (irq != k_pic_cascade_line)
         m_master.SetInputLine(irq, high);
     else
         Debug("PIC: IRQ 7 is the slave cascade input");
 }
 
-INLINE bool TownsPIC::IsInterruptPending() const
+INLINE bool PIC::IsInterruptPending() const
 {
     return m_master.IsIRQAsserted();
 }
 
-INLINE I8259* TownsPIC::GetMaster()
+INLINE I8259* PIC::GetMaster()
 {
     return &m_master;
 }
 
-INLINE I8259* TownsPIC::GetSlave()
+INLINE I8259* PIC::GetSlave()
 {
     return &m_slave;
 }
 
-INLINE void TownsPIC::UpdateCascade()
+INLINE void PIC::UpdateCascade()
 {
-    m_master.SetInputLine(k_towns_pic_cascade_line, m_slave.IsIRQAsserted());
+    m_master.SetInputLine(k_pic_cascade_line, m_slave.IsIRQAsserted());
 }
 
-#endif /* TOWNS_PIC_INLINE_H */
+#endif /* PIC_INLINE_H */

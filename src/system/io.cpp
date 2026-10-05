@@ -17,22 +17,22 @@
  *
  */
 
-#include "towns_io.h"
+#include "io.h"
 #include "../audio/audio.h"
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
 #include "../cdrom/cdrom.h"
 #include "../drive/fdc_mock.h"
-#include "../input/towns_keyboard.h"
+#include "../input/keyboard.h"
 #include "memory.h"
-#include "towns_pic.h"
-#include "towns_pit.h"
-#include "towns_rtc.h"
-#include "towns_system.h"
+#include "pic.h"
+#include "pit.h"
+#include "rtc.h"
+#include "system_control.h"
 #include "upd71071.h"
 #include "../video/video.h"
 
-TownsIO::TownsIO()
+IO::IO()
 {
     InitPointer(m_audio);
     InitPointer(m_ym3438);
@@ -41,7 +41,7 @@ TownsIO::TownsIO()
     InitPointer(m_pit);
     InitPointer(m_video);
     InitPointer(m_memory);
-    InitPointer(m_system);
+    InitPointer(m_system_control);
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
     InitPointer(m_keyboard);
@@ -49,12 +49,12 @@ TownsIO::TownsIO()
     InitPointer(m_dma);
 }
 
-TownsIO::~TownsIO()
+IO::~IO()
 {
 }
 
-void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
-    CdRom* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma)
+void IO::Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
+    CdRom* cdrom, FDCMock* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma)
 {
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();
@@ -63,7 +63,7 @@ void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Mem
     m_pit = pit;
     m_video = video;
     m_memory = memory;
-    m_system = system;
+    m_system_control = system_control;
     m_cdrom = cdrom;
     m_fdc = fdc;
     m_keyboard = keyboard;
@@ -72,11 +72,11 @@ void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Mem
     Reset();
 }
 
-void TownsIO::Reset()
+void IO::Reset()
 {
 }
 
-u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
+u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
 {
     switch (port)
     {
@@ -91,7 +91,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             return m_pic->Read(port);
         case 0x0020:
             // Reset reason
-            return m_system->Read(port);
+            return m_system_control->Read(port);
         case 0x0022:
             // Power control
             break;
@@ -103,7 +103,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             return 0x01;
         case 0x0032:
             // Serial ID ROM
-            return m_system->Read(port);
+            return m_system_control->Read(port);
         case 0x0040:
             // PIT counter 0
         case 0x0042:
@@ -308,7 +308,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x05E0:
             // Main RAM wait
-            return m_system->Read(port);
+            return m_system_control->Read(port);
         case 0x0600:
             // Keyboard data
         case 0x0602:
@@ -399,7 +399,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
     return 0xFF;
 }
 
-void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
+void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
 {
     switch (port)
     {
@@ -417,7 +417,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Reset and power control
         case 0x0022:
             // Power off
-            m_system->Write(port, value);
+            m_system_control->Write(port, value);
             break;
         case 0x0030:
             // Machine ID low
@@ -426,7 +426,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x0032:
             // Serial ID ROM
-            m_system->Write(port, value);
+            m_system_control->Write(port, value);
             break;
         case 0x0040:
             // PIT counter 0
@@ -645,7 +645,7 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x05E0:
             // Main RAM wait
-            m_system->Write(port, value);
+            m_system_control->Write(port, value);
             break;
         case 0x0600:
             // Keyboard data

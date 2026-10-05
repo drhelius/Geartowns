@@ -148,25 +148,25 @@
     <ClCompile Include="..\..\src\audio\ym3438.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\system\towns_io.cpp">
+    <ClCompile Include="..\..\src\system\io.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\system\towns_pic.cpp">
+    <ClCompile Include="..\..\src\system\pic.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\system\i8259.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\system\towns_pit.cpp">
+    <ClCompile Include="..\..\src\system\pit.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\system\towns_rtc.cpp">
+    <ClCompile Include="..\..\src\system\rtc.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\system\upd71071.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\system\towns_system.cpp">
+    <ClCompile Include="..\..\src\system\system_control.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\system\scheduler.cpp">
@@ -229,7 +229,7 @@
     <ClCompile Include="..\..\src\input\input.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\input\towns_keyboard.cpp">
+    <ClCompile Include="..\..\src\input\keyboard.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_bitstream.c">
@@ -311,20 +311,20 @@
     <ClInclude Include="..\..\src\i386\i386_run_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_names.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_io.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_io_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_pic.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_pic_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\io.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\io_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\pic.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\pic_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8259.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8259_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_pit.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_pit_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_rtc.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_rtc_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\pit.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\pit_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\rtc.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\rtc_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\upd71071.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\upd71071_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_system.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\towns_system_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\system_control.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\system_control_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom.h"><Filter>src</Filter></ClInclude>
@@ -360,8 +360,8 @@
     <ClInclude Include="..\..\src\geartowns_core_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\input.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\input_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\input\towns_keyboard.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\input\towns_keyboard_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\keyboard.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\keyboard_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\log.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\media.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\media_inline.h"><Filter>src</Filter></ClInclude>

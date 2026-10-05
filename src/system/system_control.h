@@ -17,18 +17,18 @@
  *
  */
 
-#ifndef TOWNS_SYSTEM_H
-#define TOWNS_SYSTEM_H
+#ifndef SYSTEM_CONTROL_H
+#define SYSTEM_CONTROL_H
 
 #include <iostream>
 #include "../common/common.h"
 
 class StateSerializer;
 
-class TownsSystem
+class SystemControl
 {
 public:
-    struct TownsSystem_State
+    struct SystemControl_State
     {
         u8 reset_cause;
         bool reset_pending;
@@ -40,8 +40,8 @@ public:
     };
 
 public:
-    TownsSystem();
-    ~TownsSystem();
+    SystemControl();
+    ~SystemControl();
     void Init();
     void Reset();
     u8 Read(u16 port);
@@ -49,21 +49,22 @@ public:
     void RequestCPUReset(u8 cause);
     bool IsCPUResetPending() const;
     void AcknowledgeCPUReset();
-    TownsSystem_State* GetState();
+    SystemControl_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
 private:
     void WriteSerialROM(u8 value);
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
-    TownsSystem_State m_state;
+    SystemControl_State m_state;
 };
 
-static const u8 k_towns_system_reset_soft = 0x01;
-static const u8 k_towns_system_reset_shutdown = 0x02;
+static const u8 k_system_control_reset_soft = 0x01;
+static const u8 k_system_control_reset_shutdown = 0x02;
 
-#include "towns_system_inline.h"
+#include "system_control_inline.h"
 
-#endif /* TOWNS_SYSTEM_H */
+#endif /* SYSTEM_CONTROL_H */

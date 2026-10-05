@@ -20,21 +20,21 @@
 #include <stdint.h>
 #include "i386.h"
 #include "i386_opcodes_inline.h"
-#include "../system/towns_io.h"
+#include "../system/io.h"
 
 INLINE bool I386::OPCodes_INS(int width, u32 destination_offset)
 {
     u16 port = m_state.registers[I386_REG_EDX].low;
     u32 value = width == 8 ? 0xFF : width == 16 ? 0xFFFF : 0xFFFFFFFFU;
 
-    if (IsValidPointer(m_towns_io))
+    if (IsValidPointer(m_io))
     {
         if (width == 8)
-            value = m_towns_io->Read8(port, *m_bus_context);
+            value = m_io->Read8(port, *m_bus_context);
         else if (width == 16)
-            value = m_towns_io->Read16(port, *m_bus_context);
+            value = m_io->Read16(port, *m_bus_context);
         else
-            value = m_towns_io->Read32(port, *m_bus_context);
+            value = m_io->Read32(port, *m_bus_context);
     }
 
     bool ok = WriteMemory(I386_SEGMENT_ES, destination_offset, width, value, *m_bus_context);
@@ -47,16 +47,16 @@ INLINE bool I386::OPCodes_OUTS(int width, int source_segment, u32 source_offset)
     u32 value = 0;
     bool ok = ReadMemory(source_segment, source_offset, width, *m_bus_context, value);
 
-    if (ok && IsValidPointer(m_towns_io))
+    if (ok && IsValidPointer(m_io))
     {
         u16 port = m_state.registers[I386_REG_EDX].low;
 
         if (width == 8)
-            m_towns_io->Write8(port, (u8)value, *m_bus_context);
+            m_io->Write8(port, (u8)value, *m_bus_context);
         else if (width == 16)
-            m_towns_io->Write16(port, (u16)value, *m_bus_context);
+            m_io->Write16(port, (u16)value, *m_bus_context);
         else
-            m_towns_io->Write32(port, value, *m_bus_context);
+            m_io->Write32(port, value, *m_bus_context);
     }
 
     m_bus_context->end_batch = true;

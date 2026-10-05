@@ -141,7 +141,22 @@ void CdRomAudio::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
+    SanitizeState();
+}
 
+void CdRomAudio::Serialize(StateSerializer& serializer)
+{
+    G_SERIALIZE(serializer, m_state.play_state);
+    G_SERIALIZE(serializer, m_state.start_lba);
+    G_SERIALIZE(serializer, m_state.end_lba);
+    G_SERIALIZE(serializer, m_state.current_lba);
+    G_SERIALIZE(serializer, m_state.current_sample);
+    G_SERIALIZE(serializer, m_state.seek_samples);
+    G_SERIALIZE(serializer, m_state.repeat);
+}
+
+void CdRomAudio::SanitizeState()
+{
     if (m_state.play_state > CDROM_AUDIO_PAUSED)
         m_state.play_state = CDROM_AUDIO_IDLE;
 
@@ -157,15 +172,4 @@ void CdRomAudio::LoadState(std::istream& stream)
         if (track >= 0)
             m_cdrom_media->PreloadTrack((u32)track);
     }
-}
-
-void CdRomAudio::Serialize(StateSerializer& serializer)
-{
-    G_SERIALIZE(serializer, m_state.play_state);
-    G_SERIALIZE(serializer, m_state.start_lba);
-    G_SERIALIZE(serializer, m_state.end_lba);
-    G_SERIALIZE(serializer, m_state.current_lba);
-    G_SERIALIZE(serializer, m_state.current_sample);
-    G_SERIALIZE(serializer, m_state.seek_samples);
-    G_SERIALIZE(serializer, m_state.repeat);
 }

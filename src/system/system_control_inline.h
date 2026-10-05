@@ -17,31 +17,30 @@
  *
  */
 
-#ifndef TOWNS_KEYBOARD_INLINE_H
-#define TOWNS_KEYBOARD_INLINE_H
+#ifndef SYSTEM_CONTROL_INLINE_H
+#define SYSTEM_CONTROL_INLINE_H
 
-#include "towns_keyboard.h"
+#include "system_control.h"
 
-INLINE void TownsKeyboard::HandleEvent(u64 clocks)
+INLINE void SystemControl::RequestCPUReset(u8 cause)
 {
-    Synchronize(clocks);
-    UpdateNextEvent();
+    m_state.reset_cause |= cause;
+    m_state.reset_pending = true;
 }
 
-INLINE bool TownsKeyboard::IsKeyPressed(GT_Keys key) const
+INLINE bool SystemControl::IsCPUResetPending() const
 {
-    return IsValidKey(key) && m_state.keys[key];
+    return m_state.reset_pending;
 }
 
-// Code 7Fh only appears in reset responses
-INLINE bool TownsKeyboard::IsValidKey(GT_Keys key) const
+INLINE void SystemControl::AcknowledgeCPUReset()
 {
-    return key > GT_KEY_NONE && key < 0x7F;
+    m_state.reset_pending = false;
 }
 
-INLINE TownsKeyboard::TownsKeyboard_State* TownsKeyboard::GetState()
+INLINE SystemControl::SystemControl_State* SystemControl::GetState()
 {
     return &m_state;
 }
 
-#endif /* TOWNS_KEYBOARD_INLINE_H */
+#endif /* SYSTEM_CONTROL_INLINE_H */

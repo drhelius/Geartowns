@@ -22,7 +22,7 @@
 #include "cdrom_media.h"
 #include "../audio/audio.h"
 #include "../system/scheduler.h"
-#include "../system/towns_pic.h"
+#include "../system/pic.h"
 #include "../system/upd71071.h"
 #include "../common/state_serializer.h"
 
@@ -41,7 +41,7 @@ CdRom::~CdRom()
 {
 }
 
-void CdRom::Init(TownsPIC* pic, Scheduler* scheduler, UPD71071* dma, Audio* audio)
+void CdRom::Init(PIC* pic, Scheduler* scheduler, UPD71071* dma, Audio* audio)
 {
     m_pic = pic;
     m_scheduler = scheduler;
@@ -1018,28 +1018,7 @@ void CdRom::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    m_state.param_count = MIN(m_state.param_count, CDROM_PARAM_COUNT);
-    m_state.status_head &= CDROM_STATUS_QUEUE_SIZE - 1;
-    m_state.status_count = MIN(m_state.status_count, CDROM_STATUS_QUEUE_SIZE);
-
-    if (((m_state.status_head + m_state.status_count) & 0x03) != 0)
-    {
-        m_state.status_head = 0;
-        m_state.status_count = 0;
-    }
-
-    m_state.sector_end = MIN(m_state.sector_end, CDROM_SECTOR_SIZE);
-    m_state.sector_position = MIN(m_state.sector_position, m_state.sector_end);
-
-    if (m_state.event > CDROM_EVENT_CDDA_STOP)
-        m_state.event = CDROM_EVENT_NONE;
-
-    if (m_state.transfer > CDROM_TRANSFER_CPU)
-        m_state.transfer = CDROM_TRANSFER_NONE;
-
-    UpdateIRQ();
-    UpdateNextEvent();
+    SanitizeState();
 }
 
 void CdRom::Serialize(StateSerializer& serializer)
@@ -1069,4 +1048,29 @@ void CdRom::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.sector_position);
     G_SERIALIZE(serializer, m_state.sector_end);
     G_SERIALIZE_ARRAY(serializer, m_state.sector, CDROM_SECTOR_SIZE);
+}
+
+void CdRom::SanitizeState()
+{
+    m_state.param_count = MIN(m_state.param_count, CDROM_PARAM_COUNT);
+    m_state.status_head &= CDROM_STATUS_QUEUE_SIZE - 1;
+    m_state.status_count = MIN(m_state.status_count, CDROM_STATUS_QUEUE_SIZE);
+
+    if (((m_state.status_head + m_state.status_count) & 0x03) != 0)
+    {
+        m_state.status_head = 0;
+        m_state.status_count = 0;
+    }
+
+    m_state.sector_end = MIN(m_state.sector_end, CDROM_SECTOR_SIZE);
+    m_state.sector_position = MIN(m_state.sector_position, m_state.sector_end);
+
+    if (m_state.event > CDROM_EVENT_CDDA_STOP)
+        m_state.event = CDROM_EVENT_NONE;
+
+    if (m_state.transfer > CDROM_TRANSFER_CPU)
+        m_state.transfer = CDROM_TRANSFER_NONE;
+
+    UpdateIRQ();
+    UpdateNextEvent();
 }

@@ -17,42 +17,42 @@
  *
  */
 
-#include "towns_keyboard.h"
-#include "../system/towns_pic.h"
+#include "keyboard.h"
+#include "../system/pic.h"
 #include "../system/scheduler.h"
 #include "../common/state_serializer.h"
 
 // Answer to a keyboard reset seen on a Towns II MX with a JIS keyboard
-static const u8 k_towns_keyboard_reset_response[4] = { 0xB0, 0x7F, 0xE8, 0x25 };
+static const u8 k_keyboard_reset_response[4] = { 0xB0, 0x7F, 0xE8, 0x25 };
 
-TownsKeyboard::TownsKeyboard()
+Keyboard::Keyboard()
 {
     InitPointer(m_pic);
     InitPointer(m_scheduler);
     memset(&m_state, 0, sizeof(m_state));
 }
 
-TownsKeyboard::~TownsKeyboard()
+Keyboard::~Keyboard()
 {
 }
 
-void TownsKeyboard::Init(TownsPIC* pic, Scheduler* scheduler)
+void Keyboard::Init(PIC* pic, Scheduler* scheduler)
 {
     m_pic = pic;
     m_scheduler = scheduler;
     Reset();
 }
 
-void TownsKeyboard::Reset()
+void Keyboard::Reset()
 {
     memset(&m_state, 0, sizeof(m_state));
-    m_state.repeat_delay = k_towns_keyboard_repeat_delay;
-    m_state.repeat_interval = k_towns_keyboard_repeat_interval;
+    m_state.repeat_delay = k_keyboard_repeat_delay;
+    m_state.repeat_interval = k_keyboard_repeat_interval;
     UpdateIRQ();
     UpdateNextEvent();
 }
 
-u8 TownsKeyboard::Read(u16 port, u64 clocks)
+u8 Keyboard::Read(u16 port, u64 clocks)
 {
     Synchronize(clocks);
 
@@ -65,14 +65,14 @@ u8 TownsKeyboard::Read(u16 port, u64 clocks)
             if (m_state.fifo_count != 0)
             {
                 value = m_state.fifo[m_state.fifo_read];
-                m_state.fifo_read = (m_state.fifo_read + 1) & (TOWNS_KEYBOARD_FIFO_SIZE - 1);
+                m_state.fifo_read = (m_state.fifo_read + 1) & (KEYBOARD_FIFO_SIZE - 1);
                 m_state.fifo_count--;
             }
 
             // Reading acknowledges the request, the next one comes a byte time later while data remains
             m_state.kbint = false;
             m_state.rearm_pending = m_state.fifo_count != 0 && m_state.irq_enabled;
-            m_state.rearm_clocks = clocks + k_towns_keyboard_rearm_clocks;
+            m_state.rearm_clocks = clocks + k_keyboard_rearm_clocks;
             UpdateIRQ();
             UpdateNextEvent();
             return value;
@@ -86,7 +86,7 @@ u8 TownsKeyboard::Read(u16 port, u64 clocks)
     }
 }
 
-void TownsKeyboard::Write(u16 port, u8 value, u64 clocks)
+void Keyboard::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);
 
@@ -111,7 +111,7 @@ void TownsKeyboard::Write(u16 port, u8 value, u64 clocks)
     }
 }
 
-void TownsKeyboard::Synchronize(u64 clocks)
+void Keyboard::Synchronize(u64 clocks)
 {
     bool changed = false;
 
@@ -139,7 +139,7 @@ void TownsKeyboard::Synchronize(u64 clocks)
         UpdateNextEvent();
 }
 
-void TownsKeyboard::KeyPressed(GT_Keys key)
+void Keyboard::KeyPressed(GT_Keys key)
 {
     if (!IsValidKey(key) || m_state.keys[key])
         return;
@@ -157,7 +157,7 @@ void TownsKeyboard::KeyPressed(GT_Keys key)
     UpdateNextEvent();
 }
 
-void TownsKeyboard::KeyReleased(GT_Keys key)
+void Keyboard::KeyReleased(GT_Keys key)
 {
     if (!IsValidKey(key) || !m_state.keys[key])
         return;
@@ -173,7 +173,7 @@ void TownsKeyboard::KeyReleased(GT_Keys key)
 }
 
 // Modifiers go last so the other breaks still carry them
-void TownsKeyboard::ReleaseAllKeys()
+void Keyboard::ReleaseAllKeys()
 {
     for (int i = GT_KEY_NONE + 1; i < GT_KEY_COUNT; i++)
     {
@@ -185,7 +185,7 @@ void TownsKeyboard::ReleaseAllKeys()
     KeyReleased(GT_KEY_SHIFT);
 }
 
-void TownsKeyboard::WriteCommand(u8 value)
+void Keyboard::WriteCommand(u8 value)
 {
     switch (value)
     {
@@ -223,18 +223,18 @@ void TownsKeyboard::WriteCommand(u8 value)
     m_state.last_command = value;
 }
 
-void TownsKeyboard::ResetController()
+void Keyboard::ResetController()
 {
     m_state.irq_enabled = false;
     m_state.repeat_key = GT_KEY_NONE;
-    m_state.repeat_delay = k_towns_keyboard_repeat_delay;
-    m_state.repeat_interval = k_towns_keyboard_repeat_interval;
+    m_state.repeat_delay = k_keyboard_repeat_delay;
+    m_state.repeat_interval = k_keyboard_repeat_interval;
 }
 
 // The answer replaces anything still queued
-void TownsKeyboard::SendResetResponse(int count)
+void Keyboard::SendResetResponse(int count)
 {
-    memcpy(m_state.fifo, k_towns_keyboard_reset_response, count);
+    memcpy(m_state.fifo, k_keyboard_reset_response, count);
     m_state.fifo_read = 0;
     m_state.fifo_count = (u8)count;
     m_state.rearm_pending = false;
@@ -244,9 +244,9 @@ void TownsKeyboard::SendResetResponse(int count)
 }
 
 // A JIS keyboard message: type and make or break flags with CTRL and SHIFT, then the key code
-void TownsKeyboard::PushEvent(u8 key, bool pressed)
+void Keyboard::PushEvent(u8 key, bool pressed)
 {
-    if (m_state.fifo_count + 2 > TOWNS_KEYBOARD_FIFO_SIZE)
+    if (m_state.fifo_count + 2 > KEYBOARD_FIFO_SIZE)
     {
         m_state.dropped_events++;
         return;
@@ -261,24 +261,24 @@ void TownsKeyboard::PushEvent(u8 key, bool pressed)
         flags |= 0x04;
 
     int write = m_state.fifo_read + m_state.fifo_count;
-    m_state.fifo[write & (TOWNS_KEYBOARD_FIFO_SIZE - 1)] = flags;
-    m_state.fifo[(write + 1) & (TOWNS_KEYBOARD_FIFO_SIZE - 1)] = key;
+    m_state.fifo[write & (KEYBOARD_FIFO_SIZE - 1)] = flags;
+    m_state.fifo[(write + 1) & (KEYBOARD_FIFO_SIZE - 1)] = key;
     m_state.fifo_count += 2;
     m_state.kbint = true;
     UpdateIRQ();
 }
 
-bool TownsKeyboard::IsRepeatKey(u8 key) const
+bool Keyboard::IsRepeatKey(u8 key) const
 {
     return key != GT_KEY_CTRL && key != GT_KEY_SHIFT && key != GT_KEY_ALT;
 }
 
-void TownsKeyboard::UpdateIRQ()
+void Keyboard::UpdateIRQ()
 {
-    m_pic->SetIRQLine(k_towns_keyboard_irq, m_state.kbint && m_state.irq_enabled);
+    m_pic->SetIRQLine(k_keyboard_irq, m_state.kbint && m_state.irq_enabled);
 }
 
-void TownsKeyboard::UpdateNextEvent()
+void Keyboard::UpdateNextEvent()
 {
     u64 next = GT_NO_EVENT;
 
@@ -291,30 +291,22 @@ void TownsKeyboard::UpdateNextEvent()
     m_scheduler->Schedule(SCHEDULER_EVENT_KEYBOARD, next);
 }
 
-void TownsKeyboard::SaveState(std::ostream& stream)
+void Keyboard::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
 }
 
-void TownsKeyboard::LoadState(std::istream& stream)
+void Keyboard::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    m_state.fifo_read &= TOWNS_KEYBOARD_FIFO_SIZE - 1;
-    m_state.fifo_count = (u8)MIN(m_state.fifo_count, TOWNS_KEYBOARD_FIFO_SIZE);
-
-    if (!IsValidKey((GT_Keys)m_state.repeat_key))
-        m_state.repeat_key = GT_KEY_NONE;
-
-    UpdateIRQ();
-    UpdateNextEvent();
+    SanitizeState();
 }
 
-void TownsKeyboard::Serialize(StateSerializer& serializer)
+void Keyboard::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_state.fifo, TOWNS_KEYBOARD_FIFO_SIZE);
+    G_SERIALIZE_ARRAY(serializer, m_state.fifo, KEYBOARD_FIFO_SIZE);
     G_SERIALIZE(serializer, m_state.fifo_read);
     G_SERIALIZE(serializer, m_state.fifo_count);
     G_SERIALIZE(serializer, m_state.irq_enabled);
@@ -328,4 +320,20 @@ void TownsKeyboard::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.repeat_delay);
     G_SERIALIZE(serializer, m_state.repeat_interval);
     G_SERIALIZE(serializer, m_state.dropped_events);
+}
+
+void Keyboard::SanitizeState()
+{
+    m_state.fifo_read &= KEYBOARD_FIFO_SIZE - 1;
+    m_state.fifo_count = (u8)MIN(m_state.fifo_count, KEYBOARD_FIFO_SIZE);
+
+    if (!IsValidKey((GT_Keys)m_state.repeat_key))
+        m_state.repeat_key = GT_KEY_NONE;
+
+    // A zero interval would repeat the key at the same clock forever
+    if (m_state.repeat_interval == 0)
+        m_state.repeat_interval = k_keyboard_repeat_interval;
+
+    UpdateIRQ();
+    UpdateNextEvent();
 }

@@ -70,6 +70,7 @@ private:
     void LoadSector();
     void NextSector();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
     CdRomMedia* m_cdrom_media;

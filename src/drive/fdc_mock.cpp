@@ -18,7 +18,7 @@
  */
 
 #include "fdc_mock.h"
-#include "../system/towns_pic.h"
+#include "../system/pic.h"
 #include "../system/scheduler.h"
 #include "../common/state_serializer.h"
 
@@ -36,7 +36,7 @@ FDCMock::~FDCMock()
 {
 }
 
-void FDCMock::Init(TownsPIC* pic, Scheduler* scheduler)
+void FDCMock::Init(PIC* pic, Scheduler* scheduler)
 {
     m_pic = pic;
     m_scheduler = scheduler;
@@ -297,13 +297,7 @@ void FDCMock::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    for (int i = 0; i < FDC_MOCK_DRIVES; i++)
-        m_state.cylinders[i] = (u8)MIN(m_state.cylinders[i], k_fdc_mock_last_cylinder);
-
-    m_state.drive_switch &= 0x01;
-    UpdateIRQ();
-    UpdateNextEvent();
+    SanitizeState();
 }
 
 void FDCMock::Serialize(StateSerializer& serializer)
@@ -322,4 +316,14 @@ void FDCMock::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.drive_select);
     G_SERIALIZE(serializer, m_state.drive_switch);
     G_SERIALIZE_ARRAY(serializer, m_state.cylinders, FDC_MOCK_DRIVES);
+}
+
+void FDCMock::SanitizeState()
+{
+    for (int i = 0; i < FDC_MOCK_DRIVES; i++)
+        m_state.cylinders[i] = (u8)MIN(m_state.cylinders[i], k_fdc_mock_last_cylinder);
+
+    m_state.drive_switch &= 0x01;
+    UpdateIRQ();
+    UpdateNextEvent();
 }

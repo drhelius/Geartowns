@@ -17,38 +17,31 @@
  *
  */
 
-#ifndef TOWNS_PIC_H
-#define TOWNS_PIC_H
+#ifndef KEYBOARD_INLINE_H
+#define KEYBOARD_INLINE_H
 
-#include <iostream>
-#include "../common/common.h"
-#include "i8259.h"
+#include "keyboard.h"
 
-class TownsPIC
+INLINE void Keyboard::HandleEvent(u64 clocks)
 {
-public:
-    void Init();
-    void Reset();
-    u8 Read(u16 port);
-    void Write(u16 port, u8 value);
-    void SetIRQLine(int irq, bool high);
-    bool IsInterruptPending() const;
-    u8 AcknowledgeInterrupt();
-    I8259* GetMaster();
-    I8259* GetSlave();
-    void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    Synchronize(clocks);
+    UpdateNextEvent();
+}
 
-private:
-    void UpdateCascade();
+INLINE bool Keyboard::IsKeyPressed(GT_Keys key) const
+{
+    return IsValidKey(key) && m_state.keys[key];
+}
 
-private:
-    I8259 m_master;
-    I8259 m_slave;
-};
+// Code 7Fh only appears in reset responses
+INLINE bool Keyboard::IsValidKey(GT_Keys key) const
+{
+    return key > GT_KEY_NONE && key < 0x7F;
+}
 
-static const int k_towns_pic_cascade_line = 7;
+INLINE Keyboard::Keyboard_State* Keyboard::GetState()
+{
+    return &m_state;
+}
 
-#include "towns_pic_inline.h"
-
-#endif /* TOWNS_PIC_H */
+#endif /* KEYBOARD_INLINE_H */

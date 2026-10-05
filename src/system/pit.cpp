@@ -17,11 +17,11 @@
  *
  */
 
-#include "towns_pit.h"
-#include "towns_pic.h"
+#include "pit.h"
+#include "pic.h"
 #include "../common/state_serializer.h"
 
-TownsPIT::TownsPIT()
+PIT::PIT()
 {
     InitPointer(m_pic);
     InitPointer(m_scheduler);
@@ -32,11 +32,11 @@ TownsPIT::TownsPIT()
     m_state.settled_tick = 0;
 }
 
-TownsPIT::~TownsPIT()
+PIT::~PIT()
 {
 }
 
-void TownsPIT::Init(TownsPIC* pic, Scheduler* scheduler)
+void PIT::Init(PIC* pic, Scheduler* scheduler)
 {
     m_pic = pic;
     m_scheduler = scheduler;
@@ -45,7 +45,7 @@ void TownsPIT::Init(TownsPIC* pic, Scheduler* scheduler)
     Reset();
 }
 
-void TownsPIT::Reset()
+void PIT::Reset()
 {
     m_pit[0].Reset();
     m_pit[1].Reset();
@@ -58,7 +58,7 @@ void TownsPIT::Reset()
     UpdateNextEvent();
 }
 
-u8 TownsPIT::Read(u16 port, u64 clocks)
+u8 PIT::Read(u16 port, u64 clocks)
 {
     Synchronize(clocks);
 
@@ -75,7 +75,7 @@ u8 TownsPIT::Read(u16 port, u64 clocks)
     return m_pit[chip].ReadCounter(index, GetTick(chip * 3 + index, clocks));
 }
 
-void TownsPIT::Write(u16 port, u8 value, u64 clocks)
+void PIT::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);
 
@@ -115,12 +115,12 @@ void TownsPIT::Write(u16 port, u8 value, u64 clocks)
     UpdateNextEvent();
 }
 
-void TownsPIT::UpdateIRQ()
+void PIT::UpdateIRQ()
 {
     m_pic->SetIRQLine(0, (m_state.timer_latch & m_state.timer_enable) != 0);
 }
 
-void TownsPIT::UpdateNextEvent()
+void PIT::UpdateNextEvent()
 {
     u64 next_event = GT_NO_EVENT;
 
@@ -141,7 +141,7 @@ void TownsPIT::UpdateNextEvent()
     m_scheduler->Schedule(SCHEDULER_EVENT_PIT, next_event);
 }
 
-void TownsPIT::SaveState(std::ostream& stream)
+void PIT::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
@@ -149,25 +149,28 @@ void TownsPIT::SaveState(std::ostream& stream)
     m_pit[1].SaveState(stream);
 }
 
-void TownsPIT::LoadState(std::istream& stream)
+void PIT::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    m_state.timer_latch &= 0x03;
-    m_state.timer_enable &= 0x03;
-
     m_pit[0].LoadState(stream);
     m_pit[1].LoadState(stream);
-    UpdateIRQ();
-    UpdateNextEvent();
+    SanitizeState();
 }
 
-void TownsPIT::Serialize(StateSerializer& serializer)
+void PIT::Serialize(StateSerializer& serializer)
 {
     G_SERIALIZE(serializer, m_state.timer_latch);
     G_SERIALIZE(serializer, m_state.timer_enable);
     G_SERIALIZE(serializer, m_state.sound);
     G_SERIALIZE(serializer, m_state.sound_memory);
     G_SERIALIZE(serializer, m_state.settled_tick);
+}
+
+void PIT::SanitizeState()
+{
+    m_state.timer_latch &= 0x03;
+    m_state.timer_enable &= 0x03;
+    UpdateIRQ();
+    UpdateNextEvent();
 }

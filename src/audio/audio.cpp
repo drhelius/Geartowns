@@ -247,7 +247,25 @@ void Audio::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
+    m_ym3438->LoadState(stream);
+    m_rf5c68->LoadState(stream);
+    SanitizeState();
+}
 
+void Audio::Serialize(StateSerializer& serializer)
+{
+    G_SERIALIZE(serializer, m_state.sound_clock_remainder);
+    G_SERIALIZE(serializer, m_state.sample_clock_counter);
+    G_SERIALIZE(serializer, m_state.pcm_lowpass_left);
+    G_SERIALIZE(serializer, m_state.pcm_lowpass_right);
+    G_SERIALIZE(serializer, m_state.clocks);
+    G_SERIALIZE_ARRAY(serializer, m_state.volume_channel, AUDIO_VOLUME_CHIPS);
+    G_SERIALIZE_ARRAY(serializer, &m_state.volume_data[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
+    G_SERIALIZE_ARRAY(serializer, &m_state.volume_control[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
+}
+
+void Audio::SanitizeState()
+{
     m_state.sound_clock_remainder %= k_audio_cpu_clocks_per_sound_clock;
     m_state.sample_clock_counter %= GT_CPU_CLOCK_RATE;
     m_state.pcm_lowpass_left = CLAMP(m_state.pcm_lowpass_left, -32768, 32767);
@@ -265,19 +283,4 @@ void Audio::LoadState(std::istream& stream)
     }
 
     UpdateCDDAGain();
-
-    m_ym3438->LoadState(stream);
-    m_rf5c68->LoadState(stream);
-}
-
-void Audio::Serialize(StateSerializer& serializer)
-{
-    G_SERIALIZE(serializer, m_state.sound_clock_remainder);
-    G_SERIALIZE(serializer, m_state.sample_clock_counter);
-    G_SERIALIZE(serializer, m_state.pcm_lowpass_left);
-    G_SERIALIZE(serializer, m_state.pcm_lowpass_right);
-    G_SERIALIZE(serializer, m_state.clocks);
-    G_SERIALIZE_ARRAY(serializer, m_state.volume_channel, AUDIO_VOLUME_CHIPS);
-    G_SERIALIZE_ARRAY(serializer, &m_state.volume_data[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
-    G_SERIALIZE_ARRAY(serializer, &m_state.volume_control[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
 }

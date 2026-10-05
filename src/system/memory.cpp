@@ -953,10 +953,7 @@ void Memory::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-
-    m_state.dictionary_bank &= 0x0F;
-    ApplyMapping();
-    m_debug_snapshot_id++;
+    SanitizeState();
 }
 
 void Memory::Serialize(StateSerializer& serializer)
@@ -967,4 +964,11 @@ void Memory::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.boot_ram);
     G_SERIALIZE(serializer, m_state.dictionary);
     G_SERIALIZE(serializer, m_state.dictionary_bank);
+}
+
+void Memory::SanitizeState()
+{
+    m_state.dictionary_bank &= 0x0F;
+    ApplyMapping();
+    m_debug_snapshot_id++;
 }

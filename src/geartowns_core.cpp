@@ -28,16 +28,16 @@
 #include "drive/fdc_mock.h"
 #include "media/firmware.h"
 #include "input/input.h"
-#include "input/towns_keyboard.h"
+#include "input/keyboard.h"
 #include "common/memory_stream.h"
 #include "media/media.h"
 #include "system/memory.h"
 #include "i386/i386.h"
-#include "system/towns_io.h"
-#include "system/towns_pic.h"
-#include "system/towns_pit.h"
-#include "system/towns_rtc.h"
-#include "system/towns_system.h"
+#include "system/io.h"
+#include "system/pic.h"
+#include "system/pit.h"
+#include "system/rtc.h"
+#include "system/system_control.h"
 #include "system/scheduler.h"
 #include "system/upd71071.h"
 #include "video/video.h"
@@ -50,10 +50,10 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_media);
     InitPointer(m_memory);
     InitPointer(m_i386);
-    InitPointer(m_towns_io);
+    InitPointer(m_io);
     InitPointer(m_pic);
     InitPointer(m_pit);
-    InitPointer(m_system);
+    InitPointer(m_system_control);
     InitPointer(m_scheduler);
     InitPointer(m_video);
     InitPointer(m_cdrom_media);
@@ -75,10 +75,10 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_input);
     SafeDelete(m_media);
     SafeDelete(m_i386);
-    SafeDelete(m_towns_io);
+    SafeDelete(m_io);
     SafeDelete(m_pic);
     SafeDelete(m_pit);
-    SafeDelete(m_system);
+    SafeDelete(m_system_control);
     SafeDelete(m_scheduler);
     SafeDelete(m_video);
     SafeDelete(m_cdrom);
@@ -120,17 +120,17 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_i386))
         m_i386 = new I386();
 
-    if (!IsValidPointer(m_towns_io))
-        m_towns_io = new TownsIO();
+    if (!IsValidPointer(m_io))
+        m_io = new IO();
 
     if (!IsValidPointer(m_pic))
-        m_pic = new TownsPIC();
+        m_pic = new PIC();
 
     if (!IsValidPointer(m_pit))
-        m_pit = new TownsPIT();
+        m_pit = new PIT();
 
-    if (!IsValidPointer(m_system))
-        m_system = new TownsSystem();
+    if (!IsValidPointer(m_system_control))
+        m_system_control = new SystemControl();
 
     if (!IsValidPointer(m_scheduler))
         m_scheduler = new Scheduler();
@@ -145,10 +145,10 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
         m_fdc = new FDCMock();
 
     if (!IsValidPointer(m_keyboard))
-        m_keyboard = new TownsKeyboard();
+        m_keyboard = new Keyboard();
 
     if (!IsValidPointer(m_rtc))
-        m_rtc = new TownsRTC();
+        m_rtc = new RTC();
 
     if (!IsValidPointer(m_dma))
         m_dma = new UPD71071();
@@ -161,15 +161,15 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_audio->Init(m_scheduler, m_cdrom_audio);
     m_pic->Init();
     m_pit->Init(m_pic, m_scheduler);
-    m_system->Init();
+    m_system_control->Init();
     m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
     m_fdc->Init(m_pic, m_scheduler);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
-    m_towns_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
-    m_i386->Init(m_memory, m_towns_io);
+    m_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
+    m_i386->Init(m_memory, m_io);
     m_input->Init();
     m_media->Init();
     Reset();
@@ -200,9 +200,9 @@ INLINE void GeartownsCore::CompleteSlice(u32 clocks, GT_Bus_Access_Context& cont
 
     // The board answers a shutdown cycle by resetting the CPU
     if (unlikely(m_i386->Shutdown()))
-        m_system->RequestCPUReset(k_towns_system_reset_shutdown);
+        m_system_control->RequestCPUReset(k_system_control_reset_shutdown);
 
-    if (unlikely(m_system->IsCPUResetPending()))
+    if (unlikely(m_system_control->IsCPUResetPending()))
         ResetCPU();
     else if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
     {
@@ -551,7 +551,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_input->SaveState(stream);
     m_pic->SaveState(stream);
     m_pit->SaveState(stream);
-    m_system->SaveState(stream);
+    m_system_control->SaveState(stream);
     m_video->SaveState(stream);
     m_cdrom->SaveState(stream);
     m_cdrom_audio->SaveState(stream);
@@ -776,7 +776,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
     m_pit->LoadState(stream);
-    m_system->LoadState(stream);
+    m_system_control->LoadState(stream);
     m_video->LoadState(stream);
     m_cdrom->LoadState(stream);
     m_cdrom_audio->LoadState(stream);
@@ -981,8 +981,8 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_memory))
         m_memory->Reset();
 
-    if (IsValidPointer(m_towns_io))
-        m_towns_io->Reset();
+    if (IsValidPointer(m_io))
+        m_io->Reset();
 
     if (IsValidPointer(m_pic))
         m_pic->Reset();
@@ -990,8 +990,8 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_pit))
         m_pit->Reset();
 
-    if (IsValidPointer(m_system))
-        m_system->Reset();
+    if (IsValidPointer(m_system_control))
+        m_system_control->Reset();
 
     if (IsValidPointer(m_video))
         m_video->Reset();
@@ -1029,7 +1029,7 @@ void GeartownsCore::Reset()
 // Only the CPU restarts and the low memory view returns to its boot setup, memory and devices keep their state
 void GeartownsCore::ResetCPU()
 {
-    m_system->AcknowledgeCPUReset();
+    m_system_control->AcknowledgeCPUReset();
     m_memory->ResetMapping();
     m_video->ResetFMRView();
     m_i386->Reset();

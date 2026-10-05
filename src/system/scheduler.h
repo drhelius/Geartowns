@@ -64,6 +64,7 @@ public:
 private:
     void UpdateNextEvent();
     void Serialize(StateSerializer& serializer);
+    void SanitizeState();
 
 private:
     Scheduler_State m_state;

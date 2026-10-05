@@ -17,35 +17,35 @@
  *
  */
 
-#ifndef TOWNS_IO_INLINE_H
-#define TOWNS_IO_INLINE_H
+#ifndef IO_INLINE_H
+#define IO_INLINE_H
 
-#include "towns_io.h"
+#include "io.h"
 
-INLINE u16 TownsIO::Read16(u16 port, GT_Bus_Access_Context& context)
+INLINE u16 IO::Read16(u16 port, GT_Bus_Access_Context& context)
 {
     u16 value = Read8(port, context);
     value |= (u16)Read8((u16)(port + 1), context) << 8;
     return value;
 }
 
-INLINE u32 TownsIO::Read32(u16 port, GT_Bus_Access_Context& context)
+INLINE u32 IO::Read32(u16 port, GT_Bus_Access_Context& context)
 {
     u32 value = Read16(port, context);
     value |= (u32)Read16((u16)(port + 2), context) << 16;
     return value;
 }
 
-INLINE void TownsIO::Write16(u16 port, u16 value, GT_Bus_Access_Context& context)
+INLINE void IO::Write16(u16 port, u16 value, GT_Bus_Access_Context& context)
 {
     Write8(port, (u8)value, context);
     Write8((u16)(port + 1), (u8)(value >> 8), context);
 }
 
-INLINE void TownsIO::Write32(u16 port, u32 value, GT_Bus_Access_Context& context)
+INLINE void IO::Write32(u16 port, u32 value, GT_Bus_Access_Context& context)
 {
     Write16(port, (u16)value, context);
     Write16((u16)(port + 2), (u16)(value >> 16), context);
 }
 
-#endif /* TOWNS_IO_INLINE_H */
+#endif /* IO_INLINE_H */

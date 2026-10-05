@@ -30,6 +30,7 @@
 #include "input/input.h"
 #include "input/keyboard.h"
 #include "common/memory_stream.h"
+#include "common/state_serializer.h"
 #include "media/media.h"
 #include "system/memory.h"
 #include "i386/i386.h"
@@ -39,6 +40,7 @@
 #include "system/rtc.h"
 #include "system/system_control.h"
 #include "system/scheduler.h"
+#include "system/machine_profiles.h"
 #include "system/upd71071.h"
 #include "video/video.h"
 
@@ -65,6 +67,12 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_dma);
     InitPointer(m_frame_buffer);
 
+    m_machine_config.model = GT_MACHINE_MODEL1_2;
+    m_machine_config.cpu = GT_MACHINE_CPU_80386DX;
+    m_machine_config.ram_size = GT_MAIN_RAM_SIZE;
+    m_machine_config.floppy_drives = 2;
+    m_machine_config.cpu_clock_rate = GT_CPU_CLOCK_RATE;
+    m_pending_machine_config = m_machine_config;
     m_powered = false;
     m_paused = false;
     m_pixel_format = GT_PIXEL_RGBA8888;
@@ -224,8 +232,9 @@ void GeartownsCore::RunFrame(u64 frame_start)
     while (!IsFrameDone(frame_start))
     {
         u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
+        u32 cycles = m_scheduler->GetSliceCycles(slice);
         GT_Bus_Access_Context context = BeginSlice();
-        I386_Run_Result result = m_i386->RunFor(slice, context, false, m_pic->IsInterruptPending());
+        I386_Run_Result result = m_i386->RunFor(cycles, context, false, m_pic->IsInterruptPending());
         CompleteSlice(result, context, slice);
     }
 }
@@ -304,7 +313,11 @@ INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice() const
 INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice)
 {
     bool idle = (result.steps == 0) && m_i386->Halted();
-    m_scheduler->AddClocks(idle ? slice : (u32)(result.clocks + context.wait_clocks));
+
+    if (idle)
+        m_scheduler->AddClocks(slice);
+    else
+        m_scheduler->AddCycles((u32)(result.clocks + context.wait_clocks));
 
     if (m_scheduler->IsEventDue())
         DispatchEvents();
@@ -317,8 +330,8 @@ INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_A
         ResetCPU();
     else if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
     {
-        u32 interrupt_clocks = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
-        m_scheduler->AddClocks(interrupt_clocks);
+        u32 interrupt_cycles = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+        m_scheduler->AddCycles(interrupt_cycles);
 
         if (m_scheduler->IsEventDue())
             DispatchEvents();
@@ -371,6 +384,22 @@ bool GeartownsCore::PowerOn()
 void GeartownsCore::PowerOff()
 {
     m_powered = false;
+}
+
+// The new hardware takes effect on the next reset
+void GeartownsCore::SetMachineConfig(const GT_Machine_Config& config)
+{
+    m_pending_machine_config = config;
+    SanitizeMachineConfig(m_pending_machine_config);
+}
+
+bool GeartownsCore::IsMachineConfigPending()
+{
+    return (m_pending_machine_config.model != m_machine_config.model) ||
+        (m_pending_machine_config.cpu != m_machine_config.cpu) ||
+        (m_pending_machine_config.ram_size != m_machine_config.ram_size) ||
+        (m_pending_machine_config.floppy_drives != m_machine_config.floppy_drives) ||
+        (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate);
 }
 
 // New firmware restarts a running machine, a powered off one waits for PowerOn
@@ -557,6 +586,8 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     Debug("Serializing save state...");
 
+    StateSerializer serializer(stream);
+    Serialize(serializer);
     m_scheduler->SaveState(stream);
     m_memory->SaveState(stream);
     m_i386->SaveState(stream);
@@ -782,6 +813,24 @@ bool GeartownsCore::LoadState(std::istream& stream)
 
     Debug("Unserializing save state...");
 
+    GT_Machine_Config machine_config = m_machine_config;
+    StateSerializer serializer(stream);
+    Serialize(serializer);
+    SanitizeState();
+
+    // The CPU speed may differ, the hardware may not
+    // The running machine keeps its own configuration either way
+    bool same_machine = (m_machine_config.model == machine_config.model) &&
+        (m_machine_config.cpu == machine_config.cpu) && (m_machine_config.ram_size == machine_config.ram_size) &&
+        (m_machine_config.floppy_drives == machine_config.floppy_drives);
+    m_machine_config = machine_config;
+
+    if (!same_machine)
+    {
+        Error("Save state is for another machine configuration");
+        return false;
+    }
+
     m_scheduler->LoadState(stream);
     m_memory->LoadState(stream);
     m_i386->LoadState(stream);
@@ -928,6 +977,43 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
     return success;
 }
 
+void GeartownsCore::Serialize(StateSerializer& serializer)
+{
+    G_SERIALIZE(serializer, m_machine_config.model);
+    G_SERIALIZE(serializer, m_machine_config.cpu);
+    G_SERIALIZE(serializer, m_machine_config.ram_size);
+    G_SERIALIZE(serializer, m_machine_config.floppy_drives);
+    G_SERIALIZE(serializer, m_machine_config.cpu_clock_rate);
+}
+
+void GeartownsCore::SanitizeState()
+{
+    SanitizeMachineConfig(m_machine_config);
+}
+
+void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
+{
+    bool known_model = ((int)config.model >= 0) && ((int)config.model < GT_MACHINE_COUNT);
+
+    if (!known_model || !k_machine_profiles[config.model].emulated)
+        config.model = GT_MACHINE_MODEL1_2;
+
+    const GT_Machine_Profile& profile = k_machine_profiles[config.model];
+    u32 megabyte = 1024 * 1024;
+
+    if (config.model != GT_MACHINE_CUSTOM)
+        config.cpu = profile.cpu;
+
+    bool known_cpu = ((int)config.cpu >= 0) && ((int)config.cpu < GT_MACHINE_CPU_COUNT);
+
+    if (!known_cpu || !k_machine_cpus[config.cpu].emulated)
+        config.cpu = GT_MACHINE_CPU_80386DX;
+
+    config.ram_size = CLAMP(config.ram_size, profile.ram_min_mb * megabyte, profile.ram_max_mb * megabyte);
+    config.floppy_drives = CLAMP(config.floppy_drives, profile.floppy_min, profile.floppy_max);
+    config.cpu_clock_rate = MAX(config.cpu_clock_rate, profile.cpu_clock_rate);
+}
+
 std::string GeartownsCore::GetSaveStatePath(const char* path, int index)
 {
     using namespace std;
@@ -987,6 +1073,7 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 void GeartownsCore::Reset()
 {
     m_paused = false;
+    ApplyMachineConfig();
 
     if (IsValidPointer(m_scheduler))
         m_scheduler->Reset();
@@ -1048,6 +1135,20 @@ void GeartownsCore::ResetCPU()
     m_i386->Reset();
 }
 
+void GeartownsCore::ApplyMachineConfig()
+{
+    m_machine_config = m_pending_machine_config;
+
+    if (IsValidPointer(m_scheduler))
+        m_scheduler->SetCPUClockRate(m_machine_config.cpu_clock_rate);
+
+    if (IsValidPointer(m_memory))
+        m_memory->SetMainRAMSize(m_machine_config.ram_size);
+
+    if (IsValidPointer(m_fdc))
+        m_fdc->SetInternalDrives(m_machine_config.floppy_drives);
+}
+
 void GeartownsCore::InitMemoryMap()
 {
     if (!IsValidPointer(m_memory) || !IsValidPointer(m_firmware) || !m_firmware->IsReady())
@@ -1070,8 +1171,8 @@ void GeartownsCore::InitMemoryMap()
         NULL, GT_FIRMWARE_SYSTEM_BOOT_SIZE, 0x000F8000U, boot_rom_flags))
         Error("Unable to register the low system ROM alias");
 
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_MAIN_RAM, "Main RAM", main_ram, main_ram, GT_MAIN_RAM_SIZE, 0,
-        ram_flags))
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_MAIN_RAM, "Main RAM", main_ram, main_ram,
+        m_memory->GetMainRAMSize(), 0, ram_flags))
         Error("Unable to map main RAM");
 
     u32 vram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_VIDEO;

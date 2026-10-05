@@ -84,6 +84,15 @@ struct config_Emulator
     int mouse_sensitivity;
 };
 
+struct config_Machine
+{
+    int model;
+    int custom_cpu;
+    int ram_mb[GT_MACHINE_COUNT];
+    int floppy_drives[GT_MACHINE_COUNT];
+    int cpu_mhz[GT_MACHINE_COUNT];
+};
+
 struct config_Video
 {
     int scale;
@@ -213,6 +222,7 @@ struct config_Debug
     bool show_call_stack;
     bool show_breakpoints;
     bool show_symbols;
+    bool show_rewind;
     bool auto_debug_settings;
     bool dis_show_bytes;
     bool dis_show_symbols;
@@ -231,6 +241,7 @@ struct config_Debug
 };
 
 EXTERN config_Emulator config_emulator;
+EXTERN config_Machine config_machine;
 EXTERN config_Video config_video;
 EXTERN config_Audio config_audio;
 EXTERN config_Rewind config_rewind;

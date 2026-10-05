@@ -68,6 +68,7 @@ int application_headless_init(const ApplicationParams& params)
         emu_load_bios(config_emulator.bios_path.c_str());
     }
 
+    emu_apply_machine_settings();
     emu_power_on();
 
     bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);

@@ -93,6 +93,8 @@ public:
     u8* GetWorkingRAM();
     size_t GetWorkingRAMSize() const;
     u8* GetMainRAM();
+    u32 GetMainRAMSize() const;
+    void SetMainRAMSize(u32 size);
     u8* GetCMOS();
     u8 ReadCMOS(u32 index) const;
     void WriteCMOS(u32 index, u8 value);
@@ -145,6 +147,7 @@ private:
 
     u8* m_working_ram;
     size_t m_working_ram_size;
+    u32 m_main_ram_size;
     Memory_State m_state;
 
     u8* m_video_ram;

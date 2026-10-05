@@ -194,11 +194,8 @@ void emu_update(void)
     {
         int to_pop = get_rewind_pop_budget();
 
-        for (int i = 0; i < to_pop; i++)
-        {
-            if (!rewind_pop())
-                break;
-        }
+        if (to_pop > 0)
+            rewind_pop(to_pop);
 
         int silence_count = GT_AUDIO_QUEUE_SIZE;
         memset(audio_buffer, 0, silence_count * sizeof(s16));
@@ -518,6 +515,23 @@ void emu_set_preload_cdrom(bool enabled)
 {
     if (IsValidPointer(geartowns))
         geartowns->GetMedia()->PreloadCdRom(enabled);
+}
+
+void emu_apply_machine_settings(void)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    GT_Machine_Model model = (GT_Machine_Model)config_machine.model;
+    int cpu_mhz = config_machine.cpu_mhz[model];
+
+    GT_Machine_Config config;
+    config.model = model;
+    config.cpu = model == GT_MACHINE_CUSTOM ? (GT_Machine_CPU)config_machine.custom_cpu : k_machine_profiles[model].cpu;
+    config.ram_size = (u32)config_machine.ram_mb[model] * 1024 * 1024;
+    config.floppy_drives = config_machine.floppy_drives[model];
+    config.cpu_clock_rate = cpu_mhz > 0 ? (u32)cpu_mhz * 1000000 : k_machine_profiles[model].cpu_clock_rate;
+    geartowns->SetMachineConfig(config);
 }
 
 void emu_audio_mute(bool mute)

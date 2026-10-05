@@ -31,5 +31,6 @@
 #include "cdrom/cdrom_media.h"
 #include "media/media.h"
 #include "system/memory.h"
+#include "system/machine_profiles.h"
 
 #endif /* GEARTOWNS_H */

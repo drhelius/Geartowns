@@ -78,6 +78,7 @@ EXTERN void emu_power_off(void);
 EXTERN void emu_reset(void);
 EXTERN bool emu_eject_media(void);
 EXTERN void emu_set_preload_cdrom(bool enabled);
+EXTERN void emu_apply_machine_settings(void);
 
 EXTERN void emu_audio_mute(bool mute);
 EXTERN void emu_audio_set_master_volume(float volume);

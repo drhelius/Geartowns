@@ -42,6 +42,7 @@ class PIT;
 class SystemControl;
 class Scheduler;
 class Video;
+class StateSerializer;
 struct I386_Run_Result;
 
 class GeartownsCore
@@ -68,6 +69,10 @@ public:
     bool PowerOn();
     void PowerOff();
     bool IsPoweredOn();
+    void SetMachineConfig(const GT_Machine_Config& config);
+    const GT_Machine_Config& GetMachineConfig();
+    const GT_Machine_Config& GetPendingMachineConfig();
+    bool IsMachineConfigPending();
     bool LoadBios(const char* directory_path);
     void UnloadBios();
     bool LoadMedia(const char* file_path);
@@ -128,10 +133,14 @@ private:
     void DispatchEvents();
     void Reset();
     void ResetCPU();
+    void ApplyMachineConfig();
     void InitMemoryMap();
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot);
     bool LoadState(std::istream& stream);
+    void Serialize(StateSerializer& serializer);
+    void SanitizeState();
+    void SanitizeMachineConfig(GT_Machine_Config& config);
     std::string GetSaveStatePath(const char* path, int index);
 
 private:
@@ -155,6 +164,8 @@ private:
     RTC* m_rtc;
     UPD71071* m_dma;
 
+    GT_Machine_Config m_machine_config;
+    GT_Machine_Config m_pending_machine_config;
     bool m_powered;
     bool m_paused;
     GT_Pixel_Format m_pixel_format;

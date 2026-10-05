@@ -43,6 +43,7 @@ public:
     {
         u64 clocks;
         u64 events[SCHEDULER_EVENT_COUNT];
+        u32 cycle_remainder;
     };
 
 public:
@@ -50,9 +51,13 @@ public:
     ~Scheduler();
     void Init();
     void Reset();
+    void SetCPUClockRate(u32 rate);
+    u32 GetCPUClockRate() const;
     u64 GetClocks() const;
     void AddClocks(u32 clocks);
+    void AddCycles(u32 cycles);
     u32 GetSliceClocks(u64 limit) const;
+    u32 GetSliceCycles(u32 clocks) const;
     bool IsEventDue() const;
     Scheduler_Event PopEvent();
     void Schedule(Scheduler_Event event, u64 clocks);
@@ -70,6 +75,7 @@ private:
     Scheduler_State m_state;
     u64 m_next_event_clocks;
     Scheduler_Event m_next_event;
+    u32 m_cpu_clock_rate;
 };
 
 // Longest CPU run before control returns to the main loop

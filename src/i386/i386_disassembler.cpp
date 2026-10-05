@@ -1236,6 +1236,11 @@ const std::vector<I386_CallStackEntry>& I386::GetDisassemblerCallStack() const
     return m_disassembler_call_stack;
 }
 
+void I386::SetDisassemblerCallStack(const std::vector<I386_CallStackEntry>& call_stack)
+{
+    m_disassembler_call_stack = call_stack;
+}
+
 void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, bool interrupt, u8 vector)
 {
     I386_CallStackEntry entry;

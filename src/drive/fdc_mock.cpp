@@ -30,6 +30,7 @@ FDCMock::FDCMock()
     InitPointer(m_pic);
     InitPointer(m_scheduler);
     memset(&m_state, 0, sizeof(m_state));
+    m_internal_drives = 2;
 }
 
 FDCMock::~FDCMock()
@@ -49,6 +50,12 @@ void FDCMock::Reset()
     m_state.type1 = true;
     UpdateIRQ();
     UpdateNextEvent();
+}
+
+// Drives past the internal ones never reach track zero, as on a board without them
+void FDCMock::SetInternalDrives(int drives)
+{
+    m_internal_drives = CLAMP(drives, 0, 2);
 }
 
 u8 FDCMock::Read(u16 port, u64 clocks)
@@ -220,7 +227,7 @@ int FDCMock::GetSelectedDrive() const
             continue;
 
         int drive = (m_state.drive_switch & 0x01) != 0 ? i ^ 0x02 : i;
-        return drive < k_fdc_mock_internal_drives ? drive : -1;
+        return drive < m_internal_drives ? drive : -1;
     }
 
     return -1;

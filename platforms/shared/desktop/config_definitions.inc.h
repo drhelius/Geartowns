@@ -36,6 +36,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "CallStack", config_debug.show_call_stack, false);
     CONFIG_BOOL("Debug", "Breakpoints", config_debug.show_breakpoints, false);
     CONFIG_BOOL("Debug", "Symbols", config_debug.show_symbols, false);
+    CONFIG_BOOL("Debug", "Rewind", config_debug.show_rewind, false);
     CONFIG_BOOL("Debug", "AutoDebugSettings", config_debug.auto_debug_settings, false);
     CONFIG_BOOL("Debug", "DisBytes", config_debug.dis_show_bytes, true);
     CONFIG_BOOL("Debug", "DisSymbols", config_debug.dis_show_symbols, true);
@@ -94,6 +95,20 @@ static inline void process(config_Operation operation)
     // Services
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);
     CONFIG_STRING_NOT_EMPTY("Emulator", "MCPHTTPAddress", config_emulator.mcp_http_address, "127.0.0.1");
+
+    // Machine, each model keeps its own options
+    CONFIG_INT_RANGE("Machine", "Model", config_machine.model, GT_MACHINE_MODEL1_2, 0, GT_MACHINE_COUNT - 1);
+    CONFIG_INT_RANGE("Machine", "CustomCPU", config_machine.custom_cpu, GT_MACHINE_CPU_80386DX, 0, GT_MACHINE_CPU_COUNT - 1);
+
+    for (int i = 0; i < GT_MACHINE_COUNT; i++)
+    {
+        const GT_Machine_Profile& profile = k_machine_profiles[i];
+        char section[32];
+        snprintf(section, sizeof(section), "Machine%d", i);
+        CONFIG_INT_RANGE(section, "RAM", config_machine.ram_mb[i], profile.ram_default_mb, profile.ram_min_mb, profile.ram_max_mb);
+        CONFIG_INT_RANGE(section, "FloppyDrives", config_machine.floppy_drives[i], profile.floppy_default, profile.floppy_min, profile.floppy_max);
+        CONFIG_INT_RANGE(section, "CPUSpeed", config_machine.cpu_mhz[i], 0, 0, 1000);
+    }
 
     //**************************************
     // Video
@@ -154,7 +169,7 @@ static inline void process(config_Operation operation)
     // Rewind
     //**************************************
 
-    CONFIG_BOOL("Rewind", "Enabled", config_rewind.enabled, true);
+    CONFIG_BOOL("Rewind", "Enabled", config_rewind.enabled, false);
     CONFIG_INT_RANGE("Rewind", "BufferSeconds", config_rewind.buffer_seconds, 10, 1, 10);
     CONFIG_INT_MIN("Rewind", "FramesPerSnapshot", config_rewind.frames_per_snapshot, 1, 1);
     CONFIG_FLOAT_RANGE("Rewind", "Speed", config_rewind.speed, 2.0f, 1.0f, 8.0f);

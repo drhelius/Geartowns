@@ -57,11 +57,17 @@ static const GuiColor& service_mcp_http_color = green;
 static const GuiColor& service_mcp_stdio_color = amber;
 static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
+static const int machine_ram_sizes_mb[] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128 };
+static const int machine_cpu_speeds_mhz[] = { 20, 25, 33, 40, 50, 66, 100 };
 
 static void menu_geartowns(void);
 static void menu_cdrom(void);
 static void menu_floppy(const char* label);
 static void menu_emulator(void);
+static void menu_machine(void);
+static void draw_machine_profile_tooltip(GT_Machine_Model model);
+static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model model, bool show_original);
+static int get_machine_ram_options(const GT_Machine_Profile& profile, int* options, int max_options);
 static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type);
 static void menu_video(void);
 static void menu_shader(void);
@@ -135,10 +141,13 @@ static void menu_geartowns(void)
     if (ImGui::BeginMenu(GT_TITLE))
     {
         gui_in_use = true;
+        GeartownsCore* core = emu_get_core();
         bool media_actions_enabled = media_menu_actions_enabled();
         bool loading = gui_is_rom_loading() || emu_is_media_loading();
         bool powered_on = !emu_is_empty();
-        bool firmware_ready = emu_get_core()->GetFirmware()->IsReady();
+        bool firmware_ready = core->GetFirmware()->IsReady();
+        int floppy_drives = powered_on ? core->GetMachineConfig().floppy_drives :
+            core->GetPendingMachineConfig().floppy_drives;
 
         if (ImGui::MenuItem("Power On", NULL, false, !loading && !powered_on && firmware_ready))
         {
@@ -163,8 +172,12 @@ static void menu_geartowns(void)
         ImGui::Separator();
 
         menu_cdrom();
-        menu_floppy("Floppy 1");
-        menu_floppy("Floppy 2");
+
+        if (floppy_drives > 0)
+            menu_floppy("Floppy 1");
+
+        if (floppy_drives > 1)
+            menu_floppy("Floppy 2");
 
         ImGui::Separator();
 
@@ -533,6 +546,8 @@ static void menu_emulator(void)
     {
         gui_in_use = true;
 
+        menu_machine();
+
         if (ImGui::BeginMenu("Directories"))
         {
             if (ImGui::BeginMenu("Save States"))
@@ -672,35 +687,6 @@ static void menu_emulator(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("BIOS"))
-        {
-            if (ImGui::MenuItem("Choose BIOS Directory..."))
-                open_bios = true;
-
-            ImGui::PushItemWidth(450);
-
-            if (ImGui::InputText("##bios_path", gui_bios_path, IM_ARRAYSIZE(gui_bios_path),
-                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue))
-            {
-                gui_load_bios(gui_bios_path);
-            }
-
-            ImGui::PopItemWidth();
-
-            Firmware* firmware = emu_get_core()->GetFirmware();
-            ImGui::Separator();
-
-            if (firmware->IsReady())
-                ImGui::TextColored(service_mcp_http_color, "Firmware ready");
-            else
-                ImGui::TextDisabled("Firmware not loaded");
-
-            for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
-                draw_firmware_component_status(firmware, (GT_Firmware_Type)i);
-
-            ImGui::EndMenu();
-        }
-
         ImGui::Separator();
 
         ImGui::MenuItem("Show Media Info", "", &config_emulator.show_info);
@@ -792,6 +778,277 @@ static void menu_emulator(void)
 
         ImGui::EndMenu();
     }
+}
+
+static void menu_machine(void)
+{
+    if (!ImGui::BeginMenu("Machine"))
+        return;
+
+    GT_Machine_Model model = (GT_Machine_Model)config_machine.model;
+    const GT_Machine_Profile& profile = k_machine_profiles[model];
+    bool custom = model == GT_MACHINE_CUSTOM;
+    bool changed = false;
+    char preview[32];
+    char label[32];
+
+    ImGui::PushItemWidth(200.0f);
+
+    if (ImGui::BeginCombo("Model", profile.name))
+    {
+        for (int i = 0; i < GT_MACHINE_COUNT; i++)
+        {
+            if (i == GT_MACHINE_CUSTOM)
+                ImGui::Separator();
+
+            ImGui::BeginDisabled(!k_machine_profiles[i].emulated);
+
+            if (ImGui::Selectable(k_machine_profiles[i].name, i == model))
+            {
+                config_machine.model = i;
+                changed = true;
+            }
+
+            ImGui::EndDisabled();
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                draw_machine_profile_tooltip((GT_Machine_Model)i);
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+        draw_machine_profile_tooltip(model);
+
+    ImGui::Separator();
+
+    if (custom)
+    {
+        if (ImGui::BeginCombo("CPU", k_machine_cpus[config_machine.custom_cpu].name))
+        {
+            for (int i = 0; i < GT_MACHINE_CPU_COUNT; i++)
+            {
+                ImGui::BeginDisabled(!k_machine_cpus[i].emulated);
+
+                if (ImGui::Selectable(k_machine_cpus[i].name, i == config_machine.custom_cpu))
+                {
+                    config_machine.custom_cpu = i;
+                    changed = true;
+                }
+
+                ImGui::EndDisabled();
+
+                if (!k_machine_cpus[i].emulated && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    ImGui::SetTooltip("Not emulated yet");
+            }
+
+            ImGui::EndCombo();
+        }
+
+        if (draw_machine_cpu_clock_combo("CPU Clock", model, false))
+            changed = true;
+    }
+
+    snprintf(preview, sizeof(preview), "%d MB", config_machine.ram_mb[model]);
+
+    if (ImGui::BeginCombo("Main RAM", preview))
+    {
+        int options[IM_ARRAYSIZE(machine_ram_sizes_mb) + 2];
+        int count = get_machine_ram_options(profile, options, IM_ARRAYSIZE(options));
+
+        for (int i = 0; i < count; i++)
+        {
+            snprintf(label, sizeof(label), "%d MB", options[i]);
+
+            if (ImGui::Selectable(label, options[i] == config_machine.ram_mb[model]))
+            {
+                config_machine.ram_mb[model] = options[i];
+                changed = true;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    snprintf(preview, sizeof(preview), "%d", config_machine.floppy_drives[model]);
+
+    if (ImGui::BeginCombo("Floppy Drives", preview))
+    {
+        for (int i = profile.floppy_min; i <= profile.floppy_max; i++)
+        {
+            snprintf(label, sizeof(label), "%d", i);
+
+            if (ImGui::Selectable(label, i == config_machine.floppy_drives[model]))
+            {
+                config_machine.floppy_drives[model] = i;
+                changed = true;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    ImGui::PopItemWidth();
+
+    ImGui::MenuItem("80387 FPU", NULL, false, false);
+
+    if (ImGui::BeginMenu("Expansion Cards", false))
+        ImGui::EndMenu();
+
+    ImGui::Separator();
+
+    ImGui::TextDisabled("Enhancements");
+
+    if (!custom)
+    {
+        ImGui::PushItemWidth(200.0f);
+
+        if (draw_machine_cpu_clock_combo("CPU Speed", model, true))
+            changed = true;
+
+        ImGui::PopItemWidth();
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Runs the CPU faster than the real machine.");
+            ImGui::Text("Devices keep their real timing.");
+            ImGui::EndTooltip();
+        }
+    }
+
+    ImGui::MenuItem("Fast CD-ROM", NULL, false, false);
+
+    ImGui::Separator();
+
+    if (ImGui::BeginMenu("Firmware"))
+    {
+        if (ImGui::MenuItem("Choose BIOS Directory..."))
+            open_bios = true;
+
+        ImGui::PushItemWidth(450);
+
+        if (ImGui::InputText("##bios_path", gui_bios_path, IM_ARRAYSIZE(gui_bios_path),
+            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            gui_load_bios(gui_bios_path);
+        }
+
+        ImGui::PopItemWidth();
+
+        Firmware* firmware = emu_get_core()->GetFirmware();
+        ImGui::Separator();
+
+        if (firmware->IsReady())
+            ImGui::TextColored(service_mcp_http_color, "Firmware ready");
+        else
+            ImGui::TextDisabled("Firmware not loaded");
+
+        for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+            draw_firmware_component_status(firmware, (GT_Firmware_Type)i);
+
+        ImGui::EndMenu();
+    }
+
+    if (changed)
+        emu_apply_machine_settings();
+
+    if (!emu_is_empty() && emu_get_core()->IsMachineConfigPending())
+    {
+        ImGui::Separator();
+        ImGui::TextDisabled("Reset to apply changes");
+    }
+
+    ImGui::EndMenu();
+}
+
+static void draw_machine_profile_tooltip(GT_Machine_Model model)
+{
+    const GT_Machine_Profile& profile = k_machine_profiles[model];
+    ImGui::BeginTooltip();
+
+    if (model == GT_MACHINE_CUSTOM)
+        ImGui::Text("Hardware chosen manually, on the %s", profile.models);
+    else
+        ImGui::Text("Models: %s", profile.models);
+
+    ImGui::Text("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
+    ImGui::Text("RAM: %d to %d MB", profile.ram_min_mb, profile.ram_max_mb);
+
+    if (profile.floppy_min == profile.floppy_max)
+        ImGui::Text("Floppy drives: %d", profile.floppy_max);
+    else
+        ImGui::Text("Floppy drives: %d to %d", profile.floppy_min, profile.floppy_max);
+
+    if (!profile.emulated)
+    {
+        ImGui::Separator();
+        ImGui::TextDisabled("Not emulated yet");
+    }
+
+    ImGui::EndTooltip();
+}
+
+static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model model, bool show_original)
+{
+    int original_mhz = (int)(k_machine_profiles[model].cpu_clock_rate / 1000000);
+    int cpu_mhz = config_machine.cpu_mhz[model] > original_mhz ? config_machine.cpu_mhz[model] : 0;
+    bool changed = false;
+    char original[32];
+    char text[32];
+
+    if (show_original)
+        snprintf(original, sizeof(original), "Original (%d MHz)", original_mhz);
+    else
+        snprintf(original, sizeof(original), "%d MHz", original_mhz);
+
+    snprintf(text, sizeof(text), "%d MHz", cpu_mhz);
+
+    if (ImGui::BeginCombo(label, cpu_mhz == 0 ? original : text))
+    {
+        if (ImGui::Selectable(original, cpu_mhz == 0))
+        {
+            config_machine.cpu_mhz[model] = 0;
+            changed = true;
+        }
+
+        for (int i = 0; i < IM_ARRAYSIZE(machine_cpu_speeds_mhz); i++)
+        {
+            if (machine_cpu_speeds_mhz[i] <= original_mhz)
+                continue;
+
+            snprintf(text, sizeof(text), "%d MHz", machine_cpu_speeds_mhz[i]);
+
+            if (ImGui::Selectable(text, cpu_mhz == machine_cpu_speeds_mhz[i]))
+            {
+                config_machine.cpu_mhz[model] = machine_cpu_speeds_mhz[i];
+                changed = true;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    return changed;
+}
+
+static int get_machine_ram_options(const GT_Machine_Profile& profile, int* options, int max_options)
+{
+    int count = 0;
+    options[count++] = profile.ram_min_mb;
+
+    for (int i = 0; (i < IM_ARRAYSIZE(machine_ram_sizes_mb)) && (count < max_options); i++)
+    {
+        int size = machine_ram_sizes_mb[i];
+
+        if ((size > profile.ram_min_mb) && (size < profile.ram_max_mb))
+            options[count++] = size;
+    }
+
+    if ((profile.ram_max_mb > profile.ram_min_mb) && (count < max_options))
+        options[count++] = profile.ram_max_mb;
+
+    return count;
 }
 
 static void menu_video(void)
@@ -1447,6 +1704,7 @@ static void menu_debug(void)
         ImGui::MenuItem("Show Call Stack", "", &config_debug.show_call_stack, config_debug.debug);
         ImGui::MenuItem("Show Execution Breakpoints", "", &config_debug.show_breakpoints, config_debug.debug);
         ImGui::MenuItem("Show Symbols", "", &config_debug.show_symbols, config_debug.debug);
+        ImGui::MenuItem("Show Rewind", "", &config_debug.show_rewind, config_debug.debug);
         ImGui::MenuItem("Auto Save/Load Debug Settings", "", &config_debug.auto_debug_settings, config_debug.debug);
 
         ImGui::Separator();

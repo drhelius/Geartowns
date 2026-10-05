@@ -49,6 +49,9 @@
     <ClCompile Include="..\shared\desktop\debug\gui_debug_memory.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_rewind.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_popups.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -331,6 +334,7 @@
     <ClInclude Include="..\..\src\system\upd71071_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\system_control.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\system_control_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\machine_profiles.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom.h"><Filter>src</Filter></ClInclude>
@@ -440,6 +444,9 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_rewind.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_widgets.h">

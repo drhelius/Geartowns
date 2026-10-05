@@ -395,6 +395,7 @@ public:
     bool RunToBreakpointHit() const;
 
     const std::vector<I386_CallStackEntry>& GetDisassemblerCallStack() const;
+    void SetDisassemblerCallStack(const std::vector<I386_CallStackEntry>& call_stack);
     bool GetStepCall(u32& return_linear) const;
     u32 GetCurrentLinearPC() const;
 

@@ -61,8 +61,6 @@
 #define GT_AUDIO_BUFFER_SIZE 4096
 #define GT_AUDIO_QUEUE_SIZE 1500
 
-// The 32 MHz board oscillator is the 80386 CLK2, so the CPU runs at half
-// FM and PCM take a quarter
 #define GT_MASTER_CLOCK_RATE 32000000
 #define GT_CPU_CLOCK_RATE (GT_MASTER_CLOCK_RATE / 2)
 #define GT_SOUND_CLOCK_RATE (GT_MASTER_CLOCK_RATE / 4)

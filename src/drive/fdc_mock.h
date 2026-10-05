@@ -55,6 +55,7 @@ public:
     ~FDCMock();
     void Init(PIC* pic, Scheduler* scheduler);
     void Reset();
+    void SetInternalDrives(int drives);
     u8 Read(u16 port, u64 clocks);
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
@@ -79,10 +80,10 @@ private:
     PIC* m_pic;
     Scheduler* m_scheduler;
     FDCMock_State m_state;
+    int m_internal_drives;
 };
 
 static const int k_fdc_mock_irq = 6;
-static const int k_fdc_mock_internal_drives = 2;
 static const int k_fdc_mock_last_cylinder = 80;
 static const int k_fdc_mock_restore_steps = 255;
 static const u64 k_fdc_mock_command_delay = GT_CPU_CLOCK_RATE / 20000;

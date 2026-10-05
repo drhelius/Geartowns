@@ -313,6 +313,67 @@ struct GT_GamePad_State
     s16 axis_y;
 };
 
+enum GT_Machine_Model
+{
+    GT_MACHINE_MODEL1_2 = 0,
+    GT_MACHINE_1F_2F,
+    GT_MACHINE_10F_20F,
+    GT_MACHINE_CX,
+    GT_MACHINE_UX,
+    GT_MACHINE_UG,
+    GT_MACHINE_HG,
+    GT_MACHINE_HR,
+    GT_MACHINE_UR,
+    GT_MACHINE_ME,
+    GT_MACHINE_MA,
+    GT_MACHINE_MX,
+    GT_MACHINE_MF_FRESH,
+    GT_MACHINE_HC,
+    GT_MACHINE_MARTY,
+    GT_MACHINE_CUSTOM,
+    GT_MACHINE_COUNT
+};
+
+enum GT_Machine_CPU
+{
+    GT_MACHINE_CPU_80386DX = 0,
+    GT_MACHINE_CPU_80386SX,
+    GT_MACHINE_CPU_80486SX,
+    GT_MACHINE_CPU_80486DX2,
+    GT_MACHINE_CPU_PENTIUM,
+    GT_MACHINE_CPU_COUNT
+};
+
+struct GT_Machine_CPU_Info
+{
+    const char* name;
+    bool emulated;
+};
+
+struct GT_Machine_Profile
+{
+    const char* name;
+    const char* models;
+    bool emulated;
+    GT_Machine_CPU cpu;
+    u32 cpu_clock_rate;
+    int ram_min_mb;
+    int ram_default_mb;
+    int ram_max_mb;
+    int floppy_min;
+    int floppy_default;
+    int floppy_max;
+};
+
+struct GT_Machine_Config
+{
+    GT_Machine_Model model;
+    GT_Machine_CPU cpu;
+    u32 ram_size;
+    int floppy_drives;
+    u32 cpu_clock_rate;
+};
+
 struct GT_SaveState_Header
 {
     u32 magic;

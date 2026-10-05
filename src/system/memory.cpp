@@ -32,6 +32,7 @@ Memory::Memory()
     m_debug_snapshot_id = 1;
     InitPointer(m_working_ram);
     m_working_ram_size = 0;
+    m_main_ram_size = GT_MAIN_RAM_SIZE;
     InitPointer(m_state.main_ram);
     memset(m_state.cmos, 0, sizeof(m_state.cmos));
     m_state.main_memory = false;
@@ -53,7 +54,7 @@ Memory::~Memory()
 void Memory::Init()
 {
     if (!IsValidPointer(m_state.main_ram))
-        m_state.main_ram = new u8[GT_MAIN_RAM_SIZE];
+        m_state.main_ram = new u8[m_main_ram_size];
 
     Reset();
 }
@@ -65,7 +66,7 @@ void Memory::Reset()
     m_physical_address_mask = 0xFFFFFFFF;
 
     if (IsValidPointer(m_state.main_ram))
-        memset(m_state.main_ram, 0, GT_MAIN_RAM_SIZE);
+        memset(m_state.main_ram, 0, m_main_ram_size);
 }
 
 INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size) const
@@ -624,6 +625,22 @@ u8* Memory::GetMainRAM()
     return m_state.main_ram;
 }
 
+u32 Memory::GetMainRAMSize() const
+{
+    return m_main_ram_size;
+}
+
+// The reset that follows clears the new RAM and maps it
+void Memory::SetMainRAMSize(u32 size)
+{
+    if (IsValidPointer(m_state.main_ram) && (size == m_main_ram_size))
+        return;
+
+    SafeDeleteArray(m_state.main_ram);
+    m_main_ram_size = size;
+    m_state.main_ram = new u8[m_main_ram_size];
+}
+
 u8* Memory::GetVideoRAM()
 {
     return m_video_ram;
@@ -958,7 +975,7 @@ void Memory::LoadState(std::istream& stream)
 
 void Memory::Serialize(StateSerializer& serializer)
 {
-    G_SERIALIZE_ARRAY(serializer, m_state.main_ram, GT_MAIN_RAM_SIZE);
+    G_SERIALIZE_ARRAY(serializer, m_state.main_ram, m_main_ram_size);
     G_SERIALIZE_ARRAY(serializer, m_state.cmos, GT_CMOS_SIZE);
     G_SERIALIZE(serializer, m_state.main_memory);
     G_SERIALIZE(serializer, m_state.boot_ram);

@@ -119,6 +119,7 @@
     <ClCompile Include="..\shared\desktop\debug\gui_debug_memory_provider.cpp" />
     <ClCompile Include="..\shared\desktop\debug\gui_debug_memeditor.cpp" />
     <ClCompile Include="..\shared\desktop\debug\gui_debug_memory.cpp" />
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_rewind.cpp" />
     <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp" />
     <ClCompile Include="..\shared\desktop\gui_menus.cpp" />
     <ClCompile Include="..\shared\desktop\gui_popups.cpp" />
@@ -191,6 +192,7 @@
     <ClInclude Include="..\..\src\system\upd71071_inline.h" />
     <ClInclude Include="..\..\src\system\system_control.h" />
     <ClInclude Include="..\..\src\system\system_control_inline.h" />
+    <ClInclude Include="..\..\src\system\machine_profiles.h" />
     <ClInclude Include="..\..\src\system\scheduler.h" />
     <ClInclude Include="..\..\src\system\scheduler_inline.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom.h" />
@@ -283,6 +285,7 @@
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory_provider.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memeditor.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory.h" />
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_rewind.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_widgets.h" />
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />

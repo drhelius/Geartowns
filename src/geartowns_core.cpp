@@ -190,10 +190,120 @@ GT_Run_Result GeartownsCore::RunToFrame(u8* frame_buffer, s16* sample_buffer, in
 #endif
 }
 
-// Events due by the end of the slice run before the CPU samples INTR at its boundary
-INLINE void GeartownsCore::CompleteSlice(u32 clocks, GT_Bus_Access_Context& context)
+template<bool debugger>
+GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count,
+    GT_Debug_Run* debug, bool render)
 {
-    m_scheduler->AddClocks(clocks);
+    m_frame_buffer = frame_buffer;
+
+    if (sample_count != NULL)
+        *sample_count = 0;
+
+    if (m_paused)
+        return GT_RUN_PAUSED;
+
+    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
+        return GT_RUN_NOT_READY;
+
+    u64 frame_start = m_scheduler->GetClocks();
+    m_video->BeginFrame(frame_buffer, render);
+
+    if (debugger && IsValidPointer(debug))
+        RunDebuggerFrame(frame_start, debug);
+    else
+        RunFrame(frame_start);
+
+    EndFrame(frame_start, sample_buffer, sample_count);
+
+    return GT_RUN_FRAME_READY;
+}
+
+void GeartownsCore::RunFrame(u64 frame_start)
+{
+    while (!IsFrameDone(frame_start))
+    {
+        u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
+        GT_Bus_Access_Context context = BeginSlice();
+        I386_Run_Result result = m_i386->RunFor(slice, context, false, m_pic->IsInterruptPending());
+        CompleteSlice(result, context, slice);
+    }
+}
+
+void GeartownsCore::RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug)
+{
+    debug->stopped = false;
+    debug->breakpoint_hit = false;
+
+    while (!IsFrameDone(frame_start))
+    {
+        if (m_i386->CheckDebuggerBreakpoints(debug->stop_on_breakpoint, debug->stop_on_run_to_breakpoint))
+        {
+            debug->stopped = true;
+            debug->breakpoint_hit = true;
+            break;
+        }
+
+        u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
+        GT_Bus_Access_Context context = BeginSlice();
+        m_i386->RunInstruction(context);
+
+        if (debug->step_over)
+        {
+            u32 call_return_linear = 0;
+            bool call = m_i386->GetStepCall(call_return_linear);
+            debug->step_over = false;
+            debug->step_debugger = !call;
+
+            if (call)
+                m_i386->AddRunToBreakpoint(call_return_linear);
+        }
+
+        CompleteSlice(m_i386->GetStepInfo(), context, slice);
+
+        if (debug->step_debugger)
+        {
+            debug->stopped = true;
+            break;
+        }
+    }
+}
+
+void GeartownsCore::EndFrame(u64 frame_start, s16* sample_buffer, int* sample_count)
+{
+    m_video->EndFrame();
+
+    // Debugger memory views refresh once per executed frame or debugger step
+    if (m_scheduler->GetClocks() != frame_start)
+        m_memory->InvalidateDebugSnapshot();
+
+    m_audio->Synchronize(m_scheduler->GetClocks());
+    m_audio->EndFrame(sample_buffer, sample_count);
+}
+
+INLINE bool GeartownsCore::IsFrameDone(u64 frame_start) const
+{
+    return m_video->IsFrameReady() || (m_scheduler->GetClocks() >= GetFrameLimit(frame_start));
+}
+
+INLINE u64 GeartownsCore::GetFrameLimit(u64 frame_start) const
+{
+    return frame_start + (m_video->IsRunning() ? GT_CPU_CLOCKS_PER_FRAME * 4 : GT_CPU_CLOCKS_PER_FRAME);
+}
+
+INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice() const
+{
+    GT_Bus_Access_Context context = {};
+    context.origin = GT_BUS_ORIGIN_CPU;
+    context.clocks = m_scheduler->GetClocks();
+    return context;
+}
+
+// A halted CPU idles through the slice
+// Events due by the end of the slice run before the CPU samples INTR at its boundary
+INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice)
+{
+    bool idle = (result.steps == 0) && m_i386->Halted();
+    m_scheduler->AddClocks(idle ? slice : (u32)(result.clocks + context.wait_clocks));
 
     if (m_scheduler->IsEventDue())
         DispatchEvents();
@@ -245,124 +355,6 @@ INLINE void GeartownsCore::DispatchEvents()
                 break;
         }
     }
-}
-
-template<bool debugger>
-GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count,
-    GT_Debug_Run* debug, bool render)
-{
-    m_frame_buffer = frame_buffer;
-
-    if (sample_count != NULL)
-        *sample_count = 0;
-
-    if (m_paused)
-        return GT_RUN_PAUSED;
-
-    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
-        return GT_RUN_NOT_READY;
-
-    u64 frame_start = m_scheduler->GetClocks();
-    m_video->BeginFrame(frame_buffer, render);
-
-#if !defined(GT_DISABLE_DISASSEMBLER)
-    if (debugger && IsValidPointer(debug))
-    {
-        debug->stopped = false;
-        debug->breakpoint_hit = false;
-
-        while (!m_video->IsFrameReady() && m_scheduler->GetClocks() - frame_start < GetFrameClockLimit())
-        {
-            if (m_i386->CheckDebuggerBreakpoints(debug->stop_on_breakpoint, debug->stop_on_run_to_breakpoint))
-            {
-                debug->stopped = true;
-                debug->breakpoint_hit = true;
-                break;
-            }
-
-            GT_Bus_Access_Context context = {};
-            context.origin = GT_BUS_ORIGIN_CPU;
-            context.clocks = m_scheduler->GetClocks();
-            m_i386->RunInstruction(context);
-
-            I386_Run_Result result = m_i386->GetStepInfo();
-            u32 call_return_linear = 0;
-            bool call = m_i386->GetStepCall(call_return_linear);
-
-            if (debug->step_over)
-            {
-                debug->step_over = false;
-                debug->step_debugger = !call;
-
-                if (call)
-                    m_i386->AddRunToBreakpoint(call_return_linear);
-            }
-
-            u32 clocks = (u32)(result.clocks + context.wait_clocks);
-
-            // A halted CPU idles through the slice
-            if (result.steps == 0 && m_i386->Halted())
-                clocks = m_scheduler->GetSliceClocks(frame_start + GetFrameClockLimit());
-
-            CompleteSlice(clocks, context);
-
-            if (debug->step_debugger)
-            {
-                debug->stopped = true;
-                break;
-            }
-        }
-    }
-    else
-#else
-    UNUSED(debug);
-#endif
-    {
-        while (!m_video->IsFrameReady())
-        {
-            u64 limit = frame_start + GetFrameClockLimit();
-
-            if (m_scheduler->GetClocks() >= limit)
-                break;
-
-            GT_Bus_Access_Context context = {};
-            context.origin = GT_BUS_ORIGIN_CPU;
-            context.clocks = m_scheduler->GetClocks();
-
-            u32 slice = m_scheduler->GetSliceClocks(limit);
-            I386_Run_Result result = m_i386->RunFor(slice, context, false, m_pic->IsInterruptPending());
-            u32 clocks = (u32)(result.clocks + context.wait_clocks);
-
-            // A halted CPU idles through the slice
-            if (result.steps == 0 && m_i386->Halted())
-                clocks = slice;
-
-            CompleteSlice(clocks, context);
-        }
-    }
-
-    m_video->EndFrame();
-
-    // Debugger memory views refresh once per executed frame or debugger step
-    if (m_scheduler->GetClocks() != frame_start)
-        m_memory->InvalidateDebugSnapshot();
-
-    if (IsValidPointer(m_audio))
-    {
-        m_audio->Synchronize(m_scheduler->GetClocks());
-        m_audio->EndFrame(sample_buffer, sample_count);
-    }
-    else if (sample_count != NULL)
-        *sample_count = 0;
-
-    return GT_RUN_FRAME_READY;
-}
-
-// A running CRTC ends the frame at VSYNC
-// The limit only guards against a stalled or very long frame
-u64 GeartownsCore::GetFrameClockLimit() const
-{
-    return m_video->IsRunning() ? GT_CPU_CLOCKS_PER_FRAME * 4 : GT_CPU_CLOCKS_PER_FRAME;
 }
 
 bool GeartownsCore::LoadBios(const char* directory_path)

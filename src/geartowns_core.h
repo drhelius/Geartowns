@@ -42,6 +42,7 @@ class PIT;
 class SystemControl;
 class Scheduler;
 class Video;
+struct I386_Run_Result;
 
 class GeartownsCore
 {
@@ -114,12 +115,17 @@ private:
     template<bool debugger>
     GT_Run_Result RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
         bool render);
+    void RunFrame(u64 frame_start);
+    void RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug);
+    void EndFrame(u64 frame_start, s16* sample_buffer, int* sample_count);
+    bool IsFrameDone(u64 frame_start) const;
+    u64 GetFrameLimit(u64 frame_start) const;
+    GT_Bus_Access_Context BeginSlice() const;
+    void CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice);
+    void DispatchEvents();
     void Reset();
     void ResetCPU();
     void InitMemoryMap();
-    u64 GetFrameClockLimit() const;
-    void CompleteSlice(u32 clocks, GT_Bus_Access_Context& context);
-    void DispatchEvents();
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot);
     bool LoadState(std::istream& stream);

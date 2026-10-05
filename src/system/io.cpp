@@ -194,6 +194,10 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
             // Video output data
         case 0x044C:
             // Palette and sprite status
+        case 0x0450:
+            // Sprite address
+        case 0x0452:
+            // Sprite data
         case 0x0458:
             // VRAM mask address
         case 0x045A:
@@ -201,11 +205,6 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
         case 0x045B:
             // VRAM mask high
             return m_video->Read(port, context.clocks);
-        case 0x0450:
-            // Sprite address
-        case 0x0452:
-            // Sprite data
-            break;
         case 0x0480:
             // System ROM mapping
         case 0x0484:
@@ -523,6 +522,10 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Video output data
         case 0x044C:
             // Palette and sprite status
+        case 0x0450:
+            // Sprite address
+        case 0x0452:
+            // Sprite data
         case 0x0458:
             // VRAM mask address
         case 0x045A:
@@ -530,11 +533,6 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x045B:
             // VRAM mask high
             m_video->Write(port, value, context.clocks);
-            break;
-        case 0x0450:
-            // Sprite address
-        case 0x0452:
-            // Sprite data
             break;
         case 0x0480:
             // System ROM mapping

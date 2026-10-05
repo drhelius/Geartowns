@@ -98,4 +98,5 @@ SOURCES_CXX := \
     $(SRC_DIR)/system/scheduler.cpp \
     $(SRC_DIR)/system/system_control.cpp \
     $(SRC_DIR)/system/upd71071.cpp \
+    $(SRC_DIR)/video/sprite.cpp \
     $(SRC_DIR)/video/video.cpp

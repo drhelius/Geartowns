@@ -25,6 +25,7 @@
 
 Video::Video()
 {
+    InitPointer(m_sprite);
     InitPointer(m_pic);
     InitPointer(m_pit);
     InitPointer(m_scheduler);
@@ -34,6 +35,7 @@ Video::Video()
     m_render = false;
     m_frame_ready = false;
     m_next_event_clocks = GT_NO_EVENT;
+    m_next_event_half_line = 0;
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
     m_render_width = GT_FRAME_BUFFER_WIDTH;
@@ -47,6 +49,7 @@ Video::Video()
 
 Video::~Video()
 {
+    SafeDelete(m_sprite);
 }
 
 void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format)
@@ -56,6 +59,12 @@ void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, G
     m_scheduler = scheduler;
     m_font_rom = font_rom;
     m_pixel_format = pixel_format;
+
+    if (!IsValidPointer(m_sprite))
+        m_sprite = new Sprite();
+
+    m_sprite->Init(m_state.vram, m_state.sprite_ram);
+
     Reset();
 }
 
@@ -64,6 +73,7 @@ void Video::Reset()
     memset(&m_state, 0, sizeof(m_state));
     memset(m_state.mask, 0xFF, sizeof(m_state.mask));
     m_state.fmr_display_planes = 0x0F;
+    m_sprite->Reset();
     ResetFMRView();
     m_frame_ready = false;
     m_rendered_rows = 0;
@@ -75,7 +85,8 @@ void Video::Reset()
     UpdateIRQ();
 }
 
-// The latches that shape what the CPU sees at C0000-CFFFF, restored with the memory map on a CPU reset
+// The latches that shape what the CPU sees at C0000-CFFFF
+// restored with the memory map on a CPU reset
 void Video::ResetFMRView()
 {
     m_state.fmr_mask = 0x0F;
@@ -101,11 +112,14 @@ u8 Video::Read(u16 port, u64 clocks)
             return m_state.output[m_state.output_index];
         case 0x044C:
         {
-            // Sprite busy and page stay clear without the sprite engine
-            u8 value = m_state.digital_palette_modified ? 0x80 : 0x00;
+            u8 value = (m_state.digital_palette_modified ? 0x80 : 0x00) | (m_sprite->IsBusy() ? 0x02 : 0x00) |
+                (m_sprite->GetPage() ? 0x01 : 0x00);
             m_state.digital_palette_modified = false;
             return value;
         }
+        case 0x0450:
+        case 0x0452:
+            return m_sprite->Read(port);
         case 0x0458:
             return m_state.mask_index;
         case 0x045A:
@@ -162,8 +176,11 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             m_state.output_index = value & 0x03;
             break;
         case 0x044A:
-            RenderUpTo(clocks);
             m_state.output[m_state.output_index] = value;
+            break;
+        case 0x0450:
+        case 0x0452:
+            m_sprite->Write(port, value);
             break;
         case 0x0458:
             m_state.mask_index = value & 0x03;
@@ -184,7 +201,6 @@ void Video::Write(u16 port, u8 value, u64 clocks)
         case 0xFD92:
         case 0xFD94:
         case 0xFD96:
-            RenderUpTo(clocks);
             WritePalette((port - 0xFD92) >> 1, value);
             break;
         case 0xFD98:
@@ -199,7 +215,6 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             m_state.digital_palette_modified = true;
             break;
         case 0xFDA0:
-            RenderUpTo(clocks);
             m_state.display_enable = value;
             break;
         default:
@@ -219,7 +234,6 @@ void Video::EndFrame()
     if (m_frame_ready || m_state.running)
         return;
 
-    // A stopped CRTC sends no picture
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
 
@@ -330,7 +344,8 @@ void Video::WriteVRAMSinglePage(u32 offset, u8 value)
     data = (u8)((data & ~mask) | (value & mask));
 }
 
-// C0000-C7FFF reads the plane picked by mask bits 7-6, one bit per pixel with the first pixel in bit 7
+// C0000-C7FFF reads the plane picked by mask bits 7-6
+// one bit per pixel with the first pixel in bit 7
 u8 Video::ReadFMRPlanes(u32 offset) const
 {
     const u8* bytes = &m_state.vram[FMRToCanonical(offset)];
@@ -370,7 +385,8 @@ void Video::WriteFMRPlanes(u32 offset, u8 value)
     }
 }
 
-// C8000-CAFFF is text RAM at the start of sprite RAM, the ANK font covers CA000-CBFFF and hides C9000-C9FFF
+// C8000-CAFFF is text RAM at the start of sprite RAM
+// the ANK font covers CA000-CBFFF and hides C9000-C9FFF
 u8 Video::ReadFMRText(u32 offset) const
 {
     if (offset < 0x1000)
@@ -405,7 +421,7 @@ void Video::WriteFMRRegister(u32 offset, u8 value)
             m_state.fmr_mask = value;
             break;
         case 0x0F82:
-            RenderUpTo(m_scheduler->GetClocks());
+            Synchronize(m_scheduler->GetClocks());
             m_state.fmr_display_planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
             m_state.fmr_display_page = (value & 0x10) != 0;
             break;
@@ -482,8 +498,6 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
     int index = m_state.crtc_index;
     u16 previous = m_state.crtc[index];
 
-    RenderUpTo(clocks);
-
     if (high)
         m_state.crtc[index] = (u16)((previous & 0x00FF) | (value << 8));
     else
@@ -551,25 +565,54 @@ u8 Video::ReadPalette(int component) const
     }
 }
 
+// The sprite engine is brought to each event first
+// so the rows drawn there see its VRAM writes
+void Video::RunNextEvent()
+{
+    u64 clocks = m_next_event_clocks;
+    u32 half_line = m_next_event_half_line;
+
+    m_sprite->Synchronize(clocks);
+
+    if (half_line >= m_state.frame_half_lines)
+    {
+        CompleteFrame(clocks);
+        return;
+    }
+
+    m_state.event_half_line = half_line;
+
+    if (half_line == m_state.frame_vsync_half_lines && m_sprite->IsEnabled() && !m_sprite->IsBusy())
+        m_sprite->StartTransfer(clocks);
+
+    if ((half_line & 0x01) == 0)
+        RenderRows(half_line);
+
+    UpdateNextEvent();
+}
+
 // Timing registers are latched at each frame start
-// The vertical period counts VST + 1 half-lines, 525 lines on the VGA preset and 262.5 on 15 kHz ones
+// The vertical period counts VST + 1 half-lines
+// 525 lines on the VGA preset and 262.5 on 15 kHz ones
 void Video::StartFrame(u64 clocks)
 {
+    u32 vst1 = m_state.crtc[k_video_crtc_vst1];
+    u32 vst2 = m_state.crtc[k_video_crtc_vst2];
+
     m_state.running = true;
     m_state.frame_start_clocks = clocks;
     m_state.frame_line_clocks = MAX((u32)m_state.crtc[k_video_crtc_hst] + 1, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX((u32)m_state.crtc[k_video_crtc_vst] + 1, k_video_min_half_lines);
+    m_state.frame_vsync_half_lines = CLAMP(vst2 > vst1 ? vst2 - vst1 : 1, 1U, m_state.frame_half_lines - 1);
     m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
+    m_state.event_half_line = 0;
     m_rendered_rows = 0;
     UpdateGeometry();
     UpdateNextEvent();
 }
 
-// Frames run from VSYNC to VSYNC, so every displayed line has been scanned when the next one starts
-void Video::CompleteFrame()
+void Video::CompleteFrame(u64 clocks)
 {
-    u64 vsync_clocks = m_next_event_clocks;
-
     for (; m_rendered_rows < m_render_height; m_rendered_rows++)
         RenderRow(m_rendered_rows);
 
@@ -579,7 +622,7 @@ void Video::CompleteFrame()
     m_state.frame_count++;
     m_state.vsync_irq = true;
     UpdateIRQ();
-    StartFrame(vsync_clocks);
+    StartFrame(clocks);
 }
 
 void Video::UpdateGeometry()
@@ -641,9 +684,15 @@ void Video::UpdateNextEvent()
         return;
     }
 
-    u64 frame_clocks = ((u64)m_state.frame_half_lines * m_state.frame_line_clocks) / 2;
-    u64 cpu_clocks = (frame_clocks * GT_CPU_CLOCK_RATE + m_state.frame_clock_rate - 1) / m_state.frame_clock_rate;
-    m_next_event_clocks = m_state.frame_start_clocks + cpu_clocks;
+    // Every line end, the end of VSYNC and the end of the frame
+    u32 half_line = m_state.event_half_line;
+    u32 next = (half_line + 2) & ~0x01U;
+
+    if (half_line < m_state.frame_vsync_half_lines)
+        next = MIN(next, m_state.frame_vsync_half_lines);
+
+    m_next_event_half_line = MIN(next, m_state.frame_half_lines);
+    m_next_event_clocks = GetHalfLineClocks(m_next_event_half_line);
     m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
 }
 
@@ -684,19 +733,14 @@ u8 Video::GetSyncStatus(u64 clocks) const
     return status;
 }
 
-// Rows already scanned are drawn before a register or palette change, so the change only affects later rows
-// VRAM writes are not tracked, they show up in every row not drawn yet
-void Video::RenderUpTo(u64 clocks)
+void Video::RenderRows(u32 half_line)
 {
-    if (!m_state.running)
+    u32 beam = m_state.crtc[k_video_crtc_vst1] + half_line;
+
+    if (beam <= m_canvas_v_start)
         return;
 
-    u32 half_line = GetBeamHalfLine(clocks);
-
-    if (half_line <= m_canvas_v_start)
-        return;
-
-    int rows = (int)((half_line - m_canvas_v_start) / 2);
+    int rows = (int)((beam - m_canvas_v_start) / 2);
 
     if (m_canvas_interlaced)
         rows *= 2;
@@ -778,6 +822,8 @@ void Video::RenderLayerRow(int layer, int row, bool opaque)
         if (m_state.fmr_display_page)
             start += 0x20000;
     }
+    else
+        start += m_sprite->GetDisplayOffset();
 
     // Fetching starts at HAJ, so data before HDS has already been consumed when the window opens
     u32 hds = crtc[k_video_crtc_hds0 + layer * 2];
@@ -866,12 +912,14 @@ void Video::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
+    m_sprite->SaveState(stream);
 }
 
 void Video::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
+    m_sprite->LoadState(stream);
     SanitizeState();
 }
 
@@ -896,8 +944,10 @@ void Video::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.frame_start_clocks);
     G_SERIALIZE(serializer, m_state.frame_line_clocks);
     G_SERIALIZE(serializer, m_state.frame_half_lines);
+    G_SERIALIZE(serializer, m_state.frame_vsync_half_lines);
     G_SERIALIZE(serializer, m_state.frame_clock_rate);
     G_SERIALIZE(serializer, m_state.frame_count);
+    G_SERIALIZE(serializer, m_state.event_half_line);
     G_SERIALIZE(serializer, m_state.fmr_mask);
     G_SERIALIZE(serializer, m_state.fmr_page);
     G_SERIALIZE(serializer, m_state.fmr_display_planes);
@@ -919,6 +969,8 @@ void Video::SanitizeState()
     m_state.kanji_row &= 0x0F;
     m_state.frame_line_clocks = MAX(m_state.frame_line_clocks, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX(m_state.frame_half_lines, k_video_min_half_lines);
+    m_state.frame_vsync_half_lines = CLAMP(m_state.frame_vsync_half_lines, 1U, m_state.frame_half_lines - 1);
+    m_state.event_half_line = MIN(m_state.event_half_line, m_state.frame_half_lines - 1);
 
     if (m_state.frame_clock_rate == 0)
         m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];

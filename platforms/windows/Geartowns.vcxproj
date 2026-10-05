@@ -63,6 +63,7 @@
     <ClCompile Include="..\..\src\cdrom\cdrom_physical_image.cpp" />
     <ClCompile Include="..\..\src\drive\fdc_mock.cpp" />
     <ClCompile Include="..\..\src\system\i8253.cpp" />
+    <ClCompile Include="..\..\src\video\sprite.cpp" />
     <ClCompile Include="..\..\src\video\video.cpp" />
     <ClCompile Include="..\..\src\audio\ym3438.cpp" />
     <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_bitstream.c">
@@ -208,6 +209,8 @@
     <ClInclude Include="..\..\src\drive\fdc_mock_inline.h" />
     <ClInclude Include="..\..\src\system\i8253.h" />
     <ClInclude Include="..\..\src\system\i8253_inline.h" />
+    <ClInclude Include="..\..\src\video\sprite.h" />
+    <ClInclude Include="..\..\src\video\sprite_inline.h" />
     <ClInclude Include="..\..\src\video\video.h" />
     <ClInclude Include="..\..\src\video\video_inline.h" />
     <ClInclude Include="..\..\src\media\firmware_inline.h" />

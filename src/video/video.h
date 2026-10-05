@@ -30,6 +30,7 @@
 class PIC;
 class PIT;
 class Scheduler;
+class Sprite;
 class StateSerializer;
 
 class Video
@@ -56,8 +57,10 @@ public:
         u64 frame_start_clocks;
         u32 frame_line_clocks;
         u32 frame_half_lines;
+        u32 frame_vsync_half_lines;
         u32 frame_clock_rate;
         u32 frame_count;
+        u32 event_half_line;
         u8 fmr_mask;
         bool fmr_page;
         u8 fmr_display_planes;
@@ -88,6 +91,7 @@ public:
     float GetFrameTime() const;
     u8* GetVRAM();
     u8* GetSpriteRAM();
+    Sprite* GetSprite();
     Video_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
@@ -121,15 +125,17 @@ private:
     u8 ReadCRTC(bool high, u64 clocks);
     void WritePalette(int component, u8 value);
     u8 ReadPalette(int component) const;
+    void RunNextEvent();
     void StartFrame(u64 clocks);
-    void CompleteFrame();
+    void CompleteFrame(u64 clocks);
     void UpdateGeometry();
     void UpdateNextEvent();
     void UpdateIRQ();
+    u64 GetHalfLineClocks(u32 half_line) const;
     u8 GetSyncStatus(u64 clocks) const;
     u32 GetBeamHalfLine(u64 clocks) const;
     u32 GetBeamClock(u64 clocks) const;
-    void RenderUpTo(u64 clocks);
+    void RenderRows(u32 half_line);
     void RenderRow(int row);
     void RenderLayerRow(int layer, int row, bool opaque);
     Video_Layer_Format GetLayerFormat(int layer) const;
@@ -155,6 +161,7 @@ private:
 
 private:
     Video_State m_state;
+    Sprite* m_sprite;
     PIC* m_pic;
     PIT* m_pit;
     Scheduler* m_scheduler;
@@ -164,6 +171,7 @@ private:
     bool m_render;
     bool m_frame_ready;
     u64 m_next_event_clocks;
+    u32 m_next_event_half_line;
     int m_frame_width;
     int m_frame_height;
     int m_render_width;

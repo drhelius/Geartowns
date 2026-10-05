@@ -21,12 +21,15 @@
 #define VIDEO_INLINE_H
 
 #include "video.h"
+#include "sprite.h"
 #include "../system/scheduler.h"
 
 INLINE void Video::Synchronize(u64 clocks)
 {
     while (clocks >= m_next_event_clocks)
-        CompleteFrame();
+        RunNextEvent();
+
+    m_sprite->Synchronize(clocks);
 }
 
 INLINE void Video::HandleEvent(u64 clocks)
@@ -70,6 +73,11 @@ INLINE u8* Video::GetVRAM()
 INLINE u8* Video::GetSpriteRAM()
 {
     return m_state.sprite_ram;
+}
+
+INLINE Sprite* Video::GetSprite()
+{
+    return m_sprite;
 }
 
 INLINE Video::Video_State* Video::GetState()
@@ -164,10 +172,19 @@ INLINE u32 Video::GetKanjiOffset() const
     return (glyph & 0x1FFF) * 32 + m_state.kanji_row * 2;
 }
 
+// Half-lines count from the VSYNC that started the frame
+// rounded up to the CPU clock that reaches them
+INLINE u64 Video::GetHalfLineClocks(u32 half_line) const
+{
+    u64 crtc_clocks = (u64)half_line * m_state.frame_line_clocks;
+    u64 rate = (u64)m_state.frame_clock_rate * 2;
+    return m_state.frame_start_clocks + (crtc_clocks * GT_CPU_CLOCK_RATE + rate - 1) / rate;
+}
+
 INLINE u32 Video::GetBeamHalfLine(u64 clocks) const
 {
-    u64 elapsed = ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_CPU_CLOCK_RATE;
-    return m_state.crtc[k_video_crtc_vst1] + (u32)((elapsed * 2) / m_state.frame_line_clocks);
+    u64 elapsed = (clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate * 2;
+    return m_state.crtc[k_video_crtc_vst1] + (u32)(elapsed / ((u64)GT_CPU_CLOCK_RATE * m_state.frame_line_clocks));
 }
 
 INLINE u32 Video::GetBeamClock(u64 clocks) const

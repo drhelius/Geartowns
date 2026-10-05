@@ -110,6 +110,9 @@ EXTERN void emu_set_pad_type(GT_Controllers controller, GT_Controller_Type type)
 EXTERN GT_Controller_Type emu_get_pad_type(GT_Controllers controller);
 EXTERN bool emu_save_screenshot(const char* file_path);
 EXTERN int emu_get_screenshot_png(unsigned char** out_buffer);
+EXTERN bool emu_start_video_recording(const char* file_path);
+EXTERN void emu_stop_video_recording(void);
+EXTERN bool emu_is_video_recording(void);
 EXTERN bool emu_load_bios(const char* path);
 
 EXTERN void emu_mcp_set_transport(int mode, int tcp_port, const char* tcp_address);

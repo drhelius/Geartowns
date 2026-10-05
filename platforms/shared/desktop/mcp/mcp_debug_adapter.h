@@ -49,6 +49,9 @@ public:
     json LookupSymbolAtAddress(u32 address);
     json ListCallStack();
     json GetScreenshot();
+    json StartVideoRecording(const std::string& file_path, int scale, const std::string& aspect_ratio,
+        const std::string& quality);
+    json StopVideoRecording();
     json GetMediaInfo();
     json LoadBios(const std::string& directory_path);
     json StartLoadMedia(const std::string& file_path);

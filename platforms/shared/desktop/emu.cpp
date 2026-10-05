@@ -22,6 +22,7 @@
 
 #include <SDL3/SDL.h>
 #include <atomic>
+#include <math.h>
 #include <new>
 #include <string.h>
 #include <thread>
@@ -32,6 +33,7 @@
 #include "runahead.h"
 #include "sound_queue.h"
 #include "utils.h"
+#include "video_recorder.h"
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 #include "cdrom/cdrom_drive.h"
 #endif
@@ -73,6 +75,7 @@ static void load_media_thread_func(void);
 static void reset_buffers(void);
 static void reset_run_state(void);
 static const char* get_configurated_dir(int option, const char* path);
+static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width, int* height);
 static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
 static bool unload_media(void);
@@ -152,6 +155,7 @@ void emu_destroy(void)
     }
 
     loading_state.store(Loading_State_None);
+    emu_stop_video_recording();
     runahead_destroy();
     rewind_destroy();
     SafeDelete(mcp_manager);
@@ -278,6 +282,18 @@ void emu_update(void)
             emu_frame_counter++;
 
         rewind_push();
+
+        if (video_recorder_is_recording())
+        {
+            video_recorder_add_audio(audio_buffer, sample_count);
+
+            if (frame_completed)
+            {
+                GT_Runtime_Info runtime;
+                emu_get_runtime(runtime);
+                video_recorder_add_video(emu_frame_buffer, runtime.screen_width, runtime.screen_height, 4);
+            }
+        }
     }
 
     if (sample_count > 0 && !geartowns->IsPaused())
@@ -806,6 +822,75 @@ int emu_get_screenshot_png(unsigned char** out_buffer)
     *out_buffer = stbi_write_png_to_mem(emu_frame_buffer, runtime.screen_width * 4, runtime.screen_width,
         runtime.screen_height, 4, &size);
     return size;
+}
+
+bool emu_start_video_recording(const char* file_path)
+{
+    if (emu_is_empty())
+        return false;
+
+    if (video_recorder_is_recording())
+        emu_stop_video_recording();
+
+    GT_Runtime_Info runtime;
+    emu_get_runtime(runtime);
+
+    int width = 0;
+    int height = 0;
+    get_video_recording_size(runtime, &width, &height);
+
+    if (!video_recorder_start(file_path, width, height, emu_get_frame_rate(), GT_AUDIO_SAMPLE_RATE,
+        (Video_Recorder_Quality)config_video.recording_quality))
+        return false;
+
+    Log("Video recording started: %s (%dx%d)", file_path, width, height);
+    return true;
+}
+
+void emu_stop_video_recording(void)
+{
+    if (video_recorder_is_recording())
+    {
+        video_recorder_stop();
+        Log("Video recording stopped");
+    }
+}
+
+bool emu_is_video_recording(void)
+{
+    return video_recorder_is_recording();
+}
+
+static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width, int* height)
+{
+    int selected_ratio = config_video.ratio;
+    float ratio = 0.0f;
+
+    if (config_video.recording_ratio > 0)
+        selected_ratio = config_video.recording_ratio - 1;
+
+    switch (selected_ratio)
+    {
+        case 1:
+            ratio = 4.0f / 3.0f;
+            break;
+        case 2:
+            ratio = 16.0f / 9.0f;
+            break;
+        case 3:
+            ratio = 16.0f / 10.0f;
+            break;
+        case 4:
+            ratio = 6.0f / 5.0f;
+            break;
+        default:
+            ratio = ((float)runtime.screen_width / (float)runtime.width_scale) / (float)runtime.screen_height;
+    }
+
+    *height = runtime.screen_height * config_video.recording_scale;
+    *width = (int)roundf((float)*height * ratio);
+    *width += *width & 1;
+    *height += *height & 1;
 }
 
 bool emu_load_bios(const char* path)

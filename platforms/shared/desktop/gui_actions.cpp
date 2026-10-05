@@ -32,11 +32,16 @@
 #include "debug/gui_debug.h"
 #include "rewind.h"
 #include "utils.h"
+#include "video_recorder.h"
+
+static std::string get_auto_file_path(int dir_option, const std::string& custom_path, const char* extension);
 
 void gui_action_load_defaults(void)
 {
     if (gui_is_rom_loading() || emu_is_media_loading())
         return;
+
+    emu_stop_video_recording();
 
     GeartownsCore* core = emu_get_core();
     gui_debug_auto_save_settings();
@@ -207,13 +212,6 @@ void gui_action_save_screenshot(const char* path)
     if (!IsValidPointer(emu_frame_buffer))
         return;
 
-    time_t now = time(NULL);
-    struct tm time_info;
-    char date_time[32] = { };
-
-    if (get_local_time(now, &time_info))
-        strftime(date_time, sizeof(date_time), "%Y-%m-%d %H%M%S", &time_info);
-
     std::string file_path;
 
     if (IsValidPointer(path) && path[0] != '\0')
@@ -224,31 +222,7 @@ void gui_action_save_screenshot(const char* path)
             file_path += ".png";
     }
     else
-    {
-        const char* base_path = config_root_path;
-        const char* media_name = "Geartowns";
-
-        if (!emu_is_empty())
-        {
-            media_name = emu_get_core()->GetMedia()->GetFileName();
-
-            if (config_emulator.screenshots_dir_option == Directory_Location_ROM &&
-                emu_get_core()->GetMedia()->GetFileDirectory()[0] != '\0')
-            {
-                base_path = emu_get_core()->GetMedia()->GetFileDirectory();
-            }
-            else if (config_emulator.screenshots_dir_option == Directory_Location_Custom)
-            {
-                base_path = config_emulator.screenshots_path.c_str();
-            }
-        }
-
-        file_path = base_path;
-        append_path_component(file_path, media_name);
-        file_path += " - ";
-        file_path += date_time;
-        file_path += ".png";
-    }
+        file_path = get_auto_file_path(config_emulator.screenshots_dir_option, config_emulator.screenshots_path, ".png");
 
     if (emu_save_screenshot(file_path.c_str()))
     {
@@ -262,4 +236,83 @@ void gui_action_save_screenshot(const char* path)
         message += file_path;
         gui_set_error_message(message.c_str());
     }
+}
+
+bool gui_action_start_video_recording(const char* path)
+{
+    if (emu_is_empty())
+        return false;
+
+    std::string file_path;
+
+    if (IsValidPointer(path) && path[0] != '\0')
+        file_path = path;
+    else
+        file_path = get_auto_file_path(config_emulator.video_recordings_dir_option, config_emulator.video_recordings_path,
+            ".avi");
+
+    if (!emu_start_video_recording(file_path.c_str()))
+    {
+        gui_set_error_message("Unable to start video recording");
+        return false;
+    }
+
+    std::string message = "Recording video to ";
+    message += file_path;
+    gui_set_status_message(message.c_str(), 3000);
+    return true;
+}
+
+void gui_action_stop_video_recording(void)
+{
+    if (!emu_is_video_recording())
+        return;
+
+    std::string message = "Video saved to ";
+    message += video_recorder_get_file_path();
+    emu_stop_video_recording();
+    gui_set_status_message(message.c_str(), 3000);
+}
+
+void gui_action_toggle_video_recording(void)
+{
+    if (emu_is_video_recording())
+        gui_action_stop_video_recording();
+    else
+        gui_action_start_video_recording(NULL);
+}
+
+static std::string get_auto_file_path(int dir_option, const std::string& custom_path, const char* extension)
+{
+    time_t now = time(NULL);
+    struct tm time_info;
+    char date_time[32] = { };
+
+    if (get_local_time(now, &time_info))
+        strftime(date_time, sizeof(date_time), "%Y-%m-%d %H%M%S", &time_info);
+
+    const char* base_path = config_root_path;
+    const char* media_name = "Geartowns";
+
+    if (!emu_is_empty())
+    {
+        media_name = emu_get_core()->GetMedia()->GetFileName();
+
+        if (dir_option == Directory_Location_ROM &&
+            emu_get_core()->GetMedia()->GetFileDirectory()[0] != '\0')
+        {
+            base_path = emu_get_core()->GetMedia()->GetFileDirectory();
+        }
+        else if (dir_option == Directory_Location_Custom)
+        {
+            base_path = custom_path.c_str();
+        }
+    }
+
+    std::string file_path = base_path;
+    append_path_component(file_path, media_name);
+    file_path += " - ";
+    file_path += date_time;
+    file_path += extension;
+    return file_path;
 }

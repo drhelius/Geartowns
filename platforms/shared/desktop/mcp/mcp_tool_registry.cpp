@@ -199,7 +199,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"breakpoints", "Breakpoints", "Manage Intel 80386 execution breakpoints."},
     {"disassembly", "Disassembly", "Inspect Intel 80386 code, symbols, and call stack."},
     {"media", "Media", "Load BIOS or media files and inspect loaded media."},
-    {"capture", "Capture", "Capture the current emulator screenshot."},
+    {"capture", "Capture", "Capture the current emulator screenshot or record AVI video."},
     {"input", "Input", "Inspect and control the two gamepad ports."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
 };
@@ -229,7 +229,7 @@ static const char* const kMcpMediaTools[] =
 
 static const char* const kMcpCaptureTools[] =
 {
-    "get_screenshot"
+    "get_screenshot", "start_video_recording", "stop_video_recording"
 };
 
 static const char* const kMcpInputTools[] =
@@ -617,6 +617,8 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
 
     if (StringContains(name, "controller"))
         aliases += " input joypad gamepad button tap press release";
+    if (StringContains(name, "video_recording"))
+        aliases += " record movie clip capture avi mjpeg gameplay";
 
     return aliases;
 }

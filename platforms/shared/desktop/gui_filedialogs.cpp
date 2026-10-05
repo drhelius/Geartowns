@@ -40,7 +40,9 @@ enum FileDialogID
     FileDialog_SaveState,
     FileDialog_ChooseSavestatePath,
     FileDialog_ChooseScreenshotPath,
+    FileDialog_ChooseVideoRecordingPath,
     FileDialog_SaveScreenshot,
+    FileDialog_SaveVideo,
     FileDialog_LoadBIOS,
     FileDialog_SaveMemoryDump,
     FileDialog_LoadMemoryDump,
@@ -84,6 +86,17 @@ void gui_file_dialog_choose_screenshot_path(void)
         application_sdl_window, default_path, false);
 }
 
+void gui_file_dialog_choose_video_recording_path(void)
+{
+    if (!begin_dialog())
+        return;
+
+    const char* default_path =
+        config_emulator.video_recordings_path.empty() ? NULL : config_emulator.video_recordings_path.c_str();
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseVideoRecordingPath,
+        application_sdl_window, default_path, false);
+}
+
 void gui_file_dialog_save_screenshot(void)
 {
     if (!begin_dialog())
@@ -91,6 +104,16 @@ void gui_file_dialog_save_screenshot(void)
 
     SDL_DialogFileFilter filters[] = { { "PNG Files", "png" } };
     SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveScreenshot, application_sdl_window,
+        filters, 1, NULL);
+}
+
+void gui_file_dialog_save_video(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = { { "AVI Files", "avi" } };
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveVideo, application_sdl_window,
         filters, 1, NULL);
 }
 
@@ -246,6 +269,8 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         append_extension_if_missing(pending_dialog_path, ".state");
     else if (id == FileDialog_SaveScreenshot)
         append_extension_if_missing(pending_dialog_path, ".png");
+    else if (id == FileDialog_SaveVideo)
+        append_extension_if_missing(pending_dialog_path, ".avi");
     else if (id == FileDialog_SaveMemoryDump)
         append_extension_if_missing(pending_dialog_path, ".bin");
     else if (id == FileDialog_SaveDebugSettings)
@@ -268,6 +293,10 @@ static void process_dialog_result(FileDialogID id, const char* path)
         case FileDialog_ChooseScreenshotPath:
             strncpy_fit(gui_screenshots_path, path, sizeof(gui_screenshots_path));
             config_emulator.screenshots_path = path;
+            break;
+        case FileDialog_ChooseVideoRecordingPath:
+            strncpy_fit(gui_video_recordings_path, path, sizeof(gui_video_recordings_path));
+            config_emulator.video_recordings_path = path;
             break;
         case FileDialog_LoadState:
         {
@@ -294,6 +323,9 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_SaveScreenshot:
             gui_action_save_screenshot(path);
+            break;
+        case FileDialog_SaveVideo:
+            gui_action_start_video_recording(path);
             break;
         case FileDialog_LoadBIOS:
             gui_load_bios(path);

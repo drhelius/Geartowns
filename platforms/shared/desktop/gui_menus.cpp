@@ -68,6 +68,7 @@ static void menu_machine(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model model, bool show_original);
 static int get_machine_ram_options(const GT_Machine_Profile& profile, int* options, int max_options);
+static float get_combo_width(float text_width);
 static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type);
 static void menu_video(void);
 static void menu_shader(void);
@@ -396,6 +397,19 @@ static void menu_cdrom(void)
         gui_action_eject_media();
     }
 
+    if (ImGui::MenuItem("Preload CD-ROM in RAM", "", &config_emulator.preload_cdrom))
+    {
+        emu_set_preload_cdrom(config_emulator.preload_cdrom);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("This option will preload all CD-ROM tracks in RAM.");
+        ImGui::Text("Load a new CD-ROM image to apply changes.");
+        ImGui::EndTooltip();
+    }
+
     ImGui::Separator();
 
     if (loading)
@@ -548,6 +562,8 @@ static void menu_emulator(void)
 
         menu_machine();
 
+        ImGui::Separator();
+
         if (ImGui::BeginMenu("Directories"))
         {
             if (ImGui::BeginMenu("Save States"))
@@ -698,19 +714,6 @@ static void menu_emulator(void)
         ImGui::MenuItem("Start Paused", "", &config_emulator.start_paused);
         ImGui::MenuItem("Pause When Inactive", "", &config_emulator.pause_when_inactive);
 
-        if (ImGui::MenuItem("Preload CD-ROM in RAM", "", &config_emulator.preload_cdrom))
-        {
-            emu_set_preload_cdrom(config_emulator.preload_cdrom);
-        }
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("This option will preload all CD-ROM tracks in RAM.");
-            ImGui::Text("Load a new CD-ROM image to apply changes.");
-            ImGui::EndTooltip();
-        }
-
         if (ImGui::MenuItem("Allow Screen Saver", "", &config_emulator.allow_screensaver))
         {
             if (config_emulator.allow_screensaver)
@@ -789,42 +792,58 @@ static void menu_machine(void)
     const GT_Machine_Profile& profile = k_machine_profiles[model];
     bool custom = model == GT_MACHINE_CUSTOM;
     bool changed = false;
-    char preview[32];
-    char label[32];
 
-    ImGui::PushItemWidth(200.0f);
-
-    if (ImGui::BeginCombo("Model", profile.name))
+    if (ImGui::BeginMenu("Model"))
     {
+        float text_width = 0.0f;
+
         for (int i = 0; i < GT_MACHINE_COUNT; i++)
+            text_width = MAX(text_width, ImGui::CalcTextSize(k_machine_profiles[i].name).x);
+
+        ImGui::PushItemWidth(get_combo_width(text_width));
+
+        if (ImGui::BeginCombo("##machine_model", profile.name))
         {
-            if (i == GT_MACHINE_CUSTOM)
-                ImGui::Separator();
-
-            ImGui::BeginDisabled(!k_machine_profiles[i].emulated);
-
-            if (ImGui::Selectable(k_machine_profiles[i].name, i == model))
+            for (int i = 0; i < GT_MACHINE_COUNT; i++)
             {
-                config_machine.model = i;
-                changed = true;
+                if (i == GT_MACHINE_CUSTOM)
+                    ImGui::Separator();
+
+                ImGui::BeginDisabled(!k_machine_profiles[i].emulated);
+
+                if (ImGui::Selectable(k_machine_profiles[i].name, i == model))
+                {
+                    config_machine.model = i;
+                    changed = true;
+                }
+
+                ImGui::EndDisabled();
+
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    draw_machine_profile_tooltip((GT_Machine_Model)i);
             }
 
-            ImGui::EndDisabled();
-
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                draw_machine_profile_tooltip((GT_Machine_Model)i);
+            ImGui::EndCombo();
         }
+        else if (ImGui::IsItemHovered())
+            draw_machine_profile_tooltip(model);
 
-        ImGui::EndCombo();
+        ImGui::PopItemWidth();
+        ImGui::EndMenu();
     }
-    else if (ImGui::IsItemHovered())
-        draw_machine_profile_tooltip(model);
 
     ImGui::Separator();
 
-    if (custom)
+    if (custom && ImGui::BeginMenu("CPU"))
     {
-        if (ImGui::BeginCombo("CPU", k_machine_cpus[config_machine.custom_cpu].name))
+        float text_width = 0.0f;
+
+        for (int i = 0; i < GT_MACHINE_CPU_COUNT; i++)
+            text_width = MAX(text_width, ImGui::CalcTextSize(k_machine_cpus[i].name).x);
+
+        ImGui::PushItemWidth(get_combo_width(text_width));
+
+        if (ImGui::BeginCombo("##machine_cpu", k_machine_cpus[config_machine.custom_cpu].name))
         {
             for (int i = 0; i < GT_MACHINE_CPU_COUNT; i++)
             {
@@ -845,50 +864,80 @@ static void menu_machine(void)
             ImGui::EndCombo();
         }
 
-        if (draw_machine_cpu_clock_combo("CPU Clock", model, false))
-            changed = true;
+        ImGui::PopItemWidth();
+        ImGui::EndMenu();
     }
 
-    snprintf(preview, sizeof(preview), "%d MB", config_machine.ram_mb[model]);
+    if (custom && ImGui::BeginMenu("CPU Clock"))
+    {
+        if (draw_machine_cpu_clock_combo("##machine_cpu_clock", model, false))
+            changed = true;
 
-    if (ImGui::BeginCombo("Main RAM", preview))
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Main RAM"))
     {
         int options[IM_ARRAYSIZE(machine_ram_sizes_mb) + 2];
         int count = get_machine_ram_options(profile, options, IM_ARRAYSIZE(options));
+        float text_width = 0.0f;
+        char label[32];
 
         for (int i = 0; i < count; i++)
         {
             snprintf(label, sizeof(label), "%d MB", options[i]);
-
-            if (ImGui::Selectable(label, options[i] == config_machine.ram_mb[model]))
-            {
-                config_machine.ram_mb[model] = options[i];
-                changed = true;
-            }
+            text_width = MAX(text_width, ImGui::CalcTextSize(label).x);
         }
 
-        ImGui::EndCombo();
-    }
+        snprintf(label, sizeof(label), "%d MB", config_machine.ram_mb[model]);
+        ImGui::PushItemWidth(get_combo_width(text_width));
 
-    snprintf(preview, sizeof(preview), "%d", config_machine.floppy_drives[model]);
-
-    if (ImGui::BeginCombo("Floppy Drives", preview))
-    {
-        for (int i = profile.floppy_min; i <= profile.floppy_max; i++)
+        if (ImGui::BeginCombo("##machine_ram", label))
         {
-            snprintf(label, sizeof(label), "%d", i);
-
-            if (ImGui::Selectable(label, i == config_machine.floppy_drives[model]))
+            for (int i = 0; i < count; i++)
             {
-                config_machine.floppy_drives[model] = i;
-                changed = true;
+                snprintf(label, sizeof(label), "%d MB", options[i]);
+
+                if (ImGui::Selectable(label, options[i] == config_machine.ram_mb[model]))
+                {
+                    config_machine.ram_mb[model] = options[i];
+                    changed = true;
+                }
             }
+
+            ImGui::EndCombo();
         }
 
-        ImGui::EndCombo();
+        ImGui::PopItemWidth();
+        ImGui::EndMenu();
     }
 
-    ImGui::PopItemWidth();
+    if (ImGui::BeginMenu("Floppy Drives"))
+    {
+        char label[8];
+        snprintf(label, sizeof(label), "%d", profile.floppy_max);
+        ImGui::PushItemWidth(get_combo_width(ImGui::CalcTextSize(label).x));
+        snprintf(label, sizeof(label), "%d", config_machine.floppy_drives[model]);
+
+        if (ImGui::BeginCombo("##machine_floppy_drives", label))
+        {
+            for (int i = profile.floppy_min; i <= profile.floppy_max; i++)
+            {
+                snprintf(label, sizeof(label), "%d", i);
+
+                if (ImGui::Selectable(label, i == config_machine.floppy_drives[model]))
+                {
+                    config_machine.floppy_drives[model] = i;
+                    changed = true;
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::PopItemWidth();
+        ImGui::EndMenu();
+    }
 
     ImGui::MenuItem("80387 FPU", NULL, false, false);
 
@@ -899,14 +948,10 @@ static void menu_machine(void)
 
     ImGui::TextDisabled("Enhancements");
 
-    if (!custom)
+    if (!custom && ImGui::BeginMenu("CPU Speed"))
     {
-        ImGui::PushItemWidth(200.0f);
-
-        if (draw_machine_cpu_clock_combo("CPU Speed", model, true))
+        if (draw_machine_cpu_clock_combo("##machine_cpu_speed", model, true))
             changed = true;
-
-        ImGui::PopItemWidth();
 
         if (ImGui::IsItemHovered())
         {
@@ -915,6 +960,8 @@ static void menu_machine(void)
             ImGui::Text("Devices keep their real timing.");
             ImGui::EndTooltip();
         }
+
+        ImGui::EndMenu();
     }
 
     ImGui::MenuItem("Fast CD-ROM", NULL, false, false);
@@ -1002,7 +1049,16 @@ static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model mod
     else
         snprintf(original, sizeof(original), "%d MHz", original_mhz);
 
+    float text_width = ImGui::CalcTextSize(original).x;
+
+    for (int i = 0; i < IM_ARRAYSIZE(machine_cpu_speeds_mhz); i++)
+    {
+        snprintf(text, sizeof(text), "%d MHz", machine_cpu_speeds_mhz[i]);
+        text_width = MAX(text_width, ImGui::CalcTextSize(text).x);
+    }
+
     snprintf(text, sizeof(text), "%d MHz", cpu_mhz);
+    ImGui::PushItemWidth(get_combo_width(text_width));
 
     if (ImGui::BeginCombo(label, cpu_mhz == 0 ? original : text))
     {
@@ -1029,7 +1085,13 @@ static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model mod
         ImGui::EndCombo();
     }
 
+    ImGui::PopItemWidth();
     return changed;
+}
+
+static float get_combo_width(float text_width)
+{
+    return text_width + (ImGui::GetStyle().FramePadding.x * 2.0f) + ImGui::GetFrameHeight();
 }
 
 static int get_machine_ram_options(const GT_Machine_Profile& profile, int* options, int max_options)

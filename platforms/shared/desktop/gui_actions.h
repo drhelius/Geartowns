@@ -27,9 +27,11 @@
 #endif
 
 EXTERN void gui_action_load_defaults(void);
+EXTERN void gui_action_power_on(void);
+EXTERN void gui_action_power_off(void);
 EXTERN void gui_action_reset(void);
 EXTERN void gui_action_reload_rom(void);
-EXTERN void gui_action_eject_physical_cdrom(void);
+EXTERN void gui_action_eject_media(void);
 EXTERN void gui_action_pause(void);
 EXTERN void gui_action_ffwd(void);
 EXTERN void gui_action_rewind_pressed(void);

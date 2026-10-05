@@ -27,6 +27,11 @@ INLINE bool GeartownsCore::IsPaused()
     return m_paused;
 }
 
+INLINE bool GeartownsCore::IsPoweredOn()
+{
+    return m_powered;
+}
+
 INLINE Firmware* GeartownsCore::GetFirmware()
 {
     return m_firmware;

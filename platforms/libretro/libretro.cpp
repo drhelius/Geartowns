@@ -393,6 +393,8 @@ bool retro_load_game(const struct retro_game_info *info)
     if (!core->LoadMedia(retro_game_path))
         return false;
 
+    core->PowerOn();
+
     enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
 
     if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))

@@ -65,6 +65,7 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_dma);
     InitPointer(m_frame_buffer);
 
+    m_powered = false;
     m_paused = false;
     m_pixel_format = GT_PIXEL_RGBA8888;
 }
@@ -202,7 +203,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     if (m_paused)
         return GT_RUN_PAUSED;
 
-    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
+    if (!m_powered || !IsValidPointer(m_firmware) || !m_firmware->IsReady())
         return GT_RUN_NOT_READY;
 
     u64 frame_start = m_scheduler->GetClocks();
@@ -357,6 +358,22 @@ INLINE void GeartownsCore::DispatchEvents()
     }
 }
 
+bool GeartownsCore::PowerOn()
+{
+    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
+        return false;
+
+    Reset();
+    m_powered = true;
+    return true;
+}
+
+void GeartownsCore::PowerOff()
+{
+    m_powered = false;
+}
+
+// New firmware restarts a running machine, a powered off one waits for PowerOn
 bool GeartownsCore::LoadBios(const char* directory_path)
 {
     if (!IsValidPointer(m_firmware) || !m_firmware->LoadDirectory(directory_path))
@@ -365,12 +382,16 @@ bool GeartownsCore::LoadBios(const char* directory_path)
     if (IsValidPointer(m_i386))
         m_i386->ResetDisassembler();
 
-    Reset();
+    if (m_powered)
+        Reset();
+
     return true;
 }
 
 void GeartownsCore::UnloadBios()
 {
+    m_powered = false;
+
     if (IsValidPointer(m_firmware))
         m_firmware->Unload();
 

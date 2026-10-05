@@ -56,6 +56,8 @@ static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
 
 static void menu_geartowns(void);
+static void menu_cdrom(void);
+static void menu_floppy(const char* label);
 static void menu_emulator(void);
 static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type);
 static void menu_video(void);
@@ -128,52 +130,19 @@ static void menu_geartowns(void)
     {
         gui_in_use = true;
         bool media_actions_enabled = media_menu_actions_enabled();
+        bool loading = gui_is_rom_loading() || emu_is_media_loading();
+        bool powered_on = !emu_is_empty();
+        bool firmware_ready = emu_get_core()->GetFirmware()->IsReady();
 
-        if (ImGui::MenuItem("Open Media...", config_hotkeys[config_HotkeyIndex_OpenROM].str))
+        if (ImGui::MenuItem("Power On", NULL, false, !loading && !powered_on && firmware_ready))
         {
-            open_rom = true;
+            gui_action_power_on();
         }
 
-#if defined(GT_ENABLE_PHYSICAL_CDROM)
-        if (ImGui::BeginMenu("Physical CD-ROM"))
+        if (ImGui::MenuItem("Power Off", NULL, false, !loading && powered_on))
         {
-            bool physical_cdrom_loaded = !emu_is_empty() && emu_get_core()->GetMedia()->IsPhysicalCdRom();
-
-            if (ImGui::MenuItem("Open...", "", false, !physical_cdrom_loaded))
-            {
-                open_physical_cdrom = true;
-            }
-
-            if (ImGui::MenuItem("Eject", "", false, physical_cdrom_loaded))
-            {
-                gui_action_eject_physical_cdrom();
-            }
-
-            ImGui::EndMenu();
+            gui_action_power_off();
         }
-#endif
-
-        if (ImGui::BeginMenu("Open Recent"))
-        {
-            for (int i = 0; i < config_max_recent_roms; i++)
-            {
-                if (config_emulator.recent_roms[i].length() > 0)
-                {
-                    const char* shortcut = (i == 0) ? config_hotkeys[config_HotkeyIndex_ReloadROM].str : NULL;
-
-                    if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), shortcut))
-                    {
-                        char media_path[4096];
-                        strncpy_fit(media_path, config_emulator.recent_roms[i].c_str(), sizeof(media_path));
-                        gui_load_rom(media_path);
-                    }
-                }
-            }
-
-            ImGui::EndMenu();
-        }
-
-        ImGui::Separator();
 
         if (ImGui::MenuItem("Reset", config_hotkeys[config_HotkeyIndex_Reset].str, false, media_actions_enabled))
         {
@@ -184,6 +153,12 @@ static void menu_geartowns(void)
         {
             gui_action_pause();
         }
+
+        ImGui::Separator();
+
+        menu_cdrom();
+        menu_floppy("Floppy 1");
+        menu_floppy("Floppy 2");
 
         ImGui::Separator();
 
@@ -233,62 +208,70 @@ static void menu_geartowns(void)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Save State As...", "", false, media_actions_enabled))
-            save_state = true;
-
-        if (ImGui::MenuItem("Load State From...", "", false, media_actions_enabled))
-            open_state = true;
-
-        ImGui::Separator();
-
-        if (ImGui::BeginMenu("Save State Slot"))
+        if (ImGui::BeginMenu("Savestates"))
         {
-            ImGui::PushItemWidth(100.0f);
-            ImGui::Combo("##slot", &config_emulator.save_slot, "Slot 1\0Slot 2\0Slot 3\0Slot 4\0Slot 5\0\0");
-            ImGui::PopItemWidth();
+            if (ImGui::MenuItem("Save As...", "", false, media_actions_enabled))
+                save_state = true;
+
+            if (ImGui::MenuItem("Load From...", "", false, media_actions_enabled))
+                open_state = true;
 
             ImGui::Separator();
-            draw_savestate_slot_info(config_emulator.save_slot);
+
+            if (ImGui::BeginMenu("Slot"))
+            {
+                ImGui::PushItemWidth(100.0f);
+                ImGui::Combo("##slot", &config_emulator.save_slot, "Slot 1\0Slot 2\0Slot 3\0Slot 4\0Slot 5\0\0");
+                ImGui::PopItemWidth();
+
+                ImGui::Separator();
+                draw_savestate_slot_info(config_emulator.save_slot);
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::MenuItem("Save", config_hotkeys[config_HotkeyIndex_SaveState].str, false, media_actions_enabled))
+            {
+                std::string message("Saving state to slot ");
+                message += std::to_string(config_emulator.save_slot + 1);
+                gui_set_status_message(message.c_str(), 3000);
+                emu_save_state_slot(config_emulator.save_slot + 1);
+            }
+
+            if (ImGui::MenuItem("Load", config_hotkeys[config_HotkeyIndex_LoadState].str, false, media_actions_enabled))
+            {
+                std::string message("Loading state from slot ");
+                message += std::to_string(config_emulator.save_slot + 1);
+                gui_set_status_message(message.c_str(), 3000);
+                emu_load_state_slot(config_emulator.save_slot + 1);
+            }
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Slot: %d", config_emulator.save_slot + 1);
+                ImGui::Separator();
+                draw_savestate_slot_info(config_emulator.save_slot);
+                ImGui::EndTooltip();
+            }
+
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem("Save State", config_hotkeys[config_HotkeyIndex_SaveState].str, false,
-            media_actions_enabled))
-        {
-            std::string message("Saving state to slot ");
-            message += std::to_string(config_emulator.save_slot + 1);
-            gui_set_status_message(message.c_str(), 3000);
-            emu_save_state_slot(config_emulator.save_slot + 1);
-        }
-
-        if (ImGui::MenuItem("Load State", config_hotkeys[config_HotkeyIndex_LoadState].str, false,
-            media_actions_enabled))
-        {
-            std::string message("Loading state from slot ");
-            message += std::to_string(config_emulator.save_slot + 1);
-            gui_set_status_message(message.c_str(), 3000);
-            emu_load_state_slot(config_emulator.save_slot + 1);
-        }
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("Slot: %d", config_emulator.save_slot + 1);
-            ImGui::Separator();
-            draw_savestate_slot_info(config_emulator.save_slot);
-            ImGui::EndTooltip();
-        }
-
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Save Screenshot As...", "", false, media_actions_enabled))
+        if (ImGui::BeginMenu("Screenshots"))
         {
-            save_screenshot = true;
-        }
+            if (ImGui::MenuItem("Save As...", "", false, media_actions_enabled))
+            {
+                save_screenshot = true;
+            }
 
-        if (ImGui::MenuItem("Save Screenshot", config_hotkeys[config_HotkeyIndex_Screenshot].str, false, media_actions_enabled))
-        {
-            gui_action_save_screenshot(NULL);
+            if (ImGui::MenuItem("Save", config_hotkeys[config_HotkeyIndex_Screenshot].str, false, media_actions_enabled))
+            {
+                gui_action_save_screenshot(NULL);
+            }
+
+            ImGui::EndMenu();
         }
 
         ImGui::Separator();
@@ -307,6 +290,113 @@ static void menu_geartowns(void)
 
         ImGui::EndMenu();
     }
+}
+
+static void menu_cdrom(void)
+{
+    if (!ImGui::BeginMenu("CD-ROM"))
+        return;
+
+    Media* media = emu_get_core()->GetMedia();
+    bool loading = gui_is_rom_loading() || emu_is_media_loading();
+    bool inserted = !loading && media->IsReady();
+
+    if (ImGui::MenuItem("Insert Image...", config_hotkeys[config_HotkeyIndex_OpenROM].str, false, !loading))
+    {
+        open_rom = true;
+    }
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (ImGui::MenuItem("Insert Physical Disc...", NULL, false, !loading && !media->IsPhysicalCdRom()))
+    {
+        open_physical_cdrom = true;
+    }
+#endif
+
+    if (ImGui::MenuItem("Eject", NULL, false, inserted))
+    {
+        gui_action_eject_media();
+    }
+
+    ImGui::Separator();
+
+    if (loading)
+        ImGui::TextDisabled("Loading...");
+    else if (!inserted)
+        ImGui::TextDisabled("Empty");
+    else
+    {
+        const char* name = media->GetFileName();
+        const char* path = media->GetFilePath();
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+        if (media->IsPhysicalCdRom())
+            name = path = media->GetPhysicalCdRomDeviceId();
+#endif
+
+        ImGui::Text("%.32s%s", name, strlen(name) > 32 ? "..." : "");
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", path);
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::BeginMenu("Recent"))
+    {
+        for (int i = 0; i < config_max_recent_roms; i++)
+        {
+            if (config_emulator.recent_roms[i].length() > 0)
+            {
+                const char* shortcut = (i == 0) ? config_hotkeys[config_HotkeyIndex_ReloadROM].str : NULL;
+
+                if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), shortcut))
+                {
+                    char media_path[4096];
+                    strncpy_fit(media_path, config_emulator.recent_roms[i].c_str(), sizeof(media_path));
+                    gui_load_rom(media_path);
+                }
+            }
+        }
+
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMenu();
+}
+
+static void menu_floppy(const char* label)
+{
+    if (!ImGui::BeginMenu(label))
+        return;
+
+    // Placeholder until the FDC loads disk images
+    ImGui::BeginDisabled();
+    ImGui::MenuItem("Insert...");
+    ImGui::MenuItem("New Blank Disk...");
+    ImGui::MenuItem("Eject");
+
+    ImGui::Separator();
+
+    ImGui::Text("Empty");
+
+    ImGui::Separator();
+
+    if (ImGui::BeginMenu("Disk in Image"))
+        ImGui::EndMenu();
+
+    ImGui::MenuItem("Write Protected");
+    ImGui::MenuItem("Save Changes");
+    ImGui::MenuItem("Save As...");
+    ImGui::MenuItem("Discard Changes...");
+
+    ImGui::Separator();
+
+    if (ImGui::BeginMenu("Recent"))
+        ImGui::EndMenu();
+
+    ImGui::EndDisabled();
+    ImGui::EndMenu();
 }
 
 static bool media_menu_actions_enabled(void)
@@ -378,92 +468,97 @@ static void menu_emulator(void)
     {
         gui_in_use = true;
 
-        if (ImGui::BeginMenu("Save States Dir"))
+        if (ImGui::BeginMenu("Directories"))
         {
-            ImGui::PushItemWidth(220.0f);
-
-            if (ImGui::Combo("##savestate_option", &config_emulator.savestates_dir_option,
-                "Default Location\0Same as ROM\0Custom Location\0\0"))
+            if (ImGui::BeginMenu("Save States"))
             {
-                update_savestates_data();
+                ImGui::PushItemWidth(220.0f);
+
+                if (ImGui::Combo("##savestate_option", &config_emulator.savestates_dir_option,
+                    "Default Location\0Same as ROM\0Custom Location\0\0"))
+                {
+                    update_savestates_data();
+                }
+
+                switch ((Directory_Location)config_emulator.savestates_dir_option)
+                {
+                    case Directory_Location_Default:
+                    {
+                        ImGui::Text("%s", config_root_path);
+                        break;
+                    }
+
+                    case Directory_Location_ROM:
+                    {
+                        if (!emu_is_empty())
+                            ImGui::Text("%s", get_current_media_directory_text());
+
+                        break;
+                    }
+
+                    case Directory_Location_Custom:
+                    {
+                        if (ImGui::MenuItem("Choose..."))
+                            choose_savestates_path = true;
+
+                        ImGui::PushItemWidth(450);
+
+                        if (ImGui::InputText("##savestate_path", gui_savestates_path, IM_ARRAYSIZE(gui_savestates_path),
+                            ImGuiInputTextFlags_AutoSelectAll))
+                        {
+                            config_emulator.savestates_path.assign(gui_savestates_path);
+                            update_savestates_data();
+                        }
+
+                        ImGui::PopItemWidth();
+                        break;
+                    }
+                }
+
+                ImGui::EndMenu();
             }
 
-            switch ((Directory_Location)config_emulator.savestates_dir_option)
+            if (ImGui::BeginMenu("Screenshots"))
             {
-                case Directory_Location_Default:
+                ImGui::PushItemWidth(220.0f);
+                ImGui::Combo("##screenshots_option", &config_emulator.screenshots_dir_option, "Default Location\0Same as ROM\0Custom Location\0\0");
+
+                switch ((Directory_Location)config_emulator.screenshots_dir_option)
                 {
-                    ImGui::Text("%s", config_root_path);
-                    break;
-                }
-
-                case Directory_Location_ROM:
-                {
-                    if (!emu_is_empty())
-                        ImGui::Text("%s", get_current_media_directory_text());
-
-                    break;
-                }
-
-                case Directory_Location_Custom:
-                {
-                    if (ImGui::MenuItem("Choose..."))
-                        choose_savestates_path = true;
-
-                    ImGui::PushItemWidth(450);
-
-                    if (ImGui::InputText("##savestate_path", gui_savestates_path, IM_ARRAYSIZE(gui_savestates_path),
-                        ImGuiInputTextFlags_AutoSelectAll))
+                    case Directory_Location_Default:
                     {
-                        config_emulator.savestates_path.assign(gui_savestates_path);
-                        update_savestates_data();
+                        ImGui::Text("%s", config_root_path);
+                        break;
                     }
 
-                    ImGui::PopItemWidth();
-                    break;
-                }
-            }
-
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Screenshots Dir"))
-        {
-            ImGui::PushItemWidth(220.0f);
-            ImGui::Combo("##screenshots_option", &config_emulator.screenshots_dir_option, "Default Location\0Same as ROM\0Custom Location\0\0");
-
-            switch ((Directory_Location)config_emulator.screenshots_dir_option)
-            {
-                case Directory_Location_Default:
-                {
-                    ImGui::Text("%s", config_root_path);
-                    break;
-                }
-
-                case Directory_Location_ROM:
-                {
-                    if (!emu_is_empty())
-                        ImGui::Text("%s", get_current_media_directory_text());
-
-                    break;
-                }
-
-                case Directory_Location_Custom:
-                {
-                    if (ImGui::MenuItem("Choose..."))
+                    case Directory_Location_ROM:
                     {
-                        choose_screenshots_path = true;
+                        if (!emu_is_empty())
+                            ImGui::Text("%s", get_current_media_directory_text());
+
+                        break;
                     }
 
-                    ImGui::PushItemWidth(450);
-
-                    if (ImGui::InputText("##screenshots_path", gui_screenshots_path, IM_ARRAYSIZE(gui_screenshots_path), ImGuiInputTextFlags_AutoSelectAll))
+                    case Directory_Location_Custom:
                     {
-                        config_emulator.screenshots_path.assign(gui_screenshots_path);
-                    }
+                        if (ImGui::MenuItem("Choose..."))
+                        {
+                            choose_screenshots_path = true;
+                        }
 
-                    ImGui::PopItemWidth();
-                    break;
+                        ImGui::PushItemWidth(450);
+
+                        if (ImGui::InputText("##screenshots_path", gui_screenshots_path, IM_ARRAYSIZE(gui_screenshots_path), ImGuiInputTextFlags_AutoSelectAll))
+                        {
+                            config_emulator.screenshots_path.assign(gui_screenshots_path);
+                        }
+
+                        ImGui::PopItemWidth();
+                        break;
+                    }
                 }
+
+                ImGui::EndMenu();
             }
 
             ImGui::EndMenu();
@@ -505,6 +600,7 @@ static void menu_emulator(void)
 
         ImGui::Separator();
 
+        ImGui::MenuItem("Power On at Startup", "", &config_emulator.power_on_startup);
         ImGui::MenuItem("Start Paused", "", &config_emulator.start_paused);
         ImGui::MenuItem("Pause When Inactive", "", &config_emulator.pause_when_inactive);
 
@@ -533,7 +629,7 @@ static void menu_emulator(void)
 
         if (ImGui::BeginMenu("Hotkeys"))
         {
-            hotkey_configuration_item("Open Media:", &config_hotkeys[config_HotkeyIndex_OpenROM]);
+            hotkey_configuration_item("Insert CD-ROM Image:", &config_hotkeys[config_HotkeyIndex_OpenROM]);
             hotkey_configuration_item("Quit:", &config_hotkeys[config_HotkeyIndex_Quit]);
             hotkey_configuration_item("Reset:", &config_hotkeys[config_HotkeyIndex_Reset]);
             hotkey_configuration_item("Reload Media:", &config_hotkeys[config_HotkeyIndex_ReloadROM]);
@@ -1161,9 +1257,7 @@ static void menu_audio(void)
 
         ImGui::Separator();
 
-
-
-        ImGui::MenuItem("Audio Sync", "", &config_audio.sync, config_audio.enable);
+        //ImGui::MenuItem("Audio Sync", "", &config_audio.sync, config_audio.enable);
 
         if (ImGui::BeginMenu("Buffer Size", config_audio.enable))
         {

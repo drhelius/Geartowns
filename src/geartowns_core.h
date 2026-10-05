@@ -65,6 +65,9 @@ public:
     GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
         bool render = true);
 
+    bool PowerOn();
+    void PowerOff();
+    bool IsPoweredOn();
     bool LoadBios(const char* directory_path);
     void UnloadBios();
     bool LoadMedia(const char* file_path);
@@ -152,6 +155,7 @@ private:
     RTC* m_rtc;
     UPD71071* m_dma;
 
+    bool m_powered;
     bool m_paused;
     GT_Pixel_Format m_pixel_format;
 

@@ -113,6 +113,9 @@ bool gui_init(void)
     if (gui_bios_path[0] != '\0')
         gui_load_bios(gui_bios_path);
 
+    if (config_emulator.power_on_startup)
+        emu_power_on();
+
     gui_debug_init();
     gui_init_menus();
 
@@ -805,7 +808,7 @@ static bool finish_loading_rom(void)
     if (config_emulator.start_paused)
         emu_pause();
 
-    if (!emu_is_empty())
+    if (emu_get_core()->GetMedia()->IsReady())
         application_update_title_with_rom(emu_get_core()->GetMedia()->GetFileName());
 
     return true;

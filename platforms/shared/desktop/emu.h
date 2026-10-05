@@ -73,8 +73,10 @@ EXTERN void emu_resume(void);
 EXTERN bool emu_is_paused(void);
 EXTERN bool emu_is_debug_idle(void);
 EXTERN bool emu_is_empty(void);
+EXTERN bool emu_power_on(void);
+EXTERN void emu_power_off(void);
 EXTERN void emu_reset(void);
-EXTERN bool emu_eject_physical_cdrom(void);
+EXTERN bool emu_eject_media(void);
 EXTERN void emu_set_preload_cdrom(bool enabled);
 
 EXTERN void emu_audio_mute(bool mute);

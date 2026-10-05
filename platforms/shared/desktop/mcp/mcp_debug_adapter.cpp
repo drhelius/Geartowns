@@ -86,6 +86,7 @@ json DebugAdapter::GetDebugStatus()
         {"media_ready", m_core && m_core->GetMedia()->IsReady()},
         {"bios_ready", m_core && m_core->GetFirmware()->IsReady()},
         {"firmware_ready", m_core && m_core->GetFirmware()->IsReady()},
+        {"powered_on", m_core && m_core->IsPoweredOn()},
         {"frame", emu_frame_counter}
     };
 
@@ -421,6 +422,9 @@ json DebugAdapter::LoadBios(const std::string& directory_path)
 
     if (!emu_load_bios(directory_path.c_str()))
         return {{"error", "Failed to load FM Towns firmware directory"}};
+
+    if (emu_is_empty())
+        emu_power_on();
 
     config_debug.debug = true;
     emu_debug_break();

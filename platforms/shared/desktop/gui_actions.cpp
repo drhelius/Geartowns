@@ -59,6 +59,35 @@ void gui_action_load_defaults(void)
     config_write();
 }
 
+void gui_action_power_on(void)
+{
+    if (!emu_is_empty() || gui_is_rom_loading())
+        return;
+
+    emu_resume();
+
+    if (!emu_power_on())
+    {
+        gui_set_error_message("Unable to power on. Firmware is not loaded.");
+        return;
+    }
+
+    gui_set_status_message("Powered on", 3000);
+
+    if (config_emulator.start_paused)
+        emu_pause();
+}
+
+void gui_action_power_off(void)
+{
+    if (emu_is_empty())
+        return;
+
+    emu_resume();
+    emu_power_off();
+    gui_set_status_message("Powered off", 3000);
+}
+
 void gui_action_reset(void)
 {
     if (emu_is_empty())
@@ -90,23 +119,22 @@ void gui_action_reload_rom(void)
     gui_load_rom(media_path);
 }
 
-void gui_action_eject_physical_cdrom(void)
+void gui_action_eject_media(void)
 {
-#if defined(GT_ENABLE_PHYSICAL_CDROM)
-    if (emu_is_empty() || !emu_get_core()->GetMedia()->IsPhysicalCdRom())
-    {
-        gui_set_status_message("No physical CD-ROM loaded", 3000);
-        return;
-    }
+    Media* media = emu_get_core()->GetMedia();
 
-    if (emu_eject_physical_cdrom())
-    {
+    if (!media->IsReady())
+        return;
+
+    bool ejected = emu_eject_media();
+
+    if (!media->IsReady())
         application_update_title_with_rom(NULL);
-        gui_set_status_message("Physical CD-ROM ejected", 3000);
-    }
+
+    if (ejected)
+        gui_set_status_message("CD-ROM ejected", 3000);
     else
-        gui_set_error_message("Unable to eject physical CD-ROM");
-#endif
+        gui_set_error_message("Unable to eject CD-ROM");
 }
 
 void gui_action_pause(void)

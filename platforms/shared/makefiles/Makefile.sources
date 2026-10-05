@@ -3,6 +3,16 @@ DESKTOP_SRC_DIR = ../shared/desktop
 DEPS_DIR = ../shared/dependencies
 
 SOURCES_C := \
+    $(DEPS_DIR)/libchdr/src/libchdr_bitstream.c \
+    $(DEPS_DIR)/libchdr/src/libchdr_cdrom.c \
+    $(DEPS_DIR)/libchdr/src/libchdr_chd.c \
+    $(DEPS_DIR)/libchdr/src/libchdr_flac.c \
+    $(DEPS_DIR)/libchdr/src/libchdr_huffman.c \
+    $(DEPS_DIR)/lzma/src/LzFind.c \
+    $(DEPS_DIR)/lzma/src/LzmaEnc.c \
+    $(DEPS_DIR)/lzma/src/LzmaDec.c \
+    $(DEPS_DIR)/lzma/src/CpuArch.c \
+    $(DEPS_DIR)/minivorbis/minivorbis.c \
     $(DEPS_DIR)/miniz/miniz.c \
 
 SOURCES_CXX := \
@@ -50,7 +60,13 @@ SOURCES_CXX := \
     $(SRC_DIR)/audio/audio.cpp \
     $(SRC_DIR)/audio/rf5c68.cpp \
     $(SRC_DIR)/audio/ym3438.cpp \
-    $(SRC_DIR)/drive/cdrom_mock.cpp \
+    $(SRC_DIR)/cdrom/cdrom.cpp \
+    $(SRC_DIR)/cdrom/cdrom_audio.cpp \
+    $(SRC_DIR)/cdrom/cdrom_chd_file_adapter.cpp \
+    $(SRC_DIR)/cdrom/cdrom_chd_image.cpp \
+    $(SRC_DIR)/cdrom/cdrom_cuebin_image.cpp \
+    $(SRC_DIR)/cdrom/cdrom_image.cpp \
+    $(SRC_DIR)/cdrom/cdrom_media.cpp \
     $(SRC_DIR)/drive/fdc_mock.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_disassembler.cpp \
@@ -71,6 +87,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/media/media.cpp \
     $(SRC_DIR)/media/media_file.cpp \
     $(SRC_DIR)/media/media_file_native.cpp \
+    $(SRC_DIR)/media/ogg_vorbis_decoder.cpp \
     $(SRC_DIR)/system/i8253.cpp \
     $(SRC_DIR)/system/i8259.cpp \
     $(SRC_DIR)/system/memory.cpp \

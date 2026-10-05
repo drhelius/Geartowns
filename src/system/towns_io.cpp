@@ -21,7 +21,7 @@
 #include "../audio/audio.h"
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
-#include "../drive/cdrom_mock.h"
+#include "../cdrom/cdrom.h"
 #include "../drive/fdc_mock.h"
 #include "../input/towns_keyboard.h"
 #include "memory.h"
@@ -54,7 +54,7 @@ TownsIO::~TownsIO()
 }
 
 void TownsIO::Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
-    CDROMMock* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma)
+    CdRom* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma)
 {
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();
@@ -222,12 +222,11 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // CD-ROM data
         case 0x04C6:
             // CD-ROM transfer control
-            return m_cdrom->Read(port, context.clocks);
         case 0x04CC:
             // CD-ROM subcode status
         case 0x04CD:
             // CD-ROM subcode data
-            break;
+            return m_cdrom->Read(port, context.clocks);
         case 0x04D0:
             // Game port A
         case 0x04D2:
@@ -257,6 +256,7 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             // Volume 2 data
         case 0x04E3:
             // Volume 2 command
+            return m_audio->ReadVolume(port);
         case 0x04E7:
             // ADC sample data
         case 0x04E8:
@@ -370,7 +370,23 @@ u8 TownsIO::Read8(u16 port, GT_Bus_Access_Context& context)
             return m_video->Read(port, context.clocks);
         case 0xFF81:
             // FM-R plane mask
-            return m_video->ReadFMRRegister(0x0F81, false);
+        case 0xFF83:
+            // FM-R page select
+        case 0xFF84:
+            // FM-R light pen status
+        case 0xFF86:
+            // FM-R sync status
+        case 0xFF94:
+            // Kanji ROM status
+        case 0xFF96:
+            // Kanji ROM pattern left
+        case 0xFF97:
+            // Kanji ROM pattern right
+        case 0xFF98:
+            // Buzzer on
+        case 0xFFA0:
+            // FM-R logical operation status
+            return m_video->ReadFMRRegister(port & 0x0FFF, false);
         default:
             // CMOS RAM, even ports
             if ((port & 0xF001) == 0x3000)
@@ -574,6 +590,9 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Volume 2 data
         case 0x04E3:
             // Volume 2 command
+            m_audio->Synchronize(context.clocks);
+            m_audio->WriteVolume(port, value);
+            break;
         case 0x04E7:
             // ADC sample data
         case 0x04E8:
@@ -691,7 +710,21 @@ void TownsIO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0xFF81:
             // FM-R plane mask
-            m_video->WriteFMRRegister(0x0F81, value);
+        case 0xFF82:
+            // FM-R display mode
+        case 0xFF83:
+            // FM-R page select
+        case 0xFF94:
+            // Kanji ROM code high
+        case 0xFF95:
+            // Kanji ROM code low
+        case 0xFF97:
+            // Kanji ROM row advance
+        case 0xFF98:
+            // Buzzer off
+        case 0xFF99:
+            // ANK font window
+            m_video->WriteFMRRegister(port & 0x0FFF, value);
             break;
         default:
             // CMOS RAM, even ports

@@ -24,7 +24,9 @@
 #include "common/common.h"
 
 class Audio;
-class CDROMMock;
+class CdRom;
+class CdRomAudio;
+class CdRomMedia;
 class FDCMock;
 class TownsKeyboard;
 class TownsRTC;
@@ -65,6 +67,10 @@ public:
     bool LoadBios(const char* directory_path);
     void UnloadBios();
     bool LoadMedia(const char* file_path);
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    bool LoadPhysicalCdRom(const char* device_id);
+#endif
+    void EjectMedia();
     void ResetMedia();
 
     void KeyPressed(GT_Keys key);
@@ -96,7 +102,9 @@ public:
     TownsSystem* GetSystem();
     Scheduler* GetScheduler();
     Video* GetVideo();
-    CDROMMock* GetCDROM();
+    CdRom* GetCDROM();
+    CdRomMedia* GetCDROMMedia();
+    CdRomAudio* GetCDROMAudio();
     FDCMock* GetFDC();
     TownsKeyboard* GetKeyboard();
     TownsRTC* GetRTC();
@@ -130,7 +138,9 @@ private:
     TownsSystem* m_system;
     Scheduler* m_scheduler;
     Video* m_video;
-    CDROMMock* m_cdrom;
+    CdRomMedia* m_cdrom_media;
+    CdRomAudio* m_cdrom_audio;
+    CdRom* m_cdrom;
     FDCMock* m_fdc;
     TownsKeyboard* m_keyboard;
     TownsRTC* m_rtc;

@@ -19,6 +19,7 @@
 
 #include <SDL3/SDL.h>
 #include <stdarg.h>
+#include <vector>
 
 #define GUI_POPUPS_IMPORT
 #include "gui_popups.h"
@@ -37,12 +38,25 @@
 #include "imgui.h"
 #include "implot.h"
 #include "geartowns.h"
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+#include "cdrom/cdrom_drive.h"
+#endif
 
 static char build_info[4096] = "";
 static int info_pos = 0;
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+static const char* physical_cdrom_popup_title = "Select Physical CD-ROM...";
+static std::vector<CdRomDriveInfo> physical_cdrom_drives;
+static int physical_cdrom_selected = -1;
+static bool physical_cdrom_refresh = false;
+#endif
 
 static void add_build_info(const char* fmt, ...);
 static void check_hotkey_duplicates_popup(config_Hotkey* current_hotkey);
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+static bool open_selected_physical_cdrom_drive(void);
+static void refresh_physical_cdrom_drives(void);
+#endif
 
 void gui_popup_modal_keyboard()
 {
@@ -358,6 +372,114 @@ void gui_popup_modal_load_defaults(void)
     }
 }
 
+void gui_popup_open_physical_cdrom(void)
+{
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    physical_cdrom_refresh = true;
+    physical_cdrom_selected = -1;
+    gui_dialog_in_use = true;
+    ImGui::OpenPopup(physical_cdrom_popup_title);
+#endif
+}
+
+void gui_popup_modal_physical_cdrom(void)
+{
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (physical_cdrom_refresh)
+    {
+        refresh_physical_cdrom_drives();
+        physical_cdrom_refresh = false;
+    }
+
+    if (ImGui::BeginPopupModal(physical_cdrom_popup_title, NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        gui_dialog_in_use = true;
+
+        ImGuiTableFlags table_flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings;
+
+        if (ImGui::BeginTable("##physical_cdrom_drives", 2, table_flags, ImVec2(350.0f, 100.0f)))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Drive", ImGuiTableColumnFlags_WidthFixed, 270.0f);
+            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableHeadersRow();
+
+            if (physical_cdrom_drives.empty())
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("No physical CD-ROM found");
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("-");
+            }
+            else
+            {
+                for (int i = 0; i < (int)physical_cdrom_drives.size(); i++)
+                {
+                    CdRomDriveInfo& drive = physical_cdrom_drives[i];
+                    bool selected = physical_cdrom_selected == i;
+                    char label[640];
+                    snprintf(label, sizeof(label), "##physical_cdrom_%d", i);
+
+                    ImGui::TableNextRow();
+
+                    if (selected)
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_HeaderActive));
+
+                    ImGui::TableNextColumn();
+
+                    if (ImGui::Selectable(label, false, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick))
+                    {
+                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        {
+                            physical_cdrom_selected = i;
+                            open_selected_physical_cdrom_drive();
+                        }
+                        else if (selected)
+                            physical_cdrom_selected = -1;
+                        else
+                            physical_cdrom_selected = i;
+                    }
+
+                    ImGui::SameLine(0, 0);
+                    ImGui::TextUnformatted(drive.name);
+
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(drive.has_disc ? "Ready" : "No Disc");
+                }
+            }
+
+            ImGui::EndTable();
+        }
+
+        bool can_open = (physical_cdrom_selected >= 0) && (physical_cdrom_selected < (int)physical_cdrom_drives.size()) &&
+            physical_cdrom_drives[physical_cdrom_selected].has_disc;
+
+        ImGui::BeginDisabled(!can_open);
+
+        if (ImGui::Button("Open", ImVec2(110.0f, 0.0f)))
+            open_selected_physical_cdrom_drive();
+
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f)))
+        {
+            gui_dialog_in_use = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Refresh", ImVec2(110.0f, 0.0f)))
+            refresh_physical_cdrom_drives();
+
+        ImGui::EndPopup();
+    }
+#endif
+}
+
 void gui_show_info(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -420,3 +542,37 @@ static void check_hotkey_duplicates_popup(config_Hotkey* current_hotkey)
         }
     }
 }
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+static bool open_selected_physical_cdrom_drive(void)
+{
+    if ((physical_cdrom_selected < 0) || (physical_cdrom_selected >= (int)physical_cdrom_drives.size()))
+        return false;
+
+    CdRomDriveInfo& drive = physical_cdrom_drives[physical_cdrom_selected];
+
+    if (!drive.has_disc)
+        return false;
+
+    Log("Opening physical CD-ROM drive %s", drive.id);
+    gui_load_physical_cdrom(drive.id);
+    gui_dialog_in_use = false;
+    ImGui::CloseCurrentPopup();
+    return true;
+}
+
+static void refresh_physical_cdrom_drives(void)
+{
+    physical_cdrom_selected = -1;
+
+    if (!CdRomDrive::ListDrives(physical_cdrom_drives))
+    {
+        Error("Physical CD-ROM drive enumeration failed");
+        return;
+    }
+
+    for (int i = 0; i < (int)physical_cdrom_drives.size(); i++)
+        Debug("Physical CD-ROM drive %d: id=%s name=%s has_disc=%s", i, physical_cdrom_drives[i].id,
+            physical_cdrom_drives[i].name, physical_cdrom_drives[i].has_disc ? "true" : "false");
+}
+#endif

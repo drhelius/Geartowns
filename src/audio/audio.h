@@ -23,6 +23,10 @@
 #include <iostream>
 #include "../common/common.h"
 
+#define AUDIO_VOLUME_CHIPS 2
+#define AUDIO_VOLUME_CHANNELS 4
+
+class CdRomAudio;
 class YM3438;
 class RF5C68;
 class Scheduler;
@@ -38,19 +42,25 @@ public:
         s32 pcm_lowpass_left;
         s32 pcm_lowpass_right;
         u64 clocks;
+        u8 volume_channel[AUDIO_VOLUME_CHIPS];
+        u8 volume_data[AUDIO_VOLUME_CHIPS][AUDIO_VOLUME_CHANNELS];
+        u8 volume_control[AUDIO_VOLUME_CHIPS][AUDIO_VOLUME_CHANNELS];
     };
 
 public:
     Audio();
     ~Audio();
-    void Init(Scheduler* scheduler);
+    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio);
     void Reset();
     void Mute(bool mute);
     void SetMasterVolume(float volume);
     void SetFMVolume(float volume);
     void SetPCMVolume(float volume);
+    void SetCDDAVolume(float volume);
     void SetPCMLowpassCutoff(float cutoff);
     void Synchronize(u64 clocks);
+    u8 ReadVolume(u16 port) const;
+    void WriteVolume(u16 port, u8 value);
     void EndFrame(s16* sample_buffer, int* sample_count);
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
@@ -65,20 +75,27 @@ private:
     void Clock(u32 clocks);
     void ClockSources(u32 clocks);
     void SampleSources();
+    void UpdateCDDAGain();
+    s32 GetVolumeGain(int chip, int channel) const;
     void Serialize(StateSerializer& serializer);
 
 private:
     YM3438* m_ym3438;
     RF5C68* m_rf5c68;
+    CdRomAudio* m_cdrom_audio;
     Scheduler* m_scheduler;
     bool m_mute;
     float m_master_volume;
     float m_fm_volume;
     float m_pcm_volume;
+    float m_cdda_volume;
     Audio_State m_state;
     u16 m_pcm_lowpass_alpha_q15;
+    s32 m_cdda_gain_left;
+    s32 m_cdda_gain_right;
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];
+    s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];
     int m_buffer_index;
     bool m_buffer_overflow;
 };

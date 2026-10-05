@@ -22,7 +22,9 @@
 #include <time.h>
 #include "geartowns_core.h"
 #include "audio/audio.h"
-#include "drive/cdrom_mock.h"
+#include "cdrom/cdrom.h"
+#include "cdrom/cdrom_audio.h"
+#include "cdrom/cdrom_media.h"
 #include "drive/fdc_mock.h"
 #include "media/firmware.h"
 #include "input/input.h"
@@ -54,6 +56,8 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_system);
     InitPointer(m_scheduler);
     InitPointer(m_video);
+    InitPointer(m_cdrom_media);
+    InitPointer(m_cdrom_audio);
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
     InitPointer(m_keyboard);
@@ -78,17 +82,25 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_scheduler);
     SafeDelete(m_video);
     SafeDelete(m_cdrom);
+    SafeDelete(m_cdrom_audio);
     SafeDelete(m_fdc);
     SafeDelete(m_keyboard);
     SafeDelete(m_rtc);
     SafeDelete(m_dma);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
+    SafeDelete(m_cdrom_media);
 }
 
 void GeartownsCore::Init(GT_Pixel_Format pixel_format)
 {
     m_pixel_format = pixel_format;
+
+    if (!IsValidPointer(m_cdrom_media))
+        m_cdrom_media = new CdRomMedia();
+
+    if (!IsValidPointer(m_cdrom_audio))
+        m_cdrom_audio = new CdRomAudio(m_cdrom_media);
 
     if (!IsValidPointer(m_audio))
         m_audio = new Audio();
@@ -100,7 +112,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
         m_input = new Input();
 
     if (!IsValidPointer(m_media))
-        m_media = new Media();
+        m_media = new Media(m_cdrom_media);
 
     if (!IsValidPointer(m_memory))
         m_memory = new Memory();
@@ -127,7 +139,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
         m_video = new Video();
 
     if (!IsValidPointer(m_cdrom))
-        m_cdrom = new CDROMMock();
+        m_cdrom = new CdRom(m_cdrom_media, m_cdrom_audio);
 
     if (!IsValidPointer(m_fdc))
         m_fdc = new FDCMock();
@@ -144,16 +156,18 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_firmware->Init();
     m_scheduler->Init();
     m_memory->Init();
-    m_audio->Init(m_scheduler);
+    m_cdrom_media->Init();
+    m_cdrom_audio->Init();
+    m_audio->Init(m_scheduler, m_cdrom_audio);
     m_pic->Init();
     m_pit->Init(m_pic, m_scheduler);
     m_system->Init();
     m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
-    m_cdrom->Init(m_pic, m_scheduler);
+    m_dma->Init(m_memory, m_scheduler);
+    m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
     m_fdc->Init(m_pic, m_scheduler);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
-    m_dma->Init(m_memory, m_scheduler);
     m_towns_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
     m_i386->Init(m_memory, m_towns_io);
     m_input->Init();
@@ -372,9 +386,38 @@ void GeartownsCore::UnloadBios()
         m_i386->ResetDisassembler();
 }
 
+// Loading media is a disc swap on a running machine
+// Even when it fails the old disc is gone
 bool GeartownsCore::LoadMedia(const char* file_path)
 {
-    return IsValidPointer(m_media) && m_media->LoadMedia(file_path);
+    if (!IsValidPointer(m_media))
+        return false;
+
+    bool ok = m_media->LoadMedia(file_path);
+    m_cdrom->NotifyMediaChanged();
+    return ok;
+}
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+bool GeartownsCore::LoadPhysicalCdRom(const char* device_id)
+{
+    if (!IsValidPointer(m_media))
+        return false;
+
+    bool ok = m_media->LoadPhysicalCdRom(device_id);
+    m_cdrom->NotifyMediaChanged();
+    return ok;
+}
+#endif
+
+// The machine keeps running with an empty drive
+void GeartownsCore::EjectMedia()
+{
+    if (!IsValidPointer(m_media))
+        return;
+
+    m_media->Reset();
+    m_cdrom->NotifyMediaChanged();
 }
 
 void GeartownsCore::ResetMedia()
@@ -511,6 +554,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_system->SaveState(stream);
     m_video->SaveState(stream);
     m_cdrom->SaveState(stream);
+    m_cdrom_audio->SaveState(stream);
     m_fdc->SaveState(stream);
     m_keyboard->SaveState(stream);
     m_rtc->SaveState(stream);
@@ -735,6 +779,7 @@ bool GeartownsCore::LoadState(std::istream& stream)
     m_system->LoadState(stream);
     m_video->LoadState(stream);
     m_cdrom->LoadState(stream);
+    m_cdrom_audio->LoadState(stream);
     m_fdc->LoadState(stream);
     m_keyboard->LoadState(stream);
     m_rtc->LoadState(stream);
@@ -953,6 +998,9 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_cdrom))
         m_cdrom->Reset();
+
+    if (IsValidPointer(m_cdrom_audio))
+        m_cdrom_audio->Reset();
 
     if (IsValidPointer(m_fdc))
         m_fdc->Reset();

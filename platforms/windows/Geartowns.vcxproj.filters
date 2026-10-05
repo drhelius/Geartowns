@@ -172,7 +172,34 @@
     <ClCompile Include="..\..\src\system\scheduler.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\drive\cdrom_mock.cpp">
+    <ClCompile Include="..\..\src\cdrom\cdrom.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_audio.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_chd_file_adapter.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_chd_image.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_cuebin_image.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_drive.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_drive_win32.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_image.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_media.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cdrom\cdrom_physical_image.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\drive\fdc_mock.cpp">
@@ -193,6 +220,9 @@
     <ClCompile Include="..\..\src\media\media_file_native.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\media\ogg_vorbis_decoder.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\geartowns_core.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -202,8 +232,38 @@
     <ClCompile Include="..\..\src\input\towns_keyboard.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_bitstream.c">
+      <Filter>dependencies\libchdr\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_cdrom.c">
+      <Filter>dependencies\libchdr\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_chd.c">
+      <Filter>dependencies\libchdr\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_flac.c">
+      <Filter>dependencies\libchdr\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_huffman.c">
+      <Filter>dependencies\libchdr\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lzma\src\CpuArch.c">
+      <Filter>dependencies\lzma\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lzma\src\LzFind.c">
+      <Filter>dependencies\lzma\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lzma\src\LzmaDec.c">
+      <Filter>dependencies\lzma\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lzma\src\LzmaEnc.c">
+      <Filter>dependencies\lzma\src</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <Filter>dependencies\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\minivorbis\minivorbis.c">
+      <Filter>dependencies\minivorbis</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\imgui\imgui.cpp">
       <Filter>dependencies\imgui</Filter>
@@ -267,8 +327,19 @@
     <ClInclude Include="..\..\src\system\towns_system_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\drive\cdrom_mock.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\drive\cdrom_mock_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_audio.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_audio_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_chd_file_adapter.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_chd_image.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_common.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_cuebin_image.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_drive.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_image.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_media.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_media_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\cdrom\cdrom_physical_image.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\fdc_mock.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\fdc_mock_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253.h"><Filter>src</Filter></ClInclude>
@@ -296,6 +367,7 @@
     <ClInclude Include="..\..\src\media\media_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\media_file.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\media_file_native.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\ogg_vorbis_decoder.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\memory_stream.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\state_serializer.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\types.h"><Filter>src</Filter></ClInclude>
@@ -428,6 +500,45 @@
     <ClInclude Include="..\shared\dependencies\miniz\miniz.h">
       <Filter>dependencies\miniz</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\dependencies\minivorbis\minivorbis.h">
+      <Filter>dependencies\minivorbis</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\bitstream.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\cdrom.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\chd.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\chdconfig.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\coretypes.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\flac.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\libchdr\include\libchdr\huffman.h">
+      <Filter>dependencies\libchdr\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\lzma\include\CpuArch.h">
+      <Filter>dependencies\lzma\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\lzma\include\LzFind.h">
+      <Filter>dependencies\lzma\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\lzma\include\LzmaDec.h">
+      <Filter>dependencies\lzma\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\lzma\include\LzmaEnc.h">
+      <Filter>dependencies\lzma\include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\zstd\zstddeclib.c">
+      <Filter>dependencies\zstd</Filter>
+    </ClInclude>
     <ClInclude Include="resource.h" />
     <ClInclude Include="..\shared\dependencies\glad\glad.h">
       <Filter>dependencies\glad</Filter>
@@ -505,6 +616,30 @@
     </Filter>
     <Filter Include="dependencies\imgui\fonts">
       <UniqueIdentifier>{0ff4493d-dd39-4604-9082-9f79eae3d893}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\minivorbis">
+      <UniqueIdentifier>{68e69cae-2d2c-4c4f-bfc5-2e01db79d9d8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\libchdr">
+      <UniqueIdentifier>{07f35376-ef00-42d5-8aa3-0b504beb1396}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\lzma">
+      <UniqueIdentifier>{6ce001ad-e2cb-4ee2-9356-f4b2c94a59f8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\zstd">
+      <UniqueIdentifier>{fc90f261-9527-4aca-8409-afde67cdc258}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\lzma\src">
+      <UniqueIdentifier>{eb873f02-5acb-4f4e-ba5d-aa69d731efbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\lzma\include">
+      <UniqueIdentifier>{fedd656f-34cc-42ae-9c08-96deb91b2194}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\libchdr\src">
+      <UniqueIdentifier>{87cbe406-e5eb-482a-b80a-bb112a42aabf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\libchdr\include">
+      <UniqueIdentifier>{0e3c9919-0854-40c3-9fbe-d756d654eb1a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

@@ -414,7 +414,7 @@ bool retro_load_game(const struct retro_game_info *info)
 void retro_unload_game(void)
 {
     if (core)
-        core->GetMedia()->Reset();
+        core->EjectMedia();
 
     retro_game_path[0] = 0;
     current_fps = 60.0f;
@@ -1041,5 +1041,13 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         allow_up_down = (strcmp(var.value, "Enabled") == 0);
+    }
+
+    var.key = "geartowns_cdrom_preload";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    {
+        core->GetMedia()->PreloadCdRom(strcmp(var.value, "Enabled") == 0);
     }
 }

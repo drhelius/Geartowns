@@ -59,6 +59,7 @@ EXTERN bool emu_init(void);
 EXTERN void emu_destroy(void);
 EXTERN void emu_update(void);
 EXTERN void emu_load_media_async(const char* file_path);
+EXTERN void emu_load_physical_cdrom_async(const char* device_id);
 EXTERN bool emu_is_media_loading(void);
 EXTERN bool emu_finish_media_loading(void);
 EXTERN void emu_set_gamepad_state(GT_Controllers controller, const GT_GamePad_State& state);
@@ -73,6 +74,8 @@ EXTERN bool emu_is_paused(void);
 EXTERN bool emu_is_debug_idle(void);
 EXTERN bool emu_is_empty(void);
 EXTERN void emu_reset(void);
+EXTERN bool emu_eject_physical_cdrom(void);
+EXTERN void emu_set_preload_cdrom(bool enabled);
 
 EXTERN void emu_audio_mute(bool mute);
 EXTERN void emu_audio_set_master_volume(float volume);

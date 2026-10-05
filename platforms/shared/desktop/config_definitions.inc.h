@@ -77,6 +77,7 @@ static inline void process(config_Operation operation)
     CONFIG_INT_RANGE("Emulator", "SaveSlot", config_emulator.save_slot, 0, 0, 4);
     CONFIG_BOOL("Emulator", "StartPaused", config_emulator.start_paused, false);
     CONFIG_BOOL("Emulator", "PauseWhenInactive", config_emulator.pause_when_inactive, true);
+    CONFIG_BOOL("Emulator", "PreloadCDROM", config_emulator.preload_cdrom, false);
 
     // Files and paths
     CONFIG_INT("Emulator", "SaveStatesDirOption", config_emulator.savestates_dir_option, 0);

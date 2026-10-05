@@ -48,6 +48,7 @@ static char error_message[4096] = "";
 static bool loading_rom_active = false;
 static char loading_rom_path[4096] = "";
 static char loading_symbol_path[4096] = "";
+static bool loading_physical_cdrom = false;
 static void main_window(void);
 static void show_status_message(void);
 static void show_error_window(void);
@@ -137,6 +138,8 @@ void gui_apply_settings(void)
 
     strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
     strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
+
+    emu_set_preload_cdrom(config_emulator.preload_cdrom);
 }
 
 void gui_destroy(void)
@@ -342,6 +345,7 @@ bool gui_load_rom(const char* path, const char* symbol_path)
     if (loading_rom_active)
         return false;
 
+    loading_physical_cdrom = false;
     gui_debug_auto_save_settings();
     config_push_recent_media(path);
     emu_resume();
@@ -362,6 +366,30 @@ bool gui_load_rom(const char* path, const char* symbol_path)
     emu_load_media_async(path);
 
     return true;
+}
+
+void gui_load_physical_cdrom(const char* device_id)
+{
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (loading_rom_active)
+    {
+        Debug("Ignoring physical CD-ROM load request while another media load is active: %s", device_id);
+        return;
+    }
+
+    Log("Starting physical CD-ROM load from %s", device_id);
+    loading_physical_cdrom = true;
+    gui_debug_auto_save_settings();
+    emu_resume();
+
+    strncpy_fit(loading_rom_path, device_id, sizeof(loading_rom_path));
+    loading_symbol_path[0] = '\0';
+    loading_rom_active = true;
+
+    emu_load_physical_cdrom_async(device_id);
+#else
+    UNUSED(device_id);
+#endif
 }
 
 bool gui_is_rom_loading(void)
@@ -761,7 +789,7 @@ static bool finish_loading_rom(void)
 
     if (loading_symbol_path[0] != '\0')
         gui_debug_load_symbols_file(loading_symbol_path);
-    else
+    else if (!loading_physical_cdrom)
     {
         std::string symbol_path(loading_rom_path);
         size_t extension = symbol_path.find_last_of('.');

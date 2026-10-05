@@ -32,6 +32,9 @@
 #include "runahead.h"
 #include "sound_queue.h"
 #include "utils.h"
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+#include "cdrom/cdrom_drive.h"
+#endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #if defined(_WIN32)
@@ -46,6 +49,12 @@ enum Loading_State
     Loading_State_Finished
 };
 
+enum Loading_Request_Type
+{
+    Loading_Request_File = 0,
+    Loading_Request_PhysicalCdRom
+};
+
 static GeartownsCore* geartowns = NULL;
 static s16* audio_buffer = NULL;
 static bool audio_enabled = true;
@@ -58,12 +67,17 @@ static std::thread loading_thread;
 static bool loading_thread_active = false;
 static bool loading_result = false;
 static char loading_file_path[GT_MAX_PATH] = { };
+static Loading_Request_Type loading_request_type = Loading_Request_File;
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
 static const char* get_configurated_dir(int option, const char* path);
 static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+static bool unload_physical_cdrom(char* device_id, size_t device_id_size);
+static void stop_physical_cdrom_after_error(void);
+#endif
 
 bool emu_init(void)
 {
@@ -155,6 +169,14 @@ void emu_update(void)
         return;
 
     emu_mcp_pump_commands();
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (geartowns->GetMedia()->HasPhysicalCdRomError())
+    {
+        stop_physical_cdrom_after_error();
+        return;
+    }
+#endif
 
     if (emu_is_empty())
         return;
@@ -281,10 +303,38 @@ void emu_load_media_async(const char* file_path)
     }
 
     strncpy_fit(loading_file_path, file_path, sizeof(loading_file_path));
+    loading_request_type = Loading_Request_File;
     loading_result = false;
     loading_state.store(Loading_State_Loading);
     loading_thread = std::thread(load_media_thread_func);
     loading_thread_active = true;
+}
+
+void emu_load_physical_cdrom_async(const char* device_id)
+{
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (!IsValidPointer(device_id) || device_id[0] == '\0' || loading_state.load() != Loading_State_None)
+    {
+        Debug("Ignoring physical CD-ROM async load request while another media load is active");
+        return;
+    }
+
+    if (loading_thread_active)
+    {
+        loading_thread.join();
+        loading_thread_active = false;
+    }
+
+    Log("Queueing physical CD-ROM async load: %s", device_id);
+    strncpy_fit(loading_file_path, device_id, sizeof(loading_file_path));
+    loading_request_type = Loading_Request_PhysicalCdRom;
+    loading_result = false;
+    loading_state.store(Loading_State_Loading);
+    loading_thread = std::thread(load_media_thread_func);
+    loading_thread_active = true;
+#else
+    UNUSED(device_id);
+#endif
 }
 
 bool emu_is_media_loading(void)
@@ -306,7 +356,13 @@ bool emu_finish_media_loading(void)
     loading_state.store(Loading_State_None);
 
     if (!loading_result)
+    {
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+        if (loading_request_type == Loading_Request_PhysicalCdRom)
+            Debug("Physical CD-ROM async load failed: %s", loading_file_path);
+#endif
         return false;
+    }
 
     emu_frame_counter = 0;
     reset_buffers();
@@ -396,6 +452,39 @@ void emu_reset(void)
     reset_buffers();
     emu_audio_reset();
     rewind_reset();
+}
+
+bool emu_eject_physical_cdrom(void)
+{
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (loading_state.load() != Loading_State_None)
+    {
+        Debug("Ignoring physical CD-ROM eject request while media is loading");
+        return false;
+    }
+
+    char device_id[256];
+    device_id[0] = 0;
+
+    if (!unload_physical_cdrom(device_id, sizeof(device_id)))
+    {
+        Debug("Ignoring physical CD-ROM eject request because no physical CD-ROM is loaded");
+        return false;
+    }
+
+    Log("Ejecting physical CD-ROM: %s", device_id);
+    bool ejected = CdRomDrive::Eject(device_id);
+    Debug("Physical CD-ROM eject finished: %s (%s)", device_id, ejected ? "success" : "failure");
+    return ejected;
+#else
+    return false;
+#endif
+}
+
+void emu_set_preload_cdrom(bool enabled)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetMedia()->PreloadCdRom(enabled);
 }
 
 void emu_audio_mute(bool mute)
@@ -562,6 +651,17 @@ void emu_get_info(char* info, int buffer_size)
 
     Media* media = geartowns->GetMedia();
     Firmware* firmware = geartowns->GetFirmware();
+
+    if (media->IsCDROM())
+    {
+        CdRomMedia* cdrom_media = geartowns->GetCDROMMedia();
+        GT_CdRomMSF length = cdrom_media->GetCdRomLength();
+        snprintf(info, (size_t)buffer_size, "File Name: %s\nPath: %s\nCD-ROM Tracks: %d\nCD-ROM Length: %02d:%02d:%02d\n"
+            "CRC: %08X\nFirmware Ready: %s", media->GetFileName(), media->GetFilePath(), cdrom_media->GetTrackCount(),
+            length.minutes, length.seconds, length.frames, media->GetCRC(), firmware->IsReady() ? "Yes" : "No");
+        return;
+    }
+
     snprintf(info, (size_t)buffer_size, "File Name: %s\nPath: %s\nSize: %d bytes\nCRC: %08X\nFirmware Ready: %s",
         media->GetFileName(), media->GetFilePath(), media->GetSize(), media->GetCRC(),
         firmware->IsReady() ? "Yes" : "No");
@@ -750,7 +850,13 @@ void emu_reset_rewind_timing(void)
 
 static void load_media_thread_func(void)
 {
-    loading_result = geartowns->LoadMedia(loading_file_path);
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (loading_request_type == Loading_Request_PhysicalCdRom)
+        loading_result = geartowns->LoadPhysicalCdRom(loading_file_path);
+    else
+#endif
+        loading_result = geartowns->LoadMedia(loading_file_path);
+
     loading_state.store(Loading_State_Finished);
 }
 
@@ -769,11 +875,48 @@ static const char* get_configurated_dir(int location, const char* path)
         case Directory_Location_Default:
             return config_root_path;
         case Directory_Location_ROM:
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+            if (geartowns->GetMedia()->IsPhysicalCdRom())
+                return config_root_path;
+#endif
             return NULL;
         case Directory_Location_Custom:
             return path;
     }
 }
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+static bool unload_physical_cdrom(char* device_id, size_t device_id_size)
+{
+    if (loading_state.load() != Loading_State_None)
+        return false;
+
+    if (emu_is_empty() || !geartowns->GetMedia()->IsPhysicalCdRom())
+        return false;
+
+    if (IsValidPointer(device_id) && (device_id_size > 0))
+        strncpy_fit(device_id, geartowns->GetMedia()->GetPhysicalCdRomDeviceId(), device_id_size);
+
+    emu_debug_command = Debug_Command_None;
+    reset_buffers();
+    emu_audio_reset();
+    geartowns->EjectMedia();
+    rewind_reset();
+    update_savestates_data();
+    return true;
+}
+
+static void stop_physical_cdrom_after_error(void)
+{
+    char device_id[256];
+    device_id[0] = 0;
+
+    if (!unload_physical_cdrom(device_id, sizeof(device_id)))
+        return;
+
+    Error("Physical CD-ROM media error on %s, disc ejected", device_id);
+}
+#endif
 
 static void reset_rewind_timing(void)
 {

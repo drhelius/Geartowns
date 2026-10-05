@@ -22,6 +22,31 @@ INLINE bool Media::IsReady() const
     return m_media_info.ready;
 }
 
+INLINE bool Media::IsCDROM() const
+{
+    return m_media_info.cdrom;
+}
+
+INLINE bool Media::IsPhysicalCdRom() const
+{
+    return m_media_info.physical_cdrom;
+}
+
+INLINE const char* Media::GetPhysicalCdRomDeviceId() const
+{
+    return m_media_info.physical_cdrom_device_id;
+}
+
+INLINE void Media::PreloadCdRom(bool enable)
+{
+    m_preload_cdrom = enable;
+}
+
+INLINE bool Media::IsPreloadCdRomEnabled() const
+{
+    return m_preload_cdrom;
+}
+
 INLINE const char* Media::GetTempPath() const
 {
     return m_temp_path;

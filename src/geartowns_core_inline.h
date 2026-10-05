@@ -87,9 +87,19 @@ INLINE Video* GeartownsCore::GetVideo()
     return m_video;
 }
 
-INLINE CDROMMock* GeartownsCore::GetCDROM()
+INLINE CdRom* GeartownsCore::GetCDROM()
 {
     return m_cdrom;
+}
+
+INLINE CdRomMedia* GeartownsCore::GetCDROMMedia()
+{
+    return m_cdrom_media;
+}
+
+INLINE CdRomAudio* GeartownsCore::GetCDROMAudio()
+{
+    return m_cdrom_audio;
 }
 
 INLINE FDCMock* GeartownsCore::GetFDC()

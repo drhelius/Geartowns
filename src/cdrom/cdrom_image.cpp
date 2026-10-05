@@ -1,0 +1,236 @@
+/*
+ * Geartowns - FM Towns Emulator
+ * Copyright (C) 2026  Ignacio Sanchez
+
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+ *
+ */
+
+#include <string>
+#include <algorithm>
+#include "cdrom_image.h"
+
+CdRomImage::CdRomImage()
+{
+    Reset();
+}
+
+CdRomImage::~CdRomImage()
+{
+}
+
+// Images that only keep the user data get a synthesized Mode 1 header, EDC and ECC stay zero
+bool CdRomImage::ReadRawSector2352(u32 lba, u8* buffer)
+{
+    if (!m_ready || !IsValidPointer(buffer) || (lba >= m_toc.sector_count) || IsAudioSector(lba))
+        return false;
+
+    GT_CdRomMSF msf;
+    LbaToMsf(lba + 150, &msf);
+
+    memset(buffer, 0, 2352);
+    memset(buffer + 1, 0xFF, 10);
+    buffer[12] = DecToBcd(msf.minutes);
+    buffer[13] = DecToBcd(msf.seconds);
+    buffer[14] = DecToBcd(msf.frames);
+    buffer[15] = 0x01;
+
+    return ReadSector(lba, buffer + 16);
+}
+
+bool CdRomImage::ReadSubchannelQ(s32 lba, u8* buffer)
+{
+    UNUSED(lba);
+    UNUSED(buffer);
+    return false;
+}
+
+void CdRomImage::Init()
+{
+}
+
+void CdRomImage::Reset()
+{
+    m_toc.tracks.clear();
+    m_toc.total_length = {0, 0, 0};
+    m_toc.sector_count = 0;
+    m_ready = false;
+    m_file_path[0] = 0;
+    m_file_directory[0] = 0;
+    m_file_name[0] = 0;
+    m_file_extension[0] = 0;
+    m_current_sector = 0;
+    m_crc = 0;
+}
+
+bool CdRomImage::IsReady()
+{
+    return m_ready;
+}
+
+u32 CdRomImage::GetFirstSectorOfTrack(u8 track)
+{
+    if (track < m_toc.tracks.size())
+    {
+        return m_toc.tracks[track].start_lba;
+    }
+    else if ((track > 0) && (track == m_toc.tracks.size()))
+    {
+        return m_toc.tracks[track - 1].end_lba + 1;
+    }
+
+    Error("GetFirstSectorOfTrack failed - Track number %d out of bounds (max: %d)", track, m_toc.tracks.size());
+    return 0;
+}
+
+u32 CdRomImage::GetLastSectorOfTrack(u8 track)
+{
+    if (track < m_toc.tracks.size())
+    {
+        return m_toc.tracks[track].end_lba;
+    }
+
+    Error("GetLastSectorOfTrack failed - Track number %d out of bounds (max: %d)", track, m_toc.tracks.size());
+    return 0;
+}
+
+s32 CdRomImage::GetTrackFromLBA(u32 lba)
+{
+    if (lba >= m_toc.sector_count)
+    {
+        Error("GetTrackNumber failed - LBA %d out of bounds (max: %d)", lba, m_toc.sector_count - 1);
+        return -1;
+    }
+
+    s32 track = FindTrackFromLBA(lba, false);
+
+    if (track >= 0)
+        return track;
+
+    Error("GetTrackNumber failed - LBA %d not found in any track", lba);
+    return -1;
+}
+
+bool CdRomImage::IsAudioSector(u32 lba, bool include_lead_in)
+{
+    if (lba >= m_toc.sector_count)
+        return false;
+
+    s32 track = FindTrackFromLBA(lba, include_lead_in);
+    return (track >= 0) && (m_toc.tracks[(size_t)track].type == GT_CDROM_AUDIO_TRACK);
+}
+
+const char* CdRomImage::GetFilePath()
+{
+    return m_file_path;
+}
+
+const char* CdRomImage::GetFileDirectory()
+{
+    return m_file_directory;
+}
+
+const char* CdRomImage::GetFileName()
+{
+    return m_file_name;
+}
+
+const char* CdRomImage::GetFileExtension()
+{
+    return m_file_extension;
+}
+
+CdRomImage::TableOfContents* CdRomImage::GetTOC()
+{
+    return &m_toc;
+}
+
+u32 CdRomImage::GetCRC()
+{
+    return m_crc;
+}
+
+u32 CdRomImage::GetCurrentSector()
+{
+    return m_current_sector;
+}
+
+void CdRomImage::SetCurrentSector(u32 sector)
+{
+    if (sector < m_toc.sector_count)
+        m_current_sector = sector;
+    else
+        m_current_sector = m_toc.sector_count - 1;
+}
+
+void CdRomImage::GatherPaths(const char* path)
+{
+    using namespace std;
+
+    string fullpath(path);
+    string directory;
+    string filename;
+    string extension;
+
+    size_t pos = fullpath.find_last_of("/\\");
+    if (pos != string::npos)
+    {
+        filename = fullpath.substr(pos + 1);
+        directory = fullpath.substr(0, pos);
+    }
+    else
+    {
+        filename = fullpath;
+        directory = "";
+    }
+
+    extension = fullpath.substr(fullpath.find_last_of(".") + 1);
+    transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return std::tolower(c); });
+
+    snprintf(m_file_path, sizeof(m_file_path), "%s", path);
+    snprintf(m_file_directory, sizeof(m_file_directory), "%s", directory.c_str());
+    snprintf(m_file_name, sizeof(m_file_name), "%s", filename.c_str());
+    snprintf(m_file_extension, sizeof(m_file_extension), "%s", extension.c_str());
+}
+
+void CdRomImage::InitTrack(Track& track)
+{
+    track.type = GT_CDROM_AUDIO_TRACK;
+    track.sector_size = 0;
+    track.sector_count = 0;
+    track.start_lba = 0;
+    track.start_msf = {0, 0, 0};
+    track.end_lba = 0;
+    track.end_msf = {0, 0, 0};
+    track.has_lead_in = false;
+    track.lead_in_lba = 0;
+    track.file_offset = 0;
+}
+
+s32 CdRomImage::FindTrackFromLBA(u32 lba, bool include_lead_in)
+{
+    for (size_t i = 0; i < m_toc.tracks.size(); i++)
+    {
+        const Track& track = m_toc.tracks[i];
+
+        if ((lba >= track.start_lba) && (lba <= track.end_lba))
+            return (s32)i;
+
+        if (include_lead_in && track.has_lead_in &&
+            (lba >= track.lead_in_lba) && (lba < track.start_lba))
+            return (s32)i;
+    }
+
+    return -1;
+}

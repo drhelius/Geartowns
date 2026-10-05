@@ -17,26 +17,26 @@
  *
  */
 
-#ifndef CDROM_MOCK_INLINE_H
-#define CDROM_MOCK_INLINE_H
+#ifndef CDROM_INLINE_H
+#define CDROM_INLINE_H
 
-#include "cdrom_mock.h"
+#include "cdrom.h"
 
-INLINE void CDROMMock::Synchronize(u64 clocks)
+INLINE void CdRom::Synchronize(u64 clocks)
 {
-    if (m_state.busy && clocks >= m_state.execute_clocks)
-        ExecuteCommand();
+    if ((m_state.event != CDROM_EVENT_NONE) && (clocks >= m_state.event_clocks))
+        RunEvent(clocks);
 }
 
-INLINE void CDROMMock::HandleEvent(u64 clocks)
+INLINE void CdRom::HandleEvent(u64 clocks)
 {
     Synchronize(clocks);
     UpdateNextEvent();
 }
 
-INLINE CDROMMock::CDROMMock_State* CDROMMock::GetState()
+INLINE CdRom::CdRom_State* CdRom::GetState()
 {
     return &m_state;
 }
 
-#endif /* CDROM_MOCK_INLINE_H */
+#endif /* CDROM_INLINE_H */

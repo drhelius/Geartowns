@@ -46,6 +46,9 @@ static bool open_load_defaults = false;
 static bool save_screenshot = false;
 static bool choose_savestates_path = false;
 static bool choose_screenshots_path = false;
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+static bool open_physical_cdrom = false;
+#endif
 static const ImVec4 firmware_unknown_color(0.39f, 0.58f, 0.93f, 1.0f);
 static const ImVec4 service_mcp_http_color(0.10f, 0.90f, 0.10f, 1.0f);
 static const ImVec4 service_mcp_stdio_color(0.90f, 0.70f, 0.10f, 1.0f);
@@ -93,6 +96,9 @@ void gui_main_menu(void)
     save_screenshot = false;
     choose_savestates_path = false;
     choose_screenshots_path = false;
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    open_physical_cdrom = false;
+#endif
     gui_main_menu_hovered = false;
 
     if (application_show_menu && ImGui::BeginMainMenuBar())
@@ -127,6 +133,25 @@ static void menu_geartowns(void)
         {
             open_rom = true;
         }
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+        if (ImGui::BeginMenu("Physical CD-ROM"))
+        {
+            bool physical_cdrom_loaded = !emu_is_empty() && emu_get_core()->GetMedia()->IsPhysicalCdRom();
+
+            if (ImGui::MenuItem("Open...", "", false, !physical_cdrom_loaded))
+            {
+                open_physical_cdrom = true;
+            }
+
+            if (ImGui::MenuItem("Eject", "", false, physical_cdrom_loaded))
+            {
+                gui_action_eject_physical_cdrom();
+            }
+
+            ImGui::EndMenu();
+        }
+#endif
 
         if (ImGui::BeginMenu("Open Recent"))
         {
@@ -286,7 +311,15 @@ static void menu_geartowns(void)
 
 static bool media_menu_actions_enabled(void)
 {
-    return !emu_is_empty();
+    if (emu_is_empty())
+        return false;
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (emu_get_core()->GetMedia()->HasPhysicalCdRomError())
+        return false;
+#endif
+
+    return true;
 }
 
 static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type)
@@ -474,6 +507,19 @@ static void menu_emulator(void)
 
         ImGui::MenuItem("Start Paused", "", &config_emulator.start_paused);
         ImGui::MenuItem("Pause When Inactive", "", &config_emulator.pause_when_inactive);
+
+        if (ImGui::MenuItem("Preload CD-ROM in RAM", "", &config_emulator.preload_cdrom))
+        {
+            emu_set_preload_cdrom(config_emulator.preload_cdrom);
+        }
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("This option will preload all CD-ROM tracks in RAM.");
+            ImGui::Text("Load a new CD-ROM image to apply changes.");
+            ImGui::EndTooltip();
+        }
 
         if (ImGui::MenuItem("Allow Screen Saver", "", &config_emulator.allow_screensaver))
         {
@@ -1362,6 +1408,11 @@ static void file_dialogs(void)
     if (choose_screenshots_path)
         gui_file_dialog_choose_screenshot_path();
 
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (open_physical_cdrom)
+        gui_popup_open_physical_cdrom();
+#endif
+
     if (open_about)
     {
         gui_dialog_in_use = true;
@@ -1376,10 +1427,18 @@ static void file_dialogs(void)
 
     gui_popup_modal_about();
     gui_popup_modal_load_defaults();
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    gui_popup_modal_physical_cdrom();
+#endif
 }
 
 static const char* get_current_media_directory_text(void)
 {
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (!emu_is_empty() && emu_get_core()->GetMedia()->IsPhysicalCdRom())
+        return config_root_path;
+#endif
+
     return emu_get_core()->GetMedia()->GetFileDirectory();
 }
 

@@ -46,6 +46,11 @@ struct retro_core_option_v2_category option_cats_us[] = {
         "Input",
         "Configure controller behavior."
     },
+    {
+        "cdrom",
+        "CD-ROM",
+        "Configure CD-ROM settings."
+    },
     { NULL, NULL, NULL },
 };
 
@@ -77,6 +82,23 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "Allow pressing opposite directions simultaneously. Disabling this may prevent movement glitches in some software.",
         NULL,
         "input",
+        {
+            { "Disabled", NULL },
+            { "Enabled",  NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+
+    /* CD-ROM */
+
+    {
+        "geartowns_cdrom_preload",
+        "Preload CD-ROM (restart)",
+        NULL,
+        "Preload all CD-ROM tracks into RAM. This increases memory usage but may improve performance.",
+        NULL,
+        "cdrom",
         {
             { "Disabled", NULL },
             { "Enabled",  NULL },

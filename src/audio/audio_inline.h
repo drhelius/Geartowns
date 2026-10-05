@@ -23,6 +23,7 @@
 #include "audio.h"
 #include "ym3438.h"
 #include "rf5c68.h"
+#include "../cdrom/cdrom_audio.h"
 #include "../system/scheduler.h"
 
 // FM and PCM both run from the 8 MHz sound clock, half the CPU clock
@@ -46,6 +47,11 @@ INLINE void Audio::SetFMVolume(float volume)
 INLINE void Audio::SetPCMVolume(float volume)
 {
     m_pcm_volume = volume;
+}
+
+INLINE void Audio::SetCDDAVolume(float volume)
+{
+    m_cdda_volume = volume;
 }
 
 INLINE YM3438* Audio::GetYM3438()
@@ -131,9 +137,14 @@ INLINE void Audio::SampleSources()
     s16 fm_right = 0;
     s16 pcm_left = 0;
     s16 pcm_right = 0;
+    s16 cdda_left = 0;
+    s16 cdda_right = 0;
 
     m_ym3438->Sample(fm_left, fm_right);
     m_rf5c68->Sample(pcm_left, pcm_right);
+
+    // CD-DA advances one disc sample per output sample since both run at 44.1 kHz
+    m_cdrom_audio->Sample(cdda_left, cdda_right);
 
     // The PCM DAC output passes a smoothing filter of about 4 kHz before the mixer
     //FM feeds it directly
@@ -154,6 +165,8 @@ INLINE void Audio::SampleSources()
     m_fm_buffer[m_buffer_index + 1] = fm_right;
     m_pcm_buffer[m_buffer_index + 0] = (s16)m_state.pcm_lowpass_left;
     m_pcm_buffer[m_buffer_index + 1] = (s16)m_state.pcm_lowpass_right;
+    m_cdda_buffer[m_buffer_index + 0] = (s16)((cdda_left * m_cdda_gain_left) >> 15);
+    m_cdda_buffer[m_buffer_index + 1] = (s16)((cdda_right * m_cdda_gain_right) >> 15);
     m_buffer_index += 2;
 }
 

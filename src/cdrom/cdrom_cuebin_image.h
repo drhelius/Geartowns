@@ -1,0 +1,223 @@
+/*
+ * Geartowns - FM Towns Emulator
+ * Copyright (C) 2026  Ignacio Sanchez
+
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+ *
+ */
+
+#ifndef CDROM_CUEBIN_IMAGE_H
+#define CDROM_CUEBIN_IMAGE_H
+
+#if defined(GT_ENABLE_CDROM_CUEBIN_READAHEAD)
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#endif
+
+#include <vector>
+#include "cdrom_image.h"
+
+#define GT_CDROM_CUEBIN_KEEPALIVE_SECONDS 5
+#define GT_CDROM_CUEBIN_KEEPALIVE_SIZE 2352
+#define GT_CDROM_CUEBIN_PRELOAD_FULL_TRACK 0
+#define GT_CDROM_CUEBIN_READAHEAD_QUEUE_SIZE 32
+
+struct GT_CdRomCueBinLoadOptions
+{
+    u32 chunk_size;
+    u32 max_preload_chunks;
+    u32 read_ahead_chunks;
+    u32 max_cached_chunks;
+    bool allow_disc_preload;
+    bool enable_read_ahead;
+    bool track_files_start_at_index1;
+};
+
+class MediaFile;
+class OggVorbisDecoder;
+
+typedef MediaFile* (*GT_CdRomCueFileResolver)(const char* reference, char* resolved_path,
+    size_t resolved_path_size, void* user_data);
+
+class CdRomCueBinImage : public CdRomImage
+{
+private:
+
+    struct ImgFile
+    {
+        char file_name[256];
+        char file_path[1024];
+        u64 file_size;
+        u32 chunk_size;
+        u64 chunk_count;
+        u64 chunk_cache_count;
+        u8** chunks;
+        u64* cached_chunk_indices;
+        MediaFile* file;
+        OggVorbisDecoder* ogg_decoder;
+        u64 decoded_pcm_size;
+        bool is_ogg;
+        bool is_wav;
+        u64 wav_data_offset;
+    };
+
+    struct ParsedCueTrack
+    {
+        u32 number;
+        GT_CdRomTrackType type;
+        bool has_index0;
+        u32 index0_lba;
+        bool has_pregap;
+        uint32_t pregap_length;
+        uint32_t index1_lba;
+    };
+
+    struct ParsedCueFile
+    {
+        ImgFile* img_file;
+        std::vector<ParsedCueTrack> tracks;
+    };
+
+    struct TrackFile
+    {
+        ImgFile* img_file;
+    };
+
+#if defined(GT_ENABLE_CDROM_CUEBIN_READAHEAD)
+    struct ReadAheadRequest
+    {
+        ImgFile* img_file;
+        u64 chunk_index;
+    };
+#endif
+
+public:
+    CdRomCueBinImage();
+    virtual ~CdRomCueBinImage();
+    virtual void Init() override;
+    virtual void Reset() override;
+    virtual bool LoadFromFile(const char* path, bool preload) override;
+    bool LoadFromIsoFile(const char* path, bool preload);
+    virtual bool ReadSector(u32 lba, u8* buffer) override;
+    virtual bool ReadRawSector2352(u32 lba, u8* buffer) override;
+    virtual bool ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count) override;
+    virtual bool PreloadDisc() override;
+    virtual bool PreloadTrack(u32 track_number) override;
+    void SetLoadOptions(const GT_CdRomCueBinLoadOptions& options);
+
+protected:
+    bool LoadFromCueData(const char* source_path, const u8* cue_data, size_t cue_size,
+        bool preload, GT_CdRomCueFileResolver resolver, void* resolver_user_data);
+
+private:
+    static MediaFile* ResolveNormalFile(const char* reference, char* resolved_path,
+        size_t resolved_path_size, void* user_data);
+    void InitImgFile(ImgFile* img_file);
+    void InitParsedCueTrack(ParsedCueTrack& track);
+    void InitParsedCueFile(ParsedCueFile& cue_file);
+    void InitTrackFile(TrackFile& track_file);
+    void DestroyImgFile(ImgFile* img_file);
+    void DestroyImgFiles();
+    bool GatherImgInfo(ImgFile* img_file);
+    bool OpenImgFile(ImgFile* img_file);
+    bool ProcessFileFormat(ImgFile* img_file);
+    bool ProcessOggFormat(ImgFile* img_file);
+    bool ProcessWavFormat(ImgFile* img_file);
+    bool FindWavDataChunk(ImgFile* img_file, MediaFile& file);
+    bool SetupFileChunks(ImgFile* img_file);
+    u64 CalculateFileOffset(ImgFile* img_file, u64 chunk_index);
+    u32 CalculateReadSize(ImgFile* img_file, u64 file_offset);
+    bool IsUriPath(const char* path);
+    bool ParseCueFile(const char* cue_content);
+    bool ReadFromImgFile(ImgFile* img_file, u64 offset, u8* buffer, u32 size);
+    bool LoadChunk(ImgFile* img_file, u64 chunk_index);
+    bool LoadChunkUnlocked(ImgFile* img_file, u64 chunk_index);
+    u64 GetChunkSlot(const ImgFile* img_file, u64 chunk_index) const;
+    bool IsChunkLoaded(const ImgFile* img_file, u64 chunk_index) const;
+    u8* GetChunkData(const ImgFile* img_file, u64 chunk_index) const;
+    bool PreloadChunks(ImgFile* img_file, u64 start_chunk, u64 count);
+#if defined(GT_ENABLE_CDROM_CUEBIN_READAHEAD)
+    void QueueReadAhead(ImgFile* img_file, u64 start_chunk);
+    void QueueChunk(ImgFile* img_file, u64 chunk_index);
+    void StartReadAheadWorker();
+    void StopReadAheadWorker();
+    void ReadAheadThread();
+    bool KeepAliveFile();
+    void ResetReadAheadQueue();
+#endif
+    void CalculateCRC();
+
+private:
+    std::vector<ImgFile*> m_img_files;
+    std::vector<TrackFile> m_track_files;
+    GT_CdRomCueBinLoadOptions m_load_options;
+    GT_CdRomCueFileResolver m_file_resolver;
+    void* m_file_resolver_user_data;
+#if defined(GT_ENABLE_CDROM_CUEBIN_READAHEAD)
+    std::mutex m_chunk_mutex;
+    std::mutex m_queue_mutex;
+    std::condition_variable m_queue_condition;
+    std::thread m_read_ahead_thread;
+    std::atomic<bool> m_read_ahead_running;
+    ImgFile* m_keep_alive_file;
+    ReadAheadRequest m_request_queue[GT_CDROM_CUEBIN_READAHEAD_QUEUE_SIZE];
+    u32 m_request_head;
+    u32 m_request_tail;
+    u32 m_request_count;
+#endif
+};
+
+INLINE GT_CdRomCueBinLoadOptions GT_CdRomCueBinDefaultLoadOptions()
+{
+    GT_CdRomCueBinLoadOptions options;
+
+    options.chunk_size = (2352 * 128);
+    options.max_preload_chunks = GT_CDROM_CUEBIN_PRELOAD_FULL_TRACK;
+    options.read_ahead_chunks = 0;
+    options.max_cached_chunks = 0;
+    options.allow_disc_preload = true;
+    options.enable_read_ahead = false;
+    options.track_files_start_at_index1 = false;
+
+    return options;
+}
+
+INLINE GT_CdRomCueBinLoadOptions GT_CdRomCueBinStreamingLoadOptions()
+{
+    GT_CdRomCueBinLoadOptions options;
+
+#if defined(GT_ENABLE_CDROM_CUEBIN_READAHEAD)
+    options.chunk_size = (2352 * 1);
+    options.max_preload_chunks = 8;
+    options.read_ahead_chunks = 2;
+    options.max_cached_chunks = 64;
+    options.allow_disc_preload = false;
+    options.enable_read_ahead = true;
+    options.track_files_start_at_index1 = true;
+#else
+    options.chunk_size = (2352 * 128);
+    options.max_preload_chunks = GT_CDROM_CUEBIN_PRELOAD_FULL_TRACK;
+    options.read_ahead_chunks = 0;
+    options.max_cached_chunks = 64;
+    options.allow_disc_preload = false;
+    options.enable_read_ahead = false;
+    options.track_files_start_at_index1 = true;
+#endif
+
+    return options;
+}
+
+#endif /* CDROM_CUEBIN_IMAGE_H */

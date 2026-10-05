@@ -22,6 +22,8 @@
 
 #include "../common/common.h"
 
+class CdRomMedia;
+
 class Media
 {
 public:
@@ -34,15 +36,27 @@ public:
         int size;
         u32 crc;
         bool ready;
+        bool cdrom;
+        bool physical_cdrom;
+        char physical_cdrom_device_id[256];
     };
 
 public:
-    Media();
+    Media(CdRomMedia* cdrom_media);
     ~Media();
     void Init();
     void Reset();
     bool LoadMedia(const char* file_path);
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    bool LoadPhysicalCdRom(const char* device_id);
+#endif
     bool IsReady() const;
+    bool IsCDROM() const;
+    bool IsPhysicalCdRom() const;
+    const char* GetPhysicalCdRomDeviceId() const;
+    bool HasPhysicalCdRomError();
+    void PreloadCdRom(bool enable);
+    bool IsPreloadCdRomEnabled() const;
     void SetTempPath(const char* path);
     const char* GetTempPath() const;
     const char* GetFilePath() const;
@@ -55,13 +69,17 @@ public:
     const MediaFileInfo& GetMediaInfo() const;
 
 private:
+    bool LoadFile(const char* file_path);
+    bool LoadCdRomFromZipFile(const char* file_path);
     void ResetMediaInfo();
     void GatherDataFromPath(const char* path);
 
 private:
+    CdRomMedia* m_cdrom_media;
     MediaFileInfo m_media_info;
     char m_temp_path[GT_MAX_PATH];
     u8* m_media_data;
+    bool m_preload_cdrom;
 };
 
 #include "media_inline.h"

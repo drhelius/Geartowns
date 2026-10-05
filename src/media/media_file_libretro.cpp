@@ -115,6 +115,11 @@ bool MediaFileLibretro::IsValid() const
     return m_file.IsOpen();
 }
 
+bool MediaFileLibretro::CanSeek() const
+{
+    return m_file.CanReadAt();
+}
+
 s64 MediaFileLibretro::GetSize()
 {
     return m_file.GetSize();
@@ -177,6 +182,9 @@ s64 MediaFileLibretro::Read(void* buffer, u64 size)
         return -1;
 
     if (!m_file.IsOpen())
+        return -1;
+
+    if (size > (u64)INT64_MAX)
         return -1;
 
     s64 before = Tell();

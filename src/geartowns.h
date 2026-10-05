@@ -26,6 +26,9 @@
 #include "geartowns_core.h"
 #include "input/input.h"
 #include "audio/audio.h"
+#include "cdrom/cdrom.h"
+#include "cdrom/cdrom_audio.h"
+#include "cdrom/cdrom_media.h"
 #include "media/media.h"
 #include "system/memory.h"
 

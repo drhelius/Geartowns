@@ -59,6 +59,7 @@ struct config_Emulator
     int save_slot;
     bool start_paused;
     bool pause_when_inactive;
+    bool preload_cdrom;
     bool ffwd;
     int ffwd_speed;
     int runahead;

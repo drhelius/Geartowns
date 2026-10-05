@@ -40,7 +40,7 @@ void gui_action_load_defaults(void)
 
     GeartownsCore* core = emu_get_core();
     gui_debug_auto_save_settings();
-    core->GetMedia()->Reset();
+    core->EjectMedia();
     application_update_title_with_rom(NULL);
     core->UnloadBios();
 
@@ -77,9 +77,36 @@ void gui_action_reload_rom(void)
     if (emu_is_empty())
         return;
 
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (emu_get_core()->GetMedia()->IsPhysicalCdRom())
+    {
+        gui_load_physical_cdrom(emu_get_core()->GetMedia()->GetPhysicalCdRomDeviceId());
+        return;
+    }
+#endif
+
     char media_path[GT_MAX_PATH];
     strncpy_fit(media_path, emu_get_core()->GetMedia()->GetFilePath(), sizeof(media_path));
     gui_load_rom(media_path);
+}
+
+void gui_action_eject_physical_cdrom(void)
+{
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (emu_is_empty() || !emu_get_core()->GetMedia()->IsPhysicalCdRom())
+    {
+        gui_set_status_message("No physical CD-ROM loaded", 3000);
+        return;
+    }
+
+    if (emu_eject_physical_cdrom())
+    {
+        application_update_title_with_rom(NULL);
+        gui_set_status_message("Physical CD-ROM ejected", 3000);
+    }
+    else
+        gui_set_error_message("Unable to eject physical CD-ROM");
+#endif
 }
 
 void gui_action_pause(void)

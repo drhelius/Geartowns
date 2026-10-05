@@ -23,7 +23,7 @@
 #include "../common/common.h"
 
 class Audio;
-class CDROMMock;
+class CdRom;
 class FDCMock;
 class TownsKeyboard;
 class TownsRTC;
@@ -42,7 +42,7 @@ public:
     TownsIO();
     ~TownsIO();
     void Init(Audio* audio, TownsPIC* pic, TownsPIT* pit, Video* video, Memory* memory, TownsSystem* system,
-        CDROMMock* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma);
+        CdRom* cdrom, FDCMock* fdc, TownsKeyboard* keyboard, TownsRTC* rtc, UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -60,7 +60,7 @@ private:
     Video* m_video;
     Memory* m_memory;
     TownsSystem* m_system;
-    CDROMMock* m_cdrom;
+    CdRom* m_cdrom;
     FDCMock* m_fdc;
     TownsKeyboard* m_keyboard;
     TownsRTC* m_rtc;

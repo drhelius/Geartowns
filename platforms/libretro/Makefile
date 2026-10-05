@@ -319,6 +319,10 @@ else
 	SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
 endif
 
+ifneq (,$(filter unix osx win,$(platform)))
+	PLATFORM_FLAGS += -DGT_ENABLE_CDROM_CUEBIN_READAHEAD
+endif
+
 ifneq (,$(filter unix% win% classic_armv7_a7 rs90 gcw0 retrofw miyoo,$(platform)))
 	PLATFORM_FLAGS += -pthread
 	LDFLAGS += -pthread
@@ -363,6 +367,7 @@ OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 
 INCLUDES += -I$(CORE_DIR) -I$(SOURCE_DIR)
 INCLUDES += -I$(DEPS_DIR)/miniz
+INCLUDES += -I$(DEPS_DIR)/minivorbis
 INCLUDES += -I$(DEPS_DIR)/libchdr/include
 INCLUDES += -I$(DEPS_DIR)/zstd
 INCLUDES += -I$(DEPS_DIR)/lzma/include

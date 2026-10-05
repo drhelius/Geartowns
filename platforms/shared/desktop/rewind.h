@@ -28,16 +28,17 @@
     #define EXTERN extern
 #endif
 
-// Absolute hard cap for the ring buffer. Effective capacity is derived from
-// config_rewind (buffer_seconds / frames_per_snapshot) and clamped to this.
 #define REWIND_MAX_SNAPSHOTS        600
-#define REWIND_MAX_MEMORY_SIZE      (150 * 1024 * 1024)
+#define REWIND_MAX_MEMORY_SIZE      (1024 * 1024 * 1024)
+#define REWIND_KEYFRAME_INTERVAL    60
+#define REWIND_SCREENSHOT_WIDTH     GT_FRAME_BUFFER_WIDTH
+#define REWIND_SCREENSHOT_HEIGHT    GT_FRAME_BUFFER_HEIGHT
 
 EXTERN bool rewind_init(void);
 EXTERN void rewind_destroy(void);
 EXTERN void rewind_reset(void);
 EXTERN void rewind_push(void);
-EXTERN bool rewind_pop(void);
+EXTERN bool rewind_pop(int count);
 EXTERN bool rewind_seek(int age);
 EXTERN void rewind_commit_seek(void);
 EXTERN void rewind_set_active(bool a);

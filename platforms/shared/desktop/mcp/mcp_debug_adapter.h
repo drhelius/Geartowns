@@ -60,6 +60,8 @@ public:
     json ControllerButton(int player, const std::string& button, const std::string& action);
     json GetInputState();
     void ClearControllerState();
+    json GetRewindStatus();
+    json RewindSeek(int snapshot);
 
 private:
     u16 ButtonMask(const std::string& button) const;

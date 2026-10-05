@@ -201,6 +201,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"media", "Media", "Load BIOS or media files and inspect loaded media."},
     {"capture", "Capture", "Capture the current emulator screenshot or record AVI video."},
     {"input", "Input", "Inspect and control the two gamepad ports."},
+    {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
 };
 
@@ -237,6 +238,11 @@ static const char* const kMcpInputTools[] =
     "controller_button", "get_input_state"
 };
 
+static const char* const kMcpRewindTools[] =
+{
+    "get_rewind_status", "rewind_seek"
+};
+
 static const McpToolCategoryTools kMcpToolCategoryTools[] =
 {
     {"execution", kMcpExecutionTools, MCP_ARRAY_COUNT(kMcpExecutionTools)},
@@ -244,7 +250,8 @@ static const McpToolCategoryTools kMcpToolCategoryTools[] =
     {"disassembly", kMcpDisassemblyTools, MCP_ARRAY_COUNT(kMcpDisassemblyTools)},
     {"media", kMcpMediaTools, MCP_ARRAY_COUNT(kMcpMediaTools)},
     {"capture", kMcpCaptureTools, MCP_ARRAY_COUNT(kMcpCaptureTools)},
-    {"input", kMcpInputTools, MCP_ARRAY_COUNT(kMcpInputTools)}
+    {"input", kMcpInputTools, MCP_ARRAY_COUNT(kMcpInputTools)},
+    {"rewind", kMcpRewindTools, MCP_ARRAY_COUNT(kMcpRewindTools)}
 };
 
 const size_t kMcpSearchToolLimit = 20;
@@ -619,6 +626,8 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
         aliases += " input joypad gamepad button tap press release";
     if (StringContains(name, "video_recording"))
         aliases += " record movie clip capture avi mjpeg gameplay";
+    if (StringContains(name, "rewind"))
+        aliases += " save savestate slot snapshot time travel history";
 
     return aliases;
 }

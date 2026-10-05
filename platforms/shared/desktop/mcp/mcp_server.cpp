@@ -719,6 +719,37 @@ json McpServer::BuildToolList()
         }}
     });
 
+    tools.push_back({
+        {"name", "get_rewind_status"},
+        {"title", "Get Rewind Status"},
+        {"description", "Read rewind buffer: snapshot count, capacity, buffered seconds, memory usage, settings."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "rewind_seek"},
+        {"title", "Rewind Seek"},
+        {"description", "Load rewind snapshot by number (1 oldest, snapshot_count newest); refresh screen; non-consuming seek."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"snapshot", {
+                    {"type", "integer"},
+                    {"description", "Snapshot number: 1 oldest, snapshot_count newest."},
+                    {"minimum", 1}
+                }}
+            }},
+            {"required", json::array({"snapshot"})},
+            {"additionalProperties", false}
+        }}
+    });
+
     return tools;
 }
 
@@ -1199,6 +1230,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         return m_debugAdapter.ControllerButton(arguments["player"], arguments["button"], arguments["action"]);
     else if (normalizedTool == "get_input_state")
         return m_debugAdapter.GetInputState();
+    else if (normalizedTool == "get_rewind_status")
+        return m_debugAdapter.GetRewindStatus();
+    else if (normalizedTool == "rewind_seek")
+        return m_debugAdapter.RewindSeek(arguments["snapshot"]);
     else
         return {{"error", "Unknown tool: " + toolName}};
 }

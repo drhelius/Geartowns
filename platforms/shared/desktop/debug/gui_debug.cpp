@@ -27,6 +27,7 @@
 #include "gui_debug_disassembler.h"
 #include "gui_debug_i386.h"
 #include "gui_debug_memory.h"
+#include "gui_debug_rewind.h"
 
 static const char* GTDEBUG_MAGIC = "GTDEBUG1";
 static const int GTDEBUG_MAGIC_SIZE = 8;
@@ -84,6 +85,9 @@ void gui_debug_windows(void)
 
         if (config_debug.show_symbols)
             gui_debug_window_symbols();
+
+        if (config_debug.show_rewind)
+            gui_debug_window_rewind();
 
         gui_debug_memory_auxiliary_windows();
     }

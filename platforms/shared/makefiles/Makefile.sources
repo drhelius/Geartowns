@@ -54,6 +54,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memory_provider.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memeditor.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memory.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_rewind.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_debug_adapter.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_tool_registry.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_server.cpp \

@@ -34,6 +34,8 @@
 #include "gui.h"
 #include "gui_menus.h"
 #include "gui_popups.h"
+#include "gui_floppy.h"
+#include "emu_floppy.h"
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "events.h"
@@ -138,6 +140,7 @@ void gui_apply_settings(void)
         emu_set_pad_type((GT_Controllers)i, (GT_Controller_Type)config_input.controller_type[i]);
 
     strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
+    strncpy_fit(gui_savefiles_path, config_emulator.savefiles_path.c_str(), sizeof(gui_savefiles_path));
     strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
     strncpy_fit(gui_video_recordings_path, config_emulator.video_recordings_path.c_str(), sizeof(gui_video_recordings_path));
 
@@ -353,6 +356,21 @@ bool gui_load_rom(const char* path, const char* symbol_path)
 {
     if (loading_rom_active)
         return false;
+
+    if (emu_floppy_is_image(path))
+    {
+        GeartownsCore* core = emu_get_core();
+        int drives = emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives : core->GetMachineConfig().floppy_drives;
+
+        if (drives == 0)
+        {
+            gui_set_error_message("This machine has no floppy drive.");
+            return false;
+        }
+
+        gui_floppy_insert(0, path);
+        return true;
+    }
 
     loading_physical_cdrom = false;
     gui_debug_auto_save_settings();
@@ -648,7 +666,6 @@ static void main_window(void)
 
     OglRendererScreenGeometry screen_geometry;
     screen_geometry.logical_width = image_logical_width;
-    screen_geometry.logical_height = image_logical_height;
     screen_geometry.physical_width = image_physical_width;
     screen_geometry.physical_height = image_physical_height;
     screen_geometry.framebuffer_scale_x = framebuffer_scale_x;
@@ -1036,7 +1053,6 @@ static void set_style_dark(ImGuiStyle& style)
     style.Colors[ImGuiCol_DockingPreview] = style.Colors[ImGuiCol_HeaderActive] * ImVec4(1.0f, 1.0f, 1.0f, 0.7f);
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(config_video.background_color_debugger[config_emulator.theme][0], config_video.background_color_debugger[config_emulator.theme][1], config_video.background_color_debugger[config_emulator.theme][2], 1.00f);
     style.Colors[ImGuiCol_TabHovered] = style.Colors[ImGuiCol_HeaderHovered];
-    //style.Colors[ImGuiCol_Tab] = lerp(style.Colors[ImGuiCol_Header], style.Colors[ImGuiCol_TitleBgActive], 0.80f);
     style.Colors[ImGuiCol_TabSelected] = lerp(style.Colors[ImGuiCol_HeaderActive], style.Colors[ImGuiCol_TitleBgActive], 0.60f);
     style.Colors[ImGuiCol_TabSelectedOverline] = style.Colors[ImGuiCol_HeaderActive];
     style.Colors[ImGuiCol_TabDimmed] = lerp(style.Colors[ImGuiCol_Tab], style.Colors[ImGuiCol_TitleBg], 0.60f);

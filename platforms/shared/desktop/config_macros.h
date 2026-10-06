@@ -28,16 +28,10 @@
     process_int(operation, section, key, &(value), default_value, false, 0, false, 0)
 #define CONFIG_INT_MIN(section, key, value, default_value, minimum) \
     process_int(operation, section, key, &(value), default_value, true, minimum, false, 0)
-#define CONFIG_INT_MAX(section, key, value, default_value, maximum) \
-    process_int(operation, section, key, &(value), default_value, false, 0, true, maximum)
 #define CONFIG_INT_RANGE(section, key, value, default_value, minimum, maximum) \
     process_int(operation, section, key, &(value), default_value, true, minimum, true, maximum)
 #define CONFIG_FLOAT(section, key, value, default_value) \
     process_float(operation, section, key, &(value), default_value, false, 0.0f, false, 0.0f)
-#define CONFIG_FLOAT_MIN(section, key, value, default_value, minimum) \
-    process_float(operation, section, key, &(value), default_value, true, minimum, false, 0.0f)
-#define CONFIG_FLOAT_MAX(section, key, value, default_value, maximum) \
-    process_float(operation, section, key, &(value), default_value, false, 0.0f, true, maximum)
 #define CONFIG_FLOAT_RANGE(section, key, value, default_value, minimum, maximum) \
     process_float(operation, section, key, &(value), default_value, true, minimum, true, maximum)
 #define CONFIG_STRING(section, key, value, default_value) \
@@ -47,25 +41,9 @@
 #define CONFIG_SCANCODE(section, key, value, default_value) \
     process_scancode(operation, section, key, &(value), default_value)
 #define CONFIG_INT_ARRAY(section, key_format, values, count, default_value) \
-    process_int_array(operation, section, key_format, values, count, default_value, false, 0, false, 0)
-#define CONFIG_INT_ARRAY_MIN(section, key_format, values, count, default_value, minimum) \
-    process_int_array(operation, section, key_format, values, count, default_value, true, minimum, false, 0)
-#define CONFIG_INT_ARRAY_MAX(section, key_format, values, count, default_value, maximum) \
-    process_int_array(operation, section, key_format, values, count, default_value, false, 0, true, maximum)
-#define CONFIG_INT_ARRAY_RANGE(section, key_format, values, count, default_value, minimum, maximum) \
-    process_int_array(operation, section, key_format, values, count, default_value, true, minimum, true, maximum)
-#define CONFIG_FLOAT_ARRAY(section, key_format, values, count, default_value) \
-    process_float_array(operation, section, key_format, values, count, default_value, false, 0.0f, false, 0.0f)
-#define CONFIG_FLOAT_ARRAY_MIN(section, key_format, values, count, default_value, minimum) \
-    process_float_array(operation, section, key_format, values, count, default_value, true, minimum, false, 0.0f)
-#define CONFIG_FLOAT_ARRAY_MAX(section, key_format, values, count, default_value, maximum) \
-    process_float_array(operation, section, key_format, values, count, default_value, false, 0.0f, true, maximum)
-#define CONFIG_FLOAT_ARRAY_RANGE(section, key_format, values, count, default_value, minimum, maximum) \
-    process_float_array(operation, section, key_format, values, count, default_value, true, minimum, true, maximum)
+    process_int_array(operation, section, key_format, values, count, default_value)
 #define CONFIG_STRING_ARRAY(section, key_format, values, count, default_value) \
-    process_string_array(operation, section, key_format, values, count, default_value, true)
-#define CONFIG_STRING_ARRAY_NOT_EMPTY(section, key_format, values, count, default_value) \
-    process_string_array(operation, section, key_format, values, count, default_value, false)
+    process_string_array(operation, section, key_format, values, count, default_value)
 #define CONFIG_HOTKEY(key, value, default_key, default_mod) \
     process_hotkey(operation, key, &(value), default_key, default_mod)
 

@@ -34,6 +34,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_filedialogs.cpp \
     $(DESKTOP_SRC_DIR)/gui_menus.cpp \
     $(DESKTOP_SRC_DIR)/gui_popups.cpp \
+    $(DESKTOP_SRC_DIR)/gui_floppy.cpp \
     $(DESKTOP_SRC_DIR)/gui_actions.cpp \
     $(DESKTOP_SRC_DIR)/ogl_renderer.cpp \
     $(DESKTOP_SRC_DIR)/ogl_shader_program.cpp \
@@ -46,6 +47,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/runahead.cpp \
     $(DESKTOP_SRC_DIR)/video_recorder.cpp \
     $(DESKTOP_SRC_DIR)/emu.cpp \
+    $(DESKTOP_SRC_DIR)/emu_floppy.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug.cpp \
@@ -69,7 +71,10 @@ SOURCES_CXX := \
     $(SRC_DIR)/cdrom/cdrom_cuebin_image.cpp \
     $(SRC_DIR)/cdrom/cdrom_image.cpp \
     $(SRC_DIR)/cdrom/cdrom_media.cpp \
-    $(SRC_DIR)/drive/fdc_mock.cpp \
+    $(SRC_DIR)/drive/fdc.cpp \
+    $(SRC_DIR)/drive/mb8877.cpp \
+    $(SRC_DIR)/drive/floppy_disk.cpp \
+    $(SRC_DIR)/drive/floppy_image.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_disassembler.cpp \
     $(SRC_DIR)/i386/i386_encoding.cpp \

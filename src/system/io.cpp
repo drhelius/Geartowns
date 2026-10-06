@@ -22,7 +22,7 @@
 #include "../audio/ym3438.h"
 #include "../audio/rf5c68.h"
 #include "../cdrom/cdrom.h"
-#include "../drive/fdc_mock.h"
+#include "../drive/fdc.h"
 #include "../input/keyboard.h"
 #include "memory.h"
 #include "pic.h"
@@ -54,7 +54,7 @@ IO::~IO()
 }
 
 void IO::Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-    CdRom* cdrom, FDCMock* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma)
+    CdRom* cdrom, FDC* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma)
 {
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();

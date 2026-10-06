@@ -24,7 +24,7 @@
 
 class Audio;
 class CdRom;
-class FDCMock;
+class FDC;
 class Keyboard;
 class RTC;
 class UPD71071;
@@ -42,7 +42,7 @@ public:
     IO();
     ~IO();
     void Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-        CdRom* cdrom, FDCMock* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma);
+        CdRom* cdrom, FDC* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -61,7 +61,7 @@ private:
     Memory* m_memory;
     SystemControl* m_system_control;
     CdRom* m_cdrom;
-    FDCMock* m_fdc;
+    FDC* m_fdc;
     Keyboard* m_keyboard;
     RTC* m_rtc;
     UPD71071* m_dma;

@@ -24,9 +24,11 @@
 #include "config.h"
 #include "gui.h"
 #include "gui_filedialogs.h"
+#include "gui_floppy.h"
 #include "debug/gui_debug.h"
 #include "ogl_renderer.h"
 #include "emu.h"
+#include "emu_floppy.h"
 #include "display.h"
 #include "utils.h"
 #include "single_instance.h"
@@ -55,6 +57,7 @@ static bool sdl_init(void);
 static void sdl_destroy(void);
 static void sdl_events(void);
 static void sdl_events_quit(const SDL_Event* event);
+static void request_quit(void);
 static void sdl_events_app(const SDL_Event* event);
 static void handle_mouse_cursor(void);
 static void handle_menu(void);
@@ -227,6 +230,11 @@ void application_trigger_quit(void)
     SDL_zero(event);
     event.type = SDL_EVENT_QUIT;
     SDL_PushEvent(&event);
+}
+
+void application_confirm_quit(void)
+{
+    running = false;
 }
 
 #if defined(__APPLE__)
@@ -551,15 +559,23 @@ static void sdl_events_quit(const SDL_Event* event)
 {
     if (event->type == SDL_EVENT_QUIT)
     {
-        running = false;
+        request_quit();
         return;
     }
 
     if (event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event->window.windowID == SDL_GetWindowID(application_sdl_window))
     {
-        running = false;
+        request_quit();
         return;
     }
+}
+
+static void request_quit(void)
+{
+    if (emu_floppy_flush())
+        running = false;
+    else
+        gui_floppy_open_quit_confirmation();
 }
 
 static void sdl_events_app(const SDL_Event* event)

@@ -84,6 +84,8 @@ static inline void process(config_Operation operation)
     // Files and paths
     CONFIG_INT("Emulator", "SaveStatesDirOption", config_emulator.savestates_dir_option, 0);
     CONFIG_STRING_NOT_EMPTY("Emulator", "SaveStatesPath", config_emulator.savestates_path, config_root_path);
+    CONFIG_INT("Emulator", "SaveFilesDirOption", config_emulator.savefiles_dir_option, 0);
+    CONFIG_STRING_NOT_EMPTY("Emulator", "SaveFilesPath", config_emulator.savefiles_path, config_root_path);
     CONFIG_INT("Emulator", "ScreenshotDirOption", config_emulator.screenshots_dir_option, 0);
     CONFIG_STRING_NOT_EMPTY("Emulator", "ScreenshotPath", config_emulator.screenshots_path, config_root_path);
     CONFIG_INT("Emulator", "VideoRecordingDirOption", config_emulator.video_recordings_dir_option, 0);
@@ -91,6 +93,13 @@ static inline void process(config_Operation operation)
     CONFIG_STRING("Emulator", "LastOpenPath", config_emulator.last_open_path, "");
     CONFIG_STRING("Emulator", "BiosPath", config_emulator.bios_path, "");
     CONFIG_STRING_ARRAY("Emulator", "RecentROM%d", config_emulator.recent_roms, config_max_recent_roms, "");
+
+    // Floppy drives
+    CONFIG_BOOL("Floppy", "RememberChanges", config_emulator.floppy_persistence, true);
+    CONFIG_BOOL("Floppy", "Drive1WriteProtected", config_emulator.floppy_write_protected[0], false);
+    CONFIG_BOOL("Floppy", "Drive2WriteProtected", config_emulator.floppy_write_protected[1], false);
+    CONFIG_STRING_ARRAY("Floppy", "Drive1Recent%d", config_emulator.recent_floppies[0], config_max_recent_floppies, "");
+    CONFIG_STRING_ARRAY("Floppy", "Drive2Recent%d", config_emulator.recent_floppies[1], config_max_recent_floppies, "");
 
     // Services
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);

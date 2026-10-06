@@ -27,6 +27,7 @@
 #include <string.h>
 #include <thread>
 #include "config.h"
+#include "emu_floppy.h"
 #include "events.h"
 #include "mcp/mcp_manager.h"
 #include "rewind.h"
@@ -79,6 +80,7 @@ static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width,
 static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
 static bool unload_media(void);
+static bool get_floppy_state_path(int index, char* path, size_t path_size);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 static void stop_physical_cdrom_after_error(void);
 #endif
@@ -111,6 +113,7 @@ bool emu_init(void)
 
     geartowns->Init();
     geartowns->GetMedia()->SetTempPath(config_temp_path);
+    emu_floppy_init();
 
     sound_queue_init();
 
@@ -156,6 +159,10 @@ void emu_destroy(void)
 
     loading_state.store(Loading_State_None);
     emu_stop_video_recording();
+
+    if (!emu_floppy_flush())
+        Error("Unable to save one or more floppy disks on exit");
+
     runahead_destroy();
     rewind_destroy();
     SafeDelete(mcp_manager);
@@ -462,6 +469,7 @@ bool emu_power_on(void)
     if (!geartowns->PowerOn())
         return false;
 
+    emu_floppy_check_drives();
     reset_run_state();
     update_savestates_data();
     return true;
@@ -483,6 +491,7 @@ void emu_reset(void)
         return;
 
     geartowns->ResetMedia();
+    emu_floppy_check_drives();
     reset_run_state();
 }
 
@@ -577,7 +586,13 @@ void emu_save_state_slot(int index)
     {
         const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
             config_emulator.savestates_path.c_str());
-        geartowns->SaveState(dir, index, true);
+        char path[GT_MAX_PATH];
+
+        if (get_floppy_state_path(index, path, sizeof(path)))
+            geartowns->SaveState(path, -1, true);
+        else
+            geartowns->SaveState(dir, index, true);
+
         update_savestates_data();
     }
 }
@@ -588,9 +603,13 @@ void emu_load_state_slot(int index)
     {
         const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
             config_emulator.savestates_path.c_str());
+        char path[GT_MAX_PATH];
+        bool loaded = get_floppy_state_path(index, path, sizeof(path)) ? geartowns->LoadState(path, -1) :
+            geartowns->LoadState(dir, index);
 
-        if (geartowns->LoadState(dir, index))
+        if (loaded)
         {
+            emu_floppy_reconcile();
             emu_debug_state_restored();
             events_sync_input();
             rewind_reset();
@@ -608,6 +627,7 @@ void emu_load_state_file(const char* file_path)
 {
     if (!emu_is_empty() && geartowns->LoadState(file_path))
     {
+        emu_floppy_reconcile();
         emu_debug_state_restored();
         events_sync_input();
         rewind_reset();
@@ -642,8 +662,16 @@ void update_savestates_data(void)
     {
         const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
             config_emulator.savestates_path.c_str());
+        char path[GT_MAX_PATH];
+        int index = i + 1;
 
-        if (!geartowns->GetSaveStateHeader(i + 1, dir, &emu_savestates[i]))
+        if (get_floppy_state_path(index, path, sizeof(path)))
+        {
+            dir = path;
+            index = -1;
+        }
+
+        if (!geartowns->GetSaveStateHeader(index, dir, &emu_savestates[i]))
             continue;
 
         if (emu_savestates[i].screenshot_size > 0)
@@ -654,7 +682,7 @@ void update_savestates_data(void)
                 continue;
 
             emu_savestates_screenshots[i].size = emu_savestates[i].screenshot_size;
-            geartowns->GetSaveStateScreenshot(i + 1, dir, &emu_savestates_screenshots[i]);
+            geartowns->GetSaveStateScreenshot(index, dir, &emu_savestates_screenshots[i]);
         }
     }
 }
@@ -1026,6 +1054,41 @@ static bool unload_media(void)
     rewind_reset();
     update_savestates_data();
     return true;
+}
+
+static bool get_floppy_state_path(int index, char* path, size_t path_size)
+{
+    if (geartowns->GetMedia()->IsReady())
+        return false;
+
+    const char* content = emu_floppy_get_content_path();
+    char directory[GT_MAX_PATH];
+    char name[GT_MAX_PATH];
+    char file_name[GT_MAX_PATH];
+
+    switch ((Directory_Location)config_emulator.savestates_dir_option)
+    {
+        case Directory_Location_ROM:
+            if (content[0] != '\0')
+                get_directory(content, directory, sizeof(directory));
+            else
+                strncpy_fit(directory, config_root_path, sizeof(directory));
+            break;
+        case Directory_Location_Custom:
+            strncpy_fit(directory, config_emulator.savestates_path.c_str(), sizeof(directory));
+            break;
+        default:
+            strncpy_fit(directory, config_root_path, sizeof(directory));
+            break;
+    }
+
+    if (content[0] != '\0')
+        get_filename_without_extension(content, name, sizeof(name));
+    else
+        strncpy_fit(name, "FM Towns", sizeof(name));
+
+    snprintf(file_name, sizeof(file_name), "%s.state%d", name, index);
+    return join_path(directory, file_name, path, path_size);
 }
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM)

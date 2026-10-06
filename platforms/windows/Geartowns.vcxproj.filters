@@ -16,6 +16,9 @@
     <ClCompile Include="..\shared\desktop\emu.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\emu_floppy.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\gui.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -53,6 +56,9 @@
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_popups.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_floppy.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_menus.cpp">
@@ -208,7 +214,16 @@
     <ClCompile Include="..\..\src\cdrom\cdrom_physical_image.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\drive\fdc_mock.cpp">
+    <ClCompile Include="..\..\src\drive\fdc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\drive\mb8877.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\drive\floppy_disk.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\drive\floppy_image.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\system\i8253.cpp">
@@ -350,8 +365,13 @@
     <ClInclude Include="..\..\src\cdrom\cdrom_media.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_media_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_physical_image.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\drive\fdc_mock.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\drive\fdc_mock_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\fdc.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\fdc_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\mb8877.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\mb8877_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\floppy_disk.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\floppy_disk_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\floppy_image.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\video\sprite.h"><Filter>src</Filter></ClInclude>
@@ -410,6 +430,9 @@
     <ClInclude Include="..\shared\desktop\emu.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\emu_floppy.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\desktop\gui.h">
       <Filter>desktop</Filter>
     </ClInclude>
@@ -453,6 +476,9 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_popups.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_floppy.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_menus.h">

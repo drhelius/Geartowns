@@ -46,6 +46,7 @@ EXTERN void config_read(void);
 EXTERN void config_write(void);
 EXTERN void config_load_defaults(void);
 EXTERN void config_push_recent_media(const std::string& path);
+EXTERN void config_push_recent_floppy(int drive, const std::string& path);
 EXTERN void config_update_hotkey_string(config_Hotkey* hotkey);
 EXTERN bool config_read_shader_parameter(const char* preset_file, const char* parameter_name, float* value);
 EXTERN void config_write_shader_parameter(const char* preset_file, const char* parameter_name, float value);

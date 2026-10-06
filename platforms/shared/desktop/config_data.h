@@ -27,6 +27,8 @@
 static const int config_version = 2;
 static const int config_minimum_version = 1;
 static const int config_max_recent_roms = 15;
+static const int config_max_recent_floppies = 5;
+static const int config_floppy_drives = 2;
 
 enum config_ShaderMode
 {
@@ -68,6 +70,8 @@ struct config_Emulator
     std::string recent_roms[config_max_recent_roms];
     int savestates_dir_option;
     std::string savestates_path;
+    int savefiles_dir_option;
+    std::string savefiles_path;
     int screenshots_dir_option;
     int video_recordings_dir_option;
     std::string bios_path;
@@ -82,6 +86,9 @@ struct config_Emulator
     std::string mcp_http_address;
     bool capture_mouse;
     int mouse_sensitivity;
+    bool floppy_persistence;
+    bool floppy_write_protected[config_floppy_drives];
+    std::string recent_floppies[config_floppy_drives][config_max_recent_floppies];
 };
 
 struct config_Machine

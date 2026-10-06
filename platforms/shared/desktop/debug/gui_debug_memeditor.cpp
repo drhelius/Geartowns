@@ -1091,11 +1091,6 @@ u32 MemEditor::GetSelectionSize() const
     return GetSelectionEnd() - GetSelectionStart() + 1;
 }
 
-bool MemEditor::IsAddressInWindow(u32 address) const
-{
-    return address >= m_window_base && (u64)address < (u64)m_window_base + WINDOW_SIZE;
-}
-
 bool MemEditor::IsAddressInSource(u32 address) const
 {
     return IsValidPointer(m_provider) && address <= m_provider->GetAddressLimit(m_source);

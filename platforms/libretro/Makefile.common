@@ -23,7 +23,10 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/cdrom/cdrom_cuebin_image.cpp \
                 $(SOURCE_DIR)/cdrom/cdrom_image.cpp \
                 $(SOURCE_DIR)/cdrom/cdrom_media.cpp \
-                $(SOURCE_DIR)/drive/fdc_mock.cpp \
+                $(SOURCE_DIR)/drive/fdc.cpp \
+                $(SOURCE_DIR)/drive/mb8877.cpp \
+                $(SOURCE_DIR)/drive/floppy_disk.cpp \
+                $(SOURCE_DIR)/drive/floppy_image.cpp \
                 $(SOURCE_DIR)/i386/i386.cpp \
                 $(SOURCE_DIR)/i386/i386_disassembler.cpp \
                 $(SOURCE_DIR)/i386/i386_encoding.cpp \

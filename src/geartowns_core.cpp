@@ -25,7 +25,7 @@
 #include "cdrom/cdrom.h"
 #include "cdrom/cdrom_audio.h"
 #include "cdrom/cdrom_media.h"
-#include "drive/fdc_mock.h"
+#include "drive/fdc.h"
 #include "media/firmware.h"
 #include "input/input.h"
 #include "input/keyboard.h"
@@ -151,7 +151,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
         m_cdrom = new CdRom(m_cdrom_media, m_cdrom_audio);
 
     if (!IsValidPointer(m_fdc))
-        m_fdc = new FDCMock();
+        m_fdc = new FDC();
 
     if (!IsValidPointer(m_keyboard))
         m_keyboard = new Keyboard();
@@ -174,7 +174,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
-    m_fdc->Init(m_pic, m_scheduler);
+    m_fdc->Init(m_pic, m_scheduler, m_dma);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
     m_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
@@ -467,6 +467,28 @@ void GeartownsCore::ResetMedia()
     Reset();
 }
 
+bool GeartownsCore::InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc)
+{
+    return IsValidPointer(m_fdc) && m_fdc->InsertDisk(drive, data, size, write_protected, base_crc);
+}
+
+void GeartownsCore::EjectFloppy(int drive)
+{
+    if (IsValidPointer(m_fdc))
+        m_fdc->EjectDisk(drive);
+}
+
+void GeartownsCore::SwapFloppies()
+{
+    if (IsValidPointer(m_fdc))
+        m_fdc->SwapDisks();
+}
+
+FloppyDisk* GeartownsCore::GetFloppy(int drive)
+{
+    return IsValidPointer(m_fdc) ? m_fdc->GetDisk(drive) : NULL;
+}
+
 void GeartownsCore::KeyPressed(GT_Keys key)
 {
     if (IsValidPointer(m_keyboard))
@@ -534,9 +556,9 @@ bool GeartownsCore::SaveState(u8* buffer, size_t& size, bool screenshot)
 
     Debug("Saving state to buffer [%zu bytes]...", size);
 
-    if (!IsValidPointer(m_media) || !m_media->IsReady())
+    if (!m_powered)
     {
-        Error("Media is not ready when trying to save state");
+        Error("Machine is not powered on when trying to save state");
         return false;
     }
 
@@ -578,9 +600,9 @@ bool GeartownsCore::GetMaxSaveStateSize(size_t& size)
 
 bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screenshot)
 {
-    if (!IsValidPointer(m_media) || !m_media->IsReady())
+    if (!m_powered)
     {
-        Error("Media is not ready when trying to save state");
+        Error("Machine is not powered on when trying to save state");
         return false;
     }
 
@@ -588,6 +610,16 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     StateSerializer serializer(stream);
     Serialize(serializer);
+
+    for (int i = 0; i < FDC_DRIVES; i++)
+    {
+        FloppyDisk* disk = m_fdc->GetDisk(i);
+        bool inserted = disk->IsInserted();
+        u32 base_crc = disk->GetBaseCRC();
+        G_SERIALIZE(serializer, inserted);
+        G_SERIALIZE(serializer, base_crc);
+    }
+
     m_scheduler->SaveState(stream);
     m_memory->SaveState(stream);
     m_i386->SaveState(stream);
@@ -709,9 +741,9 @@ bool GeartownsCore::LoadState(const u8* buffer, size_t size)
 {
     Debug("Loading state from buffer [%zu bytes]...", size);
 
-    if (!IsValidPointer(m_media) || !m_media->IsReady())
+    if (!m_powered)
     {
-        Error("Media is not ready when trying to load state");
+        Error("Machine is not powered on when trying to load state");
         return false;
     }
 
@@ -729,9 +761,9 @@ bool GeartownsCore::LoadState(std::istream& stream)
 {
     using namespace std;
 
-    if (!IsValidPointer(m_media) || !m_media->IsReady())
+    if (!m_powered)
     {
-        Error("Media is not ready when trying to load state");
+        Error("Machine is not powered on when trying to load state");
         return false;
     }
 
@@ -829,6 +861,21 @@ bool GeartownsCore::LoadState(std::istream& stream)
     {
         Error("Save state is for another machine configuration");
         return false;
+    }
+
+    for (int i = 0; i < FDC_DRIVES; i++)
+    {
+        FloppyDisk* disk = m_fdc->GetDisk(i);
+        bool inserted = false;
+        u32 base_crc = 0;
+        G_SERIALIZE(serializer, inserted);
+        G_SERIALIZE(serializer, base_crc);
+
+        if (inserted && disk->IsInserted() && base_crc != disk->GetBaseCRC())
+        {
+            Error("Save state is for another disk in floppy drive %d", i + 1);
+            return false;
+        }
     }
 
     m_scheduler->LoadState(stream);

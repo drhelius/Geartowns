@@ -192,45 +192,6 @@ static inline bool remove_directory_and_contents(const char* path)
 #endif
 }
 
-static inline int ends_with(const char* s, const char* suffix)
-{
-    size_t sl = strlen(s);
-    size_t su = strlen(suffix);
-
-    if (sl < su)
-    {
-        return 0;
-    }
-
-    return (memcmp(s + (sl - su), suffix, su) == 0);
-}
-
-static inline bool ends_with_no_case(const char* text, const char* suffix)
-{
-    if (!text || !suffix)
-        return false;
-
-    size_t text_length = strlen(text);
-    size_t suffix_length = strlen(suffix);
-    if (text_length < suffix_length)
-        return false;
-
-    const char* start = text + text_length - suffix_length;
-    for (size_t i = 0; i < suffix_length; i++)
-    {
-        char a = start[i];
-        char b = suffix[i];
-        if (a >= 'A' && a <= 'Z')
-            a = (char)(a - 'A' + 'a');
-        if (b >= 'A' && b <= 'Z')
-            b = (char)(b - 'A' + 'a');
-        if (a != b)
-            return false;
-    }
-
-    return true;
-}
-
 static inline void append_extension_if_missing(std::string& path, const char* extension)
 {
     if (extension && extension[0] != '\0' && !ends_with_no_case(path.c_str(), extension))

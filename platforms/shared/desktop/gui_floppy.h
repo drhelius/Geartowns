@@ -17,25 +17,23 @@
  *
  */
 
-#ifndef GUI_MENUS_H
-#define GUI_MENUS_H
+#ifndef GUI_FLOPPY_H
+#define GUI_FLOPPY_H
 
-#ifdef GUI_MENUS_IMPORT
+#ifdef GUI_FLOPPY_IMPORT
     #define EXTERN
 #else
     #define EXTERN extern
 #endif
 
-EXTERN char gui_savestates_path[4096];
-EXTERN char gui_savefiles_path[4096];
-EXTERN char gui_screenshots_path[4096];
-EXTERN char gui_video_recordings_path[4096];
-EXTERN char gui_bios_path[4096];
-EXTERN char gui_mcp_http_address[64];
+EXTERN void gui_floppy_menu(int drive, const char* label, int drives);
+EXTERN void gui_floppy_popups(void);
+EXTERN void gui_floppy_insert(int drive, const char* path);
+EXTERN void gui_floppy_dialog_insert(int drive, const char* path);
+EXTERN void gui_floppy_dialog_save_as(int drive, const char* path);
+EXTERN void gui_floppy_dialog_new_blank(int drive, const char* path);
+EXTERN void gui_floppy_open_quit_confirmation(void);
 
-EXTERN void gui_init_menus(void);
-EXTERN void gui_main_menu(void);
-
-#undef GUI_MENUS_IMPORT
+#undef GUI_FLOPPY_IMPORT
 #undef EXTERN
-#endif /* GUI_MENUS_H */
+#endif /* GUI_FLOPPY_H */

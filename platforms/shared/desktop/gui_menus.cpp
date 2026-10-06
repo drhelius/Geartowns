@@ -24,6 +24,7 @@
 #include "gui_popups.h"
 #include "gui_actions.h"
 #include "gui_colors.h"
+#include "gui_floppy.h"
 #include "config.h"
 #include "application.h"
 #include "display.h"
@@ -47,6 +48,7 @@ static bool open_load_defaults = false;
 static bool save_screenshot = false;
 static bool save_video = false;
 static bool choose_savestates_path = false;
+static bool choose_savefiles_path = false;
 static bool choose_screenshots_path = false;
 static bool choose_video_recordings_path = false;
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
@@ -62,7 +64,6 @@ static const int machine_cpu_speeds_mhz[] = { 20, 25, 33, 40, 50, 66, 100 };
 
 static void menu_geartowns(void);
 static void menu_cdrom(void);
-static void menu_floppy(const char* label);
 static void menu_emulator(void);
 static void menu_machine(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
@@ -109,6 +110,7 @@ void gui_main_menu(void)
     save_screenshot = false;
     save_video = false;
     choose_savestates_path = false;
+    choose_savefiles_path = false;
     choose_screenshots_path = false;
     choose_video_recordings_path = false;
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
@@ -175,10 +177,10 @@ static void menu_geartowns(void)
         menu_cdrom();
 
         if (floppy_drives > 0)
-            menu_floppy("Floppy 1");
+            gui_floppy_menu(0, "Floppy 1", floppy_drives);
 
         if (floppy_drives > 1)
-            menu_floppy("Floppy 2");
+            gui_floppy_menu(1, "Floppy 2", floppy_drives);
 
         ImGui::Separator();
 
@@ -457,40 +459,6 @@ static void menu_cdrom(void)
     ImGui::EndMenu();
 }
 
-static void menu_floppy(const char* label)
-{
-    if (!ImGui::BeginMenu(label))
-        return;
-
-    // Placeholder until the FDC loads disk images
-    ImGui::BeginDisabled();
-    ImGui::MenuItem("Insert...");
-    ImGui::MenuItem("New Blank Disk...");
-    ImGui::MenuItem("Eject");
-
-    ImGui::Separator();
-
-    ImGui::Text("Empty");
-
-    ImGui::Separator();
-
-    if (ImGui::BeginMenu("Disk in Image"))
-        ImGui::EndMenu();
-
-    ImGui::MenuItem("Write Protected");
-    ImGui::MenuItem("Save Changes");
-    ImGui::MenuItem("Save As...");
-    ImGui::MenuItem("Discard Changes...");
-
-    ImGui::Separator();
-
-    if (ImGui::BeginMenu("Recent"))
-        ImGui::EndMenu();
-
-    ImGui::EndDisabled();
-    ImGui::EndMenu();
-}
-
 static bool media_menu_actions_enabled(void)
 {
     if (emu_is_empty())
@@ -604,6 +572,47 @@ static void menu_emulator(void)
                         {
                             config_emulator.savestates_path.assign(gui_savestates_path);
                             update_savestates_data();
+                        }
+
+                        ImGui::PopItemWidth();
+                        break;
+                    }
+                }
+
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Save Files"))
+            {
+                ImGui::PushItemWidth(220.0f);
+                ImGui::Combo("##savefiles_option", &config_emulator.savefiles_dir_option,
+                    "Default Location\0Same as Disk\0Custom Location\0\0");
+
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Where floppy working copies keep their changes.");
+
+                switch ((Directory_Location)config_emulator.savefiles_dir_option)
+                {
+                    case Directory_Location_Default:
+                    {
+                        ImGui::Text("%s", config_root_path);
+                        break;
+                    }
+
+                    case Directory_Location_ROM:
+                        break;
+
+                    case Directory_Location_Custom:
+                    {
+                        if (ImGui::MenuItem("Choose..."))
+                            choose_savefiles_path = true;
+
+                        ImGui::PushItemWidth(450);
+
+                        if (ImGui::InputText("##savefiles_path", gui_savefiles_path, IM_ARRAYSIZE(gui_savefiles_path),
+                            ImGuiInputTextFlags_AutoSelectAll))
+                        {
+                            config_emulator.savefiles_path.assign(gui_savefiles_path);
                         }
 
                         ImGui::PopItemWidth();
@@ -1700,8 +1709,6 @@ static void menu_audio(void)
 
         ImGui::Separator();
 
-        //ImGui::MenuItem("Audio Sync", "", &config_audio.sync, config_audio.enable);
-
         if (ImGui::BeginMenu("Buffer Size", config_audio.enable))
         {
             ImGui::PushItemWidth(150.0f);
@@ -1943,6 +1950,9 @@ static void file_dialogs(void)
     if (choose_savestates_path)
         gui_file_dialog_choose_savestate_path();
 
+    if (choose_savefiles_path)
+        gui_file_dialog_choose_savefiles_path();
+
     if (open_bios)
         gui_file_dialog_load_bios();
 
@@ -1971,6 +1981,7 @@ static void file_dialogs(void)
 
     gui_popup_modal_about();
     gui_popup_modal_load_defaults();
+    gui_floppy_popups();
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     gui_popup_modal_physical_cdrom();
 #endif

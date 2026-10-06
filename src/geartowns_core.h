@@ -27,7 +27,8 @@ class Audio;
 class CdRom;
 class CdRomAudio;
 class CdRomMedia;
-class FDCMock;
+class FDC;
+class FloppyDisk;
 class Keyboard;
 class RTC;
 class UPD71071;
@@ -81,6 +82,9 @@ public:
 #endif
     void EjectMedia();
     void ResetMedia();
+    bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0);
+    void EjectFloppy(int drive);
+    void SwapFloppies();
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
@@ -114,7 +118,8 @@ public:
     CdRom* GetCDROM();
     CdRomMedia* GetCDROMMedia();
     CdRomAudio* GetCDROMAudio();
-    FDCMock* GetFDC();
+    FDC* GetFDC();
+    FloppyDisk* GetFloppy(int drive);
     Keyboard* GetKeyboard();
     RTC* GetRTC();
     UPD71071* GetDMA();
@@ -159,7 +164,7 @@ private:
     CdRomMedia* m_cdrom_media;
     CdRomAudio* m_cdrom_audio;
     CdRom* m_cdrom;
-    FDCMock* m_fdc;
+    FDC* m_fdc;
     Keyboard* m_keyboard;
     RTC* m_rtc;
     UPD71071* m_dma;

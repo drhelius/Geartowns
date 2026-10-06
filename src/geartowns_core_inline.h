@@ -117,7 +117,7 @@ INLINE CdRomAudio* GeartownsCore::GetCDROMAudio()
     return m_cdrom_audio;
 }
 
-INLINE FDCMock* GeartownsCore::GetFDC()
+INLINE FDC* GeartownsCore::GetFDC()
 {
     return m_fdc;
 }

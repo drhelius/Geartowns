@@ -168,7 +168,7 @@ int main(int argc, char* argv[])
     {
         printf("Usage: %s [options] [media_file] [symbol_file]\n", argv[0]);
         printf("\nArguments:\n");
-        printf("  [media_file]                FM Towns media: .d77, .rdd, .cue, .chd, .iso, .bin or .zip\n");
+        printf("  [media_file]                CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .m3u), also in .zip\n");
         printf("  [symbol_file]               Optional symbol file for debugging\n");
         printf("\nOptions:\n");
         printf("  -f, --fullscreen            Start in fullscreen mode\n");

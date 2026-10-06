@@ -1,7 +1,7 @@
 # Software Information
 display_name = "Fujitsu - FM Towns (Geartowns)"
 authors = "Ignacio Sanchez"
-supported_extensions = "d77|rdd|cue|chd|iso|bin|zip"
+supported_extensions = "cue|chd|iso|bin|zip|d77|d88|hdm|xdf|img|m3u"
 corename = "Geartowns"
 categories = "Emulator"
 license = "GPLv3"

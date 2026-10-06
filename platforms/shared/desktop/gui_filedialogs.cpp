@@ -30,6 +30,7 @@
 #include "debug/gui_debug.h"
 #include "debug/gui_debug_memory.h"
 #include "gui_menus.h"
+#include "gui_floppy.h"
 #include "utils.h"
 
 enum FileDialogID
@@ -39,6 +40,10 @@ enum FileDialogID
     FileDialog_LoadState,
     FileDialog_SaveState,
     FileDialog_ChooseSavestatePath,
+    FileDialog_ChooseSavefilesPath,
+    FileDialog_OpenFloppy,
+    FileDialog_SaveFloppy,
+    FileDialog_NewFloppy,
     FileDialog_ChooseScreenshotPath,
     FileDialog_ChooseVideoRecordingPath,
     FileDialog_SaveScreenshot,
@@ -53,6 +58,7 @@ enum FileDialogID
 static FileDialogID pending_dialog_id = FileDialog_None;
 static std::string pending_dialog_path;
 static bool dialog_active = false;
+static int dialog_floppy_drive = 0;
 static bool pending_refocus_window = false;
 #if !defined(__APPLE__)
 static bool was_exclusive_fullscreen = false;
@@ -149,6 +155,60 @@ void gui_file_dialog_choose_savestate_path(void)
     const char* default_path = config_emulator.savestates_path.empty() ? NULL : config_emulator.savestates_path.c_str();
     SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseSavestatePath,
         application_sdl_window, default_path, false);
+}
+
+void gui_file_dialog_choose_savefiles_path(void)
+{
+    if (!begin_dialog())
+        return;
+
+    const char* default_path = config_emulator.savefiles_path.empty() ? NULL : config_emulator.savefiles_path.c_str();
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseSavefilesPath,
+        application_sdl_window, default_path, false);
+}
+
+void gui_file_dialog_open_floppy(int drive)
+{
+    if (!begin_dialog())
+        return;
+
+    dialog_floppy_drive = drive;
+    SDL_DialogFileFilter filters[] = {
+        { "Floppy Images", "d77;d88;hdm;xdf;img;bin;zip;m3u" }
+    };
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_OpenFloppy, application_sdl_window,
+        filters, 1, default_path, false);
+}
+
+void gui_file_dialog_save_floppy(int drive)
+{
+    if (!begin_dialog())
+        return;
+
+    dialog_floppy_drive = drive;
+    SDL_DialogFileFilter filters[] = {
+        { "D77 Images", "d77;d88" },
+        { "Raw Images", "hdm;img;xdf" }
+    };
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveFloppy, application_sdl_window,
+        filters, 2, default_path);
+}
+
+void gui_file_dialog_new_floppy(int drive)
+{
+    if (!begin_dialog())
+        return;
+
+    dialog_floppy_drive = drive;
+    SDL_DialogFileFilter filters[] = {
+        { "D77 Images", "d77" },
+        { "Raw Images", "hdm;img;xdf" }
+    };
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_NewFloppy, application_sdl_window,
+        filters, 2, default_path);
 }
 
 void gui_file_dialog_load_bios(void)
@@ -254,7 +314,6 @@ static bool begin_dialog(void)
 
 static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int filter)
 {
-    UNUSED(filter);
     dialog_active = false;
     pending_refocus_window = true;
 
@@ -275,6 +334,15 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         append_extension_if_missing(pending_dialog_path, ".bin");
     else if (id == FileDialog_SaveDebugSettings)
         append_extension_if_missing(pending_dialog_path, ".gtdebug");
+    else if (id == FileDialog_SaveFloppy || id == FileDialog_NewFloppy)
+    {
+        const char* path = pending_dialog_path.c_str();
+        bool named = ends_with_no_case(path, ".d77") || ends_with_no_case(path, ".d88") ||
+            ends_with_no_case(path, ".hdm") || ends_with_no_case(path, ".img") || ends_with_no_case(path, ".xdf");
+
+        if (!named)
+            pending_dialog_path += filter == 1 ? ".hdm" : ".d77";
+    }
 }
 
 static void process_dialog_result(FileDialogID id, const char* path)
@@ -320,6 +388,19 @@ static void process_dialog_result(FileDialogID id, const char* path)
             strncpy_fit(gui_savestates_path, path, sizeof(gui_savestates_path));
             config_emulator.savestates_path = path;
             update_savestates_data();
+            break;
+        case FileDialog_ChooseSavefilesPath:
+            strncpy_fit(gui_savefiles_path, path, sizeof(gui_savefiles_path));
+            config_emulator.savefiles_path = path;
+            break;
+        case FileDialog_OpenFloppy:
+            gui_floppy_dialog_insert(dialog_floppy_drive, path);
+            break;
+        case FileDialog_SaveFloppy:
+            gui_floppy_dialog_save_as(dialog_floppy_drive, path);
+            break;
+        case FileDialog_NewFloppy:
+            gui_floppy_dialog_new_blank(dialog_floppy_drive, path);
             break;
         case FileDialog_SaveScreenshot:
             gui_action_save_screenshot(path);

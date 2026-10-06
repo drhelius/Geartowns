@@ -17,26 +17,29 @@
  *
  */
 
-#ifndef FDC_MOCK_INLINE_H
-#define FDC_MOCK_INLINE_H
+#ifndef MB8877_INLINE_H
+#define MB8877_INLINE_H
 
-#include "fdc_mock.h"
+#include "mb8877.h"
 
-INLINE void FDCMock::Synchronize(u64 clocks)
+INLINE u64 MB8877::GetEventClocks() const
 {
-    if (m_state.busy && clocks >= m_state.execute_clocks)
-        CompleteCommand();
+    return MIN(m_state.event_clocks, m_state.index_clocks);
 }
 
-INLINE void FDCMock::HandleEvent(u64 clocks)
+INLINE u8 MB8877::ReadTrackRegister() const
 {
-    Synchronize(clocks);
-    UpdateNextEvent();
+    return m_state.track;
 }
 
-INLINE FDCMock::FDCMock_State* FDCMock::GetState()
+INLINE u8 MB8877::ReadSectorRegister() const
+{
+    return m_state.sector;
+}
+
+INLINE MB8877::MB8877_State* MB8877::GetState()
 {
     return &m_state;
 }
 
-#endif /* FDC_MOCK_INLINE_H */
+#endif /* MB8877_INLINE_H */

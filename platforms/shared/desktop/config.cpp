@@ -48,15 +48,10 @@ static void process_scancode(config_Operation operation, const char* section, co
                              SDL_Scancode* value, SDL_Scancode default_value);
 static void process_int_array(config_Operation operation, const char* section,
                               const char* key_format, int* values, int count,
-                              int default_value, bool has_minimum, int minimum,
-                              bool has_maximum, int maximum);
-static void process_float_array(config_Operation operation, const char* section,
-                                const char* key_format, float* values, int count,
-                                float default_value, bool has_minimum, float minimum,
-                                bool has_maximum, float maximum);
+                              int default_value);
 static void process_string_array(config_Operation operation, const char* section,
                                  const char* key_format, std::string* values, int count,
-                                 const char* default_value, bool allow_empty);
+                                 const char* default_value);
 static void process_hotkey(config_Operation operation, const char* key, config_Hotkey* value,
                            SDL_Scancode default_key, SDL_Keymod default_mod);
 static void on_config_defaults(void);
@@ -71,7 +66,6 @@ static bool parse_bool_string(const std::string& value, bool* result);
 static int read_int(const char* group, const char* key, int default_value);
 static void write_int(const char* group, const char* key, int integer);
 static void write_float(const char* group, const char* key, float value);
-static bool read_bool(const char* group, const char* key, bool default_value);
 static void write_bool(const char* group, const char* key, bool boolean);
 static void write_string(const char* group, const char* key, const std::string& value);
 static std::string shader_preset_section_name(const char* preset_file);
@@ -80,9 +74,6 @@ static std::string shader_preset_section_name(const char* preset_file);
 
 void config_init(bool force_portable)
 {
-    UNUSED(&process_float_array);
-    UNUSED(&read_bool);
-
     const char* root_path = NULL;
     char* portable_path = get_portable_path(force_portable);
 
@@ -149,6 +140,29 @@ void config_push_recent_media(const std::string& path)
     }
 
     config_emulator.recent_roms[0] = path;
+}
+
+void config_push_recent_floppy(int drive, const std::string& path)
+{
+    if (path.empty() || drive < 0 || drive >= config_floppy_drives)
+        return;
+
+    std::string* recent = config_emulator.recent_floppies[drive];
+    int slot = 0;
+
+    for (slot = 0; slot < config_max_recent_floppies; slot++)
+    {
+        if (recent[slot].compare(path) == 0)
+            break;
+    }
+
+    if (slot >= config_max_recent_floppies)
+        slot = config_max_recent_floppies - 1;
+
+    for (int index = slot; index > 0; index--)
+        recent[index] = recent[index - 1];
+
+    recent[0] = path;
 }
 
 void config_read(void)
@@ -346,41 +360,25 @@ static void process_scancode(config_Operation operation, const char* section, co
 
 static void process_int_array(config_Operation operation, const char* section,
                               const char* key_format, int* values, int count,
-                              int default_value, bool has_minimum, int minimum,
-                              bool has_maximum, int maximum)
+                              int default_value)
 {
     for (int i = 0; i < count; i++)
     {
         char key[64];
         snprintf(key, sizeof(key), key_format, i);
-        process_int(operation, section, key, &values[i], default_value,
-                           has_minimum, minimum, has_maximum, maximum);
-    }
-}
-
-static void process_float_array(config_Operation operation, const char* section,
-                                const char* key_format, float* values, int count,
-                                float default_value, bool has_minimum, float minimum,
-                                bool has_maximum, float maximum)
-{
-    for (int i = 0; i < count; i++)
-    {
-        char key[64];
-        snprintf(key, sizeof(key), key_format, i);
-        process_float(operation, section, key, &values[i], default_value,
-                             has_minimum, minimum, has_maximum, maximum);
+        process_int(operation, section, key, &values[i], default_value, false, 0, false, 0);
     }
 }
 
 static void process_string_array(config_Operation operation, const char* section,
                                  const char* key_format, std::string* values, int count,
-                                 const char* default_value, bool allow_empty)
+                                 const char* default_value)
 {
     for (int i = 0; i < count; i++)
     {
         char key[64];
         snprintf(key, sizeof(key), key_format, i);
-        process_string(operation, section, key, &values[i], default_value, allow_empty);
+        process_string(operation, section, key, &values[i], default_value, true);
     }
 }
 
@@ -591,18 +589,6 @@ static void write_float(const char* group, const char* key, float value)
     std::string value_str = oss.str();
     config_ini_data[group][key] = value_str;
     Debug("Save float setting: [%s][%s]=%s", group, key, value_str.c_str());
-}
-
-static bool read_bool(const char* group, const char* key, bool default_value)
-{
-    bool ret = default_value;
-    std::string value;
-
-    if (!get_setting(group, key, &value) || !parse_bool_string(value, &ret))
-        ret = default_value;
-
-    Debug("Load bool setting: [%s][%s]=%s", group, key, ret ? "true" : "false");
-    return ret;
 }
 
 static void write_bool(const char* group, const char* key, bool boolean)

@@ -24,9 +24,14 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <string>
+#include <vector>
 #include "libretro.h"
 #include "geartowns.h"
 #include "media/media_file.h"
+#include "media/crc.h"
+#include "drive/floppy_disk.h"
+#include "drive/floppy_image.h"
 #include "libretro_core_options.h"
 #include "libretro_vfs_file.h"
 
@@ -92,7 +97,21 @@ static unsigned input_device[MAX_PADS] = {
     RETRO_DEVICE_TOWNS_GAMEPAD
 };
 
+struct FloppySetImage
+{
+    std::string path;
+    int disk;
+    std::string label;
+};
+
 static GeartownsCore* core;
+static std::vector<FloppySetImage> floppy_images;
+static unsigned floppy_index = 0;
+static bool floppy_ejected = true;
+static std::string floppy_working_path;
+static u32 floppy_base_crc = 0;
+static unsigned floppy_initial_index = 0;
+static std::string floppy_initial_path;
 static GT_Runtime_Info runtime_info;
 static const retro_vfs_interface* vfs_interface = NULL;
 
@@ -109,9 +128,26 @@ static void poll_input(void);
 static void apply_input(void);
 static bool categories_supported = false;
 static void check_variables(void);
-static bool path_has_extension(const char* path, const char* extension);
 static bool path_is_cdrom_uri(const char* path);
 static bool path_is_cd_content(const char* path);
+static bool path_is_floppy_content(const char* path);
+static bool read_content_file(const char* path, std::vector<u8>& data);
+static bool write_content_file(const char* path, const u8* data, u32 size);
+static bool floppy_add_images(const char* path, std::vector<FloppySetImage>& images);
+static bool floppy_load_image(unsigned index);
+static bool floppy_flush(void);
+static void floppy_clear(void);
+static void register_disk_control(void);
+static bool disk_set_eject_state(bool ejected);
+static bool disk_get_eject_state(void);
+static unsigned disk_get_image_index(void);
+static bool disk_set_image_index(unsigned index);
+static unsigned disk_get_num_images(void);
+static bool disk_replace_image_index(unsigned index, const struct retro_game_info* info);
+static bool disk_add_image_index(void);
+static bool disk_set_initial_image(unsigned index, const char* path);
+static bool disk_get_image_path(unsigned index, char* path, size_t len);
+static bool disk_get_image_label(unsigned index, char* label, size_t len);
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -168,17 +204,7 @@ void retro_set_environment(retro_environment_t cb)
 {
     environ_cb = cb;
 
-    static const struct retro_system_content_info_override content_overrides[] = {
-        {
-            "d77|rdd",  // extensions
-            false,        // need_fullpath
-            false         // persistent_data
-        },
-        { NULL, false, false }
-    };
-
-    environ_cb(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, (void*)content_overrides);
-
+    register_disk_control();
     set_controller_info();
     libretro_set_core_options(environ_cb, &categories_supported);
 }
@@ -289,7 +315,7 @@ void retro_get_system_info(struct retro_system_info *info)
     info->library_version  = GT_VERSION;
     info->need_fullpath    = true;
     info->block_extract    = true;
-    info->valid_extensions = "d77|rdd|cue|chd|iso|bin|zip";
+    info->valid_extensions = "cue|chd|iso|bin|zip|d77|d88|hdm|xdf|img|m3u";
 }
 
 static void get_system_av_info(struct retro_system_av_info* info)
@@ -390,7 +416,21 @@ bool retro_load_game(const struct retro_game_info *info)
 
     load_bios();
 
-    if (!core->LoadMedia(retro_game_path))
+    if (path_is_floppy_content(retro_game_path))
+    {
+        floppy_clear();
+
+        if (!floppy_add_images(retro_game_path, floppy_images))
+            return false;
+
+        bool initial = floppy_initial_index < floppy_images.size() &&
+            floppy_images[floppy_initial_index].path == floppy_initial_path;
+        floppy_index = initial ? floppy_initial_index : 0;
+
+        if (!floppy_load_image(floppy_index))
+            return false;
+    }
+    else if (!core->LoadMedia(retro_game_path))
         return false;
 
     core->PowerOn();
@@ -416,7 +456,16 @@ bool retro_load_game(const struct retro_game_info *info)
 void retro_unload_game(void)
 {
     if (core)
+    {
+        if (!floppy_flush())
+            log_cb(RETRO_LOG_ERROR, "Unable to save the floppy changes\n");
+
+        core->EjectFloppy(0);
+        core->EjectFloppy(1);
         core->EjectMedia();
+    }
+
+    floppy_clear();
 
     retro_game_path[0] = 0;
     current_fps = 60.0f;
@@ -437,30 +486,6 @@ static void load_bios(void)
     }
 }
 
-static bool path_has_extension(const char* path, const char* extension)
-{
-    if (!path || !extension)
-        return false;
-
-    const char* dot = strrchr(path, '.');
-
-    if (!dot || !dot[1])
-        return false;
-
-    dot++;
-
-    while (*dot && *extension)
-    {
-        if (tolower((unsigned char)*dot) != tolower((unsigned char)*extension))
-            return false;
-
-        dot++;
-        extension++;
-    }
-
-    return (*dot == 0) && (*extension == 0);
-}
-
 static bool path_is_cdrom_uri(const char* path)
 {
     return path && (strncmp(path, "cdrom://", 8) == 0);
@@ -469,9 +494,9 @@ static bool path_is_cdrom_uri(const char* path)
 static bool path_is_cd_content(const char* path)
 {
     return path_is_cdrom_uri(path) ||
-        path_has_extension(path, "cue") ||
-        path_has_extension(path, "chd") ||
-        path_has_extension(path, "iso");
+        ends_with_no_case(path, ".cue") ||
+        ends_with_no_case(path, ".chd") ||
+        ends_with_no_case(path, ".iso");
 }
 
 unsigned retro_get_region(void)
@@ -501,7 +526,16 @@ bool retro_serialize(void *data, size_t size)
 
 bool retro_unserialize(const void *data, size_t size)
 {
-    return core->LoadState(reinterpret_cast<const u8*>(data), size);
+    if (!core->LoadState(reinterpret_cast<const u8*>(data), size))
+        return false;
+
+    FloppyDisk* disk = core->GetFloppy(0);
+    floppy_ejected = !disk->IsInserted();
+
+    if (!disk->IsInserted() || disk->GetBaseCRC() != floppy_base_crc)
+        floppy_working_path.clear();
+
+    return true;
 }
 
 void *retro_get_memory_data(unsigned id)
@@ -800,7 +834,7 @@ static void release_controller_input(unsigned port)
 {
     if (core)
     {
-        GT_GamePad_State state = { 0, 0, 0 };
+        GT_GamePad_State state = { 0 };
         core->GetInput()->SetGamePadState((int)port, state);
     }
 
@@ -979,7 +1013,7 @@ static void apply_input(void)
                 mouse_current[j].delta_applied = true;
             }
 
-            GT_GamePad_State state = { 0, 0, 0 };
+            GT_GamePad_State state = { 0 };
             core->GetInput()->SetGamePadState(j, state);
             continue;
         }
@@ -1012,7 +1046,7 @@ static void apply_input(void)
             if (joypad_current[j][11]) buttons |= GT_GAMEPAD_Z;
         }
 
-        GT_GamePad_State state = { buttons, 0, 0 };
+        GT_GamePad_State state = { buttons };
         core->GetInput()->SetGamePadState(j, state);
     }
 }
@@ -1052,4 +1086,390 @@ static void check_variables(void)
     {
         core->GetMedia()->PreloadCdRom(strcmp(var.value, "Enabled") == 0);
     }
+}
+
+static bool path_is_floppy_content(const char* path)
+{
+    if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".m3u"))
+        return true;
+
+    if (!ends_with_no_case(path, ".zip"))
+        return false;
+
+    std::vector<u8> archive;
+    u8* data = NULL;
+    u32 size = 0;
+
+    if (!read_content_file(path, archive) ||
+        !FloppyImage::ExtractFromZip(archive.data(), archive.size(), &data, &size, NULL, 0))
+        return false;
+
+    SafeDeleteArray(data);
+    return true;
+}
+
+static bool read_content_file(const char* path, std::vector<u8>& data)
+{
+    MediaFile* file = MediaFile::OpenFile(path);
+
+    if (!IsValidPointer(file))
+        return false;
+
+    s64 size = file->GetSize();
+    bool ok = size > 0 && size <= (s64)k_floppy_max_image_size * 4;
+
+    if (ok)
+    {
+        data.resize((size_t)size);
+        ok = file->ReadExact(data.data(), (u64)size);
+    }
+
+    SafeDelete(file);
+    return ok;
+}
+
+// The frontend file system when it has one, the working copy is replaced only once fully written
+static bool write_content_file(const char* path, const u8* data, u32 size)
+{
+    std::string temporary(path);
+    temporary += ".tmp";
+
+    if (IsValidPointer(vfs_interface) && IsValidPointer(vfs_interface->rename) && IsValidPointer(vfs_interface->remove))
+    {
+        LibretroVfsFile file(vfs_interface);
+
+        if (!file.Open(temporary.c_str(), RETRO_VFS_FILE_ACCESS_WRITE) || !file.WriteAll(data, size) ||
+            !file.Close())
+        {
+            vfs_interface->remove(temporary.c_str());
+            return false;
+        }
+
+        vfs_interface->remove(path);
+        return vfs_interface->rename(temporary.c_str(), path) == 0;
+    }
+
+    FILE* file = fopen(temporary.c_str(), "wb");
+
+    if (!IsValidPointer(file))
+        return false;
+
+    bool written = fwrite(data, 1, size, file) == size;
+    written = (fclose(file) == 0) && written;
+    remove(path);
+
+    if (!written || rename(temporary.c_str(), path) != 0)
+    {
+        remove(temporary.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// Every disk of a multi-disk image is one image, a playlist adds the disks of each listed file
+static bool floppy_add_images(const char* path, std::vector<FloppySetImage>& images)
+{
+    std::vector<u8> data;
+
+    if (!read_content_file(path, data))
+        return false;
+
+    if (ends_with_no_case(path, ".m3u"))
+    {
+        std::string directory(path);
+        size_t separator = directory.find_last_of("/\\");
+        directory = separator == std::string::npos ? "" : directory.substr(0, separator + 1);
+        std::string text(data.begin(), data.end());
+        size_t position = 0;
+
+        while (position < text.size())
+        {
+            size_t end = text.find('\n', position);
+
+            if (end == std::string::npos)
+                end = text.size();
+
+            std::string line = text.substr(position, end - position);
+            position = end + 1;
+            size_t first = line.find_first_not_of(" \t\r\xEF\xBB\xBF");
+            size_t last = line.find_last_not_of(" \t\r");
+
+            if (first == std::string::npos || line[first] == '#')
+                continue;
+
+            line = line.substr(first, last - first + 1);
+            bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':');
+
+            if (!floppy_add_images((absolute ? line : directory + line).c_str(), images))
+                return false;
+        }
+
+        return !images.empty();
+    }
+
+    if (ends_with_no_case(path, ".zip"))
+    {
+        u8* extracted = NULL;
+        u32 size = 0;
+
+        if (!FloppyImage::ExtractFromZip(data.data(), data.size(), &extracted, &size, NULL, 0))
+            return false;
+
+        data.assign(extracted, extracted + size);
+        SafeDeleteArray(extracted);
+    }
+
+    int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
+    std::string file_name(path);
+    size_t separator = file_name.find_last_of("/\\");
+
+    if (separator != std::string::npos)
+        file_name = file_name.substr(separator + 1);
+
+    for (int i = 0; i < count; i++)
+    {
+        FloppySetImage image;
+        image.path = path;
+        image.disk = i;
+        image.label = file_name;
+
+        if (count > 1)
+        {
+            char label[32];
+            snprintf(label, sizeof(label), " (Disk %d)", i + 1);
+            image.label += label;
+        }
+
+        images.push_back(image);
+    }
+
+    return count > 0;
+}
+
+// Changes live in a working copy in the saves folder, which loads in place of the original next time
+static bool floppy_load_image(unsigned index)
+{
+    if (index >= floppy_images.size() || floppy_images[index].path.empty())
+        return false;
+
+    const FloppySetImage& image = floppy_images[index];
+    std::vector<u8> file;
+    u32 offset = 0;
+    u32 size = 0;
+
+    if (!read_content_file(image.path.c_str(), file))
+        return false;
+
+    if (ends_with_no_case(image.path.c_str(), ".zip"))
+    {
+        u8* extracted = NULL;
+        u32 extracted_size = 0;
+
+        if (!FloppyImage::ExtractFromZip(file.data(), file.size(), &extracted, &extracted_size, NULL, 0))
+            return false;
+
+        file.assign(extracted, extracted + extracted_size);
+        SafeDeleteArray(extracted);
+    }
+
+    if (!FloppyImage::GetDisk(file.data(), (u32)file.size(), image.disk, &offset, &size))
+        return false;
+
+    u32 base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
+    std::string name(image.path);
+    size_t separator = name.find_last_of("/\\");
+
+    if (separator != std::string::npos)
+        name = name.substr(separator + 1);
+
+    size_t dot = name.find_last_of('.');
+
+    if (dot != std::string::npos)
+        name = name.substr(0, dot);
+
+    char working[4096];
+    snprintf(working, sizeof(working), "%s%c%s.%08X.geartowns.d77", retro_save_directory, slash, name.c_str(),
+        base_crc);
+
+    std::vector<u8> copy;
+    const u8* data = file.data() + offset;
+
+    if (read_content_file(working, copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+    {
+        log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working);
+        data = copy.data();
+        size = (u32)copy.size();
+    }
+
+    if (!core->InsertFloppy(0, data, size, false, base_crc))
+        return false;
+
+    floppy_working_path = working;
+    floppy_base_crc = base_crc;
+    floppy_ejected = false;
+    return true;
+}
+
+static bool floppy_flush(void)
+{
+    FloppyDisk* disk = core->GetFloppy(0);
+
+    if (!disk->IsInserted() || !disk->IsDirty())
+        return true;
+
+    if (floppy_working_path.empty() ||
+        !write_content_file(floppy_working_path.c_str(), disk->GetImage(), disk->GetImageSize()))
+        return false;
+
+    disk->ClearDirty();
+    log_cb(RETRO_LOG_INFO, "Floppy changes saved to %s\n", floppy_working_path.c_str());
+    return true;
+}
+
+static void floppy_clear(void)
+{
+    floppy_images.clear();
+    floppy_index = 0;
+    floppy_ejected = true;
+    floppy_working_path.clear();
+    floppy_base_crc = 0;
+}
+
+// The frontend disk control swaps the disk in floppy drive 1, for floppy content and for a CD-ROM game's user disks
+static void register_disk_control(void)
+{
+    struct retro_disk_control_ext_callback disk_control = {
+        disk_set_eject_state,
+        disk_get_eject_state,
+        disk_get_image_index,
+        disk_set_image_index,
+        disk_get_num_images,
+        disk_replace_image_index,
+        disk_add_image_index,
+        disk_set_initial_image,
+        disk_get_image_path,
+        disk_get_image_label
+    };
+
+    if (!environ_cb(RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE, (void*)&disk_control))
+    {
+        struct retro_disk_control_callback legacy = {
+            disk_set_eject_state,
+            disk_get_eject_state,
+            disk_get_image_index,
+            disk_set_image_index,
+            disk_get_num_images,
+            disk_replace_image_index,
+            disk_add_image_index
+        };
+
+        environ_cb(RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE, (void*)&legacy);
+    }
+}
+
+static bool disk_set_eject_state(bool ejected)
+{
+    if (!core || floppy_ejected == ejected)
+        return true;
+
+    if (ejected)
+    {
+        if (!floppy_flush())
+            return false;
+
+        core->EjectFloppy(0);
+        floppy_working_path.clear();
+        floppy_ejected = true;
+        return true;
+    }
+
+    return floppy_index < floppy_images.size() && floppy_load_image(floppy_index);
+}
+
+static bool disk_get_eject_state(void)
+{
+    return floppy_ejected;
+}
+
+static unsigned disk_get_image_index(void)
+{
+    return floppy_index;
+}
+
+static bool disk_set_image_index(unsigned index)
+{
+    if (!floppy_ejected || index > floppy_images.size())
+        return false;
+
+    floppy_index = index;
+    return true;
+}
+
+static unsigned disk_get_num_images(void)
+{
+    return (unsigned)floppy_images.size();
+}
+
+static bool disk_replace_image_index(unsigned index, const struct retro_game_info* info)
+{
+    if (!floppy_ejected || index >= floppy_images.size())
+        return false;
+
+    if (!info || !info->path)
+    {
+        floppy_images.erase(floppy_images.begin() + index);
+
+        if (floppy_index >= floppy_images.size() && floppy_index > 0)
+            floppy_index--;
+
+        return true;
+    }
+
+    std::vector<FloppySetImage> images;
+
+    if (!floppy_add_images(info->path, images))
+        return false;
+
+    floppy_images[index] = images[0];
+    return true;
+}
+
+static bool disk_add_image_index(void)
+{
+    if (!floppy_ejected)
+        return false;
+
+    FloppySetImage image;
+    image.disk = 0;
+    floppy_images.push_back(image);
+    return true;
+}
+
+static bool disk_set_initial_image(unsigned index, const char* path)
+{
+    if (!path || !path[0])
+        return false;
+
+    floppy_initial_index = index;
+    floppy_initial_path = path;
+    return true;
+}
+
+static bool disk_get_image_path(unsigned index, char* path, size_t len)
+{
+    if (!path || len == 0 || index >= floppy_images.size() || floppy_images[index].path.empty())
+        return false;
+
+    snprintf(path, len, "%s", floppy_images[index].path.c_str());
+    return true;
+}
+
+static bool disk_get_image_label(unsigned index, char* label, size_t len)
+{
+    if (!label || len == 0 || index >= floppy_images.size())
+        return false;
+
+    snprintf(label, len, "%s", floppy_images[index].label.empty() ? "Floppy disk" : floppy_images[index].label.c_str());
+    return true;
 }

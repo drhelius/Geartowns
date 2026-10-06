@@ -32,15 +32,7 @@ INLINE void PIT::Synchronize(u64 clocks)
 
     u8 latch = m_state.timer_latch;
 
-    // Rising OUT edges latch the timeouts whether their IRQ is enabled or not
-    for (int i = 0; i < 2; i++)
-    {
-        u8 mask = (u8)(1 << i);
-
-        if ((m_state.timer_latch & mask) == 0 && m_pit[0].GetNextRisingEdge(i, m_state.settled_tick) <= tick)
-            m_state.timer_latch |= mask;
-    }
-
+    m_state.timer_latch = GetTimerLatch(tick);
     m_state.settled_tick = tick;
 
     if (latch != m_state.timer_latch)
@@ -76,6 +68,22 @@ INLINE u64 PIT::GetTick(int channel, u64 clocks) const
 {
     u64 ticks = channel == k_pit_serial_channel ? k_pit_fast_ticks : k_pit_base_ticks;
     return (clocks * ticks) / k_pit_clock_divisor;
+}
+
+// Rising OUT edges latch the timeouts whether their IRQ is enabled or not
+INLINE u8 PIT::GetTimerLatch(u64 tick) const
+{
+    u8 latch = m_state.timer_latch;
+
+    for (int i = 0; i < 2; i++)
+    {
+        u8 mask = (u8)(1 << i);
+
+        if ((latch & mask) == 0 && m_pit[0].GetNextRisingEdge(i, m_state.settled_tick) <= tick)
+            latch |= mask;
+    }
+
+    return latch;
 }
 
 INLINE u64 PIT::GetTickClocks(u64 tick) const

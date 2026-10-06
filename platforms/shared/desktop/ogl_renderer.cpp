@@ -55,6 +55,8 @@ static bool ogl_gui_initialized = false;
 static bool init_ogl_gui(void);
 static bool init_ogl_emu(void);
 static void init_ogl_savestates(void);
+static void init_ogl_debug(void);
+static void update_debug_textures(void);
 static bool init_shaders(void);
 static void render_gui(void);
 static bool should_use_internal_shader_chain(void);
@@ -122,6 +124,7 @@ bool ogl_renderer_init(void)
 
     load_configured_shader_preset();
     init_ogl_savestates();
+    init_ogl_debug();
 
     return true;
 }
@@ -132,6 +135,9 @@ void ogl_renderer_destroy(void)
     glDeleteTextures(1, &ogl_renderer_emu_texture);
     glDeleteTextures(1, &system_texture);
     glDeleteTextures(1, &ogl_renderer_emu_savestates);
+    glDeleteTextures(1, &ogl_renderer_emu_debug_framebuffer);
+    glDeleteTextures(1, &ogl_renderer_emu_debug_sprite_atlas);
+    glDeleteTextures(1, &ogl_renderer_emu_debug_sprite_page);
     ogl_shader_chain_destroy();
 
     if (quad_shader_program)
@@ -161,6 +167,9 @@ void ogl_renderer_render(void)
 {
     emu_get_runtime(current_runtime);
     update_savestates_texture();
+
+    if (config_debug.debug)
+        update_debug_textures();
 
     bool use_internal_shader_chain = should_use_internal_shader_chain();
 
@@ -319,6 +328,16 @@ static void init_ogl_savestates(void)
     savestates_texture_generation = 0;
 }
 
+static void init_ogl_debug(void)
+{
+    create_texture_2d(&ogl_renderer_emu_debug_framebuffer, EMU_DEBUG_FRAMEBUFFER_WIDTH, EMU_DEBUG_FRAMEBUFFER_HEIGHT,
+        GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)emu_debug_framebuffer, false);
+    create_texture_2d(&ogl_renderer_emu_debug_sprite_atlas, EMU_DEBUG_SPRITE_ATLAS_SIZE, EMU_DEBUG_SPRITE_ATLAS_SIZE,
+        GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)emu_debug_sprite_atlas, false);
+    create_texture_2d(&ogl_renderer_emu_debug_sprite_page, EMU_DEBUG_SPRITE_PAGE_SIZE, EMU_DEBUG_SPRITE_PAGE_SIZE,
+        GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)emu_debug_sprite_page, false);
+}
+
 static void render_gui(void)
 {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -466,6 +485,26 @@ static void update_system_texture(void)
     glBindTexture(GL_TEXTURE_2D, system_texture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, current_runtime.screen_width, current_runtime.screen_height,
             GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*) emu_frame_buffer);
+}
+
+static void update_debug_textures(void)
+{
+    if (config_debug.show_framebuffers)
+    {
+        glBindTexture(GL_TEXTURE_2D, ogl_renderer_emu_debug_framebuffer);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, EMU_DEBUG_FRAMEBUFFER_WIDTH, EMU_DEBUG_FRAMEBUFFER_HEIGHT, GL_RGBA,
+            GL_UNSIGNED_BYTE, (GLvoid*)emu_debug_framebuffer);
+    }
+
+    if (config_debug.show_sprites)
+    {
+        glBindTexture(GL_TEXTURE_2D, ogl_renderer_emu_debug_sprite_atlas);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, EMU_DEBUG_SPRITE_ATLAS_SIZE, EMU_DEBUG_SPRITE_ATLAS_SIZE, GL_RGBA,
+            GL_UNSIGNED_BYTE, (GLvoid*)emu_debug_sprite_atlas);
+        glBindTexture(GL_TEXTURE_2D, ogl_renderer_emu_debug_sprite_page);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, EMU_DEBUG_SPRITE_PAGE_SIZE, EMU_DEBUG_SPRITE_PAGE_SIZE, GL_RGBA,
+            GL_UNSIGNED_BYTE, (GLvoid*)emu_debug_sprite_page);
+    }
 }
 
 static void update_savestates_texture(void)

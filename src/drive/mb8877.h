@@ -28,6 +28,7 @@
 class FDC;
 class StateSerializer;
 struct FloppyDisk_Sector;
+class TraceLogger;
 
 enum MB8877_Phase
 {
@@ -94,13 +95,16 @@ public:
     MB8877();
     ~MB8877();
     void Init(FDC* fdc);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void Run(u64 clocks);
     u64 GetEventClocks() const;
     u8 ReadStatus(u64 clocks);
+    u8 PeekStatus(u64 clocks) const;
     u8 ReadTrackRegister() const;
     u8 ReadSectorRegister() const;
     u8 ReadData();
+    u8 PeekData() const;
     void WriteCommand(u8 value, u64 clocks);
     void WriteTrackRegister(u8 value, u64 clocks);
     void WriteSectorRegister(u8 value, u64 clocks);
@@ -148,6 +152,7 @@ private:
 private:
     FDC* m_fdc;
     MB8877_State m_state;
+    TraceLogger* m_trace_logger;
 };
 
 static const u8 k_mb8877_busy = 0x01;

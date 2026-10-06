@@ -13,6 +13,8 @@ SOURCES_C   :=  $(DEPS_DIR)/miniz/miniz.c \
 SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(CORE_DIR)/libretro_vfs_file.cpp \
                 $(SOURCE_DIR)/geartowns_core.cpp \
+                $(SOURCE_DIR)/common/profiler.cpp \
+                $(SOURCE_DIR)/common/trace_logger.cpp \
                 $(SOURCE_DIR)/audio/audio.cpp \
                 $(SOURCE_DIR)/audio/rf5c68.cpp \
                 $(SOURCE_DIR)/audio/ym3438.cpp \

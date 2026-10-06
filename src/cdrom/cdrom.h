@@ -33,6 +33,7 @@ class CdRomMedia;
 class Scheduler;
 class StateSerializer;
 class PIC;
+class TraceLogger;
 class UPD71071;
 
 class CdRom
@@ -108,6 +109,7 @@ public:
     CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio);
     ~CdRom();
     void Init(PIC* pic, Scheduler* scheduler, UPD71071* dma, Audio* audio);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void NotifyMediaChanged();
     u8 Read(u16 port, u64 clocks);
@@ -174,6 +176,7 @@ private:
     Audio* m_audio;
     CdRomMedia* m_cdrom_media;
     CdRomAudio* m_cdrom_audio;
+    TraceLogger* m_trace_logger;
     CdRom_State m_state;
 };
 

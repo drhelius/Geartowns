@@ -64,9 +64,12 @@ public:
     void Init();
     void Reset();
     u8 ReadCounter(int index, u64 tick);
+    u8 PeekCounter(int index, u64 tick) const;
+    u16 PeekCount(int index, u64 tick) const;
     void WriteCounter(int index, u8 value, u64 tick);
     void WriteControl(u8 value, u64 tick);
     bool GetOutput(int index, u64 tick);
+    bool PeekOutput(int index, u64 tick) const;
     u64 GetNextRisingEdge(int index, u64 tick) const;
     I8253_State* GetState();
     void SaveState(std::ostream& stream);
@@ -74,8 +77,9 @@ public:
 
 private:
     void LoadCount(I8253_Counter& counter, u16 raw, u64 tick);
-    void CommitReload(I8253_Counter& counter, u64 tick);
-    u16 GetCount(I8253_Counter& counter, u64 tick);
+    void CommitReload(I8253_Counter& counter, u64 tick) const;
+    bool GetCounterOutput(I8253_Counter& counter, u64 tick) const;
+    u16 GetCount(I8253_Counter& counter, u64 tick) const;
     u32 GetEffectiveCount(u16 raw, bool bcd) const;
     u16 EncodeBCD(u32 value) const;
     u64 GetEdgeAfter(u8 mode, u64 load, u32 count, u32 phase, u64 tick) const;

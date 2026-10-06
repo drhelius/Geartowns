@@ -35,6 +35,8 @@
 #include "sound_queue.h"
 #include "utils.h"
 #include "video_recorder.h"
+#include "video/sprite.h"
+#include "video/video.h"
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 #include "cdrom/cdrom_drive.h"
 #endif
@@ -81,6 +83,16 @@ static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
 static bool unload_media(void);
 static bool get_floppy_state_path(int index, char* path, size_t path_size);
+static bool init_debug(void);
+static void destroy_debug(void);
+static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride,
+    Emu_Debug_Buffer_Info& info);
+static u32 debug_rgba(u32 red, u32 green, u32 blue);
+static u32 debug_direct_color(u16 value);
+static u32 debug_checker(int x, int y);
+static u32 debug_single_to_canonical(u32 offset);
+static int debug_layer_format(const Video::Video_State* state, int layer);
+static void debug_palette(const Video::Video_State* state, int palette, u32* colors);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 static void stop_physical_cdrom_after_error(void);
 #endif
@@ -100,6 +112,14 @@ bool emu_init(void)
     }
 
     reset_buffers();
+
+    if (!init_debug())
+    {
+        Error("Unable to allocate debugger buffers");
+        SafeDeleteArray(emu_frame_buffer);
+        SafeDeleteArray(audio_buffer);
+        return false;
+    }
 
     geartowns = new (std::nothrow) GeartownsCore();
 
@@ -170,6 +190,7 @@ void emu_destroy(void)
     SafeDelete(geartowns);
     SafeDeleteArray(audio_buffer);
     SafeDeleteArray(emu_frame_buffer);
+    destroy_debug();
 
     for (int i = 0; i < 5; i++)
         SafeDeleteArray(emu_savestates_screenshots[i].data);
@@ -193,6 +214,8 @@ void emu_update(void)
     if (emu_is_empty())
         return;
 
+    geartowns->GetAudio()->EnableChannelScopes(config_debug.debug && (config_debug.show_ym3438 || config_debug.show_rf5c68));
+
     int sample_count = 0;
     bool frame_executed = false;
     bool frame_completed = false;
@@ -207,6 +230,10 @@ void emu_update(void)
         int silence_count = GT_AUDIO_QUEUE_SIZE;
         memset(audio_buffer, 0, silence_count * sizeof(s16));
         sound_queue_write(audio_buffer, silence_count, false);
+
+        if (config_debug.debug)
+            emu_debug_update();
+
         return;
     }
 
@@ -308,6 +335,9 @@ void emu_update(void)
         memset(audio_buffer, 0, silence_count * sizeof(s16));
         sound_queue_write(audio_buffer, silence_count, false);
     }
+
+    if (config_debug.debug)
+        emu_debug_update();
 }
 
 void emu_load_media_async(const char* file_path)
@@ -818,6 +848,281 @@ void emu_set_disassembler_syntax(int syntax)
     UNUSED(syntax);
 }
 
+// Only the buffers of open windows are decoded
+void emu_debug_update(void)
+{
+    if (emu_is_empty())
+        return;
+
+    if (config_debug.show_framebuffers)
+    {
+        Emu_Debug_Buffer_Request request;
+        request.offset = (u32)config_debug.framebuffer_custom_offset;
+        request.format = config_debug.framebuffer_custom_format + 1;
+        request.width = config_debug.framebuffer_custom_width;
+        request.height = config_debug.framebuffer_custom_height;
+        request.palette = config_debug.framebuffer_custom_palette;
+
+        int buffer = config_debug.framebuffer_tab;
+
+        if (buffer == 2)
+            buffer = config_debug.framebuffer_sprite_page == 0 ? Emu_Debug_Buffer_SpriteDisplay : Emu_Debug_Buffer_SpriteDraw;
+        else if (buffer == 3)
+            buffer = Emu_Debug_Buffer_Custom;
+
+        emu_debug_decode_buffer(buffer, &request, emu_debug_framebuffer, emu_debug_framebuffer_info);
+    }
+
+    if (config_debug.show_sprites)
+    {
+        for (int i = 0; i < (int)k_sprite_entries; i++)
+        {
+            int x = (i & 31) * 16;
+            int y = (i >> 5) * 16;
+            emu_debug_decode_sprite(i, emu_debug_sprite_atlas + (y * EMU_DEBUG_SPRITE_ATLAS_SIZE + x) * 4,
+                EMU_DEBUG_SPRITE_ATLAS_SIZE);
+        }
+
+        Emu_Debug_Buffer_Info info;
+        debug_decode(Emu_Debug_Buffer_SpriteDisplay, NULL, emu_debug_sprite_page, EMU_DEBUG_SPRITE_PAGE_SIZE, info);
+    }
+}
+
+// Pages are whole VRAM halves for layers, the sprite work halves, or a custom view of the two-page VRAM
+void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info)
+{
+    memset(&info, 0, sizeof(info));
+
+    if (!IsValidPointer(geartowns))
+        return;
+
+    Video* video = geartowns->GetVideo();
+    Video::Video_State* state = video->GetState();
+    bool two_page = video->IsTwoPage();
+
+    if (buffer == Emu_Debug_Buffer_Layer0 || buffer == Emu_Debug_Buffer_Layer1)
+    {
+        int layer = buffer;
+        u32 unit = two_page ? 4 : 8;
+        const u16* crtc = state->crtc;
+
+        info.format = debug_layer_format(state, layer);
+        info.single_page = !two_page;
+        info.page_base = two_page ? (u32)layer << 18 : 0;
+        info.page_size = two_page ? 0x40000 : 0x80000;
+        info.stride = (u32)crtc[k_video_crtc_lo0 + layer * 4] * unit;
+
+        if (info.stride == 0)
+            info.stride = info.page_size / EMU_DEBUG_FRAMEBUFFER_HEIGHT;
+
+        info.start = (u32)crtc[k_video_crtc_fa0 + layer * 4] * unit;
+
+        if (layer == 0 && state->fmr_display_page)
+            info.start += 0x20000;
+        else if (layer == 1)
+            info.start += video->GetSprite()->GetDisplayOffset();
+
+        info.start &= info.page_size - 1;
+
+        if (info.format == Video::VIDEO_LAYER_OFF)
+            return;
+
+        u32 pixels = info.format == Video::VIDEO_LAYER_4BPP ? info.stride * 2 :
+            info.format == Video::VIDEO_LAYER_8BPP ? info.stride : info.stride / 2;
+        info.width = (int)MIN(pixels, (u32)EMU_DEBUG_FRAMEBUFFER_WIDTH);
+        info.height = (int)MIN(info.page_size / info.stride, (u32)EMU_DEBUG_FRAMEBUFFER_HEIGHT);
+
+        u32 zoom = (u32)crtc[k_video_crtc_zoom] >> (layer * 8);
+        u32 zoom_x = (zoom & 0x0F) + 1;
+        u32 haj = crtc[k_video_crtc_haj0 + layer * 4];
+        u32 hds = MAX((u32)crtc[k_video_crtc_hds0 + layer * 2], haj);
+        u32 hde = crtc[k_video_crtc_hde0 + layer * 2];
+        u32 vds = crtc[k_video_crtc_vds0 + layer * 2];
+        u32 vde = crtc[k_video_crtc_vde0 + layer * 2];
+
+        if (hde > hds && vde > vds)
+        {
+            info.window = true;
+            info.window_x = (int)((info.start % info.stride) * pixels / info.stride + (hds - haj) / zoom_x);
+            info.window_y = (int)(info.start / info.stride);
+            info.window_width = (int)((hde - hds) / zoom_x);
+            info.window_height = (int)(((vde - vds) / 2) / (((zoom >> 4) & 0x0F) + 1));
+        }
+
+        return;
+    }
+
+    if (buffer == Emu_Debug_Buffer_SpriteDisplay || buffer == Emu_Debug_Buffer_SpriteDraw)
+    {
+        bool draw_half = video->GetSprite()->GetPage();
+        u32 half = buffer == Emu_Debug_Buffer_SpriteDraw ? (draw_half ? k_sprite_half_size : 0) :
+            video->GetSprite()->GetDisplayOffset();
+
+        info.format = Video::VIDEO_LAYER_16BPP;
+        info.page_base = k_sprite_work_base + half;
+        info.page_size = k_sprite_half_size;
+        info.stride = 512;
+        info.width = 256;
+        info.height = 256;
+        return;
+    }
+
+    if (!IsValidPointer(request))
+        return;
+
+    info.format = CLAMP(request->format, 1, 3);
+    info.page_base = 0;
+    info.page_size = VIDEO_VRAM_SIZE;
+    info.start = request->offset & (VIDEO_VRAM_SIZE - 1);
+    info.width = CLAMP(request->width, 1, EMU_DEBUG_FRAMEBUFFER_WIDTH);
+    info.height = CLAMP(request->height, 1, EMU_DEBUG_FRAMEBUFFER_HEIGHT);
+    info.stride = info.format == Video::VIDEO_LAYER_4BPP ? (u32)(info.width + 1) / 2 :
+        info.format == Video::VIDEO_LAYER_8BPP ? (u32)info.width : (u32)info.width * 2;
+}
+
+void emu_debug_decode_buffer(int buffer, const Emu_Debug_Buffer_Request* request, u8* output,
+    Emu_Debug_Buffer_Info& info)
+{
+    debug_decode(buffer, request, output, EMU_DEBUG_FRAMEBUFFER_WIDTH, info);
+}
+
+void emu_debug_get_sprite(int index, Emu_Debug_Sprite& sprite)
+{
+    memset(&sprite, 0, sizeof(sprite));
+
+    if (!IsValidPointer(geartowns) || index < 0 || index >= (int)k_sprite_entries)
+        return;
+
+    Video* video = geartowns->GetVideo();
+    Sprite::Sprite_State* state = video->GetSprite()->GetState();
+    const u8* entry = video->GetSpriteRAM() + index * 8;
+    u16 first = (u16)(((state->registers[k_sprite_control1] & 0x03) << 8) | state->registers[k_sprite_control0]);
+
+    sprite.index = index;
+    sprite.address = (u32)index * 8;
+    sprite.x = read_u16_le(entry);
+    sprite.y = read_u16_le(entry + 2);
+    sprite.attributes = read_u16_le(entry + 4);
+    sprite.color = read_u16_le(entry + 6);
+    sprite.offset = (sprite.attributes & k_sprite_attribute_offset) != 0;
+    sprite.swap = (sprite.attributes & k_sprite_attribute_swap) != 0;
+    sprite.flip_x = (sprite.attributes & k_sprite_attribute_flip_x) != 0;
+    sprite.flip_y = (sprite.attributes & k_sprite_attribute_flip_y) != 0;
+    sprite.half_x = (sprite.attributes & k_sprite_attribute_half_x) != 0;
+    sprite.half_y = (sprite.attributes & k_sprite_attribute_half_y) != 0;
+    sprite.table = (sprite.color & k_sprite_color_table) != 0;
+    sprite.through = (sprite.color & k_sprite_color_through) != 0;
+    sprite.hide = (sprite.color & k_sprite_color_hide) != 0;
+    sprite.pattern = (u16)(sprite.attributes & (sprite.table ? 0x03FF : 0x03FC));
+    sprite.pattern_address = (u32)sprite.pattern << 7;
+    sprite.color_table = (u16)(sprite.color & 0x0FFF);
+    sprite.color_table_address = (u32)sprite.color_table << 5;
+
+    u32 x = sprite.x;
+    u32 y = sprite.y;
+
+    if (sprite.offset)
+    {
+        x += ((state->registers[k_sprite_offset_x + 1] & 0x01) << 8) | state->registers[k_sprite_offset_x];
+        y += ((state->registers[k_sprite_offset_y + 1] & 0x01) << 8) | state->registers[k_sprite_offset_y];
+    }
+
+    sprite.screen_x = (int)(x & 0x1FF);
+    sprite.screen_y = (int)(y & 0x1FF);
+    sprite.drawn = index >= first;
+    sprite.visible = sprite.drawn && !sprite.hide && !((sprite.screen_x >= 256 && sprite.screen_x + 15 < 512) ||
+        (sprite.screen_y >= 256 && sprite.screen_y + 15 < 512 + 2));
+}
+
+// 16x16 RGBA as the engine places it, transparent pixels as a checkerboard, stride in pixels
+void emu_debug_decode_sprite(int index, u8* output, int stride)
+{
+    Emu_Debug_Sprite sprite;
+    emu_debug_get_sprite(index, sprite);
+
+    if (!IsValidPointer(output) || !IsValidPointer(geartowns))
+        return;
+
+    const u8* ram = geartowns->GetVideo()->GetSpriteRAM();
+    const u8* pattern = ram + sprite.pattern_address;
+    const u8* table = ram + sprite.color_table_address;
+    u32* pixels = (u32*)output;
+    int flip_x = sprite.flip_x ? 0x0F : 0x00;
+    int flip_y = sprite.flip_y ? 0x0F : 0x00;
+
+    for (int py = 0; py < 16; py++)
+    {
+        for (int px = 0; px < 16; px++)
+        {
+            int x = (sprite.swap ? py : px) ^ flip_x;
+            int y = (sprite.swap ? px : py) ^ flip_y;
+            u32 color = debug_checker(x, y);
+
+            if (sprite.table)
+            {
+                u8 data = pattern[(py << 3) + (px >> 1)];
+                int entry = (px & 0x01) != 0 ? data >> 4 : data & 0x0F;
+
+                if (entry != 0)
+                    color = debug_direct_color(read_u16_le(table + entry * 2));
+            }
+            else
+            {
+                u16 value = read_u16_le(pattern + (py << 5) + (px << 1));
+
+                if ((value & 0x8000) == 0)
+                    color = debug_direct_color(value);
+            }
+
+            pixels[y * stride + x] = color;
+        }
+    }
+}
+
+int emu_get_debug_buffer_png(int buffer, const Emu_Debug_Buffer_Request* request, unsigned char** out_buffer)
+{
+    *out_buffer = NULL;
+    u8* pixels = new (std::nothrow) u8[EMU_DEBUG_FRAMEBUFFER_WIDTH * EMU_DEBUG_FRAMEBUFFER_HEIGHT * 4];
+
+    if (!IsValidPointer(pixels))
+        return 0;
+
+    Emu_Debug_Buffer_Info info;
+    emu_debug_decode_buffer(buffer, request, pixels, info);
+    int size = 0;
+
+    if (info.width > 0 && info.height > 0)
+        *out_buffer = stbi_write_png_to_mem(pixels, EMU_DEBUG_FRAMEBUFFER_WIDTH * 4, info.width, info.height, 4, &size);
+
+    SafeDeleteArray(pixels);
+    return size;
+}
+
+int emu_get_sprite_png(int index, int scale, unsigned char** out_buffer)
+{
+    u32 sprite[16 * 16];
+    scale = CLAMP(scale, 1, 16);
+    int size = 16 * scale;
+    u32* pixels = new (std::nothrow) u32[size * size];
+    *out_buffer = NULL;
+
+    if (!IsValidPointer(pixels))
+        return 0;
+
+    emu_debug_decode_sprite(index, (u8*)sprite, 16);
+
+    for (int y = 0; y < size; y++)
+    {
+        for (int x = 0; x < size; x++)
+            pixels[y * size + x] = sprite[(y / scale) * 16 + (x / scale)];
+    }
+
+    int length = 0;
+    *out_buffer = stbi_write_png_to_mem((const unsigned char*)pixels, size * 4, size, size, 4, &length);
+    SafeDeleteArray(pixels);
+    return length;
+}
+
 void emu_set_pad_type(GT_Controllers controller, GT_Controller_Type type)
 {
     if (IsValidPointer(geartowns))
@@ -1142,4 +1447,158 @@ static int get_rewind_pop_budget(void)
         rewind_pop_accumulator -= (double)to_pop;
 
     return to_pop;
+}
+
+static bool init_debug(void)
+{
+    emu_debug_framebuffer = new (std::nothrow) u8[EMU_DEBUG_FRAMEBUFFER_WIDTH * EMU_DEBUG_FRAMEBUFFER_HEIGHT * 4];
+    emu_debug_sprite_atlas = new (std::nothrow) u8[EMU_DEBUG_SPRITE_ATLAS_SIZE * EMU_DEBUG_SPRITE_ATLAS_SIZE * 4];
+    emu_debug_sprite_page = new (std::nothrow) u8[EMU_DEBUG_SPRITE_PAGE_SIZE * EMU_DEBUG_SPRITE_PAGE_SIZE * 4];
+    memset(&emu_debug_framebuffer_info, 0, sizeof(emu_debug_framebuffer_info));
+
+    if (!IsValidPointer(emu_debug_framebuffer) || !IsValidPointer(emu_debug_sprite_atlas) ||
+        !IsValidPointer(emu_debug_sprite_page))
+    {
+        destroy_debug();
+        return false;
+    }
+
+    memset(emu_debug_framebuffer, 0, EMU_DEBUG_FRAMEBUFFER_WIDTH * EMU_DEBUG_FRAMEBUFFER_HEIGHT * 4);
+    memset(emu_debug_sprite_atlas, 0, EMU_DEBUG_SPRITE_ATLAS_SIZE * EMU_DEBUG_SPRITE_ATLAS_SIZE * 4);
+    memset(emu_debug_sprite_page, 0, EMU_DEBUG_SPRITE_PAGE_SIZE * EMU_DEBUG_SPRITE_PAGE_SIZE * 4);
+    return true;
+}
+
+static void destroy_debug(void)
+{
+    SafeDeleteArray(emu_debug_framebuffer);
+    SafeDeleteArray(emu_debug_sprite_atlas);
+    SafeDeleteArray(emu_debug_sprite_page);
+}
+
+static u32 debug_rgba(u32 red, u32 green, u32 blue)
+{
+    return red | (green << 8) | (blue << 16) | 0xFF000000U;
+}
+
+// GRB555, green on top
+static u32 debug_direct_color(u16 value)
+{
+    u32 green = (value >> 10) & 0x1F;
+    u32 red = (value >> 5) & 0x1F;
+    u32 blue = value & 0x1F;
+    return debug_rgba((red << 3) | (red >> 2), (green << 3) | (green >> 2), (blue << 3) | (blue >> 2));
+}
+
+static u32 debug_checker(int x, int y)
+{
+    return ((x >> 2) + (y >> 2)) & 1 ? debug_rgba(0x60, 0x60, 0x60) : debug_rgba(0x90, 0x90, 0x90);
+}
+
+static u32 debug_single_to_canonical(u32 offset)
+{
+    return ((offset & 0x00004) << 16) | ((offset & 0x7FFF8) >> 1) | (offset & 0x00003);
+}
+
+// The format the output controller selects, whether or not FDA0 shows the layer
+static int debug_layer_format(const Video::Video_State* state, int layer)
+{
+    u8 output = state->output[0];
+
+    if ((output & 0x10) != 0)
+    {
+        switch ((output >> (layer * 2)) & 0x03)
+        {
+            case 0x01: return Video::VIDEO_LAYER_4BPP;
+            case 0x03: return Video::VIDEO_LAYER_16BPP;
+            default: return Video::VIDEO_LAYER_OFF;
+        }
+    }
+
+    if (layer != 0)
+        return Video::VIDEO_LAYER_OFF;
+
+    switch (output & 0x0F)
+    {
+        case 0x0A: return Video::VIDEO_LAYER_8BPP;
+        case 0x0F: return Video::VIDEO_LAYER_16BPP;
+        default: return Video::VIDEO_LAYER_OFF;
+    }
+}
+
+// Palettes 0 and 1 are the 16 color banks, 2 the 256 color one, components in port order blue, red, green
+static void debug_palette(const Video::Video_State* state, int palette, u32* colors)
+{
+    if (palette == 2)
+    {
+        for (int i = 0; i < 256; i++)
+        {
+            const u8* color = state->palette256[i];
+            colors[i] = debug_rgba(color[1], color[2], color[0]);
+        }
+
+        return;
+    }
+
+    for (int i = 0; i < 16; i++)
+    {
+        const u8* color = state->palette16[palette & 1][i];
+        colors[i] = debug_rgba(color[1] | (color[1] >> 4), color[2] | (color[2] >> 4), color[0] | (color[0] >> 4));
+    }
+}
+
+static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride,
+    Emu_Debug_Buffer_Info& info)
+{
+    emu_debug_get_buffer_info(buffer, request, info);
+
+    if (!IsValidPointer(output) || !IsValidPointer(geartowns))
+        return;
+
+    Video::Video_State* state = geartowns->GetVideo()->GetState();
+    const u8* vram = state->vram;
+    u32* pixels = (u32*)output;
+    u32 colors[256];
+    int palette = buffer == Emu_Debug_Buffer_Custom && IsValidPointer(request) ? request->palette : buffer == 1 ? 1 : 0;
+
+    debug_palette(state, info.format == Video::VIDEO_LAYER_8BPP ? 2 : palette, colors);
+
+    bool custom = buffer == Emu_Debug_Buffer_Custom;
+    bool sprites = buffer == Emu_Debug_Buffer_SpriteDisplay || buffer == Emu_Debug_Buffer_SpriteDraw;
+    u32 base = custom ? info.start : 0;
+
+    for (int y = 0; y < info.height; y++)
+    {
+        u32* line = pixels + y * stride;
+
+        for (int x = 0; x < info.width; x++)
+        {
+            u32 offset = base + (u32)y * info.stride;
+
+            if (info.format == Video::VIDEO_LAYER_4BPP)
+                offset += (u32)x >> 1;
+            else if (info.format == Video::VIDEO_LAYER_8BPP)
+                offset += (u32)x;
+            else
+                offset += (u32)x * 2;
+
+            u32 canonical = info.single_page ? debug_single_to_canonical(offset & (info.page_size - 1)) :
+                info.page_base + (offset & (info.page_size - 1));
+
+            if (info.format == Video::VIDEO_LAYER_4BPP)
+            {
+                u8 data = vram[canonical];
+                line[x] = colors[(x & 1) ? data >> 4 : data & 0x0F];
+            }
+            else if (info.format == Video::VIDEO_LAYER_8BPP)
+                line[x] = colors[vram[canonical]];
+            else
+            {
+                u32 next = info.single_page ? debug_single_to_canonical((offset + 1) & (info.page_size - 1)) :
+                    info.page_base + ((offset + 1) & (info.page_size - 1));
+                u16 value = (u16)(vram[canonical] | (vram[next] << 8));
+                line[x] = sprites && (value & 0x8000) != 0 ? debug_checker(x, y) : debug_direct_color(value);
+            }
+        }
+    }
 }

@@ -68,6 +68,7 @@ public:
     void Synchronize();
     void Sample(s16& left, s16& right);
     u8 Read(u16 address);
+    u8 Peek(u16 address) const;
     void Write(u16 address, u8 value);
     void WriteIRQMask(u8 value);
     u8 ReadIRQFlags();
@@ -84,6 +85,9 @@ public:
     u8 GetIRQFlags() const;
     s16 GetLeftSample() const;
     s16 GetRightSample() const;
+    s16 GetChannelOutput(int channel) const;
+    void SetChannelMute(int channel, bool mute);
+    bool IsChannelMuted(int channel) const;
 
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
@@ -96,11 +100,14 @@ private:
     void ResetChannelAddress(int channel);
     void ResetChannelAddresses();
     s16 QuantizeSample(s32 sample) const;
+    void UpdateChannelPan(int channel);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     RF5C68_State m_state;
+    bool m_channel_mute[RF5C68_CHANNEL_COUNT];
+    u8 m_pan[RF5C68_CHANNEL_COUNT];
 };
 
 static const int k_rf5c68_cycles_per_sample = 384;

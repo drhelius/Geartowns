@@ -56,6 +56,7 @@ public:
     void Reset();
     void SetInternalDrives(int drives);
     u8 Read(u16 port, u64 clocks);
+    u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
@@ -85,8 +86,9 @@ public:
     void SetINTRQ(bool active);
     void SetDRQ(bool active);
 
-private:
     int GetSelectedDrive() const;
+
+private:
     void ChangeDisk(int drive);
     void ChangeSelection(int previous, u64 clocks);
     void UpdateIRQ();

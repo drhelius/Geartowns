@@ -266,6 +266,9 @@ bool I386::ReadMemorySlow(int segment, u32 offset, int width, GT_Bus_Access_Cont
     if (unlikely((m_state.debug_registers[7] & 0xFF) != 0))
         RecordDataBreakpoints(linear, bytes, false);
 
+    if (unlikely(m_debugger_memory_checks))
+        RecordDebuggerAccess(linear, bytes, false);
+
     return true;
 }
 
@@ -335,6 +338,9 @@ bool I386::WriteMemorySlow(int segment, u32 offset, int width, u32 value, GT_Bus
 
     if (unlikely((m_state.debug_registers[7] & 0xFF) != 0))
         RecordDataBreakpoints(linear, bytes, true);
+
+    if (unlikely(m_debugger_memory_checks))
+        RecordDebuggerAccess(linear, bytes, true);
 
     return true;
 }

@@ -28,6 +28,9 @@
 #include "gui.h"
 #include "gui_actions.h"
 #include "debug/gui_debug.h"
+#include "debug/gui_debug_disassembler.h"
+#include "debug/gui_debug_trace.h"
+#include "debug/gui_debug_framebuffers.h"
 #include "debug/gui_debug_memory.h"
 #include "gui_menus.h"
 #include "gui_floppy.h"
@@ -52,13 +55,19 @@ enum FileDialogID
     FileDialog_SaveMemoryDump,
     FileDialog_LoadMemoryDump,
     FileDialog_SaveDebugSettings,
-    FileDialog_LoadDebugSettings
+    FileDialog_LoadDebugSettings,
+    FileDialog_SaveSprite,
+    FileDialog_SaveAllSprites,
+    FileDialog_LoadSymbols,
+    FileDialog_SaveTrace,
+    FileDialog_ChooseTracePath
 };
 
 static FileDialogID pending_dialog_id = FileDialog_None;
 static std::string pending_dialog_path;
 static bool dialog_active = false;
 static int dialog_floppy_drive = 0;
+static int dialog_sprite_index = 0;
 static bool pending_refocus_window = false;
 #if !defined(__APPLE__)
 static bool was_exclusive_fullscreen = false;
@@ -111,6 +120,56 @@ void gui_file_dialog_save_screenshot(void)
     SDL_DialogFileFilter filters[] = { { "PNG Files", "png" } };
     SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveScreenshot, application_sdl_window,
         filters, 1, NULL);
+}
+
+void gui_file_dialog_save_sprite(int index)
+{
+    if (!begin_dialog())
+        return;
+
+    dialog_sprite_index = index;
+    SDL_DialogFileFilter filters[] = { { "PNG Files", "png" } };
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveSprite, application_sdl_window,
+        filters, 1, NULL);
+}
+
+void gui_file_dialog_save_trace(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = { { "Text Files", "txt" } };
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveTrace, application_sdl_window,
+        filters, 1, NULL);
+}
+
+void gui_file_dialog_choose_trace_path(void)
+{
+    if (!begin_dialog())
+        return;
+
+    const char* default_path = config_debug.trace_output_path.empty() ? NULL : config_debug.trace_output_path.c_str();
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseTracePath, application_sdl_window,
+        default_path, false);
+}
+
+void gui_file_dialog_load_symbols(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = { { "Symbol Files", "sym;txt" } };
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadSymbols, application_sdl_window,
+        filters, 1, NULL, false);
+}
+
+void gui_file_dialog_save_all_sprites(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveAllSprites, application_sdl_window,
+        NULL, false);
 }
 
 void gui_file_dialog_save_video(void)
@@ -334,6 +393,10 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         append_extension_if_missing(pending_dialog_path, ".bin");
     else if (id == FileDialog_SaveDebugSettings)
         append_extension_if_missing(pending_dialog_path, ".gtdebug");
+    else if (id == FileDialog_SaveSprite)
+        append_extension_if_missing(pending_dialog_path, ".png");
+    else if (id == FileDialog_SaveTrace)
+        append_extension_if_missing(pending_dialog_path, ".txt");
     else if (id == FileDialog_SaveFloppy || id == FileDialog_NewFloppy)
     {
         const char* path = pending_dialog_path.c_str();
@@ -422,6 +485,42 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_LoadDebugSettings:
             gui_debug_load_settings(path);
+            break;
+        case FileDialog_SaveSprite:
+            if (gui_debug_save_sprite(path, dialog_sprite_index))
+                gui_set_status_message("Sprite saved", 3000);
+            else
+                gui_set_error_message("Unable to save sprite");
+            break;
+        case FileDialog_SaveTrace:
+            if (gui_debug_trace_save(path))
+                gui_set_status_message("Trace saved", 3000);
+            else
+                gui_set_error_message("Unable to save the trace");
+            break;
+        case FileDialog_ChooseTracePath:
+            config_debug.trace_output_path = path;
+            break;
+        case FileDialog_LoadSymbols:
+        {
+            int count = gui_debug_load_symbols(path);
+
+            if (count >= 0)
+            {
+                char message[64];
+                snprintf(message, sizeof(message), "%d symbols loaded", count);
+                gui_set_status_message(message, 3000);
+            }
+            else
+                gui_set_error_message("Unable to load symbols");
+
+            break;
+        }
+        case FileDialog_SaveAllSprites:
+            if (gui_debug_save_all_sprites(path))
+                gui_set_status_message("Sprites saved", 3000);
+            else
+                gui_set_error_message("Unable to save sprites");
             break;
         default:
             break;

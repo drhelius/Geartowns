@@ -69,6 +69,42 @@ INLINE Audio::Audio_State* Audio::GetState()
     return &m_state;
 }
 
+INLINE void Audio::SetSourceMute(int source, bool mute)
+{
+    m_source_mute[source] = mute;
+}
+
+INLINE bool Audio::IsSourceMuted(int source) const
+{
+    return m_source_mute[source];
+}
+
+INLINE void Audio::EnableChannelScopes(bool enable)
+{
+    m_channel_scopes = enable;
+}
+
+// Stereo values in the last completed frame
+INLINE int Audio::GetFrameSamples() const
+{
+    return m_frame_samples;
+}
+
+INLINE const s16* Audio::GetSourceBuffer(int source) const
+{
+    return source == AUDIO_SOURCE_FM ? m_fm_buffer : source == AUDIO_SOURCE_PCM ? m_pcm_buffer : m_cdda_buffer;
+}
+
+INLINE const s16* Audio::GetFMChannelBuffer(int channel) const
+{
+    return m_fm_channel_buffer[channel];
+}
+
+INLINE const s16* Audio::GetPCMChannelBuffer(int channel) const
+{
+    return m_pcm_channel_buffer[channel];
+}
+
 INLINE void Audio::Synchronize(u64 clocks)
 {
     if (clocks <= m_state.clocks)
@@ -160,6 +196,9 @@ INLINE void Audio::SampleSources()
         m_buffer_overflow = true;
         return;
     }
+
+    if (m_channel_scopes)
+        CaptureChannels(m_buffer_index >> 1);
 
     m_fm_buffer[m_buffer_index + 0] = fm_left;
     m_fm_buffer[m_buffer_index + 1] = fm_right;

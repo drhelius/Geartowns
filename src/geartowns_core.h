@@ -44,6 +44,8 @@ class SystemControl;
 class Scheduler;
 class Video;
 class StateSerializer;
+class TraceLogger;
+class Profiler;
 struct I386_Run_Result;
 
 class GeartownsCore
@@ -121,6 +123,8 @@ public:
     FDC* GetFDC();
     FloppyDisk* GetFloppy(int drive);
     Keyboard* GetKeyboard();
+    TraceLogger* GetTraceLogger();
+    Profiler* GetProfiler();
     MSM58321* GetRTC();
     UPD71071* GetDMA();
 
@@ -166,6 +170,8 @@ private:
     CdRom* m_cdrom;
     FDC* m_fdc;
     Keyboard* m_keyboard;
+    TraceLogger* m_trace_logger;
+    Profiler* m_profiler;
     MSM58321* m_rtc;
     UPD71071* m_dma;
 

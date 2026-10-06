@@ -27,6 +27,7 @@
 
 class Memory;
 class Scheduler;
+class TraceLogger;
 class StateSerializer;
 
 typedef bool (*GT_DMA_Read_Fn)(void* device, u16& value, bool word);
@@ -75,6 +76,7 @@ public:
     UPD71071();
     ~UPD71071();
     void Init(Memory* memory, Scheduler* scheduler);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port);
     void Write(u16 port, u8 value);
@@ -105,6 +107,7 @@ private:
     Scheduler* m_scheduler;
     GT_DMA_Endpoint m_endpoints[UPD71071_CHANNELS];
     bool m_unsupported_logged;
+    TraceLogger* m_trace_logger;
     UPD71071_State m_state;
 };
 

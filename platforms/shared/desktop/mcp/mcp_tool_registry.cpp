@@ -195,37 +195,95 @@ struct McpToolCategoryTools
 
 static const McpToolCategory kMcpToolCategories[] =
 {
-    {"execution", "Execution", "Pause, continue, reset, and inspect execution."},
-    {"breakpoints", "Breakpoints", "Manage Intel 80386 execution breakpoints."},
-    {"disassembly", "Disassembly", "Inspect Intel 80386 code, symbols, and call stack."},
-    {"media", "Media", "Load BIOS or media files and inspect loaded media."},
-    {"capture", "Capture", "Capture the current emulator screenshot or record AVI video."},
-    {"input", "Input", "Inspect and control the two gamepad ports."},
+    {"execution", "Execution Control", "Pause, resume, step, frame-step, reset, run-to-address, and fast-forward emulator execution."},
+    {"breakpoints", "Breakpoints", "Set, clear, and list Intel 80386 execute, read, write and I/O breakpoints by address or range, and interrupt breakpoints by vector."},
+    {"memory", "Memory", "List memory areas, read/write bytes, translate addresses, select ranges, fill selections, search memory, and manage watches/bookmarks."},
+    {"cpu", "CPU", "Inspect Intel 80386 registers, flags, mode, segments, descriptor tables, control and debug registers, and write register values."},
+    {"disassembly", "Disassembly", "Decode Intel 80386 code, inspect the call stack, and manage disassembly bookmarks."},
+    {"symbols", "Symbols", "Add, remove, load, list and look up user symbols and automatic labels."},
+    {"hardware_system", "System Hardware", "Inspect the 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control and keyboard interface."},
+    {"hardware_video", "Video Hardware", "Inspect the CRTC, output controller, palettes, VRAM layers and sprite engine, write CRTC registers, and capture layers and sprites as PNG."},
+    {"hardware_audio", "Audio Hardware", "Inspect the YM3438 FM chip and its registers, the RF5C68 PCM chip, electronic volumes and sound interrupts, and mute sources or channels in the debugger."},
+    {"hardware_cdrom", "CD-ROM Hardware", "Inspect the CD-ROM controller, the disc TOC and CD audio playback, and read disc sectors."},
+    {"hardware_floppy", "Floppy Hardware", "Inspect the MB8877 floppy controller and drives, list a track's sectors, and read sector data."},
+    {"media", "Media", "Load firmware or CD images, insert, eject and swap floppies, list recent media, and inspect loaded media, firmware and floppy drives."},
+    {"capture", "Capture", "Capture current screenshots and record AVI video."},
+    {"state", "Save States", "List save slots, select a slot, save emulator state, and load emulator state."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
+    {"input", "Input", "Press pad buttons, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
+    {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, DMA, CD-ROM, FDC, VSYNC) and read the trace."},
+    {"profiler", "Profiler", "Profile CPU cycles and call counts per function and interrupt vector."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
 };
 
 static const char* const kMcpExecutionTools[] =
 {
-    "debug_pause", "debug_continue", "debug_step_into", "debug_step_over",
-    "debug_step_out", "debug_step_frame", "debug_reset", "debug_get_status"
+    "debug_pause", "debug_continue", "debug_step_into", "debug_step_over", "debug_step_out",
+    "debug_step_frame", "debug_run_to_cursor", "debug_reset", "debug_get_status",
+    "set_fast_forward_speed", "toggle_fast_forward"
 };
 
 static const char* const kMcpBreakpointTools[] =
 {
-    "set_breakpoint", "set_breakpoint_range", "remove_breakpoint",
-    "list_breakpoints"
+    "set_breakpoint", "set_breakpoint_range", "remove_breakpoint", "list_breakpoints", "set_breakpoint_on_interrupt",
+    "clear_breakpoint_on_interrupt", "list_breakpoints_on_interrupt"
+};
+
+static const char* const kMcpMemoryTools[] =
+{
+    "list_memory_areas", "read_memory", "write_memory", "translate_address", "select_memory_range",
+    "set_memory_selection_value", "get_memory_selection", "add_memory_bookmark",
+    "remove_memory_bookmark", "list_memory_bookmarks", "add_memory_watch", "remove_memory_watch",
+    "list_memory_watches", "memory_search_capture", "memory_search", "memory_find"
+};
+
+static const char* const kMcpCpuTools[] =
+{
+    "get_i386_status", "write_i386_register", "get_i386_descriptors", "get_page_directory"
 };
 
 static const char* const kMcpDisassemblyTools[] =
 {
-    "get_disassembly", "list_symbols", "lookup_symbol_by_name",
-    "lookup_symbol_at_address", "get_call_stack"
+    "get_disassembly", "add_disassembler_bookmark", "remove_disassembler_bookmark",
+    "list_disassembler_bookmarks", "get_call_stack"
+};
+
+static const char* const kMcpSymbolTools[] =
+{
+    "add_symbol", "remove_symbol", "load_symbols", "list_symbols", "lookup_symbol_by_name", "lookup_symbol_at_address"
+};
+
+static const char* const kMcpSystemTools[] =
+{
+    "get_pic_status", "get_pit_status", "get_dma_status", "get_rtc_status", "get_system_status",
+    "get_keyboard_status"
+};
+
+static const char* const kMcpVideoTools[] =
+{
+    "get_crtc_status", "get_crtc_registers", "write_crtc_register", "get_video_output_status", "get_palettes",
+    "get_frame_buffer", "list_sprites", "get_sprite"
+};
+
+static const char* const kMcpAudioTools[] =
+{
+    "get_ym3438_status", "get_ym3438_registers", "get_rf5c68_status", "get_sound_status", "set_audio_mute"
+};
+
+static const char* const kMcpCdromTools[] =
+{
+    "get_cdrom_status", "list_cdrom_tracks", "get_cdrom_audio_status", "read_cdrom_sector"
+};
+
+static const char* const kMcpFloppyTools[] =
+{
+    "get_fdc_status", "list_floppy_drives", "list_floppy_sectors", "read_floppy_sector"
 };
 
 static const char* const kMcpMediaTools[] =
 {
-    "load_media", "load_bios", "get_media_info"
+    "load_media", "get_media_info", "list_recent_media", "load_bios", "insert_floppy", "eject_floppy", "swap_floppies",
+    "set_floppy_write_protect"
 };
 
 static const char* const kMcpCaptureTools[] =
@@ -233,9 +291,10 @@ static const char* const kMcpCaptureTools[] =
     "get_screenshot", "start_video_recording", "stop_video_recording"
 };
 
-static const char* const kMcpInputTools[] =
+static const char* const kMcpStateTools[] =
 {
-    "controller_button", "get_input_state"
+    "list_save_state_slots", "select_save_state_slot", "save_state", "load_state",
+    "save_state_file", "load_state_file"
 };
 
 static const char* const kMcpRewindTools[] =
@@ -243,15 +302,42 @@ static const char* const kMcpRewindTools[] =
     "get_rewind_status", "rewind_seek"
 };
 
+static const char* const kMcpInputTools[] =
+{
+    "controller_button", "get_input_state",
+    "keyboard_key", "keyboard_type"
+};
+
+static const char* const kMcpTraceTools[] =
+{
+    "get_trace_log", "set_trace_log"
+};
+
+static const char* const kMcpProfilerTools[] =
+{
+    "set_profiler", "get_profiler_data"
+};
+
 static const McpToolCategoryTools kMcpToolCategoryTools[] =
 {
     {"execution", kMcpExecutionTools, MCP_ARRAY_COUNT(kMcpExecutionTools)},
     {"breakpoints", kMcpBreakpointTools, MCP_ARRAY_COUNT(kMcpBreakpointTools)},
+    {"memory", kMcpMemoryTools, MCP_ARRAY_COUNT(kMcpMemoryTools)},
+    {"cpu", kMcpCpuTools, MCP_ARRAY_COUNT(kMcpCpuTools)},
     {"disassembly", kMcpDisassemblyTools, MCP_ARRAY_COUNT(kMcpDisassemblyTools)},
+    {"symbols", kMcpSymbolTools, MCP_ARRAY_COUNT(kMcpSymbolTools)},
+    {"hardware_system", kMcpSystemTools, MCP_ARRAY_COUNT(kMcpSystemTools)},
+    {"hardware_video", kMcpVideoTools, MCP_ARRAY_COUNT(kMcpVideoTools)},
+    {"hardware_audio", kMcpAudioTools, MCP_ARRAY_COUNT(kMcpAudioTools)},
+    {"hardware_cdrom", kMcpCdromTools, MCP_ARRAY_COUNT(kMcpCdromTools)},
+    {"hardware_floppy", kMcpFloppyTools, MCP_ARRAY_COUNT(kMcpFloppyTools)},
     {"media", kMcpMediaTools, MCP_ARRAY_COUNT(kMcpMediaTools)},
     {"capture", kMcpCaptureTools, MCP_ARRAY_COUNT(kMcpCaptureTools)},
+    {"state", kMcpStateTools, MCP_ARRAY_COUNT(kMcpStateTools)},
+    {"rewind", kMcpRewindTools, MCP_ARRAY_COUNT(kMcpRewindTools)},
     {"input", kMcpInputTools, MCP_ARRAY_COUNT(kMcpInputTools)},
-    {"rewind", kMcpRewindTools, MCP_ARRAY_COUNT(kMcpRewindTools)}
+    {"trace", kMcpTraceTools, MCP_ARRAY_COUNT(kMcpTraceTools)},
+    {"profiler", kMcpProfilerTools, MCP_ARRAY_COUNT(kMcpProfilerTools)}
 };
 
 const size_t kMcpSearchToolLimit = 20;
@@ -592,6 +678,9 @@ bool McpToolRegistry::IsDirectToolName(const std::string& tool_name) const
         (name == "debug_step_into") ||
         (name == "debug_step_over") ||
         (name == "debug_step_out") ||
+        (name == "get_i386_status") ||
+        (name == "read_memory") ||
+        (name == "write_memory") ||
         (name == "get_disassembly") ||
         (name == "set_breakpoint") ||
         (name == "get_screenshot") ||
@@ -623,6 +712,12 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
         aliases += " record movie clip capture avi mjpeg gameplay";
     if (StringContains(name, "rewind"))
         aliases += " save savestate slot snapshot time travel history";
+    if (StringContains(name, "keyboard"))
+        aliases += " key type text typing jis kana";
+    if (StringContains(name, "i386"))
+        aliases += " cpu 80386 x86 registers eax eip eflags cr0 segments";
+    if (StringContains(name, "translate"))
+        aliases += " paging pde pte physical linear logical segment";
 
     return aliases;
 }

@@ -145,6 +145,7 @@ public:
     void Sample(s16& left, s16& right);
     void Write(u8 port, u8 value);
     u8 Read(u8 port);
+    u8 Peek(u8 port) const;
     bool IsIRQAsserted();
     YM3438_State* GetState();
 
@@ -153,6 +154,9 @@ public:
 
     u16 GetSelectedAddress() const;
     u8 GetRegister(u16 address) const;
+    void SetChannelMute(int channel, bool mute);
+    bool IsChannelMuted(int channel) const;
+    u16 GetEnvelopeOutput(const YM3438_Operator& op) const;
 
 private:
     enum YM3438_Envelope_State
@@ -179,7 +183,6 @@ private:
     void UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index);
     u8 GetEnvelopeIncrement(u8 rate) const;
     u8 GetEnvelopeRate(const YM3438_Operator& op, int channel, int operator_index) const;
-    u16 GetEnvelopeOutput(const YM3438_Operator& op) const;
     bool HandleSSGEnvelope(YM3438_Operator& op);
 
     void SetKeyState(YM3438_Operator& op, bool key_on, int channel, int operator_index);
@@ -200,12 +203,16 @@ private:
     void WriteOperatorRegister(int bank, u8 address, u8 value);
     void WriteChannelRegister(int bank, u8 address, u8 value);
     void WriteTimerControl(u8 value);
+    void UpdateChannelPan(int channel);
 
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     YM3438_State m_state;
+    bool m_channel_mute[YM3438_CHANNEL_COUNT];
+    u8 m_pan_left[YM3438_CHANNEL_COUNT];
+    u8 m_pan_right[YM3438_CHANNEL_COUNT];
 };
 
 static const int k_ym3438_native_sample_cycles = 144;

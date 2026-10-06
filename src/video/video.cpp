@@ -18,6 +18,7 @@
  */
 
 #include "video.h"
+#include "../common/trace_logger.h"
 #include "../system/pic.h"
 #include "../system/pit.h"
 #include "../system/scheduler.h"
@@ -27,6 +28,7 @@ Video::Video()
 {
     InitPointer(m_sprite);
     InitPointer(m_pic);
+    InitPointer(m_trace_logger);
     InitPointer(m_pit);
     InitPointer(m_scheduler);
     InitPointer(m_font_rom);
@@ -50,6 +52,11 @@ Video::Video()
 Video::~Video()
 {
     SafeDelete(m_sprite);
+}
+
+void Video::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format)
@@ -132,6 +139,60 @@ u8 Video::Read(u16 port, u64 clocks)
             m_state.fmr_text_written = false;
             return value;
         }
+        case 0xFD90:
+            return m_state.palette_index;
+        case 0xFD92:
+        case 0xFD94:
+        case 0xFD96:
+            return ReadPalette((port - 0xFD92) >> 1);
+        case 0xFD98:
+        case 0xFD99:
+        case 0xFD9A:
+        case 0xFD9B:
+        case 0xFD9C:
+        case 0xFD9D:
+        case 0xFD9E:
+        case 0xFD9F:
+            return m_state.digital_palette[port - 0xFD98];
+        case 0xFDA0:
+        {
+            u8 status = GetSyncStatus(clocks);
+            return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x02 : 0x00);
+        }
+        default:
+            return 0xFF;
+    }
+}
+
+// Port reads without catching up and without clearing the read-once status flags
+u8 Video::Peek(u16 port, u64 clocks) const
+{
+    switch (port)
+    {
+        case 0x0440:
+            return m_state.crtc_index;
+        case 0x0442:
+            return ReadCRTC(false, clocks);
+        case 0x0443:
+            return ReadCRTC(true, clocks);
+        case 0x0448:
+            return m_state.output_index;
+        case 0x044A:
+            return m_state.output[m_state.output_index];
+        case 0x044C:
+            return (m_state.digital_palette_modified ? 0x80 : 0x00) | (m_sprite->IsBusy() ? 0x02 : 0x00) |
+                (m_sprite->GetPage() ? 0x01 : 0x00);
+        case 0x0450:
+        case 0x0452:
+            return m_sprite->Read(port);
+        case 0x0458:
+            return m_state.mask_index;
+        case 0x045A:
+            return m_state.mask[(m_state.mask_index & 0x01) * 2];
+        case 0x045B:
+            return m_state.mask[(m_state.mask_index & 0x01) * 2 + 1];
+        case 0x05C8:
+            return m_state.fmr_text_written ? 0xFF : 0x00;
         case 0xFD90:
             return m_state.palette_index;
         case 0xFD92:
@@ -260,6 +321,12 @@ u8 Video::ReadVRAMTwoPageCallback(void* device, u32 offset)
     return video->ReadVRAMTwoPage(offset);
 }
 
+u8 Video::PeekVRAMTwoPageCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
+    return video->ReadVRAMTwoPage(offset);
+}
+
 void Video::WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value)
 {
     Video* video = (Video*)device;
@@ -269,6 +336,12 @@ void Video::WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value)
 u8 Video::ReadVRAMSinglePageCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;
+    return video->ReadVRAMSinglePage(offset);
+}
+
+u8 Video::PeekVRAMSinglePageCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
     return video->ReadVRAMSinglePage(offset);
 }
 
@@ -284,6 +357,12 @@ u8 Video::ReadFMRPlanesCallback(void* device, u32 offset)
     return video->ReadFMRPlanes(offset);
 }
 
+u8 Video::PeekFMRPlanesCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
+    return video->ReadFMRPlanes(offset);
+}
+
 void Video::WriteFMRPlanesCallback(void* device, u32 offset, u8 value)
 {
     Video* video = (Video*)device;
@@ -293,6 +372,12 @@ void Video::WriteFMRPlanesCallback(void* device, u32 offset, u8 value)
 u8 Video::ReadFMRTextCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;
+    return video->ReadFMRText(offset);
+}
+
+u8 Video::PeekFMRTextCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
     return video->ReadFMRText(offset);
 }
 
@@ -517,7 +602,7 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
     }
 }
 
-u8 Video::ReadCRTC(bool high, u64 clocks)
+u8 Video::ReadCRTC(bool high, u64 clocks) const
 {
     int index = m_state.crtc_index;
 
@@ -622,6 +707,9 @@ void Video::CompleteFrame(u64 clocks)
     m_state.frame_count++;
     m_state.vsync_irq = true;
     UpdateIRQ();
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_VIDEO))
+        m_trace_logger->Record(TRACE_VIDEO, TRACE_VIDEO_VSYNC)->video.frame = m_state.frame_count;
     StartFrame(clocks);
 }
 

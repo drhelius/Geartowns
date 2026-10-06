@@ -74,4 +74,9 @@ INLINE u8 YM3438::GetRegister(u16 address) const
     return m_state.registers[(address >> 8) & 0x01][address & 0xFF];
 }
 
+INLINE bool YM3438::IsChannelMuted(int channel) const
+{
+    return m_channel_mute[channel];
+}
+
 #endif /* YM3438_INLINE_H */

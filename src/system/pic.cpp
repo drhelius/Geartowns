@@ -21,8 +21,33 @@
 
 void PIC::Init()
 {
+    InitPointer(m_trace_logger);
     m_master.Init(true);
     m_slave.Init(false);
+}
+
+void PIC::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
+}
+
+// Only a rising input is a new request
+void PIC::TraceRequest(int irq)
+{
+    I8259* chip = irq >= 8 ? &m_slave : &m_master;
+    u8 bit = (u8)(1 << (irq & 7));
+
+    if ((chip->GetState()->input_levels & bit) != 0)
+        return;
+
+    GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_INTERRUPT, TRACE_INTERRUPT_REQUEST);
+    entry->interrupt.from = 0;
+    entry->interrupt.to = 0;
+    entry->interrupt.error_code = 0;
+    entry->interrupt.vector = (u8)((chip->GetState()->icw2 & 0xF8) | (irq & 7));
+    entry->interrupt.source = 0;
+    entry->interrupt.line = (u8)irq;
+    entry->interrupt.has_error_code = 0;
 }
 
 void PIC::Reset()

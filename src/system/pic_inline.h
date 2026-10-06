@@ -21,9 +21,13 @@
 #define PIC_INLINE_H
 
 #include "pic.h"
+#include "../common/trace_logger.h"
 
 INLINE void PIC::SetIRQLine(int irq, bool high)
 {
+    if (unlikely(high && IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_INTERRUPT)))
+        TraceRequest(irq);
+
     if (irq >= 8)
     {
         m_slave.SetInputLine(irq - 8, high);
@@ -33,6 +37,12 @@ INLINE void PIC::SetIRQLine(int irq, bool high)
         m_master.SetInputLine(irq, high);
     else
         Debug("PIC: IRQ 7 is the slave cascade input");
+}
+
+INLINE u8 PIC::Peek(u16 port) const
+{
+    int a0 = (port >> 1) & 0x01;
+    return (port & 0x10) == 0 ? m_master.Peek(a0) : m_slave.Peek(a0);
 }
 
 INLINE bool PIC::IsInterruptPending() const

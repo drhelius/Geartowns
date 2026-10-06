@@ -37,6 +37,9 @@ INLINE bool I386::OPCodes_INS(int width, u32 destination_offset)
             value = m_io->Read32(port, *m_bus_context);
     }
 
+    if (unlikely(m_debugger_io_checks))
+        RecordDebuggerIO(port, value, (u32)width >> 3, false);
+
     bool ok = WriteMemory(I386_SEGMENT_ES, destination_offset, width, value, *m_bus_context);
     m_bus_context->end_batch = true;
     return ok;
@@ -57,6 +60,9 @@ INLINE bool I386::OPCodes_OUTS(int width, int source_segment, u32 source_offset)
             m_io->Write16(port, (u16)value, *m_bus_context);
         else
             m_io->Write32(port, value, *m_bus_context);
+
+        if (unlikely(m_debugger_io_checks))
+            RecordDebuggerIO(port, value, (u32)width >> 3, true);
     }
 
     m_bus_context->end_batch = true;

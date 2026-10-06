@@ -46,17 +46,19 @@ public:
     void Init(PIC* pic, Scheduler* scheduler);
     void Reset();
     u8 Read(u16 port, u64 clocks);
+    u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
     void SetMemoryBuzzer(bool enabled);
     I8253* GetPIT(int index);
+    u64 GetTick(int channel, u64 clocks) const;
     PIT_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
 private:
-    u64 GetTick(int channel, u64 clocks) const;
+    u8 GetTimerLatch(u64 tick) const;
     u64 GetTickClocks(u64 tick) const;
     void UpdateIRQ();
     void UpdateNextEvent();

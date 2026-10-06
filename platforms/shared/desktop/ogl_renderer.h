@@ -37,6 +37,9 @@
 
 EXTERN uint32_t ogl_renderer_emu_texture;
 EXTERN uint32_t ogl_renderer_emu_savestates;
+EXTERN uint32_t ogl_renderer_emu_debug_framebuffer;
+EXTERN uint32_t ogl_renderer_emu_debug_sprite_atlas;
+EXTERN uint32_t ogl_renderer_emu_debug_sprite_page;
 EXTERN const char* ogl_renderer_opengl_version;
 
 struct OglRendererScreenGeometry

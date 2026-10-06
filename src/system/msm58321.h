@@ -45,6 +45,7 @@ public:
     void Init();
     void Reset(u64 clocks);
     u8 Read(u16 port, u64 clocks);
+    u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
     MSM58321_State* GetState();

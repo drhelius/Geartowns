@@ -18,6 +18,7 @@
  */
 
 #include "upd71071.h"
+#include "../common/trace_logger.h"
 #include "memory.h"
 #include "scheduler.h"
 #include "../common/state_serializer.h"
@@ -26,6 +27,7 @@ UPD71071::UPD71071()
 {
     InitPointer(m_memory);
     InitPointer(m_scheduler);
+    InitPointer(m_trace_logger);
     memset(m_endpoints, 0, sizeof(m_endpoints));
     m_unsupported_logged = false;
     memset(&m_state, 0, sizeof(m_state));
@@ -181,9 +183,26 @@ void UPD71071::SetEndpoint(int channel, const GT_DMA_Endpoint& endpoint)
 }
 
 // Dropping the request ends demand service without a terminal count
+void UPD71071::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
+}
+
 void UPD71071::SetRequest(int channel, bool active)
 {
     u8 bit = (u8)(1 << (channel & 0x03));
+
+    if (active && (m_state.request_levels & bit) == 0 && IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEnabled(TRACE_DMA))
+    {
+        const UPD71071_Channel& state = m_state.channels[channel & 0x03];
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_DMA, TRACE_DMA_REQUEST);
+        entry->dma.address = state.current_address;
+        entry->dma.count = state.current_count;
+        entry->dma.channel = (u8)(channel & 0x03);
+        entry->dma.mode = state.mode;
+        entry->dma.terminal = 0;
+    }
 
     if (active)
     {
@@ -360,6 +379,16 @@ void UPD71071::FinishService(int channel, bool terminal_count)
 {
     UPD71071_Channel& state = m_state.channels[channel];
     u8 bit = (u8)(1 << channel);
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_DMA))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_DMA, TRACE_DMA_END);
+        entry->dma.address = state.current_address;
+        entry->dma.count = state.current_count;
+        entry->dma.channel = (u8)channel;
+        entry->dma.mode = state.mode;
+        entry->dma.terminal = terminal_count ? 1 : 0;
+    }
 
     m_state.status_tc |= bit;
 

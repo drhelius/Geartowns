@@ -30,6 +30,8 @@
 #include "input/input.h"
 #include "input/keyboard.h"
 #include "common/memory_stream.h"
+#include "common/profiler.h"
+#include "common/trace_logger.h"
 #include "common/state_serializer.h"
 #include "media/media.h"
 #include "system/memory.h"
@@ -63,6 +65,8 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
     InitPointer(m_keyboard);
+    InitPointer(m_trace_logger);
+    InitPointer(m_profiler);
     InitPointer(m_rtc);
     InitPointer(m_dma);
     InitPointer(m_frame_buffer);
@@ -94,6 +98,8 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_cdrom_audio);
     SafeDelete(m_fdc);
     SafeDelete(m_keyboard);
+    SafeDelete(m_trace_logger);
+    SafeDelete(m_profiler);
     SafeDelete(m_rtc);
     SafeDelete(m_dma);
     SafeDelete(m_memory);
@@ -156,6 +162,12 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     if (!IsValidPointer(m_keyboard))
         m_keyboard = new Keyboard();
 
+    if (!IsValidPointer(m_trace_logger))
+        m_trace_logger = new TraceLogger();
+
+    if (!IsValidPointer(m_profiler))
+        m_profiler = new Profiler();
+
     if (!IsValidPointer(m_rtc))
         m_rtc = new MSM58321();
 
@@ -180,6 +192,15 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
     m_i386->Init(m_memory, m_io);
     m_input->Init();
+    m_trace_logger->Init(&m_scheduler->GetState()->clocks);
+    m_profiler->Init(&m_scheduler->GetState()->clocks);
+    m_i386->SetTraceLogger(m_trace_logger);
+    m_i386->SetProfiler(m_profiler);
+    m_pic->SetTraceLogger(m_trace_logger);
+    m_dma->SetTraceLogger(m_trace_logger);
+    m_cdrom->SetTraceLogger(m_trace_logger);
+    m_fdc->GetMB8877()->SetTraceLogger(m_trace_logger);
+    m_video->SetTraceLogger(m_trace_logger);
     m_media->Init();
     Reset();
 }
@@ -217,8 +238,18 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     u64 frame_start = m_scheduler->GetClocks();
     m_video->BeginFrame(frame_buffer, render);
 
-    if (debugger && IsValidPointer(debug))
+    bool debugging = debugger && IsValidPointer(debug);
+    m_trace_logger->SetActive(debugging);
+    m_profiler->SetActive(debugging);
+    m_i386->EnableDebuggerChecks(debugging);
+
+    if (debugging)
+    {
         RunDebuggerFrame(frame_start, debug);
+
+        if (m_video->IsFrameReady())
+            m_profiler->CountFrame();
+    }
     else
         RunFrame(frame_start);
 
@@ -269,6 +300,13 @@ void GeartownsCore::RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug)
         }
 
         CompleteSlice(m_i386->GetStepInfo(), context, slice);
+
+        if (unlikely(m_i386->IsDebuggerHitPending()) && m_i386->AcceptDebuggerHit())
+        {
+            debug->stopped = true;
+            debug->breakpoint_hit = true;
+            break;
+        }
 
         if (debug->step_debugger)
         {
@@ -1233,12 +1271,12 @@ void GeartownsCore::InitMemoryMap()
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM (two-page view)", VIDEO_VRAM_SIZE,
         0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPageCallback,
-        Video::WriteVRAMTwoPageCallback, NULL))
+        Video::WriteVRAMTwoPageCallback, Video::PeekVRAMTwoPageCallback))
         Error("Unable to map the two-page VRAM view");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM (single-page view)", VIDEO_VRAM_SIZE,
         0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePageCallback,
-        Video::WriteVRAMSinglePageCallback, NULL))
+        Video::WriteVRAMSinglePageCallback, Video::PeekVRAMSinglePageCallback))
         Error("Unable to map the single-page VRAM view");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", sprite_ram, sprite_ram,
@@ -1267,7 +1305,7 @@ void GeartownsCore::InitMemoryMap()
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM wave RAM window", 0x1000, 0xC2200000U,
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_AUDIO,
-        m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback, NULL))
+        m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback, Audio::PeekWaveWindowCallback))
         Error("Unable to map the PCM wave RAM window");
 
     // The low windows are overlays that the mapping latches switch on and off
@@ -1284,11 +1322,12 @@ void GeartownsCore::InitMemoryMap()
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_PLANES, "FM-R VRAM planes", 0x8000, 0x000C0000U,
         overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRPlanesCallback, Video::WriteFMRPlanesCallback,
-        NULL))
+        Video::PeekFMRPlanesCallback))
         Error("Unable to register the FM-R VRAM planes");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_TEXT, "FM-R text RAM and ANK font", 0x7000, 0x000C8000U,
-        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRTextCallback, Video::WriteFMRTextCallback, NULL))
+        overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRTextCallback, Video::WriteFMRTextCallback,
+        Video::PeekFMRTextCallback))
         Error("Unable to register the FM-R text window");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_REGISTERS, "FM-R registers", 0x1000, 0x000CF000U,

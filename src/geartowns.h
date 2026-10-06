@@ -21,6 +21,8 @@
 #define GEARTOWNS_H
 
 #include "common/common.h"
+#include "common/profiler.h"
+#include "common/trace_logger.h"
 #include "media/firmware.h"
 #include "i386/i386.h"
 #include "geartowns_core.h"

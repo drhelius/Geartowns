@@ -22,6 +22,9 @@
 
 RF5C68::RF5C68()
 {
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
+        m_channel_mute[i] = false;
+
     memset(m_state.wave_ram, 0xFF, sizeof(m_state.wave_ram));
     Reset();
 }
@@ -39,6 +42,9 @@ void RF5C68::Init()
 void RF5C68::Reset()
 {
     memset(m_state.channels, 0, sizeof(m_state.channels));
+
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
+        UpdateChannelPan(i);
 
     m_state.channel_bank = 0;
     m_state.wave_bank = 0;
@@ -68,6 +74,7 @@ void RF5C68::WriteRegister(u16 address, u8 value)
             break;
         case 0x01:
             channel.pan = value;
+            UpdateChannelPan(m_state.channel_bank);
             break;
         case 0x02:
             channel.step = (channel.step & 0xFF00) | value;
@@ -219,8 +226,8 @@ void RF5C68::GenerateSample()
 
         s32 magnitude = sample & 0x7F;
         // The DCA feeds product bits 18..5 to the channel accumulator
-        s32 left_output = (magnitude * channel.envelope * (channel.pan & 0x0F)) >> 5;
-        s32 right_output = (magnitude * channel.envelope * (channel.pan >> 4)) >> 5;
+        s32 left_output = (magnitude * channel.envelope * (m_pan[i] & 0x0F)) >> 5;
+        s32 right_output = (magnitude * channel.envelope * (m_pan[i] >> 4)) >> 5;
 
         // RF5C68 samples are sign-magnitude with bit 7 set for positive values
         if ((sample & 0x80) != 0)
@@ -274,6 +281,38 @@ s16 RF5C68::QuantizeSample(s32 sample) const
 {
     // The DAC output uses the upper 10 bits of the limited 16-bit accumulator
     return (s16)(sample & ~k_rf5c68_output_quantization_mask);
+}
+
+// The sample at the channel pointer through the DCA with the programmed pan, averaged over both sides
+s16 RF5C68::GetChannelOutput(int channel) const
+{
+    const RF5C68_Channel& ch = m_state.channels[channel];
+
+    if (!m_state.enabled || !ch.enabled)
+        return 0;
+
+    u8 sample = m_state.wave_ram[ch.address >> k_rf5c68_address_fraction_bits];
+
+    if (sample == 0xFF)
+        sample = m_state.wave_ram[ch.loop_start];
+
+    if (sample == 0xFF)
+        return 0;
+
+    s32 output = ((sample & 0x7F) * ch.envelope * ((ch.pan & 0x0F) + (ch.pan >> 4))) >> 6;
+    return (s16)((sample & 0x80) != 0 ? output : -output);
+}
+
+// A debugger mute clears the pan the mix reads, the programmed pan stays in the channel state
+void RF5C68::SetChannelMute(int channel, bool mute)
+{
+    m_channel_mute[channel] = mute;
+    UpdateChannelPan(channel);
+}
+
+void RF5C68::UpdateChannelPan(int channel)
+{
+    m_pan[channel] = m_channel_mute[channel] ? 0 : m_state.channels[channel].pan;
 }
 
 void RF5C68::SaveState(std::ostream& stream)
@@ -330,6 +369,7 @@ void RF5C68::SanitizeState()
     {
         m_state.channels[i].enabled = m_state.channels[i].enabled ? 1 : 0;
         m_state.channels[i].address &= k_rf5c68_address_mask;
+        UpdateChannelPan(i);
 
         // Channels that are not sounding hold their pointer at the start address
         if (!m_state.enabled || !m_state.channels[i].enabled)

@@ -37,6 +37,74 @@ enum Debug_Command
     Debug_Command_None
 };
 
+#define EMU_DEBUG_FRAMEBUFFER_WIDTH 1024
+#define EMU_DEBUG_FRAMEBUFFER_HEIGHT 512
+#define EMU_DEBUG_SPRITE_ATLAS_SIZE 512
+#define EMU_DEBUG_SPRITE_PAGE_SIZE 256
+
+enum Emu_Debug_Buffer
+{
+    Emu_Debug_Buffer_Layer0 = 0,
+    Emu_Debug_Buffer_Layer1,
+    Emu_Debug_Buffer_SpriteDisplay,
+    Emu_Debug_Buffer_SpriteDraw,
+    Emu_Debug_Buffer_Custom,
+    Emu_Debug_Buffer_Count
+};
+
+struct Emu_Debug_Buffer_Request
+{
+    u32 offset;
+    int format;
+    int width;
+    int height;
+    int palette;
+};
+
+struct Emu_Debug_Buffer_Info
+{
+    int format;
+    bool single_page;
+    u32 page_base;
+    u32 page_size;
+    u32 start;
+    u32 stride;
+    int width;
+    int height;
+    bool window;
+    int window_x;
+    int window_y;
+    int window_width;
+    int window_height;
+};
+
+struct Emu_Debug_Sprite
+{
+    int index;
+    u32 address;
+    u16 x;
+    u16 y;
+    u16 attributes;
+    u16 color;
+    int screen_x;
+    int screen_y;
+    bool offset;
+    bool swap;
+    bool flip_x;
+    bool flip_y;
+    bool half_x;
+    bool half_y;
+    bool table;
+    bool through;
+    bool hide;
+    u16 pattern;
+    u32 pattern_address;
+    u16 color_table;
+    u32 color_table_address;
+    bool drawn;
+    bool visible;
+};
+
 enum Directory_Location
 {
     Directory_Location_Default = 0,
@@ -45,6 +113,10 @@ enum Directory_Location
 };
 
 EXTERN u8* emu_frame_buffer;
+EXTERN u8* emu_debug_framebuffer;
+EXTERN u8* emu_debug_sprite_atlas;
+EXTERN u8* emu_debug_sprite_page;
+EXTERN Emu_Debug_Buffer_Info emu_debug_framebuffer_info;
 EXTERN GT_SaveState_Header emu_savestates[5];
 EXTERN GT_SaveState_Screenshot emu_savestates_screenshots[5];
 EXTERN u32 emu_savestates_generation;
@@ -106,6 +178,15 @@ EXTERN void emu_debug_break(void);
 EXTERN void emu_debug_continue(void);
 EXTERN void emu_debug_state_restored(void);
 EXTERN void emu_set_disassembler_syntax(int syntax);
+
+EXTERN void emu_debug_update(void);
+EXTERN void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info);
+EXTERN void emu_debug_decode_buffer(int buffer, const Emu_Debug_Buffer_Request* request, u8* output,
+    Emu_Debug_Buffer_Info& info);
+EXTERN void emu_debug_get_sprite(int index, Emu_Debug_Sprite& sprite);
+EXTERN void emu_debug_decode_sprite(int index, u8* output, int stride);
+EXTERN int emu_get_debug_buffer_png(int buffer, const Emu_Debug_Buffer_Request* request, unsigned char** out_buffer);
+EXTERN int emu_get_sprite_png(int index, int scale, unsigned char** out_buffer);
 
 EXTERN void emu_set_pad_type(GT_Controllers controller, GT_Controller_Type type);
 EXTERN GT_Controller_Type emu_get_pad_type(GT_Controllers controller);

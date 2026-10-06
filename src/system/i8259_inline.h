@@ -44,6 +44,15 @@ INLINE void I8259::SetInputLine(int line, bool high)
     UpdateOutput();
 }
 
+// The register the next read returns, without the acknowledge of an armed poll
+INLINE u8 I8259::Peek(int a0) const
+{
+    if (a0 != 0)
+        return m_state.imr;
+
+    return m_state.read_isr ? m_state.isr : m_state.irr;
+}
+
 INLINE bool I8259::IsIRQAsserted() const
 {
     return m_state.int_output;

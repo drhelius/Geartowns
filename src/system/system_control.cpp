@@ -82,6 +82,26 @@ u8 SystemControl::Read(u16 port)
     }
 }
 
+// The reset cause stays latched
+u8 SystemControl::Peek(u16 port) const
+{
+    switch (port)
+    {
+        case 0x0020:
+            return m_state.reset_cause;
+        case 0x0032:
+        {
+            u8 bit = m_state.serial_rom_bit;
+            u8 data = (k_system_control_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
+            return (m_state.serial_rom_control & 0xC0) | data;
+        }
+        case 0x05E0:
+            return m_state.main_ram_wait;
+        default:
+            return 0xFF;
+    }
+}
+
 void SystemControl::Write(u16 port, u8 value)
 {
     switch (port)

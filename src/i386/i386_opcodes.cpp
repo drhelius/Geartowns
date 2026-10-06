@@ -2258,6 +2258,9 @@ bool I386::OPCodes_IN()
             value = m_io->Read32(port, *m_bus_context);
     }
 
+    if (unlikely(m_debugger_io_checks))
+        RecordDebuggerIO(port, value, (u32)width >> 3, false);
+
     SetRegister(I386_REG_EAX, width, value);
     m_bus_context->end_batch = true;
     CommitEIP(m_instruction);
@@ -2308,6 +2311,9 @@ bool I386::OPCodes_OUT()
         else
             m_io->Write32(port, value, *m_bus_context);
     }
+
+    if (unlikely(m_debugger_io_checks))
+        RecordDebuggerIO(port, value, (u32)width >> 3, true);
 
     m_bus_context->end_batch = true;
     CommitEIP(m_instruction);

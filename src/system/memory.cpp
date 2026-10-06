@@ -732,6 +732,7 @@ GT_Debug_Memory_Status Memory::DebugReadBus(u32 bus_address, u8& value) const
     return ReadRegion(*region, bus_address - region->info.physical_base, value);
 }
 
+// Debugger reads never call a handler's emulated read, only its peek
 GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset, u8& value) const
 {
     if ((region.info.flags & GT_DEBUG_REGION_READABLE) == 0)
@@ -739,8 +740,6 @@ GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset,
 
     if (IsValidPointer(region.peek8))
         value = region.peek8(region.device, offset);
-    else if (IsValidPointer(region.read8))
-        value = region.read8(region.device, offset);
     else if (IsValidPointer(region.read_data))
         value = region.read_data[offset];
     else

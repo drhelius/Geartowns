@@ -117,6 +117,9 @@ static const u8 k_ym3438_envelope_increment[17][8] =
 
 YM3438::YM3438()
 {
+    for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+        m_channel_mute[i] = false;
+
     Reset();
 }
 
@@ -153,7 +156,10 @@ void YM3438::Reset()
     memset(m_state.registers, 0, sizeof(m_state.registers));
 
     for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+    {
         ResetChannel(m_state.channels[i]);
+        UpdateChannelPan(i);
+    }
 
     m_state.address = 0;
     m_state.f_number_high = 0;
@@ -288,10 +294,10 @@ void YM3438::GenerateNativeSample()
     {
         s16 output = CalculateChannel(i);
 
-        if (m_state.channels[i].pan_left)
+        if (m_pan_left[i])
             left += output;
 
-        if (m_state.channels[i].pan_right)
+        if (m_pan_right[i])
             right += output;
     }
 
@@ -938,6 +944,15 @@ u8 YM3438::Read(u8 port)
     return m_state.status;
 }
 
+// Status as of the last catch-up, without latching it
+u8 YM3438::Peek(u8 port) const
+{
+    if ((port & 0x01) == 0)
+        return (m_state.busy_cycles ? 0x80 : 0) | (m_state.timer_b_flag << 1) | m_state.timer_a_flag;
+
+    return m_state.status;
+}
+
 void YM3438::WriteRegister(u16 address, u8 value)
 {
     int bank = (address >> 8) & 0x01;
@@ -1112,6 +1127,7 @@ void YM3438::WriteChannelRegister(int bank, u8 address, u8 value)
             m_state.channels[channel].pan_right = (value >> 6) & 0x01;
             m_state.channels[channel].pan_left = (value >> 7) & 0x01;
             m_state.channels[channel].phase_dirty = 1;
+            UpdateChannelPan(channel);
             break;
         default:
             break;
@@ -1156,6 +1172,19 @@ void YM3438::WriteTimerControl(u8 value)
 
     if (old_mode == 2 && m_state.channel_3_mode != 2)
         KeyOffCSM();
+}
+
+// A debugger mute clears the pan the mix reads, the programmed pan stays in the channel state
+void YM3438::SetChannelMute(int channel, bool mute)
+{
+    m_channel_mute[channel] = mute;
+    UpdateChannelPan(channel);
+}
+
+void YM3438::UpdateChannelPan(int channel)
+{
+    m_pan_left[channel] = m_channel_mute[channel] ? 0 : m_state.channels[channel].pan_left;
+    m_pan_right[channel] = m_channel_mute[channel] ? 0 : m_state.channels[channel].pan_right;
 }
 
 void YM3438::SaveState(std::ostream& stream)
@@ -1291,6 +1320,7 @@ void YM3438::SanitizeState()
         ch.phase_modulation &= 0x07;
         ch.pan_left &= 0x01;
         ch.pan_right &= 0x01;
+        UpdateChannelPan(channel);
         ch.s1_key_written &= 0x01;
         ch.s1_key_register &= 0x01;
         ch.phase_dirty = 1;

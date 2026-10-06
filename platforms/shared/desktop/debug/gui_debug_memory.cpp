@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <ctype.h>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -61,21 +62,6 @@ struct MemoryWatch
     bool freeze;
 };
 
-struct MemoryBreakpoint
-{
-    GT_Debug_Memory_Address address;
-    u32 end;
-    int pass_count;
-    bool enabled;
-    bool read;
-    bool write;
-    bool execute;
-    bool cpu;
-    bool dma;
-    bool log_only;
-    bool one_shot;
-};
-
 struct MemorySearchResult
 {
     u32 address;
@@ -98,6 +84,7 @@ public:
     bool Start(DebugMemoryProvider& provider, const GT_Debug_Memory_Address& source, u32 start, u32 size, int width,
         int endian, bool signed_values, bool aligned, bool known, u64 known_value);
     bool Filter(DebugMemoryProvider& provider, int comparison, u64 value);
+    bool FilterOperator(DebugMemoryProvider& provider, int comparison, bool previous, u64 value, bool signed_values);
     void Undo();
     bool FindPattern(DebugMemoryProvider& provider, const GT_Debug_Memory_Address& source, u32 start, u32 size,
         const std::vector<u8>& pattern, const std::vector<u8>& mask);
@@ -105,6 +92,7 @@ public:
     const GT_Debug_Memory_Address& GetSource() const;
     const std::vector<MemorySearchResult>& GetResults() const;
     u32 GetCandidateCount() const;
+    int GetWidth() const;
     bool IsActive() const;
     bool CanUndo() const;
 
@@ -114,6 +102,7 @@ private:
     u64 MaskValue(u64 value) const;
     s64 GetSignedValue(u64 value) const;
     bool Compare(u64 current, u64 previous, u64 initial, u64 specific, int comparison) const;
+    bool CompareOperator(u64 current, u64 reference, int comparison, bool signed_values) const;
     bool IsCandidate(u32 offset) const;
     void SetCandidate(u32 offset, bool candidate);
     void BuildResults(const std::vector<u8>& current, const std::vector<u8>& previous);
@@ -147,7 +136,6 @@ static int current_editor = 0;
 
 static std::vector<MemoryBookmark> memory_bookmarks;
 static std::vector<MemoryWatch> memory_watches;
-static std::vector<MemoryBreakpoint> memory_breakpoints;
 
 static MemorySearch memory_search;
 
@@ -187,7 +175,7 @@ static void draw_breakpoints_window();
 static void process_editor_requests(MemEditor& editor);
 static void add_bookmark(const GT_Debug_Memory_Address& address, u32 end);
 static void add_watch(const GT_Debug_Memory_Address& address);
-static void add_breakpoint(const GT_Debug_Memory_Address& address, u32 end);
+static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end);
 static bool read_value(const GT_Debug_Memory_Address& address, int size, int endian, u64& value,
     GT_Debug_Memory_Status& status);
 static void format_address(const GT_Debug_Memory_Address& address, char* text, size_t text_size);
@@ -218,7 +206,6 @@ void gui_debug_memory_destroy(void)
 {
     memory_bookmarks.clear();
     memory_watches.clear();
-    memory_breakpoints.clear();
     memory_search.Reset();
 }
 
@@ -232,7 +219,6 @@ void gui_debug_memory_reset(void)
     {
         memory_bookmarks.clear();
         memory_watches.clear();
-        memory_breakpoints.clear();
         memory_media_crc = media_crc;
         memory_media_crc_valid = true;
     }
@@ -930,19 +916,32 @@ static void add_watch(const GT_Debug_Memory_Address& address)
     show_watches = true;
 }
 
-static void add_breakpoint(const GT_Debug_Memory_Address& address, u32 end)
+static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end)
 {
-    MemoryBreakpoint breakpoint;
-    memset(&breakpoint, 0, sizeof(breakpoint));
-    breakpoint.address = address;
-    breakpoint.end = end;
-    breakpoint.enabled = true;
-    breakpoint.read = true;
-    breakpoint.write = true;
-    breakpoint.cpu = true;
-    breakpoint.dma = true;
-    memory_breakpoints.push_back(breakpoint);
-    show_breakpoints = true;
+    I386* cpu = emu_get_core()->GetI386();
+    u8 type = I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE;
+    u32 size = end >= address.address ? end - address.address : 0;
+    bool added = false;
+
+    if (address.space == GT_DEBUG_MEMORY_IO)
+        added = cpu->AddBreakpoint(address.address, end, type, I386_BREAKPOINT_IO);
+    else
+    {
+        GT_Debug_Memory_Translation translation;
+
+        if (!memory_provider.Translate(address, translation))
+            return false;
+
+        if ((address.space == GT_DEBUG_MEMORY_LINEAR || address.space == GT_DEBUG_MEMORY_LOGICAL) && translation.linear_valid)
+            added = cpu->AddBreakpoint(translation.linear, translation.linear + size, type, I386_BREAKPOINT_LINEAR);
+        else if (translation.physical_valid)
+            added = cpu->AddBreakpoint(translation.physical, translation.physical + size, type, I386_BREAKPOINT_PHYSICAL);
+    }
+
+    if (added)
+        show_breakpoints = true;
+
+    return added;
 }
 
 static void draw_watches_window()
@@ -1238,54 +1237,81 @@ static void draw_search_window()
 
 static void draw_breakpoints_window()
 {
-    ImGui::SetNextWindowSize(ImVec2(720, 360), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Memory Breakpoints", &show_breakpoints);
-    ImGui::TextColored(violet,
-        "Breakpoint definitions are ready; Memory/I386 execution hooks are not implemented yet.");
+    static const char* k_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "LINEAR", "PHYSICAL", "I/O" };
 
-    if (ImGui::Button("Add Current Selection") && IsValidPointer(active_editor()))
+    ImGui::SetNextWindowSize(ImVec2(420, 300), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Memory Breakpoints", &show_breakpoints);
+
+    I386* cpu = emu_get_core()->GetI386();
+    bool can_add = IsValidPointer(active_editor());
+
+    if (!can_add)
+        ImGui::BeginDisabled();
+
+    if (ImGui::Button("Add Current Selection") && can_add)
     {
         u32 start = 0;
         u32 end = 0;
         active_editor()->GetSelection(start, end);
         GT_Debug_Memory_Address address = active_editor()->GetSource();
         address.address = start;
-        add_breakpoint(address, end);
+
+        if (!add_breakpoint(address, end))
+            gui_set_status_message("This memory has no linear, physical or I/O address", 3000);
     }
 
+    if (!can_add)
+        ImGui::EndDisabled();
+
     ImGui::SameLine();
+    ImGui::TextDisabled("Read and write breakpoints stop after the access");
 
-    if (ImGui::Button("Remove All"))
-        memory_breakpoints.clear();
-
-    if (ImGui::BeginTable("##memory_breakpoints", 10, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-        ImGuiTableFlags_BordersV | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY))
+    if (ImGui::BeginTable("##memory_breakpoints", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+        ImGuiTableFlags_BordersV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit))
     {
-        const char* headings[] = {
-            "On", "Range", "R", "W", "X", "CPU", "DMA", "Log", "Once", "Pass"
-        };
-
-        for (int i = 0; i < 10; i++)
-            ImGui::TableSetupColumn(headings[i]);
-
+        ImGui::TableSetupColumn("On");
+        ImGui::TableSetupColumn("Space");
+        ImGui::TableSetupColumn("Range");
+        ImGui::TableSetupColumn("R");
+        ImGui::TableSetupColumn("W");
         ImGui::TableHeadersRow();
+
+        std::vector<I386_Breakpoint>* breakpoints = cpu->GetBreakpoints();
         int remove = -1;
 
-        for (size_t i = 0; i < memory_breakpoints.size(); i++)
+        for (size_t i = 0; i < breakpoints->size(); i++)
         {
-            MemoryBreakpoint& breakpoint = memory_breakpoints[i];
+            I386_Breakpoint& breakpoint = (*breakpoints)[i];
+
+            if (breakpoint.type == I386_BREAKPOINT_EXECUTE)
+                continue;
+
+            int digits = breakpoint.space == I386_BREAKPOINT_IO ? 4 : 8;
+            bool read = (breakpoint.type & I386_BREAKPOINT_READ) != 0;
+            bool write = (breakpoint.type & I386_BREAKPOINT_WRITE) != 0;
+            char range[32];
+
+            if (breakpoint.range)
+                snprintf(range, sizeof(range), "%0*X-%0*X", digits, breakpoint.address1, digits, breakpoint.address2);
+            else
+                snprintf(range, sizeof(range), "%0*X", digits, breakpoint.address1);
+
             ImGui::PushID((int)i);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Checkbox("##enabled", &breakpoint.enabled);
             ImGui::TableNextColumn();
-            char start[128];
-            format_address(breakpoint.address, start, sizeof(start));
-            char range[180];
-            snprintf(range, sizeof(range), "%s-%08X", start, breakpoint.end);
+            ImGui::TextColored(violet, "%s", k_spaces[breakpoint.space % I386_BREAKPOINT_SPACE_COUNT]);
+            ImGui::TableNextColumn();
 
-            if (ImGui::Selectable(range, false))
-                navigate_to(breakpoint.address);
+            if (ImGui::Selectable(range, false) && breakpoint.space != I386_BREAKPOINT_IO)
+            {
+                GT_Debug_Memory_Address target = { };
+                target.space = breakpoint.space == I386_BREAKPOINT_LINEAR ? GT_DEBUG_MEMORY_LINEAR : GT_DEBUG_MEMORY_PHYSICAL;
+                target.address = breakpoint.address1;
+                target.segment_register = -1;
+                navigate_to(target);
+            }
 
             if (ImGui::BeginPopupContextItem())
             {
@@ -1295,25 +1321,18 @@ static void draw_breakpoints_window()
                 ImGui::EndPopup();
             }
 
-            ImGui::TableNextColumn(); ImGui::Checkbox("##read", &breakpoint.read);
-            ImGui::TableNextColumn(); ImGui::Checkbox("##write", &breakpoint.write);
-            ImGui::TableNextColumn(); ImGui::Checkbox("##execute", &breakpoint.execute);
-            ImGui::TableNextColumn(); ImGui::Checkbox("##cpu", &breakpoint.cpu);
-            ImGui::TableNextColumn(); ImGui::Checkbox("##dma", &breakpoint.dma);
-            ImGui::TableNextColumn(); ImGui::Checkbox("##log", &breakpoint.log_only);
-            ImGui::TableNextColumn(); ImGui::Checkbox("##once", &breakpoint.one_shot);
             ImGui::TableNextColumn();
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputInt("##pass", &breakpoint.pass_count, 0, 0);
-
-            if (breakpoint.pass_count < 0)
-                breakpoint.pass_count = 0;
-
+            ImGui::TextColored(read ? green : gray, "%s", read ? "R" : "-");
+            ImGui::TableNextColumn();
+            ImGui::TextColored(write ? green : gray, "%s", write ? "W" : "-");
             ImGui::PopID();
         }
 
         if (remove >= 0)
-            memory_breakpoints.erase(memory_breakpoints.begin() + remove);
+        {
+            I386_Breakpoint breakpoint = (*breakpoints)[remove];
+            cpu->RemoveBreakpoint(breakpoint.address1, breakpoint.address2, breakpoint.type, breakpoint.space);
+        }
 
         ImGui::EndTable();
     }
@@ -1531,6 +1550,318 @@ static bool parse_pattern(const char* text, int type, std::vector<u8>& pattern, 
     return true;
 }
 
+int gui_debug_memory_get_area_count(void)
+{
+    return GUI_DEBUG_MEMORY_AREA_REGIONS + memory_provider.GetRegionCount();
+}
+
+bool gui_debug_memory_get_area(int id, GuiDebugMemoryArea& area)
+{
+    memset(&area, 0, sizeof(area));
+    area.id = id;
+    area.source.segment_register = -1;
+    area.source.region = -1;
+
+    switch (id)
+    {
+        case GUI_DEBUG_MEMORY_AREA_LINEAR:
+            area.source.space = GT_DEBUG_MEMORY_LINEAR;
+            strncpy_fit(area.name, "LINEAR", sizeof(area.name));
+            area.size = 0x100000000ULL;
+            area.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_EXECUTABLE;
+            return true;
+        case GUI_DEBUG_MEMORY_AREA_PHYSICAL:
+            area.source.space = GT_DEBUG_MEMORY_PHYSICAL;
+            strncpy_fit(area.name, "PHYSICAL", sizeof(area.name));
+            area.size = 0x100000000ULL;
+            area.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_EXECUTABLE;
+            return true;
+        case GUI_DEBUG_MEMORY_AREA_IO:
+            area.source.space = GT_DEBUG_MEMORY_IO;
+            strncpy_fit(area.name, "I/O PORTS", sizeof(area.name));
+            area.size = 0x10000;
+            area.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_MMIO;
+            return true;
+        default:
+            break;
+    }
+
+    GT_Debug_Memory_Region region;
+
+    if (id < GUI_DEBUG_MEMORY_AREA_REGIONS || !memory_provider.GetRegion(id - GUI_DEBUG_MEMORY_AREA_REGIONS, region))
+        return false;
+
+    area.source.space = GT_DEBUG_MEMORY_REGION;
+    area.source.region = region.id;
+    strncpy_fit(area.name, region.name, sizeof(area.name));
+    area.size = region.size;
+    area.flags = region.flags;
+    area.physical_base = region.physical_base;
+    return true;
+}
+
+bool gui_debug_memory_same_source(const GT_Debug_Memory_Address& a, const GT_Debug_Memory_Address& b)
+{
+    if (a.space != b.space)
+        return false;
+
+    if (a.space == GT_DEBUG_MEMORY_REGION)
+        return a.region == b.region;
+
+    if (a.space == GT_DEBUG_MEMORY_LOGICAL)
+        return a.segment_register == b.segment_register && (a.segment_register >= 0 || a.segment == b.segment);
+
+    return true;
+}
+
+void gui_debug_memory_read(const GT_Debug_Memory_Address& address, u8* data, GT_Debug_Memory_Status* status, u32 size)
+{
+    memory_provider.ReadBlock(address, data, status, size, NULL);
+}
+
+bool gui_debug_memory_write(const GT_Debug_Memory_Address& address, const u8* data, u32 size)
+{
+    if (address.space == GT_DEBUG_MEMORY_IO)
+        return false;
+
+    return memory_provider.WriteNow(address, data, size);
+}
+
+bool gui_debug_memory_translate(const GT_Debug_Memory_Address& address, GT_Debug_Memory_Translation& translation)
+{
+    return memory_provider.Translate(address, translation);
+}
+
+bool gui_debug_memory_select_range(const GT_Debug_Memory_Address& source, u32 start, u32 end)
+{
+    MemEditor* editor = active_editor();
+
+    if (!IsValidPointer(editor) || start > end)
+        return false;
+
+    config_debug.show_memory = true;
+    editor->SetSource(source);
+    editor->JumpToAddress(start);
+    editor->SetSelection(start, end);
+    return true;
+}
+
+bool gui_debug_memory_get_selection(const GT_Debug_Memory_Address& source, u32& start, u32& end)
+{
+    MemEditor* editor = active_editor();
+
+    if (!IsValidPointer(editor) || !gui_debug_memory_same_source(editor->GetSource(), source))
+        return false;
+
+    editor->GetSelection(start, end);
+    return true;
+}
+
+int gui_debug_memory_set_selection_value(const GT_Debug_Memory_Address& source, u8 value)
+{
+    u32 start = 0;
+    u32 end = 0;
+
+    if (!gui_debug_memory_get_selection(source, start, end))
+        return 0;
+
+    u64 size = (u64)end - start + 1;
+
+    if (size > MEMORY_SEARCH_MAX_SIZE)
+        return 0;
+
+    std::vector<u8> data((size_t)size, value);
+    GT_Debug_Memory_Address address = source;
+    address.address = start;
+
+    if (!gui_debug_memory_write(address, &data[0], (u32)size))
+        return 0;
+
+    return (int)size;
+}
+
+void gui_debug_memory_add_bookmark(const GT_Debug_Memory_Address& address, u32 end, const char* name)
+{
+    add_bookmark(address, end);
+
+    if (IsValidPointer(name) && name[0] != 0)
+        strncpy_fit(memory_bookmarks.back().name, name, sizeof(memory_bookmarks.back().name));
+}
+
+bool gui_debug_memory_remove_bookmark(const GT_Debug_Memory_Address& address)
+{
+    for (size_t i = 0; i < memory_bookmarks.size(); i++)
+    {
+        const MemoryBookmark& bookmark = memory_bookmarks[i];
+
+        if (gui_debug_memory_same_source(bookmark.address, address) && bookmark.address.address == address.address)
+        {
+            memory_bookmarks.erase(memory_bookmarks.begin() + i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void gui_debug_memory_get_bookmarks(const GT_Debug_Memory_Address& source, std::vector<GuiDebugMemoryBookmark>& bookmarks)
+{
+    bookmarks.clear();
+
+    for (size_t i = 0; i < memory_bookmarks.size(); i++)
+    {
+        const MemoryBookmark& item = memory_bookmarks[i];
+
+        if (!gui_debug_memory_same_source(item.address, source))
+            continue;
+
+        GuiDebugMemoryBookmark bookmark;
+        bookmark.address = item.address;
+        bookmark.end = item.end;
+        strncpy_fit(bookmark.name, item.name, sizeof(bookmark.name));
+        bookmarks.push_back(bookmark);
+    }
+}
+
+bool gui_debug_memory_add_watch(const GT_Debug_Memory_Address& address, const char* name, int size)
+{
+    int size_index = size == 2 ? 1 : size == 4 ? 2 : size == 8 ? 3 : size == 1 ? 0 : -1;
+
+    if (size_index < 0)
+        return false;
+
+    add_watch(address);
+    MemoryWatch& watch = memory_watches.back();
+    watch.size = size_index;
+    GT_Debug_Memory_Status status;
+    watch.valid = read_value(watch.address, size, watch.endian, watch.value, status);
+    watch.previous = watch.value;
+    watch.frozen_value = watch.value;
+
+    if (IsValidPointer(name) && name[0] != 0)
+        strncpy_fit(watch.name, name, sizeof(watch.name));
+
+    return true;
+}
+
+bool gui_debug_memory_remove_watch(const GT_Debug_Memory_Address& address)
+{
+    for (size_t i = 0; i < memory_watches.size(); i++)
+    {
+        const MemoryWatch& watch = memory_watches[i];
+
+        if (gui_debug_memory_same_source(watch.address, address) && watch.address.address == address.address)
+        {
+            memory_watches.erase(memory_watches.begin() + i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void gui_debug_memory_get_watches(const GT_Debug_Memory_Address& source, std::vector<GuiDebugMemoryWatch>& watches)
+{
+    watches.clear();
+
+    for (size_t i = 0; i < memory_watches.size(); i++)
+    {
+        const MemoryWatch& item = memory_watches[i];
+
+        if (!gui_debug_memory_same_source(item.address, source))
+            continue;
+
+        GuiDebugMemoryWatch watch;
+        watch.address = item.address;
+        strncpy_fit(watch.name, item.name, sizeof(watch.name));
+        watch.size = watch_size_bytes(item.size);
+        GT_Debug_Memory_Status status;
+        watch.valid = read_value(item.address, watch.size, item.endian, watch.value, status);
+        watch.freeze = item.freeze;
+        watches.push_back(watch);
+    }
+}
+
+bool gui_debug_memory_search_capture(const GT_Debug_Memory_Address& source, u32 start, u32 size, int width)
+{
+    return memory_search.Start(memory_provider, source, start, size, width, 0, false, true, false, 0);
+}
+
+int gui_debug_memory_search(const GT_Debug_Memory_Address& source, int comparison, bool previous, u64 value,
+    bool signed_values, std::vector<GuiDebugMemorySearchResult>& results)
+{
+    results.clear();
+
+    if (!memory_search.IsActive() || !gui_debug_memory_same_source(memory_search.GetSource(), source))
+        return -1;
+
+    if (!memory_search.FilterOperator(memory_provider, comparison, previous, value, signed_values))
+        return -1;
+
+    const std::vector<MemorySearchResult>& items = memory_search.GetResults();
+
+    for (size_t i = 0; i < items.size(); i++)
+    {
+        GuiDebugMemorySearchResult result;
+        result.address = items[i].address;
+        result.current = items[i].current;
+        result.previous = items[i].previous;
+        results.push_back(result);
+    }
+
+    return (int)memory_search.GetCandidateCount();
+}
+
+int gui_debug_memory_find(const GT_Debug_Memory_Address& source, u32 start, u32 size, const std::vector<u8>& pattern,
+    bool case_sensitive, std::vector<u32>& addresses, int max)
+{
+    addresses.clear();
+
+    if (pattern.empty() || size == 0 || size > MEMORY_SEARCH_MAX_SIZE || pattern.size() > size)
+        return -1;
+
+    std::vector<u8> data(size);
+    std::vector<GT_Debug_Memory_Status> status(size);
+    GT_Debug_Memory_Address address = source;
+    address.address = start;
+    memory_provider.ReadBlock(address, &data[0], &status[0], size, NULL);
+    int count = 0;
+
+    for (u32 offset = 0; offset + pattern.size() <= size; offset++)
+    {
+        bool match = true;
+
+        for (u32 i = 0; i < pattern.size(); i++)
+        {
+            GT_Debug_Memory_Status byte_status = status[offset + i];
+            u8 value = data[offset + i];
+            u8 expected = pattern[i];
+
+            if (!case_sensitive)
+            {
+                value = (u8)tolower(value);
+                expected = (u8)tolower(expected);
+            }
+
+            if ((byte_status != GT_DEBUG_MEMORY_VALID && byte_status != GT_DEBUG_MEMORY_READ_ONLY) || value != expected)
+            {
+                match = false;
+                break;
+            }
+        }
+
+        if (!match)
+            continue;
+
+        if (count < max)
+            addresses.push_back(start + offset);
+
+        count++;
+    }
+
+    return count;
+}
+
 void gui_debug_memory_save_settings(std::ostream& stream)
 {
     int view_count = active_view_count();
@@ -1563,15 +1894,6 @@ void gui_debug_memory_save_settings(std::ostream& stream)
     for (int i = 0; i < watch_count; i++)
     {
         const MemoryWatch& item = memory_watches[i];
-        stream.write((const char*)&item, sizeof(item));
-    }
-
-    int breakpoint_count = (int)memory_breakpoints.size();
-    stream.write((const char*)&breakpoint_count, sizeof(breakpoint_count));
-
-    for (int i = 0; i < breakpoint_count; i++)
-    {
-        const MemoryBreakpoint& item = memory_breakpoints[i];
         stream.write((const char*)&item, sizeof(item));
     }
 }
@@ -1631,22 +1953,6 @@ bool gui_debug_memory_load_settings(std::istream& stream)
             return false;
     }
 
-    int breakpoint_count = 0;
-
-    if (!read_count(stream, breakpoint_count, sizeof(MemoryBreakpoint)))
-        return false;
-
-    std::vector<MemoryBreakpoint> breakpoints(breakpoint_count);
-
-    for (int i = 0; i < breakpoint_count; i++)
-    {
-        if (!read_data(stream, &breakpoints[i], sizeof(breakpoints[i])))
-            return false;
-
-        if (breakpoints[i].address.space < 0 || breakpoints[i].address.space >= GT_DEBUG_MEMORY_SPACE_COUNT)
-            return false;
-    }
-
     for (int i = 0; i < MEMORY_VIEW_COUNT; i++)
         memory_editor[i].SetAvailable(false);
 
@@ -1666,7 +1972,6 @@ bool gui_debug_memory_load_settings(std::istream& stream)
     current_editor = 0;
     memory_bookmarks.swap(bookmarks);
     memory_watches.swap(watches);
-    memory_breakpoints.swap(breakpoints);
     return true;
 }
 
@@ -1815,6 +2120,49 @@ bool MemorySearch::Filter(DebugMemoryProvider& provider, int comparison, u64 val
     return true;
 }
 
+bool MemorySearch::FilterOperator(DebugMemoryProvider& provider, int comparison, bool previous, u64 value,
+    bool signed_values)
+{
+    if (!m_active)
+        return false;
+
+    std::vector<u8> current(m_size);
+    std::vector<GT_Debug_Memory_Status> status(m_size);
+    GT_Debug_Memory_Address address = m_source;
+    address.address = m_start;
+    provider.ReadBlock(address, &current[0], &status[0], m_size, NULL);
+
+    m_undo_data = m_previous_data;
+    m_undo_candidate_bits = m_candidate_bits;
+    m_can_undo = true;
+    m_candidate_count = 0;
+
+    u32 step = m_aligned ? (u32)m_width : 1;
+
+    for (u32 offset = 0; offset + m_width <= m_size; offset += step)
+    {
+        if (!IsCandidate(offset))
+            continue;
+
+        if (!IsValueAvailable(status, offset))
+        {
+            SetCandidate(offset, false);
+            continue;
+        }
+
+        u64 reference = previous ? ReadValue(m_previous_data, offset) : value;
+        bool keep = CompareOperator(ReadValue(current, offset), reference, comparison, signed_values);
+        SetCandidate(offset, keep);
+
+        if (keep)
+            m_candidate_count++;
+    }
+
+    BuildResults(current, m_previous_data);
+    m_previous_data.swap(current);
+    return true;
+}
+
 void MemorySearch::Undo()
 {
     if (!m_can_undo)
@@ -1900,6 +2248,11 @@ const std::vector<MemorySearchResult>& MemorySearch::GetResults() const
 u32 MemorySearch::GetCandidateCount() const
 {
     return m_candidate_count;
+}
+
+int MemorySearch::GetWidth() const
+{
+    return m_width;
 }
 
 bool MemorySearch::IsActive() const
@@ -2013,6 +2366,40 @@ bool MemorySearch::Compare(u64 current, u64 previous, u64 initial, u64 specific,
         case 9: return current != initial;
         case 10: return current > initial;
         case 11: return current < initial;
+        default: return false;
+    }
+}
+
+bool MemorySearch::CompareOperator(u64 current, u64 reference, int comparison, bool signed_values) const
+{
+    current = MaskValue(current);
+    reference = MaskValue(reference);
+
+    if (signed_values)
+    {
+        s64 left = GetSignedValue(current);
+        s64 right = GetSignedValue(reference);
+
+        switch (comparison)
+        {
+            case 0: return left < right;
+            case 1: return left > right;
+            case 2: return left == right;
+            case 3: return left != right;
+            case 4: return left <= right;
+            case 5: return left >= right;
+            default: return false;
+        }
+    }
+
+    switch (comparison)
+    {
+        case 0: return current < reference;
+        case 1: return current > reference;
+        case 2: return current == reference;
+        case 3: return current != reference;
+        case 4: return current <= reference;
+        case 5: return current >= reference;
         default: return false;
     }
 }

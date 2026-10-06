@@ -43,6 +43,11 @@ INLINE bool RF5C68::IsIRQAsserted()
 
 INLINE u8 RF5C68::Read(u16 address)
 {
+    return Peek(address);
+}
+
+INLINE u8 RF5C68::Peek(u16 address) const
+{
     address &= 0x1FFF;
 
     // CPU Wave RAM reads are only available while global playback is stopped
@@ -117,6 +122,11 @@ INLINE s16 RF5C68::GetLeftSample() const
 INLINE s16 RF5C68::GetRightSample() const
 {
     return m_state.right_sample;
+}
+
+INLINE bool RF5C68::IsChannelMuted(int channel) const
+{
+    return m_channel_mute[channel];
 }
 
 #endif /* RF5C68_INLINE_H */

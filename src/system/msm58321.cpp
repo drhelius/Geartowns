@@ -82,6 +82,13 @@ u8 MSM58321::Read(u16 port, u64 clocks)
     }
 }
 
+// Counters catch up on a copy, so the time shown is the time a read would return
+u8 MSM58321::Peek(u16 port, u64 clocks) const
+{
+    MSM58321 synchronized(*this);
+    return synchronized.Read(port, clocks);
+}
+
 // The strobes are levels, so a nibble written while one is held takes effect at once
 void MSM58321::Write(u16 port, u8 value, u64 clocks)
 {

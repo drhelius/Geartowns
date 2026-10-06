@@ -37,6 +37,11 @@ INLINE u8 MB8877::ReadSectorRegister() const
     return m_state.sector;
 }
 
+INLINE u8 MB8877::PeekData() const
+{
+    return m_state.data;
+}
+
 INLINE MB8877::MB8877_State* MB8877::GetState()
 {
     return &m_state;

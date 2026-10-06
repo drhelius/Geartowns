@@ -61,6 +61,7 @@ public:
     void Init(bool is_master);
     void Reset();
     u8 Read(int a0);
+    u8 Peek(int a0) const;
     void Write(int a0, u8 value);
     void SetInputLine(int line, bool high);
     bool IsIRQAsserted() const;

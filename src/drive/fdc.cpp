@@ -88,6 +88,27 @@ u8 FDC::Read(u16 port, u64 clocks)
     }
 }
 
+u8 FDC::Peek(u16 port, u64 clocks) const
+{
+    switch (port)
+    {
+        case 0x0200:
+            return m_mb8877.PeekStatus(clocks);
+        case 0x0202:
+            return m_mb8877.ReadTrackRegister();
+        case 0x0204:
+            return m_mb8877.ReadSectorRegister();
+        case 0x0206:
+            return m_mb8877.PeekData();
+        case 0x0208:
+            return IsReady(clocks) ? 0x07 : 0x05;
+        case 0x020E:
+            return m_state.drive_switch;
+        default:
+            return 0xFF;
+    }
+}
+
 void FDC::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);

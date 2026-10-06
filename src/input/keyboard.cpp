@@ -86,6 +86,22 @@ u8 Keyboard::Read(u16 port, u64 clocks)
     }
 }
 
+// The next queued byte stays queued
+u8 Keyboard::Peek(u16 port) const
+{
+    switch (port)
+    {
+        case 0x0600:
+            return m_state.fifo_count != 0 ? m_state.fifo[m_state.fifo_read] : 0x00;
+        case 0x0602:
+            return m_state.fifo_count != 0 ? 0x01 : 0x00;
+        case 0x0604:
+            return m_state.kbint ? 0x01 : 0x00;
+        default:
+            return 0xFF;
+    }
+}
+
 void Keyboard::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);

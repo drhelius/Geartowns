@@ -55,6 +55,36 @@
     <ClCompile Include="..\shared\desktop\debug\gui_debug_rewind.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_i386_tables.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_input.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_system.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_video.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_framebuffers.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_audio.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_cdrom.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_floppy.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_trace.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_profiler.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_popups.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -250,6 +280,12 @@
     <ClCompile Include="..\..\src\geartowns_core.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\common\profiler.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\trace_logger.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\input\input.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -403,6 +439,8 @@
     <ClInclude Include="..\..\src\common\memory_stream.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\state_serializer.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\types.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\profiler.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\trace_logger.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\shared\desktop\application.h">
       <Filter>desktop</Filter>
     </ClInclude>
@@ -473,6 +511,39 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_widgets.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_i386_tables.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_constants.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_input.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_system.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_video.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_framebuffers.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_audio.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_cdrom.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_floppy.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_trace.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_profiler.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_popups.h">

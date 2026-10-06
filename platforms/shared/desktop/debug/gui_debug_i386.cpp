@@ -25,6 +25,8 @@
 #include "imgui.h"
 #include "geartowns.h"
 #include "../gui_colors.h"
+#include "gui_debug_constants.h"
+#include "gui_debug_i386_tables.h"
 #include "gui_debug_memory.h"
 #include "gui_debug_widgets.h"
 #include "../gui.h"
@@ -382,17 +384,6 @@ static const char* execution_mode_name(u8 mode)
     return "REAL";
 }
 
-static const char* interrupt_shadow_name(u8 shadow)
-{
-    if (shadow == I386_SHADOW_STI)
-        return "STI";
-
-    if (shadow == I386_SHADOW_MOV_SS)
-        return "MOV SS";
-
-    return "NONE";
-}
-
 static void format_segment_attributes(const I386_Segment& segment, char* text, size_t text_size)
 {
     snprintf(text, text_size, "%c %c%c%c %s %c%c%c%c%c",
@@ -436,8 +427,8 @@ static void draw_address(bool valid, u32 address, GT_Debug_Memory_Space space)
 
 static void draw_section_title(const char* title)
 {
-    ImGui::Spacing();
-    ImGui::TextColored(blue, " %s", title);
+    ImGui::NewLine();
+    ImGui::TextColored(cyan, "%s", title);
     ImGui::Separator();
 }
 
@@ -714,11 +705,15 @@ void gui_debug_window_i386(void)
         ImGui::TableNextColumn();
         ImGui::TextColored(violet, " MODE:");
         ImGui::SameLine();
-        ImGui::TextColored(green, "%-9s", execution_mode_name(state.execution_mode));
+        ImGui::TextColored(blue, "%-9s", execution_mode_name(state.execution_mode));
         ImGui::SameLine();
-        ImGui::TextColored(violet, "  CPL:");
+        ImGui::TextColored(violet, " CPL:");
         ImGui::SameLine();
         ImGui::Text("%u", state.current_privilege_level);
+        ImGui::SameLine();
+        ImGui::TextColored(violet, " IOPL:");
+        ImGui::SameLine();
+        ImGui::Text("%u", (state.eflags & I386_FLAG_IOPL) >> 12);
 
         ImGui::TextColored(violet, " CODE:");
         ImGui::SameLine();
@@ -729,52 +724,27 @@ void gui_debug_window_i386(void)
         ImGui::Text("%s", stack_32 ? "32" : "16");
 
         ImGui::TableNextColumn();
-        ImGui::TextColored(violet, " EXCEPTION:");
+        ImGui::TextColored(violet, " LAST EXCEPTION:");
         ImGui::SameLine();
 
         if (state.last_exception_vector == 0xFF)
-            ImGui::TextColored(gray, "--");
+            ImGui::TextColored(gray, "--      ");
         else
-            ImGui::TextColored(red, "$%02X", state.last_exception_vector);
-
-        ImGui::TextColored(violet, "    REPEAT:");
-        ImGui::SameLine();
-
-        if (state.repeat.active)
         {
-            ImGui::BeginGroup();
-            ImGui::TextColored(green, "ON");
-            ImGui::SameLine();
-            ImGui::Text("$%02X", state.repeat.opcode);
-            ImGui::EndGroup();
+            char name[16];
+            char description[64];
+            u8 vector = state.last_exception_vector;
+            gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
+            ImGui::TextColored(vector < 32 ? red : yellow, "$%02X %-4s", vector, name);
 
             if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::TextColored(cyan, "Opcode: $%02X", state.repeat.opcode);
-                ImGui::TextColored(cyan, "Start: $%08X", state.repeat.start_eip);
-                ImGui::TextColored(cyan, "Next: $%08X", state.repeat.next_eip);
-                ImGui::EndTooltip();
-            }
+                ImGui::SetTooltip("%s", description);
         }
-        else
-            ImGui::TextColored(gray, "OFF");
-
-        ImGui::TextColored(violet, "    SHADOW:");
-        ImGui::SameLine();
-
-        if (state.interrupt_shadow == I386_SHADOW_NONE)
-            ImGui::TextColored(gray, "NONE");
-        else
-            ImGui::TextColored(green, "%s (%u)", interrupt_shadow_name(state.interrupt_shadow),
-                state.interrupt_shadow_steps);
 
         ImGui::TableNextColumn();
         ImGui::TextColored(state.halted ? yellow : gray, " HALTED");
         ImGui::SameLine();
         ImGui::TextColored(state.shutdown ? red : gray, "SHUTDOWN");
-        ImGui::SameLine();
-        ImGui::TextColored(state.nmi_blocked ? yellow : gray, "NMI BLOCKED");
 
         ImGui::EndTable();
     }
@@ -790,7 +760,7 @@ void gui_debug_window_i386_details(void)
     ImGui::SetNextWindowPos(ImVec2(130, 26), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(660, 500), ImGuiCond_FirstUseEver);
 
-    bool visible = ImGui::Begin("Intel 80386 System State", &config_debug.show_processor_details,
+    bool visible = ImGui::Begin("Intel 80386 System Registers", &config_debug.show_processor_details,
         ImGuiWindowFlags_HorizontalScrollbar);
 
     if (visible)

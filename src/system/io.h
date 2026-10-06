@@ -50,6 +50,7 @@ public:
     void Write8(u16 port, u8 value, GT_Bus_Access_Context& context);
     void Write16(u16 port, u16 value, GT_Bus_Access_Context& context);
     void Write32(u16 port, u32 value, GT_Bus_Access_Context& context);
+    bool Peek(u16 port, u64 clocks, u8& value) const;
 
 private:
     Audio* m_audio;

@@ -24,8 +24,17 @@
 
 INLINE bool I8253::GetOutput(int index, u64 tick)
 {
-    I8253_Counter& counter = m_state.counters[index];
+    return GetCounterOutput(m_state.counters[index], tick);
+}
 
+INLINE bool I8253::PeekOutput(int index, u64 tick) const
+{
+    I8253_Counter counter = m_state.counters[index];
+    return GetCounterOutput(counter, tick);
+}
+
+INLINE bool I8253::GetCounterOutput(I8253_Counter& counter, u64 tick) const
+{
     if (!counter.counting)
         return !counter.programmed || counter.mode != 0;
 
@@ -73,7 +82,7 @@ INLINE I8253::I8253_State* I8253::GetState()
     return &m_state;
 }
 
-INLINE void I8253::CommitReload(I8253_Counter& counter, u64 tick)
+INLINE void I8253::CommitReload(I8253_Counter& counter, u64 tick) const
 {
     if (!counter.reload_pending || tick < counter.pending_load)
         return;

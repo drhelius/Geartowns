@@ -81,6 +81,42 @@ u8 I8253::ReadCounter(int index, u64 tick)
     return high ? (u8)(value >> 8) : (u8)value;
 }
 
+// The byte the next read returns, without toggling the read flip-flops
+u8 I8253::PeekCounter(int index, u64 tick) const
+{
+    const I8253_Counter& counter = m_state.counters[index];
+
+    if (!counter.programmed)
+        return 0xFF;
+
+    u16 value = 0;
+    bool high = counter.access == 2;
+
+    if (counter.count_latched)
+    {
+        value = counter.count_latch;
+
+        if (counter.access == 3)
+            high = counter.latch_high;
+    }
+    else
+    {
+        value = PeekCount(index, tick);
+
+        if (counter.access == 3)
+            high = counter.read_high;
+    }
+
+    return high ? (u8)(value >> 8) : (u8)value;
+}
+
+// The live count of the counting element, ignoring any latched value
+u16 I8253::PeekCount(int index, u64 tick) const
+{
+    I8253_Counter counter = m_state.counters[index];
+    return GetCount(counter, tick);
+}
+
 void I8253::WriteCounter(int index, u8 value, u64 tick)
 {
     I8253_Counter& counter = m_state.counters[index];
@@ -195,7 +231,7 @@ void I8253::LoadCount(I8253_Counter& counter, u16 raw, u64 tick)
     counter.reload_pending = false;
 }
 
-u16 I8253::GetCount(I8253_Counter& counter, u64 tick)
+u16 I8253::GetCount(I8253_Counter& counter, u64 tick) const
 {
     if (!counter.counting)
         return counter.reload;

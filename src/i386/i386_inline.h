@@ -301,4 +301,9 @@ INLINE bool I386::TryTranslateLinear(u32 linear, u32& physical) const
     return TranslatePagedPassive(linear, physical);
 }
 
+INLINE bool I386::IsDebuggerHitPending() const
+{
+    return m_debugger_hit_pending;
+}
+
 #endif /* I386_INLINE_H */

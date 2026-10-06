@@ -20,6 +20,8 @@
 #ifndef I386_RUN_INLINE_H
 #define I386_RUN_INLINE_H
 
+#include "../common/profiler.h"
+
 INLINE bool I386::ExecuteOPCode()
 {
     if (m_state.repeat.active)
@@ -65,8 +67,8 @@ INLINE u32 I386::RunCheckedStep()
         (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0);
     I386_State before;
 
-    if (m_trace_enabled)
-        CopyState(before);
+    if (unlikely(m_trace_enabled))
+        TraceStep(before);
     else if (debug_active)
         before.eflags = m_state.eflags;
 
@@ -138,7 +140,7 @@ INLINE bool I386::TrackCall(bool completed, u16 cs, u32 base)
     {
         int return_size = m_instruction.call_return_size != 0 ? m_instruction.call_return_size :
             m_instruction.operand_size;
-        PushCallStack(cs, base, m_instruction.start_eip, Truncate(m_instruction.next_eip, return_size * 8), false, 0);
+        PushCallStack(cs, base, m_instruction.start_eip, Truncate(m_instruction.next_eip, return_size * 8), I386_CALL, 0);
     }
 #else
     UNUSED(cs);
@@ -151,7 +153,12 @@ INLINE bool I386::TrackReturn(bool completed)
 {
 #if !defined(GT_DISABLE_DISASSEMBLER)
     if (completed && !m_disassembler_call_stack.empty())
+    {
         m_disassembler_call_stack.pop_back();
+
+        if (unlikely(m_profiler_active))
+            m_profiler->Leave();
+    }
 #endif
     return completed;
 }

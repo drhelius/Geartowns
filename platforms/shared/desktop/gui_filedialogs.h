@@ -43,6 +43,11 @@ EXTERN void gui_file_dialog_save_memory_dump(void);
 EXTERN void gui_file_dialog_load_memory_dump(void);
 EXTERN void gui_file_dialog_save_debug_settings(void);
 EXTERN void gui_file_dialog_load_debug_settings(void);
+EXTERN void gui_file_dialog_save_sprite(int index);
+EXTERN void gui_file_dialog_load_symbols(void);
+EXTERN void gui_file_dialog_save_trace(void);
+EXTERN void gui_file_dialog_choose_trace_path(void);
+EXTERN void gui_file_dialog_save_all_sprites(void);
 EXTERN void gui_file_dialog_process_results(void);
 EXTERN bool gui_file_dialog_is_active(void);
 

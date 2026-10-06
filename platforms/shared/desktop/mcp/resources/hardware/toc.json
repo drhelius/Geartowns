@@ -1,3 +1,58 @@
 {
-  "toc": []
+  "toc": [
+    {
+      "uri": "memory_map",
+      "title": "FM Towns Memory Map",
+      "description": "Physical map, low memory banking, FM-R compatible windows, VRAM views, CMOS and PCM windows, reset, debugger memory areas",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "io_ports",
+      "title": "FM Towns I/O Port Map",
+      "description": "Every decoded I/O port with its function, IRQ lines, DMA channels and timer counters",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "i386_cpu",
+      "title": "Intel 80386 — What FM Towns Software Relies On",
+      "description": "Registers, real, protected and VM86 modes, segmentation, paging, exceptions, IDT and the FM Towns IRQ vectors",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "system",
+      "title": "FM Towns System Devices",
+      "description": "8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control registers and keyboard",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "video",
+      "title": "FM Towns Video",
+      "description": "VRAM views, CRTC registers and timing, output controller, pixel formats, palettes, VSYNC, write mask and the FM-R view",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "sprites",
+      "title": "FM Towns Sprites",
+      "description": "Sprite RAM layout, engine registers, the 8-byte entry, patterns, color tables, clipping, pages and timing",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "sound",
+      "title": "FM Towns Sound",
+      "description": "YM3438 FM ports and registers, algorithms and timers, RF5C68 PCM registers, wave RAM and IRQs, MB87078 electronic volume, mutes and ADC",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "cdrom",
+      "title": "FM Towns CD-ROM",
+      "description": "CD-ROM ports, master status and control, commands and parameters, status packets, sector reads with DMA, CD audio",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "floppy",
+      "title": "FM Towns Floppy Disk",
+      "description": "Media and geometry, FDC ports, drive control and select, MB8877A commands and status, a sector read, D77 images",
+      "mimeType": "text/markdown"
+    }
+  ]
 }

@@ -75,6 +75,24 @@ u8 PIT::Read(u16 port, u64 clocks)
     return m_pit[chip].ReadCounter(index, GetTick(chip * 3 + index, clocks));
 }
 
+u8 PIT::Peek(u16 port, u64 clocks) const
+{
+    if (port == 0x0060)
+    {
+        u64 tick = GetTick(0, clocks);
+        u8 latch = tick > m_state.settled_tick ? GetTimerLatch(tick) : m_state.timer_latch;
+        return latch | (m_state.timer_enable << 2) | (m_state.sound ? 0x10 : 0x00);
+    }
+
+    int chip = (port >> 4) & 0x01;
+    int index = (port >> 1) & 0x03;
+
+    if (index == 3)
+        return 0xFF;
+
+    return m_pit[chip].PeekCounter(index, GetTick(chip * 3 + index, clocks));
+}
+
 void PIT::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);

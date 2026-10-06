@@ -21,7 +21,11 @@
 
 #include "../emu.h"
 #include "media/firmware.h"
+#include "drive/fdc.h"
+#include "drive/floppy_disk.h"
 #include "geartowns.h"
+#include "system/io.h"
+#include "system/scheduler.h"
 
 static const int DEBUG_MEMORY_MAX_TRANSACTION_SIZE = 0x100000;
 
@@ -54,7 +58,6 @@ static const u8* firmware_region_data(Firmware* firmware, GT_Firmware_Type type)
     }
 }
 
-// Firmware the memory map already exposes is listed once, as its mapped region
 static bool firmware_region_listed(GT_Firmware_Type type)
 {
     GeartownsCore* core = emu_get_core();
@@ -189,6 +192,12 @@ int DebugMemoryProvider::GetRegionCount() const
     if (!emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
         count++;
 
+    for (int drive = 0; drive < FDC_DRIVES; drive++)
+    {
+        if (core->GetFDC()->GetDisk(drive)->IsInserted())
+            count++;
+    }
+
     return count;
 }
 
@@ -303,6 +312,24 @@ void DebugMemoryProvider::ReadBlock(const GT_Debug_Memory_Address& address, u8* 
         return;
     }
 
+    if (address.space == GT_DEBUG_MEMORY_IO)
+    {
+        IO* io = core->GetIO();
+        u64 clocks = core->GetScheduler()->GetClocks();
+
+        for (u32 i = 0; IsValidPointer(io) && i < size; i++)
+        {
+            u64 port = (u64)address.address + i;
+
+            if (port > 0xFFFF)
+                status[i] = GT_DEBUG_MEMORY_UNMAPPED;
+            else
+                status[i] = io->Peek((u16)port, clocks, data[i]) ? GT_DEBUG_MEMORY_READ_ONLY : GT_DEBUG_MEMORY_UNMAPPED;
+        }
+
+        return;
+    }
+
     if (!IsValidPointer(cpu))
         return;
 
@@ -393,7 +420,7 @@ bool DebugMemoryProvider::Translate(const GT_Debug_Memory_Address& address, GT_D
     }
 
     strncpy_fit(translation.reason,
-        address.space == GT_DEBUG_MEMORY_IO ? "Passive I/O inspection is not implemented" : "Address translation is unavailable",
+        address.space == GT_DEBUG_MEMORY_IO ? "I/O ports are not memory mapped" : "Address translation is unavailable",
         sizeof(translation.reason));
     return false;
 }
@@ -412,6 +439,28 @@ bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address, con
     transaction.map_generation = GetMapGeneration();
     m_pending_writes.push_back(transaction);
     SetMessage("Memory edit queued for the next safe point");
+    return true;
+}
+
+bool DebugMemoryProvider::WriteNow(const GT_Debug_Memory_Address& address, const u8* data, u32 size)
+{
+    if (!IsValidPointer(data) || size == 0 || size > DEBUG_MEMORY_MAX_TRANSACTION_SIZE)
+    {
+        SetMessage("Invalid or oversized memory edit");
+        return false;
+    }
+
+    WriteTransaction transaction;
+    transaction.address = address;
+    transaction.after.assign(data, data + size);
+    transaction.map_generation = GetMapGeneration();
+
+    if (!ApplyTransaction(transaction, true))
+        return false;
+
+    m_undo_history.push_back(transaction);
+    m_redo_history.clear();
+    SetMessage("Memory edit applied");
     return true;
 }
 
@@ -516,14 +565,39 @@ bool DebugMemoryProvider::GetExternalRegion(int index, GT_Debug_Memory_Region& r
 
     Media* media = core->GetMedia();
 
-    if (index == 0 && !emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
+    if (!emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
     {
-        memset(&region, 0, sizeof(region));
-        region.id = GT_DEBUG_REGION_MEDIA_IMAGE;
-        strncpy_fit(region.name, "Media Image", sizeof(region.name));
-        region.size = (u32)media->GetSize();
-        region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM;
-        return true;
+        if (index == 0)
+        {
+            memset(&region, 0, sizeof(region));
+            region.id = GT_DEBUG_REGION_MEDIA_IMAGE;
+            strncpy_fit(region.name, "Media Image", sizeof(region.name));
+            region.size = (u32)media->GetSize();
+            region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM;
+            return true;
+        }
+
+        index--;
+    }
+
+    for (int drive = 0; drive < FDC_DRIVES; drive++)
+    {
+        FloppyDisk* disk = core->GetFDC()->GetDisk(drive);
+
+        if (!disk->IsInserted())
+            continue;
+
+        if (index == 0)
+        {
+            memset(&region, 0, sizeof(region));
+            region.id = GT_DEBUG_REGION_FLOPPY_IMAGE + drive;
+            snprintf(region.name, sizeof(region.name), "Floppy %d Image", drive);
+            region.size = disk->GetImageSize();
+            region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM;
+            return true;
+        }
+
+        index--;
     }
 
     return false;
@@ -566,6 +640,17 @@ bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data, GT_De
         }
     }
 
+    if (id >= GT_DEBUG_REGION_FLOPPY_IMAGE && id < GT_DEBUG_REGION_FLOPPY_IMAGE + FDC_DRIVES)
+    {
+        FloppyDisk* disk = core->GetFDC()->GetDisk(id - GT_DEBUG_REGION_FLOPPY_IMAGE);
+
+        if (disk->IsInserted())
+        {
+            source = disk->GetImage();
+            source_size = disk->GetImageSize();
+        }
+    }
+
     for (u32 i = 0; i < size; i++)
     {
         u64 current = (u64)offset + i;
@@ -603,7 +688,21 @@ bool DebugMemoryProvider::WriteBlock(const GT_Debug_Memory_Address& address, con
     if (address.space == GT_DEBUG_MEMORY_BUS)
         return memory->DebugWriteBusBlock(address.address, data, size);
 
-    return false;
+    if (address.space != GT_DEBUG_MEMORY_LINEAR && address.space != GT_DEBUG_MEMORY_LOGICAL)
+        return false;
+
+    for (u32 i = 0; i < size; i++)
+    {
+        GT_Debug_Memory_Translation translation;
+        GT_Debug_Memory_Address current = address;
+        current.address = address.address + i;
+
+        if (!Translate(current, translation) || !translation.physical_valid ||
+            !memory->DebugWritePhysicalBlock(translation.physical, &data[i], 1))
+            return false;
+    }
+
+    return true;
 }
 
 bool DebugMemoryProvider::ApplyTransaction(WriteTransaction& transaction, bool capture_before)

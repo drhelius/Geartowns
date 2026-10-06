@@ -61,6 +61,19 @@ Audio::Audio()
     m_cdda_volume = 1.0f;
     m_cdda_gain_left = 0;
     m_cdda_gain_right = 0;
+    m_buffer_index = 0;
+    m_buffer_overflow = false;
+    m_frame_samples = 0;
+    m_channel_scopes = false;
+
+    for (int i = 0; i < AUDIO_SOURCE_COUNT; i++)
+        m_source_mute[i] = false;
+
+    memset(m_fm_buffer, 0, sizeof(m_fm_buffer));
+    memset(m_pcm_buffer, 0, sizeof(m_pcm_buffer));
+    memset(m_cdda_buffer, 0, sizeof(m_cdda_buffer));
+    memset(m_fm_channel_buffer, 0, sizeof(m_fm_channel_buffer));
+    memset(m_pcm_channel_buffer, 0, sizeof(m_pcm_channel_buffer));
     SetPCMLowpassCutoff(k_audio_pcm_lowpass_cutoff);
 }
 
@@ -183,11 +196,29 @@ u8 Audio::ReadWaveWindowCallback(void* device, u32 offset)
     return audio->m_rf5c68->Read((u16)(0x1000 | (offset & 0x0FFF)));
 }
 
+u8 Audio::PeekWaveWindowCallback(void* device, u32 offset)
+{
+    const RF5C68* rf5c68 = ((const Audio*)device)->m_rf5c68;
+    return rf5c68->Peek((u16)(0x1000 | (offset & 0x0FFF)));
+}
+
 void Audio::WriteWaveWindowCallback(void* device, u32 offset, u8 value)
 {
     Audio* audio = (Audio*)device;
     audio->Synchronize(audio->m_scheduler->GetClocks());
     audio->m_rf5c68->Write((u16)(0x1000 | (offset & 0x0FFF)), value);
+}
+
+// One value per channel and output sample for the debugger scopes, only while they are enabled
+void Audio::CaptureChannels(int index)
+{
+    YM3438::YM3438_State* fm = m_ym3438->GetState();
+
+    for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+        m_fm_channel_buffer[i][index] = fm->channels[i].output;
+
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
+        m_pcm_channel_buffer[i][index] = m_rf5c68->GetChannelOutput(i);
 }
 
 void Audio::EndFrame(s16* sample_buffer, int* sample_count)
@@ -196,6 +227,7 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
 
     m_buffer_index = 0;
     m_buffer_overflow = false;
+    m_frame_samples = samples;
 
     if (!IsValidPointer(sample_buffer) || !IsValidPointer(sample_count))
     {
@@ -213,9 +245,13 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
         return;
     }
 
+    float fm_volume = m_source_mute[AUDIO_SOURCE_FM] ? 0.0f : m_fm_volume;
+    float pcm_volume = m_source_mute[AUDIO_SOURCE_PCM] ? 0.0f : m_pcm_volume;
+    float cdda_volume = m_source_mute[AUDIO_SOURCE_CDDA] ? 0.0f : m_cdda_volume;
+
     // Relative FM/PCM/CD-DA levels are unmeasured: 
     // FM enters at its full DAC sum, PCM at half scale and CD-DA at full scale
-    if ((m_master_volume == 1.0f) && (m_fm_volume == 1.0f) && (m_pcm_volume == 1.0f) && (m_cdda_volume == 1.0f))
+    if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f))
     {
         for (int i = 0; i < samples; i++)
         {
@@ -227,8 +263,8 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     {
         for (int i = 0; i < samples; i++)
         {
-            float mix = (float)m_fm_buffer[i] * m_fm_volume + (float)(m_pcm_buffer[i] >> 1) * m_pcm_volume +
-                (float)m_cdda_buffer[i] * m_cdda_volume;
+            float mix = (float)m_fm_buffer[i] * fm_volume + (float)(m_pcm_buffer[i] >> 1) * pcm_volume +
+                (float)m_cdda_buffer[i] * cdda_volume;
             s32 out = (s32)(mix * m_master_volume);
             sample_buffer[i] = (s16)CLAMP(out, -32768, 32767);
         }

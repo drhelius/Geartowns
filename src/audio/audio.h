@@ -22,19 +22,27 @@
 
 #include <iostream>
 #include "../common/common.h"
+#include "ym3438.h"
+#include "rf5c68.h"
 
 #define AUDIO_VOLUME_CHIPS 2
 #define AUDIO_VOLUME_CHANNELS 4
 
 class CdRomAudio;
-class YM3438;
-class RF5C68;
 class Scheduler;
 class StateSerializer;
 
 class Audio
 {
 public:
+    enum Audio_Source
+    {
+        AUDIO_SOURCE_FM = 0,
+        AUDIO_SOURCE_PCM,
+        AUDIO_SOURCE_CDDA,
+        AUDIO_SOURCE_COUNT
+    };
+
     struct Audio_State
     {
         u32 sound_clock_remainder;
@@ -65,18 +73,27 @@ public:
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
     Audio_State* GetState();
+    void SetSourceMute(int source, bool mute);
+    bool IsSourceMuted(int source) const;
+    void EnableChannelScopes(bool enable);
+    int GetFrameSamples() const;
+    const s16* GetSourceBuffer(int source) const;
+    const s16* GetFMChannelBuffer(int channel) const;
+    const s16* GetPCMChannelBuffer(int channel) const;
+    s32 GetVolumeGain(int chip, int channel) const;
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
     static u8 ReadWaveWindowCallback(void* device, u32 offset);
+    static u8 PeekWaveWindowCallback(void* device, u32 offset);
     static void WriteWaveWindowCallback(void* device, u32 offset, u8 value);
 
 private:
     void Clock(u32 clocks);
     void ClockSources(u32 clocks);
     void SampleSources();
+    void CaptureChannels(int index);
     void UpdateCDDAGain();
-    s32 GetVolumeGain(int chip, int channel) const;
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -99,6 +116,11 @@ private:
     s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];
     int m_buffer_index;
     bool m_buffer_overflow;
+    int m_frame_samples;
+    bool m_source_mute[AUDIO_SOURCE_COUNT];
+    bool m_channel_scopes;
+    s16 m_fm_channel_buffer[YM3438_CHANNEL_COUNT][GT_AUDIO_BUFFER_SIZE / 2];
+    s16 m_pcm_channel_buffer[RF5C68_CHANNEL_COUNT][GT_AUDIO_BUFFER_SIZE / 2];
 };
 
 #include "audio_inline.h"

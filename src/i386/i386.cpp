@@ -18,6 +18,8 @@
  */
 
 #include "i386.h"
+#include "../common/profiler.h"
+#include "../common/trace_logger.h"
 #include "../system/memory.h"
 #include "../system/io.h"
 #include "../common/state_serializer.h"
@@ -61,6 +63,17 @@ I386::I386()
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
+    memset(&m_breakpoint_hit_info, 0, sizeof(m_breakpoint_hit_info));
+    m_debugger_checks = false;
+    m_debugger_memory_checks = false;
+    m_debugger_io_checks = false;
+    m_debugger_interrupt_checks = false;
+    m_debugger_hit_pending = false;
+    InitPointer(m_trace_logger);
+    InitPointer(m_profiler);
+    m_trace_internal = false;
+    m_trace_cpu = false;
+    m_profiler_active = false;
 
     Reset();
 }
@@ -142,6 +155,7 @@ void I386::Reset()
     m_breakpoint_hit = false;
     m_run_to_hit = false;
     m_breakpoint_hit_address = 0;
+    m_debugger_hit_pending = false;
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
         SetRealModeSegment((I386_Segment_Register)i, 0);
@@ -714,8 +728,19 @@ void I386::SetTraceEnabled(bool enabled)
     if (enabled && !IsValidPointer(m_trace))
         m_trace = new I386_Trace_Entry[GT_I386_TRACE_SIZE]();
 
-    m_trace_enabled = enabled;
+    m_trace_internal = enabled;
+    m_trace_enabled = m_trace_internal || m_trace_cpu;
     m_trace_count = 0;
+}
+
+void I386::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
+}
+
+void I386::SetProfiler(Profiler* profiler)
+{
+    m_profiler = profiler;
 }
 
 int I386::CopyTraceEntries(I386_Trace_Entry* entries, int capacity) const
@@ -923,6 +948,16 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
     }
 }
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+static INLINE I386_Call_Type get_call_type(bool software, bool external)
+{
+    if (software)
+        return I386_CALL_SOFTWARE_INTERRUPT;
+
+    return external ? I386_CALL_HARDWARE_INTERRUPT : I386_CALL_EXCEPTION;
+}
+#endif
+
 bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& context, bool software,
     bool has_error_code, u32 error_code, bool fault, bool external, u64* clocks, I386_Run_Result* run_result)
 {
@@ -949,17 +984,16 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
         if (result)
-            PushCallStack(return_cs, return_base, source_eip, return_eip, true, vector);
+            PushCallStack(return_cs, return_base, source_eip, return_eip, get_call_type(software, external), vector);
 #endif
+
+        if (result && unlikely(m_debugger_interrupt_checks))
+            RecordDebuggerInterrupt(vector, software, external, return_base + source_eip, has_error_code, error_code);
 
         return result;
     }
 
-    UNUSED(software);
-    UNUSED(has_error_code);
-    UNUSED(error_code);
     UNUSED(fault);
-    UNUSED(external);
 
     u32 table_offset = (u32)vector * 4;
 
@@ -998,15 +1032,59 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
     }
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    PushCallStack(return_cs, return_base, source_eip, (u16)return_eip, true, vector);
+    PushCallStack(return_cs, return_base, source_eip, (u16)return_eip, get_call_type(software, external), vector);
 #endif
+
+    if (unlikely(m_debugger_interrupt_checks))
+        RecordDebuggerInterrupt(vector, software, external, return_base + source_eip, has_error_code, error_code);
 
     return true;
 }
 
+// The trace logger gets each instruction once, the internal capture keeps full states before and after
+void I386::TraceStep(I386_State& before)
+{
+    if (m_trace_cpu && !m_state.repeat.active)
+        TraceInstruction();
+
+    if (m_trace_internal)
+        CopyState(before);
+    else
+        before.eflags = m_state.eflags;
+}
+
+void I386::TraceInstruction()
+{
+    const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
+    u32 linear = code.base + m_state.eip;
+    GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CPU, 0);
+
+    entry->cpu.linear = linear;
+    entry->cpu.eip = m_state.eip;
+    entry->cpu.cs = code.selector;
+    entry->cpu.mode = (u8)m_state.execution_mode;
+    entry->cpu.eflags = m_state.eflags;
+    entry->cpu.size = 0;
+    entry->cpu.name[0] = 0;
+
+    for (int i = 0; i < 8; i++)
+        entry->cpu.registers[i] = m_state.registers[i].value;
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    const I386_Disassembler_Record* record = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
+
+    if (IsValidPointer(record) && record->linear == linear && record->size > 0)
+    {
+        entry->cpu.size = (u8)MIN(record->size, 15);
+        memcpy(entry->cpu.bytes, record->opcodes, entry->cpu.size);
+        strncpy_fit(entry->cpu.name, record->name, sizeof(entry->cpu.name));
+    }
+#endif
+}
+
 void I386::RecordTrace(const I386_State& before)
 {
-    if (!m_trace_enabled)
+    if (!m_trace_internal)
         return;
 
     if (m_trace_count == GT_I386_TRACE_SIZE)

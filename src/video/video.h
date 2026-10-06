@@ -28,6 +28,7 @@
 #define VIDEO_CRTC_REGISTER_COUNT 32
 
 class PIC;
+class TraceLogger;
 class PIT;
 class Scheduler;
 class Sprite;
@@ -36,6 +37,14 @@ class StateSerializer;
 class Video
 {
 public:
+    enum Video_Layer_Format
+    {
+        VIDEO_LAYER_OFF = 0,
+        VIDEO_LAYER_4BPP,
+        VIDEO_LAYER_8BPP,
+        VIDEO_LAYER_16BPP
+    };
+
     struct Video_State
     {
         u8 vram[VIDEO_VRAM_SIZE];
@@ -76,9 +85,11 @@ public:
     Video();
     ~Video();
     void Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void ResetFMRView();
     u8 Read(u16 port, u64 clocks);
+    u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
@@ -98,31 +109,31 @@ public:
 
     u8 ReadFMRRegister(u32 offset, bool peek);
     void WriteFMRRegister(u32 offset, u8 value);
+    Video_Layer_Format GetLayerFormat(int layer) const;
+    bool IsTwoPage() const;
+    u8 GetSyncStatus(u64 clocks) const;
+    u32 GetBeamHalfLine(u64 clocks) const;
+    u32 GetBeamClock(u64 clocks) const;
 
     static u8 ReadVRAMTwoPageCallback(void* device, u32 offset);
+    static u8 PeekVRAMTwoPageCallback(void* device, u32 offset);
     static void WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value);
     static u8 ReadVRAMSinglePageCallback(void* device, u32 offset);
+    static u8 PeekVRAMSinglePageCallback(void* device, u32 offset);
     static void WriteVRAMSinglePageCallback(void* device, u32 offset, u8 value);
     static u8 ReadFMRPlanesCallback(void* device, u32 offset);
+    static u8 PeekFMRPlanesCallback(void* device, u32 offset);
     static void WriteFMRPlanesCallback(void* device, u32 offset, u8 value);
     static u8 ReadFMRTextCallback(void* device, u32 offset);
+    static u8 PeekFMRTextCallback(void* device, u32 offset);
     static void WriteFMRTextCallback(void* device, u32 offset, u8 value);
     static u8 ReadFMRRegisterCallback(void* device, u32 offset);
     static u8 PeekFMRRegisterCallback(void* device, u32 offset);
     static void WriteFMRRegisterCallback(void* device, u32 offset, u8 value);
 
 private:
-    enum Video_Layer_Format
-    {
-        VIDEO_LAYER_OFF = 0,
-        VIDEO_LAYER_4BPP,
-        VIDEO_LAYER_8BPP,
-        VIDEO_LAYER_16BPP
-    };
-
-private:
     void WriteCRTC(u8 value, bool high, u64 clocks);
-    u8 ReadCRTC(bool high, u64 clocks);
+    u8 ReadCRTC(bool high, u64 clocks) const;
     void WritePalette(int component, u8 value);
     u8 ReadPalette(int component) const;
     void RunNextEvent();
@@ -132,14 +143,9 @@ private:
     void UpdateNextEvent();
     void UpdateIRQ();
     u64 GetHalfLineClocks(u32 half_line) const;
-    u8 GetSyncStatus(u64 clocks) const;
-    u32 GetBeamHalfLine(u64 clocks) const;
-    u32 GetBeamClock(u64 clocks) const;
     void RenderRows(u32 half_line);
     void RenderRow(int row);
     void RenderLayerRow(int layer, int row, bool opaque);
-    Video_Layer_Format GetLayerFormat(int layer) const;
-    bool IsTwoPage() const;
     u8 ReadVRAM(u32 offset, bool two_page) const;
     u32 SinglePageToCanonical(u32 offset) const;
     u32 FMRToCanonical(u32 offset) const;
@@ -163,6 +169,7 @@ private:
     Video_State m_state;
     Sprite* m_sprite;
     PIC* m_pic;
+    TraceLogger* m_trace_logger;
     PIT* m_pit;
     Scheduler* m_scheduler;
     const u8* m_font_rom;

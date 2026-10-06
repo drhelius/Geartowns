@@ -1749,31 +1749,16 @@ static void menu_debug(void)
 
         ImGui::Separator();
 
-        if (ImGui::BeginMenu("Debug Output Screen", config_debug.debug))
+        if (ImGui::MenuItem("Save Debug Settings...", "", false, config_debug.debug))
         {
-            ImGui::MenuItem("Show Output Screen", "", &config_debug.show_screen, config_debug.debug);
-
-            if (ImGui::BeginMenu("Scale", config_debug.debug))
-            {
-                ImGui::PushItemWidth(200.0f);
-                ImGui::SliderInt("##debug_scale", &config_debug.scale, 1, 10);
-                ImGui::PopItemWidth();
-                ImGui::EndMenu();
-            }
-
-            ImGui::EndMenu();
+            gui_file_dialog_save_debug_settings();
         }
 
-        ImGui::Separator();
+        if (ImGui::MenuItem("Load Debug Settings...", "", false, config_debug.debug))
+        {
+            gui_file_dialog_load_debug_settings();
+        }
 
-        ImGui::MenuItem("Show Intel 80386", "", &config_debug.show_processor, config_debug.debug);
-        ImGui::MenuItem("Show 80386 System State", "", &config_debug.show_processor_details, config_debug.debug);
-        ImGui::MenuItem("Show Memory Workspace", "", &config_debug.show_memory, config_debug.debug);
-        ImGui::MenuItem("Show Disassembler", "", &config_debug.show_disassembler, config_debug.debug);
-        ImGui::MenuItem("Show Call Stack", "", &config_debug.show_call_stack, config_debug.debug);
-        ImGui::MenuItem("Show Execution Breakpoints", "", &config_debug.show_breakpoints, config_debug.debug);
-        ImGui::MenuItem("Show Symbols", "", &config_debug.show_symbols, config_debug.debug);
-        ImGui::MenuItem("Show Rewind", "", &config_debug.show_rewind, config_debug.debug);
         ImGui::MenuItem("Auto Save/Load Debug Settings", "", &config_debug.auto_debug_settings, config_debug.debug);
 
         ImGui::Separator();
@@ -1841,6 +1826,98 @@ static void menu_debug(void)
 
             ImGui::EndMenu();
         }
+
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("Debug Output Screen", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Output Screen", "", &config_debug.show_screen, config_debug.debug);
+
+            if (ImGui::BeginMenu("Scale", config_debug.debug))
+            {
+                ImGui::PushItemWidth(200.0f);
+                ImGui::SliderInt("##debug_scale", &config_debug.scale, 1, 10);
+                ImGui::PopItemWidth();
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+        ImGui::MenuItem("Show Disassembler", "", &config_debug.show_disassembler, config_debug.debug);
+        ImGui::MenuItem("Show Memory Workspace", "", &config_debug.show_memory, config_debug.debug);
+        ImGui::MenuItem("Show Trace Logger", "", &config_debug.show_trace_logger, config_debug.debug);
+        ImGui::MenuItem("Show Profiler", "", &config_debug.show_profiler, config_debug.debug);
+
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("Intel 80386", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Status", "", &config_debug.show_processor);
+            ImGui::MenuItem("Show System Registers", "", &config_debug.show_processor_details);
+            ImGui::MenuItem("Show Descriptor Tables", "", &config_debug.show_i386_descriptors);
+            ImGui::MenuItem("Show Paging", "", &config_debug.show_i386_paging);
+            ImGui::MenuItem("Show Call Stack", "", &config_debug.show_call_stack);
+            ImGui::MenuItem("Show Breakpoints", "", &config_debug.show_breakpoints);
+            ImGui::MenuItem("Show Symbols", "", &config_debug.show_symbols);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Video", config_debug.debug))
+        {
+            ImGui::MenuItem("Show CRTC", "", &config_debug.show_crtc);
+            ImGui::MenuItem("Show CRTC Registers", "", &config_debug.show_crtc_registers);
+            ImGui::MenuItem("Show Output Control", "", &config_debug.show_video_output);
+            ImGui::MenuItem("Show Palettes", "", &config_debug.show_palettes);
+            ImGui::MenuItem("Show Framebuffers", "", &config_debug.show_framebuffers);
+            ImGui::MenuItem("Show Sprites", "", &config_debug.show_sprites);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Audio", config_debug.debug))
+        {
+            ImGui::MenuItem("Show YM3438 FM", "", &config_debug.show_ym3438);
+            ImGui::MenuItem("Show YM3438 Registers", "", &config_debug.show_ym3438_registers);
+            ImGui::MenuItem("Show RF5C68 PCM", "", &config_debug.show_rf5c68);
+            ImGui::MenuItem("Show Sound Control", "", &config_debug.show_sound_control);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("CD-ROM", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Controller", "", &config_debug.show_cdrom);
+            ImGui::MenuItem("Show TOC", "", &config_debug.show_cdrom_toc);
+            ImGui::MenuItem("Show CD Audio", "", &config_debug.show_cdrom_audio);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Floppy", config_debug.debug))
+        {
+            ImGui::MenuItem("Show FDC", "", &config_debug.show_fdc);
+            ImGui::MenuItem("Show Drives", "", &config_debug.show_floppy_drives);
+            ImGui::MenuItem("Show Disk Viewer", "", &config_debug.show_disk_viewer);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("System", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Interrupts", "", &config_debug.show_pic);
+            ImGui::MenuItem("Show Timers", "", &config_debug.show_pit);
+            ImGui::MenuItem("Show DMA", "", &config_debug.show_dma);
+            ImGui::MenuItem("Show RTC", "", &config_debug.show_rtc);
+            ImGui::MenuItem("Show System Control", "", &config_debug.show_system_control);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Input", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Keyboard", "", &config_debug.show_keyboard);
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+        ImGui::MenuItem("Show Rewind", "", &config_debug.show_rewind, config_debug.debug);
 
         ImGui::Separator();
 

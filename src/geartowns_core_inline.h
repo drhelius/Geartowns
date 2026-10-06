@@ -127,6 +127,16 @@ INLINE Keyboard* GeartownsCore::GetKeyboard()
     return m_keyboard;
 }
 
+INLINE TraceLogger* GeartownsCore::GetTraceLogger()
+{
+    return m_trace_logger;
+}
+
+INLINE Profiler* GeartownsCore::GetProfiler()
+{
+    return m_profiler;
+}
+
 INLINE MSM58321* GeartownsCore::GetRTC()
 {
     return m_rtc;

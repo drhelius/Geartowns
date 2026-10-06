@@ -398,6 +398,200 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
     return 0xFF;
 }
 
+// What a read would return, without its side effects, for the debugger
+// Returns false for ports the board does not decode
+bool IO::Peek(u16 port, u64 clocks, u8& value) const
+{
+    value = 0xFF;
+
+    switch (port)
+    {
+        case 0x0000:
+        case 0x0002:
+        case 0x0010:
+        case 0x0012:
+            value = m_pic->Peek(port);
+            break;
+        case 0x0020:
+        case 0x0032:
+            value = m_system_control->Peek(port);
+            break;
+        case 0x0022:
+            break;
+        case 0x0030:
+        case 0x0031:
+            value = 0x01;
+            break;
+        case 0x0040:
+        case 0x0042:
+        case 0x0044:
+        case 0x0046:
+        case 0x0050:
+        case 0x0052:
+        case 0x0054:
+        case 0x0056:
+        case 0x0060:
+            value = m_pit->Peek(port, clocks);
+            break;
+        case 0x0070:
+        case 0x0080:
+            value = m_rtc->Peek(port, clocks);
+            break;
+        case 0x00A0:
+        case 0x00A1:
+        case 0x00A2:
+        case 0x00A3:
+        case 0x00A4:
+        case 0x00A5:
+        case 0x00A6:
+        case 0x00A7:
+        case 0x00A8:
+        case 0x00A9:
+        case 0x00AA:
+        case 0x00AB:
+        case 0x00AC:
+        case 0x00AD:
+        case 0x00AE:
+        case 0x00AF:
+            value = m_dma->Peek(port);
+            break;
+        case 0x0200:
+        case 0x0202:
+        case 0x0204:
+        case 0x0206:
+        case 0x0208:
+        case 0x020C:
+        case 0x020E:
+            value = m_fdc->Peek(port, clocks);
+            break;
+        case 0x0400:
+            value = 0xFE;
+            break;
+        case 0x0404:
+        case 0x0480:
+        case 0x0484:
+            value = m_memory->ReadMappingControl(port);
+            break;
+        case 0x0440:
+        case 0x0442:
+        case 0x0443:
+        case 0x0448:
+        case 0x044A:
+        case 0x044C:
+        case 0x0450:
+        case 0x0452:
+        case 0x0458:
+        case 0x045A:
+        case 0x045B:
+        case 0x05C8:
+        case 0xFD90:
+        case 0xFD92:
+        case 0xFD94:
+        case 0xFD96:
+        case 0xFD98:
+        case 0xFD99:
+        case 0xFD9A:
+        case 0xFD9B:
+        case 0xFD9C:
+        case 0xFD9D:
+        case 0xFD9E:
+        case 0xFD9F:
+        case 0xFDA0:
+            value = m_video->Peek(port, clocks);
+            break;
+        case 0x048A:
+            value = 0x06;
+            break;
+        case 0x04C0:
+        case 0x04C2:
+        case 0x04C4:
+        case 0x04C6:
+        case 0x04CC:
+        case 0x04CD:
+            value = m_cdrom->Peek(port);
+            break;
+        case 0x04D8:
+        case 0x04DA:
+        case 0x04DC:
+        case 0x04DE:
+            value = m_ym3438->Peek((u8)((port - 0x04D8) >> 1));
+            break;
+        case 0x04E0:
+        case 0x04E1:
+        case 0x04E2:
+        case 0x04E3:
+            value = m_audio->ReadVolume(port);
+            break;
+        case 0x04E9:
+            value = (m_rf5c68->GetIRQFlags() != 0 ? 0x08 : 0x00) | ((m_ym3438->Peek(0) & 0x03) != 0 ? 0x01 : 0x00);
+            break;
+        case 0x04EA:
+            value = m_rf5c68->GetIRQMask();
+            break;
+        case 0x04EB:
+            value = m_rf5c68->GetIRQFlags();
+            break;
+        case 0x04D0:
+        case 0x04D2:
+        case 0x04D5:
+        case 0x04D6:
+        case 0x04E7:
+        case 0x04E8:
+        case 0x04EC:
+        case 0x04F0:
+        case 0x04F1:
+        case 0x04F2:
+        case 0x04F3:
+        case 0x04F4:
+        case 0x04F5:
+        case 0x04F6:
+        case 0x04F7:
+        case 0x04F8:
+        case 0x05C0:
+        case 0x05C2:
+        case 0x05CA:
+        case 0x0800:
+        case 0x0802:
+        case 0x0804:
+        case 0x0A00:
+        case 0x0A02:
+        case 0x0A04:
+        case 0x0A06:
+        case 0x0A08:
+        case 0x0A0A:
+        case 0x0C30:
+        case 0x0C32:
+            break;
+        case 0x05E0:
+            value = m_system_control->Peek(port);
+            break;
+        case 0x0600:
+        case 0x0602:
+        case 0x0604:
+            value = m_keyboard->Peek(port);
+            break;
+        case 0xFF81:
+        case 0xFF83:
+        case 0xFF84:
+        case 0xFF86:
+        case 0xFF94:
+        case 0xFF96:
+        case 0xFF97:
+        case 0xFF98:
+        case 0xFFA0:
+            value = m_video->ReadFMRRegister(port & 0x0FFF, true);
+            break;
+        default:
+            if ((port & 0xF001) != 0x3000)
+                return false;
+
+            value = m_memory->ReadCMOS((port & 0x0FFF) >> 1);
+            break;
+    }
+
+    return true;
+}
+
 void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
 {
     switch (port)

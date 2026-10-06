@@ -55,10 +55,10 @@ INLINE void I386::SetBusContext(GT_Bus_Access_Context& context)
     UpdateMemoryMode();
 }
 
-// Data breakpoints and write observers disable the memory fast paths
+// Data breakpoints, debugger memory breakpoints and write observers disable the memory fast paths
 INLINE void I386::UpdateMemoryMode()
 {
-    bool slow = (m_state.debug_registers[7] & 0xFF) != 0 ||
+    bool slow = (m_state.debug_registers[7] & 0xFF) != 0 || m_debugger_memory_checks ||
         (IsValidPointer(m_bus_context) && IsValidPointer(m_bus_context->observe_memory_write));
 
     if (unlikely(slow != m_slow_memory))

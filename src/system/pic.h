@@ -24,14 +24,18 @@
 #include "../common/common.h"
 #include "i8259.h"
 
+class TraceLogger;
+
 class PIC
 {
 public:
     void Init();
     void Reset();
     u8 Read(u16 port);
+    u8 Peek(u16 port) const;
     void Write(u16 port, u8 value);
     void SetIRQLine(int irq, bool high);
+    void SetTraceLogger(TraceLogger* trace_logger);
     bool IsInterruptPending() const;
     u8 AcknowledgeInterrupt();
     I8259* GetMaster();
@@ -41,10 +45,12 @@ public:
 
 private:
     void UpdateCascade();
+    void TraceRequest(int irq);
 
 private:
     I8259 m_master;
     I8259 m_slave;
+    TraceLogger* m_trace_logger;
 };
 
 static const int k_pic_cascade_line = 7;

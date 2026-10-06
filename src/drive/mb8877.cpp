@@ -18,6 +18,7 @@
  */
 
 #include "mb8877.h"
+#include "../common/trace_logger.h"
 #include "fdc.h"
 #include "floppy_disk.h"
 #include "floppy_image.h"
@@ -61,6 +62,7 @@ static u16 crc16(u16 crc, const u8* data, u32 size)
 MB8877::MB8877()
 {
     InitPointer(m_fdc);
+    InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
     m_state.event_clocks = GT_NO_EVENT;
     m_state.index_clocks = GT_NO_EVENT;
@@ -105,6 +107,11 @@ u8 MB8877::ReadStatus(u64 clocks)
     if (m_state.intrq && (m_state.conditions & k_mb8877_interrupt_immediate) == 0)
         SetINTRQ(false);
 
+    return PeekStatus(clocks);
+}
+
+u8 MB8877::PeekStatus(u64 clocks) const
+{
     u8 value = m_state.status & (k_mb8877_busy | k_mb8877_crc_error | k_mb8877_not_found);
 
     if (m_state.type1)
@@ -141,9 +148,25 @@ u8 MB8877::ReadData()
     return m_state.data;
 }
 
+void MB8877::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
+}
+
 void MB8877::WriteCommand(u8 value, u64 clocks)
 {
     SetINTRQ(false);
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_FDC))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_FDC, TRACE_FDC_COMMAND);
+        entry->fdc.command = value;
+        entry->fdc.track = m_state.track;
+        entry->fdc.sector = m_state.sector;
+        entry->fdc.data = m_state.data;
+        entry->fdc.status = m_state.status;
+        entry->fdc.drive = (s8)m_fdc->GetSelectedDrive();
+    }
 
     if ((value & 0xF0) == 0xD0)
     {
@@ -840,6 +863,17 @@ void MB8877::End()
     m_state.phase = MB8877_PHASE_IDLE;
     m_state.event_clocks = GT_NO_EVENT;
     m_state.status &= ~k_mb8877_busy;
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_FDC))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_FDC, TRACE_FDC_END);
+        entry->fdc.command = m_state.command;
+        entry->fdc.track = m_state.track;
+        entry->fdc.sector = m_state.sector;
+        entry->fdc.data = m_state.data;
+        entry->fdc.status = m_state.status;
+        entry->fdc.drive = (s8)m_fdc->GetSelectedDrive();
+    }
 
     if (m_state.drq && (m_state.status & k_mb8877_lost_data) != 0)
     {

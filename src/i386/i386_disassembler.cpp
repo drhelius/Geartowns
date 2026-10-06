@@ -18,6 +18,8 @@
  */
 
 #include "i386.h"
+#include "../common/profiler.h"
+#include "../common/trace_logger.h"
 
 
 #include <stdarg.h>
@@ -1084,27 +1086,35 @@ void I386::ResetDebuggerExecutionState()
 void I386::ResetBreakpoints()
 {
     m_breakpoints.clear();
+    m_interrupt_breakpoints.clear();
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
+    m_debugger_hit_pending = false;
+    EnableDebuggerChecks(m_debugger_checks);
 }
 
 void I386::AddBreakpoint(u32 address)
 {
-    if (IsBreakpoint(address))
-        return;
-
-    I386_Breakpoint breakpoint;
-
-    breakpoint.enabled = true;
-    breakpoint.address1 = address;
-    breakpoint.address2 = address;
-    breakpoint.range = false;
-    m_breakpoints.push_back(breakpoint);
+    AddBreakpoint(address, address, I386_BREAKPOINT_EXECUTE, I386_BREAKPOINT_LINEAR);
 }
 
 void I386::AddBreakpoint(u32 start_address, u32 end_address)
 {
+    AddBreakpoint(start_address, end_address, I386_BREAKPOINT_EXECUTE, I386_BREAKPOINT_LINEAR);
+}
+
+// Execute breakpoints only exist in linear space, and I/O ports are 16 bits
+bool I386::AddBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space)
+{
+    type &= I386_BREAKPOINT_EXECUTE | I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE;
+
+    if (type == 0 || space >= I386_BREAKPOINT_SPACE_COUNT)
+        return false;
+
+    if ((type & I386_BREAKPOINT_EXECUTE) != 0 && (type != I386_BREAKPOINT_EXECUTE || space != I386_BREAKPOINT_LINEAR))
+        return false;
+
     if (end_address < start_address)
     {
         u32 temporary = start_address;
@@ -1112,18 +1122,18 @@ void I386::AddBreakpoint(u32 start_address, u32 end_address)
         end_address = temporary;
     }
 
-    if (start_address == end_address)
-    {
-        AddBreakpoint(start_address);
-        return;
-    }
+    if (space == I386_BREAKPOINT_IO && end_address > 0xFFFF)
+        return false;
+
+    bool range = start_address != end_address;
 
     for (size_t i = 0; i < m_breakpoints.size(); i++)
     {
         const I386_Breakpoint& existing = m_breakpoints[i];
 
-        if (existing.range && existing.address1 == start_address && existing.address2 == end_address)
-            return;
+        if (existing.address1 == start_address && existing.address2 == end_address && existing.range == range &&
+            existing.type == type && existing.space == space)
+            return true;
     }
 
     I386_Breakpoint breakpoint;
@@ -1131,8 +1141,12 @@ void I386::AddBreakpoint(u32 start_address, u32 end_address)
     breakpoint.enabled = true;
     breakpoint.address1 = start_address;
     breakpoint.address2 = end_address;
-    breakpoint.range = true;
+    breakpoint.range = range;
+    breakpoint.type = type;
+    breakpoint.space = space;
     m_breakpoints.push_back(breakpoint);
+    EnableDebuggerChecks(m_debugger_checks);
+    return true;
 }
 
 void I386::AddRunToBreakpoint(u32 address)
@@ -1143,23 +1157,35 @@ void I386::AddRunToBreakpoint(u32 address)
 
 void I386::RemoveBreakpoint(u32 address, u32 end_address)
 {
+    RemoveBreakpoint(address, end_address == 0 ? address : end_address, I386_BREAKPOINT_EXECUTE,
+        I386_BREAKPOINT_LINEAR);
+}
+
+bool I386::RemoveBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space)
+{
     for (size_t i = 0; i < m_breakpoints.size(); i++)
     {
         const I386_Breakpoint& breakpoint = m_breakpoints[i];
 
-        if (breakpoint.address1 == address && (!breakpoint.range || breakpoint.address2 == end_address))
+        if (breakpoint.address1 == start_address && breakpoint.address2 == end_address && breakpoint.type == type &&
+            breakpoint.space == space)
         {
             m_breakpoints.erase(m_breakpoints.begin() + i);
-            return;
+            EnableDebuggerChecks(m_debugger_checks);
+            return true;
         }
     }
+
+    return false;
 }
 
 bool I386::IsBreakpoint(u32 address) const
 {
     for (size_t i = 0; i < m_breakpoints.size(); i++)
     {
-        if (!m_breakpoints[i].range && m_breakpoints[i].address1 == address)
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (!breakpoint.range && breakpoint.address1 == address && breakpoint.type == I386_BREAKPOINT_EXECUTE)
             return true;
     }
 
@@ -1169,6 +1195,83 @@ bool I386::IsBreakpoint(u32 address) const
 std::vector<I386_Breakpoint>* I386::GetBreakpoints()
 {
     return &m_breakpoints;
+}
+
+bool I386::AddInterruptBreakpoint(u8 vector, u8 source)
+{
+    if (source >= I386_INTERRUPT_SOURCE_COUNT)
+        return false;
+
+    for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)
+    {
+        if (m_interrupt_breakpoints[i].vector == vector && m_interrupt_breakpoints[i].source == source)
+            return true;
+    }
+
+    I386_Interrupt_Breakpoint breakpoint;
+    breakpoint.enabled = true;
+    breakpoint.vector = vector;
+    breakpoint.source = source;
+    m_interrupt_breakpoints.push_back(breakpoint);
+    EnableDebuggerChecks(m_debugger_checks);
+    return true;
+}
+
+bool I386::RemoveInterruptBreakpoint(u8 vector, u8 source)
+{
+    for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)
+    {
+        if (m_interrupt_breakpoints[i].vector == vector && m_interrupt_breakpoints[i].source == source)
+        {
+            m_interrupt_breakpoints.erase(m_interrupt_breakpoints.begin() + i);
+            EnableDebuggerChecks(m_debugger_checks);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::vector<I386_Interrupt_Breakpoint>* I386::GetInterruptBreakpoints()
+{
+    return &m_interrupt_breakpoints;
+}
+
+// The debugger run loop enables the access checks each frame, so enable toggles from the GUI apply on the next one
+// Without enabled data, I/O or interrupt breakpoints every check stays off and memory keeps its fast paths
+void I386::EnableDebuggerChecks(bool enable)
+{
+    bool trace = enable && IsValidPointer(m_trace_logger);
+
+    m_debugger_checks = enable;
+    m_debugger_memory_checks = false;
+    m_debugger_io_checks = trace && m_trace_logger->IsEnabled(TRACE_IO);
+    m_debugger_interrupt_checks = trace && m_trace_logger->IsEnabled(TRACE_INTERRUPT);
+    m_trace_cpu = trace && m_trace_logger->IsEnabled(TRACE_CPU);
+    m_trace_enabled = m_trace_internal || m_trace_cpu;
+    m_profiler_active = enable && IsValidPointer(m_profiler) && m_profiler->IsActive();
+
+    if (!enable)
+        return;
+
+    for (size_t i = 0; i < m_breakpoints.size(); i++)
+    {
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (!breakpoint.enabled || breakpoint.type == I386_BREAKPOINT_EXECUTE)
+            continue;
+
+        if (breakpoint.space == I386_BREAKPOINT_IO)
+            m_debugger_io_checks = true;
+        else
+            m_debugger_memory_checks = true;
+    }
+
+    for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)
+    {
+        if (m_interrupt_breakpoints[i].enabled)
+            m_debugger_interrupt_checks = true;
+    }
 }
 
 bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
@@ -1199,7 +1302,7 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
     {
         const I386_Breakpoint& breakpoint = m_breakpoints[i];
 
-        if (!breakpoint.enabled)
+        if (!breakpoint.enabled || breakpoint.type != I386_BREAKPOINT_EXECUTE)
             continue;
 
         bool hit = breakpoint.range ? address >= breakpoint.address1 && address <= breakpoint.address2 :
@@ -1210,11 +1313,29 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
             m_breakpoint_hit = true;
             m_run_to_hit = false;
             m_breakpoint_hit_address = address;
+            m_breakpoint_hit_info.interrupt = false;
+            m_breakpoint_hit_info.type = I386_BREAKPOINT_EXECUTE;
+            m_breakpoint_hit_info.space = I386_BREAKPOINT_LINEAR;
+            m_breakpoint_hit_info.address = address;
+            m_breakpoint_hit_info.size = 1;
             return true;
         }
     }
 
     return false;
+}
+
+// A data, I/O or interrupt hit stops after the instruction or the interrupt entry that caused it
+bool I386::AcceptDebuggerHit()
+{
+    if (!m_debugger_hit_pending)
+        return false;
+
+    m_debugger_hit_pending = false;
+    m_breakpoint_hit = true;
+    m_run_to_hit = false;
+    m_breakpoint_hit_address = GetCurrentLinearPC();
+    return true;
 }
 
 bool I386::GetBreakpointHitAddress(u32& address) const
@@ -1226,9 +1347,133 @@ bool I386::GetBreakpointHitAddress(u32& address) const
     return true;
 }
 
+bool I386::GetBreakpointHit(I386_Breakpoint_Hit& hit) const
+{
+    if (!m_breakpoint_hit || m_run_to_hit)
+        return false;
+
+    hit = m_breakpoint_hit_info;
+    return true;
+}
+
 bool I386::RunToBreakpointHit() const
 {
     return m_breakpoint_hit && m_run_to_hit;
+}
+
+void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source)
+{
+    if (m_debugger_hit_pending)
+        return;
+
+    m_debugger_hit_pending = true;
+    m_breakpoint_hit_info.interrupt = interrupt;
+    m_breakpoint_hit_info.type = type;
+    m_breakpoint_hit_info.space = space;
+    m_breakpoint_hit_info.address = address;
+    m_breakpoint_hit_info.size = size;
+    m_breakpoint_hit_info.vector = vector;
+    m_breakpoint_hit_info.source = source;
+}
+
+// Physical breakpoints see the first byte's page; an access split across pages reports that page's address
+void I386::RecordDebuggerAccess(u32 linear, u32 size, bool write)
+{
+    u8 type = write ? I386_BREAKPOINT_WRITE : I386_BREAKPOINT_READ;
+    u32 physical = linear;
+    bool physical_valid = (m_state.cr0 & 0x80000000U) == 0;
+
+    for (size_t i = 0; i < m_breakpoints.size(); i++)
+    {
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (!breakpoint.enabled || (breakpoint.type & type) == 0 || breakpoint.space == I386_BREAKPOINT_IO)
+            continue;
+
+        u32 address = linear;
+
+        if (breakpoint.space == I386_BREAKPOINT_PHYSICAL)
+        {
+            if (!physical_valid)
+            {
+                u32 pde = 0;
+                u32 pte = 0;
+                u32 flags = 0;
+                char reason[64];
+
+                if (!TranslateLinearForDebugger(linear, physical, pde, pte, flags, reason, sizeof(reason)))
+                    continue;
+
+                physical_valid = true;
+            }
+
+            address = physical;
+        }
+
+        if (address <= breakpoint.address2 && address + size - 1 >= breakpoint.address1)
+        {
+            RecordDebuggerHit(false, type, breakpoint.space, address, size, 0, 0);
+            return;
+        }
+    }
+}
+
+void I386::RecordDebuggerIO(u16 port, u32 value, u32 size, bool write)
+{
+    u8 type = write ? I386_BREAKPOINT_WRITE : I386_BREAKPOINT_READ;
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_IO))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_IO, 0);
+        entry->io.pc = GetCurrentLinearPC();
+        entry->io.value = value;
+        entry->io.port = port;
+        entry->io.size = (u8)size;
+        entry->io.write = write ? 1 : 0;
+    }
+
+    for (size_t i = 0; i < m_breakpoints.size(); i++)
+    {
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (!breakpoint.enabled || (breakpoint.type & type) == 0 || breakpoint.space != I386_BREAKPOINT_IO)
+            continue;
+
+        if (port <= breakpoint.address2 && (u32)port + size - 1 >= breakpoint.address1)
+        {
+            RecordDebuggerHit(false, type, I386_BREAKPOINT_IO, port, size, 0, 0);
+            return;
+        }
+    }
+}
+
+void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 from, bool has_error_code, u32 error_code)
+{
+    u8 source = software ? I386_INTERRUPT_SOFTWARE : external ? I386_INTERRUPT_HARDWARE : I386_INTERRUPT_EXCEPTION;
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_INTERRUPT))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_INTERRUPT, TRACE_INTERRUPT_ENTER);
+        entry->interrupt.from = from;
+        entry->interrupt.to = GetCurrentLinearPC();
+        entry->interrupt.error_code = error_code;
+        entry->interrupt.vector = vector;
+        entry->interrupt.source = source;
+        entry->interrupt.line = 0xFF;
+        entry->interrupt.has_error_code = has_error_code ? 1 : 0;
+    }
+
+    for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)
+    {
+        const I386_Interrupt_Breakpoint& breakpoint = m_interrupt_breakpoints[i];
+
+        if (breakpoint.enabled && breakpoint.vector == vector &&
+            (breakpoint.source == I386_INTERRUPT_ANY || breakpoint.source == source))
+        {
+            RecordDebuggerHit(true, 0, 0, vector, 0, vector, source);
+            return;
+        }
+    }
 }
 
 const std::vector<I386_CallStackEntry>& I386::GetDisassemblerCallStack() const
@@ -1241,11 +1486,14 @@ void I386::SetDisassemblerCallStack(const std::vector<I386_CallStackEntry>& call
     m_disassembler_call_stack = call_stack;
 }
 
-void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, bool interrupt, u8 vector)
+void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_Type type, u8 vector)
 {
     I386_CallStackEntry entry;
+    bool interrupt = type != I386_CALL;
 
     entry.interrupt = interrupt;
+    entry.type = (u8)type;
+    entry.vector = vector;
     entry.src_cs = src_cs;
     entry.src = src;
     entry.src_linear = src_base + src;
@@ -1260,6 +1508,9 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, bool inter
         m_disassembler_call_stack.erase(m_disassembler_call_stack.begin());
 
     m_disassembler_call_stack.push_back(entry);
+
+    if (unlikely(m_profiler_active))
+        m_profiler->Enter(entry.dest_linear, interrupt, vector);
 
     if (!interrupt)
     {

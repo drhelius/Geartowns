@@ -51,16 +51,28 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_audio.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_cdrom.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_disassembler.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_framebuffers.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_floppy.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_i386.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_i386_tables.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_input.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memory_provider.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memeditor.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memory.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_profiler.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_rewind.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_system.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_trace.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_video.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_debug_adapter.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_tool_registry.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_server.cpp \
     $(SRC_DIR)/geartowns_core.cpp \
+    $(SRC_DIR)/common/profiler.cpp \
+    $(SRC_DIR)/common/trace_logger.cpp \
     $(SRC_DIR)/audio/audio.cpp \
     $(SRC_DIR)/audio/rf5c68.cpp \
     $(SRC_DIR)/audio/ym3438.cpp \

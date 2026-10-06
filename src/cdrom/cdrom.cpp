@@ -18,6 +18,7 @@
  */
 
 #include "cdrom.h"
+#include "../common/trace_logger.h"
 #include "cdrom_audio.h"
 #include "cdrom_media.h"
 #include "../audio/audio.h"
@@ -32,6 +33,7 @@ CdRom::CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio)
     InitPointer(m_scheduler);
     InitPointer(m_dma);
     InitPointer(m_audio);
+    InitPointer(m_trace_logger);
     m_cdrom_media = cdrom_media;
     m_cdrom_audio = cdrom_audio;
     memset(&m_state, 0, sizeof(m_state));
@@ -371,8 +373,20 @@ void CdRom::RunEvent(u64 clocks)
     UpdateNextEvent();
 }
 
+void CdRom::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
+}
+
 void CdRom::ExecuteCommand(u64 clocks)
 {
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_CDROM))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CDROM, TRACE_CDROM_COMMAND);
+        entry->cdrom.command = m_state.active_command;
+        memcpy(entry->cdrom.bytes, m_state.active_params, CDROM_PARAM_COUNT);
+    }
+
     // A new command takes over from a read that was still running
     AbortTransfer();
     m_state.dry = true;
@@ -932,6 +946,17 @@ void CdRom::PushStatus(u8 status0, u8 status1, u8 status2, u8 status3)
     m_state.status[tail + 2] = status2;
     m_state.status[tail + 3] = status3;
     m_state.status_count += 4;
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_CDROM))
+    {
+        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CDROM, TRACE_CDROM_STATUS);
+        entry->cdrom.command = m_state.active_command;
+        memset(entry->cdrom.bytes, 0, sizeof(entry->cdrom.bytes));
+        entry->cdrom.bytes[0] = status0;
+        entry->cdrom.bytes[1] = status1;
+        entry->cdrom.bytes[2] = status2;
+        entry->cdrom.bytes[3] = status3;
+    }
 }
 
 // A packet the CPU already started keeps its remaining bytes

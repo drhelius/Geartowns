@@ -41,6 +41,7 @@ public:
     bool Translate(const GT_Debug_Memory_Address& address, GT_Debug_Memory_Translation& translation) const;
 
     bool QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
+    bool WriteNow(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
     void RequestUndo();
     void RequestRedo();
     bool CanUndo() const;

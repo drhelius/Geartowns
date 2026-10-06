@@ -341,7 +341,8 @@ void CdRom::CheckCommand(u64 clocks)
     m_state.param_count = 0;
     m_state.dry = false;
 
-    // The answer comes later because Fractal Engine Demo acknowledges SIRQ right after the command
+    // The sub-MPU answers 1 ms later
+    // Fractal Engine Demo acknowledges SIRQ right after the command, and Lemmings 2 misses an answer that comes in 50 us
     ScheduleEvent(CDROM_EVENT_EXECUTE, clocks + k_cdrom_command_clocks);
 }
 

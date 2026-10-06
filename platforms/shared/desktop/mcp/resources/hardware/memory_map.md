@@ -169,11 +169,11 @@ System ROM. The boot ROM at F8000h–FFFFFh is the same last 32 KB of the System
 1. LINEAR, PHYSICAL and I/O PORTS
 2. The regions the machine maps: System ROM, System ROM (low boot window), Main RAM, VRAM (raw 512 KB, two-page
    order), VRAM (two-page view), VRAM (single-page view), Sprite RAM, OS ROM, Dictionary ROM, Font ROM, CMOS RAM,
-   PCM wave RAM window, Dictionary ROM (low window), CMOS RAM (low window), FM-R VRAM planes, FM-R text RAM and
-   ANK font, FM-R registers, FM-R view (unmapped)
+   PCM wave RAM window, PCM wave RAM (raw 64 KB), Dictionary ROM (low window), CMOS RAM (low window), FM-R VRAM
+   planes, FM-R text RAM and ANK font, FM-R registers, FM-R view (unmapped)
 3. Firmware images that are loaded but not mapped on this machine, the CD-ROM media image and the inserted floppy
    disk images
 
 Region offsets are 0-based; `physical_base` gives the bus address of mapped regions. The LINEAR area also accepts
-logical addresses (`CS:1234`, `0008:00001234`). The 64 KB wave RAM is reached through the 4 KB PCM wave RAM window
-with the bank selected in 04F7h.
+logical addresses (`CS:1234`, `0008:00001234`). The CPU reaches the 64 KB wave RAM through the 4 KB PCM wave RAM
+window with the bank selected in 04F7h; the PCM wave RAM region shows all of it.

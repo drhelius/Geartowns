@@ -1308,6 +1308,14 @@ void GeartownsCore::InitMemoryMap()
         m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback, Audio::PeekWaveWindowCallback))
         Error("Unable to map the PCM wave RAM window");
 
+    u8* wave_ram = m_audio->GetRF5C68()->GetState()->wave_ram;
+
+    // All 64 KiB of wave RAM for raw debugger access
+    // The CPU only reaches it through the 4 KiB window
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_PCM_RAM, "PCM wave RAM", wave_ram, wave_ram,
+        RF5C68_WAVE_RAM_SIZE, 0, GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_AUDIO))
+        Error("Unable to register PCM wave RAM");
+
     // The low windows are overlays that the mapping latches switch on and off
     u32 overlay_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_OVERLAY;
 

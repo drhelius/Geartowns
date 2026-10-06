@@ -179,8 +179,8 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_memory->Init();
     m_cdrom_media->Init();
     m_cdrom_audio->Init();
-    m_audio->Init(m_scheduler, m_cdrom_audio);
     m_pic->Init();
+    m_audio->Init(m_scheduler, m_cdrom_audio, m_pic);
     m_pit->Init(m_pic, m_scheduler);
     m_system_control->Init();
     m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
@@ -402,6 +402,9 @@ INLINE void GeartownsCore::DispatchEvents()
             case SCHEDULER_EVENT_DMA:
                 // The DMA owns the bus for each unit it moves, so the CPU loses that time
                 m_scheduler->AddClocks(m_dma->HandleEvent(clocks));
+                break;
+            case SCHEDULER_EVENT_AUDIO:
+                m_audio->HandleEvent(clocks);
                 break;
             default:
                 break;

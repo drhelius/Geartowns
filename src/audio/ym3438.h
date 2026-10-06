@@ -147,6 +147,7 @@ public:
     u8 Read(u8 port);
     u8 Peek(u8 port) const;
     bool IsIRQAsserted();
+    u64 GetCyclesToTimerFlag() const;
     YM3438_State* GetState();
 
     void SaveState(std::ostream& stream);
@@ -171,7 +172,6 @@ private:
     void ResetOperator(YM3438_Operator& op);
     void ResetChannel(YM3438_Channel& channel);
     void RunCycles(u64 cycles);
-    u64 GetCyclesToTimerFlag() const;
 
     void ClockTimers();
     void TimerAOverflow();

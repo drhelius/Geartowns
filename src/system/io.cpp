@@ -273,7 +273,7 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
         case 0x04EB:
             // PCM interrupt reason
             m_audio->Synchronize(context.clocks);
-            return m_rf5c68->ReadIRQFlags();
+            return m_audio->ReadPCMIRQFlags();
         case 0x04EC:
             // LED and output mute
             return m_audio->ReadGate(port);
@@ -779,7 +779,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x04DE:
             // FM data bank 1
             m_audio->Synchronize(context.clocks);
-            m_ym3438->Write((u8)((port - 0x04D8) >> 1), value);
+            m_audio->WriteFM((u8)((port - 0x04D8) >> 1), value);
             break;
         case 0x04E0:
             // Volume 1 data
@@ -802,7 +802,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x04EA:
             // PCM interrupt mask
             m_audio->Synchronize(context.clocks);
-            m_rf5c68->WriteIRQMask(value);
+            m_audio->WritePCMIRQMask(value);
             break;
         case 0x04EB:
             // PCM interrupt reason
@@ -831,7 +831,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x04F8:
             // PCM channel enable
             m_audio->Synchronize(context.clocks);
-            m_rf5c68->Write((u16)(port - 0x04F0), value);
+            m_audio->WritePCM((u16)(port - 0x04F0), value);
             break;
         case 0x05C0:
             // Expansion NMI mask

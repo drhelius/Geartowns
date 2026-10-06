@@ -121,6 +121,12 @@ INLINE void Audio::Synchronize(u64 clocks)
     }
 }
 
+INLINE void Audio::HandleEvent(u64 clocks)
+{
+    Synchronize(clocks);
+    UpdatePCMIRQ();
+}
+
 INLINE void Audio::Clock(u32 clocks)
 {
     if (clocks == 0)

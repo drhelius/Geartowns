@@ -73,6 +73,7 @@ public:
     void WriteIRQMask(u8 value);
     u8 ReadIRQFlags();
     bool IsIRQAsserted();
+    u64 GetCyclesToBlockIRQ() const;
     RF5C68_State* GetState();
 
     const RF5C68_Channel* GetChannels() const;

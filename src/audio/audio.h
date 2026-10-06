@@ -29,6 +29,7 @@
 #define AUDIO_VOLUME_CHANNELS 4
 
 class CdRomAudio;
+class PIC;
 class Scheduler;
 class StateSerializer;
 
@@ -60,7 +61,7 @@ public:
 public:
     Audio();
     ~Audio();
-    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio);
+    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic);
     void Reset();
     void Mute(bool mute);
     void SetMasterVolume(float volume);
@@ -69,6 +70,11 @@ public:
     void SetCDDAVolume(float volume);
     void SetPCMLowpassCutoff(float cutoff);
     void Synchronize(u64 clocks);
+    void HandleEvent(u64 clocks);
+    void WriteFM(u8 port, u8 value);
+    void WritePCM(u16 address, u8 value);
+    void WritePCMIRQMask(u8 value);
+    u8 ReadPCMIRQFlags();
     u8 ReadVolume(u16 port) const;
     void WriteVolume(u16 port, u8 value);
     u8 ReadGate(u16 port) const;
@@ -99,6 +105,9 @@ private:
     void CaptureChannels(int index);
     void UpdateCDDAGain();
     void UpdateGates();
+    void UpdateIRQ();
+    void UpdatePCMIRQ();
+    u64 GetEventClocks(u64 cycles) const;
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -107,6 +116,7 @@ private:
     RF5C68* m_rf5c68;
     CdRomAudio* m_cdrom_audio;
     Scheduler* m_scheduler;
+    PIC* m_pic;
     bool m_mute;
     float m_master_volume;
     float m_fm_volume;
@@ -119,6 +129,7 @@ private:
     bool m_fm_enabled;
     bool m_pcm_enabled;
     bool m_cdda_enabled;
+    u64 m_pcm_irq_clocks;
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];
@@ -130,6 +141,8 @@ private:
     s16 m_fm_channel_buffer[YM3438_CHANNEL_COUNT][GT_AUDIO_BUFFER_SIZE / 2];
     s16 m_pcm_channel_buffer[RF5C68_CHANNEL_COUNT][GT_AUDIO_BUFFER_SIZE / 2];
 };
+
+static const int k_audio_irq = 13;
 
 #include "audio_inline.h"
 

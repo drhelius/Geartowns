@@ -22,6 +22,8 @@
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "../cdrom/cdrom_audio.h"
+#include "../system/pic.h"
+#include "../system/scheduler.h"
 #include "../common/state_serializer.h"
 
 // Data Book 5.1 puts an approximately 4 kHz reconstruction filter after the PCM DACs
@@ -57,6 +59,7 @@ Audio::Audio()
     InitPointer(m_rf5c68);
     InitPointer(m_cdrom_audio);
     InitPointer(m_scheduler);
+    InitPointer(m_pic);
     m_mute = false;
     m_master_volume = 1.0f;
     m_fm_volume = 1.0f;
@@ -67,6 +70,7 @@ Audio::Audio()
     m_fm_enabled = false;
     m_pcm_enabled = false;
     m_cdda_enabled = false;
+    m_pcm_irq_clocks = GT_NO_EVENT;
     m_buffer_index = 0;
     m_buffer_overflow = false;
     m_frame_samples = 0;
@@ -89,10 +93,11 @@ Audio::~Audio()
     SafeDelete(m_ym3438);
 }
 
-void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio)
+void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic)
 {
     m_scheduler = scheduler;
     m_cdrom_audio = cdrom_audio;
+    m_pic = pic;
 
     if (!IsValidPointer(m_ym3438))
         m_ym3438 = new YM3438();
@@ -133,6 +138,7 @@ void Audio::Reset()
 
     UpdateCDDAGain();
     UpdateGates();
+    UpdatePCMIRQ();
     m_buffer_index = 0;
     m_buffer_overflow = false;
 }
@@ -202,6 +208,69 @@ void Audio::UpdateGates()
     m_cdda_enabled = output;
 }
 
+// Every write that can move an FM timer or a PCM pointer looks again at IRQ13
+void Audio::WriteFM(u8 port, u8 value)
+{
+    m_ym3438->Write(port, value);
+    UpdateIRQ();
+}
+
+void Audio::WritePCM(u16 address, u8 value)
+{
+    m_rf5c68->Write(address, value);
+    UpdatePCMIRQ();
+}
+
+void Audio::WritePCMIRQMask(u8 value)
+{
+    m_rf5c68->WriteIRQMask(value);
+    UpdatePCMIRQ();
+}
+
+u8 Audio::ReadPCMIRQFlags()
+{
+    u8 flags = m_rf5c68->ReadIRQFlags();
+    UpdatePCMIRQ();
+    return flags;
+}
+
+// IRQ13 combines the FM timer flags and the PCM boundary causes
+// While it is low, the first clock either chip can raise it is scheduled
+void Audio::UpdateIRQ()
+{
+    bool asserted = m_ym3438->IsIRQAsserted() || m_rf5c68->IsIRQAsserted();
+    u64 next = GT_NO_EVENT;
+
+    m_pic->SetIRQLine(k_audio_irq, asserted);
+
+    if (!asserted)
+    {
+        u64 fm_cycles = m_ym3438->GetCyclesToTimerFlag();
+
+        if (fm_cycles != GT_NO_EVENT)
+            next = GetEventClocks(fm_cycles - m_ym3438->GetState()->elapsed_cycles);
+
+        next = MIN(next, m_pcm_irq_clocks);
+    }
+
+    m_scheduler->Schedule(SCHEDULER_EVENT_AUDIO, next);
+}
+
+// The PCM prediction only changes with the PCM state, so it is kept between FM writes
+void Audio::UpdatePCMIRQ()
+{
+    m_rf5c68->Synchronize();
+    u64 cycles = m_rf5c68->GetCyclesToBlockIRQ();
+    m_pcm_irq_clocks = cycles == GT_NO_EVENT ? GT_NO_EVENT : GetEventClocks(cycles);
+    UpdateIRQ();
+}
+
+// Machine clock at which the sound chips have run the given cycles past the last catch-up
+u64 Audio::GetEventClocks(u64 cycles) const
+{
+    return m_state.clocks + (cycles * k_audio_cpu_clocks_per_sound_clock) - m_state.sound_clock_remainder;
+}
+
 void Audio::UpdateCDDAGain()
 {
     m_cdda_gain_left = GetVolumeGain(k_audio_volume_cdda, k_audio_volume_cdda_left);
@@ -244,6 +313,10 @@ void Audio::WriteWaveWindowCallback(void* device, u32 offset, u8 value)
     Audio* audio = (Audio*)device;
     audio->Synchronize(audio->m_scheduler->GetClocks());
     audio->m_rf5c68->Write((u16)(0x1000 | (offset & 0x0FFF)), value);
+
+    // A new loop marker can change where a playing channel crosses its next block
+    if (value == 0xFF)
+        audio->UpdatePCMIRQ();
 }
 
 // One value per channel and output sample for the debugger scopes, only while they are enabled
@@ -360,4 +433,5 @@ void Audio::SanitizeState()
     m_state.mute_control &= k_audio_gate_fm | k_audio_gate_pcm;
     UpdateCDDAGain();
     UpdateGates();
+    UpdatePCMIRQ();
 }

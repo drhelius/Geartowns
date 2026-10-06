@@ -709,13 +709,13 @@ static void draw_algorithm(int algorithm)
     for (int i = 0; i < 4; i++)
     {
         bool carrier = (layout.carriers >> i) & 1;
-        ImVec2 min(centers[i].x - box * 0.5f, centers[i].y - box * 0.5f);
-        ImVec2 max(centers[i].x + box * 0.5f, centers[i].y + box * 0.5f);
+        ImVec2 box_min(centers[i].x - box * 0.5f, centers[i].y - box * 0.5f);
+        ImVec2 box_max(centers[i].x + box * 0.5f, centers[i].y + box * 0.5f);
         char text[2] = { (char)('1' + i), 0 };
 
-        draw_list->AddRectFilled(min, max, ImColor(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg)));
-        draw_list->AddRect(min, max, ImColor(carrier ? green : orange));
-        draw_list->AddText(ImVec2(min.x + 3.0f, min.y - 1.0f), ImColor(white), text);
+        draw_list->AddRectFilled(box_min, box_max, ImColor(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg)));
+        draw_list->AddRect(box_min, box_max, ImColor(carrier ? green : orange));
+        draw_list->AddText(ImVec2(box_min.x + 3.0f, box_min.y - 1.0f), ImColor(white), text);
     }
 
     ImGui::Dummy(ImVec2(4 * cell, 3 * cell));

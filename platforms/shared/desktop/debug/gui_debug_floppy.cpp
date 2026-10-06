@@ -250,12 +250,12 @@ void gui_debug_window_disk_viewer(void)
     {
         int c = t / 2;
         int h = t & 1;
-        ImVec2 min(origin.x + c * cell, origin.y + h * (cell + 2.0f));
-        ImVec2 max(min.x + cell - 1.0f, min.y + cell);
-        draw_list->AddRectFilled(min, max, ImColor(get_track_color(disk, t)));
+        ImVec2 cell_min(origin.x + c * cell, origin.y + h * (cell + 2.0f));
+        ImVec2 cell_max(cell_min.x + cell - 1.0f, cell_min.y + cell);
+        draw_list->AddRectFilled(cell_min, cell_max, ImColor(get_track_color(disk, t)));
 
         if (t == track)
-            draw_list->AddRect(ImVec2(min.x - 1, min.y - 1), ImVec2(max.x + 1, max.y + 1), ImColor(white));
+            draw_list->AddRect(ImVec2(cell_min.x - 1, cell_min.y - 1), ImVec2(cell_max.x + 1, cell_max.y + 1), ImColor(white));
     }
 
     ImVec2 head_min(origin.x + head_cylinder * cell - 1.0f, origin.y - 3.0f);

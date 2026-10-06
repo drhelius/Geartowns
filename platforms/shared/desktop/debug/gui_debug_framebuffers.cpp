@@ -324,9 +324,9 @@ static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
 
     if (info.window && config_debug.framebuffer_show_window && config_debug.framebuffer_tab < 2)
     {
-        ImVec2 min(position.x + info.window_x * zoom, position.y + info.window_y * zoom);
-        ImVec2 max(min.x + info.window_width * zoom, min.y + info.window_height * zoom);
-        ImGui::GetWindowDrawList()->AddRect(min, max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
+        ImVec2 window_min(position.x + info.window_x * zoom, position.y + info.window_y * zoom);
+        ImVec2 window_max(window_min.x + info.window_width * zoom, window_min.y + info.window_height * zoom);
+        ImGui::GetWindowDrawList()->AddRect(window_min, window_max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
     }
 
     if (ImGui::IsItemHovered())

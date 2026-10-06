@@ -200,12 +200,13 @@ INLINE void Audio::SampleSources()
     if (m_channel_scopes)
         CaptureChannels(m_buffer_index >> 1);
 
-    m_fm_buffer[m_buffer_index + 0] = fm_left;
-    m_fm_buffer[m_buffer_index + 1] = fm_right;
-    m_pcm_buffer[m_buffer_index + 0] = (s16)m_state.pcm_lowpass_left;
-    m_pcm_buffer[m_buffer_index + 1] = (s16)m_state.pcm_lowpass_right;
-    m_cdda_buffer[m_buffer_index + 0] = (s16)((cdda_left * m_cdda_gain_left) >> 15);
-    m_cdda_buffer[m_buffer_index + 1] = (s16)((cdda_right * m_cdda_gain_right) >> 15);
+    // Muted sources and a closed output reach the mixer as silence
+    m_fm_buffer[m_buffer_index + 0] = m_fm_enabled ? fm_left : 0;
+    m_fm_buffer[m_buffer_index + 1] = m_fm_enabled ? fm_right : 0;
+    m_pcm_buffer[m_buffer_index + 0] = m_pcm_enabled ? (s16)m_state.pcm_lowpass_left : 0;
+    m_pcm_buffer[m_buffer_index + 1] = m_pcm_enabled ? (s16)m_state.pcm_lowpass_right : 0;
+    m_cdda_buffer[m_buffer_index + 0] = m_cdda_enabled ? (s16)((cdda_left * m_cdda_gain_left) >> 15) : 0;
+    m_cdda_buffer[m_buffer_index + 1] = m_cdda_enabled ? (s16)((cdda_right * m_cdda_gain_right) >> 15) : 0;
     m_buffer_index += 2;
 }
 

@@ -1649,7 +1649,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_sound_status"},
         {"title", "Get Sound Status"},
-        {"description", "Read the sound board: both MB87078 electronic volumes (04E0/04E2) with gain, the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes."},
+        {"description", "Read the sound board: both MB87078 electronic volumes (04E0/04E2) with gain, the FM and PCM mutes (04D5) and the output gate (04EC), the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

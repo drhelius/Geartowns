@@ -235,7 +235,7 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x04D5:
             // Sound mute
-            break;
+            return m_audio->ReadGate(port);
         case 0x04D6:
             // Game port output
             break;
@@ -276,7 +276,7 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
             return m_rf5c68->ReadIRQFlags();
         case 0x04EC:
             // LED and output mute
-            break;
+            return m_audio->ReadGate(port);
         case 0x04F0:
             // PCM envelope
         case 0x04F1:
@@ -534,13 +534,15 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x04EB:
             value = m_rf5c68->GetIRQFlags();
             break;
+        case 0x04D5:
+        case 0x04EC:
+            value = m_audio->ReadGate(port);
+            break;
         case 0x04D0:
         case 0x04D2:
-        case 0x04D5:
         case 0x04D6:
         case 0x04E7:
         case 0x04E8:
-        case 0x04EC:
         case 0x04F0:
         case 0x04F1:
         case 0x04F2:
@@ -762,6 +764,8 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x04D5:
             // Sound mute
+            m_audio->Synchronize(context.clocks);
+            m_audio->WriteGate(port, value);
             break;
         case 0x04D6:
             // Game port output
@@ -802,8 +806,11 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x04EB:
             // PCM interrupt reason
+            break;
         case 0x04EC:
             // LED and output mute
+            m_audio->Synchronize(context.clocks);
+            m_audio->WriteGate(port, value);
             break;
         case 0x04F0:
             // PCM envelope

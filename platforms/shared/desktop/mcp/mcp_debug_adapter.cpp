@@ -2820,6 +2820,14 @@ json DebugAdapter::GetSoundStatus()
 
     return {
         {"electronic_volume", volumes},
+        {"output_gates", {
+            {"mute_control", hex_text(state->mute_control, 2)},
+            {"fm_enabled", (state->mute_control & 0x02) != 0},
+            {"pcm_enabled", (state->mute_control & 0x01) != 0},
+            {"output_control", hex_text(state->output_control, 2)},
+            {"output_enabled", (state->output_control & 0x40) != 0},
+            {"level_leds", (state->output_control & 0x80) == 0}
+        }},
         {"interrupts", {
             {"cause_fm", fm->timer_a_flag || fm->timer_b_flag},
             {"cause_pcm", pcm->irq_flags != 0},

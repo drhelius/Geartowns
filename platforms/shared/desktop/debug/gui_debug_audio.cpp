@@ -273,18 +273,34 @@ void gui_debug_window_sound_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(180, 100), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 420), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 512), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound Control", &config_debug.show_sound_control);
 
     ImGui::PushFont(gui_default_font);
 
     Audio* audio = emu_get_core()->GetAudio();
+    Audio::Audio_State* state = audio->GetState();
     YM3438::YM3438_State* fm = audio->GetYM3438()->GetState();
     RF5C68::RF5C68_State* pcm = audio->GetRF5C68()->GetState();
 
     ImGui::TextColored(cyan, "ELECTRONIC VOLUME"); ImGui::Separator();
     draw_volume_chip(audio, 0);
     draw_volume_chip(audio, 1);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "OUTPUT GATES"); ImGui::Separator();
+
+    u8 mute = state->mute_control;
+    u8 output = state->output_control;
+    ImGui::TextColored(violet, "SOURCES    "); ImGui::SameLine();
+    ImGui::TextColored(white, "$%02X", mute); ImGui::SameLine();
+    ImGui::TextColored((mute & 0x02) ? green : gray, "FM "); ImGui::SameLine();
+    ImGui::TextColored((mute & 0x01) ? green : gray, "PCM"); ImGui::SameLine();
+    ImGui::TextColored(gray, "04D5");
+    ImGui::TextColored(violet, "OUTPUT     "); ImGui::SameLine();
+    ImGui::TextColored(white, "$%02X", output); ImGui::SameLine();
+    ImGui::TextColored((output & 0x40) ? green : gray, "%s", (output & 0x40) ? "ON " : "OFF"); ImGui::SameLine();
+    ImGui::TextColored((output & 0x80) ? gray : green, "LED"); ImGui::SameLine();
+    ImGui::TextColored(gray, "04EC");
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "INTERRUPTS"); ImGui::Separator();
 

@@ -47,6 +47,9 @@ static const u8 k_audio_volume_minus_32db = 0x10;
 static const int k_audio_volume_cdda = 1;
 static const int k_audio_volume_cdda_left = 0;
 static const int k_audio_volume_cdda_right = 1;
+static const u8 k_audio_gate_pcm = 0x01;
+static const u8 k_audio_gate_fm = 0x02;
+static const u8 k_audio_gate_output = 0x40;
 
 Audio::Audio()
 {
@@ -61,6 +64,9 @@ Audio::Audio()
     m_cdda_volume = 1.0f;
     m_cdda_gain_left = 0;
     m_cdda_gain_right = 0;
+    m_fm_enabled = false;
+    m_pcm_enabled = false;
+    m_cdda_enabled = false;
     m_buffer_index = 0;
     m_buffer_overflow = false;
     m_frame_samples = 0;
@@ -122,7 +128,11 @@ void Audio::Reset()
         }
     }
 
+    m_state.mute_control = 0;
+    m_state.output_control = 0;
+
     UpdateCDDAGain();
+    UpdateGates();
     m_buffer_index = 0;
     m_buffer_overflow = false;
 }
@@ -163,6 +173,33 @@ void Audio::WriteVolume(u16 port, u8 value)
     }
 
     UpdateCDDAGain();
+}
+
+// 04D5h bit 1 lets FM through and bit 0 PCM
+// 04ECh bit 6 permits the final output, CD-DA included, and bit 7 turns the level LEDs off
+u8 Audio::ReadGate(u16 port) const
+{
+    return port == 0x04D5 ? m_state.mute_control : m_state.output_control;
+}
+
+void Audio::WriteGate(u16 port, u8 value)
+{
+    if (port == 0x04D5)
+        m_state.mute_control = value & (k_audio_gate_fm | k_audio_gate_pcm);
+    else
+        m_state.output_control = value;
+
+    UpdateGates();
+}
+
+// The gates only silence the outputs
+// FM timers and PCM interrupts keep running behind them
+void Audio::UpdateGates()
+{
+    bool output = (m_state.output_control & k_audio_gate_output) != 0;
+    m_fm_enabled = output && (m_state.mute_control & k_audio_gate_fm) != 0;
+    m_pcm_enabled = output && (m_state.mute_control & k_audio_gate_pcm) != 0;
+    m_cdda_enabled = output;
 }
 
 void Audio::UpdateCDDAGain()
@@ -298,6 +335,8 @@ void Audio::Serialize(StateSerializer& serializer)
     G_SERIALIZE_ARRAY(serializer, m_state.volume_channel, AUDIO_VOLUME_CHIPS);
     G_SERIALIZE_ARRAY(serializer, &m_state.volume_data[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
     G_SERIALIZE_ARRAY(serializer, &m_state.volume_control[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
+    G_SERIALIZE(serializer, m_state.mute_control);
+    G_SERIALIZE(serializer, m_state.output_control);
 }
 
 void Audio::SanitizeState()
@@ -318,5 +357,7 @@ void Audio::SanitizeState()
         }
     }
 
+    m_state.mute_control &= k_audio_gate_fm | k_audio_gate_pcm;
     UpdateCDDAGain();
+    UpdateGates();
 }

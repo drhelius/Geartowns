@@ -53,6 +53,8 @@ public:
         u8 volume_channel[AUDIO_VOLUME_CHIPS];
         u8 volume_data[AUDIO_VOLUME_CHIPS][AUDIO_VOLUME_CHANNELS];
         u8 volume_control[AUDIO_VOLUME_CHIPS][AUDIO_VOLUME_CHANNELS];
+        u8 mute_control;
+        u8 output_control;
     };
 
 public:
@@ -69,6 +71,8 @@ public:
     void Synchronize(u64 clocks);
     u8 ReadVolume(u16 port) const;
     void WriteVolume(u16 port, u8 value);
+    u8 ReadGate(u16 port) const;
+    void WriteGate(u16 port, u8 value);
     void EndFrame(s16* sample_buffer, int* sample_count);
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
@@ -94,6 +98,7 @@ private:
     void SampleSources();
     void CaptureChannels(int index);
     void UpdateCDDAGain();
+    void UpdateGates();
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -111,6 +116,9 @@ private:
     u16 m_pcm_lowpass_alpha_q15;
     s32 m_cdda_gain_left;
     s32 m_cdda_gain_right;
+    bool m_fm_enabled;
+    bool m_pcm_enabled;
+    bool m_cdda_enabled;
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];

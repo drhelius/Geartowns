@@ -127,7 +127,7 @@ static const stDebugPortLabel k_debug_port_labels[] =
     { 0x05C2, "EXP_NMI_STATUS", "Expansion NMI status" },
     { 0x05C8, "TVRAM_WRITTEN", "Text VRAM written" },
     { 0x05CA, "VSYNC_IRQ_CLEAR", "VSYNC interrupt clear" },
-    { 0x05E0, "RAM_WAIT", "Main RAM wait" },
+    { 0x05E0, "UNDOCUMENTED", "Undocumented, BIOS writes 01h" },
     { 0x0600, "KB_DATA", "Keyboard data" },
     { 0x0602, "KB_STATUS", "Keyboard status read, command write" },
     { 0x0604, "KB_IRQ", "Keyboard interrupt" },

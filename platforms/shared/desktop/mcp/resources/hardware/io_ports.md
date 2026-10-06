@@ -163,7 +163,7 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 05C2h | EXP_NMI_STATUS | Expansion NMI status |
 | 05C8h | TVRAM_WRITTEN | Text VRAM written |
 | 05CAh | VSYNC_IRQ_CLEAR | VSYNC interrupt clear |
-| 05E0h | RAM_WAIT | Written 01h by the Model 1/2 BIOS at boot |
+| 05E0h | UNDOCUMENTED | Undocumented, the Model 1/2 BIOS writes 01h at boot |
 
 ### Keyboard
 

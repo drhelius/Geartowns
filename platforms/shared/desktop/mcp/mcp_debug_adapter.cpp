@@ -2097,7 +2097,7 @@ json DebugAdapter::GetSystemStatus()
             {"dictionary_window", memory->dictionary},
             {"dictionary_bank", memory->dictionary_bank & 0x0F},
             {"cmos_write_protect", control->write_protect},
-            {"ram_wait", Hex(control->main_ram_wait, 2)}
+            {"port_05e0", Hex(control->port_05e0, 2)}
         }},
         {"serial_rom", {
             {"control", Hex(control->serial_rom_control, 2)},

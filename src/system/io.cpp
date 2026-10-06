@@ -308,7 +308,7 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
             // VSYNC interrupt clear
             break;
         case 0x05E0:
-            // Main RAM wait
+            // Undocumented, BIOS writes 01h
             return m_system_control->Read(port);
         case 0x0600:
             // Keyboard data
@@ -839,7 +839,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             m_video->Write(port, value, context.clocks);
             break;
         case 0x05E0:
-            // Main RAM wait
+            // Undocumented, BIOS writes 01h
             m_system_control->Write(port, value);
             break;
         case 0x0600:

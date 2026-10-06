@@ -36,7 +36,7 @@ public:
         bool power_off;
         u8 serial_rom_control;
         u8 serial_rom_bit;
-        u8 main_ram_wait;
+        u8 port_05e0;
     };
 
 public:

@@ -488,8 +488,8 @@ void gui_debug_window_system_control(void)
     ImGui::TextColored(violet, "CMOS WP    "); ImGui::SameLine();
     ImGui::TextColored(control->write_protect ? yellow : gray, "%s", control->write_protect ? "ON " : "OFF"); ImGui::SameLine();
     ImGui::TextColored(gray, "         0020");
-    ImGui::TextColored(violet, "RAM WAIT   "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", control->main_ram_wait); ImGui::SameLine();
+    ImGui::TextColored(violet, "UNDOC      "); ImGui::SameLine();
+    ImGui::TextColored(white, "$%02X", control->port_05e0); ImGui::SameLine();
     ImGui::TextColored(gray, "         05E0");
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "SERIAL ROM (0032)"); ImGui::Separator();

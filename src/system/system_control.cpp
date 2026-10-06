@@ -35,7 +35,7 @@ SystemControl::SystemControl()
     m_state.power_off = false;
     m_state.serial_rom_control = 0;
     m_state.serial_rom_bit = 0;
-    m_state.main_ram_wait = 0;
+    m_state.port_05e0 = 0;
 }
 
 SystemControl::~SystemControl()
@@ -56,7 +56,7 @@ void SystemControl::Reset()
     m_state.power_off = false;
     m_state.serial_rom_control = 0;
     m_state.serial_rom_bit = 0;
-    m_state.main_ram_wait = 0;
+    m_state.port_05e0 = 0;
 }
 
 u8 SystemControl::Read(u16 port)
@@ -76,7 +76,7 @@ u8 SystemControl::Read(u16 port)
             return (m_state.serial_rom_control & 0xC0) | data;
         }
         case 0x05E0:
-            return m_state.main_ram_wait;
+            return m_state.port_05e0;
         default:
             return 0xFF;
     }
@@ -96,7 +96,7 @@ u8 SystemControl::Peek(u16 port) const
             return (m_state.serial_rom_control & 0xC0) | data;
         }
         case 0x05E0:
-            return m_state.main_ram_wait;
+            return m_state.port_05e0;
         default:
             return 0xFF;
     }
@@ -129,7 +129,7 @@ void SystemControl::Write(u16 port, u8 value)
             WriteSerialROM(value);
             break;
         case 0x05E0:
-            m_state.main_ram_wait = value;
+            m_state.port_05e0 = value;
             break;
     }
 }
@@ -172,7 +172,7 @@ void SystemControl::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.power_off);
     G_SERIALIZE(serializer, m_state.serial_rom_control);
     G_SERIALIZE(serializer, m_state.serial_rom_bit);
-    G_SERIALIZE(serializer, m_state.main_ram_wait);
+    G_SERIALIZE(serializer, m_state.port_05e0);
 }
 
 void SystemControl::SanitizeState()

@@ -189,7 +189,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_fdc->Init(m_pic, m_scheduler, m_dma);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
-    m_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard, m_rtc, m_dma);
+    m_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard, m_input, m_rtc, m_dma);
     m_i386->Init(m_memory, m_io);
     m_input->Init();
     m_trace_logger->Init(&m_scheduler->GetState()->clocks);
@@ -546,12 +546,6 @@ void GeartownsCore::ReleaseAllKeys()
 {
     if (IsValidPointer(m_keyboard))
         m_keyboard->ReleaseAllKeys();
-}
-
-void GeartownsCore::ResetSound()
-{
-    if (IsValidPointer(m_audio))
-        m_audio->Reset();
 }
 
 bool GeartownsCore::SaveState(const char* path, int index, bool screenshot)

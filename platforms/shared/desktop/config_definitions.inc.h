@@ -243,18 +243,18 @@ static inline void process(config_Operation operation)
     {
         char section[32];
         snprintf(section, sizeof(section), "Input%d", i + 1);
-        CONFIG_INT_RANGE(section, "ControllerType", config_input.controller_type[i], GT_CONTROLLER_ORIGINAL_GAMEPAD, GT_CONTROLLER_NONE, GT_CONTROLLER_6_BUTTON_GAMEPAD);
+        CONFIG_INT_RANGE(section, "ControllerType", config_input.controller_type[i], i == 1 ? GT_CONTROLLER_MOUSE : GT_CONTROLLER_ORIGINAL_GAMEPAD, GT_CONTROLLER_NONE, GT_CONTROLLER_MOUSE);
         CONFIG_BOOL(section, "UseKeyboard", config_input.use_keyboard[i], i == 0);
     }
 
     // Keyboard
-    const SDL_Scancode keyboard_defaults[GT_MAX_GAMEPADS][12] = {
+    const SDL_Scancode keyboard_defaults[GT_MAX_GAMEPADS][13] = {
         { SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_UP, SDL_SCANCODE_DOWN,
           SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_X, SDL_SCANCODE_Z,
-          SDL_SCANCODE_C, SDL_SCANCODE_V, SDL_SCANCODE_B, SDL_SCANCODE_N },
+          SDL_SCANCODE_C, SDL_SCANCODE_V, SDL_SCANCODE_B, SDL_SCANCODE_N, SDL_SCANCODE_M },
         { SDL_SCANCODE_J, SDL_SCANCODE_L, SDL_SCANCODE_I, SDL_SCANCODE_K,
           SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_Y, SDL_SCANCODE_T,
-          SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8 }
+          SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9 }
     };
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
@@ -265,7 +265,7 @@ static inline void process(config_Operation operation)
         CONFIG_SCANCODE(section, "KeyRight", config_input_keyboard[i].key_right, keyboard_defaults[i][1]);
         CONFIG_SCANCODE(section, "KeyUp", config_input_keyboard[i].key_up, keyboard_defaults[i][2]);
         CONFIG_SCANCODE(section, "KeyDown", config_input_keyboard[i].key_down, keyboard_defaults[i][3]);
-        CONFIG_SCANCODE(section, "KeyStart", config_input_keyboard[i].key_start, keyboard_defaults[i][4]);
+        CONFIG_SCANCODE(section, "KeySelect", config_input_keyboard[i].key_select, keyboard_defaults[i][4]);
         CONFIG_SCANCODE(section, "KeyRun", config_input_keyboard[i].key_run, keyboard_defaults[i][5]);
         CONFIG_SCANCODE(section, "KeyA", config_input_keyboard[i].key_A, keyboard_defaults[i][6]);
         CONFIG_SCANCODE(section, "KeyB", config_input_keyboard[i].key_B, keyboard_defaults[i][7]);
@@ -273,6 +273,7 @@ static inline void process(config_Operation operation)
         CONFIG_SCANCODE(section, "KeyX", config_input_keyboard[i].key_X, keyboard_defaults[i][9]);
         CONFIG_SCANCODE(section, "KeyY", config_input_keyboard[i].key_Y, keyboard_defaults[i][10]);
         CONFIG_SCANCODE(section, "KeyZ", config_input_keyboard[i].key_Z, keyboard_defaults[i][11]);
+        CONFIG_SCANCODE(section, "KeyZoom", config_input_keyboard[i].key_zoom, keyboard_defaults[i][12]);
     }
 
     // Gamepads
@@ -283,8 +284,8 @@ static inline void process(config_Operation operation)
         CONFIG_INT_RANGE(section, "GamepadDirectional", config_input_gamepad[i].gamepad_directional, 0, 0, 2);
         CONFIG_BOOL(section, "GamepadInvertX", config_input_gamepad[i].gamepad_invert_x_axis, false);
         CONFIG_BOOL(section, "GamepadInvertY", config_input_gamepad[i].gamepad_invert_y_axis, false);
-        CONFIG_INT(section, "GamepadStart", config_input_gamepad[i].gamepad_start, SDL_GAMEPAD_BUTTON_START);
-        CONFIG_INT(section, "GamepadRun", config_input_gamepad[i].gamepad_run, SDL_GAMEPAD_BUTTON_BACK);
+        CONFIG_INT(section, "GamepadSelect", config_input_gamepad[i].gamepad_select, SDL_GAMEPAD_BUTTON_BACK);
+        CONFIG_INT(section, "GamepadRun", config_input_gamepad[i].gamepad_run, SDL_GAMEPAD_BUTTON_START);
         CONFIG_INT(section, "GamepadXAxis", config_input_gamepad[i].gamepad_x_axis, SDL_GAMEPAD_AXIS_LEFTX);
         CONFIG_INT(section, "GamepadYAxis", config_input_gamepad[i].gamepad_y_axis, SDL_GAMEPAD_AXIS_LEFTY);
         CONFIG_INT(section, "GamepadA", config_input_gamepad[i].gamepad_A, SDL_GAMEPAD_BUTTON_SOUTH);
@@ -293,6 +294,7 @@ static inline void process(config_Operation operation)
         CONFIG_INT(section, "GamepadX", config_input_gamepad[i].gamepad_X, SDL_GAMEPAD_BUTTON_NORTH);
         CONFIG_INT(section, "GamepadY", config_input_gamepad[i].gamepad_Y, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
         CONFIG_INT(section, "GamepadZ", config_input_gamepad[i].gamepad_Z, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        CONFIG_INT(section, "GamepadZoom", config_input_gamepad[i].gamepad_zoom, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     }
 
     // Gamepad shortcuts
@@ -398,30 +400,7 @@ static void normalize(void)
 
 static void migrate(int file_version)
 {
-    std::string stored;
-
-    if (file_version < 2)
-    {
-        float red = 0.0f;
-        float green = 0.0f;
-        float blue = 0.0f;
-        bool old_default = get_setting("Video", "BackgroundColorDebuggerLightR", &stored) &&
-                           parse_float_string(stored, &red) &&
-                           get_setting("Video", "BackgroundColorDebuggerLightG", &stored) &&
-                           parse_float_string(stored, &green) &&
-                           get_setting("Video", "BackgroundColorDebuggerLightB", &stored) &&
-                           parse_float_string(stored, &blue) &&
-                           std::fabs(red - (160.0f / 255.0f)) < 0.005f &&
-                           std::fabs(green - (160.0f / 255.0f)) < 0.005f &&
-                           std::fabs(blue - (160.0f / 255.0f)) < 0.005f;
-
-        if (old_default)
-        {
-            write_float("Video", "BackgroundColorDebuggerLightR", 233.0f / 255.0f);
-            write_float("Video", "BackgroundColorDebuggerLightG", 232.0f / 255.0f);
-            write_float("Video", "BackgroundColorDebuggerLightB", 230.0f / 255.0f);
-        }
-    }
+    UNUSED(file_version);
 }
 
 static void sync_shader_preset_parameter_defaults(void)

@@ -25,6 +25,7 @@
 class Audio;
 class CdRom;
 class FDC;
+class Input;
 class Keyboard;
 class MSM58321;
 class UPD71071;
@@ -42,7 +43,7 @@ public:
     IO();
     ~IO();
     void Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-        CdRom* cdrom, FDC* fdc, Keyboard* keyboard, MSM58321* rtc, UPD71071* dma);
+        CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc, UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -64,6 +65,7 @@ private:
     CdRom* m_cdrom;
     FDC* m_fdc;
     Keyboard* m_keyboard;
+    Input* m_input;
     MSM58321* m_rtc;
     UPD71071* m_dma;
 };

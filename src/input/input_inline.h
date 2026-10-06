@@ -17,16 +17,14 @@
  *
  */
 
-INLINE void Input::SetMouseDelta(s32 x, s32 y)
+// Right and down are negative on the wire
+INLINE void Input::SetMouseDelta(int port, s32 x, s32 y)
 {
-    m_state.mouse_x += x;
-    m_state.mouse_y += y;
-}
+    if (port < 0 || port >= GT_MAX_GAMEPADS)
+        return;
 
-INLINE void Input::SetMouseButtons(bool left, bool right)
-{
-    m_state.mouse_left = left;
-    m_state.mouse_right = right;
+    m_state.mouse_x[port] = (s32)CLAMP((s64)m_state.mouse_x[port] - x, -k_input_mouse_limit, k_input_mouse_limit);
+    m_state.mouse_y[port] = (s32)CLAMP((s64)m_state.mouse_y[port] - y, -k_input_mouse_limit, k_input_mouse_limit);
 }
 
 INLINE void Input::SetGamePadState(int port, const GT_GamePad_State& state)
@@ -61,6 +59,9 @@ INLINE void Input::SetControllerType(int port, GT_Controller_Type type)
 {
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return;
+
+    if (m_controller_type[port] != type)
+        ClearMouseInput(port);
 
     m_controller_type[port] = type;
 }

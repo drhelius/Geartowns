@@ -281,7 +281,9 @@ enum GT_Controller_Type
 {
     GT_CONTROLLER_NONE = 0,
     GT_CONTROLLER_ORIGINAL_GAMEPAD,
-    GT_CONTROLLER_6_BUTTON_GAMEPAD
+    GT_CONTROLLER_MARTY_GAMEPAD,
+    GT_CONTROLLER_6_BUTTON_GAMEPAD,
+    GT_CONTROLLER_MOUSE
 };
 
 enum GT_Controllers
@@ -296,14 +298,15 @@ enum GT_GamePad_Buttons
     GT_GAMEPAD_DOWN     = 0x0002,
     GT_GAMEPAD_LEFT     = 0x0004,
     GT_GAMEPAD_RIGHT    = 0x0008,
-    GT_GAMEPAD_START    = 0x0010,
+    GT_GAMEPAD_SELECT   = 0x0010,
     GT_GAMEPAD_RUN      = 0x0020,
     GT_GAMEPAD_A        = 0x0040,
     GT_GAMEPAD_B        = 0x0080,
     GT_GAMEPAD_C        = 0x0100,
     GT_GAMEPAD_X        = 0x0200,
     GT_GAMEPAD_Y        = 0x0400,
-    GT_GAMEPAD_Z        = 0x0800
+    GT_GAMEPAD_Z        = 0x0800,
+    GT_GAMEPAD_ZOOM     = 0x1000
 };
 
 struct GT_GamePad_State

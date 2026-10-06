@@ -23,6 +23,7 @@
 #include "../audio/rf5c68.h"
 #include "../cdrom/cdrom.h"
 #include "../drive/fdc.h"
+#include "../input/input.h"
 #include "../input/keyboard.h"
 #include "memory.h"
 #include "pic.h"
@@ -45,6 +46,7 @@ IO::IO()
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
     InitPointer(m_keyboard);
+    InitPointer(m_input);
     InitPointer(m_rtc);
     InitPointer(m_dma);
 }
@@ -54,7 +56,7 @@ IO::~IO()
 }
 
 void IO::Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-    CdRom* cdrom, FDC* fdc, Keyboard* keyboard, MSM58321* rtc, UPD71071* dma)
+    CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc, UPD71071* dma)
 {
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();
@@ -67,6 +69,7 @@ void IO::Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, Sy
     m_cdrom = cdrom;
     m_fdc = fdc;
     m_keyboard = keyboard;
+    m_input = input;
     m_rtc = rtc;
     m_dma = dma;
     Reset();
@@ -232,7 +235,7 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
             // Game port A
         case 0x04D2:
             // Game port B
-            break;
+            return m_input->Read(port);
         case 0x04D5:
             // Sound mute
             return m_audio->ReadGate(port);
@@ -540,6 +543,8 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             break;
         case 0x04D0:
         case 0x04D2:
+            value = m_input->Read(port);
+            break;
         case 0x04D6:
         case 0x04E7:
         case 0x04E8:
@@ -769,6 +774,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x04D6:
             // Game port output
+            m_input->Write(port, value, context.clocks);
             break;
         case 0x04D8:
             // FM address bank 0

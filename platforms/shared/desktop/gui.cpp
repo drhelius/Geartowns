@@ -197,7 +197,10 @@ void gui_render(void)
     }
 
     if (keyboard_was_active && !events_is_keyboard_active())
+    {
         events_release_keyboard();
+        events_release_mouse();
+    }
 
     ImGui::Render();
 }
@@ -271,6 +274,7 @@ void gui_shortcut(gui_ShortCutEvent event)
         break;
     case gui_ShortcutCaptureMouse:
         config_emulator.capture_mouse = !config_emulator.capture_mouse;
+        events_release_mouse();
         break;
     case gui_ShortcutDebugStepOver:
         if (config_debug.debug)

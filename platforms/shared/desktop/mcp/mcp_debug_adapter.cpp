@@ -4128,7 +4128,7 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     if (name == "down") return GT_GAMEPAD_DOWN;
     if (name == "left") return GT_GAMEPAD_LEFT;
     if (name == "right") return GT_GAMEPAD_RIGHT;
-    if (name == "start") return GT_GAMEPAD_START;
+    if (name == "select") return GT_GAMEPAD_SELECT;
     if (name == "run") return GT_GAMEPAD_RUN;
     if (name == "a") return GT_GAMEPAD_A;
     if (name == "b") return GT_GAMEPAD_B;
@@ -4136,6 +4136,7 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     if (name == "x") return GT_GAMEPAD_X;
     if (name == "y") return GT_GAMEPAD_Y;
     if (name == "z") return GT_GAMEPAD_Z;
+    if (name == "zoom") return GT_GAMEPAD_ZOOM;
 
     return 0;
 }
@@ -4149,6 +4150,38 @@ json DebugAdapter::ControllerButton(int player, const std::string& button, const
 
     if (mask == 0)
         return {{"error", "Invalid button name"}};
+
+    // A mouse moves with the directions, held or one step per tap, and clicks with A (left) and B (right)
+    if (IsMouseController(player))
+    {
+        const u16 directions = GT_GAMEPAD_UP | GT_GAMEPAD_DOWN | GT_GAMEPAD_LEFT | GT_GAMEPAD_RIGHT;
+
+        if ((mask & (directions | GT_GAMEPAD_A | GT_GAMEPAD_B)) == 0)
+            return {{"error", "A mouse only supports up, down, left, right, A (left button) and B (right button)"}};
+
+        if (mask & directions)
+        {
+            if (action != "press" && action != "release" && action != "press_and_release")
+                return {{"error", "Invalid action"}};
+
+            json result = {{"success", true}, {"player", player}, {"button", button}, {"action", action}};
+
+            if (action == "press_and_release")
+            {
+                int delta_x = mask == GT_GAMEPAD_LEFT ? -k_mcp_mouse_motion_step :
+                    (mask == GT_GAMEPAD_RIGHT ? k_mcp_mouse_motion_step : 0);
+                int delta_y = mask == GT_GAMEPAD_UP ? -k_mcp_mouse_motion_step :
+                    (mask == GT_GAMEPAD_DOWN ? k_mcp_mouse_motion_step : 0);
+                ApplyMouseMotion(player, delta_x, delta_y);
+                result["mouse_delta_x"] = delta_x;
+                result["mouse_delta_y"] = delta_y;
+            }
+            else
+                result["__mouse_motion"] = true;
+
+            return result;
+        }
+    }
 
     bool delayed_release = false;
 
@@ -4176,6 +4209,63 @@ json DebugAdapter::ControllerButton(int player, const std::string& button, const
         result["__delayed_release"] = true;
 
     return result;
+}
+
+static const char* const k_controller_type_names[] =
+{
+    "none", "original_gamepad", "marty_gamepad", "six_button_gamepad", "mouse"
+};
+
+static const int k_controller_type_count = (int)(sizeof(k_controller_type_names) / sizeof(k_controller_type_names[0]));
+
+// The configuration follows so the desktop routes its host mouse and bindings the same way
+json DebugAdapter::ControllerSetType(int player, const std::string& type)
+{
+    if (player < 1 || player > GT_MAX_GAMEPADS)
+        return {{"error", "Invalid player number (must be 1-2)"}};
+
+    std::string name = to_lower(type);
+
+    for (int i = 0; i < k_controller_type_count; i++)
+    {
+        if (name != k_controller_type_names[i])
+            continue;
+
+        config_input.controller_type[player - 1] = i;
+        emu_set_pad_type((GT_Controllers)(player - 1), (GT_Controller_Type)i);
+        return {{"success", true}, {"player", player}, {"type", name}};
+    }
+
+    return {{"error", "Invalid controller type (must be: none, original_gamepad, marty_gamepad, six_button_gamepad, mouse)"}};
+}
+
+json DebugAdapter::ControllerGetType(int player)
+{
+    if (player < 1 || player > GT_MAX_GAMEPADS)
+        return {{"error", "Invalid player number (must be 1-2)"}};
+
+    int type = (int)emu_get_pad_type((GT_Controllers)(player - 1));
+    const char* name = type >= 0 && type < k_controller_type_count ? k_controller_type_names[type] : "unknown";
+    return {{"success", true}, {"player", player}, {"type", name}};
+}
+
+bool DebugAdapter::IsMouseController(int player) const
+{
+    if (player < 1 || player > GT_MAX_GAMEPADS)
+        return false;
+
+    return emu_get_pad_type((GT_Controllers)(player - 1)) == GT_CONTROLLER_MOUSE;
+}
+
+bool DebugAdapter::ApplyMouseMotion(int player, int delta_x, int delta_y)
+{
+    if (!IsMouseController(player))
+        return false;
+
+    if (delta_x != 0 || delta_y != 0)
+        emu_set_mouse_delta((GT_Controllers)(player - 1), delta_x, delta_y);
+
+    return true;
 }
 
 bool DebugAdapter::GetKeyCode(const std::string& name, GT_Keys& key) const
@@ -4316,13 +4406,13 @@ json DebugAdapter::KeyboardKey(const std::string& key, const std::string& action
 json DebugAdapter::GetInputState()
 {
     static const char* names[] = {
-        "up", "down", "left", "right", "start", "run",
-        "A", "B", "C", "X", "Y", "Z"
+        "up", "down", "left", "right", "select", "run",
+        "A", "B", "C", "X", "Y", "Z", "zoom"
     };
     static const u16 masks[] = {
         GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT, GT_GAMEPAD_RIGHT,
-        GT_GAMEPAD_START, GT_GAMEPAD_RUN, GT_GAMEPAD_A, GT_GAMEPAD_B,
-        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z
+        GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_A, GT_GAMEPAD_B,
+        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z, GT_GAMEPAD_ZOOM
     };
 
     json players = json::array();
@@ -4338,7 +4428,9 @@ json DebugAdapter::GetInputState()
                 pressed.push_back(names[i]);
         }
 
-        players.push_back({{"player", player + 1}, {"pressed", pressed}});
+        int type = (int)emu_get_pad_type((GT_Controllers)player);
+        const char* name = type >= 0 && type < k_controller_type_count ? k_controller_type_names[type] : "unknown";
+        players.push_back({{"player", player + 1}, {"type", name}, {"pressed", pressed}});
     }
 
     json keys = json::array();

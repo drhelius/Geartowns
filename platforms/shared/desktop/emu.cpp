@@ -449,16 +449,16 @@ void emu_release_all_keys(void)
         geartowns->ReleaseAllKeys();
 }
 
-void emu_set_mouse_delta(int x, int y)
+void emu_set_mouse_delta(GT_Controllers controller, int x, int y)
 {
     if (IsValidPointer(geartowns))
-        geartowns->GetInput()->SetMouseDelta(x, y);
+        geartowns->GetInput()->SetMouseDelta((int)controller, x, y);
 }
 
-void emu_set_mouse_buttons(bool left, bool right)
+void emu_clear_mouse(GT_Controllers controller)
 {
     if (IsValidPointer(geartowns))
-        geartowns->GetInput()->SetMouseButtons(left, right);
+        geartowns->GetInput()->ClearMouseInput((int)controller);
 }
 
 void emu_pause(void)
@@ -592,9 +592,6 @@ void emu_audio_set_master_volume(float volume)
 void emu_audio_reset(void)
 {
     sound_queue_stop();
-
-    if (IsValidPointer(geartowns))
-        geartowns->ResetSound();
 
     if (audio_enabled)
         sound_queue_start(GT_AUDIO_SAMPLE_RATE, 2, GT_AUDIO_QUEUE_SIZE, config_audio.buffer_count);

@@ -145,7 +145,7 @@ struct config_Input_Keyboard
     SDL_Scancode key_right;
     SDL_Scancode key_up;
     SDL_Scancode key_down;
-    SDL_Scancode key_start;
+    SDL_Scancode key_select;
     SDL_Scancode key_run;
     SDL_Scancode key_A;
     SDL_Scancode key_B;
@@ -153,6 +153,7 @@ struct config_Input_Keyboard
     SDL_Scancode key_X;
     SDL_Scancode key_Y;
     SDL_Scancode key_Z;
+    SDL_Scancode key_zoom;
 };
 
 struct config_Input_Gamepad
@@ -160,7 +161,7 @@ struct config_Input_Gamepad
     int gamepad_directional;
     bool gamepad_invert_x_axis;
     bool gamepad_invert_y_axis;
-    int gamepad_start;
+    int gamepad_select;
     int gamepad_run;
     int gamepad_A;
     int gamepad_B;
@@ -168,6 +169,7 @@ struct config_Input_Gamepad
     int gamepad_X;
     int gamepad_Y;
     int gamepad_Z;
+    int gamepad_zoom;
     int gamepad_x_axis;
     int gamepad_y_axis;
 };

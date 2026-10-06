@@ -17,6 +17,7 @@
  *
  */
 
+
 #ifndef INPUT_H
 #define INPUT_H
 
@@ -30,19 +31,24 @@ class Input
 public:
     struct Input_State
     {
-        s32 mouse_x;
-        s32 mouse_y;
-        bool mouse_left;
-        bool mouse_right;
+        s32 mouse_x[GT_MAX_GAMEPADS];
+        s32 mouse_y[GT_MAX_GAMEPADS];
+        u8 mouse_phase[GT_MAX_GAMEPADS];
+        u8 mouse_sample_x[GT_MAX_GAMEPADS];
+        u8 mouse_sample_y[GT_MAX_GAMEPADS];
+        u64 mouse_edge_clocks[GT_MAX_GAMEPADS];
         GT_GamePad_State gamepads[GT_MAX_GAMEPADS];
+        u8 output;
     };
 
 public:
     Input();
     void Init();
     void Reset();
-    void SetMouseDelta(s32 x, s32 y);
-    void SetMouseButtons(bool left, bool right);
+    u8 Read(u16 port) const;
+    void Write(u16 port, u8 value, u64 clocks);
+    void SetMouseDelta(int port, s32 x, s32 y);
+    void ClearMouseInput(int port);
     void SetGamePadState(int port, const GT_GamePad_State& state);
     void SetInjectedGamePadState(int port, const GT_GamePad_State& state);
     const GT_GamePad_State& GetGamePadState(int port) const;
@@ -53,6 +59,9 @@ public:
     void LoadState(std::istream& stream);
 
 private:
+    u8 ReadGamePad(int port, bool com) const;
+    u8 ReadMouse(int port) const;
+    void MouseEdge(int port, u64 clocks);
     void UpdateGamePadState(int port);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
@@ -63,6 +72,18 @@ private:
     GT_GamePad_State m_injected_gamepads[GT_MAX_GAMEPADS];
     GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
 };
+
+static const u8 k_input_output_reset = 0x0F;
+static const u8 k_input_com = 0x10;
+static const u8 k_input_com_return = 0x40;
+static const u8 k_input_trig_lines = 0x30;
+static const u8 k_input_six_button_id = 0x80;
+static const u8 k_input_mouse_x_high = 0;
+static const u8 k_input_mouse_x_low = 1;
+static const u8 k_input_mouse_y_high = 2;
+static const u8 k_input_mouse_y_low = 3;
+static const u64 k_input_mouse_timeout_clocks = GT_CPU_CLOCK_RATE / 1000;
+static const s32 k_input_mouse_limit = 0x3FFFFFFF;
 
 #include "input_inline.h"
 

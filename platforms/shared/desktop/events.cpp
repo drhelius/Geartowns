@@ -30,8 +30,9 @@
 
 static u16 input_last_buttons[GT_MAX_GAMEPADS] = { };
 static bool input_updated = false;
-static bool mouse_left = false;
-static bool mouse_right = false;
+static u16 mouse_buttons = 0;
+static float mouse_remainder_x = 0.0f;
+static float mouse_remainder_y = 0.0f;
 static bool keyboard_scancode_down[SDL_SCANCODE_COUNT] = { };
 static GT_Keys keyboard_pressed_keys[SDL_SCANCODE_COUNT];
 static int keyboard_key_references[GT_KEY_COUNT] = { };
@@ -45,6 +46,7 @@ static GT_Keys keyboard_key_from_scancode(SDL_Scancode scancode);
 static void keyboard_send_key(SDL_Scancode scancode, bool pressed);
 static bool keyboard_captures_event(const SDL_Event* event);
 static bool keyboard_controller_uses_key(SDL_Scancode scancode);
+static int mouse_get_controller(void);
 
 bool events_shortcuts(const SDL_Event* event)
 {
@@ -130,27 +132,40 @@ void events_emu(const SDL_Event* event, bool shortcut_consumed)
     {
         case SDL_EVENT_MOUSE_MOTION:
         {
-            if (!config_emulator.capture_mouse && !gui_main_window_hovered)
+            int controller = mouse_get_controller();
+
+            if (controller < 0 || (!config_emulator.capture_mouse && !gui_main_window_hovered))
                 break;
 
-            int sensitivity = MAX(config_emulator.mouse_sensitivity, 1);
-            int x = (int)(event->motion.xrel * ((float)sensitivity / 6.0f));
-            int y = (int)(event->motion.yrel * ((float)sensitivity / 6.0f));
-            emu_set_mouse_delta(x, y);
+            float scale = (float)MAX(config_emulator.mouse_sensitivity, 1) / 6.0f;
+            mouse_remainder_x += event->motion.xrel * scale;
+            mouse_remainder_y += event->motion.yrel * scale;
+            int x = (int)mouse_remainder_x;
+            int y = (int)mouse_remainder_y;
+            mouse_remainder_x -= (float)x;
+            mouse_remainder_y -= (float)y;
+            emu_set_mouse_delta((GT_Controllers)controller, x, y);
             break;
         }
 
+        // Clicks outside the screen, like those on debugger windows, stay with the GUI
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
-            bool pressed = event->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+            u16 button = 0;
 
             if (event->button.button == SDL_BUTTON_LEFT)
-                mouse_left = pressed;
+                button = GT_GAMEPAD_A;
             else if (event->button.button == SDL_BUTTON_RIGHT)
-                mouse_right = pressed;
+                button = GT_GAMEPAD_B;
 
-            emu_set_mouse_buttons(mouse_left, mouse_right);
+            if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
+                mouse_buttons &= (u16)~button;
+            else if (config_emulator.capture_mouse || gui_main_window_hovered)
+                mouse_buttons |= button;
+
+            input_update(true);
+            input_updated = true;
             break;
         }
 
@@ -183,6 +198,7 @@ void events_emu(void)
 void events_sync_input(void)
 {
     events_release_keyboard();
+    events_release_mouse();
     SDL_PumpEvents();
     input_update(false);
 }
@@ -192,6 +208,18 @@ void events_release_keyboard(void)
     memset(keyboard_scancode_down, 0, sizeof(keyboard_scancode_down));
     memset(keyboard_key_references, 0, sizeof(keyboard_key_references));
     emu_release_all_keys();
+}
+
+void events_release_mouse(void)
+{
+    int controller = mouse_get_controller();
+
+    mouse_buttons = 0;
+    mouse_remainder_x = 0.0f;
+    mouse_remainder_y = 0.0f;
+
+    if (controller >= 0)
+        emu_clear_mouse((GT_Controllers)controller);
 }
 
 bool events_is_keyboard_active(void)
@@ -214,9 +242,18 @@ static void input_update(bool check_shortcuts)
     for (int controller = 0; controller < GT_MAX_GAMEPADS; controller++)
     {
         GT_GamePad_State state = { 0 };
+        int type = config_input.controller_type[controller];
 
-        if (config_input.controller_type[controller] != GT_CONTROLLER_NONE)
+        if (type != GT_CONTROLLER_NONE)
             state = input_build_state(controller);
+
+        if (type == GT_CONTROLLER_MOUSE)
+        {
+            state.buttons &= GT_GAMEPAD_A | GT_GAMEPAD_B;
+
+            if (controller == mouse_get_controller())
+                state.buttons |= mouse_buttons;
+        }
 
         state.buttons = input_filter_opposing_directions(controller, state.buttons);
         emu_set_gamepad_state((GT_Controllers)controller, state);
@@ -241,7 +278,7 @@ static GT_GamePad_State input_build_state(int controller)
         if (keyboard[keys.key_right]) state.buttons |= GT_GAMEPAD_RIGHT;
         if (keyboard[keys.key_up]) state.buttons |= GT_GAMEPAD_UP;
         if (keyboard[keys.key_down]) state.buttons |= GT_GAMEPAD_DOWN;
-        if (keyboard[keys.key_start]) state.buttons |= GT_GAMEPAD_START;
+        if (keyboard[keys.key_select]) state.buttons |= GT_GAMEPAD_SELECT;
         if (keyboard[keys.key_run]) state.buttons |= GT_GAMEPAD_RUN;
         if (keyboard[keys.key_A]) state.buttons |= GT_GAMEPAD_A;
         if (keyboard[keys.key_B]) state.buttons |= GT_GAMEPAD_B;
@@ -249,6 +286,7 @@ static GT_GamePad_State input_build_state(int controller)
         if (keyboard[keys.key_X]) state.buttons |= GT_GAMEPAD_X;
         if (keyboard[keys.key_Y]) state.buttons |= GT_GAMEPAD_Y;
         if (keyboard[keys.key_Z]) state.buttons |= GT_GAMEPAD_Z;
+        if (keyboard[keys.key_zoom]) state.buttons |= GT_GAMEPAD_ZOOM;
     }
 
     SDL_Gamepad* gamepad = gamepad_controller[controller];
@@ -258,7 +296,7 @@ static GT_GamePad_State input_build_state(int controller)
 
     const config_Input_Gamepad& mapping = config_input_gamepad[controller];
 
-    if (gamepad_get_button(gamepad, mapping.gamepad_start)) state.buttons |= GT_GAMEPAD_START;
+    if (gamepad_get_button(gamepad, mapping.gamepad_select)) state.buttons |= GT_GAMEPAD_SELECT;
     if (gamepad_get_button(gamepad, mapping.gamepad_run)) state.buttons |= GT_GAMEPAD_RUN;
     if (gamepad_get_button(gamepad, mapping.gamepad_A)) state.buttons |= GT_GAMEPAD_A;
     if (gamepad_get_button(gamepad, mapping.gamepad_B)) state.buttons |= GT_GAMEPAD_B;
@@ -266,6 +304,7 @@ static GT_GamePad_State input_build_state(int controller)
     if (gamepad_get_button(gamepad, mapping.gamepad_X)) state.buttons |= GT_GAMEPAD_X;
     if (gamepad_get_button(gamepad, mapping.gamepad_Y)) state.buttons |= GT_GAMEPAD_Y;
     if (gamepad_get_button(gamepad, mapping.gamepad_Z)) state.buttons |= GT_GAMEPAD_Z;
+    if (gamepad_get_button(gamepad, mapping.gamepad_zoom)) state.buttons |= GT_GAMEPAD_ZOOM;
 
     if (mapping.gamepad_directional == 0 || mapping.gamepad_directional == 2)
     {
@@ -443,19 +482,33 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
         const config_Input_Keyboard& keys = config_input_keyboard[controller];
         const SDL_Scancode mapped[12] =
         {
-            keys.key_left, keys.key_right, keys.key_up, keys.key_down, keys.key_start, keys.key_run,
-            keys.key_A, keys.key_B, keys.key_C, keys.key_X, keys.key_Y, keys.key_Z
+            keys.key_A, keys.key_B, keys.key_left, keys.key_right, keys.key_up, keys.key_down, keys.key_select,
+            keys.key_run, keys.key_C, keys.key_X, keys.key_Y, keys.key_Z
         };
-        int count = type == GT_CONTROLLER_6_BUTTON_GAMEPAD ? 12 : 9;
+        int count = type == GT_CONTROLLER_6_BUTTON_GAMEPAD ? 12 : (type == GT_CONTROLLER_MOUSE ? 2 : 9);
 
         for (int i = 0; i < count; i++)
         {
             if (mapped[i] == scancode)
                 return true;
         }
+
+        if (type == GT_CONTROLLER_MARTY_GAMEPAD && keys.key_zoom == scancode)
+            return true;
     }
 
     return false;
+}
+
+static int mouse_get_controller(void)
+{
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        if (config_input.controller_type[i] == GT_CONTROLLER_MOUSE)
+            return i;
+    }
+
+    return -1;
 }
 
 static GT_Keys keyboard_key_from_scancode(SDL_Scancode scancode)

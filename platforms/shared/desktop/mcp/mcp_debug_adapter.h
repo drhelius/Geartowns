@@ -28,6 +28,8 @@
 
 using json = nlohmann::json;
 
+static const int k_mcp_mouse_motion_step = 4;
+
 struct McpAddress
 {
     u32 linear;
@@ -174,6 +176,10 @@ public:
 
     // Input
     json ControllerButton(int player, const std::string& button, const std::string& action);
+    json ControllerSetType(int player, const std::string& type);
+    json ControllerGetType(int player);
+    bool IsMouseController(int player) const;
+    bool ApplyMouseMotion(int player, int delta_x, int delta_y);
     json KeyboardKey(const std::string& key, const std::string& action);
     bool GetKeyCode(const std::string& name, GT_Keys& key) const;
     bool GetTypedKey(char character, GT_Keys& key, bool& shift) const;

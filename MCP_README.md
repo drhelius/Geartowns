@@ -437,8 +437,10 @@ The server exposes tools organized in the following categories:
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 
 ### Controller Input
-- `controller_button` - Control a button on a pad (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, start, run, A, B, C, X, Y, Z
-- `get_input_state` - Get effective pressed buttons, held keyboard keys and pending tap releases
+- `controller_button` - Control a button on a game port (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, select, run, A, B, C, X, Y, Z, zoom (Marty pad, not decoded yet). On a mouse port the directions move the mouse (4 counts per frame while held, 4 counts per tap) and A/B are the left/right buttons
+- `controller_set_type` - Set the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse
+- `controller_get_type` - Read the device on a game port
+- `get_input_state` - Get each port's device type, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
 - `keyboard_type` - Type ASCII text through a frame macro on the JIS layout; optional `frames_per_key`
 

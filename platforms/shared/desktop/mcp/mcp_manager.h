@@ -73,6 +73,15 @@ struct McpInputMacroState
 
 static const u64 k_mcp_tap_frames = 10;
 
+enum McpMouseMotion
+{
+    MCP_MOUSE_MOTION_UP = 0,
+    MCP_MOUSE_MOTION_DOWN,
+    MCP_MOUSE_MOTION_LEFT,
+    MCP_MOUSE_MOTION_RIGHT,
+    MCP_MOUSE_MOTION_COUNT
+};
+
 class McpManager
 {
 public:
@@ -86,6 +95,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_request_id = json();
         reset_input_macro();
+        reset_mouse_motion();
     }
 
     ~McpManager()
@@ -122,6 +132,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
         reset_input_macro();
+        reset_mouse_motion();
         m_debug_adapter->ClearControllerState();
 
         McpTransportInterface* transport = NULL;
@@ -150,6 +161,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
         reset_input_macro();
+        reset_mouse_motion();
 
         if (IsValidPointer(m_debug_adapter))
             m_debug_adapter->ClearControllerState();
@@ -177,6 +189,8 @@ public:
 
     void PumpCommands(GeartownsCore* core)
     {
+        pump_mouse_motion();
+
         for (size_t i = 0; i < m_delayed_releases.size();)
         {
             if (emu_frame_counter >= m_delayed_releases[i].release_at_frame)
@@ -346,6 +360,72 @@ private:
             release.release_at_frame = emu_frame_counter + k_mcp_tap_frames;
             m_delayed_releases.push_back(release);
             result.erase("__delayed_key_release");
+        }
+
+        if (result.contains("__mouse_motion") && result["__mouse_motion"] == true)
+        {
+            int player = result["player"];
+            std::string button = result["button"];
+            int direction = -1;
+
+            if (button == "up")
+                direction = MCP_MOUSE_MOTION_UP;
+            else if (button == "down")
+                direction = MCP_MOUSE_MOTION_DOWN;
+            else if (button == "left")
+                direction = MCP_MOUSE_MOTION_LEFT;
+            else if (button == "right")
+                direction = MCP_MOUSE_MOTION_RIGHT;
+
+            if (direction >= 0 && player >= 1 && player <= GT_MAX_GAMEPADS)
+                m_mouse_motion_held[player - 1][direction] = result["action"] == "press";
+
+            result.erase("__mouse_motion");
+        }
+    }
+
+    void reset_mouse_motion()
+    {
+        memset(m_mouse_motion_held, 0, sizeof(m_mouse_motion_held));
+        m_mouse_motion_frame = emu_frame_counter;
+    }
+
+    // Held directions move a mouse one step per emulated frame, so nothing piles up while paused
+    void pump_mouse_motion()
+    {
+        if (!IsValidPointer(m_debug_adapter) || emu_frame_counter == m_mouse_motion_frame)
+            return;
+
+        m_mouse_motion_frame = emu_frame_counter;
+
+        for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+        {
+            int player = i + 1;
+
+            if (!m_debug_adapter->IsMouseController(player))
+            {
+                for (int j = 0; j < MCP_MOUSE_MOTION_COUNT; j++)
+                    m_mouse_motion_held[i][j] = false;
+
+                continue;
+            }
+
+            int delta_x = 0;
+            int delta_y = 0;
+
+            if (m_mouse_motion_held[i][MCP_MOUSE_MOTION_UP])
+                delta_y -= k_mcp_mouse_motion_step;
+
+            if (m_mouse_motion_held[i][MCP_MOUSE_MOTION_DOWN])
+                delta_y += k_mcp_mouse_motion_step;
+
+            if (m_mouse_motion_held[i][MCP_MOUSE_MOTION_LEFT])
+                delta_x -= k_mcp_mouse_motion_step;
+
+            if (m_mouse_motion_held[i][MCP_MOUSE_MOTION_RIGHT])
+                delta_x += k_mcp_mouse_motion_step;
+
+            m_debug_adapter->ApplyMouseMotion(player, delta_x, delta_y);
         }
     }
 
@@ -551,6 +631,8 @@ private:
     std::string m_pending_media_load_file_path;
     std::vector<DelayedButtonRelease> m_delayed_releases;
     McpInputMacroState m_input_macro;
+    bool m_mouse_motion_held[GT_MAX_GAMEPADS][MCP_MOUSE_MOTION_COUNT];
+    u64 m_mouse_motion_frame;
 };
 
 #endif /* MCP_MANAGER_H */

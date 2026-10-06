@@ -102,7 +102,6 @@ public:
     bool GetSaveStateHeader(int index, const char* path, GT_SaveState_Header* header);
     bool GetSaveStateScreenshot(int index, const char* path, GT_SaveState_Screenshot* screenshot);
 
-    void ResetSound();
     void GetRuntimeInfo(GT_Runtime_Info& runtime_info);
 
     Firmware* GetFirmware();

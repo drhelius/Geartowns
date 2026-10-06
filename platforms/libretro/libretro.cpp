@@ -43,6 +43,7 @@ static const char slash = '/';
 
 #define RETRO_DEVICE_TOWNS_GAMEPAD    RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
 #define RETRO_DEVICE_TOWNS_6_BUTTON   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 1)
+#define RETRO_DEVICE_TOWNS_MARTY      RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 2)
 #define RETRO_DEVICE_TOWNS_MOUSE      RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_MOUSE, 0)
 
 #define MAX_PADS GT_MAX_GAMEPADS
@@ -77,6 +78,7 @@ static float current_fps = 60.0f;
 
 static float aspect_ratio = 0.0f;
 static bool allow_up_down = false;
+static int mouse_sensitivity = 5;
 static bool libretro_supports_bitmasks = false;
 static int joypad_current[MAX_PADS][MAX_BUTTONS];
 static int joypad_old[MAX_PADS][MAX_BUTTONS];
@@ -84,6 +86,8 @@ struct MouseState
 {
     int delta_x;
     int delta_y;
+    float remainder_x;
+    float remainder_y;
     int button_left;
     int button_right;
     bool delta_applied;
@@ -167,6 +171,7 @@ static bool IsJoypadDevice(unsigned device)
 {
     return (device == RETRO_DEVICE_JOYPAD) ||
         (device == RETRO_DEVICE_TOWNS_GAMEPAD) ||
+        (device == RETRO_DEVICE_TOWNS_MARTY) ||
         (device == RETRO_DEVICE_TOWNS_6_BUTTON);
 }
 
@@ -579,13 +584,14 @@ static void set_controller_info(void)
 {
     static const struct retro_controller_description port[] = {
         { "Original gamepad", RETRO_DEVICE_TOWNS_GAMEPAD },
+        { "Marty gamepad", RETRO_DEVICE_TOWNS_MARTY },
         { "6 button gamepad", RETRO_DEVICE_TOWNS_6_BUTTON },
         { "Mouse", RETRO_DEVICE_TOWNS_MOUSE }
     };
 
     static const struct retro_controller_info ports[] = {
-        { port, 3 },
-        { port, 3 },
+        { port, 4 },
+        { port, 4 },
         { NULL, 0 }
     };
 
@@ -597,17 +603,17 @@ static void set_controller_info(void)
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,   "Down" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "Left" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT,  "Right" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Start" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Run" },\
+        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Run" },\
+        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "A" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,      "B" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,      "C" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,      "X" },\
         { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,      "Y" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "Z" },
+        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "Z / Zoom" },
         #define mouse_ids(INDEX) \
-        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT,     "Mouse Left" },\
-        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT,    "Mouse Right" },
+        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT,     "Mouse Left (A)" },\
+        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT,    "Mouse Right (B)" },
         button_ids(0)
         mouse_ids(0)
         button_ids(1)
@@ -632,6 +638,8 @@ static void clear_input_state(void)
 
         mouse_current[i].delta_x = 0;
         mouse_current[i].delta_y = 0;
+        mouse_current[i].remainder_x = 0.0f;
+        mouse_current[i].remainder_y = 0.0f;
         mouse_current[i].button_left = 0;
         mouse_current[i].button_right = 0;
         mouse_current[i].delta_applied = false;
@@ -801,6 +809,13 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
                 log_cb(RETRO_LOG_INFO, "Controller %u: Original gamepad\n", port);
 
             break;
+        case RETRO_DEVICE_TOWNS_MARTY:
+            type = GT_CONTROLLER_MARTY_GAMEPAD;
+
+            if (log_device && log_cb)
+                log_cb(RETRO_LOG_INFO, "Controller %u: Marty gamepad\n", port);
+
+            break;
         case RETRO_DEVICE_TOWNS_6_BUTTON:
             type = GT_CONTROLLER_6_BUTTON_GAMEPAD;
 
@@ -809,7 +824,7 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
 
             break;
         case RETRO_DEVICE_TOWNS_MOUSE:
-            type = GT_CONTROLLER_NONE;
+            type = GT_CONTROLLER_MOUSE;
 
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_INFO, "Controller %u: Mouse\n", port);
@@ -846,15 +861,14 @@ static void release_controller_input(unsigned port)
 
     mouse_current[port].delta_x = 0;
     mouse_current[port].delta_y = 0;
+    mouse_current[port].remainder_x = 0.0f;
+    mouse_current[port].remainder_y = 0.0f;
     mouse_current[port].button_left = 0;
     mouse_current[port].button_right = 0;
     mouse_current[port].delta_applied = false;
 
     if ((input_device[port] == RETRO_DEVICE_TOWNS_MOUSE) && core)
-    {
-        core->GetInput()->SetMouseDelta(0, 0);
-        core->GetInput()->SetMouseButtons(false, false);
-    }
+        core->GetInput()->ClearMouseInput((int)port);
 }
 
 static void poll_input(void)
@@ -900,8 +914,13 @@ static void poll_input(void)
 
         if (input_device[j] == RETRO_DEVICE_TOWNS_MOUSE)
         {
-            mouse_current[j].delta_x = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
-            mouse_current[j].delta_y = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+            float scale = (float)mouse_sensitivity / 6.0f;
+            mouse_current[j].remainder_x += (float)input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) * scale;
+            mouse_current[j].remainder_y += (float)input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) * scale;
+            mouse_current[j].delta_x = (int)mouse_current[j].remainder_x;
+            mouse_current[j].delta_y = (int)mouse_current[j].remainder_y;
+            mouse_current[j].remainder_x -= (float)mouse_current[j].delta_x;
+            mouse_current[j].remainder_y -= (float)mouse_current[j].delta_y;
             mouse_current[j].button_left = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) ? 1 : 0;
             mouse_current[j].button_right = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT) ? 1 : 0;
         }
@@ -1008,12 +1027,18 @@ static void apply_input(void)
         {
             if (!mouse_current[j].delta_applied)
             {
-                core->GetInput()->SetMouseDelta(mouse_current[j].delta_x, mouse_current[j].delta_y);
-                core->GetInput()->SetMouseButtons(mouse_current[j].button_left, mouse_current[j].button_right);
+                core->GetInput()->SetMouseDelta(j, mouse_current[j].delta_x, mouse_current[j].delta_y);
                 mouse_current[j].delta_applied = true;
             }
 
             GT_GamePad_State state = { 0 };
+
+            if (mouse_current[j].button_left)
+                state.buttons |= GT_GAMEPAD_A;
+
+            if (mouse_current[j].button_right)
+                state.buttons |= GT_GAMEPAD_B;
+
             core->GetInput()->SetGamePadState(j, state);
             continue;
         }
@@ -1027,13 +1052,18 @@ static void apply_input(void)
 
         if (joypad_current[j][3]) buttons |= GT_GAMEPAD_RIGHT;
 
-        if (joypad_current[j][4]) buttons |= GT_GAMEPAD_START;
+        if (joypad_current[j][4]) buttons |= GT_GAMEPAD_RUN;
 
-        if (joypad_current[j][5]) buttons |= GT_GAMEPAD_RUN;
+        if (joypad_current[j][5]) buttons |= GT_GAMEPAD_SELECT;
 
         if (joypad_current[j][6]) buttons |= GT_GAMEPAD_A;
 
         if (joypad_current[j][7]) buttons |= GT_GAMEPAD_B;
+
+        if (input_device[j] == RETRO_DEVICE_TOWNS_MARTY)
+        {
+            if (joypad_current[j][11]) buttons |= GT_GAMEPAD_ZOOM;
+        }
 
         if (input_device[j] == RETRO_DEVICE_TOWNS_6_BUTTON)
         {
@@ -1077,6 +1107,14 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         allow_up_down = (strcmp(var.value, "Enabled") == 0);
+    }
+
+    var.key = "geartowns_mouse_sensitivity";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        mouse_sensitivity = CLAMP(atoi(var.value), 1, 15);
     }
 
     var.key = "geartowns_cdrom_preload";

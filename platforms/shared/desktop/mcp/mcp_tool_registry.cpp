@@ -210,7 +210,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"capture", "Capture", "Capture current screenshots and record AVI video."},
     {"state", "Save States", "List save slots, select a slot, save emulator state, and load emulator state."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
-    {"input", "Input", "Press pad buttons, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
+    {"input", "Input", "Press pad buttons, move and click the mouse, set each game port's device, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
     {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, DMA, CD-ROM, FDC, VSYNC) and read the trace."},
     {"profiler", "Profiler", "Profile CPU cycles and call counts per function and interrupt vector."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
@@ -304,7 +304,7 @@ static const char* const kMcpRewindTools[] =
 
 static const char* const kMcpInputTools[] =
 {
-    "controller_button", "get_input_state",
+    "controller_button", "controller_set_type", "controller_get_type", "get_input_state",
     "keyboard_key", "keyboard_type"
 };
 

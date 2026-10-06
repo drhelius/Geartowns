@@ -2161,7 +2161,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "controller_button"},
         {"title", "Controller Button"},
-        {"description", "Press, release, or tap a button on either FM Towns gamepad port."},
+        {"description", "Press, release, or tap a button on either FM Towns game port. On a mouse port the directions move the mouse (held: 4 counts per frame, tap: 4 counts) and A/B are the left/right buttons."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2174,8 +2174,8 @@ json McpServer::BuildToolList()
                 }},
                 {"button", {
                     {"type", "string"},
-                    {"description", "Button: up, down, left, right, start, run, A, B, C, X, Y, Z."},
-                    {"enum", json::array({"up", "down", "left", "right", "start", "run", "A", "B", "C", "X", "Y", "Z"})}
+                    {"description", "Button: up, down, left, right, select, run, A, B, C, X, Y, Z, zoom (Marty pad, not decoded yet)."},
+                    {"enum", json::array({"up", "down", "left", "right", "select", "run", "A", "B", "C", "X", "Y", "Z", "zoom"})}
                 }},
                 {"action", {
                     {"type", "string"},
@@ -2188,9 +2188,52 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "controller_set_type"},
+        {"title", "Set Controller Type"},
+        {"description", "Set the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"player", {
+                    {"type", "integer"},
+                    {"description", "Player number 1-2."},
+                    {"minimum", 1},
+                    {"maximum", 2}
+                }},
+                {"type", {
+                    {"type", "string"},
+                    {"description", "Device type."},
+                    {"enum", json::array({"none", "original_gamepad", "marty_gamepad", "six_button_gamepad", "mouse"})}
+                }}
+            }},
+            {"required", json::array({"player", "type"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "controller_get_type"},
+        {"title", "Get Controller Type"},
+        {"description", "Read the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"player", {
+                    {"type", "integer"},
+                    {"description", "Player number 1-2."},
+                    {"minimum", 1},
+                    {"maximum", 2}
+                }}
+            }},
+            {"required", json::array({"player"})}
+        }}
+    });
+
+    tools.push_back({
         {"name", "get_input_state"},
         {"title", "Get Input State"},
-        {"description", "Get effective pressed buttons, held keyboard keys and pending tap releases."},
+        {"description", "Get each port's device type and effective pressed buttons, held keyboard keys and pending tap releases."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -3387,6 +3430,14 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "controller_button")
     {
         return m_debugAdapter.ControllerButton(arguments["player"], arguments["button"], arguments["action"]);
+    }
+    else if (normalizedTool == "controller_set_type")
+    {
+        return m_debugAdapter.ControllerSetType(arguments["player"], arguments["type"]);
+    }
+    else if (normalizedTool == "controller_get_type")
+    {
+        return m_debugAdapter.ControllerGetType(arguments["player"]);
     }
     else if (normalizedTool == "keyboard_type")
     {

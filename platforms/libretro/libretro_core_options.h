@@ -44,7 +44,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
     {
         "input",
         "Input",
-        "Configure controller behavior."
+        "Configure controller and mouse behavior."
     },
     {
         "cdrom",
@@ -88,6 +88,21 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { NULL, NULL },
         },
         "Disabled"
+    },
+    {
+        "geartowns_mouse_sensitivity",
+        "Mouse Sensitivity",
+        NULL,
+        "Adjust the sensitivity of the FM Towns mouse. Higher values result in faster cursor movement.",
+        NULL,
+        "input",
+        {
+            { "1",  NULL }, { "2",  NULL }, { "3",  NULL }, { "4",  NULL },
+            { "5",  NULL }, { "6",  NULL }, { "7",  NULL }, { "8",  NULL },
+            { "9",  NULL }, { "10", NULL }, { "11", NULL }, { "12", NULL },
+            { "13", NULL }, { "14", NULL }, { "15", NULL }, { NULL, NULL }
+        },
+        "5"
     },
 
     /* CD-ROM */

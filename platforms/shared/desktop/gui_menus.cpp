@@ -1496,7 +1496,7 @@ static void menu_input(void)
                     ImGui::PushItemWidth(200.0f);
 
                     if (ImGui::Combo("##controller", &config_input.controller_type[i],
-                        "None\0Original Gamepad\0" "6 Button Gamepad\0\0"))
+                        "None\0Original Gamepad\0Marty Gamepad\0" "6 Button Gamepad\0Mouse\0\0"))
                     {
                         emu_set_pad_type((GT_Controllers)i, (GT_Controller_Type)config_input.controller_type[i]);
                     }
@@ -1525,7 +1525,8 @@ static void menu_input(void)
 
         if (ImGui::BeginMenu("Mouse"))
         {
-            ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse);
+            if (ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse))
+                events_release_mouse();
 
             if (ImGui::IsItemHovered())
             {
@@ -1558,11 +1559,14 @@ static void menu_input(void)
                     keyboard_configuration_item("Right:", &config_input_keyboard[i].key_right, i);
                     keyboard_configuration_item("Up:", &config_input_keyboard[i].key_up, i);
                     keyboard_configuration_item("Down:", &config_input_keyboard[i].key_down, i);
-                    keyboard_configuration_item("Start:", &config_input_keyboard[i].key_start, i);
+                    keyboard_configuration_item("Select:", &config_input_keyboard[i].key_select, i);
                     keyboard_configuration_item("Run:", &config_input_keyboard[i].key_run, i);
                     keyboard_configuration_item("A:", &config_input_keyboard[i].key_A, i);
                     keyboard_configuration_item("B:", &config_input_keyboard[i].key_B, i);
                     keyboard_configuration_item("C:", &config_input_keyboard[i].key_C, i);
+                    ImGui::Separator();
+                    ImGui::TextDisabled("Marty Gamepad:");
+                    keyboard_configuration_item("Zoom:", &config_input_keyboard[i].key_zoom, i);
                     ImGui::Separator();
                     ImGui::TextDisabled("6 Button Gamepad:");
                     keyboard_configuration_item("X:", &config_input_keyboard[i].key_X, i);
@@ -1613,11 +1617,14 @@ static void menu_input(void)
                     {
                         ImGui::TextDisabled("Gamepad %s", gamepad_name);
                         ImGui::Separator();
-                        gamepad_configuration_item("Start:", &config_input_gamepad[i].gamepad_start, i);
+                        gamepad_configuration_item("Select:", &config_input_gamepad[i].gamepad_select, i);
                         gamepad_configuration_item("Run:", &config_input_gamepad[i].gamepad_run, i);
                         gamepad_configuration_item("A:", &config_input_gamepad[i].gamepad_A, i);
                         gamepad_configuration_item("B:", &config_input_gamepad[i].gamepad_B, i);
                         gamepad_configuration_item("C:", &config_input_gamepad[i].gamepad_C, i);
+                        ImGui::Separator();
+                        ImGui::TextDisabled("Marty Gamepad:");
+                        gamepad_configuration_item("Zoom:", &config_input_gamepad[i].gamepad_zoom, i);
                         ImGui::Separator();
                         ImGui::TextDisabled("6 Button Gamepad:");
                         gamepad_configuration_item("X:", &config_input_gamepad[i].gamepad_X, i);

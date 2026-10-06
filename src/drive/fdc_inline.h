@@ -90,7 +90,8 @@ INLINE int FDC::GetSelectedTrack() const
     return track < k_floppy_tracks ? track : -1;
 }
 
-// The data rate and rotation must match the ones the disk was written with
+// The drive mode, data rate and rotation must match the ones the disk was written with
+// 2HD media needs HISPD, so a two-mode drive never reads a 1.44 MB disk
 INLINE bool FDC::IsSelectedReadable() const
 {
     int drive = GetSelectedDrive();
@@ -101,12 +102,12 @@ INLINE bool FDC::IsSelectedReadable() const
     bool slow = (m_state.drive_control & k_fdc_slow_clock) != 0;
 
     if (m_disks[drive].GetMedia() == FLOPPY_MEDIA_2HD)
-        return !slow && GetRPM() == m_disks[drive].GetRPM();
+        return !slow && m_state.high_speed && GetRPM() == m_disks[drive].GetRPM();
 
-    return slow && !m_state.high_speed;
+    return slow && !m_state.high_speed && GetRPM() == m_disks[drive].GetRPM();
 }
 
-// 2HD media takes either 2HD rotation, 2DD media only the 2DD one
+// 2HD media takes either 2HD mode, 2DD media only the 2DD one
 INLINE bool FDC::IsSelectedFormattable() const
 {
     int drive = GetSelectedDrive();
@@ -117,9 +118,9 @@ INLINE bool FDC::IsSelectedFormattable() const
     bool slow = (m_state.drive_control & k_fdc_slow_clock) != 0;
 
     if (m_disks[drive].GetMedia() == FLOPPY_MEDIA_2HD)
-        return !slow;
+        return !slow && m_state.high_speed;
 
-    return slow && !m_state.high_speed;
+    return slow && !m_state.high_speed && !m_state.mode_b;
 }
 
 INLINE bool FDC::IsSpinning() const
@@ -168,8 +169,12 @@ INLINE u32 FDC::GetByteClocks() const
     return GetCycleClocks() * (IsDoubleDensity() ? 32 : 64);
 }
 
+// MODE-B with HISPD is the 1.44 MB mode, without it the unsupported 2ED one
 INLINE u32 FDC::GetRPM() const
 {
+    if (m_state.mode_b)
+        return m_state.high_speed ? 300 : 180;
+
     return m_state.high_speed ? 360 : 300;
 }
 

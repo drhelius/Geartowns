@@ -1231,7 +1231,10 @@ void GeartownsCore::ApplyMachineConfig()
         m_memory->SetMainRAMSize(m_machine_config.ram_size);
 
     if (IsValidPointer(m_fdc))
+    {
         m_fdc->SetInternalDrives(m_machine_config.floppy_drives);
+        m_fdc->SetThreeMode(k_machine_profiles[m_machine_config.model].three_mode_floppy);
+    }
 }
 
 void GeartownsCore::InitMemoryMap()

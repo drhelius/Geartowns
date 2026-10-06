@@ -10,6 +10,10 @@ IRQ6 (master IR6, vector 46h with the BIOS setup).
 |---|---|---|---|---|---|
 | 2HD, 1232 KB | 77 cylinders × 2 sides × 8 sectors of 1024 bytes | MFM | 2 MHz | 360 rpm | 500 kbit/s |
 | 2DD, 640 KB | 80 cylinders × 2 sides × 8 sectors of 512 bytes | MFM | 1 MHz | 300 rpm | 250 kbit/s |
+| 2HD, 1440 KB | 80 cylinders × 2 sides × 18 sectors of 512 bytes | MFM | 2 MHz | 300 rpm | 500 kbit/s |
+
+The 1440 KB format needs a three-mode drive (HG and later models). The Model 1/2 two-mode drives can hold such a
+disk but never read it.
 
 2D (FM-family) disks can be read for compatibility. The controller handles sector sizes of 128, 256, 512 and 1024
 bytes, so other layouts are possible.
@@ -26,17 +30,19 @@ bytes, so other layouts are possible.
 | 0206h | Data register | Data register |
 | 0208h | Drive status | Drive control |
 | 020Ch | | Drive select |
+| 020Dh | Drive type extension | |
 | 020Eh | Drive switch | Drive switch: bit 0 swaps drives 0-1 with 2-3 |
 
 Drive status (0208h read): bit 0 always 1, bit 1 READY of the selected drive, bit 2 external drive type (0 5.25",
-1 3.5").
+1 3.5"). Machines with three-mode drives read 011b in bits 4-2 instead, and 7Fh at 020Dh (FDDVEXT low).
 
 Drive control (0208h write): bit 0 IRQ enable, bit 1 MFM (double density), bit 2 side 1, bit 4 motor on, bit 5
 CLKSEL (0 2 MHz for 2HD and fast seeks, 1 1 MHz for 2D/2DD).
 
 Drive select (020Ch): bits 3-0 select drives 0-3 (one bit each, never more than one), bit 4 in-use lamp, bit 6
-HISPD (1 360 rpm for 2HD, 0 300 rpm). The in-use and speed bits are latched when a drive select bit is written as
-1, so software writes them first and then selects the drive in a second write.
+HISPD (1 360 rpm for 2HD, 0 300 rpm). Three-mode drives add bit 7 MODE-B: with HISPD it selects 300 rpm for
+1440 KB disks, without it the unsupported 180 rpm mode. The in-use and speed bits are latched when a drive select
+bit is written as 1, so software writes them first and then selects the drive in a second write.
 
 ---
 

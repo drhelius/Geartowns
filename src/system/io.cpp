@@ -173,6 +173,8 @@ u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
             // FDC drive status
         case 0x020C:
             // FDC drive select
+        case 0x020D:
+            // FDC drive type extension
         case 0x020E:
             // FDC drive switch
             return m_fdc->Read(port, context.clocks);
@@ -461,6 +463,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x0206:
         case 0x0208:
         case 0x020C:
+        case 0x020D:
         case 0x020E:
             value = m_fdc->Peek(port, clocks);
             break;

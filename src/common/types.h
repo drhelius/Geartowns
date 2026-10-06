@@ -361,6 +361,7 @@ struct GT_Machine_Profile
     int floppy_min;
     int floppy_default;
     int floppy_max;
+    bool three_mode_floppy;
 };
 
 struct GT_Machine_Config

@@ -3139,7 +3139,7 @@ json DebugAdapter::GetFDCStatus()
     int selected = fdc->GetSelectedDrive();
     json select = {
         {"value", hex_text(state->drive_select, 2)},
-        {"rpm", state->high_speed ? 360 : 300}
+        {"rpm", fdc->GetRPM()}
     };
 
     if (selected >= 0)

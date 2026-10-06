@@ -55,6 +55,7 @@ public:
     void Init(PIC* pic, Scheduler* scheduler, UPD71071* dma);
     void Reset();
     void SetInternalDrives(int drives);
+    void SetThreeMode(bool three_mode);
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
@@ -89,6 +90,7 @@ public:
     int GetSelectedDrive() const;
 
 private:
+    u8 ReadDriveStatus(u64 clocks) const;
     void ChangeDisk(int drive);
     void ChangeSelection(int previous, u64 clocks);
     void UpdateIRQ();
@@ -107,6 +109,7 @@ private:
     FloppyDisk m_disks[FDC_DRIVES];
     FDC_State m_state;
     int m_internal_drives;
+    bool m_three_mode;
 };
 
 static const int k_fdc_irq = 6;

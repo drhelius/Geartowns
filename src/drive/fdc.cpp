@@ -30,6 +30,7 @@ FDC::FDC()
     InitPointer(m_dma);
     memset(&m_state, 0, sizeof(m_state));
     m_internal_drives = FDC_DRIVES;
+    m_three_mode = false;
 }
 
 FDC::~FDC()
@@ -64,6 +65,12 @@ void FDC::SetInternalDrives(int drives)
     m_internal_drives = CLAMP(drives, 0, FDC_DRIVES);
 }
 
+// Three-mode internal drives add MODE-B and identify themselves
+void FDC::SetThreeMode(bool three_mode)
+{
+    m_three_mode = three_mode;
+}
+
 u8 FDC::Read(u16 port, u64 clocks)
 {
     Synchronize(clocks);
@@ -79,8 +86,10 @@ u8 FDC::Read(u16 port, u64 clocks)
         case 0x0206:
             return m_mb8877.ReadData();
         case 0x0208:
-            // Bit 0 always reads one and the drive type reads 3.5 inch
-            return IsReady(clocks) ? 0x07 : 0x05;
+            return ReadDriveStatus(clocks);
+        case 0x020D:
+            // FDDVEXT low tells that 0208h identifies the internal drives
+            return m_three_mode ? 0x7F : 0xFF;
         case 0x020E:
             return m_state.drive_switch;
         default:
@@ -101,12 +110,22 @@ u8 FDC::Peek(u16 port, u64 clocks) const
         case 0x0206:
             return m_mb8877.PeekData();
         case 0x0208:
-            return IsReady(clocks) ? 0x07 : 0x05;
+            return ReadDriveStatus(clocks);
+        case 0x020D:
+            return m_three_mode ? 0x7F : 0xFF;
         case 0x020E:
             return m_state.drive_switch;
         default:
             return 0xFF;
     }
+}
+
+// Bit 0 always reads one
+// The drive type reads 3.5 inch, or 011b for a three-mode drive
+u8 FDC::ReadDriveStatus(u64 clocks) const
+{
+    u8 type = m_three_mode ? 0x0C : 0x04;
+    return (IsReady(clocks) ? 0x03 : 0x01) | type;
 }
 
 void FDC::Write(u16 port, u8 value, u64 clocks)
@@ -140,7 +159,7 @@ void FDC::Write(u16 port, u8 value, u64 clocks)
             if ((m_state.drive_select & 0x0F) == 0 && (value & 0x0F) != 0)
             {
                 m_state.high_speed = (value & 0x40) != 0;
-                m_state.mode_b = (value & 0x80) != 0;
+                m_state.mode_b = m_three_mode && (value & 0x80) != 0;
                 m_state.in_use = (value & 0x10) != 0;
             }
 
@@ -314,6 +333,7 @@ void FDC::SanitizeState()
         m_state.cylinders[i] = (u8)MIN(m_state.cylinders[i], k_fdc_last_cylinder);
 
     m_state.drive_switch &= 0x01;
+    m_state.mode_b = m_three_mode && m_state.mode_b;
     UpdateIRQ();
     UpdateNextEvent(m_scheduler->GetClocks());
 }

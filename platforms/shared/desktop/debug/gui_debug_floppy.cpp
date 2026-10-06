@@ -136,7 +136,7 @@ void gui_debug_window_fdc(void)
         ImGui::TextColored(gray, "NONE   ");
 
     ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", state->high_speed ? "360 RPM" : "300 RPM");
+    ImGui::TextColored(blue, "%u RPM", fdc->GetRPM());
     ImGui::TextColored(violet, "SWITCH  "); ImGui::SameLine();
     ImGui::TextColored(white, "$%02X", state->drive_switch); ImGui::SameLine();
     ImGui::TextColored(gray, "020E");

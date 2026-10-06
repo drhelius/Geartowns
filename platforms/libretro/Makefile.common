@@ -54,7 +54,7 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/system/memory.cpp \
                 $(SOURCE_DIR)/system/pic.cpp \
                 $(SOURCE_DIR)/system/pit.cpp \
-                $(SOURCE_DIR)/system/rtc.cpp \
+                $(SOURCE_DIR)/system/msm58321.cpp \
                 $(SOURCE_DIR)/system/scheduler.cpp \
                 $(SOURCE_DIR)/system/system_control.cpp \
                 $(SOURCE_DIR)/system/upd71071.cpp \

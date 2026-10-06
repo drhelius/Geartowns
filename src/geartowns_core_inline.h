@@ -127,7 +127,7 @@ INLINE Keyboard* GeartownsCore::GetKeyboard()
     return m_keyboard;
 }
 
-INLINE RTC* GeartownsCore::GetRTC()
+INLINE MSM58321* GeartownsCore::GetRTC()
 {
     return m_rtc;
 }

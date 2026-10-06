@@ -30,7 +30,7 @@ class CdRomMedia;
 class FDC;
 class FloppyDisk;
 class Keyboard;
-class RTC;
+class MSM58321;
 class UPD71071;
 class Firmware;
 class I386;
@@ -121,7 +121,7 @@ public:
     FDC* GetFDC();
     FloppyDisk* GetFloppy(int drive);
     Keyboard* GetKeyboard();
-    RTC* GetRTC();
+    MSM58321* GetRTC();
     UPD71071* GetDMA();
 
 private:
@@ -166,7 +166,7 @@ private:
     CdRom* m_cdrom;
     FDC* m_fdc;
     Keyboard* m_keyboard;
-    RTC* m_rtc;
+    MSM58321* m_rtc;
     UPD71071* m_dma;
 
     GT_Machine_Config m_machine_config;

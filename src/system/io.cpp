@@ -27,7 +27,7 @@
 #include "memory.h"
 #include "pic.h"
 #include "pit.h"
-#include "rtc.h"
+#include "msm58321.h"
 #include "system_control.h"
 #include "upd71071.h"
 #include "../video/video.h"
@@ -54,7 +54,7 @@ IO::~IO()
 }
 
 void IO::Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-    CdRom* cdrom, FDC* fdc, Keyboard* keyboard, RTC* rtc, UPD71071* dma)
+    CdRom* cdrom, FDC* fdc, Keyboard* keyboard, MSM58321* rtc, UPD71071* dma)
 {
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();

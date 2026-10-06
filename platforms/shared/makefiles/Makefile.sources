@@ -101,7 +101,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/system/memory.cpp \
     $(SRC_DIR)/system/pic.cpp \
     $(SRC_DIR)/system/pit.cpp \
-    $(SRC_DIR)/system/rtc.cpp \
+    $(SRC_DIR)/system/msm58321.cpp \
     $(SRC_DIR)/system/scheduler.cpp \
     $(SRC_DIR)/system/system_control.cpp \
     $(SRC_DIR)/system/upd71071.cpp \

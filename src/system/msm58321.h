@@ -17,22 +17,22 @@
  *
  */
 
-#ifndef RTC_H
-#define RTC_H
+#ifndef MSM58321_H
+#define MSM58321_H
 
 #include <iostream>
 #include "../common/common.h"
 
-#define RTC_REGISTERS 16
+#define MSM58321_REGISTERS 16
 
 class StateSerializer;
 
-class RTC
+class MSM58321
 {
 public:
-    struct RTC_State
+    struct MSM58321_State
     {
-        u8 registers[RTC_REGISTERS];
+        u8 registers[MSM58321_REGISTERS];
         u8 data;
         u8 command;
         u8 address;
@@ -40,14 +40,14 @@ public:
     };
 
 public:
-    RTC();
-    ~RTC();
+    MSM58321();
+    ~MSM58321();
     void Init();
     void Reset(u64 clocks);
     u8 Read(u16 port, u64 clocks);
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
-    RTC_State* GetState();
+    MSM58321_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
@@ -62,22 +62,22 @@ private:
     void SanitizeState();
 
 private:
-    RTC_State m_state;
+    MSM58321_State m_state;
 };
 
-static const int k_rtc_seconds = 0x00;
-static const int k_rtc_minutes = 0x02;
-static const int k_rtc_hours = 0x04;
-static const int k_rtc_weekday = 0x06;
-static const int k_rtc_day = 0x07;
-static const int k_rtc_month = 0x09;
-static const int k_rtc_year = 0x0B;
-static const int k_rtc_divider_reset = 0x0D;
-static const u8 k_rtc_24_hour = 0x08;
-static const u8 k_rtc_pm = 0x04;
-static const u64 k_rtc_second_clocks = GT_CPU_CLOCK_RATE;
-static const u64 k_rtc_busy_clocks = ((u64)GT_CPU_CLOCK_RATE * 14) / 32768;
+static const int k_msm58321_seconds = 0x00;
+static const int k_msm58321_minutes = 0x02;
+static const int k_msm58321_hours = 0x04;
+static const int k_msm58321_weekday = 0x06;
+static const int k_msm58321_day = 0x07;
+static const int k_msm58321_month = 0x09;
+static const int k_msm58321_year = 0x0B;
+static const int k_msm58321_divider_reset = 0x0D;
+static const u8 k_msm58321_24_hour = 0x08;
+static const u8 k_msm58321_pm = 0x04;
+static const u64 k_msm58321_second_clocks = GT_CPU_CLOCK_RATE;
+static const u64 k_msm58321_busy_clocks = ((u64)GT_CPU_CLOCK_RATE * 14) / 32768;
 
-#include "rtc_inline.h"
+#include "msm58321_inline.h"
 
-#endif /* RTC_H */
+#endif /* MSM58321_H */

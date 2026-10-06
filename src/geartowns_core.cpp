@@ -37,7 +37,7 @@
 #include "system/io.h"
 #include "system/pic.h"
 #include "system/pit.h"
-#include "system/rtc.h"
+#include "system/msm58321.h"
 #include "system/system_control.h"
 #include "system/scheduler.h"
 #include "system/machine_profiles.h"
@@ -157,7 +157,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
         m_keyboard = new Keyboard();
 
     if (!IsValidPointer(m_rtc))
-        m_rtc = new RTC();
+        m_rtc = new MSM58321();
 
     if (!IsValidPointer(m_dma))
         m_dma = new UPD71071();

@@ -172,7 +172,7 @@
     <ClCompile Include="..\..\src\system\pit.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\system\rtc.cpp">
+    <ClCompile Include="..\..\src\system\msm58321.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\system\upd71071.cpp">
@@ -343,8 +343,8 @@
     <ClInclude Include="..\..\src\system\i8259_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\pit.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\pit_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\rtc.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\system\rtc_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\msm58321.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\msm58321_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\upd71071.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\upd71071_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\system_control.h"><Filter>src</Filter></ClInclude>

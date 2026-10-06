@@ -17,36 +17,36 @@
  *
  */
 
-#ifndef RTC_INLINE_H
-#define RTC_INLINE_H
+#ifndef MSM58321_INLINE_H
+#define MSM58321_INLINE_H
 
-#include "rtc.h"
+#include "msm58321.h"
 
 // Nothing reads the clock between accesses, so it catches up one second at a time when the CPU looks
-INLINE void RTC::Synchronize(u64 clocks)
+INLINE void MSM58321::Synchronize(u64 clocks)
 {
     while (clocks >= m_state.update_clocks)
     {
         AdvanceSecond();
-        m_state.update_clocks += k_rtc_second_clocks;
+        m_state.update_clocks += k_msm58321_second_clocks;
     }
 }
 
 // Tens digits share their nibble with the 24 hour, PM and leap phase flags
-INLINE int RTC::GetValue(int ones, u8 tens_mask) const
+INLINE int MSM58321::GetValue(int ones, u8 tens_mask) const
 {
     return (m_state.registers[ones + 1] & tens_mask) * 10 + m_state.registers[ones];
 }
 
-INLINE void RTC::SetValue(int ones, u8 tens_mask, int value)
+INLINE void MSM58321::SetValue(int ones, u8 tens_mask, int value)
 {
     m_state.registers[ones] = (u8)(value % 10);
     m_state.registers[ones + 1] = (u8)((m_state.registers[ones + 1] & ~tens_mask) | (value / 10));
 }
 
-INLINE RTC::RTC_State* RTC::GetState()
+INLINE MSM58321::MSM58321_State* MSM58321::GetState()
 {
     return &m_state;
 }
 
-#endif /* RTC_INLINE_H */
+#endif /* MSM58321_INLINE_H */

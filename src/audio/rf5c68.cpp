@@ -210,6 +210,13 @@ void RF5C68::GenerateSample()
 
             address = (u32)channel.loop_start << k_rf5c68_address_fraction_bits;
             sample = m_state.wave_ram[channel.loop_start];
+
+            // A loop start that holds a marker too parks the channel there in silence
+            if (sample == 0xFF)
+            {
+                channel.address = address;
+                continue;
+            }
         }
 
         u32 next_address = (address + channel.step) & k_rf5c68_address_mask;
@@ -219,10 +226,6 @@ void RF5C68::GenerateSample()
             SetBlockIRQ(address >> k_rf5c68_irq_block_shift);
 
         channel.address = next_address;
-
-        // 0xFF is never waveform data, but the pointer keeps advancing from the loop address
-        if (sample == 0xFF)
-            continue;
 
         s32 magnitude = sample & 0x7F;
         // The DCA feeds product bits 18..5 to the channel accumulator

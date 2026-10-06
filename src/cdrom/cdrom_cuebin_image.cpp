@@ -661,21 +661,15 @@ bool CdRomCueBinImage::OpenImgFile(ImgFile* img_file)
 
 bool CdRomCueBinImage::ProcessFileFormat(ImgFile* img_file)
 {
-    using namespace std;
-
-    string file_path(img_file->file_path);
-    string extension = file_path.substr(file_path.find_last_of(".") + 1);
-    transform(extension.begin(), extension.end(), extension.begin(), (int(*)(int)) tolower);
-
     if (!IsValidPointer(img_file->file))
     {
         Error("Invalid open file for %s", img_file->file_path);
         return false;
     }
 
-    if ((extension == "ogg") || (extension == "oga"))
+    if (ends_with_no_case(img_file->file_path, ".ogg") || ends_with_no_case(img_file->file_path, ".oga"))
         return ProcessOggFormat(img_file);
-    else if (extension == "wav")
+    else if (ends_with_no_case(img_file->file_path, ".wav"))
         return ProcessWavFormat(img_file);
 
     return true;

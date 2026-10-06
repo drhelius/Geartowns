@@ -71,7 +71,6 @@ private:
     template<bool indexed>
     void DrawPattern(u32 pixel, u32 end);
     u16 GetFirstIndex() const;
-    u16 ReadWord(u32 offset) const;
     u8* GetWorkHalf() const;
     void Serialize(StateSerializer& serializer);
     void SanitizeState();

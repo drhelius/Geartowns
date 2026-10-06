@@ -213,7 +213,7 @@ static void input_update(bool check_shortcuts)
 {
     for (int controller = 0; controller < GT_MAX_GAMEPADS; controller++)
     {
-        GT_GamePad_State state = { 0, 0, 0 };
+        GT_GamePad_State state = { 0 };
 
         if (config_input.controller_type[controller] != GT_CONTROLLER_NONE)
             state = input_build_state(controller);
@@ -229,7 +229,7 @@ static void input_update(bool check_shortcuts)
 
 static GT_GamePad_State input_build_state(int controller)
 {
-    GT_GamePad_State state = { 0, 0, 0 };
+    GT_GamePad_State state = { 0 };
     SDL_Keymod mods = SDL_GetModState();
 
     if (config_input.use_keyboard[controller] && (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
@@ -289,9 +289,6 @@ static GT_GamePad_State input_build_state(int controller)
 
         if (mapping.gamepad_invert_x_axis) x = -x;
         if (mapping.gamepad_invert_y_axis) y = -y;
-
-        state.axis_x = (s16)x;
-        state.axis_y = (s16)y;
 
         const int dead_zone = 8000;
 

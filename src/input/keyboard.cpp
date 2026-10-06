@@ -247,10 +247,7 @@ void Keyboard::SendResetResponse(int count)
 void Keyboard::PushEvent(u8 key, bool pressed)
 {
     if (m_state.fifo_count + 2 > KEYBOARD_FIFO_SIZE)
-    {
-        m_state.dropped_events++;
         return;
-    }
 
     u8 flags = pressed ? 0xA0 : 0xB0;
 
@@ -319,7 +316,6 @@ void Keyboard::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.repeat_clocks);
     G_SERIALIZE(serializer, m_state.repeat_delay);
     G_SERIALIZE(serializer, m_state.repeat_interval);
-    G_SERIALIZE(serializer, m_state.dropped_events);
 }
 
 void Keyboard::SanitizeState()

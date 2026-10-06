@@ -24,29 +24,23 @@
 
 INLINE u32 I386::LoadHost(const u8* data, int width) const
 {
-    u32 value = data[0];
-
-    if (width >= 16)
-        value |= (u32)data[1] << 8;
-
     if (width == 32)
-        value |= ((u32)data[2] << 16) | ((u32)data[3] << 24);
+        return read_u32_le(data);
 
-    return value;
+    if (width == 16)
+        return read_u16_le(data);
+
+    return data[0];
 }
 
 INLINE void I386::StoreHost(u8* data, u32 value, int width)
 {
-    data[0] = (u8)value;
-
-    if (width >= 16)
-        data[1] = (u8)(value >> 8);
-
     if (width == 32)
-    {
-        data[2] = (u8)(value >> 16);
-        data[3] = (u8)(value >> 24);
-    }
+        write_u32_le(data, value);
+    else if (width == 16)
+        write_u16_le(data, (u16)value);
+    else
+        data[0] = (u8)value;
 }
 
 // Every entry point that can access guest memory refreshes the host page pointers first

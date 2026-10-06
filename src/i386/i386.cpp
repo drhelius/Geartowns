@@ -1109,8 +1109,6 @@ void I386::UpdateDebugState() const
         m_debug_state.segment[i].dpl = m_state.segments[i].dpl;
         m_debug_state.segment[i].present = (m_state.segments[i].attributes & I386_SEGMENT_PRESENT) != 0;
     }
-
-    m_debug_state.available = true;
 }
 
 void I386::FillDecodeState(const InstructionContext& instruction, const u8* bytes, u32 length,

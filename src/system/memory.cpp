@@ -141,7 +141,7 @@ u16 Memory::Read16Physical(u32 physical, GT_Bus_Access_Context& context)
     const u8* data = GetPhysicalReadSpan(physical, 2);
 
     if (IsValidPointer(data))
-        return (u16)data[0] | ((u16)data[1] << 8);
+        return read_u16_le(data);
 
     u16 value = Read8Physical(physical, context);
     value |= (u16)Read8Physical(physical + 1, context) << 8;
@@ -153,7 +153,7 @@ u32 Memory::Read32Physical(u32 physical, GT_Bus_Access_Context& context)
     const u8* data = GetPhysicalReadSpan(physical, 4);
 
     if (IsValidPointer(data))
-        return (u32)data[0] | ((u32)data[1] << 8) | ((u32)data[2] << 16) | ((u32)data[3] << 24);
+        return read_u32_le(data);
 
     u32 value = Read16Physical(physical, context);
     value |= (u32)Read16Physical(physical + 2, context) << 16;
@@ -177,8 +177,7 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
             u8* data = region->write_data + offset;
 
-            data[0] = (u8)value;
-            data[1] = (u8)(value >> 8);
+            write_u16_le(data, value);
             m_debug_snapshot_id += 2;
             return;
         }
@@ -200,10 +199,7 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
             u8* data = region->write_data + offset;
 
-            data[0] = (u8)value;
-            data[1] = (u8)(value >> 8);
-            data[2] = (u8)(value >> 16);
-            data[3] = (u8)(value >> 24);
+            write_u32_le(data, value);
             m_debug_snapshot_id += 4;
             return;
         }
@@ -447,12 +443,6 @@ bool Memory::TryPeekPhysicalBlock(u32 physical, u8* data, u32 size) const
     }
 
     return true;
-}
-
-bool Memory::TryPeekBus(u32 bus_address, u8& value) const
-{
-    GT_Debug_Memory_Status status = DebugReadBus(bus_address, value);
-    return status == GT_DEBUG_MEMORY_VALID || status == GT_DEBUG_MEMORY_READ_ONLY;
 }
 
 void Memory::DebugReadPhysicalBlock(u32 physical, u8* data, GT_Debug_Memory_Status* status, u32 size) const

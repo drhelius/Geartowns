@@ -90,7 +90,6 @@ private:
     u32 GetSelectionStart() const;
     u32 GetSelectionEnd() const;
     u32 GetSelectionSize() const;
-    bool IsAddressInWindow(u32 address) const;
     bool IsAddressInSource(u32 address) const;
 
     void PushHistory(u32 address);

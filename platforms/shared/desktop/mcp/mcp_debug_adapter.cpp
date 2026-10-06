@@ -709,7 +709,7 @@ json DebugAdapter::RewindSeek(int snapshot)
 
 void DebugAdapter::ApplyControllerState(int player)
 {
-    GT_GamePad_State state = {m_buttons[player - 1], 0, 0};
+    GT_GamePad_State state = {m_buttons[player - 1]};
     m_core->GetInput()->SetInjectedGamePadState(player - 1, state);
 }
 
@@ -718,7 +718,7 @@ void DebugAdapter::ClearControllerState()
     for (int player = 0; player < GT_MAX_GAMEPADS; player++)
     {
         m_buttons[player] = 0;
-        GT_GamePad_State state = {0, 0, 0};
+        GT_GamePad_State state = {0};
         m_core->GetInput()->SetInjectedGamePadState(player, state);
     }
 }

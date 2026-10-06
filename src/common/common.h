@@ -77,6 +77,20 @@ inline u32 read_u32_le(const u8* p)
     return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
 }
 
+inline void write_u16_le(u8* p, u16 value)
+{
+    p[0] = (u8)(value >> 0);
+    p[1] = (u8)(value >> 8);
+}
+
+inline void write_u32_le(u8* p, u32 value)
+{
+    p[0] = (u8)(value >> 0);
+    p[1] = (u8)(value >> 8);
+    p[2] = (u8)(value >> 16);
+    p[3] = (u8)(value >> 24);
+}
+
 inline u16 read_u16_be(const u8* p)
 {
     return (u16)p[1] | ((u16)p[0] << 8);
@@ -85,6 +99,12 @@ inline u16 read_u16_be(const u8* p)
 inline u32 read_u32_be(const u8* p)
 {
     return (u32)p[3] | ((u32)p[2] << 8) | ((u32)p[1] << 16) | ((u32)p[0] << 24);
+}
+
+inline void write_u16_be(u8* p, u16 value)
+{
+    p[0] = (u8)(value >> 8);
+    p[1] = (u8)value;
 }
 
 inline u8 hi(u16 a)
@@ -235,6 +255,45 @@ inline bool strings_equal_ignore_case(const std::string& left, const std::string
         unsigned char left_char = (unsigned char)left[i];
         unsigned char right_char = (unsigned char)right[i];
         if (std::tolower(left_char) != std::tolower(right_char))
+            return false;
+    }
+
+    return true;
+}
+
+inline int ends_with(const char* s, const char* suffix)
+{
+    size_t sl = strlen(s);
+    size_t su = strlen(suffix);
+
+    if (sl < su)
+    {
+        return 0;
+    }
+
+    return (memcmp(s + (sl - su), suffix, su) == 0);
+}
+
+inline bool ends_with_no_case(const char* text, const char* suffix)
+{
+    if (!text || !suffix)
+        return false;
+
+    size_t text_length = strlen(text);
+    size_t suffix_length = strlen(suffix);
+    if (text_length < suffix_length)
+        return false;
+
+    const char* start = text + text_length - suffix_length;
+    for (size_t i = 0; i < suffix_length; i++)
+    {
+        char a = start[i];
+        char b = suffix[i];
+        if (a >= 'A' && a <= 'Z')
+            a = (char)(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z')
+            b = (char)(b - 'A' + 'a');
+        if (a != b)
             return false;
     }
 

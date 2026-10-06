@@ -190,11 +190,6 @@ bool CdRomMedia::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
     }
 }
 
-bool CdRomMedia::ReadSubchannelQ(s32 lba, u8* buffer)
-{
-    return IsValidPointer(m_current_image) && m_current_image->ReadSubchannelQ(lba, buffer);
-}
-
 bool CdRomMedia::PreloadTrack(u32 track_number)
 {
     if (IsValidPointer(m_current_image))
@@ -205,45 +200,6 @@ bool CdRomMedia::PreloadTrack(u32 track_number)
     {
         Error("PreloadTrack failed - Current image is NULL");
         return false;
-    }
-}
-
-u32 CdRomMedia::GetFirstSectorOfTrack(u8 track)
-{
-    if (IsValidPointer(m_current_image))
-    {
-        return m_current_image->GetFirstSectorOfTrack(track);
-    }
-    else
-    {
-        Error("GetFirstSectorOfTrack failed - Current image is NULL");
-        return 0;
-    }
-}
-
-u32 CdRomMedia::GetLastSectorOfTrack(u8 track)
-{
-    if (IsValidPointer(m_current_image))
-    {
-        return m_current_image->GetLastSectorOfTrack(track);
-    }
-    else
-    {
-        Error("GetLastSectorOfTrack failed - Current image is NULL");
-        return 0;
-    }
-}
-
-s32 CdRomMedia::GetTrackFromLBA(u32 lba)
-{
-    if (IsValidPointer(m_current_image))
-    {
-        return m_current_image->GetTrackFromLBA(lba);
-    }
-    else
-    {
-        Error("GetTrackFromLBA failed - Current image is NULL");
-        return -1;
     }
 }
 

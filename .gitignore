@@ -35,6 +35,7 @@ ipch/
 *.log
 *.zip
 [Dd]ebug/
+!platforms/shared/desktop/debug/
 *.sbr
 *.app
 Thumbs.db

@@ -60,11 +60,6 @@ INLINE u16 Sprite::GetFirstIndex() const
     return (u16)(((m_state.registers[k_sprite_control1] & 0x03) << 8) | m_state.registers[k_sprite_control0]);
 }
 
-INLINE u16 Sprite::ReadWord(u32 offset) const
-{
-    return (u16)(m_sprite_ram[offset] | (m_sprite_ram[offset + 1] << 8));
-}
-
 INLINE u8* Sprite::GetWorkHalf() const
 {
     return m_vram + k_sprite_work_base + (m_state.page ? k_sprite_half_size : 0);

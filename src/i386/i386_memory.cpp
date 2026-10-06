@@ -818,11 +818,6 @@ bool I386::TryPeekLogical(u16 selector, u32 offset, u8& value) const
     return TryPeekLinear(state->base + offset, value);
 }
 
-bool I386::TryPeekCode(u32 eip, u8& value) const
-{
-    return TryPeekLogical(I386_SEGMENT_CS, eip, value);
-}
-
 bool I386::TryPeekLinear(u32 linear, u8& value) const
 {
     u32 physical = 0;

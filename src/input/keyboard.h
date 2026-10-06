@@ -48,7 +48,6 @@ public:
         u64 repeat_clocks;
         u16 repeat_delay;
         u16 repeat_interval;
-        u32 dropped_events;
     };
 
 public:

@@ -227,7 +227,6 @@ struct I386_Debug_State
     u32 cr3;
 
     I386_Debug_Segment_State segment[I386_SEGMENT_COUNT];
-    bool available;
 };
 
 struct I386_Decode_State
@@ -362,7 +361,6 @@ public:
 
     bool TryPeekLogical(I386_Segment_Register segment, u32 offset, u8& value) const;
     bool TryPeekLogical(u16 selector, u32 offset, u8& value) const;
-    bool TryPeekCode(u32 eip, u8& value) const;
     bool TryPeekLinear(u32 linear, u8& value) const;
     bool TryTranslateLinear(u32 linear, u32& physical) const;
     bool DebugTranslateLogical(I386_Segment_Register segment, u32 offset,
@@ -373,7 +371,6 @@ public:
     bool CopyDebugState(I386_Debug_State& state) const;
     bool GetDebugRegisterValue(const char* name, u32& value) const;
 
-    bool DecodeInstructionForDebugger(u32 eip, I386_Decode_State& state);
     I386_Disassembler_Record* Disassemble(u32 eip);
     void DisassembleAhead(int count);
     void DisassembleAhead(u32 start_eip, int count, int depth = 0);
@@ -1057,7 +1054,6 @@ static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
 static const u8 k_i386_tlb_dirty = 0x08;
 
-static const u8 k_i386_immediate_none = 0;
 static const u8 k_i386_immediate_byte = 1;
 static const u8 k_i386_immediate_word = 2;
 static const u8 k_i386_immediate_enter = 3;

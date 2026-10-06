@@ -64,11 +64,7 @@ public:
     bool ReadSector(u32 lba, u8* buffer);
     bool ReadRawSector2352(u32 lba, u8* buffer);
     bool ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count);
-    bool ReadSubchannelQ(s32 lba, u8* buffer);
     u32 SeekTime(u32 start_lba, u32 end_lba);
-    u32 GetFirstSectorOfTrack(u8 track);
-    u32 GetLastSectorOfTrack(u8 track);
-    s32 GetTrackFromLBA(u32 lba);
     s32 FindTrackFromLBA(u32 lba, bool include_lead_in = false);
     bool PreloadTrack(u32 track_number);
 

@@ -309,8 +309,6 @@ enum GT_GamePad_Buttons
 struct GT_GamePad_State
 {
     u16 buttons;
-    s16 axis_x;
-    s16 axis_y;
 };
 
 enum GT_Machine_Model

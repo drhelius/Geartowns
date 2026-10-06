@@ -73,7 +73,6 @@ public:
     bool TryPeekPhysical(u32 physical, u8& value) const;
     const u8* GetPhysicalReadSpan(u32 physical, u32 size) const;
     bool TryPeekPhysicalBlock(u32 physical, u8* data, u32 size) const;
-    bool TryPeekBus(u32 bus_address, u8& value) const;
     void DebugReadPhysicalBlock(u32 physical, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
     void DebugReadBusBlock(u32 bus_address, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
     bool DebugWritePhysicalBlock(u32 physical, const u8* data, u32 size);

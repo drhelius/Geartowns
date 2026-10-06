@@ -165,7 +165,7 @@ static u32 toc_address_to_lba(const UCHAR* address, bool msf)
         return lba - 150;
     }
 
-    return ((u32)address[0] << 24) | ((u32)address[1] << 16) | ((u32)address[2] << 8) | (u32)address[3];
+    return read_u32_be(address);
 }
 
 static bool read_toc_ioctl(HANDLE file, const char* device_id, CDROM_TOC* toc, bool* msf)
@@ -435,7 +435,7 @@ bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out
     if (!read_toc_ioctl(m_file, m_device_id, &toc, &msf))
         return false;
 
-    u16 toc_length = ((u16)toc.Length[0] << 8) | (u16)toc.Length[1];
+    u16 toc_length = read_u16_be(toc.Length);
     if (toc_length < 2)
     {
         Error("Invalid physical CD-ROM TOC length for %s: %u", m_device_id, toc_length);

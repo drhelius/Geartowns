@@ -123,11 +123,11 @@ void Sprite::Run(u64 clocks)
 // The entry is read when its first pixel is due, later CPU writes to it wait for the next transfer
 void Sprite::LoadEntry()
 {
-    u32 offset = (u32)(m_state.first_index + m_state.entry) << 3;
-    u32 x = ReadWord(offset);
-    u32 y = ReadWord(offset + 2);
-    m_state.entry_attributes = ReadWord(offset + 4);
-    m_state.entry_color = ReadWord(offset + 6);
+    const u8* entry = m_sprite_ram + ((u32)(m_state.first_index + m_state.entry) << 3);
+    u32 x = read_u16_le(entry);
+    u32 y = read_u16_le(entry + 2);
+    m_state.entry_attributes = read_u16_le(entry + 4);
+    m_state.entry_color = read_u16_le(entry + 6);
 
     if ((m_state.entry_attributes & k_sprite_attribute_offset) != 0)
     {

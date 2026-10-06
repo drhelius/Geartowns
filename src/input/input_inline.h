@@ -49,7 +49,7 @@ INLINE void Input::SetInjectedGamePadState(int port, const GT_GamePad_State& sta
 
 INLINE const GT_GamePad_State& Input::GetGamePadState(int port) const
 {
-    static const GT_GamePad_State empty = { 0, 0, 0 };
+    static const GT_GamePad_State empty = { 0 };
 
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return empty;

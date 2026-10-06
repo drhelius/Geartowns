@@ -49,13 +49,6 @@ bool CdRomImage::ReadRawSector2352(u32 lba, u8* buffer)
     return ReadSector(lba, buffer + 16);
 }
 
-bool CdRomImage::ReadSubchannelQ(s32 lba, u8* buffer)
-{
-    UNUSED(lba);
-    UNUSED(buffer);
-    return false;
-}
-
 void CdRomImage::Init()
 {
 }
@@ -77,32 +70,6 @@ void CdRomImage::Reset()
 bool CdRomImage::IsReady()
 {
     return m_ready;
-}
-
-u32 CdRomImage::GetFirstSectorOfTrack(u8 track)
-{
-    if (track < m_toc.tracks.size())
-    {
-        return m_toc.tracks[track].start_lba;
-    }
-    else if ((track > 0) && (track == m_toc.tracks.size()))
-    {
-        return m_toc.tracks[track - 1].end_lba + 1;
-    }
-
-    Error("GetFirstSectorOfTrack failed - Track number %d out of bounds (max: %d)", track, m_toc.tracks.size());
-    return 0;
-}
-
-u32 CdRomImage::GetLastSectorOfTrack(u8 track)
-{
-    if (track < m_toc.tracks.size())
-    {
-        return m_toc.tracks[track].end_lba;
-    }
-
-    Error("GetLastSectorOfTrack failed - Track number %d out of bounds (max: %d)", track, m_toc.tracks.size());
-    return 0;
 }
 
 s32 CdRomImage::GetTrackFromLBA(u32 lba)

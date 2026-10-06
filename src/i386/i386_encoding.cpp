@@ -215,11 +215,6 @@ NO_INLINE bool I386::DecodeOperandsSlow(bool modrm, int immediate_size)
     return ok;
 }
 
-bool I386::DecodeInstructionForDebugger(u32 eip, I386_Decode_State& state)
-{
-    return DecodeInstructionForDebugger(m_state.segments[I386_SEGMENT_CS], eip, state);
-}
-
 bool I386::DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 eip, I386_Decode_State& state)
 {
     // Gather the bytes visible to passive reads, stopping at the CS limit or unreadable memory

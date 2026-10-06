@@ -55,6 +55,7 @@ public:
     void Init();
     void Reset();
     void Play(u32 start_lba, u32 end_lba, bool repeat);
+    void SetSeekScale(double scale);
     void Pause();
     void Resume();
     void Stop();
@@ -78,6 +79,7 @@ private:
     s16 m_sector_cache[CDROM_AUDIO_SECTOR_SAMPLES * 2];
     u32 m_sector_cache_lba;
     bool m_sector_cache_valid;
+    double m_seek_scale;
 };
 
 #include "cdrom_audio_inline.h"

@@ -399,6 +399,8 @@ static void menu_cdrom(void)
         gui_action_eject_media();
     }
 
+    ImGui::Separator();
+
     if (ImGui::MenuItem("Preload CD-ROM in RAM", "", &config_emulator.preload_cdrom))
     {
         emu_set_preload_cdrom(config_emulator.preload_cdrom);
@@ -410,6 +412,26 @@ static void menu_cdrom(void)
         ImGui::Text("This option will preload all CD-ROM tracks in RAM.");
         ImGui::Text("Load a new CD-ROM image to apply changes.");
         ImGui::EndTooltip();
+    }
+
+    if (ImGui::BeginMenu("Read Speed"))
+    {
+        ImGui::PushItemWidth(140.0f);
+
+        if (ImGui::Combo("##cdrom_speed", &config_emulator.cdrom_speed, "1x (Original)\0" "2x\0" "4x\0" "8x\0\0"))
+            emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
+
+        ImGui::PopItemWidth();
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Speeds up how fast the drive reads sectors.");
+            ImGui::Text("Some software may not expect a faster drive.");
+            ImGui::EndTooltip();
+        }
+
+        ImGui::EndMenu();
     }
 
     ImGui::Separator();

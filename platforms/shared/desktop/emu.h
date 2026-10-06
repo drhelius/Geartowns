@@ -150,6 +150,7 @@ EXTERN void emu_power_off(void);
 EXTERN void emu_reset(void);
 EXTERN bool emu_eject_media(void);
 EXTERN void emu_set_preload_cdrom(bool enabled);
+EXTERN void emu_set_cdrom_speed(int speed);
 EXTERN void emu_apply_machine_settings(void);
 
 EXTERN void emu_audio_mute(bool mute);

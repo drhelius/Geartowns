@@ -148,6 +148,7 @@ void gui_apply_settings(void)
     strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
 
     emu_set_preload_cdrom(config_emulator.preload_cdrom);
+    emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
     emu_apply_machine_settings();
 }
 

@@ -127,6 +127,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Emulator", "PowerOnAtStartup", config_emulator.power_on_startup, true);
     CONFIG_BOOL("Emulator", "PauseWhenInactive", config_emulator.pause_when_inactive, true);
     CONFIG_BOOL("Emulator", "PreloadCDROM", config_emulator.preload_cdrom, false);
+    CONFIG_INT_RANGE("Emulator", "CDROMSpeed", config_emulator.cdrom_speed, 0, 0, 3);
 
     // Files and paths
     CONFIG_INT("Emulator", "SaveStatesDirOption", config_emulator.savestates_dir_option, 0);

@@ -28,6 +28,7 @@ CdRomAudio::CdRomAudio(CdRomMedia* cdrom_media)
     memset(m_sector_cache, 0, sizeof(m_sector_cache));
     m_sector_cache_lba = 0;
     m_sector_cache_valid = false;
+    m_seek_scale = 1.0;
 }
 
 CdRomAudio::~CdRomAudio()
@@ -58,7 +59,7 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
     u32 sector_count = m_cdrom_media->GetSectorCount();
     end_lba = MIN(end_lba, sector_count);
 
-    u32 seek_ms = m_cdrom_media->SeekTime(m_cdrom_media->GetCurrentSector(), start_lba);
+    u32 seek_ms = (u32)(m_cdrom_media->SeekTime(m_cdrom_media->GetCurrentSector(), start_lba) * m_seek_scale);
 
     m_state.start_lba = start_lba;
     m_state.end_lba = end_lba;
@@ -83,6 +84,11 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
         m_cdrom_media->PreloadTrack((u32)track);
 
     Debug("CD AUDIO: Play LBA %u to %u, repeat %d, seek %u ms", start_lba, end_lba, repeat, seek_ms);
+}
+
+void CdRomAudio::SetSeekScale(double scale)
+{
+    m_seek_scale = scale;
 }
 
 void CdRomAudio::Pause()

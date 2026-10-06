@@ -121,6 +121,22 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         },
         "Disabled"
     },
+    {
+        "geartowns_cdrom_speed",
+        "CD-ROM Read Speed",
+        NULL,
+        "Speed up how fast the drive reads sectors. Some software may not expect a faster drive.",
+        NULL,
+        "cdrom",
+        {
+            { "1x", "1x (Original)" },
+            { "2x", NULL },
+            { "4x", NULL },
+            { "8x", NULL },
+            { NULL, NULL },
+        },
+        "1x"
+    },
 
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0, 0}}, NULL },
 };

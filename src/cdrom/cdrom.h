@@ -99,7 +99,12 @@ public:
         CdRom_Transfer transfer;
         u32 read_lba;
         u32 read_end_lba;
-        u64 sector_clocks;
+        u32 head_lba;
+        bool buffer_valid;
+        u8 buffer_capacity;
+        u32 buffer_lba;
+        u32 prefetch_lba;
+        u64 prefetch_clocks;
         u16 sector_position;
         u16 sector_end;
         u8 sector[CDROM_SECTOR_SIZE];
@@ -117,6 +122,8 @@ public:
     u8 Peek(u16 port) const;
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
+    void SetReadSpeed(int speed);
+    int GetReadSpeed() const;
     CdRom_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
@@ -156,6 +163,11 @@ private:
     void StopCDDA();
     bool LoadSector();
     void FinishSector();
+    u64 StartBuffer(u64 clocks);
+    void UpdateBuffer(u64 clocks);
+    void ReleaseBuffer(u32 lba, u64 clocks);
+    u64 GetArrivalClocks(u32 lba, u64 clocks) const;
+    void InvalidateBuffer();
     void AbortTransfer();
     bool PushErrorStatus();
     void PushStatus(u8 status0, u8 status1, u8 status2 = 0x00, u8 status3 = 0x00);
@@ -178,6 +190,9 @@ private:
     CdRomAudio* m_cdrom_audio;
     TraceLogger* m_trace_logger;
     CdRom_State m_state;
+    int m_read_speed;
+    u64 m_sector_clocks;
+    double m_seek_scale;
 };
 
 static const int k_cdrom_irq = 9;
@@ -191,6 +206,7 @@ static const u64 k_cdrom_notify_clocks = GT_CPU_CLOCK_RATE / 1000;
 static const u64 k_cdrom_seek_clocks = GT_CPU_CLOCK_RATE / 10;
 static const u64 k_cdrom_lost_data_clocks = GT_CPU_CLOCK_RATE / 10;
 static const u64 k_cdrom_cdda_stop_clocks = GT_CPU_CLOCK_RATE / 1000;
+static const u32 k_cdrom_buffer_size = 8192;
 
 #include "cdrom_inline.h"
 

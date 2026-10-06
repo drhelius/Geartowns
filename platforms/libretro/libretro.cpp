@@ -79,6 +79,7 @@ static float current_fps = 60.0f;
 static float aspect_ratio = 0.0f;
 static bool allow_up_down = false;
 static int mouse_sensitivity = 5;
+static int cdrom_speed = 1;
 static bool libretro_supports_bitmasks = false;
 static int joypad_current[MAX_PADS][MAX_BUTTONS];
 static int joypad_old[MAX_PADS][MAX_BUTTONS];
@@ -1115,6 +1116,17 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         mouse_sensitivity = CLAMP(atoi(var.value), 1, 15);
+    }
+
+    var.key = "geartowns_cdrom_speed";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        cdrom_speed = CLAMP(atoi(var.value), 1, 8);
+
+        if (core)
+            core->GetCDROM()->SetReadSpeed(cdrom_speed);
     }
 
     var.key = "geartowns_cdrom_preload";

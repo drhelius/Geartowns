@@ -556,6 +556,12 @@ void emu_set_preload_cdrom(bool enabled)
         geartowns->GetMedia()->PreloadCdRom(enabled);
 }
 
+void emu_set_cdrom_speed(int speed)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetCDROM()->SetReadSpeed(speed);
+}
+
 void emu_apply_machine_settings(void)
 {
     if (!IsValidPointer(geartowns))

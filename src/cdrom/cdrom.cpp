@@ -17,6 +17,7 @@
  *
  */
 
+#include <math.h>
 #include "cdrom.h"
 #include "../common/trace_logger.h"
 #include "cdrom_audio.h"
@@ -37,6 +38,9 @@ CdRom::CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio)
     m_cdrom_media = cdrom_media;
     m_cdrom_audio = cdrom_audio;
     memset(&m_state, 0, sizeof(m_state));
+    m_read_speed = 1;
+    m_sector_clocks = k_cdrom_sector_clocks;
+    m_seek_scale = 1.0;
 }
 
 CdRom::~CdRom()
@@ -72,6 +76,7 @@ void CdRom::NotifyMediaChanged()
 {
     m_state.disc_changed = true;
     m_cdrom_audio->Stop();
+    InvalidateBuffer();
 
     bool reading = (m_state.transfer != CDROM_TRANSFER_NONE) || (m_state.event == CDROM_EVENT_SECTOR) ||
         (m_state.event == CDROM_EVENT_LOST_DATA);
@@ -168,6 +173,7 @@ void CdRom::DMAEndCallback(void* device, bool terminal_count)
 void CdRom::ResetController()
 {
     AbortTransfer();
+    InvalidateBuffer();
     m_state.command = 0;
     m_state.command_received = false;
     memset(m_state.params, 0, sizeof(m_state.params));
@@ -182,7 +188,6 @@ void CdRom::ResetController()
     m_state.event_clocks = 0;
     m_state.read_lba = 0;
     m_state.read_end_lba = 0;
-    m_state.sector_clocks = 0;
     m_state.sector_position = 0;
     m_state.sector_end = 0;
     UpdateNextEvent();
@@ -442,6 +447,7 @@ void CdRom::ExecuteCommand(u64 clocks)
 void CdRom::CommandSeek(u64 clocks)
 {
     ClearStatus();
+    InvalidateBuffer();
 
     if (((m_state.active_command & k_cdrom_flag_status) != 0) && !PushErrorStatus())
     {
@@ -491,16 +497,7 @@ void CdRom::CommandRead(u64 clocks)
         RaiseSIRQ(true);
 
     m_state.dry = false;
-
-    // A read that continues where the last one stopped finds the disc already spinning there
-    u32 head = m_cdrom_media->GetCurrentSector();
-    u64 delay = k_cdrom_sector_clocks;
-
-    if (m_state.read_lba != head)
-        delay = ((u64)m_cdrom_media->SeekTime(head, m_state.read_lba) * GT_CPU_CLOCK_RATE) / 1000;
-
-    m_state.sector_clocks = clocks + delay;
-    ScheduleEvent(CDROM_EVENT_SECTOR, m_state.sector_clocks);
+    ScheduleEvent(CDROM_EVENT_SECTOR, StartBuffer(clocks));
 }
 
 // P6 = 1 loops the range
@@ -512,6 +509,7 @@ void CdRom::CommandCDDAPlay()
 
     // Chase HQ loops unless old responses are dropped when playback starts
     ClearStatus();
+    InvalidateBuffer();
 
     if (m_cdrom_media->IsReady() && GetRange(start, end))
         m_cdrom_audio->Play((start >= 150) ? start - 150 : 0, (end >= 150) ? end - 150 : 0,
@@ -778,7 +776,6 @@ void CdRom::SectorReady(u64 clocks)
     if (!LoadSector())
         return;
 
-    m_state.sector_clocks = clocks;
     m_state.dei = false;
     m_state.transfer = CDROM_TRANSFER_READY;
     PushStatus(0x22, 0x00);
@@ -795,6 +792,7 @@ void CdRom::LostData()
 {
     Debug("CDROM: sector %u not transferred in time", m_state.read_lba);
 
+    InvalidateBuffer();
     m_state.transfer = CDROM_TRANSFER_NONE;
     m_state.dry = true;
     m_state.dei = false;
@@ -871,6 +869,7 @@ bool CdRom::LoadSector()
 
     Debug("CDROM: unable to read sector %u, error %02X", lba, error);
 
+    InvalidateBuffer();
     m_state.dry = true;
     PushStatus(0x21, error);
 
@@ -880,27 +879,118 @@ bool CdRom::LoadSector()
     return false;
 }
 
-// The drive keeps reading at 1x while the CPU drains the buffer
-// A sector never comes before its turn
+// A sector never comes before the pickup reads it
 void CdRom::FinishSector()
 {
     if (m_state.transfer == CDROM_TRANSFER_DMA)
         m_dma->SetRequest(k_cdrom_dma_channel, false);
 
+    u64 clocks = m_scheduler->GetClocks();
     m_state.transfer = CDROM_TRANSFER_NONE;
     m_state.dei = true;
     m_state.read_lba++;
+    ReleaseBuffer(m_state.read_lba, clocks);
 
-    u64 next = m_scheduler->GetClocks() + k_cdrom_notify_clocks;
+    u64 next = clocks + k_cdrom_notify_clocks;
 
     if (m_state.read_lba <= m_state.read_end_lba)
-        next = MAX(next, m_state.sector_clocks + k_cdrom_sector_clocks);
+        next = MAX(next, GetArrivalClocks(m_state.read_lba, clocks));
 
     // A command received meanwhile ends the read when it runs
     if (m_state.event != CDROM_EVENT_EXECUTE)
         ScheduleEvent(CDROM_EVENT_SECTOR, next);
 
     UpdateIRQ();
+}
+
+// The drive's 8 KiB buffer holds 4 sectors of 2048 bytes or 3 raw ones
+// A read already buffered answers right away, one the pickup is about to reach comes when it arrives
+// Any other read seeks and starts a new stream
+u64 CdRom::StartBuffer(u64 clocks)
+{
+    bool cooked = (m_state.active_command & k_cdrom_command_mask) == CDROM_COMMAND_MODE1_READ;
+    u8 capacity = (u8)(k_cdrom_buffer_size / (cooked ? 2048 : 2340));
+    u32 lba = m_state.read_lba;
+    UpdateBuffer(clocks);
+
+    if (m_state.buffer_valid && (m_state.buffer_capacity == capacity) && (lba >= m_state.buffer_lba) &&
+        (lba <= m_state.prefetch_lba))
+    {
+        ReleaseBuffer(lba, clocks);
+        return MAX(clocks + k_cdrom_notify_clocks, GetArrivalClocks(lba, clocks));
+    }
+
+    // Seeks keep the old model, measured from the last sector handed out
+    u32 head = m_cdrom_media->GetCurrentSector();
+    u64 delay = m_sector_clocks;
+
+    if (lba != head)
+        delay = (u64)((((double)m_cdrom_media->SeekTime(head, lba) * GT_CPU_CLOCK_RATE) / 1000.0) * m_seek_scale);
+
+    m_state.buffer_valid = true;
+    m_state.buffer_capacity = capacity;
+    m_state.buffer_lba = lba;
+    m_state.prefetch_lba = lba;
+    m_state.prefetch_clocks = clocks + delay;
+    return m_state.prefetch_clocks;
+}
+
+// The pickup keeps filling the buffer one sector per period and stops when it is full
+void CdRom::UpdateBuffer(u64 clocks)
+{
+    if (!m_state.buffer_valid)
+        return;
+
+    u32 count = m_cdrom_media->GetSectorCount();
+
+    while ((m_state.prefetch_clocks <= clocks) && (m_state.prefetch_lba < count) &&
+        ((m_state.prefetch_lba - m_state.buffer_lba) < m_state.buffer_capacity))
+    {
+        m_state.prefetch_lba++;
+        m_state.prefetch_clocks += m_sector_clocks;
+    }
+}
+
+// Sectors before lba leave the buffer
+// A full buffer had stopped the pickup, which needs another period to read again
+void CdRom::ReleaseBuffer(u32 lba, u64 clocks)
+{
+    UpdateBuffer(clocks);
+
+    if (!m_state.buffer_valid || (lba <= m_state.buffer_lba))
+        return;
+
+    if ((m_state.prefetch_lba - m_state.buffer_lba) >= m_state.buffer_capacity)
+        m_state.prefetch_clocks = MAX(m_state.prefetch_clocks, clocks + m_sector_clocks);
+
+    m_state.buffer_lba = lba;
+}
+
+u64 CdRom::GetArrivalClocks(u32 lba, u64 clocks) const
+{
+    if (lba < m_state.prefetch_lba)
+        return clocks;
+
+    return m_state.prefetch_clocks + ((u64)(lba - m_state.prefetch_lba) * m_sector_clocks);
+}
+
+void CdRom::InvalidateBuffer()
+{
+    m_state.buffer_valid = false;
+}
+
+// Faster drives read at the full multiple but seek only by its square root, as drives of the time did roughly
+void CdRom::SetReadSpeed(int speed)
+{
+    m_read_speed = CLAMP(speed, 1, 8);
+    m_sector_clocks = k_cdrom_sector_clocks / (u64)m_read_speed;
+    m_seek_scale = 1.0 / sqrt((double)m_read_speed);
+    m_cdrom_audio->SetSeekScale(m_seek_scale);
+}
+
+int CdRom::GetReadSpeed() const
+{
+    return m_read_speed;
 }
 
 void CdRom::AbortTransfer()
@@ -1035,6 +1125,7 @@ void CdRom::UpdateNextEvent()
 
 void CdRom::SaveState(std::ostream& stream)
 {
+    m_state.head_lba = m_cdrom_media->GetCurrentSector();
     StateSerializer serializer(stream);
     Serialize(serializer);
 }
@@ -1044,6 +1135,7 @@ void CdRom::LoadState(std::istream& stream)
     StateSerializer serializer(stream);
     Serialize(serializer);
     SanitizeState();
+    m_cdrom_media->SetCurrentSector(m_state.head_lba);
 }
 
 void CdRom::Serialize(StateSerializer& serializer)
@@ -1069,7 +1161,12 @@ void CdRom::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.transfer);
     G_SERIALIZE(serializer, m_state.read_lba);
     G_SERIALIZE(serializer, m_state.read_end_lba);
-    G_SERIALIZE(serializer, m_state.sector_clocks);
+    G_SERIALIZE(serializer, m_state.head_lba);
+    G_SERIALIZE(serializer, m_state.buffer_valid);
+    G_SERIALIZE(serializer, m_state.buffer_capacity);
+    G_SERIALIZE(serializer, m_state.buffer_lba);
+    G_SERIALIZE(serializer, m_state.prefetch_lba);
+    G_SERIALIZE(serializer, m_state.prefetch_clocks);
     G_SERIALIZE(serializer, m_state.sector_position);
     G_SERIALIZE(serializer, m_state.sector_end);
     G_SERIALIZE_ARRAY(serializer, m_state.sector, CDROM_SECTOR_SIZE);
@@ -1095,6 +1192,11 @@ void CdRom::SanitizeState()
 
     if (m_state.transfer > CDROM_TRANSFER_CPU)
         m_state.transfer = CDROM_TRANSFER_NONE;
+
+    if ((m_state.buffer_capacity == 0) || (m_state.buffer_capacity > (k_cdrom_buffer_size / 2048)) ||
+        (m_state.prefetch_lba < m_state.buffer_lba) ||
+        ((m_state.prefetch_lba - m_state.buffer_lba) > m_state.buffer_capacity))
+        m_state.buffer_valid = false;
 
     UpdateIRQ();
     UpdateNextEvent();

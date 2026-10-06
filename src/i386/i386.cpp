@@ -60,6 +60,7 @@ I386::I386()
     m_breakpoint_hit_address = 0;
     m_step_call_return_linear = 0;
     m_step_call = false;
+    m_task_call_entered = false;
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
@@ -968,10 +969,11 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
     if (m_state.execution_mode != I386_MODE_REAL)
     {
         bool previous_external = m_external_event;
+        u32 saved_return_eip = return_eip;
         m_external_event = external;
 
         bool result = EnterProtectedInterrupt(vector, return_eip, context, software, has_error_code, error_code,
-            fault, clocks, run_result);
+            fault, clocks, run_result, saved_return_eip);
 
         m_external_event = previous_external;
 
@@ -984,7 +986,7 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
         if (result)
-            PushCallStack(return_cs, return_base, source_eip, return_eip, get_call_type(software, external), vector);
+            PushCallStack(return_cs, return_base, source_eip, saved_return_eip, get_call_type(software, external), vector);
 #endif
 
         if (result && unlikely(m_debugger_interrupt_checks))

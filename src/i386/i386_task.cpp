@@ -413,6 +413,11 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
     m_state.repeat.active = false;
     m_state.halted = false;
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    // From here a task CALL is in the new task even if loading it faults or traps
+    m_task_call_entered = switch_type == I386_TASK_SWITCH_CALL;
+#endif
+
     bool ok = LoadTaskSegments(new_state, context);
 
     if (ok && m_state.eip > m_state.segments[I386_SEGMENT_CS].limit)

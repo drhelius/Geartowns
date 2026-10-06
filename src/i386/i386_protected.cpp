@@ -354,8 +354,10 @@ bool I386::ReadPrivilegeStack(u8 privilege, u32& stack, u16& selector, GT_Bus_Ac
     return true;
 }
 
+// A 16-bit gate or task saves a truncated return offset
 bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& context,
-    bool software, bool has_error_code, u32 error_code, bool fault, u64* clocks, I386_Run_Result* run_result)
+    bool software, bool has_error_code, u32 error_code, bool fault, u64* clocks, I386_Run_Result* run_result,
+    u32& saved_return_eip)
 {
     Descriptor gate;
 
@@ -395,8 +397,10 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
         if (IsValidPointer(clocks))
             *clocks = task_clocks;
 
+        saved_return_eip = old_type == 9 || old_type == 11 ? return_eip : (u16)return_eip;
+
         if (ok && IsValidPointer(run_result))
-            run_result->exception_return_eip = old_type == 9 || old_type == 11 ? return_eip : (u16)return_eip;
+            run_result->exception_return_eip = saved_return_eip;
 
         return ok;
     }
@@ -577,8 +581,10 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     UpdateUserMode();
     UpdateSegmentFastPaths();
 
+    saved_return_eip = gate32 ? return_eip : (u16)return_eip;
+
     if (IsValidPointer(run_result))
-        run_result->exception_return_eip = gate32 ? return_eip : (u16)return_eip;
+        run_result->exception_return_eip = saved_return_eip;
 
     return true;
 }

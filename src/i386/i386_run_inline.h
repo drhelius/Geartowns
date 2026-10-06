@@ -133,10 +133,14 @@ INLINE void I386::DisassembleNextInstruction()
     cached = Disassemble(code, eip);
 }
 
+// A task CALL that faults or traps after entering the new task keeps its frame below the exception's
 INLINE bool I386::TrackCall(bool completed, u16 cs, u32 base)
 {
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    if (completed)
+    bool entered = completed || m_task_call_entered;
+    m_task_call_entered = false;
+
+    if (entered)
     {
         int return_size = m_instruction.call_return_size != 0 ? m_instruction.call_return_size :
             m_instruction.operand_size;

@@ -798,7 +798,8 @@ private:
         bool has_error_code = false, u32 error_code = 0, bool fault = false, bool external = false, u64* clocks = NULL,
         I386_Run_Result* run_result = NULL);
     bool EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& context, bool software,
-        bool has_error_code, u32 error_code, bool fault, u64* clocks, I386_Run_Result* run_result);
+        bool has_error_code, u32 error_code, bool fault, u64* clocks, I386_Run_Result* run_result,
+        u32& saved_return_eip);
     bool ReadInterruptDescriptor(u8 vector, Descriptor& descriptor, GT_Bus_Access_Context& context);
     bool ReadPrivilegeStack(u8 privilege, u32& stack, u16& selector, GT_Bus_Access_Context& context);
     bool CheckIOPermission(u16 port, int width, GT_Bus_Access_Context& context, bool& allowed);
@@ -1123,6 +1124,7 @@ private:
     u32 m_breakpoint_hit_address;
     u32 m_step_call_return_linear;
     bool m_step_call;
+    bool m_task_call_entered;
     bool m_run_to_breakpoint_enabled;
     bool m_breakpoint_hit;
     bool m_run_to_hit;

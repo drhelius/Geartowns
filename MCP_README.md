@@ -362,7 +362,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `memory_find` - Find hex byte sequences (`hex_bytes`) or text (`text`, optional `case_sensitive`) in memory; optional `start` and `size`
 
 ### Disassembly & Debugging
-- `get_disassembly` - Decode Intel 80386 instructions from current memory: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector` and `vector_name` for INT
+- `get_disassembly` - Decode Intel 80386 instructions from current memory: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector` and `vector_name` for INT, and `function` (the BIOS or DOS service picked by AX) when the INT is the current instruction
 - `add_symbol` - Add or rename a user symbol at an address; user symbols take precedence over automatic labels
 - `remove_symbol` - Remove the user symbol at an address
 - `load_symbols` - Load user symbols from a file: `ADDRESS NAME` or `NAME = ADDRESS` (or `EQU`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses
@@ -431,7 +431,7 @@ With `output` set to `disk` entries are also streamed to a text file. `output_pa
 - `clear_breakpoint_on_interrupt` - Remove an interrupt breakpoint by `vector` and `source`
 - `list_breakpoints_on_interrupt` - List interrupt breakpoints with vector names and sources
 
-`debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access, or the vector and source of the interrupt.
+`debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access, or the vector and source of the interrupt, plus `function` when a software interrupt calls a known BIOS or DOS service.
 
 ### System Hardware
 - `get_pic_status` - Get both 8259A PICs: per-IRQ source, input level, request, in-service, mask and vector; ICW1-ICW4 decoded, init state, read register, special mask, poll and priority

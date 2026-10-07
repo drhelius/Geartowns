@@ -1371,6 +1371,7 @@ void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32
     m_breakpoint_hit_info.size = size;
     m_breakpoint_hit_info.vector = vector;
     m_breakpoint_hit_info.source = source;
+    m_breakpoint_hit_info.ax = m_state.registers[I386_REG_EAX].low;
 }
 
 // Physical breakpoints see the first byte's page; an access split across pages reports that page's address
@@ -1458,6 +1459,7 @@ void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 
         entry->interrupt.source = source;
         entry->interrupt.line = 0xFF;
         entry->interrupt.has_error_code = has_error_code ? 1 : 0;
+        entry->interrupt.ax = m_state.registers[I386_REG_EAX].low;
     }
 
     for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)

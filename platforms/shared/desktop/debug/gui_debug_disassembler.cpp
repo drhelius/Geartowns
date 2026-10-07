@@ -105,8 +105,11 @@ static void add_symbol_popup(void);
 static bool parse_symbol_line(char* line, u32& address, char* name, size_t name_size);
 static bool parse_symbol_address(const char* text, u32& address);
 static bool is_symbol_name(const char* text);
+static int opcode_index(const I386_Disassembler_Record* record);
 static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate);
 static void port_tooltip(const I386_Disassembler_Record* record);
+static int get_interrupt_vector(const I386_Disassembler_Record* record);
+static void interrupt_tooltip(const I386_Disassembler_Record* record, int vector);
 
 void gui_debug_disassembler_init(void)
 {
@@ -760,6 +763,15 @@ static void draw_breakpoints_content(void)
         char description[64];
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
         ImGui::TextColored(yellow, "INT $%02X %s %s", hit.vector, name, k_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]);
+
+        const char* function = hit.source == I386_INTERRUPT_SOFTWARE ?
+            gui_debug_i386_interrupt_function(hit.vector, hit.ax) : NULL;
+
+        if (IsValidPointer(function))
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(gray, "%s", function);
+        }
     }
     else if (cpu->GetBreakpointHit(hit))
         ImGui::TextColored(yellow, "%s %s %0*X", hit.type == I386_BREAKPOINT_EXECUTE ? "EXEC" :
@@ -1213,9 +1225,9 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
     bool replaced_jump_target = replace_jump_target(record, operands, sizeof(operands));
     bool immediate_port = false;
     int port = get_port_operand(record, immediate_port);
-    const char* port_label = port >= 0 && immediate_port ? gui_debug_port_label((u16)port) : NULL;
+    const char* operand_label = port >= 0 && immediate_port ? gui_debug_port_label((u16)port) : NULL;
 
-    if (IsValidPointer(port_label) && config_debug.dis_replace_labels)
+    if (IsValidPointer(operand_label) && config_debug.dis_replace_labels)
     {
         char port_text[8];
         snprintf(port_text, sizeof(port_text), "0x%02X", port);
@@ -1224,13 +1236,38 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
         if (IsValidPointer(found))
         {
             char replaced[128];
-            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, port_label,
+            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, operand_label,
                 found + strlen(port_text));
             snprintf(operands, sizeof(operands), "%s", replaced);
         }
     }
     else
-        port_label = NULL;
+        operand_label = NULL;
+
+    int vector = get_interrupt_vector(record);
+    char vector_name[16] = "";
+    char vector_description[64];
+
+    if (vector >= 0)
+        gui_debug_i386_vector_name((u8)vector, vector_name, sizeof(vector_name), vector_description,
+            sizeof(vector_description));
+
+    if (vector >= 0 && config_debug.dis_replace_labels && strcmp(vector_name, "INT") != 0 &&
+        record->opcodes[opcode_index(record)] == 0xCD)
+    {
+        char vector_text[8];
+        snprintf(vector_text, sizeof(vector_text), "0x%02X", vector);
+        char* found = strstr(operands, vector_text);
+
+        if (IsValidPointer(found))
+        {
+            char replaced[128];
+            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, vector_name,
+                found + strlen(vector_text));
+            snprintf(operands, sizeof(operands), "%s", replaced);
+            operand_label = vector_name;
+        }
+    }
 
     bool light_theme = config_emulator.theme == config_Theme_Light;
     ImVec4 mnemonic_color = current_pc ? (ImVec4)yellow : (breakpoint ? (ImVec4)red : (ImVec4)white);
@@ -1252,13 +1289,19 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
     {
         bool address_operand = record->jump && record->jump_target_known && !replaced_jump_target;
 
+        // One group, so the tooltips below see the whole operand text and not only its last token
         ImGui::SameLine(0.0f, space_width);
-        draw_operands(operands, address_operand, override_color, mnemonic_color, port_label);
+        ImGui::BeginGroup();
+        draw_operands(operands, address_operand, override_color, mnemonic_color, operand_label);
+        ImGui::EndGroup();
         instruction_length += 1 + (int)strlen(operands);
     }
 
     if (port >= 0 && ImGui::IsItemHovered())
         port_tooltip(record);
+
+    if (vector >= 0 && ImGui::IsItemHovered())
+        interrupt_tooltip(record, vector);
 
     if (config_debug.dis_show_bytes)
     {
@@ -1773,7 +1816,7 @@ static bool parse_address_range(const char* text, u32& start, u32& end)
     return parse_address(first, start) && parse_address(separator + 1, end);
 }
 
-static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate)
+static int opcode_index(const I386_Disassembler_Record* record)
 {
     int index = 0;
 
@@ -1787,6 +1830,13 @@ static int get_port_operand(const I386_Disassembler_Record* record, bool& immedi
 
         index++;
     }
+
+    return index;
+}
+
+static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate)
+{
+    int index = opcode_index(record);
 
     if (index >= record->size)
         return -1;
@@ -1810,6 +1860,56 @@ static int get_port_operand(const I386_Disassembler_Record* record, bool& immedi
     I386_Debug_State state;
     cpu->CopyDebugState(state);
     return (int)(state.edx & 0xFFFF);
+}
+
+// INT n, INT3, INTO and ICEBP, -1 for anything else
+static int get_interrupt_vector(const I386_Disassembler_Record* record)
+{
+    int index = opcode_index(record);
+
+    if (index >= record->size)
+        return -1;
+
+    switch (record->opcodes[index])
+    {
+        case 0xCD:
+            return index + 1 < record->size ? record->opcodes[index + 1] : -1;
+        case 0xCC:
+            return 3;
+        case 0xCE:
+            return 4;
+        case 0xF1:
+            return 1;
+        default:
+            return -1;
+    }
+}
+
+// The function comes from AX, so it only shows on the current instruction
+static void interrupt_tooltip(const I386_Disassembler_Record* record, int vector)
+{
+    char name[16];
+    char description[64];
+    gui_debug_i386_vector_name((u8)vector, name, sizeof(name), description, sizeof(description));
+
+    ImGui::BeginTooltip();
+    ImGui::TextColored(cyan, "INT $%02X", vector);
+    ImGui::TextColored(orange, "%s", name);
+    ImGui::Text("%s", description);
+
+    I386* cpu = emu_get_core()->GetI386();
+
+    if (record->linear == cpu->GetCurrentLinearPC())
+    {
+        I386_Debug_State state;
+        cpu->CopyDebugState(state);
+        const char* function = gui_debug_i386_interrupt_function((u8)vector, state.eax);
+
+        if (IsValidPointer(function))
+            ImGui::TextColored(green, "AX=%04X %s", state.eax & 0xFFFF, function);
+    }
+
+    ImGui::EndTooltip();
 }
 
 static void port_tooltip(const I386_Disassembler_Record* record)

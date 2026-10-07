@@ -1171,7 +1171,8 @@ json McpServer::BuildToolList()
                 {"detailed", {
                     {"type", "boolean"},
                     {"description", "Include control flow (call, jump, conditional, return, int, iret), targets, "
-                        "I/O port names for IN/OUT and vector names for INT. Default false."}
+                        "I/O port names for IN/OUT, vector names for INT and, on the current instruction, the BIOS "
+                        "or DOS function picked by AX. Default false."}
                 }}
             }},
             {"required", json::array({"start_address"})}

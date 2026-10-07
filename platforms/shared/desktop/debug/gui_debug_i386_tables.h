@@ -63,6 +63,7 @@ EXTERN void gui_debug_i386_descriptor_type(const GuiDebugDescriptor& descriptor,
 EXTERN void gui_debug_i386_descriptor_flags(const GuiDebugDescriptor& descriptor, char* text, size_t text_size);
 EXTERN void gui_debug_i386_vector_name(u8 vector, char* name, size_t name_size, char* description,
     size_t description_size);
+EXTERN const char* gui_debug_i386_interrupt_function(u8 vector, u32 eax);
 EXTERN u16 gui_debug_i386_segment_attributes(const GuiDebugDescriptor& descriptor);
 EXTERN bool gui_debug_i386_selector_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size);
 EXTERN bool gui_debug_i386_read_page_entry(u32 table, u32 index, u32& entry);

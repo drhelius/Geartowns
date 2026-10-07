@@ -299,7 +299,11 @@ void gui_debug_trace_format(const GT_Trace_Entry& entry, char* text, size_t size
                 if (entry.interrupt.has_error_code)
                     snprintf(error, sizeof(error), " error %04X", entry.interrupt.error_code);
 
-                snprintf(text, size, "%sINT %02X %s (%s)%s  %08X -> %08X", prefix, entry.interrupt.vector, description,
+                const char* function = entry.interrupt.source == I386_INTERRUPT_SOFTWARE ?
+                    gui_debug_i386_interrupt_function(entry.interrupt.vector, entry.interrupt.ax) : NULL;
+
+                snprintf(text, size, "%sINT %02X %s%s%s (%s)%s  %08X -> %08X", prefix, entry.interrupt.vector,
+                    description, IsValidPointer(function) ? ": " : "", IsValidPointer(function) ? function : "",
                     k_sources[entry.interrupt.source & 3], error, entry.interrupt.from, entry.interrupt.to);
             }
 

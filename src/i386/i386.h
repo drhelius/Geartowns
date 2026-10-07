@@ -363,6 +363,7 @@ struct I386_Breakpoint_Hit
     u32 size;
     u8 vector;
     u8 source;
+    u16 ax;
 };
 
 struct I386_CallStackEntry

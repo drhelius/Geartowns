@@ -184,9 +184,34 @@ void gui_debug_i386_vector_name(u8 vector, char* name, size_t name_size, char* d
     }
     else
     {
+        for (int i = 0; i < k_debug_interrupt_name_count; i++)
+        {
+            if (k_debug_interrupt_names[i].vector == vector)
+            {
+                snprintf(name, name_size, "%s", k_debug_interrupt_names[i].label);
+                snprintf(description, description_size, "%s", k_debug_interrupt_names[i].description);
+                return;
+            }
+        }
+
         snprintf(name, name_size, "INT");
         snprintf(description, description_size, "Software interrupt");
     }
+}
+
+const char* gui_debug_i386_interrupt_function(u8 vector, u32 eax)
+{
+    u16 ax = (u16)eax;
+
+    for (int i = 0; i < k_debug_interrupt_function_count; i++)
+    {
+        const stDebugInterruptFunction& function = k_debug_interrupt_functions[i];
+
+        if (function.vector == vector && (ax & function.mask) == function.value)
+            return function.name;
+    }
+
+    return NULL;
 }
 
 u16 gui_debug_i386_segment_attributes(const GuiDebugDescriptor& descriptor)

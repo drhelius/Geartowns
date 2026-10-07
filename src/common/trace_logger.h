@@ -98,6 +98,7 @@ struct GT_Trace_Entry
             u8 source;
             u8 line;
             u8 has_error_code;
+            u16 ax;
         } interrupt;
 
         struct

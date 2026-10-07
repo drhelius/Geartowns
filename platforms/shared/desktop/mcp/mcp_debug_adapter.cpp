@@ -597,8 +597,15 @@ json DebugAdapter::GetBreakpointHit()
         char name[16];
         char description[64];
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
-        return {{"kind", "interrupt"}, {"vector", hex_text(hit.vector, 2)}, {"vector_name", name},
+        json result = {{"kind", "interrupt"}, {"vector", hex_text(hit.vector, 2)}, {"vector_name", name},
             {"source", k_mcp_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]}};
+        const char* function = hit.source == I386_INTERRUPT_SOFTWARE ?
+            gui_debug_i386_interrupt_function(hit.vector, hit.ax) : NULL;
+
+        if (IsValidPointer(function))
+            result["function"] = function;
+
+        return result;
     }
 
     u8 space = hit.space % I386_BREAKPOINT_SPACE_COUNT;
@@ -1490,6 +1497,17 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
                 gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
                 line["vector"] = Hex(vector, 2);
                 line["vector_name"] = description;
+
+                // AX only names the function for the instruction about to run
+                if (record->linear == m_core->GetI386()->GetCurrentLinearPC())
+                {
+                    I386_Debug_State state;
+                    m_core->GetI386()->CopyDebugState(state);
+                    const char* function = gui_debug_i386_interrupt_function(vector, state.eax);
+
+                    if (IsValidPointer(function))
+                        line["function"] = function;
+                }
             }
         }
 

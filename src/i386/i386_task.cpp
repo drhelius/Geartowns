@@ -406,7 +406,7 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
         m_state.registers[i].value = new_state.registers[i];
 
     m_state.eip = new_state.eip;
-    m_state.eflags = new_state.eflags | I386_FLAG_FIXED;
+    m_state.eflags = (new_state.eflags & 0x00037FD5U) | I386_FLAG_FIXED;
 
     if (nested)
         m_state.eflags |= I386_FLAG_NT;

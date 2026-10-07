@@ -1946,7 +1946,8 @@ bool I386::OPCodes_MOV_Segment_RM()
     if (!LoadSegment(m_instruction.reg, (u16)value, *m_bus_context))
         return false;
 
-    if (m_instruction.reg == I386_SEGMENT_SS)
+    // Outside protected mode the register form loads every segment register through the MOV SS microcode
+    if (m_instruction.reg == I386_SEGMENT_SS || (!m_instruction.memory_operand && m_state.execution_mode != I386_MODE_PROTECTED))
     {
         m_state.interrupt_shadow = I386_SHADOW_MOV_SS;
         m_state.interrupt_shadow_steps = 2;

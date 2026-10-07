@@ -387,6 +387,14 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
             total.clocks += clocks;
             total.steps += steps;
             total.instruction_completed = m_step.instruction_completed;
+
+            // A shadow from the instruction before the REP ends with it, as on the slow path
+            if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
+            {
+                CountInterruptShadow();
+                return !IsInterruptReady(nmi_pending, intr_pending);
+            }
+
             return true;
         }
     }

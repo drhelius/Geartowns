@@ -226,7 +226,8 @@ static const char* const kMcpExecutionTools[] =
 static const char* const kMcpBreakpointTools[] =
 {
     "set_breakpoint", "set_breakpoint_range", "remove_breakpoint", "list_breakpoints", "set_breakpoint_on_interrupt",
-    "clear_breakpoint_on_interrupt", "list_breakpoints_on_interrupt"
+    "clear_breakpoint_on_interrupt", "list_breakpoints_on_interrupt", "set_breakpoint_on_irq", "clear_breakpoint_on_irq",
+    "list_breakpoints_on_irq"
 };
 
 static const char* const kMcpMemoryTools[] =

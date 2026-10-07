@@ -57,6 +57,7 @@ public:
         bool step_over;
         bool stop_on_breakpoint;
         bool stop_on_run_to_breakpoint;
+        bool skip_interrupts_on_step;
         bool stopped;
         bool breakpoint_hit;
     };
@@ -178,6 +179,7 @@ private:
     GT_Machine_Config m_pending_machine_config;
     bool m_powered;
     bool m_paused;
+    bool m_skip_interrupts;
     GT_Pixel_Format m_pixel_format;
 
     u8* m_frame_buffer;

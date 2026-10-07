@@ -585,6 +585,39 @@ json DebugAdapter::ListInterruptBreakpoints()
     return {{"interrupt_breakpoints", list}, {"count", list.size()}};
 }
 
+json DebugAdapter::SetIRQBreakpoint(int irq)
+{
+    if (irq < 0 || irq > 15)
+        return {{"error", "irq must be 0-15"}};
+
+    m_core->GetI386()->SetIRQBreakpoint(irq, true);
+    return {{"success", true}, {"irq", irq}, {"irq_name", k_debug_irq_sources[irq]}};
+}
+
+json DebugAdapter::ClearIRQBreakpoint(int irq)
+{
+    if (irq < 0 || irq > 15)
+        return {{"error", "irq must be 0-15"}};
+
+    bool removed = m_core->GetI386()->IsIRQBreakpoint(irq);
+    m_core->GetI386()->SetIRQBreakpoint(irq, false);
+    return {{"success", true}, {"removed", removed}, {"irq", irq}};
+}
+
+json DebugAdapter::ListIRQBreakpoints()
+{
+    json list = json::array();
+
+    for (int i = 0; i < 16; i++)
+    {
+        if (m_core->GetI386()->IsIRQBreakpoint(i))
+            list.push_back({{"irq", i}, {"irq_name", k_debug_irq_sources[i]},
+                {"enabled", m_core->GetI386()->IsIRQBreakpointEnabled(i)}});
+    }
+
+    return {{"irq_breakpoints", list}, {"count", list.size()}};
+}
+
 json DebugAdapter::GetBreakpointHit()
 {
     I386_Breakpoint_Hit hit;
@@ -599,6 +632,13 @@ json DebugAdapter::GetBreakpointHit()
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
         json result = {{"kind", "interrupt"}, {"vector", hex_text(hit.vector, 2)}, {"vector_name", name},
             {"source", k_mcp_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]}};
+
+        if (hit.line < 16)
+        {
+            result["irq"] = hit.line;
+            result["irq_name"] = k_debug_irq_sources[hit.line];
+        }
+
         const char* function = hit.source == I386_INTERRUPT_SOFTWARE ?
             gui_debug_i386_interrupt_function(hit.vector, hit.ax) : NULL;
 

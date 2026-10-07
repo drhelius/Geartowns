@@ -1084,6 +1084,8 @@ void I386::ResetBreakpoints()
 {
     m_breakpoints.clear();
     m_interrupt_breakpoints.clear();
+    m_irq_breakpoints = 0;
+    m_irq_breakpoints_disabled = 0;
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
@@ -1234,6 +1236,66 @@ std::vector<I386_Interrupt_Breakpoint>* I386::GetInterruptBreakpoints()
     return &m_interrupt_breakpoints;
 }
 
+// IRQ breakpoints follow the line the PIC acknowledges, so they survive a change of the vector bases
+// A line can be set and disabled, like the other breakpoints
+void I386::SetIRQBreakpoint(int line, bool set)
+{
+    if (line < 0 || line > 15)
+        return;
+
+    u16 bit = (u16)(1U << line);
+
+    if (set)
+        m_irq_breakpoints |= bit;
+    else
+        m_irq_breakpoints &= (u16)~bit;
+
+    m_irq_breakpoints_disabled &= (u16)~bit;
+    EnableDebuggerChecks(m_debugger_checks);
+}
+
+void I386::EnableIRQBreakpoint(int line, bool enabled)
+{
+    if (!IsIRQBreakpoint(line))
+        return;
+
+    u16 bit = (u16)(1U << line);
+
+    if (enabled)
+        m_irq_breakpoints_disabled &= (u16)~bit;
+    else
+        m_irq_breakpoints_disabled |= bit;
+
+    EnableDebuggerChecks(m_debugger_checks);
+}
+
+bool I386::IsIRQBreakpoint(int line) const
+{
+    return line >= 0 && line <= 15 && (m_irq_breakpoints & (1U << line)) != 0;
+}
+
+bool I386::IsIRQBreakpointEnabled(int line) const
+{
+    return IsIRQBreakpoint(line) && (m_irq_breakpoints_disabled & (1U << line)) == 0;
+}
+
+u16 I386::GetIRQBreakpoints() const
+{
+    return m_irq_breakpoints;
+}
+
+u16 I386::GetDisabledIRQBreakpoints() const
+{
+    return m_irq_breakpoints_disabled;
+}
+
+void I386::SetIRQBreakpoints(u16 lines, u16 disabled)
+{
+    m_irq_breakpoints = lines;
+    m_irq_breakpoints_disabled = disabled & lines;
+    EnableDebuggerChecks(m_debugger_checks);
+}
+
 // The debugger run loop enables the access checks each frame, so enable toggles from the GUI apply on the next one
 // Without enabled data, I/O or interrupt breakpoints every check stays off and memory keeps its fast paths
 void I386::EnableDebuggerChecks(bool enable)
@@ -1269,6 +1331,9 @@ void I386::EnableDebuggerChecks(bool enable)
         if (m_interrupt_breakpoints[i].enabled)
             m_debugger_interrupt_checks = true;
     }
+
+    if ((m_irq_breakpoints & ~m_irq_breakpoints_disabled) != 0)
+        m_debugger_interrupt_checks = true;
 }
 
 bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
@@ -1315,6 +1380,7 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
             m_breakpoint_hit_info.space = I386_BREAKPOINT_LINEAR;
             m_breakpoint_hit_info.address = address;
             m_breakpoint_hit_info.size = 1;
+            m_breakpoint_hit_info.line = 0xFF;
             return true;
         }
     }
@@ -1333,6 +1399,12 @@ bool I386::AcceptDebuggerHit()
     m_run_to_hit = false;
     m_breakpoint_hit_address = GetCurrentLinearPC();
     return true;
+}
+
+// With breakpoints disabled a data, I/O or interrupt hit doesn't stop the debugger
+void I386::DiscardDebuggerHit()
+{
+    m_debugger_hit_pending = false;
 }
 
 bool I386::GetBreakpointHitAddress(u32& address) const
@@ -1358,7 +1430,7 @@ bool I386::RunToBreakpointHit() const
     return m_breakpoint_hit && m_run_to_hit;
 }
 
-void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source)
+void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source, u8 line)
 {
     if (m_debugger_hit_pending)
         return;
@@ -1371,6 +1443,7 @@ void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32
     m_breakpoint_hit_info.size = size;
     m_breakpoint_hit_info.vector = vector;
     m_breakpoint_hit_info.source = source;
+    m_breakpoint_hit_info.line = line;
     m_breakpoint_hit_info.ax = m_state.registers[I386_REG_EAX].low;
 }
 
@@ -1448,6 +1521,7 @@ void I386::RecordDebuggerIO(u16 port, u32 value, u32 size, bool write)
 void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 from, bool has_error_code, u32 error_code)
 {
     u8 source = software ? I386_INTERRUPT_SOFTWARE : external ? I386_INTERRUPT_HARDWARE : I386_INTERRUPT_EXCEPTION;
+    u8 line = external && m_external_line >= 0 ? (u8)m_external_line : 0xFF;
 
     if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_INTERRUPT))
     {
@@ -1457,7 +1531,7 @@ void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 
         entry->interrupt.error_code = error_code;
         entry->interrupt.vector = vector;
         entry->interrupt.source = source;
-        entry->interrupt.line = 0xFF;
+        entry->interrupt.line = line;
         entry->interrupt.has_error_code = has_error_code ? 1 : 0;
         entry->interrupt.ax = m_state.registers[I386_REG_EAX].low;
     }
@@ -1469,10 +1543,13 @@ void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 
         if (breakpoint.enabled && breakpoint.vector == vector &&
             (breakpoint.source == I386_INTERRUPT_ANY || breakpoint.source == source))
         {
-            RecordDebuggerHit(true, 0, 0, vector, 0, vector, source);
+            RecordDebuggerHit(true, 0, 0, vector, 0, vector, source, line);
             return;
         }
     }
+
+    if (line != 0xFF && IsIRQBreakpointEnabled(line))
+        RecordDebuggerHit(true, 0, 0, vector, 0, vector, source, line);
 }
 
 const std::vector<I386_CallStackEntry>& I386::GetDisassemblerCallStack() const

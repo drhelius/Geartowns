@@ -129,12 +129,13 @@ Use breakpoints to stop execution at points of interest:
 | I/O port | `set_breakpoint` (space: io) | Stop on IN/OUT/INS/OUTS to a port |
 | Range | `set_breakpoint_range` | Cover an address range (same type and space) |
 | Interrupt | `set_breakpoint_on_interrupt` | Stop on entry to an interrupt vector (0-255) |
+| IRQ | `set_breakpoint_on_irq` | Stop when the PIC delivers an IRQ line (0-15), whatever its vector |
 
 Breakpoints support three address spaces (`space`): `linear` (default), `physical` and `io`. Execute breakpoints are linear only. Interrupt breakpoints take a `source` (`any`, `exception`, `hardware`, `software`) and stop before the handler's first instruction.
 
 **Important**: Read, write and access breakpoints stop *after* the instruction that made the memory access, so the PC is at the following instruction. Execute breakpoints stop before the instruction runs. `debug_get_status` reports in `breakpoint` what stopped execution (kind, space, address, size, or the vector and source of an interrupt).
 
-Manage breakpoints with `list_breakpoints`, `remove_breakpoint`, `list_breakpoints_on_interrupt`, `clear_breakpoint_on_interrupt`.
+Manage breakpoints with `list_breakpoints`, `remove_breakpoint`, `list_breakpoints_on_interrupt`, `clear_breakpoint_on_interrupt`, `list_breakpoints_on_irq`, `clear_breakpoint_on_irq`.
 
 ### 4. Step Through Code
 
@@ -239,7 +240,7 @@ Use screenshots after stepping or continuing to see the visual impact of changes
 ### Finding an Interrupt Handler
 
 1. `get_pic_status` to read the vectors programmed into the master and slave PICs (the FM Towns BIOS uses 40h-47h and 48h-4Fh; IRQ11 is VSYNC, IRQ9 is the CD-ROM, IRQ6 is the floppy)
-2. `set_breakpoint_on_interrupt` with that `vector` (`source`: `hardware`), or read the handler address with `get_i386_descriptors` (`table: idt`) and set an execution breakpoint there
+2. `set_breakpoint_on_irq` with the IRQ line (it follows the line whatever vector the PIC uses), or `set_breakpoint_on_interrupt` with that `vector` (`source`: `hardware`), or read the handler address with `get_i386_descriptors` (`table: idt`) and set an execution breakpoint there
 3. `debug_continue` to run until the IRQ fires
 4. `get_i386_status` + `get_disassembly` to see the handler code
 5. `get_call_stack` to see how deep you are

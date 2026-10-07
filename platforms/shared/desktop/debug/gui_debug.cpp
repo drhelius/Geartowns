@@ -222,6 +222,11 @@ void gui_debug_save_settings(const char* file_path)
         file.write((const char*)&breakpoint, sizeof(breakpoint));
     }
 
+    u16 irq_breakpoints = emu_get_core()->GetI386()->GetIRQBreakpoints();
+    u16 irq_breakpoints_disabled = emu_get_core()->GetI386()->GetDisabledIRQBreakpoints();
+    file.write((const char*)&irq_breakpoints, sizeof(irq_breakpoints));
+    file.write((const char*)&irq_breakpoints_disabled, sizeof(irq_breakpoints_disabled));
+
     std::vector<DisassemblerBookmark>* bookmarks = gui_debug_get_disassembler_bookmarks();
     int bookmark_count = (int)bookmarks->size();
     file.write((const char*)&bookmark_count, sizeof(bookmark_count));
@@ -251,6 +256,8 @@ void gui_debug_load_settings(const char* file_path)
     int breakpoint_count = 0;
     int interrupt_count = 0;
     int bookmark_count = 0;
+    u16 irq_breakpoints = 0;
+    u16 irq_breakpoints_disabled = 0;
     std::vector<I386_Breakpoint> breakpoints;
     std::vector<I386_Interrupt_Breakpoint> interrupts;
     std::vector<DisassemblerBookmark> bookmarks;
@@ -282,6 +289,9 @@ void gui_debug_load_settings(const char* file_path)
         }
     }
 
+    valid = valid && read_settings_data(file, &irq_breakpoints, sizeof(irq_breakpoints)) &&
+        read_settings_data(file, &irq_breakpoints_disabled, sizeof(irq_breakpoints_disabled));
+
     valid = valid && read_settings_count(file, bookmark_count, sizeof(DisassemblerBookmark));
 
     if (valid)
@@ -306,6 +316,7 @@ void gui_debug_load_settings(const char* file_path)
 
     *emu_get_core()->GetI386()->GetBreakpoints() = breakpoints;
     *emu_get_core()->GetI386()->GetInterruptBreakpoints() = interrupts;
+    emu_get_core()->GetI386()->SetIRQBreakpoints(irq_breakpoints, irq_breakpoints_disabled);
     *gui_debug_get_disassembler_bookmarks() = bookmarks;
 
     Log("Debug settings loaded from: %s", file_path);

@@ -363,6 +363,7 @@ struct I386_Breakpoint_Hit
     u32 size;
     u8 vector;
     u8 source;
+    u8 line;
     u16 ax;
 };
 
@@ -400,7 +401,7 @@ public:
 
     bool CanAcceptMaskableInterrupt() const;
     bool CanAcceptNMI() const;
-    u32 EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context);
+    u32 EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int line = -1);
     u32 EnterNMI(GT_Bus_Access_Context& context);
 
     I386_State* GetState();
@@ -452,10 +453,18 @@ public:
     bool AddInterruptBreakpoint(u8 vector, u8 source);
     bool RemoveInterruptBreakpoint(u8 vector, u8 source);
     std::vector<I386_Interrupt_Breakpoint>* GetInterruptBreakpoints();
+    void SetIRQBreakpoint(int line, bool set);
+    void EnableIRQBreakpoint(int line, bool enabled);
+    bool IsIRQBreakpoint(int line) const;
+    bool IsIRQBreakpointEnabled(int line) const;
+    u16 GetIRQBreakpoints() const;
+    u16 GetDisabledIRQBreakpoints() const;
+    void SetIRQBreakpoints(u16 lines, u16 disabled);
     void EnableDebuggerChecks(bool enable);
     bool CheckDebuggerBreakpoints(bool regular, bool run_to);
     bool IsDebuggerHitPending() const;
     bool AcceptDebuggerHit();
+    void DiscardDebuggerHit();
     bool GetBreakpointHitAddress(u32& address) const;
     bool GetBreakpointHit(I386_Breakpoint_Hit& hit) const;
     bool RunToBreakpointHit() const;
@@ -814,7 +823,8 @@ private:
     void RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 from, bool has_error_code, u32 error_code);
     void TraceInstruction();
     NO_INLINE void TraceStep(I386_State& before);
-    void RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source);
+    void RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source,
+        u8 line = 0xFF);
 
     bool DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 eip, I386_Decode_State& state);
     void DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int count, int depth, int& branch_budget);
@@ -1112,6 +1122,9 @@ private:
     I386_Disassembler_Record** m_disassembler_cache;
     std::vector<I386_Breakpoint> m_breakpoints;
     std::vector<I386_Interrupt_Breakpoint> m_interrupt_breakpoints;
+    u16 m_irq_breakpoints;
+    u16 m_irq_breakpoints_disabled;
+    int m_external_line;
     std::vector<I386_CallStackEntry> m_disassembler_call_stack;
     I386_Breakpoint_Hit m_breakpoint_hit_info;
     bool m_debugger_checks;

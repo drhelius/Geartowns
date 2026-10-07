@@ -430,8 +430,11 @@ With `output` set to `disk` entries are also streamed to a text file. `output_pa
 - `set_breakpoint_on_interrupt` - Break on entry to an interrupt `vector` (0-255), before the handler's first instruction; `source`: `any` (default), `exception`, `hardware` or `software`
 - `clear_breakpoint_on_interrupt` - Remove an interrupt breakpoint by `vector` and `source`
 - `list_breakpoints_on_interrupt` - List interrupt breakpoints with vector names and sources
+- `set_breakpoint_on_irq` - Break when the PIC delivers IRQ line `irq` (0-15), before the handler's first instruction. It follows the line, not the vector, so it keeps working if the program moves the PIC vector bases
+- `clear_breakpoint_on_irq` - Remove the breakpoint on an IRQ line
+- `list_breakpoints_on_irq` - List the IRQ lines with a breakpoint, their sources and enabled state
 
-`debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access, or the vector and source of the interrupt, plus `function` when a software interrupt calls a known BIOS or DOS service.
+`debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access, or the vector and source of the interrupt, plus `irq` and `irq_name` for a hardware interrupt and `function` when a software interrupt calls a known BIOS or DOS service.
 
 ### System Hardware
 - `get_pic_status` - Get both 8259A PICs: per-IRQ source, input level, request, in-service, mask and vector; ICW1-ICW4 decoded, init state, read register, special mask, poll and priority

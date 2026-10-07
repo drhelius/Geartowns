@@ -38,6 +38,7 @@ public:
     void SetTraceLogger(TraceLogger* trace_logger);
     bool IsInterruptPending() const;
     u8 AcknowledgeInterrupt();
+    u8 AcknowledgeInterrupt(int& line);
     I8259* GetMaster();
     I8259* GetSlave();
     void SaveState(std::ostream& stream);

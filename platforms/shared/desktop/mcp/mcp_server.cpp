@@ -662,6 +662,52 @@ json McpServer::BuildToolList()
         }}
     });
 
+    json irq_properties = {
+        {"irq", {
+            {"type", "integer"},
+            {"minimum", 0},
+            {"maximum", 15},
+            {"description", "IRQ line 0-15 of the two 8259A PICs: 0 timer, 1 keyboard, 6 floppy, 9 CD-ROM, 11 VSYNC, 13 sound."}
+        }}
+    };
+
+    tools.push_back({
+        {"name", "set_breakpoint_on_irq"},
+        {"title", "Set Breakpoint On IRQ"},
+        {"description", "Break when the PIC delivers this IRQ line, before the handler's first instruction. Follows the line, "
+            "not the vector, so it keeps working if the program moves the PIC vector bases."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", irq_properties},
+            {"required", json::array({"irq"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "clear_breakpoint_on_irq"},
+        {"title", "Clear Breakpoint On IRQ"},
+        {"description", "Remove the breakpoint on an IRQ line."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", irq_properties},
+            {"required", json::array({"irq"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "list_breakpoints_on_irq"},
+        {"title", "List Breakpoints On IRQ"},
+        {"description", "List the IRQ lines with a breakpoint, their sources and enabled state."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
     // Memory tools
     tools.push_back({
         {"name", "list_memory_areas"},
@@ -2947,6 +2993,18 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "list_breakpoints_on_interrupt")
     {
         return m_debugAdapter.ListInterruptBreakpoints();
+    }
+    else if (normalizedTool == "set_breakpoint_on_irq")
+    {
+        return m_debugAdapter.SetIRQBreakpoint(arguments.value("irq", -1));
+    }
+    else if (normalizedTool == "clear_breakpoint_on_irq")
+    {
+        return m_debugAdapter.ClearIRQBreakpoint(arguments.value("irq", -1));
+    }
+    else if (normalizedTool == "list_breakpoints_on_irq")
+    {
+        return m_debugAdapter.ListIRQBreakpoints();
     }
     else if (normalizedTool == "list_breakpoints")
     {

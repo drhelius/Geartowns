@@ -258,6 +258,8 @@ void emu_update(void)
             debug_run.step_over = emu_debug_command == Debug_Command_StepOver;
             debug_run.stop_on_breakpoint = !emu_debug_disable_breakpoints;
             debug_run.stop_on_run_to_breakpoint = true;
+            debug_run.skip_interrupts_on_step = config_debug.step_skip_interrupts &&
+                emu_debug_command == Debug_Command_Step;
             debug_run.stopped = false;
             debug_run.breakpoint_hit = false;
 

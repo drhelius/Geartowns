@@ -79,6 +79,7 @@ GeartownsCore::GeartownsCore()
     m_pending_machine_config = m_machine_config;
     m_powered = false;
     m_paused = false;
+    m_skip_interrupts = false;
     m_pixel_format = GT_PIXEL_RGBA8888;
 }
 
@@ -275,6 +276,9 @@ void GeartownsCore::RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug)
     debug->stopped = false;
     debug->breakpoint_hit = false;
 
+    // A step with "skip IRQs" leaves pending IRQs for the next run instead of entering their handlers
+    m_skip_interrupts = debug->step_debugger && debug->skip_interrupts_on_step;
+
     while (!IsFrameDone(frame_start))
     {
         if (m_i386->CheckDebuggerBreakpoints(debug->stop_on_breakpoint, debug->stop_on_run_to_breakpoint))
@@ -301,11 +305,16 @@ void GeartownsCore::RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug)
 
         CompleteSlice(m_i386->GetStepInfo(), context, slice);
 
-        if (unlikely(m_i386->IsDebuggerHitPending()) && m_i386->AcceptDebuggerHit())
+        if (unlikely(m_i386->IsDebuggerHitPending()))
         {
-            debug->stopped = true;
-            debug->breakpoint_hit = true;
-            break;
+            if (!debug->stop_on_breakpoint)
+                m_i386->DiscardDebuggerHit();
+            else if (m_i386->AcceptDebuggerHit())
+            {
+                debug->stopped = true;
+                debug->breakpoint_hit = true;
+                break;
+            }
         }
 
         if (debug->step_debugger)
@@ -314,6 +323,8 @@ void GeartownsCore::RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug)
             break;
         }
     }
+
+    m_skip_interrupts = false;
 }
 
 void GeartownsCore::EndFrame(u64 frame_start, s16* sample_buffer, int* sample_count)
@@ -366,9 +377,11 @@ INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_A
 
     if (unlikely(m_system_control->IsCPUResetPending()))
         ResetCPU();
-    else if (m_pic->IsInterruptPending() && m_i386->CanAcceptMaskableInterrupt())
+    else if (m_pic->IsInterruptPending() && !m_skip_interrupts && m_i386->CanAcceptMaskableInterrupt())
     {
-        u32 interrupt_cycles = m_i386->EnterExternalInterrupt(m_pic->AcknowledgeInterrupt(), context);
+        int line = 0;
+        u8 vector = m_pic->AcknowledgeInterrupt(line);
+        u32 interrupt_cycles = m_i386->EnterExternalInterrupt(vector, context, line);
         m_scheduler->AddCycles(interrupt_cycles);
 
         if (m_scheduler->IsEventDue())

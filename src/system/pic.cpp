@@ -83,14 +83,26 @@ void PIC::Write(u16 port, u8 value)
 
 u8 PIC::AcknowledgeInterrupt()
 {
-    int line = m_master.Acknowledge();
+    int line = 0;
+    return AcknowledgeInterrupt(line);
+}
+
+// Also returns the IRQ line 0-15 that supplied the vector
+u8 PIC::AcknowledgeInterrupt(int& line)
+{
+    line = m_master.Acknowledge();
 
     // A default IR7 drives cascade address 7, so the slave supplies the vector without any service bit
     if (line < 0)
     {
         Debug("PIC: spurious interrupt acknowledge");
         line = k_pic_cascade_line;
-        return m_master.IsCascadeLine(line) ? m_slave.GetVector(7) : m_master.GetVector(line);
+
+        if (!m_master.IsCascadeLine(line))
+            return m_master.GetVector(line);
+
+        line = 8 + 7;
+        return m_slave.GetVector(7);
     }
 
     if (!m_master.IsCascadeLine(line))
@@ -105,6 +117,7 @@ u8 PIC::AcknowledgeInterrupt()
         slave_line = 7;
     }
 
+    line = 8 + slave_line;
     return m_slave.GetVector(slave_line);
 }
 

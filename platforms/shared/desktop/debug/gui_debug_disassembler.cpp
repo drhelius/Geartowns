@@ -66,6 +66,7 @@ static char new_breakpoint_buffer[20] = "";
 static char new_interrupt_buffer[4] = "";
 static int new_breakpoint_space = I386_BREAKPOINT_LINEAR;
 static int new_interrupt_source = I386_INTERRUPT_ANY;
+static int new_irq_line = 0;
 static bool new_breakpoint_read = false;
 static bool new_breakpoint_write = false;
 static bool new_breakpoint_execute = true;
@@ -79,10 +80,6 @@ static u32 decode_ahead_eip = 0;
 static u64 decode_ahead_memory_snapshot = 0;
 static int decode_ahead_count = 0;
 
-static bool noop_irq_breakpoints[8] = { };
-static bool noop_pause_on_brk = false;
-static int noop_brk_value = 0x42;
-static bool noop_brk_trigger_irq = false;
 
 static void disassembler_menu(void);
 static void draw_controls(void);
@@ -474,7 +471,6 @@ static void disassembler_menu(void)
         ImGui::Separator();
 
         ImGui::MenuItem("Skip IRQs on Step Into", NULL, &config_debug.step_skip_interrupts);
-        unavailable_tooltip();
 
         ImGui::Separator();
 
@@ -529,40 +525,19 @@ static void disassembler_menu(void)
 
         if (ImGui::BeginMenu("IRQs"))
         {
-            for (int i = 0; i < 8; i++)
-            {
-                char label[32];
+            I386* cpu = emu_get_core()->GetI386();
 
-                snprintf(label, sizeof(label), "Break on IRQ %d", i);
-                ImGui::MenuItem(label, NULL, &noop_irq_breakpoints[i]);
-                unavailable_tooltip();
+            for (int i = 0; i < 16; i++)
+            {
+                char label[40];
+                bool enabled = cpu->IsIRQBreakpointEnabled(i);
+
+                snprintf(label, sizeof(label), "Break on IRQ %d (%s)", i, k_debug_irq_sources[i]);
+
+                if (ImGui::MenuItem(label, NULL, enabled))
+                    cpu->SetIRQBreakpoint(i, !enabled);
             }
 
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("BRK #n"))
-        {
-            ImGui::MenuItem("Pause on BRK #n", NULL, &noop_pause_on_brk);
-            unavailable_tooltip();
-
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("#n");
-            ImGui::SameLine();
-            ImGui::PushItemWidth(80.0f);
-            ImGui::InputInt("##brk_value", &noop_brk_value, 1, 16,
-                ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
-            ImGui::PopItemWidth();
-
-            if (noop_brk_value < 0)
-                noop_brk_value = 0;
-            else if (noop_brk_value > 0xFF)
-                noop_brk_value = 0xFF;
-
-            unavailable_tooltip();
-
-            ImGui::MenuItem("Trigger IRQ", NULL, &noop_brk_trigger_irq);
-            unavailable_tooltip();
             ImGui::EndMenu();
         }
 
@@ -757,7 +732,9 @@ static void draw_breakpoints_content(void)
     ImGui::PushFont(gui_default_font);
     ImGui::TextColored(violet, " LAST HIT"); ImGui::SameLine();
 
-    if (cpu->GetBreakpointHit(hit) && hit.interrupt)
+    if (cpu->GetBreakpointHit(hit) && hit.interrupt && hit.line < 16)
+        ImGui::TextColored(yellow, "IRQ%d %s INT $%02X", hit.line, k_debug_irq_sources[hit.line], hit.vector);
+    else if (cpu->GetBreakpointHit(hit) && hit.interrupt)
     {
         char name[16];
         char description[64];
@@ -926,8 +903,33 @@ static void draw_breakpoints_content(void)
             new_interrupt_buffer[0] = 0;
     }
 
+    char irq_text[32];
+    snprintf(irq_text, sizeof(irq_text), "IRQ%d %s", new_irq_line, k_debug_irq_sources[new_irq_line]);
+    ImGui::PushItemWidth(145);
+
+    if (ImGui::BeginCombo("##irq_line", irq_text))
+    {
+        for (int i = 0; i < 16; i++)
+        {
+            snprintf(irq_text, sizeof(irq_text), "IRQ%d %s", i, k_debug_irq_sources[i]);
+
+            if (ImGui::Selectable(irq_text, i == new_irq_line))
+                new_irq_line = i;
+        }
+
+        ImGui::EndCombo();
+    }
+
+    ImGui::PopItemWidth();
+
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("IRQ line, whatever vector the PIC gives it");
+
+    if (ImGui::Button("Add##add_irq_button", ImVec2(85, 0)))
+        cpu->SetIRQBreakpoint(new_irq_line, true);
+
     ImGui::NextColumn();
-    ImGui::BeginChild("interrupt_breakpoint_list", ImVec2(0, 90), false);
+    ImGui::BeginChild("interrupt_breakpoint_list", ImVec2(0, 115), false);
     ImGui::PushFont(gui_default_font);
 
     std::vector<I386_Interrupt_Breakpoint>* interrupts = cpu->GetInterruptBreakpoints();
@@ -967,6 +969,42 @@ static void draw_breakpoints_content(void)
         cpu->RemoveInterruptBreakpoint(breakpoint.vector, breakpoint.source);
     }
 
+    int remove_irq = -1;
+
+    for (int line = 0; line < 16; line++)
+    {
+        if (!cpu->IsIRQBreakpoint(line))
+            continue;
+
+        char line_text[8];
+        snprintf(line_text, sizeof(line_text), "IRQ%d", line);
+
+        bool enabled = cpu->IsIRQBreakpointEnabled(line);
+
+        ImGui::PushID(line + 0x2000);
+
+        if (ImGui::SmallButton("X"))
+            remove_irq = line;
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton(enabled ? "-" : "+"))
+            cpu->EnableIRQBreakpoint(line, !enabled);
+
+        ImGui::SameLine();
+        ImGui::TextColored(enabled ? cyan : gray, "%-7s", line_text); ImGui::SameLine();
+        ImGui::TextColored(enabled ? orange : gray, "%-9s", k_debug_irq_sources[line]); ImGui::SameLine();
+        ImGui::TextColored(enabled ? violet : gray, "LINE");
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Breaks on this IRQ line whatever vector the PIC gives it");
+
+        ImGui::PopID();
+    }
+
+    if (remove_irq >= 0)
+        cpu->SetIRQBreakpoint(remove_irq, false);
+
     ImGui::PopFont();
     ImGui::EndChild();
     ImGui::Columns(1);
@@ -977,7 +1015,7 @@ void gui_debug_window_breakpoints(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(795, 26), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(520, 330), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(520, 360), ImGuiCond_FirstUseEver);
     ImGui::Begin("Breakpoints", &config_debug.show_breakpoints);
 
     draw_breakpoints_content();

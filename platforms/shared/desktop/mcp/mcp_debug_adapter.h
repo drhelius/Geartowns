@@ -67,6 +67,9 @@ public:
     json SetInterruptBreakpoint(int vector, const std::string& source);
     json ClearInterruptBreakpoint(int vector, const std::string& source);
     json ListInterruptBreakpoints();
+    json SetIRQBreakpoint(int irq);
+    json ClearIRQBreakpoint(int irq);
+    json ListIRQBreakpoints();
     json GetBreakpointHit();
 
     // Memory areas

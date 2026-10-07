@@ -70,6 +70,9 @@ I386::I386()
     m_debugger_io_checks = false;
     m_debugger_interrupt_checks = false;
     m_debugger_hit_pending = false;
+    m_irq_breakpoints = 0;
+    m_irq_breakpoints_disabled = 0;
+    m_external_line = -1;
     InitPointer(m_trace_logger);
     InitPointer(m_profiler);
     m_trace_internal = false;
@@ -450,7 +453,7 @@ bool I386::CanAcceptNMI() const
     return !m_state.shutdown && !m_state.nmi_blocked && m_state.interrupt_shadow != I386_SHADOW_MOV_SS;
 }
 
-u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context)
+u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int line)
 {
     SetBusContext(context);
     m_state.halted = false;
@@ -464,7 +467,12 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context)
 
     u64 clocks = k_i386_real_interrupt_entry_clocks;
 
-    if (EnterInterrupt(vector, m_state.eip, context, false, false, 0, false, true, &clocks))
+    // The debugger sees which IRQ line supplied the vector
+    m_external_line = line;
+    bool entered = EnterInterrupt(vector, m_state.eip, context, false, false, 0, false, true, &clocks);
+    m_external_line = -1;
+
+    if (entered)
         return clocks;
 
     if (m_exception.pending)

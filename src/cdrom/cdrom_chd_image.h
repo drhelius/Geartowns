@@ -45,7 +45,7 @@ private:
     bool InitHunkCache();
     void DestroyHunkCache();
     bool LoadHunk(u32 hunk_index);
-    GT_CdRomTrackType GetTrackType(const char* type_str);
+    bool GetTrackType(const char* type_str, GT_CdRomTrackType& type);
 
 private:
     chd_file* m_chd_file;

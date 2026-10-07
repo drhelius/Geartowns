@@ -883,9 +883,9 @@ bool I386::OPCodes0F_LAR_LSL()
     {
         u8 type = descriptor.type;
 
-        // LAR accepts gates too, LSL only the TSS and LDT descriptors
+        // LAR also accepts call and task gates, but not interrupt or trap gates, LSL only TSS and LDT descriptors
         if (opcode == 0x02)
-            valid = (type >= 1 && type <= 7) || type == 9 || type == 11 || type == 12 || type == 14 || type == 15;
+            valid = (type >= 1 && type <= 5) || type == 9 || type == 11 || type == 12;
         else
             valid = type == 1 || type == 2 || type == 3 || type == 9 || type == 11;
     }

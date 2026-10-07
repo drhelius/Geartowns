@@ -102,21 +102,23 @@ static unsigned input_device[MAX_PADS] = {
     RETRO_DEVICE_TOWNS_GAMEPAD
 };
 
-struct FloppySetImage
+struct DiskSetImage
 {
     std::string path;
-    int disk;
     std::string label;
+    int disk;
+    bool cdrom;
 };
 
 static GeartownsCore* core;
-static std::vector<FloppySetImage> floppy_images;
-static unsigned floppy_index = 0;
-static bool floppy_ejected = true;
+static std::vector<DiskSetImage> disk_images;
+static unsigned disk_index = 0;
+static bool disk_ejected = true;
+static int disk_ejected_entry = -1;
+static unsigned disk_initial_index = 0;
+static std::string disk_initial_path;
 static std::string floppy_working_path;
 static u32 floppy_base_crc = 0;
-static unsigned floppy_initial_index = 0;
-static std::string floppy_initial_path;
 static GT_Runtime_Info runtime_info;
 static const retro_vfs_interface* vfs_interface = NULL;
 
@@ -138,10 +140,13 @@ static bool path_is_cd_content(const char* path);
 static bool path_is_floppy_content(const char* path);
 static bool read_content_file(const char* path, std::vector<u8>& data);
 static bool write_content_file(const char* path, const u8* data, u32 size);
-static bool floppy_add_images(const char* path, std::vector<FloppySetImage>& images);
+static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images);
+static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images);
+static bool disk_insert(unsigned index);
+static bool disk_eject(unsigned index);
+static void disk_clear(void);
 static bool floppy_load_image(unsigned index);
 static bool floppy_flush(void);
-static void floppy_clear(void);
 static void register_disk_control(void);
 static bool disk_set_eject_state(bool ejected);
 static bool disk_get_eject_state(void);
@@ -422,22 +427,30 @@ bool retro_load_game(const struct retro_game_info *info)
 
     load_bios();
 
-    if (path_is_floppy_content(retro_game_path))
-    {
-        floppy_clear();
+    disk_clear();
 
-        if (!floppy_add_images(retro_game_path, floppy_images))
-            return false;
-
-        bool initial = floppy_initial_index < floppy_images.size() &&
-            floppy_images[floppy_initial_index].path == floppy_initial_path;
-        floppy_index = initial ? floppy_initial_index : 0;
-
-        if (!floppy_load_image(floppy_index))
-            return false;
-    }
-    else if (!core->LoadMedia(retro_game_path))
+    if (!disk_add_images(retro_game_path, disk_images))
         return false;
+
+    bool initial = disk_initial_index < disk_images.size() && disk_images[disk_initial_index].path == disk_initial_path;
+    disk_index = initial ? disk_initial_index : 0;
+
+
+    for (size_t i = 0; i < disk_images.size(); i++)
+    {
+        if (disk_images[i].cdrom != disk_images[disk_index].cdrom)
+        {
+            if (!disk_insert((unsigned)i))
+                return false;
+
+            break;
+        }
+    }
+
+    if (!disk_insert(disk_index))
+        return false;
+
+    disk_ejected = false;
 
     core->PowerOn();
 
@@ -471,7 +484,7 @@ void retro_unload_game(void)
         core->EjectMedia();
     }
 
-    floppy_clear();
+    disk_clear();
 
     retro_game_path[0] = 0;
     current_fps = 60.0f;
@@ -536,10 +549,12 @@ bool retro_unserialize(const void *data, size_t size)
         return false;
 
     FloppyDisk* disk = core->GetFloppy(0);
-    floppy_ejected = !disk->IsInserted();
 
     if (!disk->IsInserted() || disk->GetBaseCRC() != floppy_base_crc)
         floppy_working_path.clear();
+
+    if (disk_index < disk_images.size() && !disk_images[disk_index].cdrom)
+        disk_ejected = !disk->IsInserted();
 
     return true;
 }
@@ -1140,7 +1155,7 @@ static void check_variables(void)
 
 static bool path_is_floppy_content(const char* path)
 {
-    if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".m3u"))
+    if (FloppyImage::IsImageName(path))
         return true;
 
     if (!ends_with_no_case(path, ".zip"))
@@ -1217,46 +1232,63 @@ static bool write_content_file(const char* path, const u8* data, u32 size)
     return true;
 }
 
-// Every disk of a multi-disk image is one image, a playlist adds the disks of each listed file
-static bool floppy_add_images(const char* path, std::vector<FloppySetImage>& images)
+static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
+{
+    if (ends_with_no_case(path, ".m3u"))
+    {
+        std::vector<u8> data;
+        std::vector<std::string> entries;
+
+        if (!read_content_file(path, data) ||
+            !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries))
+            return false;
+
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (ends_with_no_case(entries[i].c_str(), ".m3u") || !disk_add_images(entries[i].c_str(), images))
+            {
+                log_cb(RETRO_LOG_ERROR, "Playlist entry is missing or not a disk image: %s\n", entries[i].c_str());
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    if (!path_is_cd_content(path) && path_is_floppy_content(path))
+        return disk_add_floppy_images(path, images);
+
+    if (!path_is_cdrom_uri(path))
+    {
+        MediaFile* file = MediaFile::OpenFile(path);
+
+        if (!IsValidPointer(file))
+            return false;
+
+        SafeDelete(file);
+    }
+
+    std::string label(path);
+    size_t separator = label.find_last_of("/\\");
+
+    if (separator != std::string::npos)
+        label = label.substr(separator + 1);
+
+    DiskSetImage image;
+    image.path = path;
+    image.label = label;
+    image.disk = 0;
+    image.cdrom = true;
+    images.push_back(image);
+    return true;
+}
+
+static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images)
 {
     std::vector<u8> data;
 
     if (!read_content_file(path, data))
         return false;
-
-    if (ends_with_no_case(path, ".m3u"))
-    {
-        std::string directory(path);
-        size_t separator = directory.find_last_of("/\\");
-        directory = separator == std::string::npos ? "" : directory.substr(0, separator + 1);
-        std::string text(data.begin(), data.end());
-        size_t position = 0;
-
-        while (position < text.size())
-        {
-            size_t end = text.find('\n', position);
-
-            if (end == std::string::npos)
-                end = text.size();
-
-            std::string line = text.substr(position, end - position);
-            position = end + 1;
-            size_t first = line.find_first_not_of(" \t\r\xEF\xBB\xBF");
-            size_t last = line.find_last_not_of(" \t\r");
-
-            if (first == std::string::npos || line[first] == '#')
-                continue;
-
-            line = line.substr(first, last - first + 1);
-            bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':');
-
-            if (!floppy_add_images((absolute ? line : directory + line).c_str(), images))
-                return false;
-        }
-
-        return !images.empty();
-    }
 
     if (ends_with_no_case(path, ".zip"))
     {
@@ -1279,10 +1311,11 @@ static bool floppy_add_images(const char* path, std::vector<FloppySetImage>& ima
 
     for (int i = 0; i < count; i++)
     {
-        FloppySetImage image;
+        DiskSetImage image;
         image.path = path;
         image.disk = i;
         image.label = file_name;
+        image.cdrom = false;
 
         if (count > 1)
         {
@@ -1297,13 +1330,49 @@ static bool floppy_add_images(const char* path, std::vector<FloppySetImage>& ima
     return count > 0;
 }
 
-// Changes live in a working copy in the saves folder, which loads in place of the original next time
-static bool floppy_load_image(unsigned index)
+static bool disk_insert(unsigned index)
 {
-    if (index >= floppy_images.size() || floppy_images[index].path.empty())
+    if (index >= disk_images.size() || disk_images[index].path.empty())
         return false;
 
-    const FloppySetImage& image = floppy_images[index];
+    if (disk_images[index].cdrom)
+        return core->LoadMedia(disk_images[index].path.c_str());
+
+    return floppy_flush() && floppy_load_image(index);
+}
+
+static bool disk_eject(unsigned index)
+{
+    if (index >= disk_images.size())
+        return true;
+
+    if (disk_images[index].cdrom)
+    {
+        core->EjectMedia();
+        return true;
+    }
+
+    if (!floppy_flush())
+        return false;
+
+    core->EjectFloppy(0);
+    floppy_working_path.clear();
+    return true;
+}
+
+static void disk_clear(void)
+{
+    disk_images.clear();
+    disk_index = 0;
+    disk_ejected = true;
+    disk_ejected_entry = -1;
+    floppy_working_path.clear();
+    floppy_base_crc = 0;
+}
+
+static bool floppy_load_image(unsigned index)
+{
+    const DiskSetImage& image = disk_images[index];
     std::vector<u8> file;
     u32 offset = 0;
     u32 size = 0;
@@ -1357,7 +1426,6 @@ static bool floppy_load_image(unsigned index)
 
     floppy_working_path = working;
     floppy_base_crc = base_crc;
-    floppy_ejected = false;
     return true;
 }
 
@@ -1377,16 +1445,6 @@ static bool floppy_flush(void)
     return true;
 }
 
-static void floppy_clear(void)
-{
-    floppy_images.clear();
-    floppy_index = 0;
-    floppy_ejected = true;
-    floppy_working_path.clear();
-    floppy_base_crc = 0;
-}
-
-// The frontend disk control swaps the disk in floppy drive 1, for floppy content and for a CD-ROM game's user disks
 static void register_disk_control(void)
 {
     struct retro_disk_control_ext_callback disk_control = {
@@ -1420,79 +1478,93 @@ static void register_disk_control(void)
 
 static bool disk_set_eject_state(bool ejected)
 {
-    if (!core || floppy_ejected == ejected)
+    if (!core || disk_ejected == ejected)
         return true;
 
     if (ejected)
     {
-        if (!floppy_flush())
+        if (!disk_eject(disk_index))
             return false;
 
-        core->EjectFloppy(0);
-        floppy_working_path.clear();
-        floppy_ejected = true;
+        disk_ejected_entry = (int)disk_index;
+        disk_ejected = true;
         return true;
     }
 
-    return floppy_index < floppy_images.size() && floppy_load_image(floppy_index);
+    if (!disk_insert(disk_index))
+        return false;
+
+    if (disk_ejected_entry >= 0 && disk_ejected_entry < (int)disk_images.size() &&
+        disk_images[disk_ejected_entry].cdrom != disk_images[disk_index].cdrom)
+        disk_insert((unsigned)disk_ejected_entry);
+
+    disk_ejected_entry = -1;
+    disk_ejected = false;
+    return true;
 }
 
 static bool disk_get_eject_state(void)
 {
-    return floppy_ejected;
+    return disk_ejected;
 }
 
 static unsigned disk_get_image_index(void)
 {
-    return floppy_index;
+    return disk_index;
 }
 
 static bool disk_set_image_index(unsigned index)
 {
-    if (!floppy_ejected || index > floppy_images.size())
+    if (!disk_ejected || index > disk_images.size())
         return false;
 
-    floppy_index = index;
+    disk_index = index;
     return true;
 }
 
 static unsigned disk_get_num_images(void)
 {
-    return (unsigned)floppy_images.size();
+    return (unsigned)disk_images.size();
 }
 
 static bool disk_replace_image_index(unsigned index, const struct retro_game_info* info)
 {
-    if (!floppy_ejected || index >= floppy_images.size())
+    if (!disk_ejected || index >= disk_images.size())
         return false;
 
     if (!info || !info->path)
     {
-        floppy_images.erase(floppy_images.begin() + index);
+        disk_images.erase(disk_images.begin() + index);
 
-        if (floppy_index >= floppy_images.size() && floppy_index > 0)
-            floppy_index--;
+        if (disk_ejected_entry == (int)index)
+            disk_ejected_entry = -1;
+        else if (disk_ejected_entry > (int)index)
+            disk_ejected_entry--;
+
+        if (disk_index >= disk_images.size() && disk_index > 0)
+            disk_index--;
 
         return true;
     }
 
-    std::vector<FloppySetImage> images;
+    std::vector<DiskSetImage> images;
 
-    if (!floppy_add_images(info->path, images))
+    if (!disk_add_images(info->path, images) || images.empty())
         return false;
 
-    floppy_images[index] = images[0];
+    disk_images[index] = images[0];
     return true;
 }
 
 static bool disk_add_image_index(void)
 {
-    if (!floppy_ejected)
+    if (!disk_ejected)
         return false;
 
-    FloppySetImage image;
+    DiskSetImage image;
     image.disk = 0;
-    floppy_images.push_back(image);
+    image.cdrom = false;
+    disk_images.push_back(image);
     return true;
 }
 
@@ -1501,25 +1573,26 @@ static bool disk_set_initial_image(unsigned index, const char* path)
     if (!path || !path[0])
         return false;
 
-    floppy_initial_index = index;
-    floppy_initial_path = path;
+    disk_initial_index = index;
+    disk_initial_path = path;
     return true;
 }
 
 static bool disk_get_image_path(unsigned index, char* path, size_t len)
 {
-    if (!path || len == 0 || index >= floppy_images.size() || floppy_images[index].path.empty())
+    if (!path || len == 0 || index >= disk_images.size() || disk_images[index].path.empty())
         return false;
 
-    snprintf(path, len, "%s", floppy_images[index].path.c_str());
+    snprintf(path, len, "%s", disk_images[index].path.c_str());
     return true;
 }
 
 static bool disk_get_image_label(unsigned index, char* label, size_t len)
 {
-    if (!label || len == 0 || index >= floppy_images.size())
+    if (!label || len == 0 || index >= disk_images.size())
         return false;
 
-    snprintf(label, len, "%s", floppy_images[index].label.empty() ? "Floppy disk" : floppy_images[index].label.c_str());
+    const DiskSetImage& image = disk_images[index];
+    snprintf(label, len, "%s", !image.label.empty() ? image.label.c_str() : image.cdrom ? "CD-ROM" : "Floppy disk");
     return true;
 }

@@ -20,6 +20,7 @@
 #ifndef MEDIA_H
 #define MEDIA_H
 
+#include <vector>
 #include "../common/common.h"
 
 class CdRomMedia;
@@ -46,6 +47,7 @@ public:
     ~Media();
     void Init();
     void Reset();
+    static bool ParsePlaylist(const char* playlist_path, const char* text, size_t size, std::vector<std::string>& entries);
     bool LoadMedia(const char* file_path);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     bool LoadPhysicalCdRom(const char* device_id);

@@ -57,6 +57,7 @@ static void show_status_message(void);
 static void show_error_window(void);
 static void show_loading_popup(void);
 static bool finish_loading_rom(void);
+static void start_loading_rom(const char* path, const char* symbol_path);
 static void update_window_visibility_padding(void);
 static ImVec2 snap_to_physical_pixel(const ImVec2& pos);
 static void set_style(void);
@@ -362,11 +363,11 @@ bool gui_load_rom(const char* path, const char* symbol_path)
     if (loading_rom_active)
         return false;
 
+    GeartownsCore* core = emu_get_core();
+    int drives = emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives : core->GetMachineConfig().floppy_drives;
+
     if (emu_floppy_is_image(path))
     {
-        GeartownsCore* core = emu_get_core();
-        int drives = emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives : core->GetMachineConfig().floppy_drives;
-
         if (drives == 0)
         {
             gui_set_error_message("This machine has no floppy drive.");
@@ -377,9 +378,50 @@ bool gui_load_rom(const char* path, const char* symbol_path)
         return true;
     }
 
+    const char* media_path = path;
+
+    if (ends_with_no_case(path, ".m3u"))
+    {
+        bool floppies = false;
+
+        if (!emu_cdrom_playlist_load(path, &floppies))
+        {
+            std::string message("Error loading playlist:\n");
+            message += path;
+            gui_set_error_message(message.c_str());
+            return false;
+        }
+
+        if (floppies && (drives > 0))
+            gui_floppy_insert(0, path);
+
+        media_path = emu_cdrom_playlist_get_path(0);
+        emu_cdrom_playlist_select(media_path);
+    }
+    else if (!emu_cdrom_playlist_select(path))
+        emu_cdrom_playlist_clear();
+
+    config_push_recent_media(path);
+    start_loading_rom(media_path, symbol_path);
+    return true;
+}
+
+bool gui_load_playlist_disc(int index)
+{
+    const char* path = emu_cdrom_playlist_get_path(index);
+
+    if (loading_rom_active || !IsValidPointer(path))
+        return false;
+
+    emu_cdrom_playlist_select(path);
+    start_loading_rom(path, NULL);
+    return true;
+}
+
+static void start_loading_rom(const char* path, const char* symbol_path)
+{
     loading_physical_cdrom = false;
     gui_debug_auto_save_settings();
-    config_push_recent_media(path);
     emu_resume();
 
     strncpy(loading_rom_path, path, sizeof(loading_rom_path) - 1);
@@ -396,8 +438,6 @@ bool gui_load_rom(const char* path, const char* symbol_path)
     loading_rom_active = true;
 
     emu_load_media_async(path);
-
-    return true;
 }
 
 void gui_load_physical_cdrom(const char* device_id)
@@ -410,6 +450,7 @@ void gui_load_physical_cdrom(const char* device_id)
     }
 
     Log("Starting physical CD-ROM load from %s", device_id);
+    emu_cdrom_playlist_clear();
     loading_physical_cdrom = true;
     gui_debug_auto_save_settings();
     emu_resume();

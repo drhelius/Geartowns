@@ -22,10 +22,14 @@
 
 #include <SDL3/SDL.h>
 #include <atomic>
+#include <fstream>
+#include <iterator>
 #include <math.h>
 #include <new>
 #include <string.h>
+#include <string>
 #include <thread>
+#include <vector>
 #include "config.h"
 #include "emu_floppy.h"
 #include "events.h"
@@ -73,6 +77,8 @@ static bool loading_thread_active = false;
 static bool loading_result = false;
 static char loading_file_path[GT_MAX_PATH] = { };
 static Loading_Request_Type loading_request_type = Loading_Request_File;
+static std::vector<std::string> cdrom_playlist;
+static int cdrom_playlist_index = -1;
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
@@ -523,6 +529,88 @@ void emu_reset(void)
     geartowns->ResetMedia();
     emu_floppy_check_drives();
     reset_run_state();
+}
+
+bool emu_cdrom_playlist_load(const char* path, bool* floppies)
+{
+    emu_cdrom_playlist_clear();
+
+    std::ifstream file;
+    open_ifstream_utf8(file, path, std::ios::in | std::ios::binary);
+
+    if (!file.is_open())
+        return false;
+
+    std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::vector<std::string> entries;
+
+    if (!Media::ParsePlaylist(path, text.c_str(), text.size(), entries))
+        return false;
+
+    bool others = false;
+
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        if (ends_with_no_case(entries[i].c_str(), ".m3u") || emu_floppy_is_image(entries[i].c_str()))
+            others = true;
+        else
+            cdrom_playlist.push_back(entries[i]);
+    }
+
+    if (IsValidPointer(floppies))
+        *floppies = others;
+
+    return !cdrom_playlist.empty();
+}
+
+void emu_cdrom_playlist_clear(void)
+{
+    cdrom_playlist.clear();
+    cdrom_playlist_index = -1;
+}
+
+bool emu_cdrom_playlist_select(const char* path)
+{
+    for (size_t i = 0; i < cdrom_playlist.size(); i++)
+    {
+        if (cdrom_playlist[i] == path)
+        {
+            cdrom_playlist_index = (int)i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+int emu_cdrom_playlist_get_count(void)
+{
+    return (int)cdrom_playlist.size();
+}
+
+int emu_cdrom_playlist_get_index(void)
+{
+    return cdrom_playlist_index;
+}
+
+const char* emu_cdrom_playlist_get_path(int index)
+{
+    return (index >= 0) && (index < (int)cdrom_playlist.size()) ? cdrom_playlist[index].c_str() : NULL;
+}
+
+const char* emu_cdrom_playlist_get_name(int index)
+{
+    const char* path = emu_cdrom_playlist_get_path(index);
+
+    if (!IsValidPointer(path))
+        return NULL;
+
+    const char* name = path + strlen(path);
+
+    while ((name > path) && (name[-1] != '/') && (name[-1] != '\\'))
+        name--;
+
+    return name;
 }
 
 bool emu_eject_media(void)

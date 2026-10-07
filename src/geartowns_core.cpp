@@ -655,6 +655,11 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
         G_SERIALIZE(serializer, base_crc);
     }
 
+    bool cdrom_inserted = m_media->IsReady();
+    u32 cdrom_crc = m_media->GetCRC();
+    G_SERIALIZE(serializer, cdrom_inserted);
+    G_SERIALIZE(serializer, cdrom_crc);
+
     m_scheduler->SaveState(stream);
     m_memory->SaveState(stream);
     m_i386->SaveState(stream);
@@ -911,6 +916,17 @@ bool GeartownsCore::LoadState(std::istream& stream)
             Error("Save state is for another disk in floppy drive %d", i + 1);
             return false;
         }
+    }
+
+    bool cdrom_inserted = false;
+    u32 cdrom_crc = 0;
+    G_SERIALIZE(serializer, cdrom_inserted);
+    G_SERIALIZE(serializer, cdrom_crc);
+
+    if (cdrom_inserted && m_media->IsReady() && cdrom_crc != m_media->GetCRC())
+    {
+        Error("Save state is for another CD-ROM disc");
+        return false;
     }
 
     m_scheduler->LoadState(stream);

@@ -83,7 +83,7 @@ void gui_file_dialog_open_rom(void)
         return;
 
     SDL_DialogFileFilter filters[] = {
-        { "CD-ROM Images", "cue;chd;iso;zip" }
+        { "CD-ROM Images", "cue;chd;iso;zip;m3u" }
     };
     const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
     SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_OpenMedia, application_sdl_window,

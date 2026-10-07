@@ -51,6 +51,42 @@ void Media::Reset()
     m_cdrom_media->Reset();
 }
 
+bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t size, std::vector<std::string>& entries)
+{
+    entries.clear();
+
+    if (!IsValidPointer(playlist_path) || !IsValidPointer(text))
+        return false;
+
+    std::string directory(playlist_path);
+    size_t separator = directory.find_last_of("/\\");
+    directory = separator == std::string::npos ? "" : directory.substr(0, separator + 1);
+    std::string content(text, size);
+    size_t position = 0;
+
+    while (position < content.size())
+    {
+        size_t end = content.find('\n', position);
+
+        if (end == std::string::npos)
+            end = content.size();
+
+        std::string line = content.substr(position, end - position);
+        position = end + 1;
+        size_t first = line.find_first_not_of(" \t\r\xEF\xBB\xBF");
+        size_t last = line.find_last_not_of(" \t\r");
+
+        if (first == std::string::npos || line[first] == '#')
+            continue;
+
+        line = line.substr(first, last - first + 1);
+        bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':');
+        entries.push_back(absolute ? line : directory + line);
+    }
+
+    return !entries.empty();
+}
+
 bool Media::LoadMedia(const char* file_path)
 {
     if (!IsValidPointer(file_path) || file_path[0] == '\0')

@@ -56,6 +56,7 @@ static Floppy_Host hosts[config_floppy_drives];
 static bool valid_drive(int drive);
 static void clear_host(int drive);
 static bool read_file(const char* path, std::vector<u8>& data);
+static bool read_playlist(const char* path, std::vector<std::string>& entries);
 static bool load_source(const char* path, std::vector<u8>& data);
 static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries);
 static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entries);
@@ -71,14 +72,29 @@ void emu_floppy_init(void)
         clear_host(i);
 }
 
-// Playlists and ZIP files count when they hold floppy images, a ZIP with a CD-ROM stays a CD-ROM
 bool emu_floppy_is_image(const char* path)
 {
     if (!IsValidPointer(path))
         return false;
 
-    if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".m3u"))
+    if (FloppyImage::IsImageName(path))
         return true;
+
+    if (ends_with_no_case(path, ".m3u"))
+    {
+        std::vector<std::string> entries;
+
+        if (!read_playlist(path, entries))
+            return true;
+
+        for (size_t i = 0; i < entries.size(); i++)
+        {
+            if (!ends_with_no_case(entries[i].c_str(), ".m3u") && !emu_floppy_is_image(entries[i].c_str()))
+                return false;
+        }
+
+        return true;
+    }
 
     if (!ends_with_no_case(path, ".zip"))
         return false;
@@ -381,6 +397,13 @@ static void clear_host(int drive)
     host.entry = 0;
 }
 
+static bool read_playlist(const char* path, std::vector<std::string>& entries)
+{
+    std::vector<u8> data;
+    return read_file(path, data) &&
+        Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries);
+}
+
 static bool read_file(const char* path, std::vector<u8>& data)
 {
     std::ifstream file;
@@ -433,30 +456,21 @@ static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries)
     if (!ends_with_no_case(path, ".m3u"))
         return add_file_entries(path, entries);
 
-    std::ifstream file;
-    open_ifstream_utf8(file, path, std::ios::in);
+    std::vector<std::string> paths;
 
-    if (!file.is_open())
+    if (!read_playlist(path, paths))
         return false;
 
-    char directory[GT_MAX_PATH];
-    get_directory(path, directory, sizeof(directory));
-    std::string line;
-
-    while (std::getline(file, line))
+    for (size_t i = 0; i < paths.size(); i++)
     {
-        size_t start = line.find_first_not_of(" \t\r\xEF\xBB\xBF");
-        size_t end = line.find_last_not_of(" \t\r");
+        const char* entry = paths[i].c_str();
 
-        if (start == std::string::npos || line[start] == '#')
+        if (!ends_with_no_case(entry, ".m3u") && !emu_floppy_is_image(entry))
             continue;
 
-        char resolved[GT_MAX_PATH];
-
-        if (!join_path(directory, line.substr(start, end - start + 1).c_str(), resolved, sizeof(resolved)) ||
-            ends_with_no_case(resolved, ".m3u") || !add_file_entries(resolved, entries))
+        if (ends_with_no_case(entry, ".m3u") || !add_file_entries(entry, entries))
         {
-            Error("Playlist entry is missing or not a floppy image: %s", resolved);
+            Error("Playlist entry is missing or not a floppy image: %s", entry);
             return false;
         }
     }

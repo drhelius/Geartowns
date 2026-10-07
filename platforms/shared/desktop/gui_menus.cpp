@@ -399,6 +399,25 @@ static void menu_cdrom(void)
         gui_action_eject_media();
     }
 
+    int discs = emu_cdrom_playlist_get_count();
+
+    if ((discs > 0) && ImGui::BeginMenu("Disc in Playlist", !loading))
+    {
+        int selected = inserted ? emu_cdrom_playlist_get_index() : -1;
+
+        for (int i = 0; i < discs; i++)
+        {
+            ImGui::PushID(i);
+
+            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i), NULL, i == selected) && (i != selected))
+                gui_load_playlist_disc(i);
+
+            ImGui::PopID();
+        }
+
+        ImGui::EndMenu();
+    }
+
     ImGui::Separator();
 
     if (ImGui::MenuItem("Preload CD-ROM in RAM", "", &config_emulator.preload_cdrom))

@@ -1199,13 +1199,6 @@ bool I386::OPCodes0F_LoadFarPointer()
         return false;
 
     SetRegister(m_instruction.reg, width, offset);
-
-    if (segment == I386_SEGMENT_SS)
-    {
-        m_state.interrupt_shadow = I386_SHADOW_MOV_SS;
-        m_state.interrupt_shadow_steps = 2;
-    }
-
     CommitEIP(m_instruction);
     return true;
 }

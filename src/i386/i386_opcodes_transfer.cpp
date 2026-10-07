@@ -245,16 +245,14 @@ bool I386::OPCodes_POPF()
     if (!StackPopSized(value, operand_width, *m_bus_context))
         return false;
 
-    u32 mask = operand_width == 32 ? 0x00014FD5U : 0x00004FD5U;
+    // POPFD writes only the low 16 bits too, so RF and VM never change
+    u32 mask = 0x00004FD5U;
 
     if (m_state.execution_mode == I386_MODE_REAL || m_state.current_privilege_level == 0)
         mask |= I386_FLAG_IOPL;
 
     if (m_state.execution_mode == I386_MODE_PROTECTED && m_state.current_privilege_level > GetIOPrivilegeLevel())
         mask &= ~I386_FLAG_IF;
-
-    if (operand_width == 16)
-        mask &= 0xFFFF;
 
     m_state.eflags = (m_state.eflags & ~mask) | (value & mask) | I386_FLAG_FIXED;
     CommitEIP(m_instruction);

@@ -168,7 +168,7 @@ void I386::Reset()
     m_state.eflags = I386_FLAG_FIXED;
     m_state.idtr.limit = 0x03FF;
 
-    m_state.cr0 = 0x00000010;
+    m_state.cr0 = 0;
     m_state.cr2 = 0;
     m_state.cr3 = 0;
 

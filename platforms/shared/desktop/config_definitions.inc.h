@@ -236,7 +236,6 @@ static inline void process(config_Operation operation)
     //**************************************
 
     CONFIG_BOOL("Input", "AllowUpDown", config_input.allow_up_down, false);
-    CONFIG_BOOL("Input", "CaptureMouse", config_emulator.capture_mouse, false);
     CONFIG_INT_RANGE("Input", "MouseSensitivity", config_emulator.mouse_sensitivity, 5, 1, 15);
 
     // Players
@@ -333,6 +332,7 @@ static inline void process(config_Operation operation)
     CONFIG_HOTKEY("SelectSlot3", config_hotkeys[config_HotkeyIndex_SelectSlot3], SDL_SCANCODE_3, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("SelectSlot4", config_hotkeys[config_HotkeyIndex_SelectSlot4], SDL_SCANCODE_4, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("SelectSlot5", config_hotkeys[config_HotkeyIndex_SelectSlot5], SDL_SCANCODE_5, SDL_KMOD_CTRL);
+    CONFIG_HOTKEY("CaptureMouse", config_hotkeys[config_HotkeyIndex_CaptureMouse], SDL_SCANCODE_F1, SDL_KMOD_NONE);
     CONFIG_HOTKEY("Mute", config_hotkeys[config_HotkeyIndex_Mute], SDL_SCANCODE_U, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("VideoRecording", config_hotkeys[config_HotkeyIndex_VideoRecording], SDL_SCANCODE_R,
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
@@ -383,9 +383,7 @@ static void after_defaults(void)
     config_emulator.paused = false;
     config_emulator.ffwd = false;
     config_emulator.show_info = false;
-    config_hotkeys[config_HotkeyIndex_CaptureMouse].key = SDL_SCANCODE_F1;
-    config_hotkeys[config_HotkeyIndex_CaptureMouse].mod = SDL_KMOD_NONE;
-    config_update_hotkey_string(&config_hotkeys[config_HotkeyIndex_CaptureMouse]);
+    config_emulator.capture_mouse = false;
 }
 
 static void normalize(void)

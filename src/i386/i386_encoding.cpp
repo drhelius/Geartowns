@@ -169,6 +169,20 @@ bool I386::DecodeInstructionPassive(InstructionContext& instruction, u32 eip, bo
             return false;
     }
 
+    // MOV to and from CR, DR and TR ignore the mod field, the ModR/M byte always names a general register
+    if (instruction.two_byte && instruction.opcode2 >= 0x20 && instruction.opcode2 <= 0x26 && instruction.opcode2 != 0x25)
+    {
+        u8 modrm = 0;
+
+        if (!FetchCode8<true>(instruction, modrm))
+            return false;
+
+        instruction.modrm = modrm;
+        instruction.reg = (modrm >> 3) & 7;
+        instruction.rm = modrm & 7;
+        return true;
+    }
+
     if (OPCodeHasModRM(instruction.two_byte, instruction.two_byte ? instruction.opcode2 : instruction.opcode))
     {
         if (!DecodeModRM<true>(instruction))

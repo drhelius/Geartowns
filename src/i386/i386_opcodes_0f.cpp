@@ -926,8 +926,14 @@ bool I386::OPCodes0F_CLTS()
 
 bool I386::OPCodes0F_MOV_Special()
 {
-    if (!DecodeOperands(true, 0))
+    // The mod field is ignored, the ModR/M byte always names a general register and no displacement follows
+    if (!DecodeOperands(false, 1))
         return false;
+
+    u8 modrm = (u8)m_instruction.immediate;
+    m_instruction.modrm = modrm;
+    m_instruction.reg = (modrm >> 3) & 7;
+    m_instruction.rm = modrm & 7;
 
     u32 clocks = 12;
 
@@ -953,9 +959,6 @@ bool I386::OPCodes0F_MOV_Special()
         return false;
 
     u8 opcode = m_instruction.opcode2;
-
-    if (m_instruction.memory_operand)
-        return RaiseException(6, I386_EXCEPTION_FAULT);
 
     if ((opcode == 0x21 || opcode == 0x23) && (m_state.debug_registers[7] & 0x00002000U) != 0)
     {

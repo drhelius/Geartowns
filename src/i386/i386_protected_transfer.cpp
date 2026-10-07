@@ -250,7 +250,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         UpdateUserMode();
         SetStackPointer(new_stack);
 
-        if (!StackPushSized(old_ss, gate_width, context))
+        if (!StackPushSized(old_ss, gate_width, context, 16))
             return false;
 
         if (!StackPushSized(old_esp, gate_width, context))
@@ -262,7 +262,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
                 return false;
         }
 
-        if (!StackPushSized(old_cs, gate_width, context))
+        if (!StackPushSized(old_cs, gate_width, context, 16))
             return false;
 
         if (!StackPushSized(return_eip, gate_width, context))

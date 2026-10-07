@@ -502,22 +502,23 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
         UpdateSegmentFastPaths();
         SetStackPointer(new_stack);
 
+        // The 386 writes the selector and error code slots of a 32-bit frame as words, leaving the upper halves
         if (vm86)
         {
-            if (!StackPushSized(m_state.segments[I386_SEGMENT_GS].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_GS].selector, width, context, 16))
                 return false;
 
-            if (!StackPushSized(m_state.segments[I386_SEGMENT_FS].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_FS].selector, width, context, 16))
                 return false;
 
-            if (!StackPushSized(m_state.segments[I386_SEGMENT_DS].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_DS].selector, width, context, 16))
                 return false;
 
-            if (!StackPushSized(m_state.segments[I386_SEGMENT_ES].selector, width, context))
+            if (!StackPushSized(m_state.segments[I386_SEGMENT_ES].selector, width, context, 16))
                 return false;
         }
 
-        if (!StackPushSized(old_ss, width, context))
+        if (!StackPushSized(old_ss, width, context, 16))
             return false;
 
         if (!StackPushSized(old_esp, width, context))
@@ -546,13 +547,13 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     if (!StackPushSized(old_flags, width, context))
         return false;
 
-    if (!StackPushSized(old_cs, width, context))
+    if (!StackPushSized(old_cs, width, context, 16))
         return false;
 
     if (!StackPushSized(return_eip, width, context))
         return false;
 
-    if (has_error_code && !StackPushSized(error_code, width, context))
+    if (has_error_code && !StackPushSized(error_code, width, context, 16))
         return false;
 
     LoadDescriptorCache((target_selector & 0xFFFC) | new_privilege, code, m_state.segments[I386_SEGMENT_CS]);

@@ -50,6 +50,31 @@ bool I386::OPCode0F_0x06()
     return OPCodes0F_CLTS();
 }
 
+// UMOV is an in-circuit emulator move, outside ICE mode it is a plain MOV
+bool I386::OPCode0F_0x10()
+{
+    // UMOV r/m8,r8
+    return OPCodes_MOV_RM<8, false>();
+}
+
+bool I386::OPCode0F_0x11()
+{
+    // UMOV r/m16/32,r16/32
+    return m_instruction.operand_size == 4 ? OPCodes_MOV_RM<32, false>() : OPCodes_MOV_RM<16, false>();
+}
+
+bool I386::OPCode0F_0x12()
+{
+    // UMOV r8,r/m8
+    return OPCodes_MOV_RM<8, true>();
+}
+
+bool I386::OPCode0F_0x13()
+{
+    // UMOV r16/32,r/m16/32
+    return m_instruction.operand_size == 4 ? OPCodes_MOV_RM<32, true>() : OPCodes_MOV_RM<16, true>();
+}
+
 bool I386::OPCode0F_0x20()
 {
     // MOV r32,CRn

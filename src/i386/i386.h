@@ -1026,7 +1026,8 @@ private:
     bool OPCode0xFC(); bool OPCode0xFD(); bool OPCode0xFE(); bool OPCode0xFF();
 
     bool OPCode0F_0x00(); bool OPCode0F_0x01(); bool OPCode0F_0x02(); bool OPCode0F_0x03();
-    bool OPCode0F_0x06(); bool OPCode0F_0x20(); bool OPCode0F_0x21(); bool OPCode0F_0x22();
+    bool OPCode0F_0x06(); bool OPCode0F_0x10(); bool OPCode0F_0x11(); bool OPCode0F_0x12();
+    bool OPCode0F_0x13(); bool OPCode0F_0x20(); bool OPCode0F_0x21(); bool OPCode0F_0x22();
     bool OPCode0F_0x23(); bool OPCode0F_0x24(); bool OPCode0F_0x26(); bool OPCode0F_0x80();
     bool OPCode0F_0x81(); bool OPCode0F_0x82(); bool OPCode0F_0x83(); bool OPCode0F_0x84();
     bool OPCode0F_0x85(); bool OPCode0F_0x86(); bool OPCode0F_0x87(); bool OPCode0F_0x88();

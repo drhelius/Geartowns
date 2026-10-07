@@ -196,10 +196,25 @@ void I386::ClearSegmentCache(u16 selector, I386_Segment& segment)
 
 bool I386::SetDescriptorAccessed(const Descriptor& descriptor, GT_Bus_Access_Context& context)
 {
-    if (descriptor.system || (descriptor.type & 1) != 0)
+    if (descriptor.system)
         return true;
 
-    return WriteLinear(descriptor.address + 5, 8, descriptor.access | 1, context, true);
+    u32 address = descriptor.address + 4;
+
+    // The 386 rewrites the access word on every load. With the bit already set in plain RAM that rewrite only
+    // marks the page dirty, so the bytes are written when the bit changes or something can see the write
+    if ((descriptor.type & 1) != 0 && !m_slow_memory && (address & 0xFFF) != 0xFFF)
+    {
+        u32 physical = 0;
+
+        if (!TranslateLinear(address, true, context, physical, true))
+            return false;
+
+        if (IsValidPointer(m_write_pages[physical >> 12]))
+            return true;
+    }
+
+    return WriteLinear(address, 16, (descriptor.high & 0xFFFF) | 0x0100, context, true);
 }
 
 bool I386::SetDescriptorType(const Descriptor& descriptor, u8 type, GT_Bus_Access_Context& context)

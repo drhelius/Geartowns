@@ -688,7 +688,8 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
             }
         }
 
-        if (special_index == 0 || special_index == 3)
+        // The 386 keeps its TLB across CR0 writes, even when paging is turned on or off
+        if (special_index == 3)
             FlushTLB();
     }
     else

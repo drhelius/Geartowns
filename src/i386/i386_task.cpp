@@ -392,7 +392,8 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
 
     m_state.cr0 |= 0x08;
 
-    if (new_state.tss32)
+    // The TSS CR3 is only loaded, flushing the TLB, with paging on and a different page directory
+    if (new_state.tss32 && (m_state.cr0 & 0x80000000U) != 0 && new_state.cr3 != m_state.cr3)
     {
         m_state.cr3 = new_state.cr3;
         FlushTLB();

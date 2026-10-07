@@ -40,6 +40,7 @@ public:
         bool has_lead_in;
         u32 lead_in_lba;
         u64 file_offset;
+        u8 control_flags;
     };
 
     struct TableOfContents

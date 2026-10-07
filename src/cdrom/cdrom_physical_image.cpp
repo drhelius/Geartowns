@@ -294,6 +294,7 @@ bool CdRomPhysicalImage::ReadTOC()
         Track track;
         InitTrack(track);
         track.type = drive_tracks[i].data ? GT_CDROM_DATA_TRACK_MODE1_2352 : GT_CDROM_AUDIO_TRACK;
+        track.control_flags = drive_tracks[i].control & (k_cdrom_control_pre_emphasis | k_cdrom_control_copy_permitted | k_cdrom_control_four_channels);
         track.sector_size = CDROM_PHYSICAL_SECTOR_SIZE;
         track.start_lba = drive_tracks[i].start_lba;
         track.end_lba = next_lba - 1;

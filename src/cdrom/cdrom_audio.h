@@ -47,6 +47,9 @@ public:
         u32 current_sample;
         u32 seek_samples;
         bool repeat;
+        bool deemphasis_primed;
+        s32 deemphasis_input[2];
+        s64 deemphasis_output[2];
     };
 
 public:
@@ -69,6 +72,7 @@ public:
 
 private:
     void LoadSector();
+    void Deemphasize();
     void NextSector();
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
@@ -80,6 +84,9 @@ private:
     u32 m_sector_cache_lba;
     bool m_sector_cache_valid;
     double m_seek_scale;
+    bool m_deemphasis_end_valid;
+    s32 m_deemphasis_end_input[2];
+    s64 m_deemphasis_end_output[2];
 };
 
 #include "cdrom_audio_inline.h"

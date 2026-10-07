@@ -183,6 +183,7 @@ void CdRomImage::InitTrack(Track& track)
     track.has_lead_in = false;
     track.lead_in_lba = 0;
     track.file_offset = 0;
+    track.control_flags = 0;
 }
 
 s32 CdRomImage::FindTrackFromLBA(u32 lba, bool include_lead_in)

@@ -304,6 +304,7 @@ bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out
         CdRomDriveTrackInfo track;
         track.number = (u8)track_number;
         track.data = (entry.cdte_ctrl & CDROM_DATA_TRACK) != 0;
+        track.control = entry.cdte_ctrl;
         track.start_lba = clamp_linux_lba(entry.cdte_addr.lba);
         tracks.push_back(track);
         Debug("Physical CD-ROM TOC track %u: start_lba=%u type=%s", track.number, track.start_lba, track.data ? "data" : "audio");

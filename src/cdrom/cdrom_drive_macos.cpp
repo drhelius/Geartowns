@@ -280,6 +280,7 @@ bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out
             CdRomDriveTrackInfo track;
             track.number = descriptor.point;
             track.data = (descriptor.control & 0x04) != 0;
+            track.control = descriptor.control;
             track.start_lba = CDConvertMSFToClippedLBA(descriptor.p);
             tracks.push_back(track);
             Debug("Physical CD-ROM TOC track %u: start_lba=%u type=%s", track.number, track.start_lba, track.data ? "data" : "audio");

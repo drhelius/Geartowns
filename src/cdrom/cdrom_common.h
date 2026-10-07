@@ -25,6 +25,11 @@
 static const u32 k_cdrom_track_type_size[3] = { 2352, 2048, 2352};
 static const char* const k_cdrom_track_type_name[3] = { "AUDIO", "MODE1/2048", "MODE1/2352" };
 
+static const u8 k_cdrom_control_pre_emphasis = 0x01;
+static const u8 k_cdrom_control_copy_permitted = 0x02;
+static const u8 k_cdrom_control_data = 0x04;
+static const u8 k_cdrom_control_four_channels = 0x08;
+
 enum GT_CdRomTrackType
 {
     GT_CDROM_AUDIO_TRACK,

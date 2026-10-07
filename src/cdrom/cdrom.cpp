@@ -551,13 +551,13 @@ void CdRom::CommandTOCRead()
         PushStatus(0x16, 0x00, 0xA2, 0x00);
         PushStatus(0x17, DecToBcd(msf.minutes), DecToBcd(msf.seconds), DecToBcd(msf.frames));
 
-        // Each track reports its subchannel Q control/ADR byte, 41h for data and 01h for audio
+        // Each track reports its subchannel Q control/ADR byte, 41h for data and 01h for audio plus the disc flags
         // Shadow of the Beast skips 41h entries when it looks up its music tracks
         for (u8 i = 0; i < track_count; i++)
         {
-            u8 control = (tracks[i].type == GT_CDROM_AUDIO_TRACK) ? 0x01 : 0x41;
+            u8 control = tracks[i].control_flags | ((tracks[i].type == GT_CDROM_AUDIO_TRACK) ? 0 : k_cdrom_control_data);
             LbaToMsf(tracks[i].start_lba + 150, &msf);
-            PushStatus(0x16, control, DecToBcd(i + 1), 0x00);
+            PushStatus(0x16, (u8)((control << 4) | 0x01), DecToBcd(i + 1), 0x00);
             PushStatus(0x17, DecToBcd(msf.minutes), DecToBcd(msf.seconds), DecToBcd(msf.frames));
         }
     }

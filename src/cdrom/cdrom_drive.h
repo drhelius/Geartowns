@@ -37,6 +37,7 @@ struct CdRomDriveTrackInfo
 {
     u8 number;
     bool data;
+    u8 control;
     u32 start_lba;
 };
 

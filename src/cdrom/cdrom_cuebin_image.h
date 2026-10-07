@@ -83,6 +83,7 @@ private:
         bool has_pregap;
         uint32_t pregap_length;
         uint32_t index1_lba;
+        u8 control_flags;
     };
 
     struct ParsedCueFile

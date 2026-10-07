@@ -21,6 +21,11 @@
 #include "cdrom_media.h"
 #include "../common/state_serializer.h"
 
+// First order fit of the 50/15 us de-emphasis curve at 44.1 kHz in Q16, within 0.25 dB up to 20 kHz
+static const s64 k_cdrom_deemphasis_b0 = 30011;
+static const s64 k_cdrom_deemphasis_b1 = -4478;
+static const s64 k_cdrom_deemphasis_a1 = 40003;
+
 CdRomAudio::CdRomAudio(CdRomMedia* cdrom_media)
 {
     m_cdrom_media = cdrom_media;
@@ -29,6 +34,9 @@ CdRomAudio::CdRomAudio(CdRomMedia* cdrom_media)
     m_sector_cache_lba = 0;
     m_sector_cache_valid = false;
     m_seek_scale = 1.0;
+    m_deemphasis_end_valid = false;
+    memset(m_deemphasis_end_input, 0, sizeof(m_deemphasis_end_input));
+    memset(m_deemphasis_end_output, 0, sizeof(m_deemphasis_end_output));
 }
 
 CdRomAudio::~CdRomAudio()
@@ -49,7 +57,11 @@ void CdRomAudio::Reset()
     m_state.current_sample = 0;
     m_state.seek_samples = 0;
     m_state.repeat = false;
+    m_state.deemphasis_primed = false;
+    memset(m_state.deemphasis_input, 0, sizeof(m_state.deemphasis_input));
+    memset(m_state.deemphasis_output, 0, sizeof(m_state.deemphasis_output));
     m_sector_cache_valid = false;
+    m_deemphasis_end_valid = false;
 }
 
 // The range is half open
@@ -67,6 +79,7 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
     m_state.current_sample = 0;
     m_state.seek_samples = (seek_ms * GT_AUDIO_SAMPLE_RATE) / 1000;
     m_state.repeat = repeat;
+    m_state.deemphasis_primed = false;
     m_sector_cache_valid = false;
 
     if (start_lba >= end_lba)
@@ -111,18 +124,76 @@ void CdRomAudio::Stop()
 }
 
 // Data sectors inside the range and unreadable sectors play as silence
+// Tracks mastered with pre-emphasis go through the de-emphasis filter once per sector
 void CdRomAudio::LoadSector()
 {
     m_sector_cache_lba = m_state.current_lba;
     m_sector_cache_valid = true;
+    m_deemphasis_end_valid = false;
 
     if (!m_cdrom_media->IsAudioSector(m_state.current_lba) ||
         !m_cdrom_media->ReadSamples(m_state.current_lba, 0, m_sector_cache, CDROM_AUDIO_SECTOR_SAMPLES * 2))
+    {
         memset(m_sector_cache, 0, sizeof(m_sector_cache));
+        m_state.deemphasis_primed = false;
+        return;
+    }
+
+    s32 track = m_cdrom_media->FindTrackFromLBA(m_state.current_lba);
+
+    if ((track >= 0) && ((m_cdrom_media->GetTracks()[track].control_flags & k_cdrom_control_pre_emphasis) != 0))
+        Deemphasize();
+    else
+        m_state.deemphasis_primed = false;
+}
+
+void CdRomAudio::Deemphasize()
+{
+    if (!m_state.deemphasis_primed)
+    {
+        for (int c = 0; c < 2; c++)
+        {
+            m_state.deemphasis_input[c] = m_sector_cache[c];
+            m_state.deemphasis_output[c] = (s64)m_sector_cache[c] * 65536;
+        }
+
+        m_state.deemphasis_primed = true;
+    }
+
+    for (int c = 0; c < 2; c++)
+    {
+        s64 input = m_state.deemphasis_input[c];
+        s64 output = m_state.deemphasis_output[c];
+
+        for (int i = c; i < CDROM_AUDIO_SECTOR_SAMPLES * 2; i += 2)
+        {
+            s64 sample = m_sector_cache[i];
+            output = (k_cdrom_deemphasis_b0 * sample) + (k_cdrom_deemphasis_b1 * input) +
+                ((k_cdrom_deemphasis_a1 * output) >> 16);
+            input = sample;
+            m_sector_cache[i] = (s16)CLAMP((output + 0x8000) >> 16, -32768, 32767);
+        }
+
+        m_deemphasis_end_input[c] = (s32)input;
+        m_deemphasis_end_output[c] = output;
+    }
+
+    m_deemphasis_end_valid = true;
 }
 
 void CdRomAudio::NextSector()
 {
+    if (m_deemphasis_end_valid)
+    {
+        for (int c = 0; c < 2; c++)
+        {
+            m_state.deemphasis_input[c] = m_deemphasis_end_input[c];
+            m_state.deemphasis_output[c] = m_deemphasis_end_output[c];
+        }
+
+        m_deemphasis_end_valid = false;
+    }
+
     m_state.current_sample = 0;
     m_state.current_lba++;
 
@@ -159,6 +230,9 @@ void CdRomAudio::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.current_sample);
     G_SERIALIZE(serializer, m_state.seek_samples);
     G_SERIALIZE(serializer, m_state.repeat);
+    G_SERIALIZE(serializer, m_state.deemphasis_primed);
+    G_SERIALIZE_ARRAY(serializer, m_state.deemphasis_input, 2);
+    G_SERIALIZE_ARRAY(serializer, m_state.deemphasis_output, 2);
 }
 
 void CdRomAudio::SanitizeState()
@@ -170,6 +244,7 @@ void CdRomAudio::SanitizeState()
         m_state.current_sample = 0;
 
     m_sector_cache_valid = false;
+    m_deemphasis_end_valid = false;
 
     if (m_state.play_state != CDROM_AUDIO_IDLE)
     {

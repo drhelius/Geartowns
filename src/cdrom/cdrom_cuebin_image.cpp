@@ -541,6 +541,7 @@ void CdRomCueBinImage::InitParsedCueTrack(ParsedCueTrack& track)
     track.has_pregap = false;
     track.pregap_length = 0;
     track.index1_lba = 0;
+    track.control_flags = 0;
 }
 
 void CdRomCueBinImage::InitParsedCueFile(ParsedCueFile& cue_file)
@@ -1030,6 +1031,23 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
                 return false;
             }
         }
+        else if (in_track && (lowercase_line.find("flags") == 0))
+        {
+            istringstream flags_stream(lowercase_line.substr(5));
+            string flag;
+
+            while (flags_stream >> flag)
+            {
+                if (flag == "pre")
+                    current_parsed_track.control_flags |= k_cdrom_control_pre_emphasis;
+                else if (flag == "dcp")
+                    current_parsed_track.control_flags |= k_cdrom_control_copy_permitted;
+                else if (flag == "4ch")
+                    current_parsed_track.control_flags |= k_cdrom_control_four_channels;
+            }
+
+            Debug("Track %d flags %X", current_parsed_track.number, current_parsed_track.control_flags);
+        }
         else if (lowercase_line.find("pregap") == 0)
         {
             int m = 0, s = 0, f = 0;
@@ -1143,6 +1161,7 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
             InitTrackFile(track_file);
             track.type = p.type;
             track.sector_size = TrackTypeSectorSize(p.type);
+            track.control_flags = p.control_flags;
             track_file.img_file = f.img_file;
 
             bool file_starts_at_index1 = m_load_options.track_files_start_at_index1 &&

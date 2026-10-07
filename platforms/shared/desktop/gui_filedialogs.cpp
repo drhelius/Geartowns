@@ -60,7 +60,9 @@ enum FileDialogID
     FileDialog_SaveAllSprites,
     FileDialog_LoadSymbols,
     FileDialog_SaveTrace,
-    FileDialog_ChooseTracePath
+    FileDialog_ChooseTracePath,
+    FileDialog_SaveDisassemblerFull,
+    FileDialog_SaveDisassemblerVisible
 };
 
 static FileDialogID pending_dialog_id = FileDialog_None;
@@ -141,6 +143,16 @@ void gui_file_dialog_save_trace(void)
     SDL_DialogFileFilter filters[] = { { "Text Files", "txt" } };
     SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveTrace, application_sdl_window,
         filters, 1, NULL);
+}
+
+void gui_file_dialog_save_disassembler(bool full)
+{
+    if (!begin_dialog())
+        return;
+
+    FileDialogID id = full ? FileDialog_SaveDisassemblerFull : FileDialog_SaveDisassemblerVisible;
+    SDL_DialogFileFilter filters[] = { { "Text Files", "txt" } };
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)id, application_sdl_window, filters, 1, NULL);
 }
 
 void gui_file_dialog_choose_trace_path(void)
@@ -395,7 +407,8 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         append_extension_if_missing(pending_dialog_path, ".gtdebug");
     else if (id == FileDialog_SaveSprite)
         append_extension_if_missing(pending_dialog_path, ".png");
-    else if (id == FileDialog_SaveTrace)
+    else if (id == FileDialog_SaveTrace || id == FileDialog_SaveDisassemblerFull ||
+        id == FileDialog_SaveDisassemblerVisible)
         append_extension_if_missing(pending_dialog_path, ".txt");
     else if (id == FileDialog_SaveFloppy || id == FileDialog_NewFloppy)
     {
@@ -500,6 +513,13 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_ChooseTracePath:
             config_debug.trace_output_path = path;
+            break;
+        case FileDialog_SaveDisassemblerFull:
+        case FileDialog_SaveDisassemblerVisible:
+            if (gui_debug_save_disassembler(path, id == FileDialog_SaveDisassemblerFull))
+                gui_set_status_message("Disassembly saved", 3000);
+            else
+                gui_set_error_message("Unable to save the disassembly");
             break;
         case FileDialog_LoadSymbols:
         {

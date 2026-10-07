@@ -62,6 +62,7 @@ EXTERN const char* gui_debug_get_user_symbol(u32 linear);
 EXTERN const std::map<u32, std::string>& gui_debug_get_user_symbols(void);
 EXTERN const char* gui_debug_get_symbol(u32 linear);
 EXTERN int gui_debug_load_symbols(const char* file_path);
+EXTERN bool gui_debug_save_disassembler(const char* file_path, bool full);
 
 #undef GUI_DEBUG_DISASSEMBLER_IMPORT
 #undef EXTERN

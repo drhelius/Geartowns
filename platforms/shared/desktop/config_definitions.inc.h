@@ -92,7 +92,6 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "DisDimAutoSymbols", config_debug.dis_dim_auto_symbols, false);
     CONFIG_BOOL("Debug", "DisReplaceSymbols", config_debug.dis_replace_symbols, true);
     CONFIG_BOOL("Debug", "DisReplaceLabels", config_debug.dis_replace_labels, true);
-    CONFIG_INT_RANGE("Debug", "DisSyntax", config_debug.dis_syntax, 0, 0, 0);
     CONFIG_INT_RANGE("Debug", "DisLookAheadCount", config_debug.dis_look_ahead_count, 20, 0, 100);
     CONFIG_BOOL("Debug", "StepSkipInterrupts", config_debug.step_skip_interrupts, false);
 

@@ -936,11 +936,6 @@ void emu_debug_continue(void)
     emu_resume();
 }
 
-void emu_set_disassembler_syntax(int syntax)
-{
-    UNUSED(syntax);
-}
-
 // Only the buffers of open windows are decoded
 void emu_debug_update(void)
 {

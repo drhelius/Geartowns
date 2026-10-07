@@ -185,7 +185,6 @@ EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);
 EXTERN void emu_debug_continue(void);
 EXTERN void emu_debug_state_restored(void);
-EXTERN void emu_set_disassembler_syntax(int syntax);
 
 EXTERN void emu_debug_update(void);
 EXTERN void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info);

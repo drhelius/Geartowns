@@ -93,7 +93,11 @@ static void split_instruction(const char* instruction, char* prefixes, size_t pr
 static void draw_operands(const char* operands, bool address_operand, bool override_color, const ImVec4& color,
     const char* label);
 static bool replace_jump_target(const I386_Disassembler_Record* record, char* operands, size_t operands_size);
-static void unavailable_tooltip(void);
+static const char* replace_operand_labels(const I386_Disassembler_Record* record, char* operands, size_t operands_size,
+    char* vector_name, size_t vector_name_size, bool& replaced_jump_target, int& port, int& vector);
+static void save_full_disassembler(FILE* file);
+static void save_current_disassembler(FILE* file);
+static void save_instruction(FILE* file, const I386_Disassembler_Record* record, bool segment, bool bytes, bool labels);
 static bool parse_address(const char* text, u32& address);
 static bool parse_address_range(const char* text, u32& start, u32& end);
 static void request_goto_address(u32 address);
@@ -203,6 +207,22 @@ const char* gui_debug_get_symbol(u32 linear)
 
     I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(linear);
     return IsValidPointer(record) && record->auto_symbol[0] != 0 ? record->auto_symbol : NULL;
+}
+
+bool gui_debug_save_disassembler(const char* file_path, bool full)
+{
+    FILE* file = fopen_utf8(file_path, "w");
+
+    if (!IsValidPointer(file))
+        return false;
+
+    if (full)
+        save_full_disassembler(file);
+    else
+        save_current_disassembler(file);
+
+    fclose(file);
+    return true;
 }
 
 int gui_debug_load_symbols(const char* file_path)
@@ -330,10 +350,12 @@ static void disassembler_menu(void)
 
     if (ImGui::BeginMenu("File"))
     {
-        ImGui::MenuItem("Save All Disassembled Code As...");
-        unavailable_tooltip();
-        ImGui::MenuItem("Save Current View As...");
-        unavailable_tooltip();
+        if (ImGui::MenuItem("Save All Disassembled Code As..."))
+            gui_file_dialog_save_disassembler(true);
+
+        if (ImGui::MenuItem("Save Current View As..."))
+            gui_file_dialog_save_disassembler(false);
+
         ImGui::EndMenu();
     }
 
@@ -342,26 +364,6 @@ static void disassembler_menu(void)
         ImGui::MenuItem("Opcodes", NULL, &config_debug.dis_show_bytes);
         ImGui::MenuItem("Symbols", NULL, &config_debug.dis_show_symbols);
         ImGui::MenuItem("Segment", NULL, &config_debug.dis_show_segment);
-
-        ImGui::Separator();
-
-        if (ImGui::BeginMenu("Syntax"))
-        {
-            if (ImGui::MenuItem("Intel", NULL, config_debug.dis_syntax == 0))
-            {
-                config_debug.dis_syntax = 0;
-                emu_set_disassembler_syntax(0);
-            }
-
-            ImGui::BeginDisabled();
-            ImGui::MenuItem("AT&T");
-            ImGui::EndDisabled();
-            unavailable_tooltip();
-
-            ImGui::Separator();
-            ImGui::TextDisabled("Intel syntax is currently available");
-            ImGui::EndMenu();
-        }
 
         ImGui::Separator();
 
@@ -1257,55 +1259,15 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
     char prefixes[24];
     char mnemonic[32];
     char operands[128];
+    char vector_name[16];
+    bool replaced_jump_target = false;
+    int port = -1;
+    int vector = -1;
 
     split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
 
-    bool replaced_jump_target = replace_jump_target(record, operands, sizeof(operands));
-    bool immediate_port = false;
-    int port = get_port_operand(record, immediate_port);
-    const char* operand_label = port >= 0 && immediate_port ? gui_debug_port_label((u16)port) : NULL;
-
-    if (IsValidPointer(operand_label) && config_debug.dis_replace_labels)
-    {
-        char port_text[8];
-        snprintf(port_text, sizeof(port_text), "0x%02X", port);
-        char* found = strstr(operands, port_text);
-
-        if (IsValidPointer(found))
-        {
-            char replaced[128];
-            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, operand_label,
-                found + strlen(port_text));
-            snprintf(operands, sizeof(operands), "%s", replaced);
-        }
-    }
-    else
-        operand_label = NULL;
-
-    int vector = get_interrupt_vector(record);
-    char vector_name[16] = "";
-    char vector_description[64];
-
-    if (vector >= 0)
-        gui_debug_i386_vector_name((u8)vector, vector_name, sizeof(vector_name), vector_description,
-            sizeof(vector_description));
-
-    if (vector >= 0 && config_debug.dis_replace_labels && strcmp(vector_name, "INT") != 0 &&
-        record->opcodes[opcode_index(record)] == 0xCD)
-    {
-        char vector_text[8];
-        snprintf(vector_text, sizeof(vector_text), "0x%02X", vector);
-        char* found = strstr(operands, vector_text);
-
-        if (IsValidPointer(found))
-        {
-            char replaced[128];
-            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, vector_name,
-                found + strlen(vector_text));
-            snprintf(operands, sizeof(operands), "%s", replaced);
-            operand_label = vector_name;
-        }
-    }
+    const char* operand_label = replace_operand_labels(record, operands, sizeof(operands), vector_name,
+        sizeof(vector_name), replaced_jump_target, port, vector);
 
     bool light_theme = config_emulator.theme == config_Theme_Light;
     ImVec4 mnemonic_color = current_pc ? (ImVec4)yellow : (breakpoint ? (ImVec4)red : (ImVec4)white);
@@ -1555,6 +1517,60 @@ static void split_instruction(const char* instruction, char* prefixes, size_t pr
     memcpy(mnemonic, word_start, mnemonic_length);
     mnemonic[mnemonic_length] = 0;
     snprintf(operands, operands_size, "%s", operand_start);
+}
+
+// Jump targets, ports and interrupt vectors by name, as the window shows them
+static const char* replace_operand_labels(const I386_Disassembler_Record* record, char* operands, size_t operands_size,
+    char* vector_name, size_t vector_name_size, bool& replaced_jump_target, int& port, int& vector)
+{
+    replaced_jump_target = replace_jump_target(record, operands, operands_size);
+    bool immediate_port = false;
+    port = get_port_operand(record, immediate_port);
+    const char* operand_label = port >= 0 && immediate_port ? gui_debug_port_label((u16)port) : NULL;
+
+    if (IsValidPointer(operand_label) && config_debug.dis_replace_labels)
+    {
+        char port_text[8];
+        snprintf(port_text, sizeof(port_text), "0x%02X", port);
+        char* found = strstr(operands, port_text);
+
+        if (IsValidPointer(found))
+        {
+            char replaced[128];
+            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, operand_label,
+                found + strlen(port_text));
+            snprintf(operands, operands_size, "%s", replaced);
+        }
+    }
+    else
+        operand_label = NULL;
+
+    vector = get_interrupt_vector(record);
+    vector_name[0] = 0;
+    char vector_description[64];
+
+    if (vector >= 0)
+        gui_debug_i386_vector_name((u8)vector, vector_name, vector_name_size, vector_description,
+            sizeof(vector_description));
+
+    if (vector >= 0 && config_debug.dis_replace_labels && strcmp(vector_name, "INT") != 0 &&
+        record->opcodes[opcode_index(record)] == 0xCD)
+    {
+        char vector_text[8];
+        snprintf(vector_text, sizeof(vector_text), "0x%02X", vector);
+        char* found = strstr(operands, vector_text);
+
+        if (IsValidPointer(found))
+        {
+            char replaced[128];
+            snprintf(replaced, sizeof(replaced), "%.*s%s%s", (int)(found - operands), operands, vector_name,
+                found + strlen(vector_text));
+            snprintf(operands, operands_size, "%s", replaced);
+            operand_label = vector_name;
+        }
+    }
+
+    return operand_label;
 }
 
 static bool replace_jump_target(const I386_Disassembler_Record* record, char* operands, size_t operands_size)
@@ -1820,10 +1836,81 @@ static bool parse_address(const char* text, u32& address)
     return true;
 }
 
-static void unavailable_tooltip(void)
+static void save_full_disassembler(FILE* file)
 {
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Not implemented yet in " GT_TITLE);
+    const std::map<u32, I386_Disassembler_Record>& records = emu_get_core()->GetI386()->GetDisassemblerRecords();
+    std::map<u32, I386_Disassembler_Record>::const_iterator record;
+
+    for (record = records.begin(); record != records.end(); record++)
+    {
+        if (record->second.name[0] == 0)
+            continue;
+
+        const char* symbol = gui_debug_get_symbol(record->first);
+
+        if (IsValidPointer(symbol))
+            fprintf(file, "%s:\n", symbol);
+
+        save_instruction(file, &record->second, true, true, false);
+    }
+}
+
+static void save_current_disassembler(FILE* file)
+{
+    prepare_drawable_lines();
+
+    for (size_t i = 0; i < disassembler_lines.size(); i++)
+    {
+        const DisassemblerLine& line = disassembler_lines[i];
+
+        if (line.symbol)
+        {
+            const char* user = gui_debug_get_user_symbol(line.record->linear);
+            fprintf(file, "%s:\n", IsValidPointer(user) ? user : line.record->auto_symbol);
+            continue;
+        }
+
+        save_instruction(file, line.record, config_debug.dis_show_segment, config_debug.dis_show_bytes, true);
+    }
+}
+
+static void save_instruction(FILE* file, const I386_Disassembler_Record* record, bool segment, bool bytes, bool labels)
+{
+    const int bytes_column = 25;
+    char prefixes[24];
+    char mnemonic[32];
+    char operands[128];
+    char vector_name[16];
+    bool replaced_jump_target = false;
+    int port = -1;
+    int vector = -1;
+
+    split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
+
+    if (labels)
+        replace_operand_labels(record, operands, sizeof(operands), vector_name, sizeof(vector_name),
+            replaced_jump_target, port, vector);
+
+    char instruction[192];
+    snprintf(instruction, sizeof(instruction), "%s%s%s%s%s", prefixes, prefixes[0] != 0 ? " " : "", mnemonic,
+        operands[0] != 0 ? " " : "", operands);
+
+    if (segment)
+        fprintf(file, "%s:%08X ", record->segment, record->eip);
+
+    fprintf(file, "%08X  %s", record->linear, instruction);
+
+    if (bytes)
+    {
+        int spacing = bytes_column - (int)strlen(instruction);
+
+        if (spacing < 2)
+            spacing = 2;
+
+        fprintf(file, "%*s; %s", spacing, "", record->bytes);
+    }
+
+    fputs(record->returns ? "\n\n" : "\n", file);
 }
 
 static bool parse_address_range(const char* text, u32& start, u32& end)

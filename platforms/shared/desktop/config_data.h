@@ -288,7 +288,6 @@ struct config_Debug
     bool dis_dim_auto_symbols;
     bool dis_replace_symbols;
     bool dis_replace_labels;
-    int dis_syntax;
     int dis_look_ahead_count;
     bool step_skip_interrupts;
     int font_size;

@@ -784,19 +784,18 @@ void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
     UpdateSegmentFastPaths();
 }
 
-// A real mode CS load only sets the selector and base and clears D/B, so the cached limit and access rights stay
-// A direct far JMP also rewrites the access rights to present, DPL 0, system type 2
+// A real mode CS load only sets the selector and base, so the cached limit, access rights and D/B stay
+// A direct far JMP also rewrites the access rights to present, DPL 0, system type 2, keeping G and D/B
 void I386::LoadRealCodeSegment(u16 selector, bool direct_jump)
 {
     I386_Segment& state = m_state.segments[I386_SEGMENT_CS];
     state.selector = selector;
     state.base = (u32)selector << 4;
-    state.attributes &= ~I386_SEGMENT_DEFAULT_32;
 
     if (direct_jump)
     {
-        state.attributes = (state.attributes & I386_SEGMENT_GRANULAR) | I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM |
-            (2U << I386_SEGMENT_TYPE_SHIFT);
+        state.attributes = (state.attributes & (I386_SEGMENT_GRANULAR | I386_SEGMENT_DEFAULT_32)) |
+            I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
         state.dpl = 0;
     }
 

@@ -990,16 +990,16 @@ void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int
 
             if (jump_far && current_instruction && m_state.execution_mode != I386_MODE_PROTECTED)
             {
-                I386_Segment target_segment = {};
+                I386_Segment target_segment = code_segment;
 
                 target_segment.selector = jump_cs;
                 target_segment.base = (u32)jump_cs << 4;
-                target_segment.limit = 0xFFFF;
-                target_segment.attributes = I386_SEGMENT_PRESENT | I386_SEGMENT_READABLE | I386_SEGMENT_EXECUTABLE;
 
                 if (m_state.execution_mode == I386_MODE_VM86)
                 {
-                    target_segment.attributes |= I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
+                    target_segment.limit = 0xFFFF;
+                    target_segment.attributes = I386_SEGMENT_PRESENT | I386_SEGMENT_READABLE |
+                        I386_SEGMENT_EXECUTABLE | I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
                     target_segment.dpl = 3;
                 }
 

@@ -477,12 +477,10 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
     if (!ReadMemory(I386_SEGMENT_SS, (old_stack + unit * 2) & stack_mask, width, context, flags, true))
         return false;
 
-    if (width == 32 && (flags & I386_FLAG_VM) != 0)
+    // VM is only written at CPL 0, otherwise this is a plain protected mode return
+    if (width == 32 && (flags & I386_FLAG_VM) != 0 && m_state.current_privilege_level == 0)
     {
         clocks = 60;
-
-        if (m_state.current_privilege_level != 0)
-            return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
         u32 values[6];
 
@@ -494,7 +492,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
                 return false;
         }
 
-        m_state.eip = target;
+        m_state.eip = target & 0xFFFF;
         m_state.registers[I386_REG_ESP].value = values[0];
 
         SetVM86Segment(I386_SEGMENT_CS, (u16)selector_value);
@@ -504,7 +502,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
         SetVM86Segment(I386_SEGMENT_FS, (u16)values[4]);
         SetVM86Segment(I386_SEGMENT_GS, (u16)values[5]);
 
-        m_state.eflags = (flags & 0x0003FFFFU) | I386_FLAG_FIXED;
+        m_state.eflags = (flags & 0x00037FD5U) | I386_FLAG_FIXED;
         m_state.nmi_blocked = false;
         UpdateExecutionMode();
         return true;

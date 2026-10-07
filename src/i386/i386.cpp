@@ -784,6 +784,25 @@ void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
     UpdateSegmentFastPaths();
 }
 
+// A real mode CS load only sets the selector and base and clears D/B, so the cached limit and access rights stay
+// A direct far JMP also rewrites the access rights to present, DPL 0, system type 2
+void I386::LoadRealCodeSegment(u16 selector, bool direct_jump)
+{
+    I386_Segment& state = m_state.segments[I386_SEGMENT_CS];
+    state.selector = selector;
+    state.base = (u32)selector << 4;
+    state.attributes &= ~I386_SEGMENT_DEFAULT_32;
+
+    if (direct_jump)
+    {
+        state.attributes = (state.attributes & I386_SEGMENT_GRANULAR) | I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM |
+            (2U << I386_SEGMENT_TYPE_SHIFT);
+        state.dpl = 0;
+    }
+
+    UpdateSegmentFastPaths();
+}
+
 void I386::UpdateExecutionMode()
 {
     if ((m_state.eflags & I386_FLAG_VM) != 0)
@@ -832,18 +851,34 @@ bool I386::LoadRealSegment(int segment, u16 selector)
     if (segment < 0 || segment >= I386_SEGMENT_COUNT)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
-    SetRealModeSegment((I386_Segment_Register)segment, selector);
+    if (m_state.execution_mode != I386_MODE_REAL)
+    {
+        SetRealModeSegment((I386_Segment_Register)segment, selector);
+        return true;
+    }
+
+    // A real mode data segment load only sets the selector and base, so the cached limit and type stay
+    // Unreal mode relies on it, and so does code that leaves protected mode with an expand-down stack
+    I386_Segment& state = m_state.segments[segment];
+    state.selector = selector;
+    state.base = (u32)selector << 4;
+    state.attributes |= I386_SEGMENT_PRESENT;
+    UpdateSegmentFastPaths();
     return true;
 }
 
-bool I386::FarTransfer(u16 selector, u32 offset, int width)
+bool I386::FarTransfer(u16 selector, u32 offset, int width, bool direct_jump)
 {
     u32 target = width == 16 ? (u16)offset : offset;
 
-    if (target > 0xFFFF)
+    if (target > GetFarTransferLimit())
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    SetRealModeSegment(I386_SEGMENT_CS, selector);
+    if (m_state.execution_mode == I386_MODE_REAL)
+        LoadRealCodeSegment(selector, direct_jump);
+    else
+        SetRealModeSegment(I386_SEGMENT_CS, selector);
+
     m_state.eip = target;
     m_state.repeat.active = false;
     return true;
@@ -1021,7 +1056,7 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
         return false;
 
     m_state.eflags &= ~(I386_FLAG_IF | I386_FLAG_TF);
-    SetRealModeSegment(I386_SEGMENT_CS, new_cs);
+    LoadRealCodeSegment(new_cs, false);
     m_state.eip = new_ip;
     m_state.halted = false;
 

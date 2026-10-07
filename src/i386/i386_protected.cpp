@@ -186,10 +186,20 @@ void I386::LoadDescriptorCache(u16 selector, const Descriptor& descriptor, I386_
     UpdateSegmentFastPaths();
 }
 
+// A null selector leaves base FFFFFFFFh, a 1 MiB limit and present in the cache
+// It only shows once real mode reloads the register and keeps that limit
 void I386::ClearSegmentCache(u16 selector, I386_Segment& segment)
 {
     memset(&segment, 0, sizeof(segment));
     segment.selector = selector;
+
+    if ((selector & 0xFFFC) == 0)
+    {
+        segment.base = 0xFFFFFFFF;
+        segment.limit = 0x000FFFFF;
+        segment.attributes = I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM;
+    }
+
     UpdateSegmentFastPaths();
 }
 

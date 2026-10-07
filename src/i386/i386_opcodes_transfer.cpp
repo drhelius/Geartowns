@@ -195,7 +195,7 @@ bool I386::OPCodes_CALL_Far()
         return ProtectedFarTransfer((u16)m_instruction.immediate2, target, operand_width, true, m_instruction.next_eip,
             *m_bus_context, m_step.clocks, false);
 
-    if ((operand_width == 16 ? (u32)(u16)target : target) > 0xFFFF)
+    if ((operand_width == 16 ? (u32)(u16)target : target) > GetFarTransferLimit())
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     if (!StackPushSized(m_state.segments[I386_SEGMENT_CS].selector, operand_width, *m_bus_context))
@@ -374,7 +374,7 @@ bool I386::OPCodes_RET_Far()
 
     u32 checked_target = operand_width == 16 ? (u16)target : target;
 
-    if (checked_target > 0xFFFF)
+    if (checked_target > GetFarTransferLimit())
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     u32 adjustment = m_instruction.operand_size * 2 + release_bytes;
@@ -455,7 +455,7 @@ bool I386::OPCodes_IRET()
 
     u32 checked_target = operand_width == 16 ? (u16)target : target;
 
-    if (checked_target > 0xFFFF)
+    if (checked_target > GetFarTransferLimit())
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     SetStackPointer((old_stack + m_instruction.operand_size * 3) & stack_mask);
@@ -554,7 +554,7 @@ bool I386::OPCodes_JMP_Far()
         return ProtectedFarTransfer((u16)m_instruction.immediate2, m_instruction.immediate, operand_width, false,
             m_instruction.next_eip, *m_bus_context, m_step.clocks, false);
 
-    if (!FarTransfer((u16)m_instruction.immediate2, m_instruction.immediate, operand_width))
+    if (!FarTransfer((u16)m_instruction.immediate2, m_instruction.immediate, operand_width, true))
         return false;
 
     m_step.clocks += GetNextInstructionComponents();

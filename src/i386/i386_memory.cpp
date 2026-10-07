@@ -40,25 +40,19 @@ void I386::SetUserMode(bool user)
 
 void I386::UpdateSegmentFastPaths()
 {
-    // Code fetches only need the execute check and the limit
-    // debug state never affects them
+    // Code fetches only check the CS limit, its type was checked when it was loaded in protected mode, so code runs on
+    // with the real mode CS after setting PE. Debug state never affects them
     const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
 
     m_default_size = (code.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 4 : 2;
     m_instruction_defaults.operand_size = m_default_size;
     m_instruction_defaults.address_size = m_default_size;
-    m_stack32 = (m_state.segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0;
+    m_stack32 = GetStackAddressSize() == 32;
     m_code_limit = -1;
     CloseCodeWindow();
 
-    if ((code.attributes & I386_SEGMENT_PRESENT) != 0)
-    {
-        if (m_state.execution_mode != I386_MODE_PROTECTED)
-            m_code_limit = code.limit;
-        else if ((code.selector & 0xFFFC) != 0 && (code.attributes & I386_SEGMENT_EXECUTABLE) != 0 &&
-            (code.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
-            m_code_limit = code.limit;
-    }
+    if ((code.attributes & (I386_SEGMENT_PRESENT | I386_SEGMENT_EXPAND_DOWN)) == I386_SEGMENT_PRESENT)
+        m_code_limit = code.limit;
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
@@ -71,7 +65,10 @@ void I386::UpdateSegmentFastPaths()
         if (!m_slow_memory && (segment.attributes & I386_SEGMENT_PRESENT) != 0)
         {
             if (m_state.execution_mode != I386_MODE_PROTECTED)
-                m_read_limits[i] = m_write_limits[i] = segment.limit;
+            {
+                if ((segment.attributes & I386_SEGMENT_EXPAND_DOWN) == 0)
+                    m_read_limits[i] = m_write_limits[i] = segment.limit;
+            }
             else if ((segment.selector & 0xFFFC) != 0 &&
                 (segment.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
             {
@@ -126,21 +123,18 @@ bool I386::LogicalToLinearProtected(int segment, u32 offset, u32 size, bool writ
     const I386_Segment& state = m_state.segments[segment];
     u8 fault = stack || segment == I386_SEGMENT_SS ? 12 : 13;
 
-    if ((state.selector & 0xFFFC) == 0 || (state.attributes & I386_SEGMENT_PRESENT) == 0)
+    if ((state.attributes & I386_SEGMENT_PRESENT) == 0 || (!execute && (state.selector & 0xFFFC) == 0))
         return RaiseException(fault, I386_EXCEPTION_FAULT, true, 0);
 
-    bool executable = (state.attributes & I386_SEGMENT_EXECUTABLE) != 0;
-    bool valid_type = true;
+    if (!execute)
+    {
+        bool executable = (state.attributes & I386_SEGMENT_EXECUTABLE) != 0;
+        bool valid_type = write ? !executable && (state.attributes & I386_SEGMENT_WRITABLE) != 0 :
+            !executable || (state.attributes & I386_SEGMENT_READABLE) != 0;
 
-    if (execute)
-        valid_type = executable;
-    else if (write)
-        valid_type = !executable && (state.attributes & I386_SEGMENT_WRITABLE) != 0;
-    else
-        valid_type = !executable || (state.attributes & I386_SEGMENT_READABLE) != 0;
-
-    if ((state.attributes & I386_SEGMENT_SYSTEM) != 0 || !valid_type)
-        return RaiseException(fault, I386_EXCEPTION_FAULT, true, 0);
+        if ((state.attributes & I386_SEGMENT_SYSTEM) != 0 || !valid_type)
+            return RaiseException(fault, I386_EXCEPTION_FAULT, true, 0);
+    }
 
     u64 end = (u64)offset + size - 1;
     bool in_limit = end <= 0xFFFFFFFFULL;
@@ -958,12 +952,12 @@ bool I386::DebugTranslateLogical(u16 selector, u32 offset, GT_Debug_Memory_Trans
     return DebugTranslateLinear(translation.linear, translation);
 }
 
-bool I386::IsValidSegmentOffset(const I386_Segment& segment, u32 offset, bool protected_mode)
+bool I386::IsValidSegmentOffset(const I386_Segment& segment, u32 offset, bool null_unusable)
 {
-    if ((segment.attributes & I386_SEGMENT_PRESENT) == 0)
+    if ((segment.attributes & I386_SEGMENT_PRESENT) == 0 || (null_unusable && (segment.selector & 0xFFFC) == 0))
         return false;
 
-    if (protected_mode && (segment.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)
+    if ((segment.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)
     {
         u32 upper_limit = (segment.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 0xFFFFFFFFU : 0xFFFFU;
         return offset > segment.limit && offset <= upper_limit;

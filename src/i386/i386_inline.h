@@ -147,8 +147,15 @@ INLINE bool I386::LogicalToLinear(int segment, u32 offset, u32 size, bool write,
 
     const I386_Segment& state = m_state.segments[segment];
     u64 end = (u64)offset + size - 1;
+    bool in_limit = end <= state.limit;
 
-    if ((state.attributes & I386_SEGMENT_PRESENT) == 0 || end > state.limit)
+    if (unlikely((state.attributes & I386_SEGMENT_EXPAND_DOWN) != 0))
+    {
+        u32 upper_limit = (state.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 0xFFFFFFFFU : 0xFFFFU;
+        in_limit = offset > state.limit && end <= upper_limit;
+    }
+
+    if ((state.attributes & I386_SEGMENT_PRESENT) == 0 || !in_limit)
         return RaiseException(stack || segment == I386_SEGMENT_SS ? 12 : 13, I386_EXCEPTION_FAULT, true, 0);
 
     linear = state.base + offset;
@@ -179,9 +186,17 @@ INLINE void I386::SetStackPointer(u32 value)
         m_state.registers[I386_REG_ESP].low = (u16)value;
 }
 
+// Real mode stacks are 16-bit whatever B the cached SS keeps
 INLINE int I386::GetStackAddressSize() const
 {
-    return (m_state.segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 32 : 16;
+    return (m_state.segments[I386_SEGMENT_SS].attributes & I386_SEGMENT_DEFAULT_32) != 0 &&
+        m_state.execution_mode != I386_MODE_REAL ? 32 : 16;
+}
+
+// Real mode far transfers keep the cached CS limit, VM86 ones always set 64 KiB
+INLINE u32 I386::GetFarTransferLimit() const
+{
+    return m_state.execution_mode == I386_MODE_REAL ? m_state.segments[I386_SEGMENT_CS].limit : 0xFFFF;
 }
 
 INLINE bool I386::BranchTo(u32 target, int width)

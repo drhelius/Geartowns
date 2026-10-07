@@ -634,6 +634,7 @@ private:
 
     void SetRealModeSegment(I386_Segment_Register segment, u16 selector);
     void SetVM86Segment(I386_Segment_Register segment, u16 selector);
+    void LoadRealCodeSegment(u16 selector, bool direct_jump);
     void UpdateSegmentFastPaths();
     void UpdateExecutionMode();
     void UpdateDebugState() const;
@@ -741,7 +742,7 @@ private:
         char* reason, size_t reason_size) const;
     bool ReadPhysical32Passive(u32 physical, u32& value) const;
     const I386_Segment* FindSegment(u16 selector) const;
-    static bool IsValidSegmentOffset(const I386_Segment& segment, u32 offset, bool protected_mode);
+    static bool IsValidSegmentOffset(const I386_Segment& segment, u32 offset, bool null_unusable);
 
     int FindTLBWay(u32 set, u32 linear_page) const;
     const TLBEntry* FindTLBHost(u32 linear, bool write);
@@ -759,6 +760,7 @@ private:
     u32 GetStackPointer() const;
     void SetStackPointer(u32 value);
     int GetStackAddressSize() const;
+    u32 GetFarTransferLimit() const;
     bool StackHasRoom(u32 limit, u16 attributes, u32 stack, u32 bytes) const;
     bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
         GT_Bus_Access_Context& context);
@@ -776,7 +778,7 @@ private:
     bool SetDescriptorType(const Descriptor& descriptor, u8 type, GT_Bus_Access_Context& context);
     void ValidateDataSegmentsForPrivilege(u8 privilege);
 
-    bool FarTransfer(u16 selector, u32 offset, int width);
+    bool FarTransfer(u16 selector, u32 offset, int width, bool direct_jump = false);
     bool ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, u32 return_eip,
         GT_Bus_Access_Context& context, u64& clocks, bool indirect);
     bool ProtectedFarReturn(int width, u16 adjustment, GT_Bus_Access_Context& context, u64& clocks);

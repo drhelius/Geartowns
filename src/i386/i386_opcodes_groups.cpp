@@ -376,7 +376,7 @@ INLINE bool I386::OPCodes_Far_Transfer_Memory(int width, bool call)
 
     u32 checked_target = width == 16 ? (u16)target : target;
 
-    if (checked_target > 0xFFFF)
+    if (checked_target > GetFarTransferLimit())
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     if (call)

@@ -447,7 +447,7 @@ INLINE bool I386::FetchTimingByte(TimingCursor& cursor, u8& value) const
     {
         const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
 
-        if (!IsValidSegmentOffset(code, cursor.eip, m_state.execution_mode == I386_MODE_PROTECTED))
+        if (!IsValidSegmentOffset(code, cursor.eip, false))
             return false;
 
         u32 linear = code.base + cursor.eip;

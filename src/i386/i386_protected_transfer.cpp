@@ -416,7 +416,7 @@ bool I386::ProtectedFarReturn(int width, u16 adjustment, GT_Bus_Access_Context& 
             return RaiseException(13, I386_EXCEPTION_FAULT, true, saved_ss & 0xFFFC);
 
         if (!stack_descriptor.present)
-            return RaiseException(11, I386_EXCEPTION_FAULT, true, saved_ss & 0xFFFC);
+            return RaiseException(12, I386_EXCEPTION_FAULT, true, saved_ss & 0xFFFC);
 
         if (!SetDescriptorAccessed(code, context))
             return false;
@@ -570,7 +570,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
             return RaiseException(13, I386_EXCEPTION_FAULT, true, saved_ss & 0xFFFC);
 
         if (!stack_descriptor.present)
-            return RaiseException(11, I386_EXCEPTION_FAULT, true, saved_ss & 0xFFFC);
+            return RaiseException(12, I386_EXCEPTION_FAULT, true, saved_ss & 0xFFFC);
 
         if (!SetDescriptorAccessed(code, context))
             return false;

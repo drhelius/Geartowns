@@ -684,7 +684,7 @@ static bool valid_encoding(const I386_Decode_State& state)
                 return !state.memory_operand && (state.reg == 0 || state.reg == 2 || state.reg == 3);
             case 0x21:
             case 0x23:
-                return !state.memory_operand && state.reg != 4 && state.reg != 5;
+                return !state.memory_operand;
             case 0x24:
             case 0x26:
                 return !state.memory_operand && state.reg >= 6;

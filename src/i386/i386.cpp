@@ -209,7 +209,7 @@ NO_INLINE bool I386::ExecuteOPCodeDebug(const I386_State& before)
 
     if (m_step.instruction_completed && (m_state.eflags & I386_FLAG_RF) != 0)
     {
-        bool preserve = !m_instruction.two_byte && (m_instruction.opcode == 0x9D || m_instruction.opcode == 0xCF);
+        bool preserve = !m_instruction.two_byte && m_instruction.opcode == 0xCF;
 
         if (m_state.task_register.selector != old_task)
             preserve = true;
@@ -454,6 +454,11 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context)
 {
     SetBusContext(context);
     m_state.halted = false;
+
+    // An interrupted REP restarts with RF set, so its instruction breakpoint doesn't hit again
+    if (m_state.repeat.active)
+        m_state.eflags |= I386_FLAG_RF;
+
     m_state.repeat.active = false;
     m_state.last_exception_vector = vector;
 
@@ -942,6 +947,10 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
 
     while (true)
     {
+        // Every debug exception goes through the same microcode, which clears DR7.GD
+        if (current.vector == 1)
+            m_state.debug_registers[7] &= ~0x00002000U;
+
         u64 entry_clocks = k_i386_real_interrupt_entry_clocks;
         bool ok = EnterInterrupt(current.vector, current_return_eip, context, false, current.has_error_code,
             current.error_code, current.exception_class == I386_EXCEPTION_FAULT, false, &entry_clocks, &result);

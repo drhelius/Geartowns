@@ -1020,7 +1020,7 @@ private:
     bool OPCode0xE4(); bool OPCode0xE5(); bool OPCode0xE6(); bool OPCode0xE7();
     bool OPCode0xE8(); bool OPCode0xE9(); bool OPCode0xEA(); bool OPCode0xEB();
     bool OPCode0xEC(); bool OPCode0xED(); bool OPCode0xEE(); bool OPCode0xEF();
-    bool OPCode0xF0();                    bool OPCode0xF2(); bool OPCode0xF3();
+    bool OPCode0xF0(); bool OPCode0xF1(); bool OPCode0xF2(); bool OPCode0xF3();
     bool OPCode0xF4(); bool OPCode0xF5(); bool OPCode0xF6(); bool OPCode0xF7();
     bool OPCode0xF8(); bool OPCode0xF9(); bool OPCode0xFA(); bool OPCode0xFB();
     bool OPCode0xFC(); bool OPCode0xFD(); bool OPCode0xFE(); bool OPCode0xFF();

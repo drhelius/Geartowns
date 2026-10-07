@@ -1491,9 +1491,14 @@ bool I386::OPCode0xF0()
     return PrefixLock();
 }
 
-// bool I386::OPCode0xF1()
-// {
-// }
+bool I386::OPCode0xF1()
+{
+    // ICEBP, a debug trap without the gate privilege check of INT 1
+    if (!DecodeAndStart(false, 0, 0, 0))
+        return false;
+
+    return RaiseException(1, I386_EXCEPTION_TRAP);
+}
 
 bool I386::OPCode0xF2()
 {

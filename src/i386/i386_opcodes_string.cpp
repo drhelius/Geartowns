@@ -283,7 +283,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 
     if ((!move && opcode != 0xAA && opcode != 0xAB) || (m_state.cr0 & 0x80000000U) != 0 || m_trace_enabled ||
         (m_state.debug_registers[7] & 0xFF) != 0 ||
-        (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0 || IsValidPointer(m_bus_context->observe_memory_write) ||
+        (m_state.eflags & I386_FLAG_TF) != 0 || IsValidPointer(m_bus_context->observe_memory_write) ||
         m_bus_context->end_batch)
         return 0;
 
@@ -404,6 +404,10 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 
     m_state.repeat.active = count != elements;
     m_state.eip = m_state.repeat.active ? m_state.repeat.start_eip : m_state.repeat.next_eip;
+
+    // A REP restarted after an interrupt keeps RF until it completes, as on the slow path
+    if (!m_state.repeat.active)
+        m_state.eflags &= ~I386_FLAG_RF;
 
     m_step.clocks = iteration_clocks;
     m_step.steps = 1;

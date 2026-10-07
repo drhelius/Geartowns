@@ -351,12 +351,13 @@ void I386::RecordDataBreakpoints(u32 linear, u32 size, bool write)
 
         u32 length_code = (m_state.debug_registers[7] >> (18 + i * 4)) & 3;
         u32 length = length_code == 0 ? 1 : length_code == 1 ? 2 : length_code == 3 ? 4 : 0;
+        u32 address = m_state.debug_registers[i] & ~(length - 1);
 
         for (u32 access_byte = 0; access_byte < size && length != 0; access_byte++)
         {
             for (u32 breakpoint_byte = 0; breakpoint_byte < length; breakpoint_byte++)
             {
-                if (linear + access_byte == m_state.debug_registers[i] + breakpoint_byte)
+                if (linear + access_byte == address + breakpoint_byte)
                 {
                     m_debug_data_breakpoints |= 1U << i;
                     length = 0;

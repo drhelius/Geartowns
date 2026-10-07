@@ -98,7 +98,7 @@ static const char* k_i386_opcode_names[256] =
 /* 0xE8 */  "call {Jv}",           "jmp {Jv}",            "jmp {FAR}{Ap}",       "jmp {Jb}",
 /* 0xEC */  "in al,dx",            "in {eAX},dx",         "out dx,al",           "out dx,{eAX}",
 
-/* 0xF0 */  "@prefix",             "@invalid",            "@prefix",             "@prefix",
+/* 0xF0 */  "@prefix",             "icebp",               "@prefix",             "@prefix",
 /* 0xF4 */  "hlt",                 "cmc",                 "@g3b",                "@g3v",
 /* 0xF8 */  "clc",                 "stc",                 "cli",                 "sti",
 /* 0xFC */  "cld",                 "std",                 "@g4",                 "@g5"

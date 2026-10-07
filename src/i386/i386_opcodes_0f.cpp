@@ -700,8 +700,12 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
 
 INLINE bool I386::MoveDebugRegister(u8 special_index, u8 general_index, bool write_special, u32 value)
 {
-    if (special_index == 4 || special_index == 5 || special_index > 7)
+    if (special_index > 7)
         return RaiseException(6, I386_EXCEPTION_FAULT);
+
+    // DR4 and DR5 decode as DR6 and DR7
+    if (special_index == 4 || special_index == 5)
+        special_index += 2;
 
     if (write_special)
     {
@@ -955,7 +959,6 @@ bool I386::OPCodes0F_MOV_Special()
 
     if ((opcode == 0x21 || opcode == 0x23) && (m_state.debug_registers[7] & 0x00002000U) != 0)
     {
-        m_state.debug_registers[7] &= ~0x00002000U;
         m_state.debug_registers[6] |= 0x00002000U;
         return RaiseException(1, I386_EXCEPTION_FAULT);
     }

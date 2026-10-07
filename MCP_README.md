@@ -2,26 +2,24 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/introduction) server for the Geartowns emulator, enabling AI-assisted debugging and development of FM Towns software.
 
-This server provides tools for game development, ROM hacking, translation, reverse engineering, and debugging through standardized MCP protocols compatible with AI agents like GitHub Copilot, Claude, Codex and others.
+This server provides tools for game development, rom hacking, translation, reverse engineering, and debugging through standardized MCP protocols compatible with AI agents like GitHub Copilot, Claude, Codex and others.
 
 ## Features
 
 - **Full Debugger Access**: Intel 80386 registers, descriptor tables, paging, memory inspection, execute, data, I/O and interrupt breakpoints, and execution control
 - **i386 Addressing**: Every address takes linear, `SR:offset` or `selector:offset` forms, translated through segmentation and paging
 - **Multiple Memory Areas**: Linear and physical spaces, side-effect free I/O port reads, Main RAM, VRAM, Sprite RAM, CMOS, ROMs, PCM wave RAM, media images and inserted floppy images
-- **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control and keyboard
-- **Audio Inspection**: YM3438 FM channels, operators and registers, RF5C68 PCM channels and wave RAM, electronic volumes and sound interrupts, debugger mutes per source and channel
-- **Storage Inspection**: CD-ROM controller, TOC, CD audio and disc sectors; MB8877 floppy controller, drives, track sector lists and sector data
-- **Video Inspection**: CRTC timing and layers, CRTC registers, output controller, palettes, VRAM layers and sprite pages as PNG, sprite entries and patterns
 - **Disassembly**: Intel-syntax 80386 disassembly from current memory, with control flow, targets, I/O port and interrupt vector names
-- **Symbol Support**: User symbols (add, remove, load from files) and automatic labels
-- **Bookmarks and Watches**: Memory and disassembler bookmarks, memory watches
-- **Memory Search**: Value-change search and byte or text find
-- **Call Stack**: Calls, interrupts and exceptions with their vectors
-- **Trace Logger**: Executed instructions with registers interleaved with IRQs, interrupts, I/O, DMA, CD-ROM, FDC and VSYNC events, in memory or streamed to disk
-- **Profiler**: Calls, calls per frame and inclusive/exclusive CPU cycles per function and interrupt vector
-- **Input**: Pad buttons, FM Towns keyboard keys and typed text
-- **Save States**: Slots and explicit files
+- **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control, keyboard, CRTC, output controller, YM3438, RF5C68, CD-ROM controller and MB8877 floppy controller
+- **Sprite Viewer**: Inspect the sprite engine, list sprite entries and get sprite patterns and VRAM layers as images
+- **Audio Inspection**: YM3438 FM channels, operators and registers, RF5C68 PCM channels, electronic volumes and sound interrupts, debugger mutes per source and channel
+- **Storage Inspection**: CD-ROM TOC, CD audio and disc sectors; floppy drives, track sector lists and sector data
+- **Symbol Support**: Add, remove, load, list, and look up user symbols, plus automatic labels
+- **Input State**: Inspect effective pressed buttons, held keyboard keys and pending tap releases
+- **Bookmarks**: Memory and disassembler bookmarks for navigation
+- **Call Stack**: View calls, interrupts and exceptions with their vectors
+- **Trace Logger**: CPU instruction trace with interleaved hardware events (interrupts, I/O, DMA, CD-ROM, FDC, VSYNC), in memory or streamed to disk
+- **Profiler**: Per-function and per-interrupt-vector call counts, calls per frame, and inclusive/exclusive cycle statistics
 - **Screenshot Capture**: Get current frame as PNG image
 - **Video Recording**: Record emulated video and audio to AVI files on disk
 - **Rewind**: Time-travel debugging with snapshot status and seek tools
@@ -117,11 +115,30 @@ The FM Towns needs its firmware (FMT_SYS.ROM and companion files). Set the BIOS 
 
 4. **Open GitHub Copilot Chat** and start debugging:
    - The emulator will auto-start with MCP server enabled
-   - Load a CD image
+   - Load a CD image or a floppy image
    - Start chatting with Copilot about the program state
    - You can add context from "MCP Resources" if needed
 
 ### STDIO Mode with Claude Desktop
+
+#### Option 1: Desktop Extension (Recommended)
+
+The easiest way to install Geartowns MCP server on Claude Desktop is using the MCPB package:
+
+1. **Download the latest MCPB package** for your platform from the [releases page](https://github.com/drhelius/geartowns/releases).
+
+2. **Install the extension**:
+   - Open Claude Desktop
+   - Navigate to **Settings > Extensions**
+   - Click **Advanced settings**
+   - In the Extension Developer section, click **Install Extension…**
+   - Select the downloaded `.mcpb` file
+
+3. **Start debugging**: The extension is now available in your conversations. The emulator will automatically launch when the tool is enabled.
+
+#### Option 2: Manual Configuration
+
+If you prefer to build from source or configure manually:
 
 1. **Edit Claude Desktop config file**:
 
@@ -295,6 +312,8 @@ Once configured, you can ask your AI assistant:
 
 This is the full tool catalog. All tools are exposed directly by default. With `--mcp-router`, discover advanced tools through `search_tools` or `get_category_tools`, inspect their schemas with `get_tool_info`, then invoke them with `execute_tool`.
 
+The server exposes tools organized in the following categories:
+
 ### Addresses
 
 Every tool that takes an Intel 80386 address accepts:
@@ -305,20 +324,18 @@ Every tool that takes an Intel 80386 address accepts:
 
 Results report the `linear` address, and `logical` and `physical` addresses where meaningful.
 
-The server exposes tools organized in the following categories:
-
 ### Execution Control
 - `debug_pause` - Pause emulation
 - `debug_continue` - Resume emulation
 - `debug_step_into` - Step one instruction, entering calls and interrupts
 - `debug_step_over` - Step over subroutine calls
 - `debug_step_out` - Run until the current subroutine or interrupt handler returns
-- `debug_step_frame` - Run one frame with breakpoints active, then pause
-- `debug_run_to_cursor` - Continue execution until reaching an address
+- `debug_step_frame` - Run one complete frame with breakpoints active, then pause
+- `debug_run_to_cursor` - Continue execution until reaching specified address
 - `debug_reset` - Reset emulation
 - `debug_get_status` - Get debug status: `paused`, `at_breakpoint`, `pc` (linear), `logical_pc`, `mode`, `halted`, `breakpoint`, `media_loading`, `media_ready`, `powered_on`, `frame`
 - `set_fast_forward_speed` - Set fast forward speed multiplier (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
-- `toggle_fast_forward` - Toggle fast forward mode on/off
+- `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`
 
 ### CPU & Registers
 - `get_i386_status` - Get the complete Intel 80386 status: general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode, CPL, IOPL, code and stack size, last exception or interrupt vector, segment descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers
@@ -346,18 +363,64 @@ The server exposes tools organized in the following categories:
 
 ### Disassembly & Debugging
 - `get_disassembly` - Decode Intel 80386 instructions from current memory: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector` and `vector_name` for INT
-- `get_call_stack` - View the call stack: entries with `kind` (call, interrupt, exception), `vector`, `from`, `to` and `return` addresses (logical and linear) and symbols
-- `add_disassembler_bookmark` - Add bookmark in disassembler
-- `remove_disassembler_bookmark` - Remove disassembler bookmark
-- `list_disassembler_bookmarks` - List all disassembler bookmarks
-
-### Symbols
 - `add_symbol` - Add or rename a user symbol at an address; user symbols take precedence over automatic labels
 - `remove_symbol` - Remove the user symbol at an address
 - `load_symbols` - Load user symbols from a file: `ADDRESS NAME` or `NAME = ADDRESS` (or `EQU`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses
 - `list_symbols` - List user symbols and automatic labels, optional `filter`
 - `lookup_symbol_by_name` - Find all exact-name symbol matches
 - `lookup_symbol_at_address` - Find the symbol at an address
+- `add_disassembler_bookmark` - Add bookmark in disassembler
+- `remove_disassembler_bookmark` - Remove disassembler bookmark
+- `list_disassembler_bookmarks` - List all disassembler bookmarks
+- `get_call_stack` - View the call stack: entries with `kind` (call, interrupt, exception), `vector`, `from`, `to` and `return` addresses (logical and linear) and symbols
+- `get_trace_log` - Read trace logger entries (CPU + hardware events) using absolute sequence pagination. Use `set_trace_log` to start or stop the logger
+- `set_trace_log` - Start or stop trace logging and configure event filters and memory or disk storage
+
+#### Trace pagination
+
+`get_trace_log` returns:
+
+- `running`, `output`, `memory_size`, `disk_size`, `registers` and `filters`: the current logger configuration. `disk_path` and `disk_bytes` are added when the output is `disk`.
+- `retained`: entries currently retained in the memory ring.
+- `total_logged`: the next absolute sequence number. It is monotonic for the process lifetime and is not reset by clear, resize or stop.
+- `oldest_sequence`: absolute sequence of the oldest retained entry (`total_logged - retained`).
+- `start`: actual absolute sequence used for this page.
+- `next_sequence`: absolute sequence to pass as the next `start`.
+- `count`: number of returned entries.
+- `overrun`: `true` when a requested `start` had expired and was clamped to `oldest_sequence`.
+- `lines`: formatted trace entries in sequence order, each starting with the CPU clock.
+
+When `start` is omitted, the latest 100 retained entries are returned. A negative `start` requests that many entries from the retained tail. Positive starts are absolute sequences. `count` defaults to 100 and is capped at 1000. A requested sequence older than `oldest_sequence` starts at the oldest retained entry and sets `overrun` to `true`. A sequence at or beyond `total_logged` returns an empty page with `start` and `next_sequence` equal to the requested value and `overrun` set to `false`.
+
+#### Trace filters
+
+Omitting `filters` keeps the configured events, which default to `cpu`, `interrupt` and `io`. When supplied, `filters` can contain only these exact values:
+
+```text
+cpu
+interrupt
+io
+dma
+cdrom
+fdc
+vsync
+```
+
+`cpu` records executed instructions (CS:EIP, linear address, mode, bytes and Intel syntax), `registers` adds the general registers and EFLAGS to those lines. `interrupt` records IRQ requests and interrupt entries, `io` records I/O port accesses, `dma` records DMA requests and ends, `cdrom` and `fdc` record controller commands and status, and `vsync` records the vertical sync.
+
+The trace logger records while the debugger runs the machine, so the debugger must be enabled, which is always the case when the MCP server is running. `set_trace_log` with `enabled` true opens the Trace Logger window and starts recording.
+
+#### Trace storage
+
+Starting a stopped logger without `output` uses the configured storage, which defaults to `memory`. Memory capacities are `100K`, `500K`, `1M` and `2M` entries; the default is `100K`. Disk limits are `10MB`, `100MB`, `1GB` and `unbounded`; the default is `100MB`.
+
+Events, output, `memory_size`, `disk_size` and `output_path` can be changed only while the logger is stopped; the call fails otherwise. `registers` can be changed at any time. Stopping preserves retained memory entries.
+
+With `output` set to `disk` entries are also streamed to a text file. `output_path` is a directory only, not a filename. Geartowns creates a timestamped `geartowns_trace_YYYYMMDD_HHMMSS.txt` file in that directory, or in the configuration directory when it is not set. The path and size of the file are reported as `disk_path` and `disk_bytes`.
+
+### Profiler
+- `set_profiler` - Start, stop, or reset the function profiler with `action` (`start`, `stop`, `reset`). `start` opens the Profiler debugger window and `stop` closes it. Statistics are only collected while the window is open and the debugger runs the machine
+- `get_profiler_data` - Read profiler results: `running`, `total_cycles`, `frames`, `functions`, and per-function `name`, `type` (`call`, `interrupt` or `root` for code running outside any call), `address`, `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Interrupt handlers are listed per vector as `INT xx` with the vector name. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
 
 ### Breakpoints
 - `set_breakpoint` - Set a breakpoint at an address. `type`: `execute` (default, stops before the instruction), `read`, `write` or `access` (stop after the instruction that made the CPU access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear only
@@ -385,6 +448,8 @@ The server exposes tools organized in the following categories:
 - `get_video_output_status` - Get the output controller (mode, layer formats, front layer, palette select), FDA0 layer enables, 044C status, the VRAM write mask and the FM-R display state
 - `get_palettes` - Get the palettes: `layer0` and `layer1` (16 colors, 4-bit B, R, G), `256` (8-bit B, R, G), `digital` (FM-R), or `all`
 - `get_frame_buffer` - Decode a VRAM buffer as PNG: `layer0`, `layer1` (whole page with the layer's format and stride), `sprite_display`, `sprite_draw` (256x256, transparent pixels as a checkerboard), or `custom` with `offset`, `format`, `width`, `height` and `palette`
+
+### Sprites
 - `list_sprites` - Get the sprite engine state and list entries with screen position, pattern, colors and flags; `start`, `count`, `filter` (`all`, `drawn`, `visible`)
 - `get_sprite` - Get one sprite entry as an 8x PNG (`format` `image`) or its details (`info`)
 
@@ -407,22 +472,16 @@ The server exposes tools organized in the following categories:
 - `list_floppy_sectors` - List a track's sectors by `drive`, `cylinder`, `head`: C, H, R, N, size, density, deleted mark, status and image offset
 - `read_floppy_sector` - Read the sector with ID R (`sector`) on a track: IDs, status and data as hex
 
-### Trace Logger & Profiler
-- `set_trace_log` - Start (`enabled` true) or stop the trace logger and configure it: `filters` (`cpu`, `interrupt`, `io`, `dma`, `cdrom`, `fdc`, `vsync`), `output` (`memory`, `disk`), `memory_size`, `disk_size`, `output_path`, `registers`. It records while the debugger runs the machine
-- `get_trace_log` - Read trace lines from an absolute `start` sequence or the last N (`start` negative), up to `count`; each line starts with the CPU clock
-- `set_profiler` - `start` (opens the Profiler window), `stop` or `reset` the profiler; it collects while its window is open and the debugger runs the machine
-- `get_profiler_data` - Read per-function and per-vector results: calls, calls per frame, inclusive and exclusive cycles and percentages, average, min and max cycles; `sort`, `count`, `filter`
-
 ### Screen Capture
 - `get_screenshot` - Capture current screen frame as base64 PNG
-- `start_video_recording` - Start recording video and audio to an AVI file (MJPEG or uncompressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`). Given options update the recording settings, same as the GUI menu. Frames are recorded only while the emulator runs, so continue or step execution before stopping
+- `start_video_recording` - Start recording video and audio to an AVI file (MJPEG or uncompressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`). Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses square pixels while debugging. Frames are recorded only while the emulator runs, so continue or step execution before stopping
 - `stop_video_recording` - Stop the active recording and finalize the AVI file. Returns `file_path` and the number of recorded `frames`
 
 ### Media & State Management
 - `get_media_info` - Get loaded media info, firmware status and the floppy drives (image, disk name, media, write protect, modified)
 - `list_recent_media` - List the most recent CD images and floppies opened by Geartowns
-- `load_media` - Load a CD image (.cue, .chd, .iso, .zip)
-- `load_bios` - Load the FM Towns firmware set from a directory
+- `load_media` - Load a CD image or a floppy image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .m3u; also inside .zip)
+- `load_bios` - Load the FM Towns firmware set from a directory, reset, and stop at the reset vector
 - `insert_floppy` - Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, an .m3u list or a .zip) in `drive`; optional `write_protected`
 - `eject_floppy` - Eject the disk in `drive`, keeping its changes in the working copy
 - `swap_floppies` - Swap the disks in drives 0 and 1
@@ -442,7 +501,7 @@ The server exposes tools organized in the following categories:
 - `controller_get_type` - Read the device on a game port
 - `get_input_state` - Get each port's device type, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
-- `keyboard_type` - Type ASCII text through a frame macro on the JIS layout; optional `frames_per_key`
+- `keyboard_type` - Type ASCII text (up to 256 characters) through a frame macro on the JIS layout; optional `frames_per_key`
 
 ## Available MCP Resources
 
@@ -452,7 +511,7 @@ MCP clients usually offer resources in the "Add context..." section of the chat 
 
 ### Hardware Documentation Resources
 
-Programmer references for the FM Towns hardware:
+Complete technical reference documentation for all FM Towns hardware components:
 
 - **FM Towns Memory Map** (`geartowns://hardware/memory_map`)
 - **FM Towns I/O Port Map** (`geartowns://hardware/io_ports`)

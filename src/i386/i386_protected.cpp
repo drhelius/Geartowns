@@ -455,10 +455,7 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
         if (!ReadPrivilegeStack(new_privilege, new_stack, new_ss, context))
             return false;
 
-        if ((new_ss & 0xFFFC) == 0)
-            return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
-
-        if ((new_ss & 3) != new_privilege)
+        if ((new_ss & 0xFFFC) == 0 || (new_ss & 3) != new_privilege)
             return RaiseException(10, I386_EXCEPTION_FAULT, true, new_ss & 0xFFFC);
 
         Descriptor stack_descriptor;

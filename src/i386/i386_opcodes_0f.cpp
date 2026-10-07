@@ -50,6 +50,12 @@ bool I386::OPCode0F_0x06()
     return OPCodes0F_CLTS();
 }
 
+bool I386::OPCode0F_0x07()
+{
+    // LOADALL
+    return OPCodes0F_LOADALL();
+}
+
 // UMOV is an in-circuit emulator move, outside ICE mode it is a plain MOV
 bool I386::OPCode0F_0x10()
 {
@@ -946,6 +952,100 @@ bool I386::OPCodes0F_CLTS()
 
     m_state.cr0 &= ~0x08U;
     CommitEIP(m_instruction);
+    return true;
+}
+
+// LOADALL reads the CPU state from a 204-byte table at ES:EDI, after ten dwords from EDI+100h that only fill
+// microcode temporaries. The caches take access rights, base and limit from the table, CPL comes from the SS cache,
+// CR0 goes last and the TLB is flushed when paging was on. The table is read before anything changes
+bool I386::OPCodes0F_LOADALL()
+{
+    if (!DecodeAndStart(false, 0, 250, 250))
+        return false;
+
+    if (m_state.execution_mode != I386_MODE_REAL && m_state.current_privilege_level != 0)
+        return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+
+    u32 table = m_state.registers[I386_REG_EDI].value;
+    u32 value = 0;
+    u32 dwords[13];
+    u32 selectors[8];
+    u32 caches[10][3];
+
+    for (u32 i = 0; i < 10; i++)
+    {
+        if (!ReadMemory(I386_SEGMENT_ES, table + 0x100 + i * 4, 32, *m_bus_context, value))
+            return false;
+    }
+
+    // CR0, EFLAGS, EIP, EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX, DR6 and DR7
+    for (u32 i = 0; i < 13; i++)
+    {
+        if (!ReadMemory(I386_SEGMENT_ES, table + i * 4, 32, *m_bus_context, dwords[i]))
+            return false;
+    }
+
+    // TR, LDTR, GS, FS, DS, SS, CS and ES selectors
+    for (u32 i = 0; i < 8; i++)
+    {
+        if (!ReadMemory(I386_SEGMENT_ES, table + 0x34 + i * 4, 16, *m_bus_context, selectors[i]))
+            return false;
+    }
+
+    // TSS, IDT, GDT, LDT, GS, FS, DS, SS, CS and ES caches
+    for (u32 i = 0; i < 30; i++)
+    {
+        if (!ReadMemory(I386_SEGMENT_ES, table + 0x54 + i * 4, 32, *m_bus_context, caches[i / 3][i % 3]))
+            return false;
+    }
+
+    static const int k_registers[8] = { I386_REG_EDI, I386_REG_ESI, I386_REG_EBP, I386_REG_ESP, I386_REG_EBX,
+        I386_REG_EDX, I386_REG_ECX, I386_REG_EAX };
+    static const int k_caches[8] = { 0, 3, 4, 5, 6, 7, 8, 9 };
+    I386_Segment* segments[8] = { &m_state.task_register, &m_state.ldtr, &m_state.segments[I386_SEGMENT_GS],
+        &m_state.segments[I386_SEGMENT_FS], &m_state.segments[I386_SEGMENT_DS], &m_state.segments[I386_SEGMENT_SS],
+        &m_state.segments[I386_SEGMENT_CS], &m_state.segments[I386_SEGMENT_ES] };
+    bool paging = (m_state.cr0 & 0x80000000U) != 0;
+
+    m_state.eflags = (dwords[1] & 0x00037FD5U) | I386_FLAG_FIXED;
+    m_state.eip = dwords[2];
+
+    for (int i = 0; i < 8; i++)
+        m_state.registers[k_registers[i]].value = dwords[3 + i];
+
+    m_state.debug_registers[6] = dwords[11];
+    m_state.debug_registers[7] = dwords[12];
+
+    for (int i = 0; i < 8; i++)
+    {
+        const u32* cache = caches[k_caches[i]];
+        Descriptor descriptor;
+
+        DecodeDescriptor((u16)selectors[i], 0, 0, cache[0] & 0x00C0FF00U, descriptor);
+        descriptor.base = cache[1];
+        descriptor.limit = cache[2];
+        LoadDescriptorCache((u16)selectors[i], descriptor, *segments[i]);
+    }
+
+    m_state.idtr.base = caches[1][1];
+    m_state.idtr.limit = (u16)caches[1][2];
+    m_state.gdtr.base = caches[2][1];
+    m_state.gdtr.limit = (u16)caches[2][2];
+    m_state.cr0 = dwords[0];
+    UpdateExecutionMode();
+
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
+    {
+        m_state.current_privilege_level = m_state.segments[I386_SEGMENT_SS].dpl;
+        UpdateUserMode();
+    }
+
+    if (paging)
+        FlushTLB();
+
+    m_state.nmi_blocked = false;
+    UpdateStepMode();
+    UpdateMemoryMode();
     return true;
 }
 

@@ -303,7 +303,7 @@ const I386::opcodeptr I386::k_opcodes_0f[256] =
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x04 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x05 invalid
     &I386::OPCodeThunk<&I386::OPCode0F_0x06>,
-    &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x07 invalid
+    &I386::OPCodeThunk<&I386::OPCode0F_0x07>,
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x08 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x09 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x0A invalid

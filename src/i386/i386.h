@@ -926,6 +926,7 @@ private:
     bool OPCodes0F_Group7();
     bool OPCodes0F_LAR_LSL();
     bool OPCodes0F_CLTS();
+    bool OPCodes0F_LOADALL();
     bool OPCodes0F_MOV_Special();
     bool OPCodes0F_SETcc();
     bool OPCodes0F_PUSH_FS_GS();
@@ -1026,7 +1027,7 @@ private:
     bool OPCode0xFC(); bool OPCode0xFD(); bool OPCode0xFE(); bool OPCode0xFF();
 
     bool OPCode0F_0x00(); bool OPCode0F_0x01(); bool OPCode0F_0x02(); bool OPCode0F_0x03();
-    bool OPCode0F_0x06(); bool OPCode0F_0x10(); bool OPCode0F_0x11(); bool OPCode0F_0x12();
+    bool OPCode0F_0x06(); bool OPCode0F_0x07(); bool OPCode0F_0x10(); bool OPCode0F_0x11(); bool OPCode0F_0x12();
     bool OPCode0F_0x13(); bool OPCode0F_0x20(); bool OPCode0F_0x21(); bool OPCode0F_0x22();
     bool OPCode0F_0x23(); bool OPCode0F_0x24(); bool OPCode0F_0x26(); bool OPCode0F_0x80();
     bool OPCode0F_0x81(); bool OPCode0F_0x82(); bool OPCode0F_0x83(); bool OPCode0F_0x84();

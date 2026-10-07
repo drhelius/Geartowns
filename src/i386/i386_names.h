@@ -120,6 +120,7 @@ static const I386_Extended_Opcode_Name k_i386_extended_opcode_names[] =
     { 0x02, "lar {Gv},{Ew}" },       // LAR r16/32,r/m16
     { 0x03, "lsl {Gv},{Ew}" },       // LSL r16/32,r/m16
     { 0x06, "clts" },                // CLTS
+    { 0x07, "loadall" },             // LOADALL
     { 0x10, "umov {Eb},{Gb}" },      // UMOV r/m8,r8
     { 0x11, "umov {Ev},{Gv}" },      // UMOV r/m16/32,r16/32
     { 0x12, "umov {Gb},{Eb}" },      // UMOV r8,r/m8

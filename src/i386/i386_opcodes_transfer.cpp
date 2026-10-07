@@ -465,6 +465,10 @@ bool I386::OPCodes_IRET()
 
     u32 mask = operand_width == 16 ? 0x00007FD5U : 0x00017FD5U;
 
+    // The flags are written as POPF writes them, so a V86 IRET at CPL 3 keeps IOPL
+    if (m_state.execution_mode == I386_MODE_VM86)
+        mask &= ~I386_FLAG_IOPL;
+
     m_state.eflags = (m_state.eflags & ~mask) | (flags & mask) | I386_FLAG_FIXED;
     m_state.nmi_blocked = false;
     UpdateExecutionMode();

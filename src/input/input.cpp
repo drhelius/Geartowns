@@ -160,11 +160,15 @@ u8 Input::ReadMouse(int port) const
 }
 
 // Each COM edge presents the next nibble, and the first edge after a pause longer than the timeout starts a packet
+// The Data Book times out T2, the pause before the third edge, at 150 us
 // The packet takes the motion at that edge and the rest waits for the next one
 // Each axis stops at 127 counts both ways because Towns OS negates the byte and would turn -128 around
 void Input::MouseEdge(int port, u64 clocks)
 {
-    if (clocks - m_state.mouse_edge_clocks[port] > k_input_mouse_timeout_clocks)
+    u64 timeout = m_state.mouse_phase[port] == k_input_mouse_x_low ? k_input_mouse_t2_timeout_clocks :
+        k_input_mouse_timeout_clocks;
+
+    if (clocks - m_state.mouse_edge_clocks[port] > timeout)
         m_state.mouse_phase[port] = k_input_mouse_y_low;
 
     m_state.mouse_phase[port] = (m_state.mouse_phase[port] + 1) & 0x03;

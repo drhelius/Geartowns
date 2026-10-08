@@ -83,6 +83,7 @@ static const u8 k_input_mouse_x_low = 1;
 static const u8 k_input_mouse_y_high = 2;
 static const u8 k_input_mouse_y_low = 3;
 static const u64 k_input_mouse_timeout_clocks = GT_CPU_CLOCK_RATE / 1000;
+static const u64 k_input_mouse_t2_timeout_clocks = ((u64)GT_CPU_CLOCK_RATE * 150) / 1000000;
 static const s32 k_input_mouse_limit = 0x3FFFFFFF;
 
 #include "input_inline.h"

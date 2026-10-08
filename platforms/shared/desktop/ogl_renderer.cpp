@@ -308,7 +308,7 @@ static bool init_ogl_emu(void)
 {
     glGenFramebuffers(1, &frame_buffer_object);
     create_texture_2d(&ogl_renderer_emu_texture, FRAME_BUFFER_WIDTH, FRAME_BUFFER_HEIGHT, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, NULL, false);
-    create_texture_2d(&system_texture, SYSTEM_TEXTURE_WIDTH, SYSTEM_TEXTURE_HEIGHT, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*) emu_frame_buffer, false);
+    create_texture_2d(&system_texture, SYSTEM_TEXTURE_WIDTH, SYSTEM_TEXTURE_HEIGHT, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, (GLvoid*) emu_frame_buffer, false);
 
     glBindFramebuffer(GL_FRAMEBUFFER, frame_buffer_object);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ogl_renderer_emu_texture, 0);
@@ -323,7 +323,7 @@ static bool init_ogl_emu(void)
 static void init_ogl_savestates(void)
 {
     create_texture_2d(&ogl_renderer_emu_savestates, SYSTEM_TEXTURE_WIDTH,
-        SYSTEM_TEXTURE_HEIGHT, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
+        SYSTEM_TEXTURE_HEIGHT, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL, false);
     savestates_texture_slot = -1;
     savestates_texture_generation = 0;
 }
@@ -484,7 +484,7 @@ static void update_system_texture(void)
 {
     glBindTexture(GL_TEXTURE_2D, system_texture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, current_runtime.screen_width, current_runtime.screen_height,
-            GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*) emu_frame_buffer);
+            GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, (GLvoid*) emu_frame_buffer);
 }
 
 static void update_debug_textures(void)
@@ -527,8 +527,8 @@ static void update_savestates_texture(void)
         int width = emu_savestates_screenshots[slot].width;
         int height = emu_savestates_screenshots[slot].height;
         glBindTexture(GL_TEXTURE_2D, ogl_renderer_emu_savestates);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA,
-            GL_UNSIGNED_BYTE, (GLvoid*)emu_savestates_screenshots[slot].data);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA,
+            GL_UNSIGNED_INT_8_8_8_8_REV, (GLvoid*)emu_savestates_screenshots[slot].data);
     }
 }
 

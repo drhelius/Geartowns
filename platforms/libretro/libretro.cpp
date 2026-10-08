@@ -254,10 +254,10 @@ void retro_init(void)
     log_cb(RETRO_LOG_INFO, "%s (%s) libretro\n", GT_TITLE, GT_VERSION);
 
     core = new GeartownsCore();
-    core->Init(GT_PIXEL_RGB565);
+    core->Init();
     core->GetRuntimeInfo(runtime_info);
 
-    frame_buffer = new u8[MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16)];
+    frame_buffer = new u8[MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u32)];
 
     clear_input_state();
 
@@ -395,7 +395,7 @@ void retro_run(void)
         }
     }
 
-    video_cb(frame_buffer, runtime_info.screen_width, runtime_info.screen_height, runtime_info.screen_width * sizeof(u16));
+    video_cb(frame_buffer, runtime_info.screen_width, runtime_info.screen_height, runtime_info.screen_width * sizeof(u32));
 
     if (audio_sample_count > 0)
         audio_batch_cb(audio_buf, audio_sample_count / 2);
@@ -454,11 +454,11 @@ bool retro_load_game(const struct retro_game_info *info)
 
     core->PowerOn();
 
-    enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
+    enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
 
     if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
     {
-        log_cb(RETRO_LOG_ERROR, "RGB565 is not supported.\n");
+        log_cb(RETRO_LOG_ERROR, "XRGB8888 is not supported.\n");
         retro_game_path[0] = 0;
         return false;
     }
@@ -490,7 +490,7 @@ void retro_unload_game(void)
     current_fps = 60.0f;
 
     if (frame_buffer)
-        memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u16));
+        memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u32));
 }
 
 static void load_bios(void)

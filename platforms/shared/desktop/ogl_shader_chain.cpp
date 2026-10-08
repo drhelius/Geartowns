@@ -130,7 +130,7 @@ bool ogl_shader_chain_init(const char* name)
     pass_float_framebuffer = false;
 
     glGenTextures(1, &source_texture);
-    resize_texture_2d(source_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
+    resize_texture_2d(source_texture, 1, 1, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL, false);
 
     glGenTextures(1, &pass_texture);
     resize_texture_2d(pass_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
@@ -256,14 +256,15 @@ bool ogl_shader_chain_update_source_texture(const OglShaderChainSourceTexture* t
 
     if (source_width != width || source_height != height)
     {
-        resize_texture_2d(source_texture, width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, texture->filter_linear);
+        resize_texture_2d(source_texture, width, height, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL,
+            texture->filter_linear);
         source_width = width;
         source_height = height;
         source_filter_linear = texture->filter_linear;
     }
 
     glBindTexture(GL_TEXTURE_2D, source_texture);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, texture->pixels);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, texture->pixels);
     if (source_filter_linear != texture->filter_linear)
     {
         configure_texture_2d(texture->filter_linear);

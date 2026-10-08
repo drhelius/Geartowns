@@ -126,9 +126,18 @@ INLINE Video::Video_Layer_Format Video::GetLayerFormat(int layer) const
     }
 }
 
-INLINE u8 Video::ReadVRAM(u32 offset, bool two_page) const
+// Layer pages start at their own half in two page mode
+template<bool two_page>
+INLINE u8 Video::ReadLayerVRAM(const u8* page, u32 offset) const
 {
-    return m_state.vram[two_page ? offset : SinglePageToCanonical(offset)];
+    return two_page ? page[offset & 0x3FFFF] : page[SinglePageToCanonical(offset)];
+}
+
+// Masks instead of branching, as transparent pixels come and go with the picture
+INLINE u32 Video::BlendLayerColor(u32 color, u32 back) const
+{
+    u32 keep = 0 - (u32)(color == k_video_transparent);
+    return (color & ~keep) | (back & keep);
 }
 
 // The single page view interleaves four byte groups between the two 256 KiB halves
@@ -194,16 +203,9 @@ INLINE u32 Video::GetBeamClock(u64 clocks) const
     return (u32)((origin + elapsed) % m_state.frame_line_clocks);
 }
 
-INLINE u32 Video::MakeColor(u8 red, u8 green, u8 blue) const
+INLINE u32 Video::ToXRGB(u8 red, u8 green, u8 blue) const
 {
-    if (m_pixel_format == GT_PIXEL_RGB565)
-        return ((u32)(red >> 3) << 11) | ((u32)(green >> 2) << 5) | (blue >> 3);
-
-#if defined(GT_LITTLE_ENDIAN)
-    return (u32)red | ((u32)green << 8) | ((u32)blue << 16) | 0xFF000000U;
-#else
-    return ((u32)red << 24) | ((u32)green << 16) | ((u32)blue << 8) | 0xFFU;
-#endif
+    return 0xFF000000U | ((u32)red << 16) | ((u32)green << 8) | blue;
 }
 
 INLINE u8 Video::Expand5(u32 value) const

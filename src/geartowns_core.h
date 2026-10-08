@@ -65,7 +65,7 @@ public:
 public:
     GeartownsCore();
     ~GeartownsCore();
-    void Init(GT_Pixel_Format pixel_format = GT_PIXEL_RGBA8888);
+    void Init();
     GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, bool render = true);
     GT_Run_Result RunToFrame(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
         bool render = true);
@@ -180,7 +180,6 @@ private:
     bool m_powered;
     bool m_paused;
     bool m_skip_interrupts;
-    GT_Pixel_Format m_pixel_format;
 
     u8* m_frame_buffer;
 };

@@ -148,12 +148,6 @@ struct GT_Color
     u8 blue;
 };
 
-enum GT_Pixel_Format
-{
-    GT_PIXEL_RGB565,
-    GT_PIXEL_RGBA8888,
-};
-
 enum GT_Keys
 {
     GT_KEY_NONE             = 0x00,

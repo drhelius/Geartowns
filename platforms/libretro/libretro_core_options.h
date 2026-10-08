@@ -51,6 +51,13 @@ struct retro_core_option_v2_category option_cats_us[] = {
         "CD-ROM",
         "Configure CD-ROM settings."
     },
+#if !defined(GT_DISABLE_DYNAREC)
+    {
+        "system",
+        "System",
+        "Configure how the emulated CPU runs."
+    },
+#endif
     { NULL, NULL, NULL },
 };
 
@@ -137,6 +144,24 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         },
         "1x"
     },
+
+    /* System */
+#if !defined(GT_DISABLE_DYNAREC)
+    {
+        "geartowns_dynarec",
+        "CPU Dynarec",
+        NULL,
+        "Translate the 80386 code into native code, with the same results as the interpreter. The core falls back to the interpreter when the frontend can't run generated code.",
+        NULL,
+        "system",
+        {
+            { "Enabled",  NULL },
+            { "Disabled", NULL },
+            { NULL, NULL },
+        },
+        "Enabled"
+    },
+#endif
 
     { NULL, NULL, NULL, NULL, NULL, NULL, {{0, 0}}, NULL },
 };

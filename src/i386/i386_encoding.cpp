@@ -611,3 +611,11 @@ INLINE u32 I386::CountInstructionComponents(const u8* bytes, u32 count, bool& tr
     truncated = false;
     return components;
 }
+
+#if !defined(GT_DISABLE_DYNAREC)
+// The m component of a transfer target, for the dynarec to count it when it compiles the transfer
+u32 I386::CountTargetComponents(const u8* bytes, u32 count, bool& truncated) const
+{
+    return CountInstructionComponents(bytes, count, truncated);
+}
+#endif

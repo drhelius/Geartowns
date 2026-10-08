@@ -25,6 +25,7 @@
 #include <vector>
 #include "../common/common.h"
 #include "../common/debug_memory.h"
+#include "dynarec_platform.h"
 
 #define I386_TLB_SETS 8
 #define I386_TLB_WAYS 4
@@ -34,6 +35,8 @@ class Memory;
 class Profiler;
 class TraceLogger;
 class IO;
+class ExecMemory;
+class DynarecEmitter;
 
 enum I386_Register
 {
@@ -367,6 +370,17 @@ struct I386_Breakpoint_Hit
     u16 ax;
 };
 
+struct I386_Dynarec_Info
+{
+    bool available;
+    bool enabled;
+    u32 blocks;
+    u32 code_used;
+    u32 code_size;
+    u32 flushes;
+    u32 invalidations;
+};
+
 struct I386_CallStackEntry
 {
     u16 src_cs;
@@ -474,7 +488,14 @@ public:
     bool GetStepCall(u32& return_linear) const;
     u32 GetCurrentLinearPC() const;
 
+    void EnableDynarec(bool enable);
+    bool IsDynarecEnabled() const;
+    void GetDynarecInfo(I386_Dynarec_Info& info) const;
+    void SetDynarecTuning(u32 threshold, u32 block_limit);
+
 private:
+    friend class DynarecEmitter;
+
     struct StepState
     {
         u64 clocks;
@@ -603,6 +624,37 @@ private:
         u8* write_page;
     };
 
+#if !defined(GT_DISABLE_DYNAREC)
+    typedef u32 (*DynarecEntry)(I386* cpu, const u8* code);
+
+    // Blocks are found by the host address of their first byte, their EIP and a key with the decoding state they
+    // assume in the low byte and the CS limit they were decoded for above it
+    // Translated blocks are listed in their RAM page, the others are only counted until they get hot
+    struct DynarecBlock
+    {
+        const u8* host;
+        u64 key;
+        u32 eip;
+        u8 state;
+        u8 count;
+        u16 length;
+        u16 watch_length;
+        u32 watch_eip;
+        u32 hits;
+        u32 fit_clocks;
+        u32 eip_limit;
+        u32 epoch;
+        u32 copy;
+        u32 hash_next;
+        u32 page;
+        u32 page_next;
+        u32 call_eip;
+        u32 call_next_eip;
+        u32 link[2];
+        const u8* code;
+    };
+#endif
+
     typedef bool (I386::*opcode_member_ptr)();
     typedef bool (*opcodeptr)(I386*);
 
@@ -625,8 +677,11 @@ private:
 
     u32 RunCheckedStep();
     bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
+    bool RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
+        bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending);
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
     void DisassembleNextInstruction();
+    void DisassembleInstruction(u32 eip);
     void ClearDisassemblerCache();
     void PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_Type type, u8 vector);
     bool TrackCall(bool completed, u16 cs, u32 base);
@@ -634,6 +689,24 @@ private:
     bool DeferIO();
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
+#if !defined(GT_DISABLE_DYNAREC)
+    I386_Run_Result RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
+    void FlushDynarec();
+    DynarecBlock* FindDynarecBlock(u8 entry);
+    u32 LookupDynarecBlock(const u8* host, u32 eip, u64 key) const;
+    u32 CountTargetComponents(const u8* bytes, u32 count, bool& truncated) const;
+    void CompileDynarecBlock(DynarecBlock& block, u32 available);
+    bool VerifyDynarecBlock(DynarecBlock& block);
+    void AddDynarecPageBlock(u32 index);
+    void LinkDynarecBlock(u32 from, u8 slot, u32 to);
+    void RemoveDynarecBlock(u32 index);
+    void InvalidateDynarecCode(u32 offset, u32 size);
+    void EvictDynarecPage(u32 page);
+    void CoolDynarecPages();
+    void CheckDynarecMemory();
+    static void DynarecCodeWrite(void* context, u32 offset, u32 size);
+    static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks);
+#endif
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();
     void UpdateStepMode();
@@ -1117,6 +1190,46 @@ private:
     u32 m_tlb_used;
     u8 m_tlb_plru[I386_TLB_SETS];
     u8 m_tlb_mru[I386_TLB_SETS];
+
+#if !defined(GT_DISABLE_DYNAREC)
+    bool m_dynarec_enabled;
+    bool m_dynarec_failed;
+    ExecMemory* m_dynarec_memory;
+    DynarecEntry m_dynarec_entry;
+    const u8* m_dynarec_exit;
+    const u8* m_dynarec_link;
+    u32 m_dynarec_code_start;
+    u32 m_dynarec_code_used;
+    DynarecBlock* m_dynarec_blocks;
+    u32 m_dynarec_block_count;
+    u32* m_dynarec_hash;
+    u8* m_dynarec_bytes;
+    u32 m_dynarec_bytes_used;
+    u32* m_dynarec_page_blocks;
+    u64* m_dynarec_page_granules;
+    u8* m_dynarec_page_heat;
+    u16* m_dynarec_page_writes;
+    u8* m_dynarec_page_cool;
+    u32 m_dynarec_page_count;
+    const u8* m_dynarec_ram;
+    u32 m_dynarec_region_generation;
+    u32 m_dynarec_epoch;
+    u32 m_dynarec_threshold;
+    u32 m_dynarec_block_limit;
+    u32 m_dynarec_flushes;
+    u32 m_dynarec_invalidations;
+    u64 m_dynarec_cool_clocks;
+    u32 m_dynarec_current;
+    u32 m_dynarec_steps;
+    u32 m_dynarec_link_block;
+    u8 m_dynarec_link_slot;
+    u32 m_dynarec_link_window;
+    bool m_dynarec_dirty;
+    bool m_dynarec_keep_entry;
+    u32 m_dynarec_clocks;
+    u32 m_dynarec_remaining;
+    u32 m_dynarec_wait;
+#endif
 
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;
     I386_Disassembler_Record** m_disassembler_cache;

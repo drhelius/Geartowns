@@ -150,6 +150,7 @@ void gui_apply_settings(void)
 
     emu_set_preload_cdrom(config_emulator.preload_cdrom);
     emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
+    emu_set_dynarec(config_emulator.dynarec);
     emu_apply_machine_settings();
 }
 

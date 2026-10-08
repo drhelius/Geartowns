@@ -29,6 +29,7 @@ Memory::Memory()
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
     m_map_generation = 1;
+    m_region_generation = 1;
     m_debug_snapshot_id = 1;
     InitPointer(m_working_ram);
     m_working_ram_size = 0;
@@ -42,6 +43,12 @@ Memory::Memory()
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     memset(m_debug_regions, 0, sizeof(m_debug_regions));
+#if !defined(GT_DISABLE_DYNAREC)
+    InitPointer(m_code_pages);
+    m_code_page_count = 0;
+    InitPointer(m_code_write_context);
+    InitPointer(m_code_write_callback);
+#endif
 }
 
 Memory::~Memory()
@@ -49,6 +56,9 @@ Memory::~Memory()
     SafeDeleteArray(m_cpu_read_pages);
     SafeDeleteArray(m_cpu_write_pages);
     SafeDeleteArray(m_state.main_ram);
+#if !defined(GT_DISABLE_DYNAREC)
+    SafeDeleteArray(m_code_pages);
+#endif
 }
 
 void Memory::Init()
@@ -128,6 +138,27 @@ INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size)
     return found;
 }
 
+#if !defined(GT_DISABLE_DYNAREC)
+// Writes that reach RAM pages holding translated code outside the CPU fast path
+INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size)
+{
+    if (region->write_data != m_working_ram || !IsValidPointer(m_code_pages))
+        return;
+
+    u32 first = offset >> 12;
+    u32 last = (offset + size - 1) >> 12;
+
+    for (u32 page = first; page <= last && page < m_code_page_count; page++)
+    {
+        if (m_code_pages[page] != 0)
+        {
+            m_code_write_callback(m_code_write_context, offset, size);
+            return;
+        }
+    }
+}
+#endif
+
 u8 Memory::Read8Physical(u32 physical, GT_Bus_Access_Context& context)
 {
     if (m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages[physical >> 12]))
@@ -179,6 +210,9 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
 
             write_u16_le(data, value);
             m_debug_snapshot_id += 2;
+#if !defined(GT_DISABLE_DYNAREC)
+            NotifyCodeWrite(region, offset, 2);
+#endif
             return;
         }
     }
@@ -201,6 +235,9 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
 
             write_u32_le(data, value);
             m_debug_snapshot_id += 4;
+#if !defined(GT_DISABLE_DYNAREC)
+            NotifyCodeWrite(region, offset, 4);
+#endif
             return;
         }
     }
@@ -218,7 +255,12 @@ void Memory::ClearDebugRegions()
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     m_map_generation++;
+    m_region_generation++;
     m_debug_snapshot_id++;
+#if !defined(GT_DISABLE_DYNAREC)
+    SafeDeleteArray(m_code_pages);
+    m_code_page_count = 0;
+#endif
 }
 
 bool Memory::RegisterDebugRegion(int id, const char* name, const u8* read_data, u8* write_data, u32 size, u32 physical_base, u32 flags)
@@ -252,6 +294,7 @@ bool Memory::RegisterDebugRegion(int id, const char* name, const u8* read_data, 
 
     UpdateRAMRegions();
     m_map_generation++;
+    m_region_generation++;
     m_debug_snapshot_id++;
     return true;
 }
@@ -291,6 +334,7 @@ bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physi
     region.peek8 = peek8;
 
     m_map_generation++;
+    m_region_generation++;
     m_debug_snapshot_id++;
     return true;
 }
@@ -385,6 +429,9 @@ bool Memory::DebugWriteRegionBlock(int id, u32 offset, const u8* data, u32 size)
 
     memcpy(region->write_data + offset, data, size);
     m_debug_snapshot_id++;
+#if !defined(GT_DISABLE_DYNAREC)
+    NotifyCodeWrite(region, offset, size);
+#endif
     return true;
 }
 
@@ -513,7 +560,12 @@ bool Memory::DebugWritePhysicalBlock(u32 physical, const u8* data, u32 size)
         if (IsValidPointer(region->write8))
             region->write8(region->device, offset, data[i]);
         else
+        {
             region->write_data[offset] = data[i];
+#if !defined(GT_DISABLE_DYNAREC)
+            NotifyCodeWrite(region, offset, 1);
+#endif
+        }
     }
 
     m_debug_snapshot_id++;
@@ -548,7 +600,12 @@ bool Memory::DebugWriteBusBlock(u32 bus_address, const u8* data, u32 size)
         if (IsValidPointer(region->write8))
             region->write8(region->device, offset, data[i]);
         else
+        {
             region->write_data[offset] = data[i];
+#if !defined(GT_DISABLE_DYNAREC)
+            NotifyCodeWrite(region, offset, 1);
+#endif
+        }
     }
 
     m_debug_snapshot_id++;
@@ -594,6 +651,65 @@ void Memory::SetPhysicalAddressMask(u32 mask)
         m_debug_snapshot_id++;
     }
 }
+
+u32 Memory::GetRegionGeneration() const
+{
+    return m_region_generation;
+}
+
+#if !defined(GT_DISABLE_DYNAREC)
+void Memory::SetCodeWriteCallback(void* context, GT_Memory_Code_Write_Fn callback)
+{
+    m_code_write_context = context;
+    m_code_write_callback = callback;
+}
+
+// A RAM page with translated code keeps no CPU write pointer, so every CPU write to it reaches NotifyCodeWrite
+// Up to date host pages are patched in place for each alias of the page, the new generation makes the CPU drop its
+// cached pointers
+void Memory::SetCodePage(u32 page, bool code)
+{
+    if (!IsValidPointer(m_code_pages) || page >= m_code_page_count || (m_code_pages[page] != 0) == code)
+        return;
+
+    m_code_pages[page] = code ? 1 : 0;
+
+    const DebugRegion* ram = FindRegion(GT_DEBUG_REGION_MAIN_RAM);
+    u32 period = (m_physical_address_mask + 1) >> 12;
+    bool patch = m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages) &&
+        IsValidPointer(ram) && (m_physical_address_mask & (m_physical_address_mask + 1)) == 0;
+
+    m_map_generation++;
+
+    if (!patch)
+        return;
+
+    for (u32 alias = (ram->info.physical_base >> 12) + page; alias < (1U << 20); alias += period)
+    {
+        UpdateCPUPage(alias);
+
+        if (period == 0)
+            break;
+    }
+
+    m_cpu_map_generation = m_map_generation;
+}
+
+// Host memory of a ROM region, which no write ever reaches
+bool Memory::IsReadOnlyHost(const u8* host) const
+{
+    for (int i = 0; i < m_debug_region_count; i++)
+    {
+        const DebugRegion& region = m_debug_regions[i];
+
+        if ((region.info.flags & GT_DEBUG_REGION_ROM) != 0 && IsValidPointer(region.read_data) &&
+            !IsValidPointer(region.write_data) && host >= region.read_data && host < region.read_data + region.info.size)
+            return true;
+    }
+
+    return false;
+}
+#endif
 
 u64 Memory::GetDebugSnapshotId() const
 {
@@ -795,7 +911,12 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
     if (IsValidPointer(region->write8))
         region->write8(region->device, offset, value);
     else
+    {
         region->write_data[offset] = value;
+#if !defined(GT_DISABLE_DYNAREC)
+        NotifyCodeWrite(region, offset, 1);
+#endif
+    }
 
     m_debug_snapshot_id++;
 }
@@ -810,6 +931,22 @@ void Memory::UpdateRAMRegions()
     DebugRegion* ram = FindRegion(GT_DEBUG_REGION_MAIN_RAM);
     m_working_ram = IsValidPointer(ram) ? ram->write_data : NULL;
     m_working_ram_size = IsValidPointer(ram) ? ram->info.size : 0;
+
+#if !defined(GT_DISABLE_DYNAREC)
+    u32 code_pages = (u32)((m_working_ram_size + 0xFFF) >> 12);
+
+    if (code_pages != m_code_page_count)
+    {
+        SafeDeleteArray(m_code_pages);
+        m_code_page_count = code_pages;
+
+        if (code_pages != 0)
+        {
+            m_code_pages = new u8[code_pages];
+            memset(m_code_pages, 0, code_pages);
+        }
+    }
+#endif
 
     DebugRegion* vram = FindRegion(GT_DEBUG_REGION_VRAM);
     m_video_ram = IsValidPointer(vram) ? vram->write_data : NULL;
@@ -860,7 +997,14 @@ void Memory::UpdateCPUPage(u32 page)
         m_cpu_read_pages[page] = region->read_data + offset;
 
     if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data))
+    {
+#if !defined(GT_DISABLE_DYNAREC)
+        if (region->write_data == m_working_ram && IsValidPointer(m_code_pages) && (offset >> 12) < m_code_page_count &&
+            m_code_pages[offset >> 12] != 0)
+            return;
+#endif
         m_cpu_write_pages[page] = region->write_data + offset;
+    }
 }
 
 // Up to date host pages are patched in place, the new generation makes the CPU drop its cached pointers

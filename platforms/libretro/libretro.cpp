@@ -1151,6 +1151,20 @@ static void check_variables(void)
     {
         core->GetMedia()->PreloadCdRom(strcmp(var.value, "Enabled") == 0);
     }
+
+#if !defined(GT_DISABLE_DYNAREC)
+    var.key = "geartowns_dynarec";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    {
+        bool dynarec = strcmp(var.value, "Enabled") == 0;
+        core->GetI386()->EnableDynarec(dynarec);
+
+        if (dynarec && !core->GetI386()->IsDynarecEnabled())
+            log_cb(RETRO_LOG_WARN, "Dynarec unavailable, the CPU runs in the interpreter\n");
+    }
+#endif
 }
 
 static bool path_is_floppy_content(const char* path)

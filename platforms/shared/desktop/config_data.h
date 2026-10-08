@@ -64,6 +64,7 @@ struct config_Emulator
     bool pause_when_inactive;
     bool preload_cdrom;
     int cdrom_speed;
+    bool dynarec;
     bool ffwd;
     int ffwd_speed;
     int runahead;

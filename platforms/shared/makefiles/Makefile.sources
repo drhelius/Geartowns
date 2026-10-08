@@ -15,6 +15,14 @@ SOURCES_C := \
     $(DEPS_DIR)/minivorbis/minivorbis.c \
     $(DEPS_DIR)/miniz/miniz.c \
 
+SOURCES_LIGHTNING := \
+    $(DEPS_DIR)/lightning/lib/lightning.c \
+    $(DEPS_DIR)/lightning/lib/jit_disasm.c \
+    $(DEPS_DIR)/lightning/lib/jit_memory.c \
+    $(DEPS_DIR)/lightning/lib/jit_note.c \
+    $(DEPS_DIR)/lightning/lib/jit_print.c \
+    $(DEPS_DIR)/lightning/lib/jit_size.c \
+
 SOURCES_CXX := \
     $(DEPS_DIR)/imgui/imgui_impl_sdl3.cpp \
     $(DEPS_DIR)/imgui/imgui_impl_opengl3.cpp \
@@ -89,6 +97,8 @@ SOURCES_CXX := \
     $(SRC_DIR)/drive/floppy_image.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_disassembler.cpp \
+    $(SRC_DIR)/i386/i386_dynarec.cpp \
+    $(SRC_DIR)/i386/i386_dynarec_emit.cpp \
     $(SRC_DIR)/i386/i386_encoding.cpp \
     $(SRC_DIR)/i386/i386_functors.cpp \
     $(SRC_DIR)/i386/i386_memory.cpp \
@@ -100,6 +110,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/i386/i386_protected.cpp \
     $(SRC_DIR)/i386/i386_protected_transfer.cpp \
     $(SRC_DIR)/i386/i386_task.cpp \
+    $(SRC_DIR)/i386/exec_memory.cpp \
     $(SRC_DIR)/input/input.cpp \
     $(SRC_DIR)/input/keyboard.cpp \
     $(SRC_DIR)/media/firmware.cpp \

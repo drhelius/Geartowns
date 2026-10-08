@@ -23,6 +23,8 @@
     <ClCompile Include="..\..\src\media\firmware.cpp" />
     <ClCompile Include="..\..\src\i386\i386.cpp" />
     <ClCompile Include="..\..\src\i386\i386_disassembler.cpp" />
+    <ClCompile Include="..\..\src\i386\i386_dynarec.cpp" />
+    <ClCompile Include="..\..\src\i386\i386_dynarec_emit.cpp" />
     <ClCompile Include="..\..\src\i386\i386_encoding.cpp" />
     <ClCompile Include="..\..\src\i386\i386_functors.cpp" />
     <ClCompile Include="..\..\src\i386\i386_memory.cpp" />
@@ -34,6 +36,7 @@
     <ClCompile Include="..\..\src\i386\i386_protected.cpp" />
     <ClCompile Include="..\..\src\i386\i386_protected_transfer.cpp" />
     <ClCompile Include="..\..\src\i386\i386_task.cpp" />
+    <ClCompile Include="..\..\src\i386\exec_memory.cpp" />
     <ClCompile Include="..\..\src\media\media.cpp" />
     <ClCompile Include="..\..\src\media\media_file.cpp" />
     <ClCompile Include="..\..\src\media\media_file_native.cpp" />
@@ -97,6 +100,42 @@
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\lzma\src\LzmaEnc.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\lightning.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <ExcludedFromBuild Condition="'$(DisableDynarec)' == 'true'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_disasm.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <ExcludedFromBuild Condition="'$(DisableDynarec)' == 'true'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_memory.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <ExcludedFromBuild Condition="'$(DisableDynarec)' == 'true'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_note.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <ExcludedFromBuild Condition="'$(DisableDynarec)' == 'true'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_print.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <ExcludedFromBuild Condition="'$(DisableDynarec)' == 'true'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_size.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <ExcludedFromBuild Condition="'$(DisableDynarec)' == 'true'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
@@ -374,6 +413,7 @@
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <EmulatorBuild Condition="'$(EmulatorBuild)' == ''">undefined</EmulatorBuild>
     <DisableDisassembler Condition="'$(DisableDisassembler)' == ''">false</DisableDisassembler>
+    <DisableDynarec Condition="'$(DisableDynarec)' == ''">false</DisableDynarec>
     <EmulatorVersion>$([System.Text.RegularExpressions.Regex]::Match('$(EmulatorBuild)', '^[0-9]+\.[0-9]+\.[0-9]+').Value)</EmulatorVersion>
     <EmulatorVersion Condition="'$(EmulatorVersion)' == ''">0.0.0</EmulatorVersion>
     <EmulatorVersionResource>$([System.String]::Copy('$(EmulatorVersion)').Replace('.', ',')),0</EmulatorVersionResource>
@@ -454,7 +494,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;release;.;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/lightning/include;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;release;.;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-Zc:strictStrings -Zc:throwingNew -w34100 -w34189 -w44996 -w44456 -w44457 -w44458 %(AdditionalOptions)</AdditionalOptions>
       <AssemblerListingLocation>release\</AssemblerListingLocation>
       <BrowseInformation>false</BrowseInformation>
@@ -499,7 +539,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;release;.;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/lightning/include;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;release;.;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-Zc:strictStrings -Zc:throwingNew -w34100 -w34189 -w44996 -w44456 -w44457 -w44458 %(AdditionalOptions)</AdditionalOptions>
       <AssemblerListingLocation>release\</AssemblerListingLocation>
       <BrowseInformation>false</BrowseInformation>
@@ -544,7 +584,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;debug;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/lightning/include;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;debug;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-Zc:strictStrings -Zc:throwingNew -w34100 -w34189 -w44996 -w44456 -w44457 -w44458 %(AdditionalOptions)</AdditionalOptions>
       <AssemblerListingLocation>debug\</AssemblerListingLocation>
       <BrowseInformation>false</BrowseInformation>
@@ -584,7 +624,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;debug;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;../../src;../shared/dependencies/imgui;../shared/dependencies/mINI;../shared/dependencies/stb;../shared/dependencies/libchdr/include;../shared/dependencies/lzma/include;../shared/dependencies/zstd;../shared/dependencies/minivorbis;../shared/dependencies/miniz;../shared/dependencies/lightning/include;../shared/dependencies/glad;../shared/dependencies/json;dependencies/SDL3/include;debug;.\GeneratedFiles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-Zc:strictStrings -Zc:throwingNew -w34100 -w34189 -w44996 -w44456 -w44457 -w44458 %(AdditionalOptions)</AdditionalOptions>
       <AssemblerListingLocation>debug\</AssemblerListingLocation>
       <BrowseInformation>false</BrowseInformation>
@@ -625,6 +665,11 @@
   <ItemDefinitionGroup Condition="'$(DisableDisassembler)' == 'true'">
     <ClCompile>
       <PreprocessorDefinitions>GT_DISABLE_DISASSEMBLER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(DisableDynarec)' == 'true'">
+    <ClCompile>
+      <PreprocessorDefinitions>GT_DISABLE_DYNAREC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

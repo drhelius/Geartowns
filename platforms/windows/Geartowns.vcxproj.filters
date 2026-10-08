@@ -148,6 +148,15 @@
     <ClCompile Include="..\..\src\i386\i386_disassembler.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\i386\i386_dynarec.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386\i386_dynarec_emit.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386\exec_memory.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\i386\i386_encoding.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -318,6 +327,24 @@
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\lzma\src\LzmaEnc.c">
       <Filter>dependencies\lzma\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\lightning.c">
+      <Filter>dependencies\lightning</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_disasm.c">
+      <Filter>dependencies\lightning</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_memory.c">
+      <Filter>dependencies\lightning</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_note.c">
+      <Filter>dependencies\lightning</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_print.c">
+      <Filter>dependencies\lightning</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\lightning\lib\jit_size.c">
+      <Filter>dependencies\lightning</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <Filter>dependencies\miniz</Filter>
@@ -713,6 +740,9 @@
     </Filter>
     <Filter Include="desktop">
       <UniqueIdentifier>{b305c14e-49f4-4f2f-9d40-5b15a839fbb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\lightning">
+      <UniqueIdentifier>{5b8f3d2e-7c41-4a9e-b6d0-2f1e8a9c4d73}</UniqueIdentifier>
     </Filter>
     <Filter Include="dependencies\miniz">
       <UniqueIdentifier>{466b2296-06dc-4afd-a898-3c4ed168681e}</UniqueIdentifier>

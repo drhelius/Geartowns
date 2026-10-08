@@ -48,16 +48,18 @@ INLINE void I386::SetRegister(int index, int width, u32 value)
         m_state.registers[index].value = value;
 }
 
+// AL to BL are byte 0 and AH to BH byte 1 of the register, on either host byte order
 INLINE u8 I386::GetRegister8(int index) const
 {
-    const u8* bytes = (const u8*)&m_state.registers[index & 3];
-    return bytes[index >> 2];
+    const u32_union& reg = m_state.registers[index & 3];
+    return (index & 4) != 0 ? reg.byte1 : reg.byte0;
 }
 
 INLINE void I386::SetRegister8(int index, u8 value)
 {
-    u8* bytes = (u8*)&m_state.registers[index & 3];
-    bytes[index >> 2] = value;
+    u32_union& reg = m_state.registers[index & 3];
+    u8* target = (index & 4) != 0 ? &reg.byte1 : &reg.byte0;
+    *target = value;
 }
 
 INLINE u32 I386::GetMask(int width) const

@@ -18,6 +18,7 @@
  */
 
 #include "i386.h"
+#include "exec_memory.h"
 #include "../common/profiler.h"
 #include "../common/trace_logger.h"
 #include "../system/memory.h"
@@ -79,6 +80,47 @@ I386::I386()
     m_trace_cpu = false;
     m_profiler_active = false;
 
+#if !defined(GT_DISABLE_DYNAREC)
+    m_dynarec_enabled = false;
+    m_dynarec_failed = false;
+    InitPointer(m_dynarec_memory);
+    InitPointer(m_dynarec_entry);
+    InitPointer(m_dynarec_exit);
+    InitPointer(m_dynarec_link);
+    m_dynarec_code_start = 0;
+    m_dynarec_code_used = 0;
+    InitPointer(m_dynarec_blocks);
+    m_dynarec_block_count = 0;
+    InitPointer(m_dynarec_hash);
+    InitPointer(m_dynarec_bytes);
+    m_dynarec_bytes_used = 0;
+    InitPointer(m_dynarec_page_blocks);
+    InitPointer(m_dynarec_page_granules);
+    InitPointer(m_dynarec_page_heat);
+    InitPointer(m_dynarec_page_writes);
+    InitPointer(m_dynarec_page_cool);
+    m_dynarec_page_count = 0;
+    InitPointer(m_dynarec_ram);
+    m_dynarec_region_generation = 0;
+    m_dynarec_epoch = 0;
+    m_dynarec_threshold = 0;
+    m_dynarec_block_limit = 0;
+    m_dynarec_flushes = 0;
+    m_dynarec_invalidations = 0;
+    m_dynarec_cool_clocks = 0;
+    m_dynarec_current = 0xFFFFFFFFU;
+    m_dynarec_steps = 0;
+    m_dynarec_link_block = 0xFFFFFFFFU;
+    m_dynarec_link_slot = 0;
+    m_dynarec_link_window = 0;
+    m_dynarec_dirty = false;
+    m_dynarec_keep_entry = false;
+    m_dynarec_clocks = 0;
+    m_dynarec_remaining = 0;
+    m_dynarec_wait = 0;
+#endif
+
+    SetDynarecTuning(0, 0);
     Reset();
 }
 
@@ -86,12 +128,26 @@ I386::~I386()
 {
     SafeDeleteArray(m_trace);
     SafeDeleteArray(m_disassembler_cache);
+#if !defined(GT_DISABLE_DYNAREC)
+    SafeDelete(m_dynarec_memory);
+    SafeDeleteArray(m_dynarec_blocks);
+    SafeDeleteArray(m_dynarec_hash);
+    SafeDeleteArray(m_dynarec_bytes);
+    SafeDeleteArray(m_dynarec_page_blocks);
+    SafeDeleteArray(m_dynarec_page_granules);
+    SafeDeleteArray(m_dynarec_page_heat);
+    SafeDeleteArray(m_dynarec_page_writes);
+    SafeDeleteArray(m_dynarec_page_cool);
+#endif
 }
 
 void I386::Init(Memory* memory, IO* io)
 {
     m_memory = memory;
     m_io = io;
+#if !defined(GT_DISABLE_DYNAREC)
+    m_memory->SetCodeWriteCallback(this, DynarecCodeWrite);
+#endif
 
     m_disassembler_records.clear();
     ClearDisassemblerCache();
@@ -192,6 +248,11 @@ void I386::Reset()
 
     m_debug_data_breakpoints = 0;
     m_state.last_exception_vector = 0xFF;
+
+#if !defined(GT_DISABLE_DYNAREC)
+    // Memory may have been rewritten without the CPU seeing it, so blocks check their bytes before running again
+    m_dynarec_epoch++;
+#endif
 
     UpdateSegmentFastPaths();
     UpdateDebugState();
@@ -297,6 +358,11 @@ I386_Run_Result I386::GetStepInfo() const
 
 I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending)
 {
+#if !defined(GT_DISABLE_DYNAREC)
+    if (m_dynarec_enabled)
+        return RunDynarec(cycle_budget, context, nmi_pending, intr_pending);
+#endif
+
     I386_Run_Result total = {};
     total.instruction_completed = true;
     total.exception_vector = 0xFF;
@@ -318,36 +384,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
-#if !defined(GT_DISABLE_DISASSEMBLER)
-            DisassembleNextInstruction();
-#endif
-            u16 old_task = m_state.task_register.selector;
-            m_step.clocks = 0;
-            m_step.instruction_completed = true;
-            m_step.end_batch = false;
-            m_step.exception = false;
-
-            if (unlikely(!ExecuteOPCode()))
-                CompleteFault(old_task);
-
-            if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
-                CountInterruptShadow();
-
-            clocks += m_step.clocks;
-            steps++;
-            completed = m_step.instruction_completed;
-
-            if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
-            {
-                // Exceptions and software interrupts always end the batch
-                if (m_step.exception)
-                    CopyStepException(total);
-
-                total.end_batch = true;
-                break;
-            }
-
-            if (unlikely(interrupt_pending) && IsInterruptReady(nmi_pending, intr_pending))
+            if (!RunFastStep(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
                 break;
         }
         else
@@ -604,6 +641,10 @@ void I386::SanitizeState()
     m_debug_data_breakpoints = 0;
     m_step = {};
     m_step_exception = {};
+
+#if !defined(GT_DISABLE_DYNAREC)
+    m_dynarec_epoch++;
+#endif
 
     memset(&m_exception, 0, sizeof(m_exception));
     memset(&m_string, 0, sizeof(m_string));

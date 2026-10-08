@@ -652,6 +652,23 @@ void emu_set_cdrom_speed(int speed)
         geartowns->GetCDROM()->SetReadSpeed(speed);
 }
 
+// The dynarec runs while the debugger is off, the debugger always steps the interpreter
+void emu_set_dynarec(bool enabled)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    geartowns->GetI386()->EnableDynarec(enabled);
+
+    if (enabled && !geartowns->GetI386()->IsDynarecEnabled())
+        Log("Dynarec unavailable, the CPU runs in the interpreter");
+}
+
+bool emu_is_dynarec_enabled(void)
+{
+    return IsValidPointer(geartowns) && geartowns->GetI386()->IsDynarecEnabled();
+}
+
 void emu_apply_machine_settings(void)
 {
     if (!IsValidPointer(geartowns))

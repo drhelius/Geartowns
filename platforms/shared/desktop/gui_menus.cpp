@@ -571,6 +571,23 @@ static void menu_emulator(void)
 
         menu_machine();
 
+#if !defined(GT_DISABLE_DYNAREC)
+        if (ImGui::MenuItem("CPU Dynarec", "", &config_emulator.dynarec))
+            emu_set_dynarec(config_emulator.dynarec);
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Translates the 80386 code into host code, with the same results as the interpreter.");
+            ImGui::Text("The debugger always runs the interpreter.");
+
+            if (config_emulator.dynarec && !emu_is_dynarec_enabled())
+                ImGui::TextColored(red, "Not available on this system, the interpreter is running.");
+
+            ImGui::EndTooltip();
+        }
+#endif
+
         ImGui::Separator();
 
         if (ImGui::BeginMenu("Directories"))

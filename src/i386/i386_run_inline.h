@@ -104,10 +104,50 @@ INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
     return nmi_pending || (intr_pending && CanAcceptMaskableInterrupt());
 }
 
+// One step of the fast loop, shared by RunFor and RunDynarec. Returns false when the batch must end
+INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
+    bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending)
+{
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    DisassembleNextInstruction();
+#endif
+    u16 old_task = m_state.task_register.selector;
+    m_step.clocks = 0;
+    m_step.instruction_completed = true;
+    m_step.end_batch = false;
+    m_step.exception = false;
+
+    if (unlikely(!ExecuteOPCode()))
+        CompleteFault(old_task);
+
+    if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
+        CountInterruptShadow();
+
+    clocks += m_step.clocks;
+    steps++;
+    completed = m_step.instruction_completed;
+
+    if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
+    {
+        // Exceptions and software interrupts always end the batch
+        if (m_step.exception)
+            CopyStepException(total);
+
+        total.end_batch = true;
+        return false;
+    }
+
+    return !(unlikely(interrupt_pending) && IsInterruptReady(nmi_pending, intr_pending));
+}
+
 INLINE void I386::DisassembleNextInstruction()
 {
+    DisassembleInstruction(m_state.eip);
+}
+
+INLINE void I386::DisassembleInstruction(u32 eip)
+{
     const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
-    u32 eip = m_state.eip;
     u32 linear = code.base + eip;
     I386_Disassembler_Record*& cached = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
     I386_Disassembler_Record* record = cached;

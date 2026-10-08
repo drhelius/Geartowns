@@ -24,11 +24,13 @@
 #include <iostream>
 #include "../common/common.h"
 #include "../common/debug_memory.h"
+#include "../i386/dynarec_platform.h"
 
 class StateSerializer;
 
 typedef u8 (*GT_Memory_Read8_Fn)(void* device, u32 offset);
 typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
+typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size);
 
 class Memory
 {
@@ -86,6 +88,12 @@ public:
 
     void SetPhysicalAddressMask(u32 mask);
     u32 GetMapGeneration() const;
+    u32 GetRegionGeneration() const;
+#if !defined(GT_DISABLE_DYNAREC)
+    void SetCodeWriteCallback(void* context, GT_Memory_Code_Write_Fn callback);
+    void SetCodePage(u32 page, bool code);
+    bool IsReadOnlyHost(const u8* host) const;
+#endif
     u64 GetDebugSnapshotId() const;
     void InvalidateDebugSnapshot();
 
@@ -129,6 +137,9 @@ private:
     void UpdateRAMRegions();
     void UpdateCPUPage(u32 page);
     void RemapRange(u32 base, u32 size);
+#if !defined(GT_DISABLE_DYNAREC)
+    void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size);
+#endif
     void ApplyMapping();
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
@@ -142,6 +153,7 @@ private:
     int m_debug_region_count;
     u32 m_physical_address_mask;
     u32 m_map_generation;
+    u32 m_region_generation;
     u64 m_debug_snapshot_id;
 
     u8* m_working_ram;
@@ -151,6 +163,13 @@ private:
 
     u8* m_video_ram;
     size_t m_video_ram_size;
+
+#if !defined(GT_DISABLE_DYNAREC)
+    u8* m_code_pages;
+    u32 m_code_page_count;
+    void* m_code_write_context;
+    GT_Memory_Code_Write_Fn m_code_write_callback;
+#endif
 };
 
 #include "memory_inline.h"

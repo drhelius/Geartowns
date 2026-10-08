@@ -1,5 +1,6 @@
 STATIC_LINKING := 0
 AR             ?= ar
+DISABLE_DYNAREC ?= 0
 
 ifeq ($(platform),)
 	platform = unix
@@ -323,6 +324,15 @@ ifneq (,$(filter unix osx win,$(platform)))
 	PLATFORM_FLAGS += -DGT_ENABLE_CDROM_CUEBIN_READAHEAD
 endif
 
+# The dynarec needs a GNU lightning backend and executable memory, src/i386/dynarec_platform.h lists the providers
+ifneq (,$(filter switch ps3 psl1ght emscripten sf2000 ps2 psp1 ctr wiiu tvos-arm64 ios%,$(platform)))
+	DISABLE_DYNAREC = 1
+endif
+
+ifeq ($(DISABLE_DYNAREC), 1)
+	PLATFORM_FLAGS += -DGT_DISABLE_DYNAREC
+endif
+
 ifneq (,$(filter unix% win% classic_armv7_a7 rs90 gcw0 retrofw miyoo,$(platform)))
 	PLATFORM_FLAGS += -pthread
 	LDFLAGS += -pthread
@@ -371,6 +381,7 @@ INCLUDES += -I$(DEPS_DIR)/minivorbis
 INCLUDES += -I$(DEPS_DIR)/libchdr/include
 INCLUDES += -I$(DEPS_DIR)/zstd
 INCLUDES += -I$(DEPS_DIR)/lzma/include
+INCLUDES += -I$(DEPS_DIR)/lightning/include
 
 CFLAGS   += -DGT_DISABLE_DISASSEMBLER -Wall -fno-exceptions -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)
 CXXFLAGS += -DGT_DISABLE_DISASSEMBLER -Wall -fno-exceptions -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)

@@ -158,6 +158,8 @@ EXTERN const char* emu_cdrom_playlist_get_path(int index);
 EXTERN const char* emu_cdrom_playlist_get_name(int index);
 EXTERN void emu_set_preload_cdrom(bool enabled);
 EXTERN void emu_set_cdrom_speed(int speed);
+EXTERN void emu_set_dynarec(bool enabled);
+EXTERN bool emu_is_dynarec_enabled(void);
 EXTERN void emu_apply_machine_settings(void);
 
 EXTERN void emu_audio_mute(bool mute);

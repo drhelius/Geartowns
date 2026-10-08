@@ -146,6 +146,7 @@ private:
     void RenderRows(u32 half_line);
     void RenderRow(int row);
     void RenderLayerRow(u32* destination, int layer, int row, bool opaque);
+    void DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 count, u32 wrap, u8 planes, bool opaque);
     void DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
     template<Video_Layer_Format format, bool two_page>
     void DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
@@ -201,6 +202,7 @@ static const u32 k_video_clock_rates[4] = { 28636364, 24545455, 25175000, 210525
 static const u32 k_video_min_line_clocks = 64;
 static const u32 k_video_min_half_lines = 16;
 static const u32 k_video_transparent = 0x00010000;
+static const u32 k_video_no_wrap = 0x7FFFFFFF;
 
 static const int k_video_crtc_hsw1 = 0x00;
 static const int k_video_crtc_hst = 0x04;

@@ -892,6 +892,20 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     if (m_canvas_interlaced && (row & 0x01) != 0)
         start += (u32)crtc[k_video_crtc_fo0 + layer * 4] * unit;
 
+    // Without CEN the low 8 bits of the address counter don't carry, so rows turn around within 256 units
+    u32 skip = 0;
+    u32 wrap = k_video_no_wrap;
+
+    if ((crtc[k_video_crtc_cr0] & (0x10 << layer)) == 0)
+    {
+        Video_Layer_Format format = GetLayerFormat(layer);
+        u32 bits = format == VIDEO_LAYER_4BPP ? 4 : (format == VIDEO_LAYER_8BPP ? 8 : 16);
+        u32 block = unit << 8;
+        skip = ((start & (block - 1)) * 8) / bits;
+        wrap = (block * 8) / bits - 1;
+        start &= ~(block - 1);
+    }
+
     // The FM-R display mode picks the page and hides planes of layer 0
     u8 planes = 0x0F;
 
@@ -912,7 +926,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     {
         for (; x < end; x++, position += divider)
         {
-            u32 pixel = position / zoom_x;
+            u32 pixel = (position / zoom_x + skip) & wrap;
             DecodeLayerPixels(colors, layer, start, pixel, 1, planes, opaque);
             destination[x] = BlendLayerColor(colors[pixel & 0x01], destination[x]);
         }
@@ -922,7 +936,8 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
 
     u32 pixel = position / zoom_x;
     u32 count = (position + (u32)(end - x) - 1) / zoom_x - pixel + 1;
-    DecodeLayerPixels(colors, layer, start, pixel, count, planes, opaque);
+    pixel = (pixel + skip) & wrap;
+    DecodeLayerRun(colors, layer, start, pixel, count, wrap, planes, opaque);
     const u32* source = colors + (pixel & 0x01);
 
     if (zoom_x == 1)
@@ -967,6 +982,21 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
             source++;
         }
     }
+}
+
+// A run that reaches the end of the block goes on from its beginning
+void Video::DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 count, u32 wrap, u8 planes, bool opaque)
+{
+    while (pixel + count > wrap + 1)
+    {
+        u32 part = wrap + 1 - pixel;
+        DecodeLayerPixels(colors, layer, start, pixel, part, planes, opaque);
+        colors += part + (pixel & 0x01);
+        count -= part;
+        pixel = 0;
+    }
+
+    DecodeLayerPixels(colors, layer, start, pixel, count, planes, opaque);
 }
 
 // Decoding starts at an even pixel so 4 bpp layers read whole bytes

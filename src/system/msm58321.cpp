@@ -231,15 +231,15 @@ void MSM58321::AdvanceSecond()
     SetValue(k_msm58321_year, 0x0F, (GetValue(k_msm58321_year, 0x0F) + 1) % 100);
 }
 
-// February is leap when the year modulo 4 matches the phase in bits 2-3 of the day tens
+// Bits 2-3 of the day tens select the leap year remainder modulo 4: 0, 3, 2 or 1
 int MSM58321::GetDaysInMonth() const
 {
     int month = GetValue(k_msm58321_month, 0x01);
 
     if (month == 2)
     {
-        int phase = (m_state.registers[k_msm58321_day + 1] >> 2) & 0x03;
-        return (GetValue(k_msm58321_year, 0x0F) % 4) == phase ? 29 : 28;
+        int selector = (m_state.registers[k_msm58321_day + 1] >> 2) & 0x03;
+        return ((GetValue(k_msm58321_year, 0x0F) + selector) % 4) == 0 ? 29 : 28;
     }
 
     if (month == 4 || month == 6 || month == 9 || month == 11)

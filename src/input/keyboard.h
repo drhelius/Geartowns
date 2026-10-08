@@ -72,7 +72,7 @@ private:
     void WriteCommand(u8 value);
     void ResetController();
     void SendResetResponse(int count);
-    void PushEvent(u8 key, bool pressed);
+    void PushEvent(u8 key, u8 flags);
     bool IsValidKey(GT_Keys key) const;
     bool IsRepeatKey(u8 key) const;
     void UpdateIRQ();
@@ -90,6 +90,9 @@ static const int k_keyboard_irq = 1;
 static const u64 k_keyboard_rearm_clocks = GT_CPU_CLOCK_RATE / 1200;
 static const u16 k_keyboard_repeat_delay = 400;
 static const u16 k_keyboard_repeat_interval = 30;
+static const u8 k_keyboard_make = 0xA0;
+static const u8 k_keyboard_break = 0xB0;
+static const u8 k_keyboard_typematic = 0xF0;
 
 #include "keyboard_inline.h"
 

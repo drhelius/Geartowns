@@ -143,10 +143,10 @@ void Keyboard::Synchronize(u64 clocks)
         }
     }
 
-    // Typematic repeat sends the held key again as a plain make
+    // Typematic repeat sends the held key again with bits 7-4 set
     if (m_state.repeat_key != GT_KEY_NONE && clocks >= m_state.repeat_clocks)
     {
-        PushEvent(m_state.repeat_key, true);
+        PushEvent(m_state.repeat_key, k_keyboard_typematic);
         m_state.repeat_clocks += ((u64)m_state.repeat_interval * GT_CPU_CLOCK_RATE) / 1000;
         changed = true;
     }
@@ -162,7 +162,7 @@ void Keyboard::KeyPressed(GT_Keys key)
 
     Synchronize(m_scheduler->GetClocks());
     m_state.keys[key] = true;
-    PushEvent((u8)key, true);
+    PushEvent((u8)key, k_keyboard_make);
 
     if (IsRepeatKey((u8)key))
     {
@@ -180,7 +180,7 @@ void Keyboard::KeyReleased(GT_Keys key)
 
     Synchronize(m_scheduler->GetClocks());
     m_state.keys[key] = false;
-    PushEvent((u8)key, false);
+    PushEvent((u8)key, k_keyboard_break);
 
     if (m_state.repeat_key == key)
         m_state.repeat_key = GT_KEY_NONE;
@@ -259,13 +259,11 @@ void Keyboard::SendResetResponse(int count)
     UpdateNextEvent();
 }
 
-// A JIS keyboard message: type and make or break flags with CTRL and SHIFT, then the key code
-void Keyboard::PushEvent(u8 key, bool pressed)
+// A JIS keyboard message: make, break or typematic flags with CTRL and SHIFT, then the key code
+void Keyboard::PushEvent(u8 key, u8 flags)
 {
     if (m_state.fifo_count + 2 > KEYBOARD_FIFO_SIZE)
         return;
-
-    u8 flags = pressed ? 0xA0 : 0xB0;
 
     if (m_state.keys[GT_KEY_CTRL])
         flags |= 0x08;

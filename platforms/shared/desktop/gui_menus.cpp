@@ -1544,18 +1544,25 @@ static void menu_input(void)
 
                     ImGui::PopItemWidth();
 
-                    if (ImGui::MenuItem("Use Keyboard", "", &config_input.use_keyboard[i]))
+                    if (ImGui::BeginMenu("Keyboard Mode"))
                     {
-                        events_sync_input();
-                    }
+                        ImGui::PushItemWidth(160.0f);
 
-                    if (ImGui::IsItemHovered())
-                    {
-                        ImGui::BeginTooltip();
-                        ImGui::Text("Uses the Player %d bindings from Input > Keyboard.", i + 1);
-                        ImGui::Text("Mapped keys control this gamepad,");
-                        ImGui::Text("other keys still type on the FM Towns keyboard.");
-                        ImGui::EndTooltip();
+                        if (ImGui::Combo("##keyboard_mode", &config_input.keyboard_mode[i], "Gamepad\0FM Towns Keyboard\0\0"))
+                            events_sync_input();
+
+                        ImGui::PopItemWidth();
+
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("Gamepad: the Player %d bindings from Input > Keyboard control this gamepad.", i + 1);
+                            ImGui::Text("FM Towns Keyboard: the Player %d bindings type on the FM Towns keyboard.", i + 1);
+                            ImGui::Text("Other keys always type on the FM Towns keyboard.");
+                            ImGui::EndTooltip();
+                        }
+
+                        ImGui::EndMenu();
                     }
                     ImGui::EndMenu();
                 }

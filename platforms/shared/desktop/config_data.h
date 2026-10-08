@@ -50,6 +50,12 @@ enum config_VideoSync
     config_VideoSync_VRR = 2
 };
 
+enum config_KeyboardMode
+{
+    config_KeyboardMode_Gamepad = 0,
+    config_KeyboardMode_Towns = 1
+};
+
 struct config_Emulator
 {
     bool maximized;
@@ -137,7 +143,7 @@ struct config_Input
 {
     bool allow_up_down;
     int controller_type[GT_MAX_GAMEPADS];
-    bool use_keyboard[GT_MAX_GAMEPADS];
+    int keyboard_mode[GT_MAX_GAMEPADS];
 };
 
 struct config_Input_Keyboard

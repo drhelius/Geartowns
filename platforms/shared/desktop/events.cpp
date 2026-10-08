@@ -269,7 +269,8 @@ static GT_GamePad_State input_build_state(int controller)
     GT_GamePad_State state = { 0 };
     SDL_Keymod mods = SDL_GetModState();
 
-    if (config_input.use_keyboard[controller] && (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
+    if (config_input.keyboard_mode[controller] == config_KeyboardMode_Gamepad &&
+        (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
     {
         const bool* keyboard = SDL_GetKeyboardState(NULL);
         const config_Input_Keyboard& keys = config_input_keyboard[controller];
@@ -476,7 +477,7 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
     {
         int type = config_input.controller_type[controller];
 
-        if (!config_input.use_keyboard[controller] || type == GT_CONTROLLER_NONE)
+        if (config_input.keyboard_mode[controller] != config_KeyboardMode_Gamepad || type == GT_CONTROLLER_NONE)
             continue;
 
         const config_Input_Keyboard& keys = config_input_keyboard[controller];

@@ -600,6 +600,7 @@ void MB8877::ForceInterrupt(u8 value, u64 clocks)
     }
     else
     {
+        m_state.status &= ~(k_mb8877_crc_error | k_mb8877_not_found);
         m_state.type1 = true;
         DropDRQ();
     }

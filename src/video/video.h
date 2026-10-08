@@ -84,7 +84,7 @@ public:
 public:
     Video();
     ~Video();
-    void Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format);
+    void Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void ResetFMRView();
@@ -145,8 +145,13 @@ private:
     u64 GetHalfLineClocks(u32 half_line) const;
     void RenderRows(u32 half_line);
     void RenderRow(int row);
-    void RenderLayerRow(int layer, int row, bool opaque);
-    u8 ReadVRAM(u32 offset, bool two_page) const;
+    void RenderLayerRow(u32* destination, int layer, int row, bool opaque);
+    void DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
+    template<Video_Layer_Format format, bool two_page>
+    void DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
+    template<bool two_page>
+    u8 ReadLayerVRAM(const u8* page, u32 offset) const;
+    u32 BlendLayerColor(u32 color, u32 back) const;
     u32 SinglePageToCanonical(u32 offset) const;
     u32 FMRToCanonical(u32 offset) const;
     u8 ReadVRAMTwoPage(u32 offset) const;
@@ -158,7 +163,7 @@ private:
     u8 ReadFMRText(u32 offset) const;
     void WriteFMRText(u32 offset, u8 value);
     u32 GetKanjiOffset() const;
-    u32 MakeColor(u8 red, u8 green, u8 blue) const;
+    u32 ToXRGB(u8 red, u8 green, u8 blue) const;
     u8 Expand5(u32 value) const;
     void UpdatePaletteColor(int bank, int index);
     void UpdateColorCaches();
@@ -173,7 +178,6 @@ private:
     PIT* m_pit;
     Scheduler* m_scheduler;
     const u8* m_font_rom;
-    GT_Pixel_Format m_pixel_format;
     u8* m_frame_buffer;
     bool m_render;
     bool m_frame_ready;
@@ -188,7 +192,6 @@ private:
     u32 m_canvas_v_start;
     u32 m_canvas_h_divider;
     bool m_canvas_interlaced;
-    u32 m_line[GT_MAX_FRAME_BUFFER_WIDTH];
     u32 m_palette16_colors[2][16];
     u32 m_palette256_colors[256];
     u32 m_direct_colors[0x8000];
@@ -197,6 +200,7 @@ private:
 static const u32 k_video_clock_rates[4] = { 28636364, 24545455, 25175000, 21052500 };
 static const u32 k_video_min_line_clocks = 64;
 static const u32 k_video_min_half_lines = 16;
+static const u32 k_video_transparent = 0x00010000;
 
 static const int k_video_crtc_hsw1 = 0x00;
 static const int k_video_crtc_hst = 0x04;

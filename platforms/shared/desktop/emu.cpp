@@ -66,6 +66,7 @@ enum Loading_Request_Type
 
 static GeartownsCore* geartowns = NULL;
 static s16* audio_buffer = NULL;
+static u8* rgba_frame_buffer = NULL;
 static bool audio_enabled = true;
 static McpManager* mcp_manager = NULL;
 static Uint64 rewind_last_counter = 0;
@@ -82,6 +83,7 @@ static int cdrom_playlist_index = -1;
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
+static const u8* get_rgba_frame(int width, int height);
 static void reset_run_state(void);
 static const char* get_configurated_dir(int option, const char* path);
 static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width, int* height);
@@ -91,8 +93,7 @@ static bool unload_media(void);
 static bool get_floppy_state_path(int index, char* path, size_t path_size);
 static bool init_debug(void);
 static void destroy_debug(void);
-static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride,
-    Emu_Debug_Buffer_Info& info);
+static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride, Emu_Debug_Buffer_Info& info);
 static u32 debug_rgba(u32 red, u32 green, u32 blue);
 static u32 debug_direct_color(u16 value);
 static u32 debug_checker(int x, int y);
@@ -196,6 +197,7 @@ void emu_destroy(void)
     SafeDelete(geartowns);
     SafeDeleteArray(audio_buffer);
     SafeDeleteArray(emu_frame_buffer);
+    SafeDeleteArray(rgba_frame_buffer);
     destroy_debug();
 
     for (int i = 0; i < 5; i++)
@@ -330,7 +332,10 @@ void emu_update(void)
             {
                 GT_Runtime_Info runtime;
                 emu_get_runtime(runtime);
-                video_recorder_add_video(emu_frame_buffer, runtime.screen_width, runtime.screen_height, 4);
+                const u8* rgba = get_rgba_frame(runtime.screen_width, runtime.screen_height);
+
+                if (IsValidPointer(rgba))
+                    video_recorder_add_video(rgba, runtime.screen_width, runtime.screen_height, 4);
             }
         }
     }
@@ -1234,8 +1239,11 @@ bool emu_save_screenshot(const char* file_path)
 
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
-    int result = stbi_write_png(file_path, runtime.screen_width, runtime.screen_height, 4, emu_frame_buffer,
-        runtime.screen_width * 4);
+    const u8* rgba = get_rgba_frame(runtime.screen_width, runtime.screen_height);
+    int result = 0;
+
+    if (IsValidPointer(rgba))
+        result = stbi_write_png(file_path, runtime.screen_width, runtime.screen_height, 4, rgba, runtime.screen_width * 4);
 
     if (result != 0)
         Log("Screenshot saved to %s", file_path);
@@ -1253,8 +1261,13 @@ int emu_get_screenshot_png(unsigned char** out_buffer)
     *out_buffer = NULL;
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
+    const u8* rgba = get_rgba_frame(runtime.screen_width, runtime.screen_height);
+
+    if (!IsValidPointer(rgba))
+        return 0;
+
     int size = 0;
-    *out_buffer = stbi_write_png_to_mem(emu_frame_buffer, runtime.screen_width * 4, runtime.screen_width,
+    *out_buffer = stbi_write_png_to_mem(rgba, runtime.screen_width * 4, runtime.screen_width,
         runtime.screen_height, 4, &size);
     return size;
 }
@@ -1402,6 +1415,30 @@ static void reset_buffers(void)
     size_t frame_buffer_size = (size_t)GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4;
     memset(emu_frame_buffer, 0, frame_buffer_size);
     memset(audio_buffer, 0, GT_AUDIO_BUFFER_SIZE * sizeof(s16));
+}
+
+static const u8* get_rgba_frame(int width, int height)
+{
+    if (!IsValidPointer(rgba_frame_buffer))
+        rgba_frame_buffer = new (std::nothrow) u8[(size_t)GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4];
+
+    if (!IsValidPointer(rgba_frame_buffer))
+        return NULL;
+
+    const u32* source = (const u32*)emu_frame_buffer;
+    u8* destination = rgba_frame_buffer;
+    int pixels = width * height;
+
+    for (int i = 0; i < pixels; i++, destination += 4)
+    {
+        u32 color = source[i];
+        destination[0] = (u8)(color >> 16);
+        destination[1] = (u8)(color >> 8);
+        destination[2] = (u8)color;
+        destination[3] = 0xFF;
+    }
+
+    return rgba_frame_buffer;
 }
 
 static void reset_run_state(void)

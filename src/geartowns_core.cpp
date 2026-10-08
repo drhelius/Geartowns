@@ -80,7 +80,6 @@ GeartownsCore::GeartownsCore()
     m_powered = false;
     m_paused = false;
     m_skip_interrupts = false;
-    m_pixel_format = GT_PIXEL_RGBA8888;
 }
 
 GeartownsCore::~GeartownsCore()
@@ -108,10 +107,8 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_cdrom_media);
 }
 
-void GeartownsCore::Init(GT_Pixel_Format pixel_format)
+void GeartownsCore::Init()
 {
-    m_pixel_format = pixel_format;
-
     if (!IsValidPointer(m_cdrom_media))
         m_cdrom_media = new CdRomMedia();
 
@@ -184,7 +181,7 @@ void GeartownsCore::Init(GT_Pixel_Format pixel_format)
     m_audio->Init(m_scheduler, m_cdrom_audio, m_pic);
     m_pit->Init(m_pic, m_scheduler);
     m_system_control->Init();
-    m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom(), m_pixel_format);
+    m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom());
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
     m_fdc->Init(m_pic, m_scheduler, m_dma);
@@ -721,8 +718,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     {
         header.screenshot_width = GT_FRAME_BUFFER_WIDTH;
         header.screenshot_height = GT_FRAME_BUFFER_HEIGHT;
-        int bytes_per_pixel = m_pixel_format == GT_PIXEL_RGBA8888 ? 4 : 2;
-        header.screenshot_size = header.screenshot_width * header.screenshot_height * bytes_per_pixel;
+        header.screenshot_size = header.screenshot_width * header.screenshot_height * 4;
         stream.write(reinterpret_cast<const char*>(m_frame_buffer), header.screenshot_size);
     }
     else

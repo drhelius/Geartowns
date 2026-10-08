@@ -33,7 +33,6 @@ Video::Video()
     InitPointer(m_scheduler);
     InitPointer(m_font_rom);
     InitPointer(m_frame_buffer);
-    m_pixel_format = GT_PIXEL_RGBA8888;
     m_render = false;
     m_frame_ready = false;
     m_next_event_clocks = GT_NO_EVENT;
@@ -59,13 +58,12 @@ void Video::SetTraceLogger(TraceLogger* trace_logger)
     m_trace_logger = trace_logger;
 }
 
-void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom, GT_Pixel_Format pixel_format)
+void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom)
 {
     m_pic = pic;
     m_pit = pit;
     m_scheduler = scheduler;
     m_font_rom = font_rom;
-    m_pixel_format = pixel_format;
 
     if (!IsValidPointer(m_sprite))
         m_sprite = new Sprite();
@@ -302,17 +300,11 @@ void Video::EndFrame()
         return;
 
     int pixels = m_frame_width * m_frame_height;
-    u32 black = MakeColor(0, 0, 0);
+    u32* buffer = (u32*)m_frame_buffer;
+    u32 black = ToXRGB(0, 0, 0);
 
-    if (m_pixel_format == GT_PIXEL_RGB565)
-        memset(m_frame_buffer, 0, pixels * 2);
-    else
-    {
-        u32* buffer = (u32*)m_frame_buffer;
-
-        for (int i = 0; i < pixels; i++)
-            buffer[i] = black;
-    }
+    for (int i = 0; i < pixels; i++)
+        buffer[i] = black;
 }
 
 u8 Video::ReadVRAMTwoPageCallback(void* device, u32 offset)
@@ -844,37 +836,27 @@ void Video::RenderRow(int row)
     if (!m_render || !IsValidPointer(m_frame_buffer))
         return;
 
-    u32 black = MakeColor(0, 0, 0);
+    int width = m_render_width;
+    u32* destination = (u32*)m_frame_buffer + row * width;
+    u32 black = ToXRGB(0, 0, 0);
 
-    for (int x = 0; x < m_render_width; x++)
-        m_line[x] = black;
+    for (int x = 0; x < width; x++)
+        destination[x] = black;
 
     if (IsTwoPage())
     {
         // The back layer is drawn opaque and the front one lets transparent pixels through
         int front = m_state.output[1] & 0x01;
-        RenderLayerRow(front ^ 1, row, true);
-        RenderLayerRow(front, row, false);
+        RenderLayerRow(destination, front ^ 1, row, true);
+        RenderLayerRow(destination, front, row, false);
     }
     else
-        RenderLayerRow(0, row, true);
-
-    if (m_pixel_format == GT_PIXEL_RGB565)
-    {
-        u16* buffer = (u16*)m_frame_buffer + row * m_render_width;
-
-        for (int x = 0; x < m_render_width; x++)
-            buffer[x] = (u16)m_line[x];
-    }
-    else
-        memcpy(m_frame_buffer + row * m_render_width * 4, m_line, m_render_width * 4);
+        RenderLayerRow(destination, 0, row, true);
 }
 
-void Video::RenderLayerRow(int layer, int row, bool opaque)
+void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
 {
-    Video_Layer_Format format = GetLayerFormat(layer);
-
-    if (format == VIDEO_LAYER_OFF)
+    if (GetLayerFormat(layer) == VIDEO_LAYER_OFF)
         return;
 
     const u16* crtc = m_state.crtc;
@@ -886,13 +868,23 @@ void Video::RenderLayerRow(int layer, int row, bool opaque)
     if (half_line < vds || half_line >= vde)
         return;
 
+    // Fetching starts at HAJ, so data before HDS has already been consumed when the window opens
+    u32 hds = crtc[k_video_crtc_hds0 + layer * 2];
+    u32 hde = crtc[k_video_crtc_hde0 + layer * 2];
+    u32 haj = crtc[k_video_crtc_haj0 + layer * 4];
+    u32 first = MAX(hds, haj);
+    u32 h_start = m_canvas_h_start;
+    u32 divider = m_canvas_h_divider;
+    int x = first > h_start ? (int)((first - h_start + divider - 1) / divider) : 0;
+    int end = hde > h_start ? (int)MIN((hde - h_start + divider - 1) / divider, (u32)m_render_width) : 0;
+
+    if (x >= end)
+        return;
+
     u32 zoom = (u32)crtc[k_video_crtc_zoom] >> (layer * 8);
     u32 zoom_x = (zoom & 0x0F) + 1;
     u32 zoom_y = ((zoom >> 4) & 0x0F) + 1;
-    bool two_page = IsTwoPage();
-    u32 unit = two_page ? 4 : 8;
-    u32 page_mask = two_page ? 0x3FFFF : 0x7FFFF;
-    u32 page_base = two_page ? (u32)layer << 18 : 0;
+    u32 unit = IsTwoPage() ? 4 : 8;
     u32 line = ((half_line - vds) / 2) / zoom_y;
     u32 start = ((u32)crtc[k_video_crtc_fa0 + layer * 4] + line * crtc[k_video_crtc_lo0 + layer * 4]) * unit;
 
@@ -913,53 +905,133 @@ void Video::RenderLayerRow(int layer, int row, bool opaque)
     else
         start += m_sprite->GetDisplayOffset();
 
-    // Fetching starts at HAJ, so data before HDS has already been consumed when the window opens
-    u32 hds = crtc[k_video_crtc_hds0 + layer * 2];
-    u32 hde = crtc[k_video_crtc_hde0 + layer * 2];
-    u32 haj = crtc[k_video_crtc_haj0 + layer * 4];
-    u32 first = MAX(hds, haj);
+    u32 position = h_start + (u32)x * divider - haj;
+    u32 colors[GT_MAX_FRAME_BUFFER_WIDTH + 4];
 
-    for (int x = 0; x < m_render_width; x++)
+    if (divider != 1)
     {
-        u32 clock = m_canvas_h_start + (u32)x * m_canvas_h_divider;
-
-        if (clock < first || clock >= hde)
-            continue;
-
-        u32 pixel = (clock - haj) / zoom_x;
-
-        switch (format)
+        for (; x < end; x++, position += divider)
         {
-            case VIDEO_LAYER_4BPP:
-            {
-                u8 data = ReadVRAM(page_base + ((start + (pixel >> 1)) & page_mask), two_page);
-                u8 index = ((pixel & 0x01) != 0 ? data >> 4 : data & 0x0F) & planes;
+            u32 pixel = position / zoom_x;
+            DecodeLayerPixels(colors, layer, start, pixel, 1, planes, opaque);
+            destination[x] = BlendLayerColor(colors[pixel & 0x01], destination[x]);
+        }
 
-                if (opaque || index != 0)
-                    m_line[x] = m_palette16_colors[layer][index];
+        return;
+    }
 
-                break;
-            }
-            case VIDEO_LAYER_8BPP:
-            {
-                u8 index = ReadVRAM(page_base + ((start + pixel) & page_mask), two_page);
+    u32 pixel = position / zoom_x;
+    u32 count = (position + (u32)(end - x) - 1) / zoom_x - pixel + 1;
+    DecodeLayerPixels(colors, layer, start, pixel, count, planes, opaque);
+    const u32* source = colors + (pixel & 0x01);
 
-                if (opaque || index != 0)
-                    m_line[x] = m_palette256_colors[index];
+    if (zoom_x == 1)
+    {
+        for (; x < end; x++, source++)
+            destination[x] = BlendLayerColor(*source, destination[x]);
 
-                break;
-            }
-            default:
-            {
-                u32 address = start + pixel * 2;
-                u16 value = (u16)(ReadVRAM(page_base + (address & page_mask), two_page) |
-                    (ReadVRAM(page_base + ((address + 1) & page_mask), two_page) << 8));
+        return;
+    }
 
-                if (opaque || (value & 0x8000) == 0)
-                    m_line[x] = m_direct_colors[value & 0x7FFF];
+    // Each pixel covers ZOOM outputs
+    u32 phase = position % zoom_x;
 
-                break;
-            }
+    if (zoom_x == 2)
+    {
+        if (phase != 0)
+        {
+            destination[x] = BlendLayerColor(*source, destination[x]);
+            x++;
+            source++;
+        }
+
+        for (; x + 1 < end; x += 2, source++)
+        {
+            destination[x] = BlendLayerColor(*source, destination[x]);
+            destination[x + 1] = BlendLayerColor(*source, destination[x + 1]);
+        }
+
+        if (x < end)
+            destination[x] = BlendLayerColor(*source, destination[x]);
+
+        return;
+    }
+
+    for (; x < end; x++)
+    {
+        destination[x] = BlendLayerColor(*source, destination[x]);
+
+        if (++phase == zoom_x)
+        {
+            phase = 0;
+            source++;
+        }
+    }
+}
+
+// Decoding starts at an even pixel so 4 bpp layers read whole bytes
+// Pixels the layer lets the back one through are k_video_transparent
+void Video::DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque)
+{
+    u32 even = pixel & ~0x01U;
+    count += pixel & 0x01;
+
+    switch (GetLayerFormat(layer))
+    {
+        case VIDEO_LAYER_4BPP:
+            DecodeLayerPixelsTemplate<VIDEO_LAYER_4BPP, true>(colors, layer, start, even, count, planes, opaque);
+            break;
+        case VIDEO_LAYER_8BPP:
+            DecodeLayerPixelsTemplate<VIDEO_LAYER_8BPP, false>(colors, layer, start, even, count, planes, opaque);
+            break;
+        default:
+            if (IsTwoPage())
+                DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, true>(colors, layer, start, even, count, planes, opaque);
+            else
+                DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, false>(colors, layer, start, even, count, planes, opaque);
+            break;
+    }
+}
+
+// 4 bpp layers only exist in two page mode and 8 bpp ones in single page mode
+template<Video::Video_Layer_Format format, bool two_page>
+void Video::DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque)
+{
+    const u8* page = m_state.vram + (two_page ? (u32)layer << 18 : 0);
+
+    if (format == VIDEO_LAYER_4BPP)
+    {
+        const u32* palette = m_palette16_colors[layer];
+
+        for (u32 i = 0; i < count; i += 2, pixel += 2)
+        {
+            u8 data = ReadLayerVRAM<two_page>(page, start + (pixel >> 1));
+            u8 low = data & planes;
+            u8 high = (data >> 4) & planes;
+            u32 low_color = palette[low];
+            u32 high_color = palette[high];
+            colors[i] = opaque || low != 0 ? low_color : k_video_transparent;
+            colors[i + 1] = opaque || high != 0 ? high_color : k_video_transparent;
+        }
+    }
+    else if (format == VIDEO_LAYER_8BPP)
+    {
+        for (u32 i = 0; i < count; i++, pixel++)
+        {
+            u8 index = ReadLayerVRAM<two_page>(page, start + pixel);
+            u32 color = m_palette256_colors[index];
+            colors[i] = opaque || index != 0 ? color : k_video_transparent;
+        }
+    }
+    else
+    {
+        for (u32 i = 0; i < count; i++, pixel++)
+        {
+            u32 address = start + pixel * 2;
+            u16 value = (u16)(ReadLayerVRAM<two_page>(page, address) |
+                (ReadLayerVRAM<two_page>(page, address + 1) << 8));
+            u32 color = m_direct_colors[value & 0x7FFF];
+            colors[i] = opaque || (value & 0x8000) == 0 ? color : k_video_transparent;
         }
     }
 }
@@ -970,13 +1042,13 @@ void Video::UpdatePaletteColor(int bank, int index)
     if (bank < 2)
     {
         const u8* color = m_state.palette16[bank][index];
-        m_palette16_colors[bank][index] = MakeColor(color[1] | (color[1] >> 4), color[2] | (color[2] >> 4),
+        m_palette16_colors[bank][index] = ToXRGB(color[1] | (color[1] >> 4), color[2] | (color[2] >> 4),
             color[0] | (color[0] >> 4));
     }
     else
     {
         const u8* color = m_state.palette256[index];
-        m_palette256_colors[index] = MakeColor(color[1], color[2], color[0]);
+        m_palette256_colors[index] = ToXRGB(color[1], color[2], color[0]);
     }
 }
 
@@ -993,7 +1065,7 @@ void Video::UpdateColorCaches()
         UpdatePaletteColor(2, i);
 
     for (u32 i = 0; i < 0x8000; i++)
-        m_direct_colors[i] = MakeColor(Expand5((i >> 5) & 0x1F), Expand5((i >> 10) & 0x1F), Expand5(i & 0x1F));
+        m_direct_colors[i] = ToXRGB(Expand5((i >> 5) & 0x1F), Expand5((i >> 10) & 0x1F), Expand5(i & 0x1F));
 }
 
 void Video::SaveState(std::ostream& stream)

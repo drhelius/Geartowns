@@ -157,16 +157,8 @@ void MB8877::WriteCommand(u8 value, u64 clocks)
 {
     SetINTRQ(false);
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_FDC))
-    {
-        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_FDC, TRACE_FDC_COMMAND);
-        entry->fdc.command = value;
-        entry->fdc.track = m_state.track;
-        entry->fdc.sector = m_state.sector;
-        entry->fdc.data = m_state.data;
-        entry->fdc.status = m_state.status;
-        entry->fdc.drive = (s8)m_fdc->GetSelectedDrive();
-    }
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_FDC, TRACE_FDC_COMMAND))
+        TraceEvent(TRACE_FDC_COMMAND, value);
 
     if ((value & 0xF0) == 0xD0)
     {
@@ -865,16 +857,8 @@ void MB8877::End()
     m_state.event_clocks = GT_NO_EVENT;
     m_state.status &= ~k_mb8877_busy;
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_FDC))
-    {
-        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_FDC, TRACE_FDC_END);
-        entry->fdc.command = m_state.command;
-        entry->fdc.track = m_state.track;
-        entry->fdc.sector = m_state.sector;
-        entry->fdc.data = m_state.data;
-        entry->fdc.status = m_state.status;
-        entry->fdc.drive = (s8)m_fdc->GetSelectedDrive();
-    }
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_FDC, TRACE_FDC_END))
+        TraceEvent(TRACE_FDC_END, m_state.command);
 
     if (m_state.drq && (m_state.status & k_mb8877_lost_data) != 0)
     {
@@ -884,6 +868,22 @@ void MB8877::End()
 
     if (!m_state.drq)
         SetINTRQ(true);
+}
+
+void MB8877::TraceEvent(u8 event, u8 command)
+{
+    int drive = m_fdc->GetSelectedDrive();
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_FDC;
+    entry.event = event;
+    entry.fdc.command = command;
+    entry.fdc.track = m_state.track;
+    entry.fdc.sector = m_state.sector;
+    entry.fdc.data = m_state.data;
+    entry.fdc.status = m_state.status;
+    entry.fdc.drive = (s8)drive;
+    entry.fdc.cylinder = drive >= 0 ? m_fdc->GetState()->cylinders[drive] : 0;
+    m_trace_logger->TraceLog(entry);
 }
 
 void MB8877::SetDRQ()

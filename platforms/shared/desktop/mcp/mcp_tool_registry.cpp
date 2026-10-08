@@ -211,7 +211,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"state", "Save States", "List save slots, select a slot, save emulator state, and load emulator state."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
     {"input", "Input", "Press pad buttons, move and click the mouse, set each game port's device, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
-    {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, DMA, CD-ROM, FDC, VSYNC) and read the trace."},
+    {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, PIC, timers, DMA, video, sprites, sound, CD-ROM, FDC, keyboard, game ports, system) and read the trace."},
     {"profiler", "Profiler", "Profile CPU cycles and call counts per function and interrupt vector."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
 };

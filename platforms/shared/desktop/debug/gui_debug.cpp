@@ -37,7 +37,7 @@
 #include "gui_debug_profiler.h"
 #include "gui_debug_rewind.h"
 #include "gui_debug_system.h"
-#include "gui_debug_trace.h"
+#include "gui_debug_trace_logger.h"
 #include "gui_debug_video.h"
 
 static const char* GTDEBUG_MAGIC = "GTDEBUG1";
@@ -49,6 +49,7 @@ static bool read_settings_count(std::istream& stream, int& count, size_t record_
 
 void gui_debug_init(void)
 {
+    gui_debug_trace_logger_init();
     gui_debug_audio_init();
     gui_debug_disassembler_init();
     gui_debug_memory_init();
@@ -56,6 +57,7 @@ void gui_debug_init(void)
 
 void gui_debug_destroy(void)
 {
+    gui_debug_trace_logger_shutdown();
     gui_debug_audio_destroy();
     gui_debug_disassembler_destroy();
     gui_debug_memory_destroy();
@@ -72,13 +74,13 @@ void gui_debug_reset(void)
 
 void gui_debug_update(void)
 {
+    gui_debug_trace_logger_update();
     gui_debug_memory_update();
 }
 
 void gui_debug_windows(void)
 {
     gui_debug_update();
-    gui_debug_trace_update();
     gui_debug_profiler_update();
 
     if (config_debug.debug)

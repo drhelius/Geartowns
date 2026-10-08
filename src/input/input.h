@@ -25,6 +25,7 @@
 #include "../common/common.h"
 
 class StateSerializer;
+class TraceLogger;
 
 class Input
 {
@@ -44,8 +45,10 @@ public:
 public:
     Input();
     void Init();
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
-    u8 Read(u16 port) const;
+    u8 Read(u16 port);
+    u8 Peek(u16 port) const;
     void Write(u16 port, u8 value, u64 clocks);
     void SetMouseDelta(int port, s32 x, s32 y);
     void ClearMouseInput(int port);
@@ -63,6 +66,7 @@ private:
     u8 ReadMouse(int port) const;
     void MouseEdge(int port, u64 clocks);
     void UpdateGamePadState(int port);
+    void TraceEvent(u8 event, int port, u8 value, u16 previous);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -71,6 +75,7 @@ private:
     GT_GamePad_State m_physical_gamepads[GT_MAX_GAMEPADS];
     GT_GamePad_State m_injected_gamepads[GT_MAX_GAMEPADS];
     GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
+    TraceLogger* m_trace_logger;
 };
 
 static const u8 k_input_output_reset = 0x0F;

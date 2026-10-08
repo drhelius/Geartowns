@@ -211,6 +211,10 @@ void CdRom::WriteControl(u8 value)
 
     m_state.enable_sirq = (value & 0x02) != 0;
     m_state.enable_dei = (value & 0x01) != 0;
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_CONTROL)))
+        TraceEvent(TRACE_CDROM_CONTROL, value);
+
     UpdateIRQ();
 }
 
@@ -257,6 +261,9 @@ void CdRom::WriteTransferControl(u8 value)
         m_state.event = CDROM_EVENT_NONE;
         UpdateNextEvent();
     }
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_TRANSFER)))
+        TraceEvent(TRACE_CDROM_TRANSFER, value);
 
     if ((value & 0x10) != 0)
     {
@@ -382,16 +389,13 @@ void CdRom::RunEvent(u64 clocks)
 void CdRom::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
+    m_cdrom_audio->SetTraceLogger(trace_logger);
 }
 
 void CdRom::ExecuteCommand(u64 clocks)
 {
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_CDROM))
-    {
-        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CDROM, TRACE_CDROM_COMMAND);
-        entry->cdrom.command = m_state.active_command;
-        memcpy(entry->cdrom.bytes, m_state.active_params, CDROM_PARAM_COUNT);
-    }
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_COMMAND))
+        TraceEvent(TRACE_CDROM_COMMAND, 0);
 
     // A new command takes over from a read that was still running
     AbortTransfer();
@@ -780,6 +784,11 @@ void CdRom::SectorReady(u64 clocks)
 
     m_state.dei = false;
     m_state.transfer = CDROM_TRANSFER_READY;
+
+    if (unlikely(IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_SECTOR_READY)))
+        TraceEvent(TRACE_CDROM_SECTOR_READY, 0);
+
     PushStatus(0x22, 0x00);
 
     // Shadow of the Beast waits for Data Ready without asking for STATUS
@@ -793,6 +802,9 @@ void CdRom::SectorReady(u64 clocks)
 void CdRom::LostData()
 {
     Debug("CDROM: sector %u not transferred in time", m_state.read_lba);
+
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_LOST_DATA))
+        TraceEvent(TRACE_CDROM_LOST_DATA, 0);
 
     InvalidateBuffer();
     m_state.transfer = CDROM_TRANSFER_NONE;
@@ -884,6 +896,9 @@ bool CdRom::LoadSector()
 // A sector never comes before the pickup reads it
 void CdRom::FinishSector()
 {
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_SECTOR_END)))
+        TraceEvent(TRACE_CDROM_SECTOR_END, 0);
+
     if (m_state.transfer == CDROM_TRANSFER_DMA)
         m_dma->SetRequest(k_cdrom_dma_channel, false);
 
@@ -1039,16 +1054,8 @@ void CdRom::PushStatus(u8 status0, u8 status1, u8 status2, u8 status3)
     m_state.status[tail + 3] = status3;
     m_state.status_count += 4;
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_CDROM))
-    {
-        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CDROM, TRACE_CDROM_STATUS);
-        entry->cdrom.command = m_state.active_command;
-        memset(entry->cdrom.bytes, 0, sizeof(entry->cdrom.bytes));
-        entry->cdrom.bytes[0] = status0;
-        entry->cdrom.bytes[1] = status1;
-        entry->cdrom.bytes[2] = status2;
-        entry->cdrom.bytes[3] = status3;
-    }
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_STATUS)))
+        TraceEvent(TRACE_CDROM_STATUS, 0);
 }
 
 // A packet the CPU already started keeps its remaining bytes
@@ -1109,7 +1116,39 @@ void CdRom::UpdateIRQ()
 {
     bool status_irq = m_state.sirq && m_state.sirq_irq && m_state.enable_sirq;
     bool dma_irq = m_state.dei && m_state.enable_dei;
+
+    if (unlikely((status_irq || dma_irq) && IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_IRQ) &&
+        (m_pic->GetSlave()->GetState()->input_levels & (1 << (k_cdrom_irq - 8))) == 0))
+        TraceEvent(TRACE_CDROM_IRQ, (status_irq ? 0x01 : 0x00) | (dma_irq ? 0x02 : 0x00));
+
     m_pic->SetIRQLine(k_cdrom_irq, status_irq || dma_irq);
+}
+
+// Status packets are pushed one at a time, so the last four queued bytes are the packet just pushed
+void CdRom::TraceEvent(u8 event, u8 value)
+{
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_CDROM;
+    entry.event = event;
+    entry.cdrom.lba = m_state.read_lba;
+    entry.cdrom.end_lba = m_state.read_end_lba;
+    entry.cdrom.size = (u16)(m_state.sector_end - m_state.sector_position);
+    entry.cdrom.command = m_state.active_command;
+    entry.cdrom.value = value;
+    entry.cdrom.flags = (m_state.enable_sirq ? 0x01 : 0x00) | (m_state.enable_dei ? 0x02 : 0x00) |
+        (m_state.sirq ? 0x04 : 0x00) | (m_state.dei ? 0x08 : 0x00) |
+        (m_state.transfer == CDROM_TRANSFER_DMA ? 0x10 : 0x00);
+
+    if (event == TRACE_CDROM_COMMAND)
+        memcpy(entry.cdrom.bytes, m_state.active_params, CDROM_PARAM_COUNT);
+    else if (event == TRACE_CDROM_STATUS)
+    {
+        u16 tail = (m_state.status_head + m_state.status_count - 4) & (CDROM_STATUS_QUEUE_SIZE - 1);
+        memcpy(entry.cdrom.bytes, &m_state.status[tail], 4);
+    }
+
+    m_trace_logger->TraceLog(entry);
 }
 
 void CdRom::ScheduleEvent(CdRom_Event event, u64 clocks)

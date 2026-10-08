@@ -543,7 +543,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             break;
         case 0x04D0:
         case 0x04D2:
-            value = m_input->Read(port);
+            value = m_input->Peek(port);
             break;
         case 0x04D6:
         case 0x04E7:

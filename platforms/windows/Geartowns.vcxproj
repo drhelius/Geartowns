@@ -134,7 +134,8 @@
     <ClCompile Include="..\shared\desktop\debug\gui_debug_audio.cpp" />
     <ClCompile Include="..\shared\desktop\debug\gui_debug_cdrom.cpp" />
     <ClCompile Include="..\shared\desktop\debug\gui_debug_floppy.cpp" />
-    <ClCompile Include="..\shared\desktop\debug\gui_debug_trace.cpp" />
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_trace_logger.cpp" />
+    <ClCompile Include="..\shared\desktop\debug\trace_logger_formatter.cpp" />
     <ClCompile Include="..\shared\desktop\debug\gui_debug_profiler.cpp" />
     <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp" />
     <ClCompile Include="..\shared\desktop\gui_menus.cpp" />
@@ -321,7 +322,8 @@
     <ClInclude Include="..\shared\desktop\debug\gui_debug_audio.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_cdrom.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_floppy.h" />
-    <ClInclude Include="..\shared\desktop\debug\gui_debug_trace.h" />
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_trace_logger.h" />
+    <ClInclude Include="..\shared\desktop\debug\trace_logger_formatter.h" />
     <ClInclude Include="..\shared\desktop\debug\gui_debug_profiler.h" />
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />

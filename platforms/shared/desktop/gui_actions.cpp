@@ -30,6 +30,7 @@
 #include "events.h"
 #include "gui.h"
 #include "debug/gui_debug.h"
+#include "debug/gui_debug_trace_logger.h"
 #include "rewind.h"
 #include "utils.h"
 #include "video_recorder.h"
@@ -39,6 +40,9 @@ static std::string get_auto_file_path(int dir_option, const std::string& custom_
 void gui_action_load_defaults(void)
 {
     if (gui_is_rom_loading() || emu_is_media_loading())
+        return;
+
+    if (!gui_debug_trace_logger_stop())
         return;
 
     emu_stop_video_recording();
@@ -56,6 +60,7 @@ void gui_action_load_defaults(void)
     emu_reset();
 
     gui_debug_reset();
+    gui_debug_trace_logger_init();
     update_savestates_data();
     events_sync_input();
     ogl_renderer_unload_shader_preset();
@@ -99,6 +104,7 @@ void gui_action_reset(void)
         return;
 
     gui_set_status_message("Resetting...", 3000);
+    gui_debug_trace_logger_clear();
     emu_resume();
     emu_reset();
 

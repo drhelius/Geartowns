@@ -65,7 +65,8 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_profiler.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_rewind.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_system.cpp \
-    $(DESKTOP_SRC_DIR)/debug/gui_debug_trace.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_trace_logger.cpp \
+    $(DESKTOP_SRC_DIR)/debug/trace_logger_formatter.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_video.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_debug_adapter.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_tool_registry.cpp \

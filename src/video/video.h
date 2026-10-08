@@ -168,6 +168,8 @@ private:
     u8 Expand5(u32 value) const;
     void UpdatePaletteColor(int bank, int index);
     void UpdateColorCaches();
+    void TraceWrite(u16 port, u8 value, u64 clocks);
+    void TraceEvent(u8 event, u8 reg, u16 value, u8 raw, u8 bank, u32 param, u64 clocks);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 

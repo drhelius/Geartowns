@@ -47,6 +47,7 @@ public:
 private:
     void UpdateCascade();
     void TraceRequest(int irq);
+    void TraceWrite(int chip, int a0, u8 value, u8 previous_mask, u8 previous_step);
 
 private:
     I8259 m_master;

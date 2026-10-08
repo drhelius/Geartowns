@@ -28,6 +28,7 @@
 class PIC;
 class Scheduler;
 class StateSerializer;
+class TraceLogger;
 
 // JIS keyboard behind the 8042 interface at 0600h-0604h
 class Keyboard
@@ -54,6 +55,7 @@ public:
     Keyboard();
     ~Keyboard();
     void Init(PIC* pic, Scheduler* scheduler);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port) const;
@@ -77,12 +79,14 @@ private:
     bool IsRepeatKey(u8 key) const;
     void UpdateIRQ();
     void UpdateNextEvent();
+    void TraceEvent(u8 event, u8 value, u8 flags, u8 key);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     PIC* m_pic;
     Scheduler* m_scheduler;
+    TraceLogger* m_trace_logger;
     Keyboard_State m_state;
 };
 

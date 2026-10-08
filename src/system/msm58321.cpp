@@ -19,11 +19,13 @@
 
 #include <time.h>
 #include "msm58321.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 MSM58321::MSM58321()
 {
     memset(&m_state, 0, sizeof(m_state));
+    InitPointer(m_trace_logger);
 }
 
 MSM58321::~MSM58321()
@@ -33,6 +35,11 @@ MSM58321::~MSM58321()
 void MSM58321::Init()
 {
     Reset(0);
+}
+
+void MSM58321::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 // Power on starts from the host local time in 24 hour mode, the year counter holds two digits
@@ -73,7 +80,10 @@ u8 MSM58321::Read(u16 port, u64 clocks)
             u8 value = clocks + k_msm58321_busy_clocks < m_state.update_clocks ? 0x80 : 0x00;
 
             if ((m_state.command & 0x84) == 0x84)
+            {
                 value |= ReadRegister(clocks);
+                TraceEvent(TRACE_SYSTEM_RTC_READ, value & 0x0F);
+            }
 
             return value;
         }
@@ -86,6 +96,7 @@ u8 MSM58321::Read(u16 port, u64 clocks)
 u8 MSM58321::Peek(u16 port, u64 clocks) const
 {
     MSM58321 synchronized(*this);
+    InitPointer(synchronized.m_trace_logger);
     return synchronized.Read(port, clocks);
 }
 
@@ -113,7 +124,10 @@ void MSM58321::Write(u16 port, u8 value, u64 clocks)
         m_state.address = m_state.data;
 
     if ((m_state.command & 0x02) != 0)
+    {
         WriteRegister(m_state.data, clocks);
+        TraceEvent(TRACE_SYSTEM_RTC_WRITE, m_state.data);
+    }
 }
 
 void MSM58321::WriteRegister(u8 value, u64 clocks)
@@ -246,6 +260,21 @@ int MSM58321::GetDaysInMonth() const
         return 30;
 
     return 31;
+}
+
+void MSM58321::TraceEvent(u8 event, u8 value)
+{
+    if (!IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_SYSTEM, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_SYSTEM;
+    entry.event = event;
+    entry.system.port = 0x0070;
+    entry.system.value = value;
+    entry.system.address = m_state.address;
+    entry.system.flags = m_state.command;
+    m_trace_logger->TraceLog(entry);
 }
 
 void MSM58321::SaveState(std::ostream& stream)

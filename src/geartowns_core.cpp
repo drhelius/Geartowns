@@ -194,11 +194,18 @@ void GeartownsCore::Init()
     m_profiler->Init(&m_scheduler->GetState()->clocks);
     m_i386->SetTraceLogger(m_trace_logger);
     m_i386->SetProfiler(m_profiler);
+    m_memory->SetTraceLogger(m_trace_logger);
+    m_system_control->SetTraceLogger(m_trace_logger);
     m_pic->SetTraceLogger(m_trace_logger);
+    m_pit->SetTraceLogger(m_trace_logger);
     m_dma->SetTraceLogger(m_trace_logger);
-    m_cdrom->SetTraceLogger(m_trace_logger);
-    m_fdc->GetMB8877()->SetTraceLogger(m_trace_logger);
+    m_rtc->SetTraceLogger(m_trace_logger);
     m_video->SetTraceLogger(m_trace_logger);
+    m_audio->SetTraceLogger(m_trace_logger);
+    m_cdrom->SetTraceLogger(m_trace_logger);
+    m_fdc->SetTraceLogger(m_trace_logger);
+    m_keyboard->SetTraceLogger(m_trace_logger);
+    m_input->SetTraceLogger(m_trace_logger);
     m_media->Init();
     Reset();
 }
@@ -246,7 +253,10 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
         RunDebuggerFrame(frame_start, debug);
 
         if (m_video->IsFrameReady())
+        {
             m_profiler->CountFrame();
+            m_i386->UpdateVBlankWatch();
+        }
     }
     else
         RunFrame(frame_start);

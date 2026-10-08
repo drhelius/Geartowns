@@ -28,6 +28,23 @@
 
 bool g_mcp_router_enabled = false;
 
+static bool parse_trace_filter(const std::string& filter, u32* flags, u32* event_filters)
+{
+    for (int i = 0; i < k_mcp_trace_filter_count; i++)
+    {
+        const McpTraceFilter& trace_filter = k_mcp_trace_filters[i];
+
+        if (filter != trace_filter.name)
+            continue;
+
+        *flags |= 1U << trace_filter.type;
+        event_filters[trace_filter.type] |= trace_filter.mask;
+        return true;
+    }
+
+    return false;
+}
+
 #define MCP_ADDRESS_DESCRIPTION "Linear hex (1234ABCD, 0x1234ABCD, $1234ABCD), SR:offset with a segment register " \
     "(CS:1234), or SSSS:offset with a selector or real-mode segment (0008:00001234)."
 
@@ -2338,69 +2355,87 @@ json McpServer::BuildToolList()
     });
 
     // Trace and profiler tools
+    json trace_filter_names = json::array();
+
+    for (int i = 0; i < k_mcp_trace_filter_count; i++)
+        trace_filter_names.push_back(k_mcp_trace_filters[i].name);
+
     tools.push_back({
         {"name", "get_trace_log"},
         {"title", "Get Trace Log"},
-        {"description", "Read trace lines: executed instructions (CS:EIP, linear, mode, bytes, Intel syntax, optional registers) interleaved with IRQ requests, interrupt entries, I/O port accesses, DMA requests and ends, CD-ROM and FDC commands and status, and VSYNC. Lines start with the CPU clock."},
+        {"description", "Read trace log entries: CPU instructions and hardware events. Lines start with the CPU clock."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
                 {"start", {
                     {"type", "integer"},
-                    {"description", "Absolute sequence to read from, or a negative value to read that many from the end. Default -100."}
+                    {"description", "Absolute trace sequence, or a negative value to read that many entries from the retained tail (omit for latest 100)"}
                 }},
                 {"count", {
                     {"type", "integer"},
-                    {"description", "Lines to return, 1-1000. Default 100."},
+                    {"description", "Entries to return (default 100, max 1000)"},
                     {"minimum", 1},
                     {"maximum", 1000}
                 }}
-            }}
+            }},
+            {"additionalProperties", false}
         }}
     });
 
     tools.push_back({
         {"name", "set_trace_log"},
-        {"title", "Set Trace Log"},
-        {"description", "Start or stop the trace logger (opens its window; it records while the debugger runs the machine) and configure events, output to memory or a disk file, sizes and registers."},
-        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"title", "Set Trace Logger"},
+        {"description", "Enable/disable trace logging to memory or disk; configure capacity, file limit, output directory, and event filters. It records while the debugger runs the machine."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
                 {"enabled", {
                     {"type", "boolean"},
-                    {"description", "true starts, false stops; retained entries are kept."}
-                }},
-                {"filters", {
-                    {"type", "array"},
-                    {"description", "Events to record."},
-                    {"items", {{"type", "string"}, {"enum", json::array({"cpu", "interrupt", "io", "dma", "cdrom", "fdc", "vsync"})}}}
+                    {"description", "true starts logging and opens the Trace Logger window, false stops; preserves entries."}
                 }},
                 {"output", {
                     {"type", "string"},
-                    {"enum", json::array({"memory", "disk"})},
-                    {"description", "Keep entries in memory, or also stream them to a text file."}
+                    {"description", "Trace destination. Defaults to memory when starting a stopped logger."},
+                    {"enum", json::array({"memory", "disk"})}
                 }},
                 {"memory_size", {
                     {"type", "string"},
-                    {"enum", json::array({"100K", "500K", "1M", "2M"})},
-                    {"description", "Entries retained in memory."}
+                    {"description", "Maximum entries retained in memory mode."},
+                    {"enum", json::array({"100K", "500K", "1M", "2M", "5M"})}
                 }},
                 {"disk_size", {
                     {"type", "string"},
-                    {"enum", json::array({"10MB", "100MB", "1GB", "unbounded"})},
-                    {"description", "Maximum trace file size."}
+                    {"description", "Maximum disk trace file size."},
+                    {"enum", json::array({"10MB", "50MB", "100MB", "250MB", "500MB", "1GB", "unbounded"})}
                 }},
                 {"output_path", {
                     {"type", "string"},
-                    {"description", "Folder for the automatically named trace file."}
+                    {"description", "Directory for the automatically named disk trace file."}
                 }},
-                {"registers", {
-                    {"type", "boolean"},
-                    {"description", "Add the general registers and EFLAGS to instruction lines."}
+                {"vblank_watch_address", {
+                    {"type", "string"},
+                    {"description", "Linear address hex watched by video.missed_vblank: '1234ABCD', '0x1234ABCD', or '$1234ABCD'. Omit to keep current."}
+                }},
+                {"vblank_watch_operation", {
+                    {"type", "string"},
+                    {"description", "Access that marks a frame as on time for video.missed_vblank. Omit to keep current."},
+                    {"enum", json::array({"read", "write", "read_write"})}
+                }},
+                {"filters", {
+                    {"type", "array"},
+                    {"description", "Exact event streams to record. Defaults to CPU instructions, IRQs and exceptions."},
+                    {"items", {
+                        {"type", "string"},
+                        {"enum", trace_filter_names}
+                    }},
+                    {"minItems", 1},
+                    {"uniqueItems", true}
                 }}
-            }}
+            }},
+            {"required", json::array({"enabled"})},
+            {"additionalProperties", false}
         }}
     });
 
@@ -3422,7 +3457,54 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "set_trace_log")
     {
-        return m_debugAdapter.SetTraceLog(arguments);
+        bool enabled = arguments["enabled"];
+        u32 flags = TRACE_FLAG_CPU | TRACE_FLAG_CPU_INTERRUPT;
+        u32 event_filters[TRACE_TYPE_COUNT] = {};
+        event_filters[TRACE_CPU_INTERRUPT] = TRACE_CPU_INTERRUPT_EVENT_DEFAULT;
+        event_filters[TRACE_IO] = TRACE_IO_EVENT_ALL;
+        event_filters[TRACE_PIC] = TRACE_PIC_EVENT_ALL;
+        event_filters[TRACE_TIMER] = TRACE_TIMER_EVENT_ALL;
+        event_filters[TRACE_DMA] = TRACE_DMA_EVENT_ALL;
+        event_filters[TRACE_VIDEO] = TRACE_VIDEO_EVENT_DEFAULT;
+        event_filters[TRACE_SPRITE] = TRACE_SPRITE_EVENT_ALL;
+        event_filters[TRACE_FM] = TRACE_FM_EVENT_DEFAULT;
+        event_filters[TRACE_PCM] = TRACE_PCM_EVENT_ALL;
+        event_filters[TRACE_MIXER] = TRACE_MIXER_EVENT_ALL;
+        event_filters[TRACE_CDROM] = TRACE_CDROM_EVENT_ALL;
+        event_filters[TRACE_FDC] = TRACE_FDC_EVENT_ALL;
+        event_filters[TRACE_KEYBOARD] = TRACE_KEYBOARD_EVENT_ALL;
+        event_filters[TRACE_INPUT] = TRACE_INPUT_EVENT_DEFAULT;
+        event_filters[TRACE_SYSTEM] = TRACE_SYSTEM_EVENT_DEFAULT;
+
+        if (enabled && arguments.contains("filters"))
+        {
+            flags = 0;
+
+            for (int i = 0; i < TRACE_TYPE_COUNT; i++)
+                event_filters[i] = 0;
+
+            const json& filters = arguments["filters"];
+
+            for (json::const_iterator it = filters.begin(); it != filters.end(); ++it)
+            {
+                std::string filter = it->get<std::string>();
+
+                if (!parse_trace_filter(filter, &flags, event_filters))
+                    return {{"error", "Unknown trace filter: " + filter}};
+            }
+
+            if (flags == 0)
+                return {{"error", "At least one trace filter is required"}};
+        }
+
+        std::string output = arguments.value("output", "");
+        std::string memory_size = arguments.value("memory_size", "");
+        std::string disk_size = arguments.value("disk_size", "");
+        std::string output_path = arguments.value("output_path", "");
+        std::string vblank_watch_address = arguments.value("vblank_watch_address", "");
+        std::string vblank_watch_operation = arguments.value("vblank_watch_operation", "");
+        return m_debugAdapter.SetTraceLog(enabled, flags, output, memory_size, disk_size, output_path, event_filters,
+            vblank_watch_address, vblank_watch_operation);
     }
     else if (normalizedTool == "set_profiler")
     {

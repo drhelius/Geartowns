@@ -31,6 +31,7 @@
 #include <thread>
 #include <vector>
 #include "config.h"
+#include "debug/gui_debug_trace_logger.h"
 #include "emu_floppy.h"
 #include "events.h"
 #include "mcp/mcp_manager.h"
@@ -366,6 +367,7 @@ void emu_load_media_async(const char* file_path)
         loading_thread_active = false;
     }
 
+    gui_debug_trace_logger_reset();
     strncpy_fit(loading_file_path, file_path, sizeof(loading_file_path));
     loading_request_type = Loading_Request_File;
     loading_result = false;
@@ -389,6 +391,7 @@ void emu_load_physical_cdrom_async(const char* device_id)
         loading_thread_active = false;
     }
 
+    gui_debug_trace_logger_reset();
     Log("Queueing physical CD-ROM async load: %s", device_id);
     strncpy_fit(loading_file_path, device_id, sizeof(loading_file_path));
     loading_request_type = Loading_Request_PhysicalCdRom;
@@ -509,6 +512,8 @@ bool emu_power_on(void)
     if (!IsValidPointer(geartowns) || loading_state.load() != Loading_State_None)
         return false;
 
+    gui_debug_trace_logger_reset();
+
     if (!geartowns->PowerOn())
         return false;
 
@@ -523,6 +528,7 @@ void emu_power_off(void)
     if (!IsValidPointer(geartowns) || loading_state.load() != Loading_State_None)
         return;
 
+    gui_debug_trace_logger_reset();
     geartowns->PowerOff();
     reset_run_state();
     update_savestates_data();
@@ -533,6 +539,7 @@ void emu_reset(void)
     if (!IsValidPointer(geartowns))
         return;
 
+    gui_debug_trace_logger_reset();
     geartowns->ResetMedia();
     emu_floppy_check_drives();
     reset_run_state();
@@ -1477,6 +1484,7 @@ static bool unload_media(void)
     if (!geartowns->GetMedia()->IsReady())
         return false;
 
+    gui_debug_trace_logger_reset();
     emu_debug_command = Debug_Command_None;
     reset_buffers();
     emu_audio_reset();

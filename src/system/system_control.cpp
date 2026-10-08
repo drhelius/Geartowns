@@ -18,6 +18,7 @@
  */
 
 #include "system_control.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 // 256 bits, bit 255 first: a zero nibble, "FUJITSU", reserved ones, model 0101h and a zero serial number
@@ -29,6 +30,7 @@ static const u8 k_system_control_serial_rom[32] =
 
 SystemControl::SystemControl()
 {
+    InitPointer(m_trace_logger);
     m_state.reset_cause = 0;
     m_state.reset_pending = false;
     m_state.write_protect = false;
@@ -45,6 +47,11 @@ SystemControl::~SystemControl()
 void SystemControl::Init()
 {
     Reset();
+}
+
+void SystemControl::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 // Power-on state, a CPU reset keeps the reset causes for the BIOS to read
@@ -131,6 +138,19 @@ void SystemControl::Write(u16 port, u8 value)
         case 0x05E0:
             m_state.port_05e0 = value;
             break;
+    }
+
+    if (unlikely((port == 0x0020 || port == 0x0022) && IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_SYSTEM, TRACE_SYSTEM_RESET)))
+    {
+        GT_Trace_Entry entry = {};
+        entry.type = TRACE_SYSTEM;
+        entry.event = TRACE_SYSTEM_RESET;
+        entry.system.port = port;
+        entry.system.value = value;
+        entry.system.flags = (m_state.reset_pending ? 0x01 : 0x00) | (m_state.write_protect ? 0x02 : 0x00) |
+            (m_state.power_off ? 0x04 : 0x00);
+        m_trace_logger->TraceLog(entry);
     }
 }
 

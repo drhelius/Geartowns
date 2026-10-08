@@ -2308,6 +2308,9 @@ bool I386::OPCodes_OUT()
 
     u32 value = GetRegister(I386_REG_EAX, width);
 
+    if (unlikely(m_debugger_io_checks))
+        RecordDebuggerIO(port, value, (u32)width >> 3, true);
+
     if (IsValidPointer(m_io))
     {
         if (width == 8)
@@ -2317,9 +2320,6 @@ bool I386::OPCodes_OUT()
         else
             m_io->Write32(port, value, *m_bus_context);
     }
-
-    if (unlikely(m_debugger_io_checks))
-        RecordDebuggerIO(port, value, (u32)width >> 3, true);
 
     m_bus_context->end_batch = true;
     CommitEIP(m_instruction);

@@ -1315,6 +1315,33 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
     }
 }
 
+// Instruction text in the window colors, for other views that show it without its record
+void gui_debug_disassembler_draw_text(const char* instruction)
+{
+    char prefixes[24];
+    char mnemonic[32];
+    char operands[128];
+    float space_width = ImGui::CalcTextSize(" ").x;
+
+    split_instruction(instruction, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
+
+    if (prefixes[0] != 0)
+    {
+        ImGui::TextColored(blue, "%s", prefixes);
+        ImGui::SameLine(0.0f, space_width);
+    }
+
+    ImGui::TextColored(white, "%s", mnemonic);
+
+    if (operands[0] != 0)
+    {
+        ImGui::SameLine(0.0f, space_width);
+        ImGui::BeginGroup();
+        draw_operands(operands, false, false, white, NULL);
+        ImGui::EndGroup();
+    }
+}
+
 static bool text_equals(const char* start, const char* end, const char* word)
 {
     size_t length = (size_t)(end - start);

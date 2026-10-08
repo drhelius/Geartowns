@@ -18,7 +18,7 @@ This server provides tools for game development, rom hacking, translation, rever
 - **Input State**: Inspect effective pressed buttons, held keyboard keys and pending tap releases
 - **Bookmarks**: Memory and disassembler bookmarks for navigation
 - **Call Stack**: View calls, interrupts and exceptions with their vectors
-- **Trace Logger**: CPU instruction trace with interleaved hardware events (interrupts, I/O, DMA, CD-ROM, FDC, VSYNC), in memory or streamed to disk
+- **Trace Logger**: CPU instruction trace with interleaved hardware events (interrupts, I/O ports, PIC, timers, DMA, video, sprites, FM, PCM, mixer, CD-ROM, FDC, keyboard, game ports, system), in memory or streamed to disk
 - **Profiler**: Per-function and per-interrupt-vector call counts, calls per frame, and inclusive/exclusive cycle statistics
 - **Screenshot Capture**: Get current frame as PNG image
 - **Video Recording**: Record emulated video and audio to AVI files on disk
@@ -374,49 +374,105 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `list_disassembler_bookmarks` - List all disassembler bookmarks
 - `get_call_stack` - View the call stack: entries with `kind` (call, interrupt, exception), `vector`, `from`, `to` and `return` addresses (logical and linear) and symbols
 - `get_trace_log` - Read trace logger entries (CPU + hardware events) using absolute sequence pagination. Use `set_trace_log` to start or stop the logger
-- `set_trace_log` - Start or stop trace logging and configure event filters and memory or disk storage
+- `set_trace_log` - Start or stop trace logging and configure exact event filters and memory or disk storage
 
 #### Trace pagination
 
 `get_trace_log` returns:
 
-- `running`, `output`, `memory_size`, `disk_size`, `registers` and `filters`: the current logger configuration. `disk_path` and `disk_bytes` are added when the output is `disk`.
-- `retained`: entries currently retained in the memory ring.
-- `total_logged`: the next absolute sequence number. It is monotonic for the process lifetime and is not reset by clear, resize or stop.
-- `oldest_sequence`: absolute sequence of the oldest retained entry (`total_logged - retained`).
+- `total_entries`: entries currently retained in the memory ring.
+- `total_logged`: the next absolute sequence number. It is monotonic for the process lifetime and is not reset by clear, resize, media changes, or resets.
+- `oldest_sequence`: absolute sequence of the oldest retained entry (`total_logged - total_entries`).
 - `start`: actual absolute sequence used for this page.
 - `next_sequence`: absolute sequence to pass as the next `start`.
 - `count`: number of returned entries.
 - `overrun`: `true` when a requested `start` had expired and was clamped to `oldest_sequence`.
-- `lines`: formatted trace entries in sequence order, each starting with the CPU clock.
+- `lines`: formatted trace entries in sequence order, each starting with the CPU clock and the clocks since the previous entry. Instruction lines carry the linear address, CS:EIP, general and segment registers, EFLAGS, Intel syntax and bytes.
 
 When `start` is omitted, the latest 100 retained entries are returned. A negative `start` requests that many entries from the retained tail. Positive starts are absolute sequences. `count` defaults to 100 and is capped at 1000. A requested sequence older than `oldest_sequence` starts at the oldest retained entry and sets `overrun` to `true`. A sequence at or beyond `total_logged` returns an empty page with `start` and `next_sequence` equal to the requested value and `overrun` set to `false`.
 
+Memory-mode counters shown in the GUI and written by manual export use the same absolute sequence values as MCP. Disk trace files use a separate zero-based entry counter local to each file.
+
 #### Trace filters
 
-Omitting `filters` keeps the configured events, which default to `cpu`, `interrupt` and `io`. When supplied, `filters` can contain only these exact values:
+Omitting `filters` enables the default of CPU instructions, IRQs and exceptions. When supplied, `filters` must be non-empty, unique, and contain only these exact values:
 
 ```text
-cpu
-interrupt
-io
-dma
-cdrom
-fdc
-vsync
+cpu.instructions
+cpu.irqs
+cpu.exceptions
+cpu.software_ints
+io.reads
+io.writes
+pic.requests
+pic.mask
+pic.commands
+pic.init
+timer.timeouts
+timer.counters
+timer.interrupt_control
+dma.registers
+dma.requests
+dma.ends
+video.crtc
+video.output
+video.palette
+video.vram_mask
+video.vsync
+video.fmr
+video.missed_vblank
+sprite.registers
+sprite.transfers
+sprite.busy
+fm.key
+fm.frequency
+fm.operators
+fm.channels
+fm.global
+fm.dac
+fm.timers
+fm.irqs
+pcm.channels
+pcm.key
+pcm.control
+pcm.irqs
+mixer.volume
+mixer.mute
+cdrom.commands
+cdrom.status
+cdrom.irqs
+cdrom.control
+cdrom.data
+cdrom.cdda
+fdc.commands
+fdc.results
+fdc.drives
+keyboard.keys
+keyboard.reads
+keyboard.commands
+input.reads
+input.writes
+input.changes
+system.reset
+system.memory_map
+system.rtc
 ```
 
-`cpu` records executed instructions (CS:EIP, linear address, mode, bytes and Intel syntax), `registers` adds the general registers and EFLAGS to those lines. `interrupt` records IRQ requests and interrupt entries, `io` records I/O port accesses, `dma` records DMA requests and ends, `cdrom` and `fdc` record controller commands and status, and `vsync` records the vertical sync.
+Hardware events are decoded as the guest sees them: register names and fields, IRQ lines and vectors, DMA channels with their device, CD-ROM commands with their MSF ranges, status packets and sector transfers, FDC commands and results, keyboard messages with the key name, and pad buttons. Video register writes carry the beam line and dot. I/O port writes are logged before the device acts on them, so the events they cause follow them.
+
+`video.missed_vblank` detects frames where the game missed VBlank. It watches one linear address, set with `vblank_watch_address` (hex, e.g. `1234ABCD`, `0x1234ABCD`, or `$1234ABCD`), for the access set with `vblank_watch_operation` (`read`, `write`, or `read_write`). CPU data accesses count, instruction fetches do not. At each VSYNC the frame that just ended is checked, and if the watched access did not happen during it, a `VBLANK MISSED` entry is logged with the watched address, operation, and the number of consecutive missed frames. The first VSYNC after starting the logger, changing the watch, resetting, or loading a state only arms the check. Both parameters persist in the configuration and keep their current values when omitted; the response echoes them when `video.missed_vblank` is active.
+
+`sprite.busy` logs the VSYNCs where the sprite controller is still drawing the previous list, so no new transfer starts and the shown page stays the same.
 
 The trace logger records while the debugger runs the machine, so the debugger must be enabled, which is always the case when the MCP server is running. `set_trace_log` with `enabled` true opens the Trace Logger window and starts recording.
 
 #### Trace storage
 
-Starting a stopped logger without `output` uses the configured storage, which defaults to `memory`. Memory capacities are `100K`, `500K`, `1M` and `2M` entries; the default is `100K`. Disk limits are `10MB`, `100MB`, `1GB` and `unbounded`; the default is `100MB`.
+Starting a stopped logger without `output` selects `memory`. Memory capacities are `100K`, `500K`, `1M`, `2M`, and `5M` entries; the persisted default is `100K`. Disk limits are `10MB`, `50MB`, `100MB`, `250MB`, `500MB`, `1GB`, and `unbounded`; the persisted default is `100MB`.
 
-Events, output, `memory_size`, `disk_size` and `output_path` can be changed only while the logger is stopped; the call fails otherwise. `registers` can be changed at any time. Stopping preserves retained memory entries.
+Storage changes while tracing is active cleanly stop and restart the logger. Repeating the active storage configuration is idempotent and only updates filters. Stopping preserves retained memory entries; changing memory capacity or starting disk output resets the ring used by that recording. Resets, power cycles and media changes stop the logger.
 
-With `output` set to `disk` entries are also streamed to a text file. `output_path` is a directory only, not a filename. Geartowns creates a timestamped `geartowns_trace_YYYYMMDD_HHMMSS.txt` file in that directory, or in the configuration directory when it is not set. The path and size of the file are reported as `disk_path` and `disk_bytes`.
+`output_path` is a directory only, not a filename. Geartowns creates a unique timestamped trace filename in that directory. When omitted, the configured default, media, or custom directory policy remains in effect.
 
 ### Profiler
 - `set_profiler` - Start, stop, or reset the function profiler with `action` (`start`, `stop`, `reset`). `start` opens the Profiler debugger window and `stop` closes it. Statistics are only collected while the window is open and the debugger runs the machine

@@ -78,6 +78,12 @@ I386::I386()
     m_trace_internal = false;
     m_trace_cpu = false;
     m_profiler_active = false;
+    m_vblank_watch_read = false;
+    m_vblank_watch_write = false;
+    m_vblank_watch_address = 0;
+    m_vblank_watch_hit = false;
+    m_vblank_watch_armed = false;
+    m_vblank_watch_misses = 0;
 
     Reset();
 }
@@ -160,6 +166,7 @@ void I386::Reset()
     m_run_to_hit = false;
     m_breakpoint_hit_address = 0;
     m_debugger_hit_pending = false;
+    ResetVBlankWatch();
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
         SetRealModeSegment((I386_Segment_Register)i, 0);
@@ -604,6 +611,7 @@ void I386::SanitizeState()
     m_debug_data_breakpoints = 0;
     m_step = {};
     m_step_exception = {};
+    ResetVBlankWatch();
 
     memset(&m_exception, 0, sizeof(m_exception));
     memset(&m_string, 0, sizeof(m_string));
@@ -1118,29 +1126,35 @@ void I386::TraceInstruction()
 {
     const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
     u32 linear = code.base + m_state.eip;
-    GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CPU, 0);
+    GT_Trace_Entry entry = {};
 
-    entry->cpu.linear = linear;
-    entry->cpu.eip = m_state.eip;
-    entry->cpu.cs = code.selector;
-    entry->cpu.mode = (u8)m_state.execution_mode;
-    entry->cpu.eflags = m_state.eflags;
-    entry->cpu.size = 0;
-    entry->cpu.name[0] = 0;
+    entry.type = TRACE_CPU;
+    entry.cpu.linear = linear;
+    entry.cpu.eip = m_state.eip;
+    entry.cpu.eflags = m_state.eflags;
+    entry.cpu.cs = code.selector;
+    entry.cpu.ds = m_state.segments[I386_SEGMENT_DS].selector;
+    entry.cpu.es = m_state.segments[I386_SEGMENT_ES].selector;
+    entry.cpu.ss = m_state.segments[I386_SEGMENT_SS].selector;
+    entry.cpu.fs = m_state.segments[I386_SEGMENT_FS].selector;
+    entry.cpu.gs = m_state.segments[I386_SEGMENT_GS].selector;
+    entry.cpu.mode = (u8)m_state.execution_mode;
 
-    for (int i = 0; i < 8; i++)
-        entry->cpu.registers[i] = m_state.registers[i].value;
+    for (int i = 0; i < I386_REG_COUNT; i++)
+        entry.cpu.registers[i] = m_state.registers[i].value;
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
     const I386_Disassembler_Record* record = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
 
     if (IsValidPointer(record) && record->linear == linear && record->size > 0)
     {
-        entry->cpu.size = (u8)MIN(record->size, 15);
-        memcpy(entry->cpu.bytes, record->opcodes, entry->cpu.size);
-        strncpy_fit(entry->cpu.name, record->name, sizeof(entry->cpu.name));
+        entry.cpu.size = (u8)MIN(record->size, GT_I386_MAX_INSTRUCTION_LENGTH);
+        memcpy(entry.cpu.opcodes, record->opcodes, entry.cpu.size);
+        strncpy_fit(entry.cpu.name, record->name, sizeof(entry.cpu.name));
     }
 #endif
+
+    m_trace_logger->TraceLog(entry);
 }
 
 void I386::RecordTrace(const I386_State& before)

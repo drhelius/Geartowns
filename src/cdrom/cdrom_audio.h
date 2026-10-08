@@ -27,6 +27,7 @@
 
 class CdRomMedia;
 class StateSerializer;
+class TraceLogger;
 
 class CdRomAudio
 {
@@ -56,6 +57,7 @@ public:
     CdRomAudio(CdRomMedia* cdrom_media);
     ~CdRomAudio();
     void Init();
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void Play(u32 start_lba, u32 end_lba, bool repeat);
     void SetSeekScale(double scale);
@@ -74,11 +76,13 @@ private:
     void LoadSector();
     void Deemphasize();
     void NextSector();
+    void TraceEvent(u8 event, u32 seek_ms);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     CdRomMedia* m_cdrom_media;
+    TraceLogger* m_trace_logger;
     CdRomAudio_State m_state;
     s16 m_sector_cache[CDROM_AUDIO_SECTOR_SAMPLES * 2];
     u32 m_sector_cache_lba;

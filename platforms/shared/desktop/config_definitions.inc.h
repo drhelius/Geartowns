@@ -38,13 +38,6 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "Paging", config_debug.show_i386_paging, false);
     CONFIG_BOOL("Debug", "TraceLogger", config_debug.show_trace_logger, false);
     CONFIG_BOOL("Debug", "Profiler", config_debug.show_profiler, false);
-    CONFIG_INT_RANGE("Debug", "TraceFlags", config_debug.trace_flags, 0x07, 0, 0x7F);
-    CONFIG_BOOL("Debug", "TraceRegisters", config_debug.trace_registers, false);
-    CONFIG_BOOL("Debug", "TraceCycles", config_debug.trace_cycles, true);
-    CONFIG_INT_RANGE("Debug", "TraceCapacity", config_debug.trace_capacity, 0, 0, 3);
-    CONFIG_INT_RANGE("Debug", "TraceOutput", config_debug.trace_output, 0, 0, 1);
-    CONFIG_INT_RANGE("Debug", "TraceDiskSize", config_debug.trace_disk_size, 1, 0, 3);
-    CONFIG_STRING("Debug", "TraceOutputPath", config_debug.trace_output_path, "");
     CONFIG_BOOL("Debug", "Breakpoints", config_debug.show_breakpoints, false);
     CONFIG_BOOL("Debug", "Symbols", config_debug.show_symbols, false);
     CONFIG_BOOL("Debug", "Rewind", config_debug.show_rewind, false);
@@ -85,6 +78,69 @@ static inline void process(config_Operation operation)
     CONFIG_INT_RANGE("Debug", "DiskViewerCylinder", config_debug.disk_viewer_cylinder, 0, 0, 81);
     CONFIG_INT_RANGE("Debug", "DiskViewerHead", config_debug.disk_viewer_head, 0, 0, 1);
     CONFIG_BOOL("Debug", "AutoDebugSettings", config_debug.auto_debug_settings, false);
+
+    // Trace logger
+    CONFIG_BOOL("Debug", "TraceCounter", config_debug.trace_counter, true);
+    CONFIG_BOOL("Debug", "TraceCycles", config_debug.trace_cycles, false);
+    CONFIG_BOOL("Debug", "TraceLinear", config_debug.trace_linear, false);
+    CONFIG_BOOL("Debug", "TraceRegisters", config_debug.trace_registers, false);
+    CONFIG_BOOL("Debug", "TraceSegments", config_debug.trace_segments, false);
+    CONFIG_BOOL("Debug", "TraceFlags", config_debug.trace_flags, false);
+    CONFIG_BOOL("Debug", "TraceBytes", config_debug.trace_bytes, false);
+    CONFIG_BOOL("Debug", "TraceCpuEnabled", config_debug.trace_cpu_enabled, true);
+    CONFIG_BOOL("Debug", "TraceCpu", config_debug.trace_cpu, true);
+    CONFIG_BOOL("Debug", "TraceIo", config_debug.trace_io, false);
+    CONFIG_BOOL("Debug", "TracePic", config_debug.trace_pic, false);
+    CONFIG_BOOL("Debug", "TraceTimer", config_debug.trace_timer, false);
+    CONFIG_BOOL("Debug", "TraceDma", config_debug.trace_dma, false);
+    CONFIG_BOOL("Debug", "TraceVideo", config_debug.trace_video, false);
+    CONFIG_BOOL("Debug", "TraceSprite", config_debug.trace_sprite, false);
+    CONFIG_BOOL("Debug", "TraceFm", config_debug.trace_fm, false);
+    CONFIG_BOOL("Debug", "TracePcm", config_debug.trace_pcm, false);
+    CONFIG_BOOL("Debug", "TraceMixer", config_debug.trace_mixer, false);
+    CONFIG_BOOL("Debug", "TraceCdrom", config_debug.trace_cdrom, false);
+    CONFIG_BOOL("Debug", "TraceFdc", config_debug.trace_fdc, false);
+    CONFIG_BOOL("Debug", "TraceKeyboard", config_debug.trace_keyboard, false);
+    CONFIG_BOOL("Debug", "TraceInput", config_debug.trace_input, false);
+    CONFIG_BOOL("Debug", "TraceSystem", config_debug.trace_system, false);
+    CONFIG_INT_RANGE("Debug", "TraceCpuInterruptEvents", config_debug.trace_cpu_interrupt_events,
+        TRACE_CPU_INTERRUPT_EVENT_DEFAULT, 0, TRACE_CPU_INTERRUPT_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceIoEvents", config_debug.trace_io_events, TRACE_IO_EVENT_ALL, 0, TRACE_IO_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TracePicEvents", config_debug.trace_pic_events, TRACE_PIC_EVENT_ALL, 0,
+        TRACE_PIC_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceTimerEvents", config_debug.trace_timer_events, TRACE_TIMER_EVENT_ALL, 0,
+        TRACE_TIMER_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceDmaEvents", config_debug.trace_dma_events, TRACE_DMA_EVENT_ALL, 0,
+        TRACE_DMA_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceVideoEvents", config_debug.trace_video_events, TRACE_VIDEO_EVENT_DEFAULT, 0,
+        TRACE_VIDEO_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceSpriteEvents", config_debug.trace_sprite_events, TRACE_SPRITE_EVENT_ALL, 0,
+        TRACE_SPRITE_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceFmEvents", config_debug.trace_fm_events, TRACE_FM_EVENT_DEFAULT, 0,
+        TRACE_FM_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TracePcmEvents", config_debug.trace_pcm_events, TRACE_PCM_EVENT_ALL, 0,
+        TRACE_PCM_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceMixerEvents", config_debug.trace_mixer_events, TRACE_MIXER_EVENT_ALL, 0,
+        TRACE_MIXER_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceCdromEvents", config_debug.trace_cdrom_events, TRACE_CDROM_EVENT_ALL, 0,
+        TRACE_CDROM_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceFdcEvents", config_debug.trace_fdc_events, TRACE_FDC_EVENT_ALL, 0,
+        TRACE_FDC_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceKeyboardEvents", config_debug.trace_keyboard_events, TRACE_KEYBOARD_EVENT_ALL, 0,
+        TRACE_KEYBOARD_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceInputEvents", config_debug.trace_input_events, TRACE_INPUT_EVENT_DEFAULT, 0,
+        TRACE_INPUT_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceSystemEvents", config_debug.trace_system_events, TRACE_SYSTEM_EVENT_DEFAULT, 0,
+        TRACE_SYSTEM_EVENT_ALL);
+    CONFIG_INT("Debug", "TraceVBlankWatchAddress", config_debug.trace_vblank_watch_address, 0);
+    CONFIG_INT_RANGE("Debug", "TraceVBlankWatchOperation", config_debug.trace_vblank_watch_operation, 1, 0, 2);
+    CONFIG_INT_RANGE("Debug", "TraceOutput", config_debug.trace_output, 0, 0, 1);
+    CONFIG_INT_RANGE("Debug", "TraceCapacity", config_debug.trace_capacity, 0, 0, 4);
+    CONFIG_INT_RANGE("Debug", "TraceDiskDirOption", config_debug.trace_disk_dir_option, 0, 0, 2);
+    CONFIG_INT_RANGE("Debug", "TraceDiskSize", config_debug.trace_disk_size, 2, 0, 6);
+    CONFIG_STRING_NOT_EMPTY("Debug", "TraceDiskPath", config_debug.trace_disk_path, config_root_path);
+
+    // Disassembler
     CONFIG_BOOL("Debug", "DisBytes", config_debug.dis_show_bytes, true);
     CONFIG_BOOL("Debug", "DisSymbols", config_debug.dis_show_symbols, true);
     CONFIG_BOOL("Debug", "DisSegment", config_debug.dis_show_segment, true);

@@ -30,6 +30,78 @@ using json = nlohmann::json;
 
 static const int k_mcp_mouse_motion_step = 4;
 
+struct McpTraceFilter
+{
+    const char* name;
+    GT_Trace_Type type;
+    u32 mask;
+};
+
+// Filter names for set_trace_log, cpu.instructions has no event mask
+static const McpTraceFilter k_mcp_trace_filters[] =
+{
+    { "cpu.instructions", TRACE_CPU, 0 },
+    { "cpu.irqs", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_IRQS },
+    { "cpu.exceptions", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_EXCEPTIONS },
+    { "cpu.software_ints", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_SOFTWARE },
+    { "io.reads", TRACE_IO, TRACE_IO_EVENT_READS },
+    { "io.writes", TRACE_IO, TRACE_IO_EVENT_WRITES },
+    { "pic.requests", TRACE_PIC, TRACE_PIC_EVENT_REQUESTS },
+    { "pic.mask", TRACE_PIC, TRACE_PIC_EVENT_MASK },
+    { "pic.commands", TRACE_PIC, TRACE_PIC_EVENT_COMMANDS },
+    { "pic.init", TRACE_PIC, TRACE_PIC_EVENT_INIT },
+    { "timer.timeouts", TRACE_TIMER, TRACE_TIMER_EVENT_TIMEOUTS },
+    { "timer.counters", TRACE_TIMER, TRACE_TIMER_EVENT_COUNTERS },
+    { "timer.interrupt_control", TRACE_TIMER, TRACE_TIMER_EVENT_INTERRUPT },
+    { "dma.registers", TRACE_DMA, TRACE_DMA_EVENT_REGISTERS },
+    { "dma.requests", TRACE_DMA, TRACE_DMA_EVENT_REQUESTS },
+    { "dma.ends", TRACE_DMA, TRACE_DMA_EVENT_ENDS },
+    { "video.crtc", TRACE_VIDEO, TRACE_VIDEO_EVENT_CRTC },
+    { "video.output", TRACE_VIDEO, TRACE_VIDEO_EVENT_OUTPUT },
+    { "video.palette", TRACE_VIDEO, TRACE_VIDEO_EVENT_PALETTE },
+    { "video.vram_mask", TRACE_VIDEO, TRACE_VIDEO_EVENT_MASK },
+    { "video.vsync", TRACE_VIDEO, TRACE_VIDEO_EVENT_VSYNC },
+    { "video.fmr", TRACE_VIDEO, TRACE_VIDEO_EVENT_FMR },
+    { "video.missed_vblank", TRACE_VIDEO, TRACE_VIDEO_EVENT_MISSED_VBLANK },
+    { "sprite.registers", TRACE_SPRITE, TRACE_SPRITE_EVENT_REGISTERS },
+    { "sprite.transfers", TRACE_SPRITE, TRACE_SPRITE_EVENT_TRANSFERS },
+    { "sprite.busy", TRACE_SPRITE, TRACE_SPRITE_EVENT_BUSY },
+    { "fm.key", TRACE_FM, TRACE_FM_EVENT_KEY },
+    { "fm.frequency", TRACE_FM, TRACE_FM_EVENT_FREQUENCY },
+    { "fm.operators", TRACE_FM, TRACE_FM_EVENT_OPERATORS },
+    { "fm.channels", TRACE_FM, TRACE_FM_EVENT_CHANNELS },
+    { "fm.global", TRACE_FM, TRACE_FM_EVENT_GLOBAL },
+    { "fm.dac", TRACE_FM, TRACE_FM_EVENT_DAC },
+    { "fm.timers", TRACE_FM, TRACE_FM_EVENT_TIMERS },
+    { "fm.irqs", TRACE_FM, TRACE_FM_EVENT_IRQS },
+    { "pcm.channels", TRACE_PCM, TRACE_PCM_EVENT_CHANNELS },
+    { "pcm.key", TRACE_PCM, TRACE_PCM_EVENT_KEY },
+    { "pcm.control", TRACE_PCM, TRACE_PCM_EVENT_CONTROL },
+    { "pcm.irqs", TRACE_PCM, TRACE_PCM_EVENT_IRQS },
+    { "mixer.volume", TRACE_MIXER, TRACE_MIXER_EVENT_VOLUME },
+    { "mixer.mute", TRACE_MIXER, TRACE_MIXER_EVENT_MUTE },
+    { "cdrom.commands", TRACE_CDROM, TRACE_CDROM_EVENT_COMMANDS },
+    { "cdrom.status", TRACE_CDROM, TRACE_CDROM_EVENT_STATUS },
+    { "cdrom.irqs", TRACE_CDROM, TRACE_CDROM_EVENT_IRQS },
+    { "cdrom.control", TRACE_CDROM, TRACE_CDROM_EVENT_CONTROL },
+    { "cdrom.data", TRACE_CDROM, TRACE_CDROM_EVENT_DATA },
+    { "cdrom.cdda", TRACE_CDROM, TRACE_CDROM_EVENT_CDDA },
+    { "fdc.commands", TRACE_FDC, TRACE_FDC_EVENT_COMMANDS },
+    { "fdc.results", TRACE_FDC, TRACE_FDC_EVENT_RESULTS },
+    { "fdc.drives", TRACE_FDC, TRACE_FDC_EVENT_DRIVES },
+    { "keyboard.keys", TRACE_KEYBOARD, TRACE_KEYBOARD_EVENT_KEYS },
+    { "keyboard.reads", TRACE_KEYBOARD, TRACE_KEYBOARD_EVENT_READS },
+    { "keyboard.commands", TRACE_KEYBOARD, TRACE_KEYBOARD_EVENT_COMMANDS },
+    { "input.reads", TRACE_INPUT, TRACE_INPUT_EVENT_READS },
+    { "input.writes", TRACE_INPUT, TRACE_INPUT_EVENT_WRITES },
+    { "input.changes", TRACE_INPUT, TRACE_INPUT_EVENT_CHANGES },
+    { "system.reset", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_RESET },
+    { "system.memory_map", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_MEMORY },
+    { "system.rtc", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_RTC }
+};
+
+static const int k_mcp_trace_filter_count = sizeof(k_mcp_trace_filters) / sizeof(k_mcp_trace_filters[0]);
+
 struct McpAddress
 {
     u32 linear;
@@ -153,7 +225,9 @@ public:
 
     // Trace and profiler
     json GetTraceLog(s64 start, int count);
-    json SetTraceLog(const json& arguments);
+    json SetTraceLog(bool enabled, u32 flags, const std::string& output, const std::string& memory_size,
+        const std::string& disk_size, const std::string& output_path, const u32* event_filters,
+        const std::string& vblank_watch_address, const std::string& vblank_watch_operation);
     json SetProfiler(const std::string& action);
     json GetProfilerData(const std::string& sort, int count, const std::string& filter);
 

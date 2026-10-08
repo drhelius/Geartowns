@@ -54,15 +54,15 @@ INLINE bool I386::OPCodes_OUTS(int width, int source_segment, u32 source_offset)
     {
         u16 port = m_state.registers[I386_REG_EDX].low;
 
+        if (unlikely(m_debugger_io_checks))
+            RecordDebuggerIO(port, value, (u32)width >> 3, true);
+
         if (width == 8)
             m_io->Write8(port, (u8)value, *m_bus_context);
         else if (width == 16)
             m_io->Write16(port, (u16)value, *m_bus_context);
         else
             m_io->Write32(port, value, *m_bus_context);
-
-        if (unlikely(m_debugger_io_checks))
-            RecordDebuggerIO(port, value, (u32)width >> 3, true);
     }
 
     m_bus_context->end_batch = true;

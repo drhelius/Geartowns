@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "memory.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 Memory::Memory()
@@ -41,6 +42,7 @@ Memory::Memory()
     m_state.dictionary_bank = 0;
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
+    InitPointer(m_trace_logger);
     memset(m_debug_regions, 0, sizeof(m_debug_regions));
 }
 
@@ -57,6 +59,11 @@ void Memory::Init()
         m_state.main_ram = new u8[m_main_ram_size];
 
     Reset();
+}
+
+void Memory::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 // Power-on reset, backup RAM keeps its contents
@@ -927,6 +934,20 @@ void Memory::WriteMappingControl(u16 port, u8 value)
     }
 
     ApplyMapping();
+
+    if (unlikely(IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_SYSTEM, TRACE_SYSTEM_MEMORY_MAP)))
+    {
+        GT_Trace_Entry entry = {};
+        entry.type = TRACE_SYSTEM;
+        entry.event = TRACE_SYSTEM_MEMORY_MAP;
+        entry.system.port = port;
+        entry.system.value = value;
+        entry.system.address = m_state.dictionary_bank;
+        entry.system.flags = (m_state.main_memory ? 0x01 : 0x00) | (m_state.boot_ram ? 0x02 : 0x00) |
+            (m_state.dictionary ? 0x04 : 0x00);
+        m_trace_logger->TraceLog(entry);
+    }
 }
 
 // 0404h bit 7 swaps C0000-EFFFF between the FM-R view and RAM, 0480h bit 1 swaps the boot ROM at F8000

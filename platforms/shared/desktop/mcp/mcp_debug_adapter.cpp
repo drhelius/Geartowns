@@ -56,7 +56,8 @@
 #include "../debug/gui_debug_disassembler.h"
 #include "../debug/gui_debug_i386_tables.h"
 #include "../debug/gui_debug_rewind.h"
-#include "../debug/gui_debug_trace.h"
+#include "../debug/gui_debug_trace_logger.h"
+#include "../debug/trace_logger_formatter.h"
 #include "../emu_floppy.h"
 #include "../utils.h"
 #include "../video_recorder.h"
@@ -3448,158 +3449,255 @@ json DebugAdapter::SetFloppyWriteProtect(int drive, bool write_protected)
     return {{"success", true}, {"drive", drive}, {"write_protected", disk->IsWriteProtected()}};
 }
 
-static const char* const k_mcp_trace_filters[TRACE_TYPE_COUNT] =
-{
-    "cpu", "interrupt", "io", "dma", "cdrom", "fdc", "vsync"
-};
-static const char* const k_mcp_trace_memory_sizes[4] = { "100K", "500K", "1M", "2M" };
-static const char* const k_mcp_trace_disk_sizes[4] = { "10MB", "100MB", "1GB", "unbounded" };
-
-static int find_name(const std::string& value, const char* const* names, int count)
-{
-    for (int i = 0; i < count; i++)
-    {
-        if (value == names[i])
-            return i;
-    }
-
-    return -1;
-}
-
-static json trace_status(TraceLogger* logger)
-{
-    json filters = json::array();
-
-    for (int i = 0; i < TRACE_TYPE_COUNT; i++)
-    {
-        if ((config_debug.trace_flags & (1 << i)) != 0)
-            filters.push_back(k_mcp_trace_filters[i]);
-    }
-
-    json result = {
-        {"running", logger->IsRunning()},
-        {"output", config_debug.trace_output == 1 ? "disk" : "memory"},
-        {"memory_size", k_mcp_trace_memory_sizes[CLAMP(config_debug.trace_capacity, 0, 3)]},
-        {"disk_size", k_mcp_trace_disk_sizes[CLAMP(config_debug.trace_disk_size, 0, 3)]},
-        {"registers", config_debug.trace_registers},
-        {"filters", filters},
-        {"retained", logger->GetCount()},
-        {"total_logged", logger->GetSequence()}
-    };
-
-    if (config_debug.trace_output == 1)
-    {
-        result["disk_path"] = gui_debug_trace_get_disk_path();
-        result["disk_bytes"] = gui_debug_trace_get_disk_bytes();
-    }
-
-    return result;
-}
-
 json DebugAdapter::GetTraceLog(s64 start, int count)
 {
-    TraceLogger* logger = m_core->GetTraceLogger();
-    u32 retained = logger->GetCount();
-    u64 total = logger->GetSequence();
+    json result;
+    TraceLogger* tl = m_core->GetTraceLogger();
+    u32 retained = tl->GetCount();
+    u64 total = tl->GetSequence();
     u64 oldest = total - retained;
-    bool overrun = false;
-    u64 first = 0;
 
-    count = CLAMP(count, 1, 1000);
+    if (count < 1)
+        count = 100;
+
+    if (count > 1000)
+        count = 1000;
+
+    u64 actual_start;
+    bool overrun = false;
 
     if (start < 0)
     {
-        u64 tail = (u64)(-start);
-        first = total - oldest > tail ? total - tail : oldest;
+        u64 tail = (u64)(-(start + 1)) + 1;
+        actual_start = (total - oldest > tail) ? (total - tail) : oldest;
     }
     else
     {
-        first = (u64)start;
+        actual_start = (u64)start;
 
-        if (first < oldest)
+        if (actual_start < oldest)
         {
-            first = oldest;
+            actual_start = oldest;
             overrun = true;
         }
     }
 
-    json lines = json::array();
-    u64 last = first;
-
-    for (u64 sequence = first; sequence < total && (int)lines.size() < count; sequence++)
+    if (actual_start >= total)
     {
-        char text[GUI_DEBUG_TRACE_TEXT_SIZE];
-        gui_debug_trace_format(logger->GetEntry((u32)(sequence - oldest)), text, sizeof(text), config_debug.trace_registers,
-            true);
-        lines.push_back(text);
-        last = sequence + 1;
+        result["total_entries"] = retained;
+        result["total_logged"] = total;
+        result["oldest_sequence"] = oldest;
+        result["start"] = actual_start;
+        result["next_sequence"] = actual_start;
+        result["count"] = 0;
+        result["overrun"] = overrun;
+        result["lines"] = json::array();
+        return result;
     }
 
-    json result = trace_status(logger);
-    result["start"] = first;
-    result["next_sequence"] = last;
+    u32 actual_count = (u32)count;
+
+    if ((u64)actual_count > total - actual_start)
+        actual_count = (u32)(total - actual_start);
+
+    u32 buffer_start = (u32)(actual_start - oldest);
+    json lines = json::array();
+
+    for (u32 i = 0; i < actual_count; i++)
+    {
+        const GT_Trace_Entry& entry = tl->GetEntry(buffer_start + i);
+        char buf[GT_TRACE_FORMAT_BUFFER_SIZE];
+
+        GT_Trace_Format_Options options = {};
+        options.linear = true;
+        options.registers = true;
+        options.segments = true;
+        options.flags = true;
+        options.bytes = true;
+        options.cycles = true;
+        options.previous_cycle_valid = (buffer_start + i) > 0;
+        options.previous_cycle = options.previous_cycle_valid ? tl->GetEntry(buffer_start + i - 1).cycle : 0;
+        trace_logger_format_entry(entry, options, buf, sizeof(buf));
+        lines.push_back(buf);
+    }
+
+    result["total_entries"] = retained;
+    result["total_logged"] = total;
     result["oldest_sequence"] = oldest;
+    result["start"] = actual_start;
+    result["next_sequence"] = actual_start + actual_count;
+    result["count"] = actual_count;
     result["overrun"] = overrun;
-    result["count"] = lines.size();
     result["lines"] = lines;
     return result;
 }
 
-json DebugAdapter::SetTraceLog(const json& arguments)
+json DebugAdapter::SetTraceLog(bool enabled, u32 flags, const std::string& output, const std::string& memory_size,
+    const std::string& disk_size, const std::string& output_path, const u32* event_filters,
+    const std::string& vblank_watch_address, const std::string& vblank_watch_operation)
 {
-    TraceLogger* logger = m_core->GetTraceLogger();
-    bool running = logger->IsRunning();
-    bool enable = arguments.contains("enabled") ? arguments["enabled"].get<bool>() : running;
+    static const char* const k_vblank_watch_operations[] = { "read", "write", "read_write" };
+    json result;
+    TraceLogger* tl = m_core->GetTraceLogger();
 
-    if (running && enable && (arguments.contains("filters") || arguments.contains("output") ||
-        arguments.contains("memory_size") || arguments.contains("disk_size") || arguments.contains("output_path")))
-        return {{"error", "Stop the trace logger before changing its settings"}};
-
-    if (arguments.contains("filters"))
+    if (!enabled)
     {
-        int flags = 0;
-
-        for (size_t i = 0; i < arguments["filters"].size(); i++)
+        if (!gui_debug_trace_logger_stop())
         {
-            int index = find_name(arguments["filters"][i].get<std::string>(), k_mcp_trace_filters, TRACE_TYPE_COUNT);
-
-            if (index < 0)
-                return {{"error", "filters take cpu, interrupt, io, dma, cdrom, fdc and vsync"}};
-
-            flags |= 1 << index;
+            result["error"] = "Unable to stop trace logger cleanly";
+            return result;
         }
 
-        config_debug.trace_flags = flags;
+        tl->SetEnabledFlags(0);
+        result["status"] = "stopped";
+        result["total_entries"] = tl->GetCount();
+        return result;
     }
 
-    if (arguments.contains("output"))
-        config_debug.trace_output = arguments["output"].get<std::string>() == "disk" ? 1 : 0;
+    bool was_enabled = gui_debug_trace_logger_is_enabled();
+    int output_value;
 
-    if (arguments.contains("memory_size"))
-        config_debug.trace_capacity = MAX(0, find_name(arguments["memory_size"].get<std::string>(), k_mcp_trace_memory_sizes, 4));
-
-    if (arguments.contains("disk_size"))
-        config_debug.trace_disk_size = MAX(0, find_name(arguments["disk_size"].get<std::string>(), k_mcp_trace_disk_sizes, 4));
-
-    if (arguments.contains("output_path"))
-        config_debug.trace_output_path = arguments["output_path"].get<std::string>();
-
-    if (arguments.contains("registers"))
-        config_debug.trace_registers = arguments["registers"].get<bool>();
-
-    if (enable && !running)
+    if (output.empty())
+        output_value = was_enabled ? config_debug.trace_output : gui_TraceOutput_Memory;
+    else if (output == "memory")
+        output_value = gui_TraceOutput_Memory;
+    else if (output == "disk")
+        output_value = gui_TraceOutput_Disk;
+    else
     {
-        if (!config_debug.debug)
-            return {{"error", "The trace logger records while the debugger is enabled"}};
-
-        if (!gui_debug_trace_start())
-            return {{"error", "Unable to start the trace logger"}};
+        result["error"] = "Invalid trace output";
+        return result;
     }
-    else if (!enable && running)
-        gui_debug_trace_stop();
 
-    json result = trace_status(logger);
-    result["success"] = true;
+    int memory_size_value = config_debug.trace_capacity;
+
+    if (!memory_size.empty())
+    {
+        memory_size_value = gui_debug_trace_logger_memory_size_index(memory_size.c_str());
+
+        if (memory_size_value < 0)
+        {
+            result["error"] = "Invalid trace memory size";
+            return result;
+        }
+    }
+
+    int disk_size_value = config_debug.trace_disk_size;
+
+    if (!disk_size.empty())
+    {
+        disk_size_value = gui_debug_trace_logger_disk_size_index(disk_size.c_str());
+
+        if (disk_size_value < 0)
+        {
+            result["error"] = "Invalid trace disk size";
+            return result;
+        }
+    }
+
+    int vblank_watch_address_value = config_debug.trace_vblank_watch_address;
+
+    if (!vblank_watch_address.empty())
+    {
+        u32 address = 0;
+
+        if (!parse_hex_with_prefix(vblank_watch_address, &address))
+        {
+            result["error"] = "Invalid vblank watch address";
+            return result;
+        }
+
+        vblank_watch_address_value = (int)address;
+    }
+
+    int vblank_watch_operation_value = config_debug.trace_vblank_watch_operation;
+
+    if (!vblank_watch_operation.empty())
+    {
+        vblank_watch_operation_value = -1;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (vblank_watch_operation == k_vblank_watch_operations[i])
+                vblank_watch_operation_value = i;
+        }
+
+        if (vblank_watch_operation_value < 0)
+        {
+            result["error"] = "Invalid vblank watch operation";
+            return result;
+        }
+    }
+
+    bool configuration_changed = output_value != config_debug.trace_output;
+
+    if (output_value == gui_TraceOutput_Memory)
+        configuration_changed = configuration_changed || memory_size_value != config_debug.trace_capacity;
+    else
+    {
+        configuration_changed = configuration_changed || disk_size_value != config_debug.trace_disk_size;
+
+        if (!output_path.empty())
+            configuration_changed = configuration_changed ||
+                config_debug.trace_disk_dir_option != Directory_Location_Custom ||
+                output_path != config_debug.trace_disk_path;
+    }
+
+    if (was_enabled && configuration_changed && !gui_debug_trace_logger_stop())
+    {
+        result["error"] = "Unable to stop trace logger cleanly";
+        return result;
+    }
+
+    if (!gui_debug_trace_logger_is_enabled() &&
+        !gui_debug_trace_logger_configure(output_value, memory_size_value, disk_size_value, output_path.c_str()))
+    {
+        result["error"] = "Unable to configure trace logger";
+        return result;
+    }
+
+    gui_debug_trace_logger_set_event_filters(event_filters);
+    config_debug.trace_vblank_watch_address = vblank_watch_address_value;
+    config_debug.trace_vblank_watch_operation = vblank_watch_operation_value;
+
+    if (!gui_debug_trace_logger_start(flags))
+    {
+        result["error"] = "Unable to start trace logger";
+        return result;
+    }
+
+    result["status"] = "started";
+    result["output"] = config_debug.trace_output == gui_TraceOutput_Disk ? "disk" : "memory";
+    result["memory_size"] = gui_debug_trace_logger_memory_size_name(config_debug.trace_capacity);
+    result["disk_size"] = gui_debug_trace_logger_disk_size_name(config_debug.trace_disk_size);
+
+    if (config_debug.trace_output == gui_TraceOutput_Disk)
+        result["output_path"] = gui_debug_trace_logger_get_output_path();
+
+    u32 enabled_flags = tl->GetEnabledFlags();
+    json event_filter_list = json::array();
+
+    for (int i = 0; i < k_mcp_trace_filter_count; i++)
+    {
+        const McpTraceFilter& filter = k_mcp_trace_filters[i];
+        u32 events = tl->GetEventFilter(filter.type);
+
+        if ((enabled_flags & (1U << filter.type)) != 0 && (events & filter.mask) == filter.mask)
+            event_filter_list.push_back(filter.name);
+    }
+
+    result["filters"] = event_filter_list;
+
+    if ((enabled_flags & TRACE_FLAG_VIDEO) != 0 &&
+        (tl->GetEventFilter(TRACE_VIDEO) & TRACE_VIDEO_EVENT_MISSED_VBLANK) != 0)
+    {
+        char address[16];
+        snprintf(address, sizeof(address), "%08X", (u32)config_debug.trace_vblank_watch_address);
+        result["vblank_watch_address"] = address;
+        result["vblank_watch_operation"] = k_vblank_watch_operations[config_debug.trace_vblank_watch_operation];
+    }
+
+    result["total_entries"] = tl->GetCount();
     return result;
 }
 

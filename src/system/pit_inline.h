@@ -22,6 +22,7 @@
 
 #include "pit.h"
 #include "scheduler.h"
+#include "../common/trace_logger.h"
 
 INLINE void PIT::Synchronize(u64 clocks)
 {
@@ -37,6 +38,10 @@ INLINE void PIT::Synchronize(u64 clocks)
 
     if (latch != m_state.timer_latch)
     {
+        if (unlikely(IsValidPointer(m_trace_logger) &&
+            m_trace_logger->IsEventEnabled(TRACE_TIMER, TRACE_TIMER_TIMEOUT)))
+            TraceTimeout(latch);
+
         UpdateIRQ();
         UpdateNextEvent();
     }

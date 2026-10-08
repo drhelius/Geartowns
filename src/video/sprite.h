@@ -26,6 +26,7 @@
 #define SPRITE_REGISTERS 8
 
 class StateSerializer;
+class TraceLogger;
 
 class Sprite
 {
@@ -51,11 +52,13 @@ public:
     Sprite();
     ~Sprite();
     void Init(u8* vram, const u8* sprite_ram);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port) const;
     void Write(u16 port, u8 value);
     void Synchronize(u64 clocks);
     void StartTransfer(u64 clocks);
+    void TraceBusyAtVSync();
     bool IsEnabled() const;
     bool IsBusy() const;
     bool GetPage() const;
@@ -72,6 +75,7 @@ private:
     void DrawPattern(u32 pixel, u32 end);
     u16 GetFirstIndex() const;
     u8* GetWorkHalf() const;
+    void TraceEvent(u8 event, u8 value);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -79,6 +83,7 @@ private:
     Sprite_State m_state;
     u8* m_vram;
     const u8* m_sprite_ram;
+    TraceLogger* m_trace_logger;
 };
 
 static const u8 k_sprite_register_masks[SPRITE_REGISTERS] = { 0xFF, 0x83, 0xFF, 0x01, 0xFF, 0x01, 0x88, 0x00 };

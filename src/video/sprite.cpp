@@ -18,12 +18,14 @@
  */
 
 #include "sprite.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 Sprite::Sprite()
 {
     InitPointer(m_vram);
     InitPointer(m_sprite_ram);
+    InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
 }
 
@@ -36,6 +38,11 @@ void Sprite::Init(u8* vram, const u8* sprite_ram)
     m_vram = vram;
     m_sprite_ram = sprite_ram;
     Reset();
+}
+
+void Sprite::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void Sprite::Reset()
@@ -57,9 +64,16 @@ u8 Sprite::Read(u16 port) const
 void Sprite::Write(u16 port, u8 value)
 {
     if (port == 0x0450)
+    {
         m_state.address = value & 0x07;
-    else
-        m_state.registers[m_state.address] = value & k_sprite_register_masks[m_state.address];
+        return;
+    }
+
+    m_state.registers[m_state.address] = value & k_sprite_register_masks[m_state.address];
+
+    if (unlikely(IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_REGISTER)))
+        TraceEvent(TRACE_SPRITE_REGISTER, value);
 }
 
 // Each transfer swaps the halves, clears the new work half and walks the index from the first entry to 1023
@@ -73,6 +87,17 @@ void Sprite::StartTransfer(u64 clocks)
     m_state.clear_row = 1;
     m_state.entry = 0;
     m_state.pixel = 0;
+
+    if (unlikely(IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_TRANSFER_START)))
+        TraceEvent(TRACE_SPRITE_TRANSFER_START, 0);
+}
+
+// The previous transfer still runs, so this frame starts none and the shown half stays the same
+void Sprite::TraceBusyAtVSync()
+{
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_BUSY_AT_VSYNC))
+        TraceEvent(TRACE_SPRITE_BUSY_AT_VSYNC, 0);
 }
 
 // The clear takes 32 us and every index entry 75 us, drawn or not, with its 256 pixels spread over that time
@@ -118,6 +143,10 @@ void Sprite::Run(u64 clocks)
     }
 
     m_state.busy = false;
+
+    if (unlikely(IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_TRANSFER_END)))
+        TraceEvent(TRACE_SPRITE_TRANSFER_END, 0);
 }
 
 // The entry is read when its first pixel is due, later CPU writes to it wait for the next transfer
@@ -212,6 +241,23 @@ void Sprite::DrawPattern(u32 pixel, u32 end)
         destination[0] = source[0];
         destination[1] = (u8)((source[1] & 0x7F) | through);
     }
+}
+
+void Sprite::TraceEvent(u8 event, u8 value)
+{
+    u32 count = k_sprite_entries - m_state.first_index;
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_SPRITE;
+    entry.event = event;
+    entry.sprite.clocks = k_sprite_clear_clocks + count * k_sprite_entry_clocks;
+    entry.sprite.first = event == TRACE_SPRITE_REGISTER ? GetFirstIndex() : m_state.first_index;
+    entry.sprite.count = (u16)count;
+    entry.sprite.entry = m_state.entry;
+    entry.sprite.reg = m_state.address;
+    entry.sprite.value = event == TRACE_SPRITE_REGISTER ? m_state.registers[m_state.address] : value;
+    entry.sprite.raw = value;
+    entry.sprite.page = m_state.page ? 1 : 0;
+    m_trace_logger->TraceLog(entry);
 }
 
 void Sprite::SaveState(std::ostream& stream)

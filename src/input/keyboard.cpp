@@ -20,6 +20,7 @@
 #include "keyboard.h"
 #include "../system/pic.h"
 #include "../system/scheduler.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 // Answer to a keyboard reset seen on a Towns II MX with a JIS keyboard
@@ -29,6 +30,7 @@ Keyboard::Keyboard()
 {
     InitPointer(m_pic);
     InitPointer(m_scheduler);
+    InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
 }
 
@@ -41,6 +43,11 @@ void Keyboard::Init(PIC* pic, Scheduler* scheduler)
     m_pic = pic;
     m_scheduler = scheduler;
     Reset();
+}
+
+void Keyboard::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void Keyboard::Reset()
@@ -75,6 +82,7 @@ u8 Keyboard::Read(u16 port, u64 clocks)
             m_state.rearm_clocks = clocks + k_keyboard_rearm_clocks;
             UpdateIRQ();
             UpdateNextEvent();
+            TraceEvent(TRACE_KEYBOARD_READ, value, 0, 0);
             return value;
         }
         case 0x0602:
@@ -109,14 +117,18 @@ void Keyboard::Write(u16 port, u8 value, u64 clocks)
     switch (port)
     {
         case 0x0600:
+            TraceEvent(TRACE_KEYBOARD_COMMAND, value, 0, 0);
+
             // FM-OASYS and the keyboard BIOS reset the keyboard here, keeping the IRQ enable
             if (value == 0xA1 || value == 0xA2)
                 SendResetResponse(4);
             break;
         case 0x0602:
+            TraceEvent(TRACE_KEYBOARD_COMMAND, value, 0x02, 0);
             WriteCommand(value);
             break;
         case 0x0604:
+            TraceEvent(TRACE_KEYBOARD_IRQ_ENABLE, value, 0, 0);
             m_state.irq_enabled = (value & 0x01) != 0;
 
             if (m_state.irq_enabled && m_state.fifo_count != 0 && !m_state.rearm_pending)
@@ -276,7 +288,23 @@ void Keyboard::PushEvent(u8 key, u8 flags)
     m_state.fifo[(write + 1) & (KEYBOARD_FIFO_SIZE - 1)] = key;
     m_state.fifo_count += 2;
     m_state.kbint = true;
+    TraceEvent(TRACE_KEYBOARD_KEY, 0, flags, key);
     UpdateIRQ();
+}
+
+void Keyboard::TraceEvent(u8 event, u8 value, u8 flags, u8 key)
+{
+    if (!IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_KEYBOARD, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_KEYBOARD;
+    entry.event = event;
+    entry.keyboard.value = value;
+    entry.keyboard.flags = flags;
+    entry.keyboard.key = key;
+    entry.keyboard.pending = m_state.fifo_count;
+    m_trace_logger->TraceLog(entry);
 }
 
 bool Keyboard::IsRepeatKey(u8 key) const

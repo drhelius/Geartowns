@@ -99,6 +99,7 @@ private:
     void FinishService(int channel, bool terminal_count);
     void CheckUnsupported();
     void UpdateNextEvent();
+    void TraceEvent(u8 event, int channel, u8 reg, u8 value, bool terminal);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 

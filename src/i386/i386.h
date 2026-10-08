@@ -460,6 +460,8 @@ public:
     u16 GetIRQBreakpoints() const;
     u16 GetDisabledIRQBreakpoints() const;
     void SetIRQBreakpoints(u16 lines, u16 disabled);
+    void SetVBlankWatch(bool read, bool write, u32 address);
+    void UpdateVBlankWatch();
     void EnableDebuggerChecks(bool enable);
     bool CheckDebuggerBreakpoints(bool regular, bool run_to);
     bool IsDebuggerHitPending() const;
@@ -819,6 +821,7 @@ private:
     bool CheckInstructionBreakpoint();
     void RecordDataBreakpoints(u32 linear, u32 size, bool write);
     void RecordDebuggerAccess(u32 linear, u32 size, bool write);
+    void ResetVBlankWatch();
     void RecordDebuggerIO(u16 port, u32 value, u32 size, bool write);
     void RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 from, bool has_error_code, u32 error_code);
     void TraceInstruction();
@@ -1137,6 +1140,12 @@ private:
     bool m_trace_internal;
     bool m_trace_cpu;
     bool m_profiler_active;
+    bool m_vblank_watch_read;
+    bool m_vblank_watch_write;
+    u32 m_vblank_watch_address;
+    bool m_vblank_watch_hit;
+    bool m_vblank_watch_armed;
+    u32 m_vblank_watch_misses;
 
     u32 m_run_to_breakpoint;
     u32 m_breakpoint_hit_address;

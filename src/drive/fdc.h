@@ -31,6 +31,7 @@ class PIC;
 class Scheduler;
 class UPD71071;
 class StateSerializer;
+class TraceLogger;
 
 class FDC
 {
@@ -53,6 +54,7 @@ public:
     FDC();
     ~FDC();
     void Init(PIC* pic, Scheduler* scheduler, UPD71071* dma);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void SetInternalDrives(int drives);
     void SetThreeMode(bool three_mode);
@@ -96,6 +98,7 @@ private:
     void UpdateIRQ();
     void UpdateReady(u64 clocks);
     void UpdateNextEvent(u64 clocks);
+    void TraceDrive(u8 event, u8 value);
     static bool DMAReadCallback(void* device, u16& value, bool word);
     static bool DMAWriteCallback(void* device, u16 value, bool word);
     void Serialize(StateSerializer& serializer);
@@ -105,6 +108,7 @@ private:
     PIC* m_pic;
     Scheduler* m_scheduler;
     UPD71071* m_dma;
+    TraceLogger* m_trace_logger;
     MB8877 m_mb8877;
     FloppyDisk m_disks[FDC_DRIVES];
     FDC_State m_state;

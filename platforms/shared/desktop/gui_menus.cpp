@@ -805,6 +805,9 @@ static void menu_emulator(void)
             hotkey_configuration_item("Step Frame:", &config_hotkeys[config_HotkeyIndex_DebugStepFrame]);
             hotkey_configuration_item("Continue:", &config_hotkeys[config_HotkeyIndex_DebugContinue]);
             hotkey_configuration_item("Break:", &config_hotkeys[config_HotkeyIndex_DebugBreak]);
+            hotkey_configuration_item("Run to Cursor:", &config_hotkeys[config_HotkeyIndex_DebugRunToCursor]);
+            hotkey_configuration_item("Toggle Breakpoint:", &config_hotkeys[config_HotkeyIndex_DebugBreakpoint]);
+            hotkey_configuration_item("Go Back:", &config_hotkeys[config_HotkeyIndex_DebugGoBack]);
             gui_popup_modal_hotkey();
             ImGui::EndMenu();
         }

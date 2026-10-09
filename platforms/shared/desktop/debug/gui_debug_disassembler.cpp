@@ -54,7 +54,6 @@ static bool selected_address_valid = false;
 static u32 selected_address = 0;
 
 static bool goto_address_requested = false;
-static bool goto_address_unavailable = false;
 static u32 goto_address_target = 0;
 
 static bool goto_back_requested = false;
@@ -125,7 +124,6 @@ void gui_debug_disassembler_reset(void)
 {
     selected_address_valid = false;
     goto_address_requested = false;
-    goto_address_unavailable = false;
     goto_back_requested = false;
     decode_ahead_valid = false;
 }
@@ -392,7 +390,7 @@ static void disassembler_menu(void)
             request_goto_address(emu_get_core()->GetI386()->GetCurrentLinearPC());
         }
 
-        if (ImGui::BeginMenu("Go To Address..."))
+        if (ImGui::BeginMenu("Go To Linear Address..."))
         {
             bool go = false;
             ImGui::PushItemWidth(82.0f);
@@ -476,7 +474,7 @@ static void disassembler_menu(void)
 
         ImGui::Separator();
 
-        if (ImGui::BeginMenu("Run To Address..."))
+        if (ImGui::BeginMenu("Run To Linear Address..."))
         {
             bool run = false;
             ImGui::PushItemWidth(82.0f);
@@ -684,37 +682,6 @@ static void draw_controls(void)
 
     ImGui::SameLine();
     ImGui::TextColored(emu_is_debug_idle() ? red : green, emu_is_debug_idle() ? "   PAUSED" : "   RUNNING");
-
-    ImGui::PushItemWidth(92.0f);
-    ImGui::InputTextWithHint("##goto_address", "Go to linear", goto_address_buffer, IM_ARRAYSIZE(goto_address_buffer),
-        ImGuiInputTextFlags_CharsHexadecimal);
-    ImGui::SameLine();
-
-    if (ImGui::Button("Go"))
-    {
-        u32 address = 0;
-
-        if (parse_address(goto_address_buffer, address))
-            request_goto_address(address);
-    }
-
-    ImGui::SameLine();
-    ImGui::InputTextWithHint("##runto_address", "Run to linear", runto_address_buffer,
-        IM_ARRAYSIZE(runto_address_buffer), ImGuiInputTextFlags_CharsHexadecimal);
-    ImGui::SameLine();
-
-    if (ImGui::Button("Run To"))
-    {
-        u32 address = 0;
-
-        if (parse_address(runto_address_buffer, address))
-            gui_debug_runto_address(address);
-    }
-
-    ImGui::PopItemWidth();
-
-    if (goto_address_unavailable)
-        ImGui::TextColored(violet, "Disassembly unavailable at %08X", goto_address_target);
 }
 
 static void draw_breakpoints_content(void)
@@ -1148,9 +1115,8 @@ static void draw_disassembly(void)
         if (goto_address_requested)
         {
             goto_address_requested = false;
-            goto_address_unavailable = goto_position < 0;
 
-            if (!goto_address_unavailable)
+            if (goto_position >= 0)
             {
                 goto_back = ImGui::GetScrollY();
                 ImGui::SetScrollY(goto_position * ImGui::GetTextLineHeightWithSpacing() + 2.0f);
@@ -2158,7 +2124,6 @@ static void request_goto_address(u32 address)
 {
     goto_address_target = address;
     goto_address_requested = true;
-    goto_address_unavailable = false;
 }
 
 static void add_symbol_popup(void)

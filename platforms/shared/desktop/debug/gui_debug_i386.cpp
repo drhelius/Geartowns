@@ -634,7 +634,20 @@ void gui_debug_window_i386(void)
         draw_flags(I386RegId_EFLAGS, state.eflags, k_eflags + 7, 7, cpu);
 
         ImGui::TableNextColumn();
-        ImGui::TextColored(yellow, "   CS:EIP");
+
+        float address_width = ImGui::CalcTextSize("PHYSICAL").x + ImGui::GetStyle().ItemSpacing.x +
+            ImGui::CalcTextSize("$0000:$00000000").x;
+        float address_offset = (float)(int)((ImGui::GetContentRegionAvail().x - address_width) * 0.5f);
+
+        if (address_offset < 0.0f)
+            address_offset = 0.0f;
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + address_offset);
+        ImGui::TextColored(yellow, "  CS:EIP");
+
+        if (ImGui::IsItemClicked())
+            goto_memory(GT_DEBUG_MEMORY_LOGICAL, state.eip, I386_SEGMENT_CS);
+
         ImGui::SameLine();
         EditableRegister16(NULL, NULL, I386RegId_SegmentSelectorBase + I386_SEGMENT_CS, cs.selector, I386WriteCallback16,
             cpu, EditableRegisterFlags_None);
@@ -643,24 +656,37 @@ void gui_debug_window_i386(void)
         ImGui::SameLine(0.0f, 0.0f);
         EditableRegister32(NULL, NULL, I386RegId_EIP, state.eip, I386WriteCallback32, cpu, EditableRegisterFlags_None);
 
-        if (ImGui::IsItemClicked())
-            goto_memory(GT_DEBUG_MEMORY_LOGICAL, state.eip, I386_SEGMENT_CS);
-
         if (ImGui::IsItemHovered())
             draw_register_tooltip("EIP", state.eip);
 
         GT_Debug_Memory_Translation pc = { };
         cpu->DebugTranslateLogical(I386_SEGMENT_CS, state.eip, pc);
 
-        ImGui::TextColored(yellow, "   LINEAR");
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + address_offset);
+        ImGui::TextColored(yellow, "  LINEAR");
+
+        if (pc.linear_valid && ImGui::IsItemClicked())
+            goto_memory(GT_DEBUG_MEMORY_LINEAR, pc.linear, -1);
+
         ImGui::SameLine();
         draw_address(pc.linear_valid, pc.linear, GT_DEBUG_MEMORY_LINEAR);
-        ImGui::TextColored(yellow, " PHYSICAL");
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + address_offset);
+        ImGui::TextColored(yellow, "PHYSICAL");
+
+        if (pc.physical_valid && ImGui::IsItemClicked())
+            goto_memory(GT_DEBUG_MEMORY_PHYSICAL, pc.physical, -1);
+
         ImGui::SameLine();
         draw_address(pc.physical_valid, pc.physical, GT_DEBUG_MEMORY_PHYSICAL);
 
         ImGui::TableNextColumn();
-        ImGui::TextColored(yellow, "   SS:ESP");
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + address_offset);
+        ImGui::TextColored(yellow, "  SS:ESP");
+
+        if (ImGui::IsItemClicked())
+            goto_memory(GT_DEBUG_MEMORY_LOGICAL,
+                stack_32 ? state.registers[I386_REG_ESP].value : (u16)state.registers[I386_REG_ESP].value, I386_SEGMENT_SS);
+
         ImGui::SameLine();
         EditableRegister16(NULL, NULL, I386RegId_SegmentSelectorBase + I386_SEGMENT_SS, ss.selector, I386WriteCallback16,
             cpu, EditableRegisterFlags_None);
@@ -670,10 +696,6 @@ void gui_debug_window_i386(void)
         ImGui::PushID("stack_esp");
         EditableRegister32(NULL, NULL, I386RegId_ESP, state.registers[I386_REG_ESP].value, I386WriteCallback32, cpu,
             EditableRegisterFlags_None);
-
-        if (ImGui::IsItemClicked())
-            goto_memory(GT_DEBUG_MEMORY_LOGICAL,
-                stack_32 ? state.registers[I386_REG_ESP].value : (u16)state.registers[I386_REG_ESP].value, I386_SEGMENT_SS);
 
         if (ImGui::IsItemHovered())
             draw_register_tooltip("ESP", state.registers[I386_REG_ESP].value);
@@ -705,43 +727,46 @@ void gui_debug_window_i386(void)
         ImGui::TableNextColumn();
         ImGui::TextColored(violet, " MODE:");
         ImGui::SameLine();
-        ImGui::TextColored(blue, "%-9s", execution_mode_name(state.execution_mode));
-        ImGui::SameLine();
-        ImGui::TextColored(violet, " CPL:");
-        ImGui::SameLine();
-        ImGui::Text("%u", state.current_privilege_level);
-        ImGui::SameLine();
-        ImGui::TextColored(violet, " IOPL:");
-        ImGui::SameLine();
-        ImGui::Text("%u", (state.eflags & I386_FLAG_IOPL) >> 12);
+        ImGui::TextColored(blue, "%s", execution_mode_name(state.execution_mode));
 
         ImGui::TextColored(violet, " CODE:");
         ImGui::SameLine();
-        ImGui::Text("%-9s", code_32 ? "32" : "16");
+        ImGui::Text("%-4s", code_32 ? "32" : "16");
         ImGui::SameLine();
         ImGui::TextColored(violet, "STACK:");
         ImGui::SameLine();
         ImGui::Text("%s", stack_32 ? "32" : "16");
+
+        ImGui::TextColored(violet, "  CPL:");
+        ImGui::SameLine();
+        ImGui::Text("%-4u", state.current_privilege_level);
+        ImGui::SameLine();
+        ImGui::TextColored(violet, " IOPL:");
+        ImGui::SameLine();
+        ImGui::Text("%u", (state.eflags & I386_FLAG_IOPL) >> 12);
 
         ImGui::TableNextColumn();
         ImGui::TextColored(violet, " LAST EXCEPTION:");
         ImGui::SameLine();
 
         if (state.last_exception_vector == 0xFF)
-            ImGui::TextColored(gray, "--      ");
+            ImGui::TextColored(gray, "--       ");
         else
         {
             char name[16];
             char description[64];
             u8 vector = state.last_exception_vector;
             gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
-            ImGui::TextColored(vector < 32 ? red : yellow, "$%02X %-4s", vector, name);
+
+            if (vector >= 32 && strncmp(name, "IRQ", 3) != 0)
+                snprintf(name, sizeof(name), "INT");
+
+            ImGui::TextColored(vector < 32 ? red : yellow, "$%02X %-5s", vector, name);
 
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", description);
         }
 
-        ImGui::TableNextColumn();
         ImGui::TextColored(state.halted ? yellow : gray, " HALTED");
         ImGui::SameLine();
         ImGui::TextColored(state.shutdown ? red : gray, "SHUTDOWN");

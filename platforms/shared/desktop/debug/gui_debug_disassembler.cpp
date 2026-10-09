@@ -736,7 +736,14 @@ static void draw_breakpoints_content(void)
     ImGui::SetColumnOffset(1, 175);
 
     ImGui::PushItemWidth(145);
-    ImGui::Combo("##breakpoint_space", &new_breakpoint_space, "LINEAR\0PHYSICAL\0I/O\0\0");
+
+    if (ImGui::Combo("##breakpoint_space", &new_breakpoint_space, "LINEAR\0PHYSICAL\0I/O\0\0"))
+    {
+        new_breakpoint_read = new_breakpoint_space != I386_BREAKPOINT_LINEAR;
+        new_breakpoint_write = false;
+        new_breakpoint_execute = new_breakpoint_space == I386_BREAKPOINT_LINEAR;
+    }
+
     bool add = ImGui::InputTextWithHint("##add_breakpoint", "ADDR[-ADDR]", new_breakpoint_buffer,
         IM_ARRAYSIZE(new_breakpoint_buffer), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::PopItemWidth();
@@ -753,15 +760,20 @@ static void draw_breakpoints_content(void)
         ImGui::Checkbox("X##breakpoint_execute", &new_breakpoint_execute);
     }
 
+    u8 data = (new_breakpoint_read ? I386_BREAKPOINT_READ : 0) | (new_breakpoint_write ? I386_BREAKPOINT_WRITE : 0);
+    bool execute = new_breakpoint_execute && new_breakpoint_space == I386_BREAKPOINT_LINEAR;
+
+    ImGui::BeginDisabled(data == 0 && !execute);
+
     if (ImGui::Button("Add##add_breakpoint_button", ImVec2(85, 0)))
         add = true;
+
+    ImGui::EndDisabled();
 
     if (add)
     {
         u32 start = 0;
         u32 end = 0;
-        u8 data = (new_breakpoint_read ? I386_BREAKPOINT_READ : 0) | (new_breakpoint_write ? I386_BREAKPOINT_WRITE : 0);
-        bool execute = new_breakpoint_execute && new_breakpoint_space == I386_BREAKPOINT_LINEAR;
 
         if (parse_address_range(new_breakpoint_buffer, start, end) && (data != 0 || execute))
         {
@@ -796,10 +808,16 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove = (int)i;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Remove breakpoint");
+
         ImGui::SameLine();
 
         if (ImGui::SmallButton(breakpoint.enabled ? "-" : "+"))
             breakpoint.enabled = !breakpoint.enabled;
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(breakpoint.enabled ? "Disable breakpoint" : "Enable breakpoint");
 
         ImGui::SameLine();
         ImGui::TextColored(breakpoint.enabled ? violet : gray, "%-8s", k_spaces[breakpoint.space % I386_BREAKPOINT_SPACE_COUNT]);
@@ -812,7 +830,9 @@ static void draw_breakpoints_content(void)
             ImGui::TextColored(color, "%0*X-%0*X", digits, breakpoint.address1, digits, breakpoint.address2);
         else
         {
-            ImGui::TextColored(color, "%0*X", digits, breakpoint.address1);
+            char address[9];
+            snprintf(address, sizeof(address), "%0*X", digits, breakpoint.address1);
+            ImGui::TextColored(color, "%-8s", address);
 
             if (breakpoint.space == I386_BREAKPOINT_IO)
             {
@@ -919,15 +939,23 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove_interrupt = (int)i;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Remove breakpoint");
+
         ImGui::SameLine();
 
         if (ImGui::SmallButton(breakpoint.enabled ? "-" : "+"))
             breakpoint.enabled = !breakpoint.enabled;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(breakpoint.enabled ? "Disable breakpoint" : "Enable breakpoint");
+
         ImGui::SameLine();
+        ImGui::BeginGroup();
         ImGui::TextColored(breakpoint.enabled ? cyan : gray, "INT $%02X", breakpoint.vector); ImGui::SameLine();
-        ImGui::TextColored(breakpoint.enabled ? orange : gray, "%-9s", name); ImGui::SameLine();
+        ImGui::TextColored(breakpoint.enabled ? orange : gray, "%-14s", name); ImGui::SameLine();
         ImGui::TextColored(breakpoint.enabled ? violet : gray, "%s", k_sources[breakpoint.source % I386_INTERRUPT_SOURCE_COUNT]);
+        ImGui::EndGroup();
 
         if (description[0] != 0 && ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", description);
@@ -958,15 +986,23 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove_irq = line;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Remove breakpoint");
+
         ImGui::SameLine();
 
         if (ImGui::SmallButton(enabled ? "-" : "+"))
             cpu->EnableIRQBreakpoint(line, !enabled);
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(enabled ? "Disable breakpoint" : "Enable breakpoint");
+
         ImGui::SameLine();
+        ImGui::BeginGroup();
         ImGui::TextColored(enabled ? cyan : gray, "%-7s", line_text); ImGui::SameLine();
-        ImGui::TextColored(enabled ? orange : gray, "%-9s", k_debug_irq_sources[line]); ImGui::SameLine();
+        ImGui::TextColored(enabled ? orange : gray, "%-14s", k_debug_irq_sources[line]); ImGui::SameLine();
         ImGui::TextColored(enabled ? violet : gray, "LINE");
+        ImGui::EndGroup();
 
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Breaks on this IRQ line whatever vector the PIC gives it");
@@ -1224,7 +1260,7 @@ static void draw_disassembly(void)
 
 static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc)
 {
-    const int bytes_column = 25;
+    const int bytes_column = 29;
     char prefixes[24];
     char mnemonic[32];
     char operands[128];
@@ -1875,7 +1911,7 @@ static void save_current_disassembler(FILE* file)
 
 static void save_instruction(FILE* file, const I386_Disassembler_Record* record, bool segment, bool bytes, bool labels)
 {
-    const int bytes_column = 25;
+    const int bytes_column = 29;
     char prefixes[24];
     char mnemonic[32];
     char operands[128];

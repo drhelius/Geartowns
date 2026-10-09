@@ -600,7 +600,7 @@ static void disassembler_menu(void)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Add Symbol...", NULL, false, selected_address_valid))
+        if (ImGui::MenuItem("Add Symbol..."))
             gui_debug_add_symbol();
 
         if (ImGui::MenuItem("Load Symbols..."))

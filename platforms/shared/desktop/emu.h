@@ -166,10 +166,10 @@ EXTERN void emu_audio_reset(void);
 EXTERN bool emu_is_audio_enabled(void);
 EXTERN bool emu_is_audio_open(void);
 
-EXTERN void emu_save_state_slot(int index);
-EXTERN void emu_load_state_slot(int index);
-EXTERN void emu_save_state_file(const char* file_path);
-EXTERN void emu_load_state_file(const char* file_path);
+EXTERN bool emu_save_state_slot(int index);
+EXTERN bool emu_load_state_slot(int index);
+EXTERN bool emu_save_state_file(const char* file_path);
+EXTERN bool emu_load_state_file(const char* file_path);
 EXTERN void update_savestates_data(void);
 
 EXTERN void emu_get_runtime(GT_Runtime_Info& runtime);

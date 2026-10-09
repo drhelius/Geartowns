@@ -72,8 +72,8 @@ void gui_debug_window_memory(void);
 void gui_debug_memory_auxiliary_windows(void);
 void gui_debug_memory_copy(void);
 void gui_debug_memory_paste(void);
-void gui_debug_memory_save_dump(const char* file_path);
-void gui_debug_memory_load_dump(const char* file_path);
+bool gui_debug_memory_save_dump(const char* file_path);
+bool gui_debug_memory_load_dump(const char* file_path);
 void gui_debug_memory_save_settings(std::ostream& stream);
 bool gui_debug_memory_load_settings(std::istream& stream);
 

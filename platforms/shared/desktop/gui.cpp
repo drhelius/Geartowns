@@ -35,6 +35,7 @@
 #include "gui_menus.h"
 #include "gui_popups.h"
 #include "gui_floppy.h"
+#include "gui_notifications.h"
 #include "emu_floppy.h"
 #include "gui_actions.h"
 #include "gui_colors.h"
@@ -42,10 +43,6 @@
 #include "debug/gui_debug_disassembler.h"
 #include "debug/gui_debug.h"
 
-static bool status_message_active = false;
-static char status_message[4096] = "";
-static Uint64 status_message_start_time = 0;
-static Uint64 status_message_duration = 0;
 static bool error_window_active = false;
 static char error_message[4096] = "";
 static bool loading_rom_active = false;
@@ -53,9 +50,9 @@ static char loading_rom_path[4096] = "";
 static char loading_symbol_path[4096] = "";
 static bool loading_physical_cdrom = false;
 static void main_window(void);
-static void show_status_message(void);
 static void show_error_window(void);
 static void show_loading_popup(void);
+static void select_save_slot(int slot);
 static bool finish_loading_rom(void);
 static void start_loading_rom(const char* path, const char* symbol_path);
 static void update_window_visibility_padding(void);
@@ -188,7 +185,7 @@ void gui_render(void)
         gui_show_info();
 
     show_loading_popup();
-    show_status_message();
+    gui_notifications_render();
     show_error_window();
 
     if (!config_debug.debug && !emu_is_empty())
@@ -229,39 +226,29 @@ void gui_shortcut(gui_ShortCutEvent event)
     case gui_ShortcutMute:
         config_audio.enable = !config_audio.enable;
         emu_audio_mute(!config_audio.enable);
+        gui_notify(gui_NotificationInfo, config_audio.enable ? ICON_MD_VOLUME_UP : ICON_MD_VOLUME_OFF,
+            config_audio.enable ? "Audio unmuted" : "Audio muted", NULL, "mute", 1500);
         break;
     case gui_ShortcutSaveState:
-    {
-        std::string message("Saving state to slot ");
-        message += std::to_string(config_emulator.save_slot + 1);
-        gui_set_status_message(message.c_str(), 3000);
-        emu_save_state_slot(config_emulator.save_slot + 1);
+        gui_action_save_state(NULL);
         break;
-    }
-
     case gui_ShortcutLoadState:
-    {
-        std::string message("Loading state from slot ");
-        message += std::to_string(config_emulator.save_slot + 1);
-        gui_set_status_message(message.c_str(), 3000);
-        emu_load_state_slot(config_emulator.save_slot + 1);
+        gui_action_load_state(NULL);
         break;
-    }
-
     case gui_ShortcutSelectSlot1:
-        config_emulator.save_slot = 0;
+        select_save_slot(0);
         break;
     case gui_ShortcutSelectSlot2:
-        config_emulator.save_slot = 1;
+        select_save_slot(1);
         break;
     case gui_ShortcutSelectSlot3:
-        config_emulator.save_slot = 2;
+        select_save_slot(2);
         break;
     case gui_ShortcutSelectSlot4:
-        config_emulator.save_slot = 3;
+        select_save_slot(3);
         break;
     case gui_ShortcutSelectSlot5:
-        config_emulator.save_slot = 4;
+        select_save_slot(4);
         break;
     case gui_ShortcutScreenshot:
         gui_action_save_screenshot(NULL);
@@ -276,11 +263,14 @@ void gui_shortcut(gui_ShortCutEvent event)
     case gui_ShortcutCaptureMouse:
         config_emulator.capture_mouse = !config_emulator.capture_mouse;
         events_release_mouse();
+        gui_notify(gui_NotificationInfo, ICON_MD_MOUSE,
+            config_emulator.capture_mouse ? "Mouse captured" : "Mouse released", NULL, "mouse", 1500);
         break;
     case gui_ShortcutCaptureKeyboard:
         config_emulator.capture_keyboard = !config_emulator.capture_keyboard;
         events_release_keyboard();
-        gui_set_status_message(config_emulator.capture_keyboard ? "Keyboard captured" : "Keyboard released", 3000);
+        gui_notify(gui_NotificationInfo, ICON_MD_KEYBOARD,
+            config_emulator.capture_keyboard ? "Keyboard captured" : "Keyboard released", NULL, "keyboard");
         break;
     case gui_ShortcutDebugStepOver:
         if (config_debug.debug)
@@ -359,7 +349,7 @@ void gui_load_bios(const char* path)
 
     config_emulator.bios_path = path;
     strncpy_fit(gui_bios_path, path, sizeof(gui_bios_path));
-    gui_set_status_message("Firmware loaded", 3000);
+    gui_notify(gui_NotificationSuccess, ICON_MD_MEMORY, "Firmware loaded", path);
 }
 
 bool gui_load_rom(const char* path, const char* symbol_path)
@@ -494,17 +484,6 @@ bool gui_finish_loading_rom(void)
     }
 
     return success;
-}
-
-void gui_set_status_message(const char* message, Uint64 milliseconds)
-{
-    if (config_emulator.status_messages)
-    {
-        strncpy_fit(status_message, message, sizeof(status_message));
-        status_message_active = true;
-        status_message_start_time = SDL_GetTicks();
-        status_message_duration = milliseconds;
-    }
 }
 
 void gui_set_error_message(const char* message)
@@ -750,6 +729,7 @@ static void main_window(void)
         draw_list->PushClipRect(clip_min, clip_max, false);
         draw_list->AddImage((ImTextureID)(intptr_t)ogl_renderer_get_screen_texture(), image_min, image_max, ImVec2(0, 0), ImVec2(tex_h, tex_v));
         draw_list->PopClipRect();
+        gui_notifications_render_output(image_min, image_max);
     }
 
     if (config_video.fps)
@@ -774,40 +754,6 @@ static ImVec2 snap_to_physical_pixel(const ImVec2& pos)
     float y = ceilf(((pos.y - viewport->Pos.y) * scale.y) - 0.5f - 0.01f);
 
     return ImVec2(viewport->Pos.x + (x / scale.x), viewport->Pos.y + (y / scale.y));
-}
-
-static void show_status_message(void)
-{
-    if (status_message_active)
-    {
-        Uint64 current_time = SDL_GetTicks();
-
-        if ((current_time - status_message_start_time) > status_message_duration)
-            status_message_active = false;
-        else
-            ImGui::OpenPopup("Status");
-    }
-
-    if (status_message_active)
-    {
-        ImGui::SetNextWindowPos(ImVec2(0.0f, application_show_menu ? gui_main_menu_height : 0.0f));
-        ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, 0.0f));
-        ImGui::SetNextWindowBgAlpha(0.9f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav;
-
-        if (ImGui::BeginPopup("Status", flags))
-        {
-            ImGui::PushFont(gui_default_font);
-            ImGui::PushStyleColor(ImGuiCol_Text, green);
-            ImGui::TextWrapped("%s", status_message);
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            ImGui::EndPopup();
-        }
-
-        ImGui::PopStyleVar();
-    }
 }
 
 static void show_loading_popup(void)
@@ -859,6 +805,15 @@ static void show_loading_popup(void)
     ImGui::PopStyleVar(3);
 }
 
+static void select_save_slot(int slot)
+{
+    config_emulator.save_slot = slot;
+
+    char message[32];
+    snprintf(message, sizeof(message), "Save slot %d selected", slot + 1);
+    gui_notify(gui_NotificationInfo, ICON_MD_SAVE, message, NULL, "slot", 1500);
+}
+
 static bool finish_loading_rom(void)
 {
     gui_debug_reset();
@@ -882,7 +837,10 @@ static bool finish_loading_rom(void)
         emu_pause();
 
     if (emu_get_core()->GetMedia()->IsReady())
+    {
         application_update_title_with_rom(emu_get_core()->GetMedia()->GetFileName());
+        gui_notify(gui_NotificationSuccess, ICON_MD_ALBUM, "CD-ROM loaded", emu_get_core()->GetMedia()->GetFileName());
+    }
 
     return true;
 }

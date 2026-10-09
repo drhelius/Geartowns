@@ -191,16 +191,16 @@ void gui_debug_windows(void)
     }
 }
 
-void gui_debug_save_settings(const char* file_path)
+bool gui_debug_save_settings(const char* file_path)
 {
     if (!IsValidPointer(file_path))
-        return;
+        return false;
 
     std::ofstream file;
     open_ofstream_utf8(file, file_path, std::ios::binary);
 
     if (!file.is_open())
-        return;
+        return false;
 
     file.write(GTDEBUG_MAGIC, GTDEBUG_MAGIC_SIZE);
 
@@ -241,18 +241,19 @@ void gui_debug_save_settings(const char* file_path)
 
     gui_debug_memory_save_settings(file);
     file.close();
+    return !file.fail();
 }
 
-void gui_debug_load_settings(const char* file_path)
+bool gui_debug_load_settings(const char* file_path)
 {
     if (!IsValidPointer(file_path))
-        return;
+        return false;
 
     std::ifstream file;
     open_ifstream_utf8(file, file_path, std::ios::binary);
 
     if (!file.is_open())
-        return;
+        return false;
 
     char magic[GTDEBUG_MAGIC_SIZE];
     int breakpoint_count = 0;
@@ -311,7 +312,7 @@ void gui_debug_load_settings(const char* file_path)
     {
         Log("Invalid debug settings file: %s", file_path);
         file.close();
-        return;
+        return false;
     }
 
     file.close();
@@ -322,6 +323,7 @@ void gui_debug_load_settings(const char* file_path)
     *gui_debug_get_disassembler_bookmarks() = bookmarks;
 
     Log("Debug settings loaded from: %s", file_path);
+    return true;
 }
 
 void gui_debug_auto_save_settings(void)

@@ -34,6 +34,7 @@
 #include "gui_debug_memeditor.h"
 #include "gui_debug_memory_provider.h"
 #include "../gui_filedialogs.h"
+#include "../gui_notifications.h"
 #include "imgui.h"
 
 static const int MEMORY_VIEW_COUNT = 8;
@@ -390,12 +391,12 @@ void gui_debug_memory_paste(void)
         active_editor()->PasteSelection();
 }
 
-void gui_debug_memory_save_dump(const char* file_path)
+bool gui_debug_memory_save_dump(const char* file_path)
 {
     MemEditor* editor = active_editor();
 
     if (!IsValidPointer(editor) || !IsValidPointer(file_path))
-        return;
+        return false;
 
     u32 start = 0;
     u32 end = 0;
@@ -403,7 +404,7 @@ void gui_debug_memory_save_dump(const char* file_path)
     u64 size64 = (u64)end - start + 1;
 
     if (size64 == 0 || size64 > MEMORY_SEARCH_MAX_SIZE)
-        return;
+        return false;
 
     u32 size = (u32)size64;
 
@@ -416,30 +417,31 @@ void gui_debug_memory_save_dump(const char* file_path)
     for (u32 i = 0; i < size; i++)
     {
         if (status[i] != GT_DEBUG_MEMORY_VALID && status[i] != GT_DEBUG_MEMORY_READ_ONLY)
-            return;
+            return false;
     }
 
     FILE* file = fopen_utf8(file_path, "wb");
 
-    if (IsValidPointer(file))
-    {
-        fwrite(&data[0], 1, size, file);
-        fclose(file);
-    }
+    if (!IsValidPointer(file))
+        return false;
+
+    bool written = fwrite(&data[0], 1, size, file) == size;
+    fclose(file);
+    return written;
 }
 
-void gui_debug_memory_load_dump(const char* file_path)
+bool gui_debug_memory_load_dump(const char* file_path)
 {
     MemEditor* editor = active_editor();
 
     if (!IsValidPointer(editor) || !IsValidPointer(file_path))
-        return;
+        return false;
 
     std::ifstream file;
     open_ifstream_utf8(file, file_path, std::ios::binary);
 
     if (!file.is_open())
-        return;
+        return false;
 
     file.seekg(0, std::ios::end);
     std::streampos position = file.tellg();
@@ -448,7 +450,7 @@ void gui_debug_memory_load_dump(const char* file_path)
     if (position == std::streampos(-1) || file_size <= 0 || (u64)file_size > MEMORY_SEARCH_MAX_SIZE)
     {
         file.close();
-        return;
+        return false;
     }
 
     u32 size = (u32)file_size;
@@ -459,7 +461,7 @@ void gui_debug_memory_load_dump(const char* file_path)
     file.close();
 
     if (!valid)
-        return;
+        return false;
 
     u32 start = 0;
     u32 end = 0;
@@ -467,6 +469,7 @@ void gui_debug_memory_load_dump(const char* file_path)
     GT_Debug_Memory_Address address = editor->GetSource();
     address.address = start;
     memory_provider.QueueWrite(address, &data[0], size);
+    return true;
 }
 
 static MemEditor* active_editor()
@@ -1257,7 +1260,7 @@ static void draw_breakpoints_window()
         address.address = start;
 
         if (!add_breakpoint(address, end))
-            gui_set_status_message("This memory has no linear, physical or I/O address", 3000);
+            gui_notify(gui_NotificationWarning, NULL, "This memory has no linear, physical or I/O address");
     }
 
     if (!can_add)

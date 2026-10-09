@@ -25,6 +25,7 @@
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "gui_floppy.h"
+#include "gui_notifications.h"
 #include "config.h"
 #include "application.h"
 #include "display.h"
@@ -253,18 +254,12 @@ static void menu_geartowns(void)
 
             if (ImGui::MenuItem("Save", config_hotkeys[config_HotkeyIndex_SaveState].str, false, media_actions_enabled))
             {
-                std::string message("Saving state to slot ");
-                message += std::to_string(config_emulator.save_slot + 1);
-                gui_set_status_message(message.c_str(), 3000);
-                emu_save_state_slot(config_emulator.save_slot + 1);
+                gui_action_save_state(NULL);
             }
 
             if (ImGui::MenuItem("Load", config_hotkeys[config_HotkeyIndex_LoadState].str, false, media_actions_enabled))
             {
-                std::string message("Loading state from slot ");
-                message += std::to_string(config_emulator.save_slot + 1);
-                gui_set_status_message(message.c_str(), 3000);
-                emu_load_state_slot(config_emulator.save_slot + 1);
+                gui_action_load_state(NULL);
             }
 
             if (ImGui::IsItemHovered())
@@ -756,7 +751,7 @@ static void menu_emulator(void)
         ImGui::Separator();
 
         ImGui::MenuItem("Show Media Info", "", &config_emulator.show_info);
-        ImGui::MenuItem("Status Messages", "", &config_emulator.status_messages);
+        ImGui::MenuItem("Show Notifications", "", &config_emulator.show_notifications);
 
         ImGui::Separator();
 
@@ -1363,7 +1358,7 @@ static void menu_shader(void)
             if (selected_index != 0)
             {
                 ogl_renderer_unload_shader_preset();
-                gui_set_status_message("Shader preset: Pixel Perfect", 3000);
+                gui_notify(gui_NotificationInfo, ICON_MD_TUNE, "Shader preset loaded", "Pixel Perfect", "shader");
             }
         }
 
@@ -1380,15 +1375,13 @@ static void menu_shader(void)
                 {
                     if (ogl_renderer_load_shader_preset(shader_presets[i].path))
                     {
-                        std::string message("Shader preset loaded: ");
-                        message += ogl_shader_chain_get_preset_name();
-                        gui_set_status_message(message.c_str(), 3000);
+                        gui_notify(gui_NotificationInfo, ICON_MD_TUNE, "Shader preset loaded",
+                            ogl_shader_chain_get_preset_name(), "shader");
                     }
                     else
                     {
-                        std::string message("Shader preset failed: ");
-                        message += ogl_shader_chain_get_last_error();
-                        gui_set_status_message(message.c_str(), 5000);
+                        gui_notify(gui_NotificationError, NULL, "Unable to load shader preset",
+                            ogl_shader_chain_get_last_error(), "shader");
                     }
                 }
             }
@@ -1435,7 +1428,7 @@ static void draw_shader_parameters(void)
         if (ogl_shader_chain_restore_default_parameters())
         {
             ogl_renderer_save_shader_parameter_config();
-            gui_set_status_message("Shader parameters restored", 3000);
+            gui_notify(gui_NotificationSuccess, ICON_MD_TUNE, "Shader parameters restored");
         }
     }
 

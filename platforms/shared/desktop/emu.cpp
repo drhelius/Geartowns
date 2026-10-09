@@ -715,58 +715,61 @@ bool emu_is_audio_open(void)
     return sound_queue_is_open();
 }
 
-void emu_save_state_slot(int index)
+bool emu_save_state_slot(int index)
 {
-    if (!emu_is_empty())
-    {
-        const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
-            config_emulator.savestates_path.c_str());
-        char path[GT_MAX_PATH];
+    if (emu_is_empty())
+        return false;
 
-        if (get_floppy_state_path(index, path, sizeof(path)))
-            geartowns->SaveState(path, -1, true);
-        else
-            geartowns->SaveState(dir, index, true);
+    const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
+        config_emulator.savestates_path.c_str());
+    char path[GT_MAX_PATH];
+    bool saved = get_floppy_state_path(index, path, sizeof(path)) ? geartowns->SaveState(path, -1, true) :
+        geartowns->SaveState(dir, index, true);
 
-        update_savestates_data();
-    }
+    update_savestates_data();
+    return saved;
 }
 
-void emu_load_state_slot(int index)
+bool emu_load_state_slot(int index)
 {
-    if (!emu_is_empty())
-    {
-        const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
-            config_emulator.savestates_path.c_str());
-        char path[GT_MAX_PATH];
-        bool loaded = get_floppy_state_path(index, path, sizeof(path)) ? geartowns->LoadState(path, -1) :
-            geartowns->LoadState(dir, index);
+    if (emu_is_empty())
+        return false;
 
-        if (loaded)
-        {
-            emu_floppy_reconcile();
-            emu_debug_state_restored();
-            events_sync_input();
-            rewind_reset();
-        }
-    }
-}
+    const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
+        config_emulator.savestates_path.c_str());
+    char path[GT_MAX_PATH];
+    bool loaded = get_floppy_state_path(index, path, sizeof(path)) ? geartowns->LoadState(path, -1) :
+        geartowns->LoadState(dir, index);
 
-void emu_save_state_file(const char* file_path)
-{
-    if (!emu_is_empty())
-        geartowns->SaveState(file_path, -1, true);
-}
-
-void emu_load_state_file(const char* file_path)
-{
-    if (!emu_is_empty() && geartowns->LoadState(file_path))
+    if (loaded)
     {
         emu_floppy_reconcile();
         emu_debug_state_restored();
         events_sync_input();
         rewind_reset();
     }
+
+    return loaded;
+}
+
+bool emu_save_state_file(const char* file_path)
+{
+    if (emu_is_empty())
+        return false;
+
+    return geartowns->SaveState(file_path, -1, true);
+}
+
+bool emu_load_state_file(const char* file_path)
+{
+    if (emu_is_empty() || !geartowns->LoadState(file_path))
+        return false;
+
+    emu_floppy_reconcile();
+    emu_debug_state_restored();
+    events_sync_input();
+    rewind_reset();
+    return true;
 }
 
 void emu_debug_state_restored(void)

@@ -1605,6 +1605,9 @@ static void draw_context_menu(DisassemblerLine* line)
     if (!ImGui::BeginPopupContextItem())
         return;
 
+    selected_address_valid = true;
+    selected_address = line->record->linear;
+
     I386* cpu = emu_get_core()->GetI386();
 
     if (ImGui::Selectable(line->breakpoint ? "Remove Breakpoint" : "Add Breakpoint"))

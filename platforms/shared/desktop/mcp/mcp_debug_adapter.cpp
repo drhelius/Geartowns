@@ -2239,9 +2239,10 @@ static json layer_json(Video* video, int layer)
         {"h_window", {{"start", hds}, {"end", hde}, {"dots", hde > hds ? hde - hds : 0}}},
         {"v_window", {{"start", vds}, {"end", vde}, {"lines", vde > vds ? (vde - vds) / 2 : 0}}},
         {"vram_start", hex_text(info.page_base + info.start, 5)},
+        {"fa", hex_text(crtc[k_video_crtc_fa0 + layer * 4], 4)},
         {"stride_bytes", info.stride},
         {"haj", crtc[k_video_crtc_haj0 + layer * 4]},
-        {"field_offset", crtc[k_video_crtc_fo0 + layer * 4]},
+        {"field_offset", hex_text(crtc[k_video_crtc_fo0 + layer * 4], 4)},
         {"zoom_x", (zoom & 0x0F) + 1},
         {"zoom_y", ((zoom >> 4) & 0x0F) + 1}
     };
@@ -2284,9 +2285,9 @@ json DebugAdapter::GetCRTCStatus()
         {"display", {
             {"dot_clock_hz", (u32)clock},
             {"line_dots", line_clocks},
-            {"line_rate_khz", clock / line_clocks / 1000.0},
+            {"line_rate_khz", state->running ? json(clock / line_clocks / 1000.0) : json(NULL)},
             {"frame_half_lines", half_lines},
-            {"refresh_hz", clock * 2.0 / ((double)half_lines * line_clocks)},
+            {"refresh_hz", state->running ? json(clock * 2.0 / ((double)half_lines * line_clocks)) : json(NULL)},
             {"interlaced", (half_lines & 1) != 0},
             {"hsw1", crtc[0x00]},
             {"hsw2", crtc[0x01]},
@@ -2413,11 +2414,17 @@ static json palette_entries(const u8 (*colors)[3], int count, bool nibbles)
 
 json DebugAdapter::GetPalettes(const std::string& palette)
 {
-    Video::Video_State* state = m_core->GetVideo()->GetState();
+    Video* video = m_core->GetVideo();
+    Video::Video_State* state = video->GetState();
     int selected = (state->output[1] >> 4) & 0x03;
     json result = {
         {"index", Hex(state->palette_index, 2)},
-        {"selected", selected == 0 ? "layer0" : selected == 2 ? "layer1" : "256"}
+        {"selected", selected == 0 ? "layer0" : selected == 2 ? "layer1" : "256"},
+        {"in_use", {
+            {"layer0", video->GetLayerFormat(0) == Video::VIDEO_LAYER_4BPP},
+            {"layer1", video->GetLayerFormat(1) == Video::VIDEO_LAYER_4BPP},
+            {"256", video->GetLayerFormat(0) == Video::VIDEO_LAYER_8BPP}
+        }}
     };
     bool all = palette.empty() || palette == "all";
 
@@ -2445,6 +2452,7 @@ json DebugAdapter::GetPalettes(const std::string& palette)
         }
 
         result["digital"] = digital;
+        result["dpmd"] = state->digital_palette_modified;
     }
 
     return result;

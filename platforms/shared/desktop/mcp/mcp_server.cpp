@@ -1550,7 +1550,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_palettes"},
         {"title", "Get Palettes"},
-        {"description", "Read the palettes: the two 16 color banks (4-bit B, R, G), the 256 color palette (8-bit B, R, G) and the FM-R digital palette, each with its RGB888 color."},
+        {"description", "Read the palettes: the two 16 color banks (4-bit B, R, G) and the 256 color palette (8-bit B, R, G), each entry with its RGB888 color, and the FM-R digital palette (IGRB) with its DPMD flag. in_use tells which palettes the display layers read; 32K color layers read none."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

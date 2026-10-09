@@ -501,11 +501,11 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_keyboard_status` - Get the keyboard interface: data, status, IRQ enable, KBINT, last command, queued bytes with key names, and held keys
 
 ### Video Hardware
-- `get_crtc_status` - Get the CRTC: dot clock, line and frame timing, interlace, sync widths, beam line, dot, field and H/V state, the VSYNC IRQ, and per layer format, H/V windows, VRAM start, stride, HAJ, field offset, zoom and visible size
+- `get_crtc_status` - Get the CRTC: dot clock, line and frame timing (rates are null while the CRTC is stopped), interlace, sync widths, beam line, dot, field and H/V state, the VSYNC IRQ, and per layer format, H/V windows, VRAM start (with the FA register), stride, HAJ, field offset, zoom and visible size
 - `get_crtc_registers` - Get the 32 CRTC registers R00-R1F with names and the selected index
 - `write_crtc_register` - Write a CRTC register (0-31) through the port path, restoring the index
 - `get_video_output_status` - Get the output controller (mode, layer formats, front layer, palette select), FDA0 layer enables, 044C status, the VRAM write mask and the FM-R display state
-- `get_palettes` - Get the palettes: `layer0` and `layer1` (16 colors, 4-bit B, R, G), `256` (8-bit B, R, G), `digital` (FM-R), or `all`
+- `get_palettes` - Get the palettes: `layer0` and `layer1` (16 colors, 4-bit B, R, G), `256` (8-bit B, R, G), `digital` (FM-R, with the DPMD flag), or `all`, plus which palettes the display layers use
 - `get_frame_buffer` - Decode a VRAM buffer as PNG: `layer0`, `layer1` (whole page with the layer's format and stride), `sprite_display`, `sprite_draw` (256x256, transparent pixels as a checkerboard), or `custom` with `offset`, `format`, `width`, `height` and `palette`
 
 ### Sprites

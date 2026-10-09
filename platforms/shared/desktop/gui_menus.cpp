@@ -796,6 +796,7 @@ static void menu_emulator(void)
             hotkey_configuration_item("Fullscreen:", &config_hotkeys[config_HotkeyIndex_Fullscreen]);
             hotkey_configuration_item("Show Main Menu:", &config_hotkeys[config_HotkeyIndex_ShowMainMenu]);
             hotkey_configuration_item("Capture Mouse:", &config_hotkeys[config_HotkeyIndex_CaptureMouse]);
+            hotkey_configuration_item("Capture Keyboard:", &config_hotkeys[config_HotkeyIndex_CaptureKeyboard]);
 
             gui_popup_modal_hotkey();
 
@@ -1524,13 +1525,12 @@ static void menu_input(void)
     {
         gui_in_use = true;
 
-
-        if (ImGui::BeginMenu("Controller"))
+        if (ImGui::BeginMenu("FM Towns Ports"))
         {
             for (int i = 0; i < GT_MAX_GAMEPADS; i++)
             {
                 char player_name[32];
-                snprintf(player_name, sizeof(player_name), "Player %d", i + 1);
+                snprintf(player_name, sizeof(player_name), "Port %d", i + 1);
 
                 if (ImGui::BeginMenu(player_name))
                 {
@@ -1556,8 +1556,8 @@ static void menu_input(void)
                         if (ImGui::IsItemHovered())
                         {
                             ImGui::BeginTooltip();
-                            ImGui::Text("Gamepad: the Player %d bindings from Input > Keyboard control this gamepad.", i + 1);
-                            ImGui::Text("FM Towns Keyboard: the Player %d bindings type on the FM Towns keyboard.", i + 1);
+                            ImGui::Text("Gamepad: the Port %d bindings from Input > Keyboard control this gamepad.", i + 1);
+                            ImGui::Text("FM Towns Keyboard: the Port %d bindings type on the FM Towns keyboard.", i + 1);
                             ImGui::Text("Other keys always type on the FM Towns keyboard.");
                             ImGui::EndTooltip();
                         }
@@ -1571,33 +1571,29 @@ static void menu_input(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Mouse"))
-        {
-            if (ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse))
-                events_release_mouse();
-
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("When enabled, the mouse will be captured inside");
-                ImGui::Text("the emulator window to use the mouse freely.");
-                ImGui::Text("Press %s to release the mouse.", config_hotkeys[config_HotkeyIndex_CaptureMouse].str);
-                ImGui::EndTooltip();
-            }
-
-            ImGui::SliderInt("##mouse_sensitivity", &config_emulator.mouse_sensitivity, 1, 15, "Sensitivity = %d");
-
-            ImGui::EndMenu();
-        }
-
         ImGui::Separator();
 
         if (ImGui::BeginMenu("Keyboard"))
         {
+            if (ImGui::MenuItem("Capture Keyboard", config_hotkeys[config_HotkeyIndex_CaptureKeyboard].str, &config_emulator.capture_keyboard))
+                events_release_keyboard();
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("When enabled, keys type on the FM Towns keyboard and only");
+                ImGui::Text("the Quit, Fullscreen and Capture Keyboard hotkeys work.");
+                ImGui::Text("When disabled, all hotkeys work and other keys still type.");
+                ImGui::Text("Press %s to toggle it.", config_hotkeys[config_HotkeyIndex_CaptureKeyboard].str);
+                ImGui::EndTooltip();
+            }
+
+            ImGui::Separator();
+
             for (int i = 0; i < GT_MAX_GAMEPADS; i++)
             {
                 char keyboard_name[32];
-                snprintf(keyboard_name, sizeof(keyboard_name), "Player %d", i + 1);
+                snprintf(keyboard_name, sizeof(keyboard_name), "Port %d Mapping", i + 1);
 
                 if (ImGui::BeginMenu(keyboard_name))
                 {
@@ -1630,19 +1626,40 @@ static void menu_input(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Gamepads"))
+        if (ImGui::BeginMenu("Mouse"))
+        {
+            if (ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse))
+                events_release_mouse();
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("When enabled, the mouse will be captured inside");
+                ImGui::Text("the emulator window to use the mouse freely.");
+                ImGui::Text("Press %s to release the mouse.", config_hotkeys[config_HotkeyIndex_CaptureMouse].str);
+                ImGui::EndTooltip();
+            }
+
+            ImGui::SliderInt("##mouse_sensitivity", &config_emulator.mouse_sensitivity, 1, 15, "Sensitivity = %d");
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("Host Gamepads"))
         {
             for (int i = 0; i < GT_MAX_GAMEPADS; i++)
             {
                 char gamepad_name[32];
-                snprintf(gamepad_name, sizeof(gamepad_name), "Player %d", i + 1);
+                snprintf(gamepad_name, sizeof(gamepad_name), "Port %d", i + 1);
 
                 if (ImGui::BeginMenu(gamepad_name))
                 {
                     if (!gamepad_controller[i])
                         ImGui::TextDisabled("This gamepad is not detected");
                     else
-                        ImGui::TextDisabled("Gamepad detected for Player %d", i + 1);
+                        ImGui::TextDisabled("Gamepad detected for Port %d", i + 1);
 
                     ImGui::Separator();
 
@@ -1697,6 +1714,7 @@ static void menu_input(void)
                         gamepad_configuration_item("Mute Audio:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Mute], i);
                         gamepad_configuration_item("Fullscreen:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Fullscreen], i);
                         gamepad_configuration_item("Capture Mouse:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_CaptureMouse], i);
+                        gamepad_configuration_item("Capture Keyboard:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_CaptureKeyboard], i);
                         gamepad_configuration_item("Show Main Menu:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_ShowMainMenu], i);
 
                         gui_popup_modal_gamepad(i);
@@ -2205,7 +2223,7 @@ static void gamepad_configuration_item(const char* text, int* button, int player
 static void hotkey_configuration_item(const char* text, config_Hotkey* hotkey)
 {
     ImGui::Text("%s", text);
-    ImGui::SameLine(150);
+    ImGui::SameLine(160);
 
     char button_label[256];
     snprintf(button_label, sizeof(button_label), "%s##%s", hotkey->str[0] != '\0' ? hotkey->str : "<None>", text);

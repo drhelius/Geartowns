@@ -292,6 +292,7 @@ static inline void process(config_Operation operation)
 
     CONFIG_BOOL("Input", "AllowUpDown", config_input.allow_up_down, false);
     CONFIG_INT_RANGE("Input", "MouseSensitivity", config_emulator.mouse_sensitivity, 5, 1, 15);
+    CONFIG_BOOL("Input", "CaptureKeyboard", config_emulator.capture_keyboard, true);
 
     // Players
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
@@ -390,6 +391,8 @@ static inline void process(config_Operation operation)
     CONFIG_HOTKEY("CaptureMouse", config_hotkeys[config_HotkeyIndex_CaptureMouse], SDL_SCANCODE_F1, SDL_KMOD_NONE);
     CONFIG_HOTKEY("Mute", config_hotkeys[config_HotkeyIndex_Mute], SDL_SCANCODE_U, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("VideoRecording", config_hotkeys[config_HotkeyIndex_VideoRecording], SDL_SCANCODE_R,
+        (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
+    CONFIG_HOTKEY("CaptureKeyboard", config_hotkeys[config_HotkeyIndex_CaptureKeyboard], SDL_SCANCODE_K,
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
 }
 

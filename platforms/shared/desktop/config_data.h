@@ -92,6 +92,7 @@ struct config_Emulator
     int mcp_tcp_port;
     std::string mcp_http_address;
     bool capture_mouse;
+    bool capture_keyboard;
     int mouse_sensitivity;
     bool floppy_persistence;
     bool floppy_write_protected[config_floppy_drives];
@@ -212,6 +213,7 @@ enum config_HotkeyIndex
     config_HotkeyIndex_CaptureMouse,
     config_HotkeyIndex_Mute,
     config_HotkeyIndex_VideoRecording,
+    config_HotkeyIndex_CaptureKeyboard,
     config_HotkeyIndex_COUNT
 };
 

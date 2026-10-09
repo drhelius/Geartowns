@@ -194,8 +194,7 @@ void gui_render(void)
     if (!config_debug.debug && !emu_is_empty())
     {
         ImGuiIO& io = ImGui::GetIO();
-        gui_main_window_focused = SDL_GetKeyboardFocus() == application_sdl_window && !io.WantCaptureKeyboard &&
-            !io.WantTextInput;
+        gui_main_window_focused = !io.WantCaptureKeyboard && !io.WantTextInput;
     }
 
     if (keyboard_was_active && !events_is_keyboard_active())
@@ -277,6 +276,11 @@ void gui_shortcut(gui_ShortCutEvent event)
     case gui_ShortcutCaptureMouse:
         config_emulator.capture_mouse = !config_emulator.capture_mouse;
         events_release_mouse();
+        break;
+    case gui_ShortcutCaptureKeyboard:
+        config_emulator.capture_keyboard = !config_emulator.capture_keyboard;
+        events_release_keyboard();
+        gui_set_status_message(config_emulator.capture_keyboard ? "Keyboard captured" : "Keyboard released", 3000);
         break;
     case gui_ShortcutDebugStepOver:
         if (config_debug.debug)

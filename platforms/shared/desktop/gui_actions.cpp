@@ -116,20 +116,10 @@ void gui_action_reset(void)
 
 void gui_action_reload_rom(void)
 {
-    if (emu_is_empty())
+    if (!config_debug.debug || emu_is_empty())
         return;
 
-#if defined(GT_ENABLE_PHYSICAL_CDROM)
-    if (emu_get_core()->GetMedia()->IsPhysicalCdRom())
-    {
-        gui_load_physical_cdrom(emu_get_core()->GetMedia()->GetPhysicalCdRomDeviceId());
-        return;
-    }
-#endif
-
-    char media_path[GT_MAX_PATH];
-    strncpy_fit(media_path, emu_get_core()->GetMedia()->GetFilePath(), sizeof(media_path));
-    gui_load_rom(media_path);
+    gui_reload_cdrom();
 }
 
 void gui_action_eject_media(void)

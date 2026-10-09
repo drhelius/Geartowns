@@ -678,6 +678,9 @@ static void draw_controls(void)
     if (ImGui::Button(ICON_MD_REPLAY))
         gui_action_reset();
 
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Reset (%s)", config_hotkeys[config_HotkeyIndex_Reset].str);
+
     ImGui::PopFont();
 
     ImGui::SameLine();

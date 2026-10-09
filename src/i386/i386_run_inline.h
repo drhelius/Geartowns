@@ -157,12 +157,7 @@ INLINE bool I386::TrackReturn(bool completed)
 {
 #if !defined(GT_DISABLE_DISASSEMBLER)
     if (completed && !m_disassembler_call_stack.empty())
-    {
-        m_disassembler_call_stack.pop_back();
-
-        if (unlikely(m_profiler_active))
-            m_profiler->Leave();
-    }
+        PopCallStack();
 #endif
     return completed;
 }

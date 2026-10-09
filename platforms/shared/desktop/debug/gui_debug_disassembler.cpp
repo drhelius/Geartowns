@@ -198,9 +198,16 @@ const std::map<u32, std::string>& gui_debug_get_user_symbols(void)
 
 const char* gui_debug_get_symbol(u32 linear)
 {
-    const char* user = gui_debug_get_user_symbol(linear);
+    bool is_manual = false;
+    return gui_debug_get_symbol_name(linear, &is_manual);
+}
 
-    if (IsValidPointer(user))
+const char* gui_debug_get_symbol_name(u32 linear, bool* is_manual)
+{
+    const char* user = gui_debug_get_user_symbol(linear);
+    *is_manual = IsValidPointer(user);
+
+    if (*is_manual)
         return user;
 
     I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(linear);

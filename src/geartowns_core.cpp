@@ -1195,6 +1195,9 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_scheduler))
         m_scheduler->Reset();
 
+    if (IsValidPointer(m_profiler))
+        m_profiler->Reset();
+
     if (IsValidPointer(m_memory))
         m_memory->Reset();
 

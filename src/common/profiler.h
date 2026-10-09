@@ -26,9 +26,12 @@
 #define GT_PROFILER_HASH_BITS 14
 #define GT_PROFILER_HASH_SIZE (1 << GT_PROFILER_HASH_BITS)
 #define GT_PROFILER_MAX_DEPTH 256
+#define GT_PROFILER_ROOT 0
 #define GT_PROFILER_INVALID 0xFFFF
 
-enum GT_Profiler_Function_Type
+static_assert(GT_PROFILER_MAX_FUNCTIONS < GT_PROFILER_HASH_SIZE, "Profiler hash table too small");
+
+enum GT_Profiler_Function_Type : u8
 {
     PROFILER_FUNCTION_ROOT = 0,
     PROFILER_FUNCTION_CALL,
@@ -44,8 +47,17 @@ struct GT_Profiler_Function
     u32 completed;
     u32 min_cycles;
     u32 max_cycles;
-    u8 type;
     u8 vector;
+    GT_Profiler_Function_Type type;
+};
+
+struct GT_Profiler_Frame
+{
+    u64 enter_cycle;
+    u64 interrupt_cycles;
+    u16 function;
+    bool interrupt;
+    bool outermost;
 };
 
 class Profiler
@@ -55,13 +67,13 @@ public:
     ~Profiler();
     void Init(const u64* clocks);
     void Reset();
-    void Start();
-    void Stop();
-    bool IsRunning() const;
+    void ResetStack();
+    void Enable(bool enable);
     void SetActive(bool active);
-    INLINE bool IsActive() const;
+    INLINE bool IsEnabled() const;
+    void Sync();
     void Enter(u32 address, bool interrupt, u8 vector);
-    void Leave();
+    void Return();
     void CountFrame();
     const GT_Profiler_Function* GetFunctions() const;
     u32 GetFunctionCount() const;
@@ -69,40 +81,35 @@ public:
     u32 GetFrames() const;
 
 private:
-    struct Frame
-    {
-        u64 enter_cycle;
-        u64 interrupt_cycles;
-        u16 function;
-        bool interrupt;
-        bool outermost;
-    };
-
-    void UpdateActive();
-    u16 FindFunction(u32 address, bool interrupt, u8 vector);
-    void Charge();
-    bool IsOnStack(u16 function) const;
+    void UpdateEnabled();
+    void InitFunction(u16 index, u32 address, u8 vector, GT_Profiler_Function_Type type);
+    u16 FindFunction(u32 address, u8 vector, GT_Profiler_Function_Type type);
+    void Charge(u64 cycle);
+    void Leave(u64 cycle);
+    void AddSample(GT_Profiler_Function* function, u64 cycles);
+    u16 GetCurrentFunction() const;
+    bool IsOutermost(u16 function, bool interrupt) const;
 
 private:
     GT_Profiler_Function* m_functions;
     u16* m_hash;
-    Frame* m_stack;
-    const u64* m_clocks;
     u32 m_function_count;
+    GT_Profiler_Frame m_stack[GT_PROFILER_MAX_DEPTH];
     int m_depth;
+    bool m_enabled;
+    bool m_enable_request;
+    bool m_active;
     u64 m_last_cycle;
     u64 m_total_cycles;
     u64 m_interrupt_cycles;
     u32 m_frames;
-    bool m_running;
-    bool m_active_request;
-    bool m_active;
+    const u64* m_clocks;
 };
 
-// Calls and returns are only counted while the debugger runs the machine and the profiler is started
-INLINE bool Profiler::IsActive() const
+// Calls and returns are only counted while the profiler is enabled and the debugger runs the machine
+INLINE bool Profiler::IsEnabled() const
 {
-    return m_active;
+    return m_enabled;
 }
 
 #endif /* PROFILER_H */

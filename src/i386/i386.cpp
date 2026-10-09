@@ -161,6 +161,10 @@ void I386::Reset()
 
     // Decoded rows are debugger history and survive a machine reset
     m_disassembler_call_stack.clear();
+
+    if (IsValidPointer(m_profiler))
+        m_profiler->ResetStack();
+
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;

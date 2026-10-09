@@ -61,6 +61,7 @@ EXTERN bool gui_debug_remove_user_symbol(u32 linear);
 EXTERN const char* gui_debug_get_user_symbol(u32 linear);
 EXTERN const std::map<u32, std::string>& gui_debug_get_user_symbols(void);
 EXTERN const char* gui_debug_get_symbol(u32 linear);
+EXTERN const char* gui_debug_get_symbol_name(u32 linear, bool* is_manual);
 EXTERN int gui_debug_load_symbols(const char* file_path);
 EXTERN bool gui_debug_save_disassembler(const char* file_path, bool full);
 EXTERN void gui_debug_disassembler_draw_text(const char* instruction);

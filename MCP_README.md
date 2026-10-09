@@ -362,7 +362,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `memory_find` - Find hex byte sequences (`hex_bytes`) or text (`text`, optional `case_sensitive`) in memory; optional `start` and `size`
 
 ### Disassembly & Debugging
-- `get_disassembly` - Decode Intel 80386 instructions from current memory: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector` and `vector_name` for INT, and `function` (the BIOS or DOS service picked by AX) when the INT is the current instruction
+- `get_disassembly` - Decode Intel 80386 instructions from current memory: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector`, `vector_name` and `vector_description` for INT, and `function` (the BIOS or DOS service picked by AX) when the INT is the current instruction
 - `add_symbol` - Add or rename a user symbol at an address; user symbols take precedence over automatic labels
 - `remove_symbol` - Remove the user symbol at an address
 - `load_symbols` - Load user symbols from a file: `ADDRESS NAME` or `NAME = ADDRESS` (or `EQU`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses
@@ -372,7 +372,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `add_disassembler_bookmark` - Add bookmark in disassembler
 - `remove_disassembler_bookmark` - Remove disassembler bookmark
 - `list_disassembler_bookmarks` - List all disassembler bookmarks
-- `get_call_stack` - View the call stack: entries with `kind` (call, interrupt, exception), `vector`, `from`, `to` and `return` addresses (logical and linear) and symbols
+- `get_call_stack` - View the call stack: entries with `kind` (call, interrupt, exception), `vector`, `vector_name`, `vector_description`, `from`, `to` and `return` addresses (logical and linear) and symbols
 - `get_trace_log` - Read trace logger entries (CPU + hardware events) using absolute sequence pagination. Use `set_trace_log` to start or stop the logger
 - `set_trace_log` - Start or stop trace logging and configure exact event filters and memory or disk storage
 
@@ -475,17 +475,17 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 `output_path` is a directory only, not a filename. Geartowns creates a unique timestamped trace filename in that directory. When omitted, the configured default, media, or custom directory policy remains in effect.
 
 ### Profiler
-- `set_profiler` - Start, stop, or reset the function profiler with `action` (`start`, `stop`, `reset`). `start` opens the Profiler debugger window and `stop` closes it. Statistics are only collected while the window is open and the debugger runs the machine
-- `get_profiler_data` - Read profiler results: `running`, `total_cycles`, `frames`, `functions`, and per-function `name`, `type` (`call`, `interrupt` or `root` for code running outside any call), `address`, `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Interrupt handlers are listed per vector as `INT xx` with the vector name. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
+- `set_profiler` - Start, stop, or reset the function profiler with `action` (`start`, `stop`, `reset`). `start` opens the Profiler debugger window and `stop` closes it. Statistics are only collected while the window is visible (in headless mode, while started) and the debugger runs the machine, starting on the next frame
+- `get_profiler_data` - Read profiler results: `collecting`, `window_open`, `total_cycles`, `frames`, `function_count`, and per-function `name`, `symbol`, `address`, `vector`, `vector_name` and `vector_description` (interrupt handlers), `type` (`call`, `interrupt`, or `root` for code running outside any call), `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Calls are listed per linear target and interrupt handlers per vector. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
 
 ### Breakpoints
-- `set_breakpoint` - Set a breakpoint at an address. `type`: `execute` (default, stops before the instruction), `read`, `write` or `access` (stop after the instruction that made the CPU access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear only
+- `set_breakpoint` - Set a breakpoint at an address. `type`: `execute` (stops before the instruction; default for linear), `read` (default for physical and io), `write` or `access` (stop after the instruction that made the CPU access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear only
 - `set_breakpoint_range` - Set a breakpoint over an inclusive address range, same `type` and `space`
 - `remove_breakpoint` - Remove a breakpoint matching address (and `end_address` for ranges), `type` and `space`
 - `list_breakpoints` - List all breakpoints with type, space, range and enabled state
 - `set_breakpoint_on_interrupt` - Break on entry to an interrupt `vector` (0-255), before the handler's first instruction; `source`: `any` (default), `exception`, `hardware` or `software`
 - `clear_breakpoint_on_interrupt` - Remove an interrupt breakpoint by `vector` and `source`
-- `list_breakpoints_on_interrupt` - List interrupt breakpoints with vector names and sources
+- `list_breakpoints_on_interrupt` - List interrupt breakpoints with `vector_name`, `vector_description`, sources and enabled state
 - `set_breakpoint_on_irq` - Break when the PIC delivers IRQ line `irq` (0-15), before the handler's first instruction. It follows the line, not the vector, so it keeps working if the program moves the PIC vector bases
 - `clear_breakpoint_on_irq` - Remove the breakpoint on an IRQ line
 - `list_breakpoints_on_irq` - List the IRQ lines with a breakpoint, their sources and enabled state

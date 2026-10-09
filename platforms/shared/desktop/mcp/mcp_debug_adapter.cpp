@@ -55,6 +55,7 @@
 #include "../debug/gui_debug_floppy.h"
 #include "../debug/gui_debug_disassembler.h"
 #include "../debug/gui_debug_i386_tables.h"
+#include "../debug/gui_debug_profiler.h"
 #include "../debug/gui_debug_rewind.h"
 #include "../debug/gui_debug_trace_logger.h"
 #include "../debug/trace_logger_formatter.h"
@@ -554,7 +555,8 @@ json DebugAdapter::SetInterruptBreakpoint(int vector, const std::string& source)
     char description[64];
     gui_debug_i386_vector_name((u8)vector, name, sizeof(name), description, sizeof(description));
 
-    return {{"success", true}, {"vector", hex_text(vector, 2)}, {"vector_name", name}, {"source", source}};
+    return {{"success", true}, {"vector", hex_text(vector, 2)}, {"vector_name", name},
+        {"vector_description", description}, {"source", source}};
 }
 
 json DebugAdapter::ClearInterruptBreakpoint(int vector, const std::string& source)
@@ -580,6 +582,7 @@ json DebugAdapter::ListInterruptBreakpoints()
         char description[64];
         gui_debug_i386_vector_name(item.vector, name, sizeof(name), description, sizeof(description));
         list.push_back({{"enabled", item.enabled}, {"vector", hex_text(item.vector, 2)}, {"vector_name", name},
+            {"vector_description", description},
             {"source", k_mcp_interrupt_sources[item.source % I386_INTERRUPT_SOURCE_COUNT]}});
     }
 
@@ -632,6 +635,7 @@ json DebugAdapter::GetBreakpointHit()
         char description[64];
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
         json result = {{"kind", "interrupt"}, {"vector", hex_text(hit.vector, 2)}, {"vector_name", name},
+            {"vector_description", description},
             {"source", k_mcp_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]}};
 
         if (hit.line < 16)
@@ -1537,7 +1541,8 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
                 char description[64];
                 gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
                 line["vector"] = Hex(vector, 2);
-                line["vector_name"] = description;
+                line["vector_name"] = name;
+                line["vector_description"] = description;
 
                 // AX only names the function for the instruction about to run
                 if (record->linear == m_core->GetI386()->GetCurrentLinearPC())
@@ -1607,7 +1612,8 @@ json DebugAdapter::ListCallStack()
             char name[16];
             char description[64];
             gui_debug_i386_vector_name(entry.vector, name, sizeof(name), description, sizeof(description));
-            item["vector_name"] = description;
+            item["vector_name"] = name;
+            item["vector_description"] = description;
         }
 
         if (IsValidPointer(GetSymbolAt(entry.dest_linear)))
@@ -1781,6 +1787,7 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
             char description[64];
             gui_debug_i386_vector_name((u8)i, name, sizeof(name), description, sizeof(description));
             entry["vector_name"] = name;
+            entry["vector_description"] = description;
         }
 
         if (!readable)
@@ -3701,111 +3708,218 @@ json DebugAdapter::SetTraceLog(bool enabled, u32 flags, const std::string& outpu
     return result;
 }
 
+struct ProfilerEntry
+{
+    u32 index;
+    u64 key;
+    std::string name;
+    const char* symbol;
+};
+
+static const char* const k_profiler_type_names[] = { "root", "call", "interrupt" };
+
+static bool profiler_entry_compare(const ProfilerEntry& a, const ProfilerEntry& b)
+{
+    if (a.key != b.key)
+        return a.key > b.key;
+
+    return a.index < b.index;
+}
+
+static double profiler_round(double value)
+{
+    return floor((value * 100.0) + 0.5) / 100.0;
+}
+
 json DebugAdapter::SetProfiler(const std::string& action)
 {
+    json result;
+
     Profiler* profiler = m_core->GetProfiler();
+
+    if (!IsValidPointer(profiler))
+    {
+        result["error"] = "Profiler not available";
+        return result;
+    }
 
     if (action == "start")
     {
         if (!config_debug.debug)
-            return {{"error", "The profiler collects while the debugger is enabled"}};
+        {
+            config_debug.debug = true;
+            emu_debug_continue();
+        }
 
-        config_debug.show_profiler = true;
-        profiler->Start();
+        gui_debug_profiler_show(true);
     }
     else if (action == "stop")
-    {
-        profiler->Stop();
-        config_debug.show_profiler = false;
-    }
+        gui_debug_profiler_show(false);
     else if (action == "reset")
-        profiler->Reset();
-    else
-        return {{"error", "action must be start, stop or reset"}};
-
-    return {{"success", true}, {"running", profiler->IsRunning()}, {"total_cycles", profiler->GetTotalCycles()},
-        {"frames", profiler->GetFrames()}};
-}
-
-static std::string profiler_function_name(const GT_Profiler_Function& function)
-{
-    if (function.type == PROFILER_FUNCTION_ROOT)
-        return "(outside calls)";
-
-    if (function.type == PROFILER_FUNCTION_INTERRUPT)
     {
-        char name[16];
-        char description[64];
-        gui_debug_i386_vector_name(function.vector, name, sizeof(name), description, sizeof(description));
-        return "INT " + hex_text(function.vector, 2) + " " + description;
+        profiler->Reset();
+        gui_debug_profiler_reset();
+    }
+    else
+    {
+        result["error"] = "Invalid profiler action";
+        return result;
     }
 
-    const char* symbol = gui_debug_get_symbol(function.address);
-    return IsValidPointer(symbol) ? std::string(symbol) : hex_text(function.address, 8);
+    result["success"] = true;
+    result["action"] = action;
+    result["window_open"] = config_debug.show_profiler;
+    return result;
 }
 
 json DebugAdapter::GetProfilerData(const std::string& sort, int count, const std::string& filter)
 {
+    json result;
+
     Profiler* profiler = m_core->GetProfiler();
+
+    if (!IsValidPointer(profiler) || !IsValidPointer(profiler->GetFunctions()))
+    {
+        result["error"] = "Profiler not available";
+        return result;
+    }
+
+    if (count < 1)
+        count = 50;
+
+    if (count > 1000)
+        count = 1000;
+
+    profiler->Sync();
+
     const GT_Profiler_Function* functions = profiler->GetFunctions();
-    u32 function_count = IsValidPointer(functions) ? profiler->GetFunctionCount() : 0;
+    u32 function_count = profiler->GetFunctionCount();
     u64 total = profiler->GetTotalCycles();
     u32 frames = profiler->GetFrames();
-    std::string needle = to_lower(filter);
-    std::vector<std::pair<u64, u32> > order;
 
-    if (sort != "inclusive" && sort != "exclusive" && sort != "calls" && sort != "average" && sort != "max")
-        return {{"error", "sort must be inclusive, exclusive, calls, average or max"}};
+    std::string filter_upper = filter;
+    std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), ::toupper);
+
+    std::vector<ProfilerEntry> entries;
 
     for (u32 i = 0; i < function_count; i++)
     {
         const GT_Profiler_Function& function = functions[i];
-        std::string name = profiler_function_name(function);
+        bool pseudo = (function.type == PROFILER_FUNCTION_ROOT);
 
-        if (!needle.empty() && to_lower(name).find(needle) == std::string::npos &&
-            to_lower(hex_text(function.address, 8)).find(needle) == std::string::npos)
-            continue;
+        ProfilerEntry entry;
+        entry.index = i;
+        entry.key = 0;
+        entry.symbol = "none";
 
-        u64 average = function.completed > 0 ? function.inclusive_cycles / function.completed : 0;
-        u64 key = sort == "exclusive" ? function.exclusive_cycles : sort == "calls" ? function.calls :
-            sort == "average" ? average : sort == "max" ? function.max_cycles : function.inclusive_cycles;
-        order.push_back(std::make_pair(key, i));
+        if (function.type == PROFILER_FUNCTION_ROOT)
+            entry.name = "[Root]";
+        else
+        {
+            bool is_manual = false;
+            const char* name = gui_debug_get_symbol_name(function.address, &is_manual);
+
+            if (IsValidPointer(name))
+            {
+                entry.name = name;
+                entry.symbol = is_manual ? "manual" : "auto";
+            }
+        }
+
+        if (!filter_upper.empty())
+        {
+            std::string name_upper = entry.name;
+            std::transform(name_upper.begin(), name_upper.end(), name_upper.begin(), ::toupper);
+
+            char address[16];
+            snprintf(address, sizeof(address), "%08X", function.address);
+
+            bool name_match = (name_upper.find(filter_upper) != std::string::npos);
+            bool address_match = !pseudo && (std::string(address).find(filter_upper) != std::string::npos);
+
+            if (!name_match && !address_match)
+                continue;
+        }
+
+        if (sort == "exclusive")
+            entry.key = function.exclusive_cycles;
+        else if (sort == "calls")
+            entry.key = function.calls;
+        else if (sort == "average")
+            entry.key = (function.completed > 0) ? function.inclusive_cycles / function.completed : 0;
+        else if (sort == "max")
+            entry.key = (function.completed > 0) ? function.max_cycles : 0;
+        else
+            entry.key = function.inclusive_cycles;
+
+        entries.push_back(entry);
     }
 
-    std::sort(order.begin(), order.end(), std::greater<std::pair<u64, u32> >());
-    json list = json::array();
+    std::sort(entries.begin(), entries.end(), profiler_entry_compare);
 
-    for (size_t i = 0; i < order.size() && (int)i < CLAMP(count, 1, 1000); i++)
+    json functions_array = json::array();
+
+    for (size_t i = 0; (i < entries.size()) && (i < (size_t)count); i++)
     {
-        const GT_Profiler_Function& function = functions[order[i].second];
-        json item = {
-            {"name", profiler_function_name(function)},
-            {"type", function.type == PROFILER_FUNCTION_ROOT ? "root" : function.type == PROFILER_FUNCTION_INTERRUPT ?
-                "interrupt" : "call"},
-            {"calls", function.calls},
-            {"calls_per_frame", frames > 0 ? (double)function.calls / frames : 0.0},
-            {"inclusive_cycles", function.inclusive_cycles},
-            {"inclusive_percent", total > 0 ? 100.0 * function.inclusive_cycles / total : 0.0},
-            {"exclusive_cycles", function.exclusive_cycles},
-            {"exclusive_percent", total > 0 ? 100.0 * function.exclusive_cycles / total : 0.0},
-            {"average_cycles", function.completed > 0 ? function.inclusive_cycles / function.completed : 0},
-            {"min_cycles", function.completed > 0 ? function.min_cycles : 0},
-            {"max_cycles", function.max_cycles}
-        };
+        const GT_Profiler_Function& function = functions[entries[i].index];
+        bool root = (function.type == PROFILER_FUNCTION_ROOT);
+        json item;
+        char text[16];
 
-        if (function.type != PROFILER_FUNCTION_ROOT)
-            item["address"] = Hex32(function.address);
+        item["name"] = entries[i].name;
+        item["type"] = k_profiler_type_names[function.type];
 
-        list.push_back(item);
+        if (!root)
+        {
+            item["symbol"] = entries[i].symbol;
+            snprintf(text, sizeof(text), "%08X", function.address);
+            item["address"] = text;
+        }
+
+        if (function.type == PROFILER_FUNCTION_INTERRUPT)
+        {
+            char name[16];
+            char description[64];
+            gui_debug_i386_vector_name(function.vector, name, sizeof(name), description, sizeof(description));
+            snprintf(text, sizeof(text), "%02X", function.vector);
+            item["vector"] = text;
+            item["vector_name"] = name;
+            item["vector_description"] = description;
+        }
+
+        if (!root)
+        {
+            item["calls"] = function.calls;
+            item["calls_per_frame"] = (frames > 0) ? profiler_round((double)function.calls / (double)frames) : 0.0;
+            item["inclusive_cycles"] = function.inclusive_cycles;
+            item["inclusive_percent"] = (total > 0) ?
+                profiler_round(((double)function.inclusive_cycles * 100.0) / (double)total) : 0.0;
+        }
+
+        item["exclusive_cycles"] = function.exclusive_cycles;
+        item["exclusive_percent"] = (total > 0) ?
+            profiler_round(((double)function.exclusive_cycles * 100.0) / (double)total) : 0.0;
+
+        if (!root && (function.completed > 0))
+        {
+            item["average_cycles"] = function.inclusive_cycles / function.completed;
+            item["min_cycles"] = function.min_cycles;
+            item["max_cycles"] = function.max_cycles;
+        }
+
+        functions_array.push_back(item);
     }
 
-    return {
-        {"running", profiler->IsRunning()},
-        {"total_cycles", total},
-        {"frames", frames},
-        {"functions", function_count},
-        {"results", list}
-    };
+    result["collecting"] = profiler->IsEnabled();
+    result["window_open"] = config_debug.show_profiler;
+    result["total_cycles"] = total;
+    result["frames"] = frames;
+    result["function_count"] = function_count - 1;
+    result["sort"] = sort;
+    result["count"] = functions_array.size();
+    result["functions"] = functions_array;
+
+    return result;
 }
 
 json DebugAdapter::GetScreenshot()

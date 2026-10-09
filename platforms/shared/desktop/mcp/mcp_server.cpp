@@ -542,7 +542,7 @@ json McpServer::BuildToolList()
                 }},
                 {"type", {
                     {"type", "string"},
-                    {"description", "Breakpoint type: execute (default), read, write, or access (read or write)."},
+                    {"description", "Breakpoint type: execute (default for linear), read (default for physical and io), write, or access (read or write)."},
                     {"enum", json::array({"execute", "read", "write", "access"})}
                 }},
                 {"space", {
@@ -573,7 +573,7 @@ json McpServer::BuildToolList()
                 }},
                 {"type", {
                     {"type", "string"},
-                    {"description", "Breakpoint type: execute (default), read, write, or access (read or write)."},
+                    {"description", "Breakpoint type: execute (default for linear), read (default for physical and io), write, or access (read or write)."},
                     {"enum", json::array({"execute", "read", "write", "access"})}
                 }},
                 {"space", {
@@ -604,7 +604,7 @@ json McpServer::BuildToolList()
                 }},
                 {"type", {
                     {"type", "string"},
-                    {"description", "Breakpoint type: execute (default), read, write, or access."},
+                    {"description", "Breakpoint type: execute (default for linear), read (default for physical and io), write, or access."},
                     {"enum", json::array({"execute", "read", "write", "access"})}
                 }},
                 {"space", {
@@ -670,7 +670,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "list_breakpoints_on_interrupt"},
         {"title", "List Breakpoints On Interrupt"},
-        {"description", "List interrupt breakpoints with vector names, sources and enabled state."},
+        {"description", "List interrupt breakpoints with vector names and descriptions, sources and enabled state."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2442,45 +2442,47 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "set_profiler"},
         {"title", "Set Profiler"},
-        {"description", "Start (opens the Profiler window), stop (closes it), or reset the function profiler. It collects while its window is open and the debugger runs the machine."},
+        {"description", "Start (opens the Profiler window), stop (closes it), or reset the function profiler. Collects only while the window is visible and the debugger runs the machine."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
                 {"action", {
                     {"type", "string"},
-                    {"enum", json::array({"start", "stop", "reset"})},
-                    {"description", "start, stop or reset."}
+                    {"description", "start opens the window and resumes collection; stop closes the window; reset clears collected data."},
+                    {"enum", json::array({"start", "stop", "reset"})}
                 }}
             }},
-            {"required", json::array({"action"})}
+            {"required", json::array({"action"})},
+            {"additionalProperties", false}
         }}
     });
 
     tools.push_back({
         {"name", "get_profiler_data"},
         {"title", "Get Profiler Data"},
-        {"description", "Read profiler results per call target and interrupt vector: name or symbol, address, calls, calls per frame, inclusive and exclusive CPU cycles with percentages, and average, min and max cycles per call."},
+        {"description", "Read function profiler results: totals plus per-function symbol, address, interrupt vector, calls, calls per frame, inclusive/exclusive cycles and percentages, and avg/min/max cycles per call."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
                 {"sort", {
                     {"type", "string"},
-                    {"enum", json::array({"inclusive", "exclusive", "calls", "average", "max"})},
-                    {"description", "Sort order, highest first. Default inclusive."}
+                    {"description", "Sort order, highest first (default inclusive)."},
+                    {"enum", json::array({"inclusive", "exclusive", "calls", "average", "max"})}
                 }},
                 {"count", {
                     {"type", "integer"},
-                    {"description", "Functions to return, 1-1000. Default 50."},
+                    {"description", "Functions to return (default 50, max 1000)"},
                     {"minimum", 1},
                     {"maximum", 1000}
                 }},
                 {"filter", {
                     {"type", "string"},
-                    {"description", "Case-insensitive substring of the name or hex address."}
+                    {"description", "Case-insensitive substring matched against function name or hex address."}
                 }}
-            }}
+            }},
+            {"additionalProperties", false}
         }}
     });
 
@@ -2820,15 +2822,18 @@ void McpServer::HandleToolsCall(const json& request)
 }
 
 
+// Like the Breakpoints window, the type defaults to execute for linear addresses and to read for physical and io
 static bool ParseBreakpointType(const json& arguments, u8& type, u8& space, std::string& error)
 {
-    std::string type_name = arguments.value("type", "execute");
     std::string space_name = arguments.value("space", "linear");
+
+    space = space_name == "linear" ? I386_BREAKPOINT_LINEAR : space_name == "physical" ? I386_BREAKPOINT_PHYSICAL :
+        space_name == "io" ? I386_BREAKPOINT_IO : I386_BREAKPOINT_SPACE_COUNT;
+
+    std::string type_name = arguments.value("type", space == I386_BREAKPOINT_LINEAR ? "execute" : "read");
 
     type = type_name == "execute" ? I386_BREAKPOINT_EXECUTE : type_name == "read" ? I386_BREAKPOINT_READ :
         type_name == "write" ? I386_BREAKPOINT_WRITE : type_name == "access" ? I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE : 0;
-    space = space_name == "linear" ? I386_BREAKPOINT_LINEAR : space_name == "physical" ? I386_BREAKPOINT_PHYSICAL :
-        space_name == "io" ? I386_BREAKPOINT_IO : I386_BREAKPOINT_SPACE_COUNT;
 
     if (type == 0 || space == I386_BREAKPOINT_SPACE_COUNT)
     {

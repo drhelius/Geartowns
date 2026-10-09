@@ -24,167 +24,126 @@ static u64 k_profiler_no_clocks = 0;
 
 Profiler::Profiler()
 {
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    m_functions = new (std::nothrow) GT_Profiler_Function[GT_PROFILER_MAX_FUNCTIONS];
+    m_hash = new (std::nothrow) u16[GT_PROFILER_HASH_SIZE];
+#else
     InitPointer(m_functions);
     InitPointer(m_hash);
-    InitPointer(m_stack);
+#endif
     m_clocks = &k_profiler_no_clocks;
     m_function_count = 0;
     m_depth = 0;
+    m_enabled = false;
+    m_enable_request = false;
+    m_active = false;
     m_last_cycle = 0;
     m_total_cycles = 0;
     m_interrupt_cycles = 0;
     m_frames = 0;
-    m_running = false;
-    m_active_request = false;
-    m_active = false;
+    Reset();
 }
 
 Profiler::~Profiler()
 {
-    SafeDeleteArray(m_functions);
     SafeDeleteArray(m_hash);
-    SafeDeleteArray(m_stack);
+    SafeDeleteArray(m_functions);
 }
 
 void Profiler::Init(const u64* clocks)
 {
     m_clocks = IsValidPointer(clocks) ? clocks : &k_profiler_no_clocks;
+    ResetStack();
 }
 
 // Function 0 is the root, which takes the cycles spent outside any tracked call
 void Profiler::Reset()
 {
     m_function_count = 0;
-    m_depth = 0;
     m_total_cycles = 0;
-    m_interrupt_cycles = 0;
     m_frames = 0;
-    m_last_cycle = *m_clocks;
 
-    if (!IsValidPointer(m_functions))
-        return;
-
-    for (int i = 0; i < GT_PROFILER_HASH_SIZE; i++)
-        m_hash[i] = GT_PROFILER_INVALID;
-
-    memset(&m_functions[0], 0, sizeof(m_functions[0]));
-    m_functions[0].min_cycles = 0xFFFFFFFF;
-    m_functions[0].type = PROFILER_FUNCTION_ROOT;
-    m_function_count = 1;
-}
-
-// The tables are only allocated when profiling starts
-void Profiler::Start()
-{
-    if (!IsValidPointer(m_functions))
+    if (IsValidPointer(m_hash))
     {
-        m_functions = new (std::nothrow) GT_Profiler_Function[GT_PROFILER_MAX_FUNCTIONS];
-        m_hash = new (std::nothrow) u16[GT_PROFILER_HASH_SIZE];
-        m_stack = new (std::nothrow) Frame[GT_PROFILER_MAX_DEPTH];
-
-        if (!IsValidPointer(m_functions) || !IsValidPointer(m_hash) || !IsValidPointer(m_stack))
-        {
-            SafeDeleteArray(m_functions);
-            SafeDeleteArray(m_hash);
-            SafeDeleteArray(m_stack);
-            return;
-        }
-
-        Reset();
+        for (int i = 0; i < GT_PROFILER_HASH_SIZE; i++)
+            m_hash[i] = GT_PROFILER_INVALID;
     }
 
-    m_running = true;
-    UpdateActive();
+    if (IsValidPointer(m_functions))
+        InitFunction(GT_PROFILER_ROOT, 0, 0, PROFILER_FUNCTION_ROOT);
+
+    ResetStack();
 }
 
-void Profiler::Stop()
+void Profiler::ResetStack()
 {
-    m_running = false;
-    UpdateActive();
+    m_depth = 0;
+    m_interrupt_cycles = 0;
+    m_last_cycle = *m_clocks;
 }
 
-bool Profiler::IsRunning() const
+void Profiler::Enable(bool enable)
 {
-    return m_running;
+    m_enable_request = enable;
+    UpdateEnabled();
 }
 
 void Profiler::SetActive(bool active)
 {
-    m_active_request = active;
-    UpdateActive();
+    m_active = active;
+    UpdateEnabled();
 }
 
-// Time while inactive is not charged to anything
-void Profiler::UpdateActive()
+void Profiler::Sync()
 {
-    bool active = m_running && m_active_request && IsValidPointer(m_functions);
-
-    if (active == m_active)
-        return;
-
-    if (m_active)
-        Charge();
-
-    m_active = active;
-    m_last_cycle = *m_clocks;
+    if (m_enabled)
+        Charge(*m_clocks);
 }
 
 void Profiler::Enter(u32 address, bool interrupt, u8 vector)
 {
-    Charge();
-    u16 index = FindFunction(address, interrupt, vector);
+    u64 cycle = *m_clocks;
+    Charge(cycle);
 
+    u16 index = interrupt ? FindFunction(address, vector, PROFILER_FUNCTION_INTERRUPT) :
+        FindFunction(address, 0, PROFILER_FUNCTION_CALL);
+
+    // A full table still pushes a frame, so returns stay paired with the debugger call stack
     if (index == GT_PROFILER_INVALID)
-        return;
+        index = GT_PROFILER_ROOT;
 
     // A stack deeper than the debugger call stack drops its outermost frame like the call stack does
-    if (m_depth == GT_PROFILER_MAX_DEPTH)
+    if (m_depth >= GT_PROFILER_MAX_DEPTH)
     {
-        memmove(&m_stack[0], &m_stack[1], sizeof(Frame) * (GT_PROFILER_MAX_DEPTH - 1));
+        memmove(&m_stack[0], &m_stack[1], sizeof(GT_Profiler_Frame) * (GT_PROFILER_MAX_DEPTH - 1));
         m_depth--;
     }
 
-    m_functions[index].calls++;
+    GT_Profiler_Function* function = &m_functions[index];
+    function->calls++;
 
-    Frame& frame = m_stack[m_depth];
-    frame.enter_cycle = m_last_cycle;
-    frame.interrupt_cycles = m_interrupt_cycles;
-    frame.function = index;
-    frame.interrupt = interrupt;
-    frame.outermost = !IsOnStack(index);
+    GT_Profiler_Frame* frame = &m_stack[m_depth];
+    frame->enter_cycle = cycle;
+    frame->interrupt_cycles = m_interrupt_cycles;
+    frame->function = index;
+    frame->interrupt = interrupt;
+    frame->outermost = IsOutermost(index, interrupt);
     m_depth++;
 }
 
-// Interrupt handlers that ran during a call are not part of its cycles
-void Profiler::Leave()
+void Profiler::Return()
 {
     if (m_depth == 0)
         return;
 
-    Charge();
-    m_depth--;
-
-    Frame& frame = m_stack[m_depth];
-    GT_Profiler_Function& function = m_functions[frame.function];
-    u64 elapsed = m_last_cycle - frame.enter_cycle;
-    u64 interrupted = m_interrupt_cycles - frame.interrupt_cycles;
-    u64 cycles = elapsed > interrupted ? elapsed - interrupted : 0;
-
-    if (frame.outermost)
-    {
-        function.inclusive_cycles += cycles;
-        function.completed++;
-        function.min_cycles = MIN(function.min_cycles, (u32)MIN(cycles, (u64)0xFFFFFFFF));
-        function.max_cycles = MAX(function.max_cycles, (u32)MIN(cycles, (u64)0xFFFFFFFF));
-    }
-
-    if (frame.interrupt)
-        m_interrupt_cycles += cycles;
+    u64 cycle = *m_clocks;
+    Charge(cycle);
+    Leave(cycle);
 }
 
 void Profiler::CountFrame()
 {
-    if (m_active)
+    if (m_enabled)
         m_frames++;
 }
 
@@ -208,8 +167,40 @@ u32 Profiler::GetFrames() const
     return m_frames;
 }
 
-u16 Profiler::FindFunction(u32 address, bool interrupt, u8 vector)
+// Time while disabled is not charged to anything and calls made meanwhile are not on the stack
+void Profiler::UpdateEnabled()
 {
+    bool enabled = m_enable_request && m_active && IsValidPointer(m_functions) && IsValidPointer(m_hash);
+
+    if (enabled == m_enabled)
+        return;
+
+    Sync();
+    m_enabled = enabled;
+    ResetStack();
+}
+
+void Profiler::InitFunction(u16 index, u32 address, u8 vector, GT_Profiler_Function_Type type)
+{
+    GT_Profiler_Function* function = &m_functions[index];
+    function->inclusive_cycles = 0;
+    function->exclusive_cycles = 0;
+    function->address = address;
+    function->calls = 0;
+    function->completed = 0;
+    function->min_cycles = 0xFFFFFFFF;
+    function->max_cycles = 0;
+    function->vector = vector;
+    function->type = type;
+
+    if (index >= m_function_count)
+        m_function_count = index + 1;
+}
+
+// Calls are keyed by their linear target and interrupts by their vector
+u16 Profiler::FindFunction(u32 address, u8 vector, GT_Profiler_Function_Type type)
+{
+    bool interrupt = type == PROFILER_FUNCTION_INTERRUPT;
     u32 key = interrupt ? 0x80000000U | vector : address;
     u32 slot = (key * 2654435761U) >> (32 - GT_PROFILER_HASH_BITS);
 
@@ -222,48 +213,88 @@ u16 Profiler::FindFunction(u32 address, bool interrupt, u8 vector)
             if (m_function_count >= GT_PROFILER_MAX_FUNCTIONS)
                 return GT_PROFILER_INVALID;
 
-            index = (u16)m_function_count++;
-            GT_Profiler_Function& function = m_functions[index];
-            memset(&function, 0, sizeof(function));
-            function.address = address;
-            function.min_cycles = 0xFFFFFFFF;
-            function.type = interrupt ? PROFILER_FUNCTION_INTERRUPT : PROFILER_FUNCTION_CALL;
-            function.vector = vector;
+            index = (u16)m_function_count;
+            InitFunction(index, address, vector, type);
             m_hash[slot] = index;
             return index;
         }
 
         const GT_Profiler_Function& function = m_functions[index];
-        bool match = interrupt ? function.type == PROFILER_FUNCTION_INTERRUPT && function.vector == vector :
-            function.type == PROFILER_FUNCTION_CALL && function.address == address;
 
-        if (match)
+        if (function.type == type && (interrupt ? function.vector == vector : function.address == address))
             return index;
 
         slot = (slot + 1) & (GT_PROFILER_HASH_SIZE - 1);
     }
 }
 
-void Profiler::Charge()
+void Profiler::Charge(u64 cycle)
 {
-    u64 cycle = *m_clocks;
-
     if (cycle <= m_last_cycle)
         return;
 
     u64 cycles = cycle - m_last_cycle;
-    m_functions[m_depth > 0 ? m_stack[m_depth - 1].function : 0].exclusive_cycles += cycles;
+    m_functions[GetCurrentFunction()].exclusive_cycles += cycles;
     m_total_cycles += cycles;
     m_last_cycle = cycle;
 }
 
-bool Profiler::IsOnStack(u16 function) const
+// Interrupt handlers that ran during a call are not part of its cycles
+void Profiler::Leave(u64 cycle)
 {
-    for (int i = 0; i < m_depth; i++)
+    m_depth--;
+    GT_Profiler_Frame* frame = &m_stack[m_depth];
+    GT_Profiler_Function* function = &m_functions[frame->function];
+
+    u64 elapsed = (cycle > frame->enter_cycle) ? cycle - frame->enter_cycle : 0;
+    u64 interrupt_cycles = m_interrupt_cycles - frame->interrupt_cycles;
+    u64 cycles = (elapsed > interrupt_cycles) ? elapsed - interrupt_cycles : 0;
+
+    if (frame->outermost)
+    {
+        function->inclusive_cycles += cycles;
+        function->completed++;
+    }
+
+    AddSample(function, cycles);
+
+    if (frame->interrupt)
+        m_interrupt_cycles += cycles;
+}
+
+void Profiler::AddSample(GT_Profiler_Function* function, u64 cycles)
+{
+    u32 value = (cycles > 0xFFFFFFFF) ? 0xFFFFFFFF : (u32)cycles;
+
+    if (value < function->min_cycles)
+        function->min_cycles = value;
+
+    if (value > function->max_cycles)
+        function->max_cycles = value;
+}
+
+// A recursive call is only counted once, but an interrupt handler starts a new context
+bool Profiler::IsOutermost(u16 function, bool interrupt) const
+{
+    if (interrupt)
+        return true;
+
+    for (int i = m_depth - 1; i >= 0; i--)
     {
         if (m_stack[i].function == function)
+            return false;
+
+        if (m_stack[i].interrupt)
             return true;
     }
 
-    return false;
+    return true;
+}
+
+u16 Profiler::GetCurrentFunction() const
+{
+    if (m_depth > 0)
+        return m_stack[m_depth - 1].function;
+
+    return GT_PROFILER_ROOT;
 }

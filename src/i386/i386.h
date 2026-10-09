@@ -631,6 +631,7 @@ private:
     void DisassembleNextInstruction();
     void ClearDisassemblerCache();
     void PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_Type type, u8 vector);
+    void PopCallStack();
     bool TrackCall(bool completed, u16 cs, u32 base);
     bool TrackReturn(bool completed);
     bool DeferIO();

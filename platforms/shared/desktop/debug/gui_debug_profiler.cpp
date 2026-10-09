@@ -21,8 +21,9 @@
 #include "gui_debug_profiler.h"
 
 #include <algorithm>
-#include <string.h>
 #include <vector>
+#include <ctype.h>
+#include <string.h>
 #include "imgui.h"
 #include "geartowns.h"
 #include "../config.h"
@@ -35,153 +36,79 @@
 enum ProfilerColumn
 {
     ProfilerColumn_Function = 0,
+    ProfilerColumn_Address,
+    ProfilerColumn_Vector,
     ProfilerColumn_Calls,
     ProfilerColumn_CallsPerFrame,
     ProfilerColumn_Inclusive,
+    ProfilerColumn_InclusivePercent,
     ProfilerColumn_Exclusive,
+    ProfilerColumn_ExclusivePercent,
     ProfilerColumn_Average,
-    ProfilerColumn_Max
+    ProfilerColumn_Min,
+    ProfilerColumn_Max,
+    ProfilerColumn_Count
 };
 
-static std::vector<u32> sorted;
-static int sort_column = ProfilerColumn_Inclusive;
-static bool sort_ascending = false;
+static const char* const k_profiler_column_tooltips[ProfilerColumn_Count] =
+{
+    "Symbol name (green: manual, yellow: automatic)",
+    "Function entry linear address",
+    "Interrupt vector, for interrupt, exception and software interrupt handlers",
+    "Times the function was called",
+    "Average calls per frame",
+    "Cycles in the function and everything it calls, excluding interrupts",
+    "Inclusive cycles as a percentage of all profiled cycles",
+    "Cycles in the function's own code only",
+    "Exclusive cycles as a percentage of all profiled cycles",
+    "Average inclusive cycles per completed call",
+    "Fewest inclusive cycles in a completed call",
+    "Most inclusive cycles in a completed call"
+};
 
-static void function_name(const GT_Profiler_Function& function, char* text, size_t size);
-static bool compare_functions(u32 a, u32 b);
-static u64 average_cycles(const GT_Profiler_Function& function);
+static const double k_profiler_refresh_seconds = 0.25;
+
+struct ProfilerRow
+{
+    u16 index;
+    bool has_symbol;
+    bool is_manual;
+    char name[64];
+};
+
+static bool profiler_visible = false;
+static bool profiler_paused = false;
+static bool profiler_dirty = true;
+static double profiler_refresh_time = 0.0;
+static u32 profiler_function_count = 0;
+static char profiler_filter[64] = "";
+static int profiler_sort_column = ProfilerColumn_Inclusive;
+static bool profiler_sort_ascending = false;
+static std::vector<ProfilerRow> profiler_rows;
+static const GT_Profiler_Function* profiler_sort_functions = NULL;
+
+static void draw_profiler(Profiler* profiler);
+static void build_rows(const GT_Profiler_Function* functions, u32 count);
+static bool row_matches_filter(const ProfilerRow& row, const GT_Profiler_Function& function, const char* filter);
+static bool is_pseudo_function(const GT_Profiler_Function& function);
+static u64 get_sort_value(const GT_Profiler_Function& function, int column);
+static bool row_sort_compare(const ProfilerRow& a, const ProfilerRow& b);
+static void draw_right_aligned(const ImVec4& color, const char* text);
+static void draw_number(u64 value);
+static void draw_percent(u64 value, u64 total);
+static void draw_calls_per_frame(u32 calls, u32 frames);
+static void draw_empty(void);
 
 void gui_debug_window_profiler(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(130, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 460), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Profiler", &config_debug.show_profiler);
+    ImGui::SetNextWindowPos(ImVec2(180, 140), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(958, 383), ImGuiCond_FirstUseEver);
 
-    Profiler* profiler = emu_get_core()->GetProfiler();
-    bool running = profiler->IsRunning();
+    profiler_visible = ImGui::Begin("Profiler", &config_debug.show_profiler);
 
-    if (ImGui::Button(running ? "Stop" : "Start", ImVec2(60, 0)))
-    {
-        if (running)
-            profiler->Stop();
-        else
-            profiler->Start();
-    }
-
-    ImGui::SameLine();
-
-    if (ImGui::Button("Reset", ImVec2(60, 0)))
-        profiler->Reset();
-
-    static char filter[64] = "";
-    ImGui::SameLine();
-    ImGui::PushItemWidth(140);
-    ImGui::InputTextWithHint("##profiler_filter", "Filter...", filter, IM_ARRAYSIZE(filter));
-    ImGui::PopItemWidth();
-
-    ImGui::PushFont(gui_default_font);
-
-    u64 total = profiler->GetTotalCycles();
-    u32 frames = profiler->GetFrames();
-    ImGui::SameLine();
-    ImGui::TextColored(violet, " CYCLES"); ImGui::SameLine();
-    ImGui::TextColored(white, "%llu", (unsigned long long)total); ImGui::SameLine();
-    ImGui::TextColored(violet, " FRAMES"); ImGui::SameLine();
-    ImGui::TextColored(white, "%u", frames);
-    ImGui::Separator();
-
-    const GT_Profiler_Function* functions = profiler->GetFunctions();
-    u32 count = IsValidPointer(functions) ? profiler->GetFunctionCount() : 0;
-    ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
-        ImGuiTableFlags_BordersV | ImGuiTableFlags_Sortable | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable;
-
-    if (ImGui::BeginTable("##profiler", 7, flags))
-    {
-        ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("FUNCTION", ImGuiTableColumnFlags_WidthStretch, 0.0f, ProfilerColumn_Function);
-        ImGui::TableSetupColumn("CALLS", 0, 0.0f, ProfilerColumn_Calls);
-        ImGui::TableSetupColumn("/FRAME", 0, 0.0f, ProfilerColumn_CallsPerFrame);
-        ImGui::TableSetupColumn("INCLUSIVE", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending,
-            0.0f, ProfilerColumn_Inclusive);
-        ImGui::TableSetupColumn("EXCLUSIVE", ImGuiTableColumnFlags_PreferSortDescending, 0.0f, ProfilerColumn_Exclusive);
-        ImGui::TableSetupColumn("AVG", ImGuiTableColumnFlags_PreferSortDescending, 0.0f, ProfilerColumn_Average);
-        ImGui::TableSetupColumn("MAX", ImGuiTableColumnFlags_PreferSortDescending, 0.0f, ProfilerColumn_Max);
-        ImGui::TableHeadersRow();
-
-        ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs();
-
-        if (IsValidPointer(specs) && specs->SpecsCount > 0)
-        {
-            sort_column = (int)specs->Specs[0].ColumnUserID;
-            sort_ascending = specs->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
-        }
-
-        sorted.clear();
-
-        for (u32 i = 0; i < count; i++)
-        {
-            char name[64];
-            function_name(functions[i], name, sizeof(name));
-
-            if (filter[0] != 0 && strstr(name, filter) == NULL)
-                continue;
-
-            sorted.push_back(i);
-        }
-
-        std::sort(sorted.begin(), sorted.end(), compare_functions);
-
-        ImGuiListClipper clipper;
-        clipper.Begin((int)sorted.size());
-
-        while (clipper.Step())
-        {
-            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
-            {
-                const GT_Profiler_Function& function = functions[sorted[row]];
-                char name[64];
-                function_name(function, name, sizeof(name));
-                double inclusive = total > 0 ? 100.0 * (double)function.inclusive_cycles / (double)total : 0.0;
-                double exclusive = total > 0 ? 100.0 * (double)function.exclusive_cycles / (double)total : 0.0;
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::PushID(row);
-
-                if (ImGui::Selectable("##function", false, ImGuiSelectableFlags_SpanAllColumns) &&
-                    function.type != PROFILER_FUNCTION_ROOT)
-                    gui_debug_goto_address(function.address);
-
-                ImGui::SameLine(0, 0);
-                ImGui::TextColored(function.type == PROFILER_FUNCTION_ROOT ? gray :
-                    function.type == PROFILER_FUNCTION_INTERRUPT ? yellow : green, "%s", name);
-
-                if (ImGui::IsItemHovered() && function.type != PROFILER_FUNCTION_ROOT)
-                    ImGui::SetTooltip("%08X\nMIN %u cycles", function.address, function.completed > 0 ? function.min_cycles : 0);
-
-                ImGui::PopID();
-                ImGui::TableNextColumn();
-                ImGui::TextColored(white, "%u", function.calls);
-                ImGui::TableNextColumn();
-                ImGui::TextColored(white, "%.1f", frames > 0 ? (double)function.calls / frames : 0.0);
-                ImGui::TableNextColumn();
-                ImGui::TextColored(white, "%llu", (unsigned long long)function.inclusive_cycles); ImGui::SameLine();
-                ImGui::TextColored(gray, "%5.1f%%", inclusive);
-                ImGui::TableNextColumn();
-                ImGui::TextColored(white, "%llu", (unsigned long long)function.exclusive_cycles); ImGui::SameLine();
-                ImGui::TextColored(gray, "%5.1f%%", exclusive);
-                ImGui::TableNextColumn();
-                ImGui::TextColored(white, "%llu", (unsigned long long)average_cycles(function));
-                ImGui::TableNextColumn();
-                ImGui::TextColored(white, "%u", function.max_cycles);
-            }
-        }
-
-        ImGui::EndTable();
-    }
-
-    ImGui::PopFont();
+    if (profiler_visible)
+        draw_profiler(emu_get_core()->GetProfiler());
 
     ImGui::End();
     ImGui::PopStyleVar();
@@ -189,84 +116,443 @@ void gui_debug_window_profiler(void)
 
 void gui_debug_profiler_update(void)
 {
-    if (!IsValidPointer(emu_get_core()))
-        return;
+    if (!config_debug.debug || !config_debug.show_profiler)
+        profiler_visible = false;
 
     Profiler* profiler = emu_get_core()->GetProfiler();
 
-    if (profiler->IsRunning() && (!config_debug.show_profiler || !config_debug.debug))
-        profiler->Stop();
+    if (IsValidPointer(profiler))
+        profiler->Enable(profiler_visible && !profiler_paused);
 }
 
-static void function_name(const GT_Profiler_Function& function, char* text, size_t size)
+void gui_debug_profiler_update_headless(void)
 {
-    if (function.type == PROFILER_FUNCTION_ROOT)
+    Profiler* profiler = emu_get_core()->GetProfiler();
+
+    if (IsValidPointer(profiler))
+        profiler->Enable(config_debug.debug && config_debug.show_profiler && !profiler_paused);
+}
+
+void gui_debug_profiler_reset(void)
+{
+    profiler_rows.clear();
+    profiler_function_count = 0;
+    profiler_dirty = true;
+}
+
+void gui_debug_profiler_show(bool show)
+{
+    config_debug.show_profiler = show;
+
+    if (show)
     {
-        snprintf(text, size, "(outside calls)");
+        profiler_paused = false;
         return;
     }
 
-    if (function.type == PROFILER_FUNCTION_INTERRUPT)
-    {
-        char name[16];
-        char description[64];
-        gui_debug_i386_vector_name(function.vector, name, sizeof(name), description, sizeof(description));
-        snprintf(text, size, "INT %02X %s", function.vector, description);
+    profiler_visible = false;
+
+    Profiler* profiler = emu_get_core()->GetProfiler();
+
+    if (IsValidPointer(profiler))
+        profiler->Enable(false);
+}
+
+static void draw_profiler(Profiler* profiler)
+{
+    if (!IsValidPointer(profiler) || !IsValidPointer(profiler->GetFunctions()))
         return;
+
+    profiler->Sync();
+
+    if (ImGui::Button(profiler_paused ? "Resume" : "Pause"))
+        profiler_paused = !profiler_paused;
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Reset"))
+    {
+        profiler->Reset();
+        profiler_dirty = true;
     }
 
-    const char* symbol = gui_debug_get_symbol(function.address);
+    const GT_Profiler_Function* functions = profiler->GetFunctions();
+    u32 count = profiler->GetFunctionCount();
+    u64 total = profiler->GetTotalCycles();
+    u32 frames = profiler->GetFrames();
 
-    if (IsValidPointer(symbol))
-        snprintf(text, size, "%s", symbol);
-    else
-        snprintf(text, size, "%08X", function.address);
-}
+    ImGui::SameLine();
+    ImGui::Text("Functions: %u  Frames: %u  Cycles: %llu", count - 1, frames, (unsigned long long)total);
 
-static u64 average_cycles(const GT_Profiler_Function& function)
-{
-    return function.completed > 0 ? function.inclusive_cycles / function.completed : 0;
-}
+    ImGui::SameLine();
+    ImGui::PushItemWidth(-1);
 
-static bool compare_functions(u32 a, u32 b)
-{
-    const GT_Profiler_Function* functions = emu_get_core()->GetProfiler()->GetFunctions();
-    const GT_Profiler_Function& fa = functions[a];
-    const GT_Profiler_Function& fb = functions[b];
-    u64 va = 0;
-    u64 vb = 0;
+    if (ImGui::InputTextWithHint("##profiler_filter", "Filter...", profiler_filter, IM_ARRAYSIZE(profiler_filter)))
+        profiler_dirty = true;
 
-    switch (sort_column)
+    ImGui::PopItemWidth();
+
+    ImGui::Separator();
+
+    ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+        ImGuiTableFlags_BordersV | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_Hideable;
+    ImGuiTableColumnFlags number_flags = ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending;
+
+    if (ImGui::BeginTable("profiler_table", ProfilerColumn_Count, flags))
     {
-        case ProfilerColumn_Function:
-            va = fa.address;
-            vb = fb.address;
-            break;
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 2.0f);
+        ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("Vector", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Calls", number_flags, 45.0f);
+        ImGui::TableSetupColumn("Calls/Frame", number_flags, 91.0f);
+        ImGui::TableSetupColumn("Incl. Cycles", number_flags | ImGuiTableColumnFlags_DefaultSort, 87.0f);
+        ImGui::TableSetupColumn("Incl. %", number_flags, 55.0f);
+        ImGui::TableSetupColumn("Excl. Cycles", number_flags, 90.0f);
+        ImGui::TableSetupColumn("Excl. %", number_flags, 58.0f);
+        ImGui::TableSetupColumn("Avg", number_flags, 53.0f);
+        ImGui::TableSetupColumn("Min", number_flags, 51.0f);
+        ImGui::TableSetupColumn("Max", number_flags, 52.0f);
+
+        ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+
+        for (int column = 0; column < ProfilerColumn_Count; column++)
+        {
+            if (!ImGui::TableSetColumnIndex(column))
+                continue;
+
+            ImGui::PushID(column);
+            ImGui::TableHeader(ImGui::TableGetColumnName(column));
+            ImGui::PopID();
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", k_profiler_column_tooltips[column]);
+        }
+
+        ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs();
+
+        if (IsValidPointer(sort_specs))
+        {
+            if (sort_specs->SpecsDirty)
+            {
+                sort_specs->SpecsDirty = false;
+                profiler_dirty = true;
+            }
+
+            if (sort_specs->SpecsCount > 0)
+            {
+                profiler_sort_column = sort_specs->Specs[0].ColumnIndex;
+                profiler_sort_ascending = (sort_specs->Specs[0].SortDirection == ImGuiSortDirection_Ascending);
+            }
+        }
+
+        double time = ImGui::GetTime();
+
+        if (profiler_dirty || (count != profiler_function_count) ||
+            ((time - profiler_refresh_time) >= k_profiler_refresh_seconds))
+        {
+            build_rows(functions, count);
+            profiler_refresh_time = time;
+        }
+
+        ImGui::PushFont(gui_default_font);
+
+        ImGuiListClipper clipper;
+        clipper.Begin((int)profiler_rows.size());
+
+        while (clipper.Step())
+        {
+            for (int idx = clipper.DisplayStart; idx < clipper.DisplayEnd; idx++)
+            {
+                ProfilerRow& row = profiler_rows[idx];
+                const GT_Profiler_Function& function = functions[row.index];
+                bool pseudo = is_pseudo_function(function);
+                bool root = (function.type == PROFILER_FUNCTION_ROOT);
+                bool interrupt = (function.type == PROFILER_FUNCTION_INTERRUPT);
+                u32 completed = function.completed;
+
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                char selectable_id[32];
+                snprintf(selectable_id, sizeof(selectable_id), "##prof%d", (int)row.index);
+
+                if (ImGui::Selectable(selectable_id, false, ImGuiSelectableFlags_SpanAllColumns) && !pseudo)
+                    gui_debug_goto_address(function.address);
+
+                ImGui::PopFont();
+
+                if (!pseudo && ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::Selectable("Add Breakpoint"))
+                    {
+                        I386* cpu = emu_get_core()->GetI386();
+
+                        if (!cpu->IsBreakpoint(function.address))
+                            cpu->AddBreakpoint(function.address);
+                    }
+
+                    ImGui::EndPopup();
+                }
+
+                ImGui::PushFont(gui_default_font);
+
+                ImGui::SameLine(0, 0);
+
+                if (pseudo)
+                    ImGui::TextColored(orange, "%s", row.name);
+                else if (row.has_symbol)
+                    ImGui::TextColored(row.is_manual ? green : yellow, "%s", row.name);
+                else
+                    ImGui::TextColored(gray, "-");
+
+                ImGui::TableNextColumn();
+
+                if (pseudo)
+                    ImGui::TextColored(gray, " --------");
+                else
+                    ImGui::TextColored(cyan, " %08X", function.address);
+
+                ImGui::TableNextColumn();
+
+                if (!interrupt)
+                    ImGui::TextColored(gray, " --");
+                else
+                {
+                    ImGui::TextColored(violet, " %02X", function.vector);
+
+                    if (ImGui::IsItemHovered())
+                    {
+                        char name[16];
+                        char description[64];
+                        gui_debug_i386_vector_name(function.vector, name, sizeof(name), description,
+                            sizeof(description));
+                        ImGui::SetTooltip("%s", description);
+                    }
+                }
+
+                ImGui::TableNextColumn();
+
+                if (root)
+                    draw_empty();
+                else
+                    draw_number(function.calls);
+
+                ImGui::TableNextColumn();
+
+                if (root || (frames == 0))
+                    draw_empty();
+                else
+                    draw_calls_per_frame(function.calls, frames);
+
+                ImGui::TableNextColumn();
+
+                if (root)
+                    draw_empty();
+                else
+                    draw_number(function.inclusive_cycles);
+
+                ImGui::TableNextColumn();
+
+                if (root)
+                    draw_empty();
+                else
+                    draw_percent(function.inclusive_cycles, total);
+
+                ImGui::TableNextColumn();
+                draw_number(function.exclusive_cycles);
+
+                ImGui::TableNextColumn();
+                draw_percent(function.exclusive_cycles, total);
+
+                ImGui::TableNextColumn();
+
+                if (root || (completed == 0))
+                    draw_empty();
+                else
+                    draw_number(function.inclusive_cycles / completed);
+
+                ImGui::TableNextColumn();
+
+                if (root || (completed == 0))
+                    draw_empty();
+                else
+                    draw_number(function.min_cycles);
+
+                ImGui::TableNextColumn();
+
+                if (root || (completed == 0))
+                    draw_empty();
+                else
+                    draw_number(function.max_cycles);
+            }
+        }
+
+        ImGui::PopFont();
+
+        ImGui::EndTable();
+    }
+}
+
+static void build_rows(const GT_Profiler_Function* functions, u32 count)
+{
+    char filter_upper[64] = { };
+
+    for (int i = 0; i < 63 && profiler_filter[i]; i++)
+        filter_upper[i] = (char)toupper(profiler_filter[i]);
+
+    profiler_rows.clear();
+
+    for (u32 i = 0; i < count; i++)
+    {
+        const GT_Profiler_Function& function = functions[i];
+
+        ProfilerRow row;
+        row.index = (u16)i;
+        row.has_symbol = false;
+        row.is_manual = false;
+        row.name[0] = 0;
+
+        if (function.type == PROFILER_FUNCTION_ROOT)
+            snprintf(row.name, sizeof(row.name), "[Root]");
+        else
+        {
+            const char* name = gui_debug_get_symbol_name(function.address, &row.is_manual);
+
+            if (IsValidPointer(name))
+            {
+                row.has_symbol = true;
+                snprintf(row.name, sizeof(row.name), "%s", name);
+            }
+        }
+
+        if ((filter_upper[0] != 0) && !row_matches_filter(row, function, filter_upper))
+            continue;
+
+        profiler_rows.push_back(row);
+    }
+
+    profiler_sort_functions = functions;
+    std::sort(profiler_rows.begin(), profiler_rows.end(), row_sort_compare);
+
+    profiler_function_count = count;
+    profiler_dirty = false;
+}
+
+static bool row_matches_filter(const ProfilerRow& row, const GT_Profiler_Function& function, const char* filter)
+{
+    char name_upper[64] = { };
+
+    for (int i = 0; i < 63 && row.name[i]; i++)
+        name_upper[i] = (char)toupper(row.name[i]);
+
+    if (strstr(name_upper, filter) != NULL)
+        return true;
+
+    if (is_pseudo_function(function))
+        return false;
+
+    char address[16];
+    snprintf(address, sizeof(address), "%08X", function.address);
+    return strstr(address, filter) != NULL;
+}
+
+static bool is_pseudo_function(const GT_Profiler_Function& function)
+{
+    return function.type == PROFILER_FUNCTION_ROOT;
+}
+
+static u64 get_sort_value(const GT_Profiler_Function& function, int column)
+{
+    u32 completed = function.completed;
+
+    switch (column)
+    {
+        case ProfilerColumn_Vector:
+            return ((u64)(function.type == PROFILER_FUNCTION_INTERRUPT ? function.vector + 1 : 0) << 32) |
+                function.address;
+        case ProfilerColumn_Address:
+            return function.address;
         case ProfilerColumn_Calls:
         case ProfilerColumn_CallsPerFrame:
-            va = fa.calls;
-            vb = fb.calls;
-            break;
+            return function.calls;
+        case ProfilerColumn_Inclusive:
+        case ProfilerColumn_InclusivePercent:
+            return function.inclusive_cycles;
         case ProfilerColumn_Exclusive:
-            va = fa.exclusive_cycles;
-            vb = fb.exclusive_cycles;
-            break;
+        case ProfilerColumn_ExclusivePercent:
+            return function.exclusive_cycles;
         case ProfilerColumn_Average:
-            va = average_cycles(fa);
-            vb = average_cycles(fb);
-            break;
+            return (completed > 0) ? function.inclusive_cycles / completed : 0;
+        case ProfilerColumn_Min:
+            return (completed > 0) ? function.min_cycles : 0;
         case ProfilerColumn_Max:
-            va = fa.max_cycles;
-            vb = fb.max_cycles;
-            break;
+            return (completed > 0) ? function.max_cycles : 0;
         default:
-            va = fa.inclusive_cycles;
-            vb = fb.inclusive_cycles;
-            break;
+            return 0;
+    }
+}
+
+static bool row_sort_compare(const ProfilerRow& a, const ProfilerRow& b)
+{
+    bool less = false;
+
+    if (profiler_sort_column == ProfilerColumn_Function)
+    {
+        int result = strcmp(a.name, b.name);
+
+        if (result == 0)
+            return a.index < b.index;
+
+        less = (result < 0);
+    }
+    else
+    {
+        u64 value_a = get_sort_value(profiler_sort_functions[a.index], profiler_sort_column);
+        u64 value_b = get_sort_value(profiler_sort_functions[b.index], profiler_sort_column);
+
+        if (value_a == value_b)
+            return a.index < b.index;
+
+        less = (value_a < value_b);
     }
 
-    if (va == vb)
-        return a < b;
+    return profiler_sort_ascending ? less : !less;
+}
 
-    return sort_ascending ? va < vb : va > vb;
+static void draw_right_aligned(const ImVec4& color, const char* text)
+{
+    float offset = ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text).x;
+
+    if (offset > 0.0f)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+
+    ImGui::TextColored(color, "%s", text);
+}
+
+static void draw_number(u64 value)
+{
+    char text[32];
+    snprintf(text, sizeof(text), "%llu", (unsigned long long)value);
+    draw_right_aligned(white, text);
+}
+
+static void draw_percent(u64 value, u64 total)
+{
+    char text[16];
+    double percent = (total > 0) ? ((double)value * 100.0) / (double)total : 0.0;
+    snprintf(text, sizeof(text), "%.2f%%", percent);
+    draw_right_aligned(white, text);
+}
+
+static void draw_calls_per_frame(u32 calls, u32 frames)
+{
+    char text[32];
+    snprintf(text, sizeof(text), "%.2f", (double)calls / (double)frames);
+    draw_right_aligned(white, text);
+}
+
+static void draw_empty(void)
+{
+    draw_right_aligned(gray, "-");
 }

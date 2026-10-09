@@ -1073,6 +1073,10 @@ void I386::ResetDisassembler()
 void I386::ResetDebuggerExecutionState()
 {
     m_disassembler_call_stack.clear();
+
+    if (IsValidPointer(m_profiler))
+        m_profiler->ResetStack();
+
     m_run_to_breakpoint = 0;
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
@@ -1352,7 +1356,7 @@ void I386::EnableDebuggerChecks(bool enable)
     m_debugger_interrupt_checks = trace && m_trace_logger->IsEnabled(TRACE_CPU_INTERRUPT);
     m_trace_cpu = trace && m_trace_logger->IsEnabled(TRACE_CPU);
     m_trace_enabled = m_trace_internal || m_trace_cpu;
-    m_profiler_active = enable && IsValidPointer(m_profiler) && m_profiler->IsActive();
+    m_profiler_active = enable && IsValidPointer(m_profiler) && m_profiler->IsEnabled();
 
     if (!enable)
         return;
@@ -1669,6 +1673,30 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_
         set_auto_symbol(*target, true);
     else if (target->auto_symbol[0] == 0)
         snprintf(target->auto_symbol, sizeof(target->auto_symbol), "INT_%02X", vector);
+}
+
+void I386::PopCallStack()
+{
+    u32 target = GetCurrentLinearPC();
+    size_t size = m_disassembler_call_stack.size();
+    size_t count = 1;
+
+    for (size_t i = size; i > 0; i--)
+    {
+        if (m_disassembler_call_stack[i - 1].back_linear == target)
+        {
+            count = size - (i - 1);
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < count; i++)
+    {
+        m_disassembler_call_stack.pop_back();
+
+        if (unlikely(m_profiler_active))
+            m_profiler->Return();
+    }
 }
 
 bool I386::GetStepCall(u32& return_linear) const

@@ -76,6 +76,7 @@ struct Emu_Debug_Buffer_Info
     int window_y;
     int window_width;
     int window_height;
+    int window_wrap;
 };
 
 struct Emu_Debug_Sprite

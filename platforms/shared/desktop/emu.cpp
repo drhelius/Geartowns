@@ -1049,9 +1049,24 @@ void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* reque
 
         if (hde > hds && vde > vds)
         {
+            u32 bits = info.format == Video::VIDEO_LAYER_4BPP ? 4 : info.format == Video::VIDEO_LAYER_8BPP ? 8 : 16;
+            u32 first = info.start * 8 / bits;
+            u32 skip = (hds - haj) / zoom_x;
+
+            // Without CEN the rows turn around within 256 units, as Video::RenderLayerRow fetches them
+            if ((crtc[k_video_crtc_cr0] & (0x10 << layer)) == 0)
+            {
+                u32 block = (unit << 8) * 8 / bits;
+                info.window_wrap = (int)block;
+                first = (first & ~(block - 1)) + (((first & (block - 1)) + skip) & (block - 1));
+            }
+            else
+                first += skip;
+
+            first %= info.page_size * 8 / bits;
             info.window = true;
-            info.window_x = (int)((info.start % info.stride) * pixels / info.stride + (hds - haj) / zoom_x);
-            info.window_y = (int)(info.start / info.stride);
+            info.window_x = (int)(first % pixels);
+            info.window_y = (int)(first / pixels);
             info.window_width = (int)((hde - hds) / zoom_x);
             info.window_height = (int)(((vde - vds) / 2) / (((zoom >> 4) & 0x0F) + 1));
         }

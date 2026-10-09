@@ -38,8 +38,8 @@
 #include "gui_debug_constants.h"
 #include "gui_debug_memory.h"
 
-static const float k_framebuffer_zoom[3] = { 0.5f, 1.0f, 2.0f };
-static const char k_framebuffer_zoom_items[] = "0.5x\0" "1x\0" "2x\0";
+static const float k_framebuffer_zoom[3] = { 1.0f, 2.0f, 3.0f };
+static const char k_framebuffer_zoom_items[] = "1x\0" "2x\0" "3x\0";
 static const char k_framebuffer_page_items[] = "DISPLAY\0DRAW\0";
 static const char k_framebuffer_format_items[] = "16 COLORS\0" "256 COLORS\0" "32K COLORS\0";
 static const char k_framebuffer_palette_items[] = "LAYER 0\0LAYER 1\0" "256\0";
@@ -53,6 +53,8 @@ static float combo_width(const char* items);
 static void draw_buffer_header(const Emu_Debug_Buffer_Info& info);
 static void draw_info_label(const char* label);
 static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom);
+static void draw_visible_area(const Emu_Debug_Buffer_Info& info, ImVec2 position, float zoom);
+static void draw_visible_rect(ImDrawList* draw_list, ImVec2 position, float zoom, int x, int y, int width, int height);
 static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, int y);
 static void draw_sprite_header(void);
 static void draw_sprite_details(int index);
@@ -408,11 +410,7 @@ static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
         ImVec2((float)info.width / EMU_DEBUG_FRAMEBUFFER_WIDTH, (float)info.height / EMU_DEBUG_FRAMEBUFFER_HEIGHT));
 
     if (info.window && config_debug.framebuffer_show_window && config_debug.framebuffer_tab < 2)
-    {
-        ImVec2 window_min(position.x + info.window_x * zoom, position.y + info.window_y * zoom);
-        ImVec2 window_max(window_min.x + info.window_width * zoom, window_min.y + info.window_height * zoom);
-        ImGui::GetWindowDrawList()->AddRect(window_min, window_max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
-    }
+        draw_visible_area(info, position, zoom);
 
     if (ImGui::IsItemHovered())
     {
@@ -460,6 +458,61 @@ static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
     }
 
     ImGui::EndChild();
+}
+
+static void draw_visible_area(const Emu_Debug_Buffer_Info& info, ImVec2 position, float zoom)
+{
+    int bits = info.format == Video::VIDEO_LAYER_4BPP ? 4 : info.format == Video::VIDEO_LAYER_8BPP ? 8 : 16;
+    int row_width = (int)(info.stride * 8 / bits);
+    int rows = (int)(info.page_size / info.stride);
+
+    if (row_width <= 0 || rows <= 0)
+        return;
+
+    int first = info.window_y * row_width + info.window_x;
+    int height = MIN(info.window_height, rows);
+    int segments[2][2] = { { first, first + info.window_width }, { 0, 0 } };
+
+    if (info.window_wrap > 0)
+    {
+        int block = info.window_wrap;
+        int base = first - first % block;
+        int end = first + MIN(info.window_width, block);
+        segments[0][1] = MIN(end, base + block);
+        segments[1][0] = base;
+        segments[1][1] = MAX(end - block, base);
+    }
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->PushClipRect(position, ImVec2(position.x + info.width * zoom, position.y + info.height * zoom), true);
+
+    for (int i = 0; i < 2; i++)
+    {
+        int start = segments[i][0];
+
+        while (start < segments[i][1])
+        {
+            int column = start % row_width;
+            int span = MIN(segments[i][1] - start, row_width - column);
+            int top = (start / row_width) % rows;
+
+            draw_visible_rect(draw_list, position, zoom, column, top, span, MIN(height, rows - top));
+
+            if (top + height > rows)
+                draw_visible_rect(draw_list, position, zoom, column, 0, span, top + height - rows);
+
+            start += span;
+        }
+    }
+
+    draw_list->PopClipRect();
+}
+
+static void draw_visible_rect(ImDrawList* draw_list, ImVec2 position, float zoom, int x, int y, int width, int height)
+{
+    ImVec2 min(position.x + x * zoom, position.y + y * zoom);
+    ImVec2 max(min.x + width * zoom, min.y + height * zoom);
+    draw_list->AddRect(min, max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
 }
 
 static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, int y)
@@ -554,7 +607,7 @@ static void draw_sprite_details(int index)
         switch (row)
         {
             case 0:
-                ImGui::TextColored(white, "%4d", sprite.index); ImGui::SameLine();
+                ImGui::TextColored(white, "%-4d", sprite.index); ImGui::SameLine();
                 ImGui::TextColored(cyan, "$%05X", sprite.address);
 
                 if (ImGui::IsItemClicked())

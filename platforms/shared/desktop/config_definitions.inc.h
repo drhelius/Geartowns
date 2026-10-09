@@ -54,7 +54,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "Framebuffers", config_debug.show_framebuffers, false);
     CONFIG_BOOL("Debug", "Sprites", config_debug.show_sprites, false);
     CONFIG_INT_RANGE("Debug", "FramebufferTab", config_debug.framebuffer_tab, 0, 0, 3);
-    CONFIG_INT_RANGE("Debug", "FramebufferZoom", config_debug.framebuffer_zoom, 1, 0, 2);
+    CONFIG_INT_RANGE("Debug", "FramebufferZoom", config_debug.framebuffer_zoom, 0, 0, 2);
     CONFIG_BOOL("Debug", "FramebufferShowWindow", config_debug.framebuffer_show_window, true);
     CONFIG_INT_RANGE("Debug", "FramebufferSpritePage", config_debug.framebuffer_sprite_page, 0, 0, 1);
     CONFIG_INT_RANGE("Debug", "FramebufferCustomOffset", config_debug.framebuffer_custom_offset, 0, 0, 0x7FFFF);

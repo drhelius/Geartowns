@@ -176,7 +176,7 @@ void gui_render(void)
     gui_main_window_focused = false;
     gui_main_window_sdl_window_id = 0;
 
-    if ((!config_debug.debug && !emu_is_empty()) || (config_debug.debug && config_debug.show_screen))
+    if ((!config_debug.debug && emu_is_powered_on()) || (config_debug.debug && config_debug.show_screen))
         main_window();
 
     gui_debug_windows();
@@ -208,7 +208,8 @@ void gui_shortcut(gui_ShortCutEvent event)
     switch (event)
     {
     case gui_ShortcutOpenROM:
-        gui_shortcut_open_rom = true;
+        if (!emu_get_core()->GetMedia()->IsReady())
+            gui_shortcut_open_rom = true;
         break;
     case gui_ShortcutReloadROM:
         gui_action_reload_rom();
@@ -832,9 +833,6 @@ static bool finish_loading_rom(void)
     }
 
     gui_debug_auto_load_settings();
-
-    if (config_emulator.start_paused)
-        emu_pause();
 
     if (emu_get_core()->GetMedia()->IsReady())
     {

@@ -431,8 +431,6 @@ bool emu_finish_media_loading(void)
         return false;
     }
 
-    emu_frame_counter = 0;
-    reset_buffers();
     emu_audio_reset();
     update_savestates_data();
     rewind_reset();
@@ -505,6 +503,12 @@ bool emu_is_empty(void)
         return true;
 
     return !IsValidPointer(geartowns) || !geartowns->IsPoweredOn();
+}
+
+// Unlike emu_is_empty a running machine stays powered on while a disc swap loads
+bool emu_is_powered_on(void)
+{
+    return IsValidPointer(geartowns) && geartowns->IsPoweredOn();
 }
 
 bool emu_power_on(void)

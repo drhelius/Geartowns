@@ -376,14 +376,15 @@ static void menu_cdrom(void)
     Media* media = emu_get_core()->GetMedia();
     bool loading = gui_is_rom_loading() || emu_is_media_loading();
     bool inserted = !loading && media->IsReady();
+    bool can_insert = !loading && !media->IsReady();
 
-    if (ImGui::MenuItem("Insert Image...", config_hotkeys[config_HotkeyIndex_OpenROM].str, false, !loading))
+    if (ImGui::MenuItem("Insert Image...", config_hotkeys[config_HotkeyIndex_OpenROM].str, false, can_insert))
     {
         open_rom = true;
     }
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
-    if (ImGui::MenuItem("Insert Physical Disc...", NULL, false, !loading && !media->IsPhysicalCdRom()))
+    if (ImGui::MenuItem("Insert Physical Disc...", NULL, false, can_insert))
     {
         open_physical_cdrom = true;
     }
@@ -404,7 +405,7 @@ static void menu_cdrom(void)
         {
             ImGui::PushID(i);
 
-            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i), NULL, i == selected) && (i != selected))
+            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i), NULL, i == selected, can_insert) && (i != selected))
                 gui_load_playlist_disc(i);
 
             ImGui::PopID();
@@ -480,7 +481,7 @@ static void menu_cdrom(void)
             {
                 const char* shortcut = (i == 0) ? config_hotkeys[config_HotkeyIndex_ReloadROM].str : NULL;
 
-                if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), shortcut))
+                if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), shortcut, false, can_insert))
                 {
                     char media_path[4096];
                     strncpy_fit(media_path, config_emulator.recent_roms[i].c_str(), sizeof(media_path));

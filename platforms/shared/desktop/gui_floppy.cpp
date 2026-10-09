@@ -70,11 +70,12 @@ void gui_floppy_menu(int drive, const char* label, int drives)
     Emu_FloppyInfo info;
     emu_floppy_get_info(drive, &info);
     bool loading = gui_is_rom_loading() || emu_is_media_loading();
+    bool can_insert = !loading && !info.inserted;
 
-    if (ImGui::MenuItem("Insert...", NULL, false, !loading))
+    if (ImGui::MenuItem("Insert...", NULL, false, can_insert))
         gui_file_dialog_open_floppy(drive);
 
-    if (ImGui::MenuItem("New Blank Disk...", NULL, false, !loading))
+    if (ImGui::MenuItem("New Blank Disk...", NULL, false, can_insert))
     {
         dialog_drive = drive;
         open_blank = true;
@@ -102,7 +103,7 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Disk in Image", info.disk_count > 1))
+    if ((info.disk_count > 1) && ImGui::BeginMenu("Disk in Image"))
     {
         for (int i = 0; i < info.disk_count; i++)
         {
@@ -160,7 +161,7 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
             ImGui::PushID(i);
 
-            if (ImGui::MenuItem(get_filename(recent.c_str()), NULL, false, !loading))
+            if (ImGui::MenuItem(get_filename(recent.c_str()), NULL, false, can_insert))
                 request(drive, Floppy_Action_Insert, recent.c_str(), 0);
 
             if (ImGui::IsItemHovered())
@@ -174,8 +175,14 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     ImGui::Separator();
 
-    if (drives > 1 && ImGui::MenuItem("Swap Floppy 1 and 2"))
-        emu_floppy_swap();
+    if (drives > 1)
+    {
+        Emu_FloppyInfo other;
+        emu_floppy_get_info(drive ^ 1, &other);
+
+        if ((info.inserted || other.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
+            emu_floppy_swap();
+    }
 
     ImGui::MenuItem("Remember Changes", NULL, &config_emulator.floppy_persistence);
 

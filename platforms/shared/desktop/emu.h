@@ -145,6 +145,7 @@ EXTERN void emu_resume(void);
 EXTERN bool emu_is_paused(void);
 EXTERN bool emu_is_debug_idle(void);
 EXTERN bool emu_is_empty(void);
+EXTERN bool emu_is_powered_on(void);
 EXTERN bool emu_power_on(void);
 EXTERN void emu_power_off(void);
 EXTERN void emu_reset(void);

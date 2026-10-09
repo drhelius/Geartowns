@@ -36,16 +36,22 @@
 #include "gui_debug_widgets.h"
 
 static void crtc_write_callback(u16 index, u16 value, void* user_data);
+static void setup_grid_columns(bool layers);
+static void draw_grid_label(const char* label);
 static void draw_layer_column(int layer, int row);
-static void draw_palette_row(const char* id, const u8 (*colors)[3], int first, int count, bool nibbles);
+static void draw_palette_title(const char* title, bool in_use);
+static void setup_palette_columns(void);
+static void draw_palette_indices(int count);
+static void draw_palette_swatches(const u8 (*colors)[3], int first, bool nibbles);
+static void draw_centered_digit(const ImVec4& color, int value);
 static void draw_color_tooltip(int index, const u8* color, bool nibbles);
-static void goto_vram(u32 offset);
+static void goto_vram(u32 offset, bool single_page);
 
 void gui_debug_window_crtc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(70, 50), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(440, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
     ImGui::Begin("CRTC", &config_debug.show_crtc);
 
     ImGui::PushFont(gui_default_font);
@@ -58,92 +64,133 @@ void gui_debug_window_crtc(void)
     u32 line_clocks = (u32)crtc[k_video_crtc_hst] + 1;
     u32 half_lines = (u32)crtc[k_video_crtc_vst] + 1;
     bool interlaced = (half_lines & 1) != 0;
+    bool running = state->running;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
 
     ImGui::TextColored(cyan, "DISPLAY"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "DOT CLOCK  "); ImGui::SameLine();
-    ImGui::TextColored(orange, "%.3f MHz", clock); ImGui::SameLine();
-    ImGui::TextColored(violet, " RUNNING"); ImGui::SameLine();
-    ImGui::TextColored(state->running ? green : gray, "%s", state->running ? "ON " : "OFF");
+    if (ImGui::BeginTable("##crtc_display", 4, flags))
+    {
+        setup_grid_columns(false);
 
-    ImGui::TextColored(violet, "LINE       "); ImGui::SameLine();
-    ImGui::TextColored(white, "%4u DOTS", line_clocks); ImGui::SameLine();
-    ImGui::TextColored(orange, "%6.2f kHz", clock * 1000.0 / line_clocks);
+        ImGui::TableNextRow();
+        draw_grid_label("DOT CLOCK");
+        ImGui::TextColored(orange, "%.3f MHz", clock);
+        draw_grid_label("RUNNING");
+        ImGui::TextColored(running ? green : gray, "%s", running ? "ON" : "OFF");
 
-    ImGui::TextColored(violet, "FRAME      "); ImGui::SameLine();
-    ImGui::TextColored(white, "%4u HALF-LINES", half_lines); ImGui::SameLine();
-    ImGui::TextColored(orange, "%5.2f Hz", (clock * 1000000.0 * 2.0) / ((double)half_lines * line_clocks));
+        ImGui::TableNextRow();
+        draw_grid_label("LINE");
+        ImGui::TextColored(white, "%u DOTS", line_clocks);
+        draw_grid_label("LINE RATE");
 
-    ImGui::TextColored(violet, "INTERLACE  "); ImGui::SameLine();
-    ImGui::TextColored(interlaced ? green : gray, "%s", interlaced ? "ON " : "OFF");
+        if (running)
+            ImGui::TextColored(orange, "%.2f kHz", clock * 1000.0 / line_clocks);
+        else
+            ImGui::TextColored(gray, "--");
 
-    ImGui::TextColored(violet, "HSYNC      "); ImGui::SameLine();
-    ImGui::TextColored(white, "HSW1 %4u  HSW2 %4u", crtc[0x00], crtc[0x01]);
+        ImGui::TableNextRow();
+        draw_grid_label("FRAME");
+        ImGui::TextColored(white, "%u HALF-LINES", half_lines);
+        draw_grid_label("REFRESH");
 
-    ImGui::TextColored(violet, "VSYNC      "); ImGui::SameLine();
-    ImGui::TextColored(white, "VST1 %4u  VST2 %4u  EET %4u", crtc[k_video_crtc_vst1], crtc[k_video_crtc_vst2], crtc[0x07]);
+        if (running)
+            ImGui::TextColored(orange, "%.2f Hz", (clock * 1000000.0 * 2.0) / ((double)half_lines * line_clocks));
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextRow();
+        draw_grid_label("INTERLACE");
+        ImGui::TextColored(interlaced ? green : gray, "%s", interlaced ? "ON" : "OFF");
+
+        ImGui::TableNextRow();
+        draw_grid_label("HSW1");
+        ImGui::TextColored(white, "%u", crtc[0x00]);
+        draw_grid_label("HSW2");
+        ImGui::TextColored(white, "%u", crtc[0x01]);
+
+        ImGui::TableNextRow();
+        draw_grid_label("VST1");
+        ImGui::TextColored(white, "%u", crtc[k_video_crtc_vst1]);
+        draw_grid_label("VST2");
+        ImGui::TextColored(white, "%u", crtc[k_video_crtc_vst2]);
+
+        ImGui::TableNextRow();
+        draw_grid_label("EET");
+        ImGui::TextColored(white, "%u", crtc[0x07]);
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "RASTER"); ImGui::Separator();
 
-    u64 clocks = core->GetScheduler()->GetClocks();
-
-    if (state->running)
+    if (ImGui::BeginTable("##crtc_raster", 4, flags))
     {
-        u32 beam = video->GetBeamHalfLine(clocks);
-        u8 status = video->GetSyncStatus(clocks);
+        setup_grid_columns(false);
 
-        ImGui::TextColored(violet, "LINE       "); ImGui::SameLine();
-        ImGui::TextColored(white, "%4u", beam / 2); ImGui::SameLine();
-        ImGui::TextColored(violet, " DOT"); ImGui::SameLine();
-        ImGui::TextColored(white, "%4u", video->GetBeamClock(clocks)); ImGui::SameLine();
-        ImGui::TextColored(violet, " FIELD"); ImGui::SameLine();
-        ImGui::TextColored(white, "%d", (status & 0x08) ? 1 : 0);
+        u64 clocks = core->GetScheduler()->GetClocks();
+        u8 status = running ? video->GetSyncStatus(clocks) : 0;
 
-        const char* h_state = (status & 0x02) ? "SYNC   " : (status & 0x30) ? "DISPLAY" : "BLANK  ";
-        const char* v_state = (status & 0x04) ? "SYNC   " : (status & 0xC0) ? "DISPLAY" : "BLANK  ";
-        ImGui::TextColored(violet, "H STATE    "); ImGui::SameLine();
-        ImGui::TextColored(blue, "%s", h_state); ImGui::SameLine();
-        ImGui::TextColored(violet, " V STATE"); ImGui::SameLine();
-        ImGui::TextColored(blue, "%s", v_state);
+        ImGui::TableNextRow();
+        draw_grid_label("LINE");
+
+        if (running)
+            ImGui::TextColored(white, "%u", video->GetBeamHalfLine(clocks) / 2);
+        else
+            ImGui::TextColored(gray, "--");
+
+        draw_grid_label("DOT");
+
+        if (running)
+            ImGui::TextColored(white, "%u", video->GetBeamClock(clocks));
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextRow();
+        draw_grid_label("H STATE");
+
+        if (running)
+            ImGui::TextColored(blue, "%s", (status & 0x02) ? "SYNC" : (status & 0x30) ? "DISPLAY" : "BLANK");
+        else
+            ImGui::TextColored(gray, "--");
+
+        draw_grid_label("V STATE");
+
+        if (running)
+            ImGui::TextColored(blue, "%s", (status & 0x04) ? "SYNC" : (status & 0xC0) ? "DISPLAY" : "BLANK");
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextRow();
+        draw_grid_label("FIELD");
+
+        if (running)
+            ImGui::TextColored(white, "%d", (status & 0x08) ? 1 : 0);
+        else
+            ImGui::TextColored(gray, "--");
+
+        draw_grid_label("VSYNC IRQ");
+        ImGui::TextColored(state->vsync_irq ? yellow : gray, "%-8s", state->vsync_irq ? "PENDING" : "CLEAR");
+        ImGui::SameLine(0.0f, 0.0f);
+        ImGui::TextColored(gray, "(05CA)");
+
+        ImGui::EndTable();
     }
-    else
-    {
-        ImGui::TextColored(violet, "LINE       "); ImGui::SameLine();
-        ImGui::TextColored(gray, "--  "); ImGui::SameLine();
-        ImGui::TextColored(violet, " DOT"); ImGui::SameLine();
-        ImGui::TextColored(gray, "--  "); ImGui::SameLine();
-        ImGui::TextColored(violet, " FIELD"); ImGui::SameLine();
-        ImGui::TextColored(gray, "-");
-        ImGui::TextColored(violet, "H STATE    "); ImGui::SameLine();
-        ImGui::TextColored(gray, "--     "); ImGui::SameLine();
-        ImGui::TextColored(violet, " V STATE"); ImGui::SameLine();
-        ImGui::TextColored(gray, "--     ");
-    }
-
-    ImGui::TextColored(violet, "VSYNC IRQ  "); ImGui::SameLine();
-    ImGui::TextColored(state->vsync_irq ? yellow : gray, "%s", state->vsync_irq ? "PENDING" : "CLEAR  "); ImGui::SameLine();
-    ImGui::TextColored(gray, "(05CA)");
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "LAYERS"); ImGui::Separator();
 
-    ImGuiTableFlags flags = ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
-
-    if (ImGui::BeginTable("##crtc_layers", 3, flags))
+    if (ImGui::BeginTable("##crtc_layers", 3, flags | ImGuiTableFlags_RowBg))
     {
-        ImGui::TableSetupColumn(" ");
-        ImGui::TableSetupColumn("LAYER 0");
-        ImGui::TableSetupColumn("LAYER 1");
+        setup_grid_columns(true);
         ImGui::TableHeadersRow();
 
-        static const char* rows[] = { "FORMAT", "H WINDOW", "V WINDOW", "START", "STRIDE", "HAJ", "FIELD OFFSET", "ZOOM X/Y",
-            "VISIBLE SIZE" };
+        static const char* rows[] = { "FORMAT", "H WINDOW", "V WINDOW", "VRAM START", "STRIDE", "HAJ", "FIELD OFFSET",
+            "ZOOM X/Y", "VISIBLE SIZE" };
 
         for (int row = 0; row < (int)(sizeof(rows) / sizeof(rows[0])); row++)
         {
             ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(violet, "%-12s", rows[row]);
-            ImGui::TableNextColumn();
+            draw_grid_label(rows[row]);
             draw_layer_column(0, row);
             ImGui::TableNextColumn();
             draw_layer_column(1, row);
@@ -301,101 +348,152 @@ void gui_debug_window_palettes(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(160, 140), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(526, 420), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(404, 504), ImGuiCond_FirstUseEver);
     ImGui::Begin("Palettes", &config_debug.show_palettes);
 
     ImGui::PushFont(gui_default_font);
 
-    Video::Video_State* state = emu_get_core()->GetVideo()->GetState();
+    Video* video = emu_get_core()->GetVideo();
+    Video::Video_State* state = video->GetState();
     int palette = (state->output[1] >> 4) & 0x03;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
 
     ImGui::TextColored(violet, "INDEX"); ImGui::SameLine();
     ImGui::TextColored(white, "$%02X", state->palette_index); ImGui::SameLine();
     ImGui::TextColored(gray, "(FD90)"); ImGui::SameLine();
-    ImGui::TextColored(violet, "  SELECTED"); ImGui::SameLine();
+    ImGui::TextColored(violet, " SELECTED"); ImGui::SameLine();
     ImGui::TextColored(white, "%s", palette == 0 ? "LAYER 0" : palette == 2 ? "LAYER 1" : "256 COLORS");
 
     ImGui::PopFont();
 
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, 2.0f));
+
     if (ImGui::BeginTabBar("##palette_tabs"))
     {
-        for (int bank = 0; bank < 2; bank++)
+        if (ImGui::BeginTabItem("16 COLORS"))
         {
-            if (ImGui::BeginTabItem(bank == 0 ? "LAYER 0" : "LAYER 1"))
+            ImGui::PushFont(gui_default_font);
+
+            for (int bank = 0; bank < 2; bank++)
             {
-                ImGui::PushFont(gui_default_font);
-                ImGui::NewLine();
-                draw_palette_row(bank == 0 ? "##pal0" : "##pal1", state->palette16[bank], 0, 16, true);
-                ImGui::NewLine();
+                if (bank == 1)
+                    ImGui::NewLine();
 
-                if (ImGui::BeginTable("##palette16", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit |
-                    ImGuiTableFlags_NoHostExtendX | ImGuiTableFlags_ScrollY, ImVec2(0, 0)))
+                draw_palette_title(bank == 0 ? "LAYER 0" : "LAYER 1",
+                    video->GetLayerFormat(bank) == Video::VIDEO_LAYER_4BPP);
+
+                if (ImGui::BeginTable(bank == 0 ? "##palette16_0" : "##palette16_1", 17, flags))
                 {
-                    ImGui::TableSetupColumn("INDEX");
-                    ImGui::TableSetupColumn("BLUE");
-                    ImGui::TableSetupColumn("RED");
-                    ImGui::TableSetupColumn("GREEN");
-                    ImGui::TableHeadersRow();
+                    const u8 (*colors)[3] = state->palette16[bank];
+                    setup_palette_columns();
+                    draw_palette_indices(16);
 
-                    for (int i = 0; i < 16; i++)
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    draw_palette_swatches(colors, 0, true);
+
+                    for (int component = 0; component < 3; component++)
                     {
-                        const u8* color = state->palette16[bank][i];
+                        ImVec4 tint = component == 0 ? blue : component == 1 ? red : green;
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextColored(orange, "%X", i);
-                        ImGui::TableNextColumn();
-                        ImGui::TextColored(blue, "%X", color[0] >> 4);
-                        ImGui::TableNextColumn();
-                        ImGui::TextColored(red, "%X", color[1] >> 4);
-                        ImGui::TableNextColumn();
-                        ImGui::TextColored(green, "%X", color[2] >> 4);
+                        ImGui::TextColored(violet, "%c", "BRG"[component]);
+
+                        for (int i = 0; i < 16; i++)
+                        {
+                            ImGui::TableNextColumn();
+                            draw_centered_digit(tint, colors[i][component] >> 4);
+                        }
                     }
 
                     ImGui::EndTable();
                 }
-
-                ImGui::PopFont();
-                ImGui::EndTabItem();
             }
+
+            ImGui::PopFont();
+            ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("256 COLORS"))
         {
-            ImGui::BeginChild("##palette256", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
             ImGui::PushFont(gui_default_font);
-            ImGui::NewLine();
 
-            for (int row = 0; row < 16; row++)
+            draw_palette_title("256 COLORS", video->GetLayerFormat(0) == Video::VIDEO_LAYER_8BPP);
+
+            if (ImGui::BeginTable("##palette256", 17, flags))
             {
-                char id[16];
-                snprintf(id, sizeof(id), "##p256_%d", row);
-                ImGui::TextColored(white, "%02X:", row * 16); ImGui::SameLine();
-                draw_palette_row(id, state->palette256, row * 16, 16, false);
+                setup_palette_columns();
+                draw_palette_indices(16);
+
+                for (int row = 0; row < 16; row++)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextColored(orange, "%02X", row * 16);
+                    draw_palette_swatches(state->palette256, row * 16, false);
+                }
+
+                ImGui::EndTable();
             }
 
             ImGui::PopFont();
-            ImGui::EndChild();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("DIGITAL"))
         {
             ImGui::PushFont(gui_default_font);
-            ImGui::NewLine();
 
-            for (int i = 0; i < 8; i++)
+            bool modified = state->digital_palette_modified;
+            ImGui::TextColored(cyan, "DIGITAL"); ImGui::SameLine();
+            ImGui::TextColored(violet, "DPMD"); ImGui::SameLine();
+            ImGui::TextColored(modified ? yellow : gray, "%s", modified ? "ON" : "OFF");
+            ImGui::Separator();
+
+            if (ImGui::BeginTable("##palette_digital", 17, flags))
             {
-                u8 value = state->digital_palette[i] & 0x0F;
-                ImVec4 color = ImVec4((value & 0x02) ? (value & 0x08 ? 1.0f : 0.5f) : 0.0f,
-                    (value & 0x04) ? (value & 0x08 ? 1.0f : 0.5f) : 0.0f, (value & 0x01) ? (value & 0x08 ? 1.0f : 0.5f) : 0.0f,
-                    1.0f);
-                char id[16];
-                snprintf(id, sizeof(id), "##dpal_%d", i);
+                float size = ImGui::GetFrameHeight();
+                setup_palette_columns();
+                draw_palette_indices(8);
 
-                ImGui::TextColored(cyan, "FD%02X", 0x98 + i); ImGui::SameLine();
-                ImGui::ColorEdit3(id, (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker); ImGui::SameLine();
-                ImGui::TextColored(white, "$%X ", value); ImGui::SameLine(0, 0);
-                ImGui::TextColored(gray, "(I%dG%dR%dB%d)", (value >> 3) & 1, (value >> 2) & 1, (value >> 1) & 1, value & 1);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+
+                for (int i = 0; i < 8; i++)
+                {
+                    u8 value = state->digital_palette[i] & 0x0F;
+                    float level = (value & 0x08) ? 1.0f : 0.5f;
+                    ImVec4 color = ImVec4((value & 0x02) ? level : 0.0f, (value & 0x04) ? level : 0.0f,
+                        (value & 0x01) ? level : 0.0f, 1.0f);
+
+                    ImGui::TableNextColumn();
+                    ImGui::PushID(i);
+                    ImGui::ColorButton("##color", color, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                        ImVec2(size, size));
+
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("FD%02X $%X", 0x98 + i, value);
+
+                    ImGui::PopID();
+                }
+
+                for (int bit = 3; bit >= 0; bit--)
+                {
+                    ImVec4 tint = bit == 3 ? white : bit == 2 ? green : bit == 1 ? red : blue;
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(violet, "%c", "BRGI"[bit]);
+
+                    for (int i = 0; i < 8; i++)
+                    {
+                        int set = (state->digital_palette[i] >> bit) & 0x01;
+                        ImGui::TableNextColumn();
+                        draw_centered_digit(set ? tint : (ImVec4)gray, set);
+                    }
+                }
+
+                ImGui::EndTable();
             }
 
             ImGui::PopFont();
@@ -404,6 +502,8 @@ void gui_debug_window_palettes(void)
 
         ImGui::EndTabBar();
     }
+
+    ImGui::PopStyleVar();
 
     ImGui::End();
     ImGui::PopStyleVar();
@@ -419,6 +519,35 @@ static void crtc_write_callback(u16 index, u16 value, void* user_data)
     video->Write(0x0442, (u8)value, clocks);
     video->Write(0x0443, (u8)(value >> 8), clocks);
     video->Write(0x0440, saved, clocks);
+}
+
+// The sections share the second label column and the right edge, so LAYER 1 starts under the second labels
+// The layer labels are longer, which takes two characters from the LAYER 0 column
+static void setup_grid_columns(bool layers)
+{
+    float character = ImGui::CalcTextSize("0").x;
+    float spacing = ImGui::GetStyle().CellPadding.x * 2.0f;
+
+    if (layers)
+    {
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, character * 12);
+        ImGui::TableSetupColumn("LAYER 0", ImGuiTableColumnFlags_WidthFixed, character * 14);
+        ImGui::TableSetupColumn("LAYER 1", ImGuiTableColumnFlags_WidthFixed, character * 23 + spacing);
+    }
+    else
+    {
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, character * 10);
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, character * 16);
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, character * 9);
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, character * 14);
+    }
+}
+
+static void draw_grid_label(const char* label)
+{
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+    ImGui::TableNextColumn();
 }
 
 static void draw_layer_column(int layer, int row)
@@ -438,49 +567,82 @@ static void draw_layer_column(int layer, int row)
     switch (row)
     {
         case 0:
-            ImGui::TextColored(active && info.format ? blue : gray, "%-10s", k_debug_layer_format_names[info.format & 3]);
+            ImGui::TextColored(active && info.format ? blue : gray, "%s", k_debug_layer_format_names[info.format & 3]);
             break;
         case 1:
-            ImGui::TextColored(color, "%4u-%4u %4u", hds, hde, hde > hds ? hde - hds : 0);
+            ImGui::TextColored(color, "%u-%u", hds, hde); ImGui::SameLine();
+            ImGui::TextColored(gray, "(%u)", hde > hds ? hde - hds : 0);
             break;
         case 2:
-            ImGui::TextColored(color, "%4u-%4u %4u", vds, vde, vde > vds ? (vde - vds) / 2 : 0);
+            ImGui::TextColored(color, "%u-%u", vds, vde); ImGui::SameLine();
+            ImGui::TextColored(gray, "(%u)", vde > vds ? (vde - vds) / 2 : 0);
             break;
         case 3:
-            ImGui::TextColored(active ? cyan : gray, "$%05X", info.start);
+            ImGui::TextColored(active ? cyan : gray, "$%05X", info.page_base + info.start);
 
             if (active && ImGui::IsItemClicked())
-                goto_vram(info.page_base + info.start);
+                goto_vram(info.page_base + info.start, info.single_page);
 
             if (active && ImGui::IsItemHovered())
                 ImGui::SetTooltip("FA%d $%04X", layer, crtc[k_video_crtc_fa0 + layer * 4]);
 
             break;
         case 4:
-            ImGui::TextColored(color, "%5u BYTES", info.stride);
+            ImGui::TextColored(color, "%u BYTES", info.stride);
             break;
         case 5:
-            ImGui::TextColored(color, "%4u", crtc[k_video_crtc_haj0 + layer * 4]);
+            ImGui::TextColored(color, "%u", crtc[k_video_crtc_haj0 + layer * 4]);
             break;
         case 6:
             ImGui::TextColored(color, "$%04X", crtc[k_video_crtc_fo0 + layer * 4]);
             break;
         case 7:
-            ImGui::TextColored(color, "%2u x %2u", (zoom & 0x0F) + 1, ((zoom >> 4) & 0x0F) + 1);
+            ImGui::TextColored(color, "%u x %u", (zoom & 0x0F) + 1, ((zoom >> 4) & 0x0F) + 1);
             break;
         default:
             if (info.window && active)
-                ImGui::TextColored(white, "%4d x %4d", info.window_width, info.window_height);
+                ImGui::TextColored(white, "%d x %d", info.window_width, info.window_height);
             else
-                ImGui::TextColored(gray, "--         ");
+                ImGui::TextColored(gray, "--");
 
             break;
     }
 }
 
-static void draw_palette_row(const char* id, const u8 (*colors)[3], int first, int count, bool nibbles)
+static void draw_palette_title(const char* title, bool in_use)
 {
+    ImGui::TextColored(cyan, "%s", title); ImGui::SameLine();
+    ImGui::TextColored(in_use ? green : gray, "%s", in_use ? "IN USE" : "UNUSED");
+    ImGui::Separator();
+}
+
+static void setup_palette_columns(void)
+{
+    float size = ImGui::GetFrameHeight();
+
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("00").x);
+
+    for (int i = 0; i < 16; i++)
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, size);
+}
+
+static void draw_palette_indices(int count)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+
     for (int i = 0; i < count; i++)
+    {
+        ImGui::TableNextColumn();
+        draw_centered_digit(orange, i);
+    }
+}
+
+static void draw_palette_swatches(const u8 (*colors)[3], int first, bool nibbles)
+{
+    float size = ImGui::GetFrameHeight();
+
+    for (int i = 0; i < 16; i++)
     {
         const u8* color = colors[first + i];
         ImVec4 value = ImVec4(color[1] / 255.0f, color[2] / 255.0f, color[0] / 255.0f, 1.0f);
@@ -489,17 +651,24 @@ static void draw_palette_row(const char* id, const u8 (*colors)[3], int first, i
             value = ImVec4((color[1] | (color[1] >> 4)) / 255.0f, (color[2] | (color[2] >> 4)) / 255.0f,
                 (color[0] | (color[0] >> 4)) / 255.0f, 1.0f);
 
-        char item_id[32];
-        snprintf(item_id, sizeof(item_id), "%s_%d", id, i);
-        ImGui::ColorEdit3(item_id, (float*)&value, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker |
-            ImGuiColorEditFlags_NoTooltip);
+        ImGui::TableNextColumn();
+        ImGui::PushID(first + i);
+        ImGui::ColorButton("##color", value, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+            ImVec2(size, size));
 
         if (ImGui::IsItemHovered())
             draw_color_tooltip(first + i, color, nibbles);
 
-        if (i != count - 1)
-            ImGui::SameLine(0, 10);
+        ImGui::PopID();
     }
+}
+
+static void draw_centered_digit(const ImVec4& color, int value)
+{
+    char text[4];
+    snprintf(text, sizeof(text), "%X", value);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text).x) * 0.5f);
+    ImGui::TextColored(color, "%s", text);
 }
 
 static void draw_color_tooltip(int index, const u8* color, bool nibbles)
@@ -515,11 +684,11 @@ static void draw_color_tooltip(int index, const u8* color, bool nibbles)
     ImGui::EndTooltip();
 }
 
-static void goto_vram(u32 offset)
+static void goto_vram(u32 offset, bool single_page)
 {
     GT_Debug_Memory_Address target = { };
     target.space = GT_DEBUG_MEMORY_REGION;
-    target.region = GT_DEBUG_REGION_VRAM;
+    target.region = single_page ? GT_DEBUG_REGION_VRAM_SINGLE_PAGE : GT_DEBUG_REGION_VRAM;
     target.address = offset;
     target.segment_register = -1;
     gui_debug_memory_goto(target);

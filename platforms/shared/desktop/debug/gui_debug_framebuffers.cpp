@@ -23,6 +23,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "imgui.h"
 #include "geartowns.h"
 #include "video/sprite.h"
@@ -38,12 +39,22 @@
 #include "gui_debug_memory.h"
 
 static const float k_framebuffer_zoom[3] = { 0.5f, 1.0f, 2.0f };
+static const char k_framebuffer_zoom_items[] = "0.5x\0" "1x\0" "2x\0";
+static const char k_framebuffer_page_items[] = "DISPLAY\0DRAW\0";
+static const char k_framebuffer_format_items[] = "16 COLORS\0" "256 COLORS\0" "32K COLORS\0";
+static const char k_framebuffer_palette_items[] = "LAYER 0\0LAYER 1\0" "256\0";
+static const char k_sprite_filter_items[] = "ALL\0DRAWN\0VISIBLE\0";
 
 static int selected_sprite = -1;
 
+static void draw_buffer_controls(int tab);
+static void draw_control_label(const char* label, bool spaced);
+static float combo_width(const char* items);
 static void draw_buffer_header(const Emu_Debug_Buffer_Info& info);
+static void draw_info_label(const char* label);
 static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom);
 static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, int y);
+static void draw_sprite_header(void);
 static void draw_sprite_details(int index);
 static void draw_sprite_position(int index);
 static void draw_sprite_context_menu(int index);
@@ -66,59 +77,20 @@ void gui_debug_window_framebuffers(void)
             if (!ImGui::BeginTabItem(tabs[tab]))
                 continue;
 
-            ImGui::PushFont(gui_default_font);
-
             if (config_debug.framebuffer_tab != tab)
             {
                 config_debug.framebuffer_tab = tab;
                 emu_debug_update();
             }
 
-            if (tab == 2)
-            {
-                ImGui::PushItemWidth(90.0f);
-                ImGui::Combo("PAGE##sprite_page", &config_debug.framebuffer_sprite_page, "DISPLAY\0DRAW\0\0");
-                ImGui::PopItemWidth();
-                ImGui::SameLine();
-            }
-            else if (tab == 3)
-            {
-                ImGui::PushItemWidth(70.0f);
-                ImGui::InputScalar("OFFSET##custom_offset", ImGuiDataType_S32, &config_debug.framebuffer_custom_offset, NULL,
-                    NULL, "%05X", ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
-                config_debug.framebuffer_custom_offset &= 0x7FFFF;
-                ImGui::SameLine();
-                ImGui::PushItemWidth(100.0f);
-                ImGui::Combo("FORMAT##custom_format", &config_debug.framebuffer_custom_format,
-                    "16 COLORS\0256 COLORS\0" "32K COLORS\0\0");
-                ImGui::PopItemWidth();
-                ImGui::SameLine();
-                ImGui::PushItemWidth(80.0f);
-                ImGui::Combo("PALETTE##custom_palette", &config_debug.framebuffer_custom_palette, "LAYER 0\0LAYER 1\0" "256\0\0");
-                ImGui::PopItemWidth();
-                ImGui::InputInt("WIDTH##custom_width", &config_debug.framebuffer_custom_width, 8, 64);
-                ImGui::SameLine();
-                ImGui::InputInt("HEIGHT##custom_height", &config_debug.framebuffer_custom_height, 8, 64);
-                config_debug.framebuffer_custom_width = CLAMP(config_debug.framebuffer_custom_width, 1, EMU_DEBUG_FRAMEBUFFER_WIDTH);
-                config_debug.framebuffer_custom_height = CLAMP(config_debug.framebuffer_custom_height, 1,
-                    EMU_DEBUG_FRAMEBUFFER_HEIGHT);
-                ImGui::PopItemWidth();
-            }
+            draw_buffer_controls(tab);
+            ImGui::Separator();
 
-            ImGui::PushItemWidth(60.0f);
-            ImGui::Combo("ZOOM##framebuffer_zoom", &config_debug.framebuffer_zoom, "0.5x\0" "1x\0" "2x\0\0");
-            ImGui::PopItemWidth();
-
-            if (tab < 2)
-            {
-                ImGui::SameLine();
-                ImGui::Checkbox("Show Visible Area", &config_debug.framebuffer_show_window);
-            }
-
+            ImGui::PushFont(gui_default_font);
             draw_buffer_header(emu_debug_framebuffer_info);
             draw_buffer_image(emu_debug_framebuffer_info, tab == 3);
-
             ImGui::PopFont();
+
             ImGui::EndTabItem();
         }
 
@@ -133,46 +105,34 @@ void gui_debug_window_sprites(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(110, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(568, 500), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sprites", &config_debug.show_sprites);
 
     ImGui::PushFont(gui_default_font);
-
-    Video* video = emu_get_core()->GetVideo();
-    Sprite* sprite = video->GetSprite();
-    Sprite::Sprite_State* state = sprite->GetState();
-    u16 first = (u16)(((state->registers[k_sprite_control1] & 0x03) << 8) | state->registers[k_sprite_control0]);
-    int offset_x = ((state->registers[k_sprite_offset_x + 1] & 0x01) << 8) | state->registers[k_sprite_offset_x];
-    int offset_y = ((state->registers[k_sprite_offset_y + 1] & 0x01) << 8) | state->registers[k_sprite_offset_y];
-
-    ImGui::TextColored(violet, "ENABLED"); ImGui::SameLine();
-    ImGui::TextColored(sprite->IsEnabled() ? green : gray, "%s", sprite->IsEnabled() ? "ON " : "OFF"); ImGui::SameLine();
-    ImGui::TextColored(violet, " BUSY"); ImGui::SameLine();
-    ImGui::TextColored(sprite->IsBusy() ? yellow : gray, "%s", sprite->IsBusy() ? "YES" : "NO "); ImGui::SameLine();
-    ImGui::TextColored(violet, " DRAWN"); ImGui::SameLine();
-    ImGui::TextColored(white, "%4u (FROM %4u)", k_sprite_entries - first, first);
-
-    ImGui::TextColored(violet, "OFFSET "); ImGui::SameLine();
-    ImGui::TextColored(white, "%3d,%3d", offset_x, offset_y); ImGui::SameLine();
-    ImGui::TextColored(violet, " DISPLAY PAGE"); ImGui::SameLine();
-    ImGui::TextColored(white, "%d", sprite->GetDisplayOffset() != 0 ? 1 : 0); ImGui::SameLine();
-    ImGui::TextColored(violet, " "); ImGui::SameLine();
-    ImGui::PushItemWidth(90.0f);
-    ImGui::Combo("FILTER##sprite_filter", &config_debug.sprite_filter, "ALL\0DRAWN\0VISIBLE\0\0");
-    ImGui::PopItemWidth();
+    draw_sprite_header();
+    ImGui::PopFont();
     ImGui::Separator();
+
+    float cell = 32.0f;
+    float spacing = 2.0f;
+    float grid_width = cell * 8 + spacing * 7 + ImGui::GetStyle().ScrollbarSize;
 
     if (ImGui::BeginTable("##sprites_layout", 2, ImGuiTableFlags_BordersInnerV))
     {
-        ImGui::TableSetupColumn("##grid", ImGuiTableColumnFlags_WidthFixed, 284.0f);
+        ImGui::TableSetupColumn("##grid", ImGuiTableColumnFlags_WidthFixed, grid_width);
         ImGui::TableSetupColumn("##details", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
 
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Filter");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(combo_width(k_sprite_filter_items));
+        ImGui::Combo("##sprite_filter", &config_debug.sprite_filter, k_sprite_filter_items);
+
         ImGui::BeginChild("##sprite_grid", ImVec2(0, 0), ImGuiChildFlags_None);
         int hovered = -1;
         int column = 0;
-        float cell = 32.0f;
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
         for (int i = 0; i < (int)k_sprite_entries; i++)
@@ -184,7 +144,7 @@ void gui_debug_window_sprites(void)
                 continue;
 
             if (column > 0)
-                ImGui::SameLine(0, 2);
+                ImGui::SameLine(0, spacing);
 
             ImVec2 position = ImGui::GetCursorScreenPos();
             float u = (float)((i & 31) * 16) / EMU_DEBUG_SPRITE_ATLAS_SIZE;
@@ -229,7 +189,9 @@ void gui_debug_window_sprites(void)
         {
             if (ImGui::BeginTabItem("DETAILS"))
             {
+                ImGui::PushFont(gui_default_font);
                 draw_sprite_details(display);
+                ImGui::PopFont();
                 ImGui::EndTabItem();
             }
 
@@ -244,8 +206,6 @@ void gui_debug_window_sprites(void)
 
         ImGui::EndTable();
     }
-
-    ImGui::PopFont();
 
     ImGui::End();
     ImGui::PopStyleVar();
@@ -285,23 +245,148 @@ bool gui_debug_save_all_sprites(const char* folder)
     return ok;
 }
 
+static void draw_buffer_controls(int tab)
+{
+    ImGuiStyle& style = ImGui::GetStyle();
+    int columns = tab < 2 ? 3 : tab == 2 ? 4 : 6;
+
+    if (!ImGui::BeginTable("##framebuffer_controls", columns, ImGuiTableFlags_SizingFixedFit |
+        ImGuiTableFlags_NoHostExtendX))
+        return;
+
+    ImGui::TableNextRow();
+    draw_control_label("Zoom", false);
+    ImGui::SetNextItemWidth(combo_width(k_framebuffer_zoom_items));
+    ImGui::Combo("##framebuffer_zoom", &config_debug.framebuffer_zoom, k_framebuffer_zoom_items);
+
+    if (tab < 2)
+    {
+        ImGui::TableNextColumn();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + style.ItemSpacing.x);
+        ImGui::Checkbox("Show Visible Area", &config_debug.framebuffer_show_window);
+    }
+    else if (tab == 2)
+    {
+        draw_control_label("Page", true);
+        ImGui::SetNextItemWidth(combo_width(k_framebuffer_page_items));
+        ImGui::Combo("##sprite_page", &config_debug.framebuffer_sprite_page, k_framebuffer_page_items);
+    }
+    else
+    {
+        float number = ImGui::CalcTextSize("0000").x + style.FramePadding.x * 2.0f;
+        float steps = (ImGui::GetFrameHeight() + style.ItemInnerSpacing.x) * 2.0f;
+
+        draw_control_label("Format", true);
+        ImGui::SetNextItemWidth(combo_width(k_framebuffer_format_items));
+        ImGui::Combo("##custom_format", &config_debug.framebuffer_custom_format, k_framebuffer_format_items);
+
+        ImGui::BeginDisabled(config_debug.framebuffer_custom_format != 0);
+        draw_control_label("Palette", true);
+        ImGui::SetNextItemWidth(combo_width(k_framebuffer_palette_items));
+        ImGui::Combo("##custom_palette", &config_debug.framebuffer_custom_palette, k_framebuffer_palette_items);
+        ImGui::EndDisabled();
+
+        ImGui::TableNextRow();
+        draw_control_label("Offset", false);
+        ImGui::SetNextItemWidth(ImGui::CalcTextSize("00000").x + style.FramePadding.x * 2.0f);
+        ImGui::InputScalar("##custom_offset", ImGuiDataType_S32, &config_debug.framebuffer_custom_offset, NULL, NULL,
+            "%05X", ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
+        config_debug.framebuffer_custom_offset &= 0x7FFFF;
+
+        draw_control_label("Width", true);
+        ImGui::SetNextItemWidth(number + steps);
+        ImGui::InputInt("##custom_width", &config_debug.framebuffer_custom_width, 8, 64);
+        config_debug.framebuffer_custom_width = CLAMP(config_debug.framebuffer_custom_width, 1, EMU_DEBUG_FRAMEBUFFER_WIDTH);
+
+        draw_control_label("Height", true);
+        ImGui::SetNextItemWidth(number + steps);
+        ImGui::InputInt("##custom_height", &config_debug.framebuffer_custom_height, 8, 64);
+        config_debug.framebuffer_custom_height = CLAMP(config_debug.framebuffer_custom_height, 1,
+            EMU_DEBUG_FRAMEBUFFER_HEIGHT);
+    }
+
+    ImGui::EndTable();
+}
+
+static void draw_control_label(const char* label, bool spaced)
+{
+    ImGui::TableNextColumn();
+
+    if (spaced)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::TableNextColumn();
+}
+
+static float combo_width(const char* items)
+{
+    float width = 0.0f;
+
+    for (const char* item = items; *item; item += strlen(item) + 1)
+        width = MAX(width, ImGui::CalcTextSize(item).x);
+
+    return width + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+}
+
 static void draw_buffer_header(const Emu_Debug_Buffer_Info& info)
 {
-    ImGui::TextColored(violet, "FORMAT"); ImGui::SameLine();
-    ImGui::TextColored(info.format ? blue : gray, "%-10s", k_debug_layer_format_names[info.format & 3]); ImGui::SameLine();
-    ImGui::TextColored(violet, " START"); ImGui::SameLine();
-    ImGui::TextColored(cyan, "$%05X", (info.page_base + info.start) & 0x7FFFF);
+    if (!ImGui::BeginTable("##framebuffer_info", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+        return;
+
+    float character = ImGui::CalcTextSize("0").x;
+    u32 start = (info.page_base + info.start) & 0x7FFFF;
+
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 14);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 5);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 9);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 7);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 10);
+
+    ImGui::TableNextRow();
+    draw_info_label("FORMAT");
+    ImGui::TextColored(info.format ? blue : gray, "%s", k_debug_layer_format_names[info.format & 3]);
+    draw_info_label("START");
+    ImGui::TextColored(cyan, "$%05X", start);
 
     if (ImGui::IsItemClicked())
-        goto_region(GT_DEBUG_REGION_VRAM, (info.page_base + info.start) & 0x7FFFF);
+        goto_region(info.single_page ? GT_DEBUG_REGION_VRAM_SINGLE_PAGE : GT_DEBUG_REGION_VRAM, start);
 
-    ImGui::SameLine();
-    ImGui::TextColored(violet, " STRIDE"); ImGui::SameLine();
-    ImGui::TextColored(white, "%4u", info.stride); ImGui::SameLine();
-    ImGui::TextColored(violet, " PAGE"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%05X %s", info.page_base, info.single_page ? "SINGLE" : "      "); ImGui::SameLine();
-    ImGui::TextColored(violet, " SIZE"); ImGui::SameLine();
-    ImGui::TextColored(white, "%4dx%-3d", info.width, info.height);
+    draw_info_label("STRIDE");
+    ImGui::TextColored(white, "%u BYTES", info.stride);
+
+    ImGui::TableNextRow();
+    draw_info_label("PAGE");
+
+    if (info.single_page)
+        ImGui::TextColored(blue, "SINGLE PAGE");
+    else
+        ImGui::TextColored(white, "$%05X-$%05X", info.page_base, info.page_base + info.page_size - 1);
+
+    draw_info_label("SIZE");
+
+    if (info.width > 0 && info.height > 0)
+        ImGui::TextColored(white, "%dx%d", info.width, info.height);
+    else
+        ImGui::TextColored(gray, "--");
+
+    draw_info_label("VISIBLE");
+
+    if (info.window)
+        ImGui::TextColored(yellow, "%dx%d", info.window_width, info.window_height);
+    else
+        ImGui::TextColored(gray, "--");
+
+    ImGui::EndTable();
+}
+
+static void draw_info_label(const char* label)
+{
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+    ImGui::TableNextColumn();
 }
 
 static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
@@ -338,18 +423,36 @@ static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
         const u8* vram = emu_get_core()->GetVideo()->GetVRAM();
         u32 color = ((u32*)emu_debug_framebuffer)[y * EMU_DEBUG_FRAMEBUFFER_WIDTH + x];
 
+        float swatch = ImGui::GetTextLineHeight();
+        ImVec4 pixel = ImVec4((color & 0xFF) / 255.0f, ((color >> 8) & 0xFF) / 255.0f, ((color >> 16) & 0xFF) / 255.0f,
+            1.0f);
+
         ImGui::BeginTooltip();
-        ImGui::TextColored(cyan, "X %d  Y %d", x, y);
-        ImGui::Text("VRAM $%05X", offset);
+        ImGui::TextColored(violet, "X,Y  "); ImGui::SameLine();
+        ImGui::TextColored(white, "%d,%d", x, y);
+        ImGui::TextColored(violet, "VRAM "); ImGui::SameLine();
+        ImGui::TextColored(cyan, "$%05X", offset);
 
         if (info.format == Video::VIDEO_LAYER_4BPP)
-            ImGui::Text("INDEX $%X", (x & 1) ? vram[offset] >> 4 : vram[offset] & 0x0F);
+        {
+            ImGui::TextColored(violet, "INDEX"); ImGui::SameLine();
+            ImGui::TextColored(white, "$%X", (x & 1) ? vram[offset] >> 4 : vram[offset] & 0x0F);
+        }
         else if (info.format == Video::VIDEO_LAYER_8BPP)
-            ImGui::Text("INDEX $%02X", vram[offset]);
+        {
+            ImGui::TextColored(violet, "INDEX"); ImGui::SameLine();
+            ImGui::TextColored(white, "$%02X", vram[offset]);
+        }
         else
-            ImGui::Text("VALUE $%04X", vram[offset] | (vram[(offset + 1) & 0x7FFFF] << 8));
+        {
+            ImGui::TextColored(violet, "VALUE"); ImGui::SameLine();
+            ImGui::TextColored(white, "$%04X", vram[offset] | (vram[(offset + 1) & 0x7FFFF] << 8));
+        }
 
-        ImGui::Text("RGB #%02X%02X%02X", color & 0xFF, (color >> 8) & 0xFF, (color >> 16) & 0xFF);
+        ImGui::TextColored(violet, "COLOR"); ImGui::SameLine();
+        ImGui::ColorButton("##pixel", pixel, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+            ImVec2(swatch, swatch)); ImGui::SameLine();
+        ImGui::TextColored(white, "#%02X%02X%02X", color & 0xFF, (color >> 8) & 0xFF, (color >> 16) & 0xFF);
         ImGui::EndTooltip();
 
         if (ImGui::IsMouseClicked(0))
@@ -378,64 +481,133 @@ static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, 
     return info.page_base + offset;
 }
 
+static void draw_sprite_header(void)
+{
+    Sprite* sprite = emu_get_core()->GetVideo()->GetSprite();
+    Sprite::Sprite_State* state = sprite->GetState();
+    u16 first = (u16)(((state->registers[k_sprite_control1] & 0x03) << 8) | state->registers[k_sprite_control0]);
+    int offset_x = ((state->registers[k_sprite_offset_x + 1] & 0x01) << 8) | state->registers[k_sprite_offset_x];
+    int offset_y = ((state->registers[k_sprite_offset_y + 1] & 0x01) << 8) | state->registers[k_sprite_offset_y];
+    bool enabled = sprite->IsEnabled();
+    bool busy = sprite->IsBusy();
+
+    if (!ImGui::BeginTable("##sprite_info", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+        return;
+
+    float character = ImGui::CalcTextSize("0").x;
+
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 7);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 4);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 12);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 2);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 16);
+
+    ImGui::TableNextRow();
+    draw_info_label("ENABLED");
+    ImGui::TextColored(enabled ? green : gray, "%s", enabled ? "ON" : "OFF");
+    draw_info_label("DISPLAY PAGE");
+    ImGui::TextColored(white, "%d", sprite->GetDisplayOffset() != 0 ? 1 : 0);
+    draw_info_label("DRAWN");
+    ImGui::TextColored(white, "%u", k_sprite_entries - first); ImGui::SameLine();
+    ImGui::TextColored(gray, "(FROM %u)", first);
+
+    ImGui::TableNextRow();
+    draw_info_label("BUSY");
+    ImGui::TextColored(busy ? yellow : gray, "%s", busy ? "YES" : "NO");
+    draw_info_label("DRAW PAGE");
+    ImGui::TextColored(white, "%d", sprite->GetPage() ? 1 : 0);
+    draw_info_label("OFFSET");
+    ImGui::TextColored(white, "%d,%d", offset_x, offset_y);
+
+    ImGui::EndTable();
+}
+
 static void draw_sprite_details(int index)
 {
+    static const char* rows[] = { "ENTRY", "X,Y", "SCREEN X,Y", "PATTERN", "COLORS", "COLOR TABLE", "FLAGS", "", "" };
     Emu_Debug_Sprite sprite;
     bool valid = index >= 0;
     emu_debug_get_sprite(valid ? index : 0, sprite);
 
-    if (!valid)
-    {
-        static const char* rows[] = { "ENTRY", "X,Y", "SCREEN X,Y", "PATTERN", "COLORS", "COLOR TABLE", "FLAGS", " ", " " };
+    if (!ImGui::BeginTable("##sprite_details", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+        return;
 
-        for (int i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++)
+    float character = ImGui::CalcTextSize("0").x;
+
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 11);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 19);
+
+    for (int row = 0; row < (int)(sizeof(rows) / sizeof(rows[0])); row++)
+    {
+        ImGui::TableNextRow();
+        draw_info_label(rows[row]);
+
+        if (!valid)
         {
-            ImGui::TextColored(violet, "%-11s", rows[i]); ImGui::SameLine();
-            ImGui::TextColored(gray, "--");
+            if (row < 7)
+                ImGui::TextColored(gray, "--");
+
+            continue;
         }
 
-        return;
+        switch (row)
+        {
+            case 0:
+                ImGui::TextColored(white, "%4d", sprite.index); ImGui::SameLine();
+                ImGui::TextColored(cyan, "$%05X", sprite.address);
+
+                if (ImGui::IsItemClicked())
+                    goto_region(GT_DEBUG_REGION_SPRITE_RAM, sprite.address);
+
+                break;
+            case 1:
+                ImGui::TextColored(white, "$%04X,$%04X", sprite.x, sprite.y);
+                break;
+            case 2:
+                ImGui::TextColored(sprite.visible ? white : gray, "%d,%d", sprite.screen_x, sprite.screen_y);
+                break;
+            case 3:
+                ImGui::TextColored(white, "$%03X", sprite.pattern); ImGui::SameLine();
+                ImGui::TextColored(cyan, "$%05X", sprite.pattern_address);
+
+                if (ImGui::IsItemClicked())
+                    goto_region(GT_DEBUG_REGION_SPRITE_RAM, sprite.pattern_address);
+
+                break;
+            case 4:
+                ImGui::TextColored(blue, "%s", sprite.table ? "16 (TABLE)" : "32K DIRECT");
+                break;
+            case 5:
+                ImGui::TextColored(sprite.table ? white : gray, "$%03X", sprite.color_table); ImGui::SameLine();
+                ImGui::TextColored(sprite.table ? cyan : gray, "$%05X", sprite.color_table_address);
+
+                if (sprite.table && ImGui::IsItemClicked())
+                    goto_region(GT_DEBUG_REGION_SPRITE_RAM, sprite.color_table_address);
+
+                break;
+            case 6:
+                ImGui::TextColored(sprite.offset ? green : gray, "%-7s", "OFFSET"); ImGui::SameLine(0.0f, 0.0f);
+                ImGui::TextColored(sprite.swap ? green : gray, "%-7s", "ROTATE"); ImGui::SameLine(0.0f, 0.0f);
+                ImGui::TextColored(sprite.flip_x ? green : gray, "FLIPX");
+                break;
+            case 7:
+                ImGui::TextColored(sprite.flip_y ? green : gray, "%-7s", "FLIPY"); ImGui::SameLine(0.0f, 0.0f);
+                ImGui::TextColored(sprite.half_x ? green : gray, "%-7s", "HALFX"); ImGui::SameLine(0.0f, 0.0f);
+                ImGui::TextColored(sprite.half_y ? green : gray, "HALFY");
+                break;
+            default:
+                ImGui::TextColored(sprite.table ? green : gray, "%-7s", "TABLE"); ImGui::SameLine(0.0f, 0.0f);
+                ImGui::TextColored(sprite.through ? green : gray, "%-7s", "THRU"); ImGui::SameLine(0.0f, 0.0f);
+                ImGui::TextColored(sprite.hide ? yellow : gray, "HIDE");
+                break;
+        }
     }
 
-    ImGui::TextColored(violet, "ENTRY      "); ImGui::SameLine();
-    ImGui::TextColored(white, "%4d", sprite.index); ImGui::SameLine();
-    ImGui::TextColored(cyan, "$%04X", sprite.address);
+    ImGui::EndTable();
 
-    if (ImGui::IsItemClicked())
-        goto_region(GT_DEBUG_REGION_SPRITE_RAM, sprite.address);
-
-    ImGui::TextColored(violet, "X,Y        "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%04X,$%04X", sprite.x, sprite.y);
-    ImGui::TextColored(violet, "SCREEN X,Y "); ImGui::SameLine();
-    ImGui::TextColored(sprite.visible ? white : gray, "%3d,%3d", sprite.screen_x, sprite.screen_y);
-    ImGui::TextColored(violet, "PATTERN    "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%03X", sprite.pattern); ImGui::SameLine();
-    ImGui::TextColored(cyan, "$%05X", sprite.pattern_address);
-
-    if (ImGui::IsItemClicked())
-        goto_region(GT_DEBUG_REGION_SPRITE_RAM, sprite.pattern_address);
-
-    ImGui::TextColored(violet, "COLORS     "); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", sprite.table ? "16 (TABLE)" : "32K DIRECT");
-    ImGui::TextColored(violet, "COLOR TABLE"); ImGui::SameLine();
-    ImGui::TextColored(sprite.table ? white : gray, "$%03X", sprite.color_table); ImGui::SameLine();
-    ImGui::TextColored(sprite.table ? cyan : gray, "$%05X", sprite.color_table_address);
-
-    if (sprite.table && ImGui::IsItemClicked())
-        goto_region(GT_DEBUG_REGION_SPRITE_RAM, sprite.color_table_address);
-
-    ImGui::TextColored(violet, "FLAGS      "); ImGui::SameLine();
-    ImGui::TextColored(sprite.offset ? green : gray, "OFFSET"); ImGui::SameLine();
-    ImGui::TextColored(sprite.swap ? green : gray, "ROTATE"); ImGui::SameLine();
-    ImGui::TextColored(sprite.flip_x ? green : gray, "FLIPX");
-    ImGui::TextColored(violet, "           "); ImGui::SameLine();
-    ImGui::TextColored(sprite.flip_y ? green : gray, "FLIPY "); ImGui::SameLine();
-    ImGui::TextColored(sprite.half_x ? green : gray, "HALFX "); ImGui::SameLine();
-    ImGui::TextColored(sprite.half_y ? green : gray, "HALFY");
-    ImGui::TextColored(violet, "           "); ImGui::SameLine();
-    ImGui::TextColored(sprite.table ? green : gray, "TABLE "); ImGui::SameLine();
-    ImGui::TextColored(sprite.through ? green : gray, "THRU  "); ImGui::SameLine();
-    ImGui::TextColored(sprite.hide ? yellow : gray, "HIDE");
+    if (!valid)
+        return;
 
     float u = (float)((index & 31) * 16) / EMU_DEBUG_SPRITE_ATLAS_SIZE;
     float v = (float)((index >> 5) * 16) / EMU_DEBUG_SPRITE_ATLAS_SIZE;
@@ -468,8 +640,6 @@ static void draw_sprite_position(int index)
 
 static void draw_sprite_context_menu(int index)
 {
-    ImGui::PopFont();
-
     if (ImGui::BeginPopupContextItem())
     {
         if (ImGui::Selectable("Save Sprite As..."))
@@ -480,8 +650,6 @@ static void draw_sprite_context_menu(int index)
 
         ImGui::EndPopup();
     }
-
-    ImGui::PushFont(gui_default_font);
 }
 
 static void goto_region(int region, u32 offset)

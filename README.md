@@ -8,17 +8,92 @@
 [![License](https://img.shields.io/github/license/drhelius/Geartowns)](https://github.com/drhelius/Geartowns/blob/main/LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/drhelius)](https://x.com/drhelius)
 
----
-> THIS PROJECT IS UNDER ACTIVE DEVELOPMENT
-> 
-> IT IS NOT READY FOR USE, DO NOT USE IT YET
----
-
 Geartowns is a cross-platform Fujitsu FM Towns emulator written in C++ that runs on Windows, macOS, Linux, BSD and RetroArch, with an embedded MCP server for AI debugging and development.
 
 This is an open source project with its ongoing development made possible thanks to the support by these awesome [backers](backers.md). If you find it useful, please consider [sponsoring](https://github.com/sponsors/drhelius).
 
 Don't hesitate to report bugs or ask for new features by [opening an issue](https://github.com/drhelius/Geartowns/issues).
+
+## Downloads
+
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>Architecture</th>
+      <th>Download Link</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="2"><strong>Windows</strong></td>
+      <td>Desktop x64</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-windows-x64.zip">Geartowns-0.0.0-desktop-windows-x64.zip</a></td>
+    </tr>
+    <tr>
+      <td>Desktop ARM64</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-windows-arm64.zip">Geartowns-0.0.0-desktop-windows-arm64.zip</a></td>
+    </tr>
+    <tr>
+      <td rowspan="3"><strong>macOS</strong></td>
+      <td>Homebrew</td>
+      <td><code>brew install --cask drhelius/geardome/geartowns</code></td>
+    </tr>
+    <tr>
+      <td>Desktop Apple Silicon</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-macos-arm64.zip">Geartowns-0.0.0-desktop-macos-arm64.zip</a></td>
+    </tr>
+    <tr>
+      <td>Desktop Intel</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-macos-intel.zip">Geartowns-0.0.0-desktop-macos-intel.zip</a></td>
+    </tr>
+    <tr>
+      <td rowspan="6"><strong>Linux</strong></td>
+      <td>Ubuntu PPA</td>
+      <td><a href="https://github.com/drhelius/ppa-geardome">drhelius/ppa-geardome</a></td>
+    </tr>
+    <tr>
+      <td>Fedora RPM</td>
+      <td><a href="https://github.com/drhelius/rpm-geardome">drhelius/rpm-geardome</a></td>
+    </tr>
+    <tr>
+      <td>Desktop Ubuntu 26.04 x64</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-ubuntu26.04-x64.zip">Geartowns-0.0.0-desktop-ubuntu26.04-x64.zip</a></td>
+    </tr>
+    <tr>
+      <td>Desktop Ubuntu 26.04 ARM64</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-ubuntu26.04-arm64.zip">Geartowns-0.0.0-desktop-ubuntu26.04-arm64.zip</a></td>
+    </tr>
+    <tr>
+      <td>Desktop Ubuntu 24.04 x64</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-ubuntu24.04-x64.zip">Geartowns-0.0.0-desktop-ubuntu24.04-x64.zip</a></td>
+    </tr>
+    <tr>
+      <td>Desktop Ubuntu 24.04 ARM64</td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.0/Geartowns-0.0.0-desktop-ubuntu24.04-arm64.zip">Geartowns-0.0.0-desktop-ubuntu24.04-arm64.zip</a></td>
+    </tr>
+    <tr>
+      <td><strong>MCPB</strong></td>
+      <td>All platforms</td>
+      <td><a href="MCP_README.md">MCP Readme</a></td>
+    </tr>
+    <tr>
+      <td><strong>RetroArch</strong></td>
+      <td>All platforms</td>
+      <td><a href="https://docs.libretro.com/library/geartowns/">Libretro core documentation</a></td>
+    </tr>
+    <tr>
+      <td><strong>Dev Builds</strong></td>
+      <td>All platforms</td>
+      <td><a href="https://github.com/drhelius/Geartowns/actions/workflows/geartowns.yml">GitHub Actions</a></td>
+    </tr>
+  </tbody>
+</table>
+
+**Notes:**
+- **Windows**: May need [Visual C++ Redistributable](https://go.microsoft.com/fwlink/?LinkId=746572) and [OpenGL Compatibility Pack](https://apps.microsoft.com/detail/9nqpsl29bfff)
+- **Homebrew**: If Homebrew asks you to trust the third-party tap, run `brew trust --tap drhelius/geardome`
+- **Linux**: May need `libsdl3`
 
 ## Features
 

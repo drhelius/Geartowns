@@ -29,50 +29,68 @@
 #include "../gui_colors.h"
 #include "gui_debug_constants.h"
 
+static void draw_grid_label(const char* label);
+
 void gui_debug_window_keyboard(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(210, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 320), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 330), ImGuiCond_FirstUseEver);
     ImGui::Begin("Keyboard", &config_debug.show_keyboard);
 
     ImGui::PushFont(gui_default_font);
 
     Keyboard* keyboard = emu_get_core()->GetKeyboard();
     Keyboard::Keyboard_State* state = keyboard->GetState();
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float character = ImGui::CalcTextSize("0").x;
+    float space = ImGui::CalcTextSize(" ").x;
 
     ImGui::TextColored(cyan, "INTERFACE (0600-0604)"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "DATA        "); ImGui::SameLine();
-    ImGui::TextColored(state->fifo_count ? white : gray, "$%02X", keyboard->Peek(0x0600)); ImGui::SameLine();
-    ImGui::TextColored(violet, " STATUS"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", keyboard->Peek(0x0602));
+    if (ImGui::BeginTable("##keyboard_interface", 4, flags))
+    {
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 12);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 4);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 3);
 
-    ImGui::TextColored(violet, "IRQ ENABLE  "); ImGui::SameLine();
-    ImGui::TextColored(state->irq_enabled ? green : gray, "%s", state->irq_enabled ? "ON " : "OFF"); ImGui::SameLine();
-    ImGui::TextColored(violet, " KBINT "); ImGui::SameLine();
-    ImGui::TextColored(state->kbint ? yellow : gray, "%s", state->kbint ? "ON " : "OFF");
+        ImGui::TableNextRow();
+        draw_grid_label("DATA");
+        ImGui::TextColored(state->fifo_count ? white : gray, "$%02X", keyboard->Peek(0x0600));
+        draw_grid_label("STATUS");
+        ImGui::TextColored(white, "$%02X", keyboard->Peek(0x0602));
 
-    ImGui::TextColored(violet, "LAST COMMAND"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", state->last_command);
+        ImGui::TableNextRow();
+        draw_grid_label("IRQ ENABLE");
+        ImGui::TextColored(state->irq_enabled ? green : gray, "%s", state->irq_enabled ? "ON" : "OFF");
+        draw_grid_label("KBINT");
+        ImGui::TextColored(state->kbint ? yellow : gray, "%s", state->kbint ? "ON" : "OFF");
+
+        ImGui::TableNextRow();
+        draw_grid_label("LAST COMMAND");
+        ImGui::TextColored(white, "$%02X", state->last_command);
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "QUEUE"); ImGui::Separator();
 
     for (int i = 0; i < KEYBOARD_FIFO_SIZE; i++)
     {
         if ((i & 7) != 0)
-            ImGui::SameLine();
+            ImGui::SameLine(0.0f, space);
 
         if (i < state->fifo_count)
         {
             u8 value = state->fifo[(state->fifo_read + i) & (KEYBOARD_FIFO_SIZE - 1)];
-            bool flags = (value & 0x80) != 0;
+            bool event = (value & 0x80) != 0;
 
-            ImGui::TextColored(flags ? orange : white, "%02X", value);
+            ImGui::TextColored(event ? orange : white, "%02X", value);
 
             if (ImGui::IsItemHovered())
             {
-                if (flags)
+                if (event)
                     ImGui::SetTooltip("%s%s%s", (value & 0x10) ? "BREAK" : "MAKE", (value & 0x08) ? " +CTRL" : "",
                         (value & 0x04) ? " +SHIFT" : "");
                 else
@@ -88,33 +106,54 @@ void gui_debug_window_keyboard(void)
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "PRESSED"); ImGui::Separator();
 
-    int pressed = 0;
-
-    for (int key = GT_KEY_NONE + 1; key < GT_KEY_COUNT && pressed < 8; key++)
+    if (ImGui::BeginTable("##keyboard_pressed", 4, flags))
     {
-        if (!state->keys[key])
-            continue;
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 2);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 17);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 2);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 16);
 
-        const char* name = gui_debug_key_name(key);
+        int pressed = 0;
 
-        if ((pressed & 1) != 0)
-            ImGui::SameLine(150);
+        for (int key = GT_KEY_NONE + 1; key < GT_KEY_COUNT && pressed < 8; key++)
+        {
+            if (!state->keys[key])
+                continue;
 
-        ImGui::TextColored(white, "%02X", key); ImGui::SameLine();
-        ImGui::TextColored(green, "%-12s", IsValidPointer(name) ? name : "UNKNOWN");
-        pressed++;
-    }
+            const char* name = gui_debug_key_name(key);
 
-    for (; pressed < 8; pressed++)
-    {
-        if ((pressed & 1) != 0)
-            ImGui::SameLine(150);
+            if ((pressed & 1) == 0)
+                ImGui::TableNextRow();
 
-        ImGui::TextColored(gray, "--");
+            ImGui::TableNextColumn();
+            ImGui::TextColored(white, "%02X", key);
+            ImGui::TableNextColumn();
+            ImGui::TextColored(green, "%s", IsValidPointer(name) ? name : "UNKNOWN");
+            pressed++;
+        }
+
+        for (; pressed < 8; pressed++)
+        {
+            if ((pressed & 1) == 0)
+                ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::TextColored(gray, "--");
+            ImGui::TableNextColumn();
+        }
+
+        ImGui::EndTable();
     }
 
     ImGui::PopFont();
 
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+static void draw_grid_label(const char* label)
+{
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+    ImGui::TableNextColumn();
 }

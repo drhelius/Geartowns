@@ -2201,7 +2201,7 @@ json DebugAdapter::GetKeyboardStatus()
     for (int key = GT_KEY_NONE + 1; key < GT_KEY_COUNT; key++)
     {
         if (state->keys[key] && IsValidPointer(gui_debug_key_name(key)))
-            pressed.push_back(gui_debug_key_name(key));
+            pressed.push_back({{"code", Hex(key, 2)}, {"key", gui_debug_key_name(key)}});
     }
 
     return {

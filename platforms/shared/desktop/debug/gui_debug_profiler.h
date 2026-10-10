@@ -28,6 +28,9 @@
 
 EXTERN void gui_debug_window_profiler(void);
 EXTERN void gui_debug_profiler_update(void);
+EXTERN void gui_debug_profiler_update_headless(void);
+EXTERN void gui_debug_profiler_reset(void);
+EXTERN void gui_debug_profiler_show(bool show);
 
 #undef GUI_DEBUG_PROFILER_IMPORT
 #undef EXTERN

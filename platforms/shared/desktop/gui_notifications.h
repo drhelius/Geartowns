@@ -17,30 +17,32 @@
  *
  */
 
-#ifndef GUI_DEBUG_TRACE_H
-#define GUI_DEBUG_TRACE_H
+#ifndef GUI_NOTIFICATIONS_H
+#define GUI_NOTIFICATIONS_H
 
-#include "geartowns.h"
+#include <SDL3/SDL.h>
+#include "imgui.h"
+#include "fonts/IconsMaterialDesign.h"
 
-#define GUI_DEBUG_TRACE_TEXT_SIZE 256
-
-#ifdef GUI_DEBUG_TRACE_IMPORT
+#ifdef GUI_NOTIFICATIONS_IMPORT
     #define EXTERN
 #else
     #define EXTERN extern
 #endif
 
-EXTERN void gui_debug_window_trace_logger(void);
-EXTERN void gui_debug_trace_update(void);
-EXTERN bool gui_debug_trace_start(void);
-EXTERN void gui_debug_trace_stop(void);
-EXTERN bool gui_debug_trace_is_running(void);
-EXTERN const char* gui_debug_trace_get_disk_path(void);
-EXTERN u64 gui_debug_trace_get_disk_bytes(void);
-EXTERN void gui_debug_trace_format(const GT_Trace_Entry& entry, char* text, size_t size, bool registers, bool cycles);
-EXTERN bool gui_debug_trace_save(const char* file_path);
-EXTERN const char* gui_debug_trace_type_name(int type);
+enum gui_NotificationType
+{
+    gui_NotificationInfo = 0,
+    gui_NotificationSuccess,
+    gui_NotificationWarning,
+    gui_NotificationError
+};
 
-#undef GUI_DEBUG_TRACE_IMPORT
+EXTERN void gui_notify(gui_NotificationType type, const char* icon, const char* message, const char* detail = NULL,
+    const char* tag = NULL, Uint64 milliseconds = 0);
+EXTERN void gui_notifications_render_output(const ImVec2& min, const ImVec2& max);
+EXTERN void gui_notifications_render(void);
+
+#undef GUI_NOTIFICATIONS_IMPORT
 #undef EXTERN
-#endif /* GUI_DEBUG_TRACE_H */
+#endif /* GUI_NOTIFICATIONS_H */

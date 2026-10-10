@@ -19,10 +19,13 @@
 
 
 #include "input.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 Input::Input()
 {
+    InitPointer(m_trace_logger);
+
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
         m_controller_type[i] = GT_CONTROLLER_ORIGINAL_GAMEPAD;
 
@@ -32,6 +35,11 @@ Input::Input()
 void Input::Init()
 {
     Reset();
+}
+
+void Input::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void Input::Reset()
@@ -45,7 +53,17 @@ void Input::Reset()
         m_state.mouse_phase[i] = k_input_mouse_y_low;
 }
 
-u8 Input::Read(u16 port) const
+u8 Input::Read(u16 port)
+{
+    u8 value = Peek(port);
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_INPUT, TRACE_INPUT_READ)))
+        TraceEvent(TRACE_INPUT_READ, port == 0x04D2 ? 1 : 0, value, 0);
+
+    return value;
+}
+
+u8 Input::Peek(u16 port) const
 {
     int index = port == 0x04D2 ? 1 : 0;
     bool com = (m_state.output & (k_input_com << index)) != 0;
@@ -81,6 +99,9 @@ void Input::Write(u16 port, u8 value, u64 clocks)
 
     u8 changed = m_state.output ^ value;
     m_state.output = value;
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_INPUT, TRACE_INPUT_WRITE)))
+        TraceEvent(TRACE_INPUT_WRITE, 0, value, (u16)(value ^ changed));
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
     {
@@ -160,11 +181,15 @@ u8 Input::ReadMouse(int port) const
 }
 
 // Each COM edge presents the next nibble, and the first edge after a pause longer than the timeout starts a packet
+// The Data Book times out T2, the pause before the third edge, at 150 us
 // The packet takes the motion at that edge and the rest waits for the next one
 // Each axis stops at 127 counts both ways because Towns OS negates the byte and would turn -128 around
 void Input::MouseEdge(int port, u64 clocks)
 {
-    if (clocks - m_state.mouse_edge_clocks[port] > k_input_mouse_timeout_clocks)
+    u64 timeout = m_state.mouse_phase[port] == k_input_mouse_x_low ? k_input_mouse_t2_timeout_clocks :
+        k_input_mouse_timeout_clocks;
+
+    if (clocks - m_state.mouse_edge_clocks[port] > timeout)
         m_state.mouse_phase[port] = k_input_mouse_y_low;
 
     m_state.mouse_phase[port] = (m_state.mouse_phase[port] + 1) & 0x03;
@@ -223,6 +248,25 @@ void Input::UpdateGamePadState(int port)
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return;
 
+    u16 previous = m_state.gamepads[port].buttons;
     m_state.gamepads[port] = m_physical_gamepads[port];
     m_state.gamepads[port].buttons |= m_injected_gamepads[port].buttons;
+
+    if (unlikely(previous != m_state.gamepads[port].buttons && IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_INPUT, TRACE_INPUT_CHANGE)))
+        TraceEvent(TRACE_INPUT_CHANGE, port, 0, previous);
+}
+
+void Input::TraceEvent(u8 event, int port, u8 value, u16 previous)
+{
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_INPUT;
+    entry.event = event;
+    entry.input.buttons = m_state.gamepads[port].buttons;
+    entry.input.previous = previous;
+    entry.input.port = (u8)port;
+    entry.input.value = value;
+    entry.input.output = m_state.output;
+    entry.input.device = (u8)m_controller_type[port];
+    m_trace_logger->TraceLog(entry);
 }

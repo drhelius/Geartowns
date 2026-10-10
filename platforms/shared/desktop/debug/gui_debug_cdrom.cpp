@@ -32,13 +32,14 @@
 #include "gui_debug_constants.h"
 
 static void draw_flag(const char* name, bool value);
+static void draw_flag_tooltip(const char* text);
 static void draw_lba(u32 lba);
 
 void gui_debug_window_cdrom(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(60, 50), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(240, 600), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(207, 109), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(213, 599), ImGuiCond_FirstUseEver);
     ImGui::Begin("CD-ROM Controller", &config_debug.show_cdrom);
 
     ImGui::PushFont(gui_default_font);
@@ -56,17 +57,19 @@ void gui_debug_window_cdrom(void)
     ImGui::TextColored(white, "$%02X", master); ImGui::SameLine();
     ImGui::TextColored(gray, "04C0");
     ImGui::TextColored(violet, "        "); ImGui::SameLine();
-    draw_flag("SIRQ", (master & 0x80) != 0); ImGui::SameLine();
-    draw_flag("DEI", (master & 0x40) != 0); ImGui::SameLine();
-    draw_flag("STSF", (master & 0x20) != 0); ImGui::SameLine();
+    draw_flag("SIRQ", (master & 0x80) != 0);
+    draw_flag_tooltip("Interrupt cause: status"); ImGui::SameLine();
+    draw_flag("DEI", (master & 0x40) != 0);
+    draw_flag_tooltip("Interrupt cause: DMA end"); ImGui::SameLine();
+    draw_flag("STSF", (master & 0x20) != 0);
+    draw_flag_tooltip("CPU transfer in progress"); ImGui::SameLine();
     draw_flag("DTSF", (master & 0x10) != 0);
+    draw_flag_tooltip("DMA transfer in progress");
     ImGui::TextColored(violet, "        "); ImGui::SameLine();
-    draw_flag("SRQ", (master & 0x02) != 0); ImGui::SameLine();
+    draw_flag("SRQ", (master & 0x02) != 0);
+    draw_flag_tooltip("Status available"); ImGui::SameLine();
     draw_flag("DRY", (master & 0x01) != 0);
-
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("SIRQ/DEI: interrupt causes\nSTSF/DTSF: CPU/DMA transfer in progress\n"
-            "SRQ: status available\nDRY: ready for a command");
+    draw_flag_tooltip("Ready for a command");
 
     ImGui::TextColored(violet, "COMMAND "); ImGui::SameLine();
     ImGui::TextColored(white, "$%02X", state->command); ImGui::SameLine();
@@ -202,7 +205,7 @@ void gui_debug_window_cdrom(void)
 void gui_debug_window_cdrom_toc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(105, 95), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(248, 176), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(560, 420), ImGuiCond_FirstUseEver);
     ImGui::Begin("CD-ROM TOC", &config_debug.show_cdrom_toc);
 
@@ -351,6 +354,12 @@ u32 gui_debug_cdrom_head(void)
 static void draw_flag(const char* name, bool value)
 {
     ImGui::TextColored(value ? green : gray, "%s", name);
+}
+
+static void draw_flag_tooltip(const char* text)
+{
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", text);
 }
 
 static void draw_lba(u32 lba)

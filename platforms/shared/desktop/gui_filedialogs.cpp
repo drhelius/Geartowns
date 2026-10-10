@@ -27,9 +27,10 @@
 #include "emu.h"
 #include "gui.h"
 #include "gui_actions.h"
+#include "gui_notifications.h"
 #include "debug/gui_debug.h"
 #include "debug/gui_debug_disassembler.h"
-#include "debug/gui_debug_trace.h"
+#include "debug/gui_debug_trace_logger.h"
 #include "debug/gui_debug_framebuffers.h"
 #include "debug/gui_debug_memory.h"
 #include "gui_menus.h"
@@ -59,7 +60,7 @@ enum FileDialogID
     FileDialog_SaveSprite,
     FileDialog_SaveAllSprites,
     FileDialog_LoadSymbols,
-    FileDialog_SaveTrace,
+    FileDialog_SaveLog,
     FileDialog_ChooseTracePath,
     FileDialog_SaveDisassemblerFull,
     FileDialog_SaveDisassemblerVisible
@@ -135,13 +136,13 @@ void gui_file_dialog_save_sprite(int index)
         filters, 1, NULL);
 }
 
-void gui_file_dialog_save_trace(void)
+void gui_file_dialog_save_log(void)
 {
     if (!begin_dialog())
         return;
 
-    SDL_DialogFileFilter filters[] = { { "Text Files", "txt" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveTrace, application_sdl_window,
+    SDL_DialogFileFilter filters[] = { { "Log Files", "txt" } };
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveLog, application_sdl_window,
         filters, 1, NULL);
 }
 
@@ -160,7 +161,7 @@ void gui_file_dialog_choose_trace_path(void)
     if (!begin_dialog())
         return;
 
-    const char* default_path = config_debug.trace_output_path.empty() ? NULL : config_debug.trace_output_path.c_str();
+    const char* default_path = config_debug.trace_disk_path.empty() ? NULL : config_debug.trace_disk_path.c_str();
     SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseTracePath, application_sdl_window,
         default_path, false);
 }
@@ -407,7 +408,7 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         append_extension_if_missing(pending_dialog_path, ".gtdebug");
     else if (id == FileDialog_SaveSprite)
         append_extension_if_missing(pending_dialog_path, ".png");
-    else if (id == FileDialog_SaveTrace || id == FileDialog_SaveDisassemblerFull ||
+    else if (id == FileDialog_SaveLog || id == FileDialog_SaveDisassemblerFull ||
         id == FileDialog_SaveDisassemblerVisible)
         append_extension_if_missing(pending_dialog_path, ".txt");
     else if (id == FileDialog_SaveFloppy || id == FileDialog_NewFloppy)
@@ -443,22 +444,11 @@ static void process_dialog_result(FileDialogID id, const char* path)
             config_emulator.video_recordings_path = path;
             break;
         case FileDialog_LoadState:
-        {
-            std::string message("Loading state from ");
-            message += path;
-            gui_set_status_message(message.c_str(), 3000);
-            emu_load_state_file(path);
+            gui_action_load_state(path);
             break;
-        }
-
         case FileDialog_SaveState:
-        {
-            std::string message("Saving state to ");
-            message += path;
-            gui_set_status_message(message.c_str(), 3000);
-            emu_save_state_file(path);
+            gui_action_save_state(path);
             break;
-        }
 
         case FileDialog_ChooseSavestatePath:
             strncpy_fit(gui_savestates_path, path, sizeof(gui_savestates_path));
@@ -488,59 +478,77 @@ static void process_dialog_result(FileDialogID id, const char* path)
             gui_load_bios(path);
             break;
         case FileDialog_SaveMemoryDump:
-            gui_debug_memory_save_dump(path);
+            if (gui_debug_memory_save_dump(path))
+                gui_notify(gui_NotificationSuccess, ICON_MD_SAVE, "Memory dump saved", path);
+            else
+                gui_notify(gui_NotificationError, NULL, "Unable to save memory dump", path);
             break;
         case FileDialog_LoadMemoryDump:
-            gui_debug_memory_load_dump(path);
+            if (gui_debug_memory_load_dump(path))
+                gui_notify(gui_NotificationSuccess, ICON_MD_FILE_UPLOAD, "Memory dump loaded", path);
+            else
+                gui_notify(gui_NotificationError, NULL, "Unable to load memory dump", path);
             break;
         case FileDialog_SaveDebugSettings:
-            gui_debug_save_settings(path);
+            if (gui_debug_save_settings(path))
+                gui_notify(gui_NotificationSuccess, ICON_MD_BUG_REPORT, "Debug settings saved", path);
+            else
+                gui_notify(gui_NotificationError, NULL, "Unable to save debug settings", path);
             break;
         case FileDialog_LoadDebugSettings:
-            gui_debug_load_settings(path);
+            if (gui_debug_load_settings(path))
+                gui_notify(gui_NotificationSuccess, ICON_MD_BUG_REPORT, "Debug settings loaded", path);
+            else
+                gui_notify(gui_NotificationError, NULL, "Unable to load debug settings", path);
             break;
         case FileDialog_SaveSprite:
             if (gui_debug_save_sprite(path, dialog_sprite_index))
-                gui_set_status_message("Sprite saved", 3000);
+                gui_notify(gui_NotificationSuccess, ICON_MD_IMAGE, "Sprite saved", path);
             else
-                gui_set_error_message("Unable to save sprite");
+                gui_notify(gui_NotificationError, NULL, "Unable to save sprite", path);
             break;
-        case FileDialog_SaveTrace:
-            if (gui_debug_trace_save(path))
-                gui_set_status_message("Trace saved", 3000);
+        case FileDialog_SaveLog:
+            if (gui_debug_save_log(path))
+                gui_notify(gui_NotificationSuccess, ICON_MD_DESCRIPTION, "Trace log saved", path);
             else
-                gui_set_error_message("Unable to save the trace");
+                gui_notify(gui_NotificationError, NULL, "Unable to save the trace log", path);
             break;
         case FileDialog_ChooseTracePath:
-            config_debug.trace_output_path = path;
+            gui_debug_trace_logger_set_output_directory(path);
             break;
         case FileDialog_SaveDisassemblerFull:
         case FileDialog_SaveDisassemblerVisible:
             if (gui_debug_save_disassembler(path, id == FileDialog_SaveDisassemblerFull))
-                gui_set_status_message("Disassembly saved", 3000);
+                gui_notify(gui_NotificationSuccess, ICON_MD_CODE, "Disassembly saved", path);
             else
-                gui_set_error_message("Unable to save the disassembly");
+                gui_notify(gui_NotificationError, NULL, "Unable to save the disassembly", path);
             break;
         case FileDialog_LoadSymbols:
         {
-            int count = gui_debug_load_symbols(path);
+            int skipped = 0;
+            int count = gui_debug_load_symbols(path, &skipped);
 
             if (count >= 0)
             {
                 char message[64];
-                snprintf(message, sizeof(message), "%d symbols loaded", count);
-                gui_set_status_message(message, 3000);
+
+                if (skipped > 0)
+                    snprintf(message, sizeof(message), "%d symbols loaded, %d lines skipped", count, skipped);
+                else
+                    snprintf(message, sizeof(message), "%d symbols loaded", count);
+
+                gui_notify(skipped > 0 ? gui_NotificationWarning : gui_NotificationSuccess, ICON_MD_LABEL, message, path);
             }
             else
-                gui_set_error_message("Unable to load symbols");
+                gui_notify(gui_NotificationError, NULL, "Unable to load symbols", path);
 
             break;
         }
         case FileDialog_SaveAllSprites:
             if (gui_debug_save_all_sprites(path))
-                gui_set_status_message("Sprites saved", 3000);
+                gui_notify(gui_NotificationSuccess, ICON_MD_PHOTO_LIBRARY, "Sprites saved", path);
             else
-                gui_set_error_message("Unable to save sprites");
+                gui_notify(gui_NotificationError, NULL, "Unable to save sprites", path);
             break;
         default:
             break;

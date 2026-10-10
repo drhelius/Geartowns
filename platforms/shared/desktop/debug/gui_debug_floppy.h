@@ -32,7 +32,8 @@ EXTERN void gui_debug_window_fdc(void);
 EXTERN void gui_debug_window_floppy_drives(void);
 EXTERN void gui_debug_window_disk_viewer(void);
 EXTERN void gui_debug_floppy_disk_name(FloppyDisk* disk, char* name, size_t size);
-EXTERN bool gui_debug_floppy_geometry(FloppyDisk* disk, int& cylinders, int& heads, int& sectors, int& sector_size);
+EXTERN bool gui_debug_floppy_geometry(FloppyDisk* disk, int& cylinders, int& heads, int& sectors, int& sector_size,
+    u32& total_size, bool& mixed);
 
 #undef GUI_DEBUG_FLOPPY_IMPORT
 #undef EXTERN

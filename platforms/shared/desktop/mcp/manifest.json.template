@@ -14,7 +14,7 @@
     "url": "https://github.com/drhelius/{{NAME_LOWER}}.git"
   },
   "homepage": "https://github.com/drhelius/{{NAME_LOWER}}",
-  "documentation": "https://github.com/drhelius/{{NAME_LOWER}}/blob/main/README.md",
+  "documentation": "https://github.com/drhelius/{{NAME_LOWER}}/blob/main/MCP_README.md",
   "support": "https://github.com/drhelius/{{NAME_LOWER}}/issues",
   "keywords": ["emulator", "fm-towns", "fujitsu", "retro-gaming", "hardware-emulation"],
   "license": "GPL-3.0",

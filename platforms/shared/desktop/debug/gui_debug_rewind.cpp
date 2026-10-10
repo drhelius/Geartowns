@@ -28,7 +28,6 @@
 #include "../rewind.h"
 
 static int seek_position = 0;
-static bool scrubbing = false;
 
 static void draw_transport_bar(void);
 static void draw_timeline(void);
@@ -36,7 +35,7 @@ static void draw_timeline(void);
 void gui_debug_window_rewind(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(180, 300), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(274, 238), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_FirstUseEver);
 
     ImGui::Begin("Rewind", &config_debug.show_rewind, ImGuiWindowFlags_AlwaysAutoResize);
@@ -74,7 +73,6 @@ static void draw_transport_bar(void)
                 emu_debug_continue();
             else
                 emu_resume();
-            scrubbing = false;
             seek_position = 0;
         }
     }
@@ -86,7 +84,6 @@ static void draw_transport_bar(void)
                 emu_debug_break();
             else
                 emu_pause();
-            scrubbing = false;
             seek_position = 0;
         }
     }
@@ -161,7 +158,7 @@ static void draw_timeline(void)
     if (fps < 1)
         fps = 1;
 
-    float age_seconds = (float)(seek_position * fps) / 60.0f;
+    float age_seconds = (float)((double)(seek_position * fps) / emu_get_frame_rate());
     char label[64];
     snprintf(label, sizeof(label), "%.1fs ago  (snapshot %d / %d)", age_seconds, slider_val + 1, snapshot_count);
 
@@ -182,6 +179,5 @@ bool gui_debug_rewind_seek(int age)
         return false;
 
     seek_position = age;
-    scrubbing = true;
     return true;
 }

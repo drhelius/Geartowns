@@ -142,12 +142,12 @@ void config_push_recent_media(const std::string& path)
     config_emulator.recent_roms[0] = path;
 }
 
-void config_push_recent_floppy(int drive, const std::string& path)
+void config_push_recent_floppy(const std::string& path)
 {
-    if (path.empty() || drive < 0 || drive >= config_floppy_drives)
+    if (path.empty())
         return;
 
-    std::string* recent = config_emulator.recent_floppies[drive];
+    std::string* recent = config_emulator.recent_floppies;
     int slot = 0;
 
     for (slot = 0; slot < config_max_recent_floppies; slot++)

@@ -62,10 +62,19 @@ EXTERN bool gui_debug_i386_read_descriptor(u16 selector, GuiDebugDescriptor& des
 EXTERN void gui_debug_i386_descriptor_type(const GuiDebugDescriptor& descriptor, char* text, size_t text_size);
 EXTERN void gui_debug_i386_descriptor_flags(const GuiDebugDescriptor& descriptor, char* text, size_t text_size);
 EXTERN void gui_debug_i386_vector_name(u8 vector, char* name, size_t name_size, char* description,
-    size_t description_size);
+    size_t description_size, bool pic_bases = true);
 EXTERN const char* gui_debug_i386_interrupt_function(u8 vector, u32 eax);
 EXTERN u16 gui_debug_i386_segment_attributes(const GuiDebugDescriptor& descriptor);
 EXTERN bool gui_debug_i386_selector_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size);
+EXTERN bool gui_debug_i386_descriptor_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size);
+EXTERN bool gui_debug_i386_idt_is_ivt(void);
+EXTERN bool gui_debug_i386_parse_linear(const char* text, u32& linear);
+EXTERN bool gui_debug_i386_load_segment(const I386_State& state, int index, u32 selector, I386_Segment& segment,
+    char* error, size_t error_size);
+EXTERN bool gui_debug_i386_load_system_segment(const I386_State& state, bool task, u32 selector, I386_Segment& segment,
+    char* error, size_t error_size);
+EXTERN u8 gui_debug_i386_access_byte(const I386_Segment& segment);
+EXTERN u16 gui_debug_i386_access_attributes(u8 access, u16 attributes);
 EXTERN bool gui_debug_i386_read_page_entry(u32 table, u32 index, u32& entry);
 EXTERN void gui_debug_i386_page_flags(u32 entry, char* text, size_t text_size);
 EXTERN void gui_debug_window_descriptor_tables(void);

@@ -34,20 +34,48 @@ void PIC::SetTraceLogger(TraceLogger* trace_logger)
 // Only a rising input is a new request
 void PIC::TraceRequest(int irq)
 {
-    I8259* chip = irq >= 8 ? &m_slave : &m_master;
+    I8259::I8259_State* state = irq >= 8 ? m_slave.GetState() : m_master.GetState();
     u8 bit = (u8)(1 << (irq & 7));
 
-    if ((chip->GetState()->input_levels & bit) != 0)
+    if ((state->input_levels & bit) != 0)
         return;
 
-    GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_INTERRUPT, TRACE_INTERRUPT_REQUEST);
-    entry->interrupt.from = 0;
-    entry->interrupt.to = 0;
-    entry->interrupt.error_code = 0;
-    entry->interrupt.vector = (u8)((chip->GetState()->icw2 & 0xF8) | (irq & 7));
-    entry->interrupt.source = 0;
-    entry->interrupt.line = (u8)irq;
-    entry->interrupt.has_error_code = 0;
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_PIC;
+    entry.event = TRACE_PIC_REQUEST;
+    entry.pic.chip = irq >= 8 ? 1 : 0;
+    entry.pic.line = (u8)irq;
+    entry.pic.vector = (u8)((state->icw2 & 0xF8) | (irq & 7));
+    entry.pic.irr = state->irr;
+    entry.pic.isr = state->isr;
+    entry.pic.imr = state->imr;
+    m_trace_logger->TraceLog(entry);
+}
+
+void PIC::TraceWrite(int chip, int a0, u8 value, u8 previous_mask, u8 previous_step)
+{
+    u8 event = TRACE_PIC_COMMAND;
+
+    if ((a0 == 0 && (value & k_i8259_icw1_init) != 0) || (a0 != 0 && previous_step != I8259::I8259_INIT_READY))
+        event = TRACE_PIC_INIT;
+    else if (a0 != 0)
+        event = TRACE_PIC_MASK;
+
+    if (!m_trace_logger->IsEventEnabled(TRACE_PIC, event))
+        return;
+
+    I8259::I8259_State* state = chip != 0 ? m_slave.GetState() : m_master.GetState();
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_PIC;
+    entry.event = event;
+    entry.pic.chip = (u8)chip;
+    entry.pic.value = value;
+    entry.pic.previous = previous_mask;
+    entry.pic.irr = state->irr;
+    entry.pic.isr = state->isr;
+    entry.pic.imr = state->imr;
+    entry.pic.step = a0 == 0 ? (u8)I8259::I8259_INIT_READY : previous_step;
+    m_trace_logger->TraceLog(entry);
 }
 
 void PIC::Reset()
@@ -71,14 +99,21 @@ u8 PIC::Read(u16 port)
 void PIC::Write(u16 port, u8 value)
 {
     int a0 = (port >> 1) & 0x01;
+    int chip = (port >> 4) & 0x01;
+    I8259::I8259_State* state = chip != 0 ? m_slave.GetState() : m_master.GetState();
+    u8 previous_mask = state->imr;
+    u8 previous_step = (u8)state->init_step;
 
-    if ((port & 0x10) == 0)
+    if (chip == 0)
         m_master.Write(a0, value);
     else
     {
         m_slave.Write(a0, value);
         UpdateCascade();
     }
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_PIC)))
+        TraceWrite(chip, a0, value, previous_mask, previous_step);
 }
 
 u8 PIC::AcknowledgeInterrupt()

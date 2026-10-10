@@ -50,6 +50,12 @@ enum config_VideoSync
     config_VideoSync_VRR = 2
 };
 
+enum config_KeyboardMode
+{
+    config_KeyboardMode_Gamepad = 0,
+    config_KeyboardMode_Towns = 1
+};
+
 struct config_Emulator
 {
     bool maximized;
@@ -82,15 +88,16 @@ struct config_Emulator
     std::string last_open_path;
     int window_width;
     int window_height;
-    bool status_messages;
+    bool show_notifications;
     bool allow_screensaver;
     int mcp_tcp_port;
     std::string mcp_http_address;
     bool capture_mouse;
+    bool capture_keyboard;
     int mouse_sensitivity;
     bool floppy_persistence;
     bool floppy_write_protected[config_floppy_drives];
-    std::string recent_floppies[config_floppy_drives][config_max_recent_floppies];
+    std::string recent_floppies[config_max_recent_floppies];
 };
 
 struct config_Machine
@@ -123,6 +130,9 @@ struct config_Audio
     bool enable;
     bool sync;
     float master_volume;
+    float fm_volume;
+    float pcm_volume;
+    float cdda_volume;
     int buffer_count;
 };
 
@@ -138,7 +148,7 @@ struct config_Input
 {
     bool allow_up_down;
     int controller_type[GT_MAX_GAMEPADS];
-    bool use_keyboard[GT_MAX_GAMEPADS];
+    int keyboard_mode[GT_MAX_GAMEPADS];
 };
 
 struct config_Input_Keyboard
@@ -207,6 +217,7 @@ enum config_HotkeyIndex
     config_HotkeyIndex_CaptureMouse,
     config_HotkeyIndex_Mute,
     config_HotkeyIndex_VideoRecording,
+    config_HotkeyIndex_CaptureKeyboard,
     config_HotkeyIndex_COUNT
 };
 
@@ -235,13 +246,51 @@ struct config_Debug
     bool show_i386_paging;
     bool show_trace_logger;
     bool show_profiler;
-    int trace_flags;
-    bool trace_registers;
+    bool trace_counter;
     bool trace_cycles;
-    int trace_capacity;
+    bool trace_linear;
+    bool trace_registers;
+    bool trace_segments;
+    bool trace_flags;
+    bool trace_bytes;
+    bool trace_cpu_enabled;
+    bool trace_cpu;
+    bool trace_io;
+    bool trace_pic;
+    bool trace_timer;
+    bool trace_dma;
+    bool trace_video;
+    bool trace_sprite;
+    bool trace_fm;
+    bool trace_pcm;
+    bool trace_mixer;
+    bool trace_cdrom;
+    bool trace_fdc;
+    bool trace_keyboard;
+    bool trace_input;
+    bool trace_system;
+    int trace_cpu_interrupt_events;
+    int trace_io_events;
+    int trace_pic_events;
+    int trace_timer_events;
+    int trace_dma_events;
+    int trace_video_events;
+    int trace_sprite_events;
+    int trace_fm_events;
+    int trace_pcm_events;
+    int trace_mixer_events;
+    int trace_cdrom_events;
+    int trace_fdc_events;
+    int trace_keyboard_events;
+    int trace_input_events;
+    int trace_system_events;
+    int trace_vblank_watch_address;
+    int trace_vblank_watch_operation;
     int trace_output;
+    int trace_capacity;
+    int trace_disk_dir_option;
     int trace_disk_size;
-    std::string trace_output_path;
+    std::string trace_disk_path;
     bool show_breakpoints;
     bool show_symbols;
     bool show_rewind;
@@ -251,6 +300,7 @@ struct config_Debug
     bool show_rtc;
     bool show_system_control;
     bool show_keyboard;
+    bool show_game_ports;
     bool show_crtc;
     bool show_crtc_registers;
     bool show_video_output;
@@ -293,6 +343,7 @@ struct config_Debug
     bool step_skip_interrupts;
     int font_size;
     int scale;
+    int ratio;
     bool multi_viewport;
     bool single_instance;
 };

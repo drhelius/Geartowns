@@ -20,6 +20,7 @@
 #define GUI_DEBUG_FLOPPY_IMPORT
 #include "gui_debug_floppy.h"
 
+#include <SDL3/SDL.h>
 #include "imgui.h"
 #include "geartowns.h"
 #include "drive/fdc.h"
@@ -38,6 +39,10 @@
 
 static int selected_sector = -1;
 
+static void setup_fdc_columns(void);
+static void draw_fdc_register(const char* label, u8 value);
+static void draw_fdc_port(const char* port);
+static void draw_fdc_detail(void);
 static void draw_flag(const char* name, bool value);
 static void draw_drive_column(int drive, int row);
 static ImVec4 get_track_color(FloppyDisk* disk, int track);
@@ -46,8 +51,8 @@ static void goto_floppy_image(int drive, u32 offset);
 void gui_debug_window_fdc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(80, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(260, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(289, 243), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(265, 545), ImGuiCond_FirstUseEver);
     ImGui::Begin("FDC", &config_debug.show_fdc);
 
     ImGui::PushFont(gui_default_font);
@@ -58,17 +63,42 @@ void gui_debug_window_fdc(void)
     MB8877::MB8877_State* mb8877 = fdc->GetMB8877()->GetState();
     u64 clocks = core->GetScheduler()->GetClocks();
     u8 status = fdc->Peek(0x0200, clocks);
+    u8 control = state->drive_control;
+    u8 drive_status = fdc->Peek(0x0208, clocks);
+    int selected = fdc->GetSelectedDrive();
+    float space = ImGui::CalcTextSize(" ").x;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
     char command[48];
     gui_debug_mb8877_command(mb8877->command, command, sizeof(command));
 
+    // The decoder writes the name and then its flags, which go on their own row
+    char* parameters = strchr(command, '=');
+
+    while (IsValidPointer(parameters) && parameters > command && *parameters != ' ')
+        parameters--;
+
+    if (IsValidPointer(parameters) && parameters > command)
+        *parameters++ = 0;
+    else
+        parameters = NULL;
+
     ImGui::TextColored(cyan, "MB8877 REGISTERS"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "STATUS  "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", status); ImGui::SameLine();
-    ImGui::TextColored(gray, "0200");
-
-    if (ImGui::BeginTable("##fdc_status", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+    if (ImGui::BeginTable("##fdc_status_register", 3, flags))
     {
+        setup_fdc_columns();
+        draw_fdc_register("STATUS", status);
+        draw_fdc_port("0200");
+        ImGui::EndTable();
+    }
+
+    if (ImGui::BeginTable("##fdc_status", 3, flags))
+    {
+        ImGui::TableSetupColumn("");
+        ImGui::TableSetupColumn("TYPE I");
+        ImGui::TableSetupColumn("TYPE II/III");
+        ImGui::TableHeadersRow();
+
         for (int bit = 7; bit >= 0; bit--)
         {
             bool set = ((status >> bit) & 1) != 0;
@@ -76,70 +106,81 @@ void gui_debug_window_fdc(void)
             ImGui::TableNextColumn();
             ImGui::TextColored(gray, "%d", bit);
             ImGui::TableNextColumn();
-            ImGui::TextColored(mb8877->type1 ? (set ? green : white) : dark_gray, "%s", k_debug_mb8877_type1_status[bit]);
+            ImGui::TextColored(mb8877->type1 ? (set ? green : white) : gray, "%s", k_debug_mb8877_type1_status[bit]);
             ImGui::TableNextColumn();
-            ImGui::TextColored(!mb8877->type1 ? (set ? green : white) : dark_gray, "%s", k_debug_mb8877_type2_status[bit]);
+            ImGui::TextColored(!mb8877->type1 ? (set ? green : white) : gray, "%s", k_debug_mb8877_type2_status[bit]);
         }
 
         ImGui::EndTable();
     }
 
-    ImGui::TextColored(violet, "COMMAND "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", mb8877->command);
-    ImGui::TextColored(blue, "%-32s", command);
-    ImGui::TextColored(violet, "TRACK   "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", mb8877->track); ImGui::SameLine();
-    ImGui::TextColored(gray, "0202");
-    ImGui::TextColored(violet, "SECTOR  "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", mb8877->sector); ImGui::SameLine();
-    ImGui::TextColored(gray, "0204");
-    ImGui::TextColored(violet, "DATA    "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", mb8877->data); ImGui::SameLine();
-    ImGui::TextColored(gray, "0206");
+    if (ImGui::BeginTable("##fdc_registers", 3, flags))
+    {
+        setup_fdc_columns();
+
+        draw_fdc_register("COMMAND", mb8877->command);
+        draw_fdc_port("0200");
+        draw_fdc_detail();
+        ImGui::TextColored(blue, "%s", command);
+        draw_fdc_detail();
+
+        if (IsValidPointer(parameters))
+            ImGui::TextColored(white, "%s", parameters);
+
+        draw_fdc_register("TRACK", mb8877->track);
+        draw_fdc_port("0202");
+        draw_fdc_register("SECTOR", mb8877->sector);
+        draw_fdc_port("0204");
+        draw_fdc_register("DATA", mb8877->data);
+        draw_fdc_port("0206");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "SIGNALS"); ImGui::Separator();
 
-    bool irq = mb8877->intrq && (state->drive_control & k_fdc_irq_enable) != 0;
-    draw_flag("BUSY", (status & 0x01) != 0); ImGui::SameLine();
-    draw_flag("DRQ", mb8877->drq); ImGui::SameLine();
-    draw_flag("INTRQ", mb8877->intrq); ImGui::SameLine();
+    bool irq = mb8877->intrq && (control & k_fdc_irq_enable) != 0;
+    draw_flag("BUSY", (status & 0x01) != 0); ImGui::SameLine(0.0f, space);
+    draw_flag("DRQ", mb8877->drq); ImGui::SameLine(0.0f, space);
+    draw_flag("INTRQ", mb8877->intrq); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(irq ? yellow : gray, "IRQ6");
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "DRIVE"); ImGui::Separator();
 
-    u8 control = state->drive_control;
-    ImGui::TextColored(violet, "CONTROL "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", control); ImGui::SameLine();
-    ImGui::TextColored(gray, "0208");
-    ImGui::TextColored(violet, "        "); ImGui::SameLine();
-    draw_flag("IRQ", (control & k_fdc_irq_enable) != 0); ImGui::SameLine();
-    draw_flag("MOTOR", (control & k_fdc_motor) != 0); ImGui::SameLine();
-    ImGui::TextColored(white, "SIDE %d", (control & k_fdc_side) ? 1 : 0);
-    ImGui::TextColored(violet, "        "); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", (control & k_fdc_double_density) ? "MFM" : "FM "); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", (control & k_fdc_slow_clock) ? "SLOW CLOCK" : "FAST CLOCK");
+    if (ImGui::BeginTable("##fdc_drive", 3, flags))
+    {
+        setup_fdc_columns();
 
-    u8 drive_status = fdc->Peek(0x0208, clocks);
-    ImGui::TextColored(violet, "STATUS  "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", drive_status); ImGui::SameLine();
-    draw_flag("READY", (drive_status & 0x02) != 0);
+        draw_fdc_register("CONTROL", control);
+        draw_fdc_port("0208");
+        draw_fdc_detail();
+        draw_flag("IRQ", (control & k_fdc_irq_enable) != 0); ImGui::SameLine(0.0f, space);
+        draw_flag("MOTOR", (control & k_fdc_motor) != 0); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(white, "SIDE %d", (control & k_fdc_side) ? 1 : 0);
+        draw_fdc_detail();
+        ImGui::TextColored(blue, "%s", (control & k_fdc_double_density) ? "MFM" : "FM"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(blue, "%s", (control & k_fdc_slow_clock) ? "SLOW CLOCK" : "FAST CLOCK");
 
-    int selected = fdc->GetSelectedDrive();
-    ImGui::TextColored(violet, "SELECT  "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", state->drive_select); ImGui::SameLine();
-    ImGui::TextColored(gray, "020C");
-    ImGui::TextColored(violet, "        "); ImGui::SameLine();
+        draw_fdc_register("STATUS", drive_status); ImGui::SameLine(0.0f, space);
+        draw_flag("READY", (drive_status & 0x02) != 0);
+        draw_fdc_port("0208");
 
-    if (selected >= 0)
-        ImGui::TextColored(orange, "DRIVE %d", selected);
-    else
-        ImGui::TextColored(gray, "NONE   ");
+        draw_fdc_register("SELECT", state->drive_select); ImGui::SameLine(0.0f, space);
 
-    ImGui::SameLine();
-    ImGui::TextColored(blue, "%u RPM", fdc->GetRPM());
-    ImGui::TextColored(violet, "SWITCH  "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", state->drive_switch); ImGui::SameLine();
-    ImGui::TextColored(gray, "020E");
+        if (selected >= 0)
+            ImGui::TextColored(orange, "DRIVE %d", selected);
+        else
+            ImGui::TextColored(gray, "NONE");
+
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(blue, "%u RPM", fdc->GetRPM());
+        draw_fdc_port("020C");
+
+        draw_fdc_register("SWITCH", state->drive_switch);
+        draw_fdc_port("020E");
+
+        ImGui::EndTable();
+    }
 
     ImGui::PopFont();
 
@@ -150,8 +191,8 @@ void gui_debug_window_fdc(void)
 void gui_debug_window_floppy_drives(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(110, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(460, 260), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(130, 110), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(382, 243), ImGuiCond_FirstUseEver);
     ImGui::Begin("Floppy Drives", &config_debug.show_floppy_drives);
 
     ImGui::PushFont(gui_default_font);
@@ -160,9 +201,11 @@ void gui_debug_window_floppy_drives(void)
 
     if (ImGui::BeginTable("##floppy_drives", 3, flags))
     {
-        ImGui::TableSetupColumn(" ");
-        ImGui::TableSetupColumn("DRIVE 0");
-        ImGui::TableSetupColumn("DRIVE 1");
+        float character = ImGui::CalcTextSize("0").x;
+
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 9);
+        ImGui::TableSetupColumn("DRIVE 0", ImGuiTableColumnFlags_WidthFixed, character * 20);
+        ImGui::TableSetupColumn("DRIVE 1", ImGuiTableColumnFlags_WidthFixed, character * 20);
         ImGui::TableHeadersRow();
 
         static const char* rows[11] =
@@ -174,7 +217,7 @@ void gui_debug_window_floppy_drives(void)
         {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextColored(violet, "%-9s", rows[row]);
+            ImGui::TextColored(violet, "%s", rows[row]);
 
             for (int drive = 0; drive < FDC_DRIVES; drive++)
             {
@@ -195,49 +238,51 @@ void gui_debug_window_floppy_drives(void)
 void gui_debug_window_disk_viewer(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(140, 70), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 560), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(171, 177), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(508, 536), ImGuiCond_FirstUseEver);
     ImGui::Begin("Disk Viewer", &config_debug.show_disk_viewer);
-
-    ImGui::PushFont(gui_default_font);
 
     GeartownsCore* core = emu_get_core();
     FDC* fdc = core->GetFDC();
-    int drive = CLAMP(config_debug.disk_viewer_drive, 0, FDC_DRIVES - 1);
-    FloppyDisk* disk = fdc->GetDisk(drive);
     int max_cylinder = k_floppy_tracks / 2 - 1;
+    ImGuiStyle& style = ImGui::GetStyle();
+    float arrow = ImGui::GetFrameHeight();
+    float steps = (arrow + style.ItemInnerSpacing.x) * 2.0f;
+    float padding = style.FramePadding.x * 2.0f;
 
-    ImGui::PushItemWidth(80.0f);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Drive"); ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("0").x + padding + arrow);
 
-    if (ImGui::Combo("DRIVE##disk_drive", &config_debug.disk_viewer_drive, "DRIVE 0\0DRIVE 1\0\0"))
+    if (ImGui::Combo("##disk_drive", &config_debug.disk_viewer_drive, "0\0" "1\0"))
         selected_sector = -1;
 
-    ImGui::SameLine();
+    ImGui::SameLine(0.0f, 16.0f);
+    ImGui::TextUnformatted("Cylinder"); ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("00").x + padding + steps);
 
-    if (ImGui::InputInt("CYLINDER##disk_cylinder", &config_debug.disk_viewer_cylinder))
+    if (ImGui::InputInt("##disk_cylinder", &config_debug.disk_viewer_cylinder, 1, 10))
         selected_sector = -1;
 
-    ImGui::SameLine();
+    ImGui::SameLine(0.0f, 16.0f);
+    ImGui::TextUnformatted("Head"); ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("0").x + padding + arrow);
 
-    if (ImGui::Combo("HEAD##disk_head", &config_debug.disk_viewer_head, "0\0" "1\0\0"))
+    if (ImGui::Combo("##disk_head", &config_debug.disk_viewer_head, "0\0" "1\0"))
         selected_sector = -1;
 
-    ImGui::PopItemWidth();
-
+    config_debug.disk_viewer_drive = CLAMP(config_debug.disk_viewer_drive, 0, FDC_DRIVES - 1);
     config_debug.disk_viewer_cylinder = CLAMP(config_debug.disk_viewer_cylinder, 0, max_cylinder);
     config_debug.disk_viewer_head = CLAMP(config_debug.disk_viewer_head, 0, 1);
+    int drive = config_debug.disk_viewer_drive;
     int cylinder = config_debug.disk_viewer_cylinder;
     int head = config_debug.disk_viewer_head;
     int track = cylinder * 2 + head;
+    FloppyDisk* disk = fdc->GetDisk(drive);
 
-    if (!disk->IsInserted())
-    {
-        ImGui::TextColored(gray, "No disk in drive %d", drive);
-        ImGui::PopFont();
-        ImGui::End();
-        ImGui::PopStyleVar();
-        return;
-    }
+    ImGui::PushFont(gui_default_font);
+
+    float space = ImGui::CalcTextSize(" ").x;
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "TRACK MAP"); ImGui::Separator();
 
@@ -280,11 +325,11 @@ void gui_debug_window_disk_viewer(void)
         }
     }
 
-    ImGui::TextColored(green, "NORMAL"); ImGui::SameLine();
-    ImGui::TextColored(yellow, " DELETED"); ImGui::SameLine();
-    ImGui::TextColored(red, " ERRORS"); ImGui::SameLine();
-    ImGui::TextColored(gray, " UNFORMATTED"); ImGui::SameLine();
-    ImGui::TextColored(orange, " HEAD");
+    ImGui::TextColored(green, "NORMAL"); ImGui::SameLine(0.0f, space * 2.0f);
+    ImGui::TextColored(yellow, "DELETED"); ImGui::SameLine(0.0f, space * 2.0f);
+    ImGui::TextColored(red, "ERRORS"); ImGui::SameLine(0.0f, space * 2.0f);
+    ImGui::TextColored(gray, "UNFORMATTED"); ImGui::SameLine(0.0f, space * 2.0f);
+    ImGui::TextColored(orange, "HEAD");
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "SECTORS"); ImGui::Separator();
 
@@ -297,18 +342,19 @@ void gui_debug_window_disk_viewer(void)
     ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
         ImGuiTableFlags_BordersV | ImGuiTableFlags_SizingFixedFit;
 
-    if (ImGui::BeginTable("##disk_sectors", 9, flags, ImVec2(0, 150)))
+    // Always 16 rows tall so the window keeps its layout, longer tracks scroll
+    float row_height = ImGui::GetTextLineHeight() + style.CellPadding.y * 2.0f;
+    float table_height = 17 * row_height + 4.0f;
+
+    if (ImGui::BeginTable("##disk_sectors", 10, flags, ImVec2(0, table_height)))
     {
+        static const char* headers[10] = { "#", "C", "H", "R", "N", "SIZE", "DENSITY", "DELETED", "STATUS", "OFFSET" };
+
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("#");
-        ImGui::TableSetupColumn("C");
-        ImGui::TableSetupColumn("H");
-        ImGui::TableSetupColumn("R");
-        ImGui::TableSetupColumn("N");
-        ImGui::TableSetupColumn("DENSITY");
-        ImGui::TableSetupColumn("DELETED");
-        ImGui::TableSetupColumn("STATUS");
-        ImGui::TableSetupColumn("OFFSET");
+
+        for (int i = 0; i < 10; i++)
+            ImGui::TableSetupColumn(headers[i]);
+
         ImGui::TableHeadersRow();
 
         for (int i = 0; i < count; i++)
@@ -327,9 +373,10 @@ void gui_debug_window_disk_viewer(void)
             ImGui::TableNextColumn(); ImGui::TextColored(white, "%02X", sector.id[0]);
             ImGui::TableNextColumn(); ImGui::TextColored(white, "%02X", sector.id[1]);
             ImGui::TableNextColumn(); ImGui::TextColored(orange, "%02X", sector.id[2]);
-            ImGui::TableNextColumn(); ImGui::TextColored(white, "%02X %4d", sector.id[3], sector.size);
-            ImGui::TableNextColumn(); ImGui::TextColored(blue, "%s", sector.fm ? "FM " : "MFM");
-            ImGui::TableNextColumn(); ImGui::TextColored(sector.deleted ? yellow : gray, "%s", sector.deleted ? "YES" : "NO ");
+            ImGui::TableNextColumn(); ImGui::TextColored(white, "%02X", sector.id[3]);
+            ImGui::TableNextColumn(); ImGui::TextColored(white, "%d", sector.size);
+            ImGui::TableNextColumn(); ImGui::TextColored(blue, "%s", sector.fm ? "FM" : "MFM");
+            ImGui::TableNextColumn(); ImGui::TextColored(sector.deleted ? yellow : gray, "%s", sector.deleted ? "YES" : "NO");
             ImGui::TableNextColumn(); ImGui::TextColored(error ? red : green, "%s", gui_debug_floppy_status_name(sector.status));
             ImGui::TableNextColumn(); ImGui::TextColored(white, "$%06X", sector.header + k_floppy_sector_header_size);
         }
@@ -339,29 +386,45 @@ void gui_debug_window_disk_viewer(void)
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "SECTOR DATA"); ImGui::Separator();
 
-    if (selected_sector < 0)
-    {
-        ImGui::TextColored(gray, "Select a sector");
-        ImGui::PopFont();
-        ImGui::End();
-        ImGui::PopStyleVar();
-        return;
-    }
-
-    const FloppyDisk_Sector& sector = sectors[selected_sector];
-    u32 data_offset = sector.header + k_floppy_sector_header_size;
+    bool valid = selected_sector >= 0;
+    const FloppyDisk_Sector* sector = valid ? &sectors[selected_sector] : NULL;
+    u32 data_offset = valid ? sector->header + k_floppy_sector_header_size : 0;
     const u8* image = disk->GetImage();
     u32 image_size = disk->GetImageSize();
-    u32 size = MIN((u32)sector.size, image_size > data_offset ? image_size - data_offset : 0);
+    u32 size = valid ? MIN((u32)sector->size, image_size > data_offset ? image_size - data_offset : 0) : 0;
+    static const char* ids[4] = { "C", "H", "R", "N" };
 
-    ImGui::TextColored(violet, "C %02X H %02X R %02X N %02X", sector.id[0], sector.id[1], sector.id[2], sector.id[3]);
-    ImGui::SameLine();
-    ImGui::PopFont();
+    for (int i = 0; i < 4; i++)
+    {
+        ImGui::TextColored(violet, "%s", ids[i]); ImGui::SameLine(0.0f, space);
 
-    if (ImGui::SmallButton("Open in Memory Workspace"))
-        goto_floppy_image(drive, data_offset);
+        if (valid)
+            ImGui::TextColored(i == 2 ? orange : white, "%02X", sector->id[i]);
+        else
+            ImGui::TextColored(gray, "--");
 
-    ImGui::PushFont(gui_default_font);
+        ImGui::SameLine(0.0f, space * 2.0f);
+    }
+
+    ImGui::TextColored(violet, "OFFSET"); ImGui::SameLine(0.0f, space);
+
+    if (valid)
+    {
+        ImGui::TextColored(cyan, "$%06X", data_offset);
+
+        if (ImGui::IsItemClicked())
+            goto_floppy_image(drive, data_offset);
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::PushFont(gui_roboto_font);
+            ImGui::SetTooltip("Open in Memory Workspace");
+            ImGui::PopFont();
+        }
+    }
+    else
+        ImGui::TextColored(gray, "--");
+
     ImGui::BeginChild("##sector_data", ImVec2(0, 0), ImGuiChildFlags_Borders);
 
     ImGuiListClipper clipper;
@@ -374,7 +437,7 @@ void gui_debug_window_disk_viewer(void)
             u32 base = (u32)row * 16;
             char ascii[17];
 
-            ImGui::TextColored(cyan, "%04X", base); ImGui::SameLine();
+            ImGui::TextColored(cyan, "%04X", base); ImGui::SameLine(0.0f, space * 2.0f);
 
             for (int i = 0; i < 16; i++)
             {
@@ -392,7 +455,7 @@ void gui_debug_window_disk_viewer(void)
                     ascii[i] = ' ';
                 }
 
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, i == 15 ? space * 2.0f : space);
             }
 
             ascii[16] = 0;
@@ -406,6 +469,37 @@ void gui_debug_window_disk_viewer(void)
 
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+static void setup_fdc_columns(void)
+{
+    float character = ImGui::CalcTextSize("0").x;
+
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 7);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 20);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
+}
+
+static void draw_fdc_register(const char* label, u8 value)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(white, "$%02X", value);
+}
+
+static void draw_fdc_port(const char* port)
+{
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(%s)", port);
+}
+
+static void draw_fdc_detail(void)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TableNextColumn();
 }
 
 static void draw_flag(const char* name, bool value)
@@ -425,7 +519,7 @@ static void draw_drive_column(int drive, int row)
 
     if (!present)
     {
-        ImGui::TextColored(gray, "NOT PRESENT");
+        ImGui::TextColored(gray, "%s", row == 0 ? "NOT PRESENT" : "--");
         return;
     }
 
@@ -450,7 +544,7 @@ static void draw_drive_column(int drive, int row)
         }
         case 1:
         {
-            char name[18] = { };
+            char name[64] = { };
 
             if (inserted)
                 gui_debug_floppy_disk_name(disk, name, sizeof(name));
@@ -475,10 +569,17 @@ static void draw_drive_column(int drive, int row)
             int heads = 0;
             int sectors = 0;
             int sector_size = 0;
+            u32 total_size = 0;
+            bool mixed = false;
 
-            if (inserted && gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size))
-                ImGui::TextColored(white, "%dx%dx%d %dK", cylinders, heads, sectors,
-                    cylinders * heads * sectors * sector_size / 1024);
+            if (inserted && gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size, total_size, mixed))
+            {
+                ImGui::TextColored(mixed ? yellow : white, "%dx%dx%d %uK", cylinders, heads, sectors, total_size / 1024);
+
+                if (mixed && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Tracks use different layouts\n"
+                        "Sectors per track are track 0's, the size counts every track");
+            }
             else
                 ImGui::TextColored(gray, "--");
 
@@ -493,14 +594,14 @@ static void draw_drive_column(int drive, int row)
             break;
         case 5:
             if (inserted)
-                ImGui::TextColored(disk->IsWriteProtected() ? yellow : gray, "%s", disk->IsWriteProtected() ? "YES" : "NO ");
+                ImGui::TextColored(disk->IsWriteProtected() ? yellow : gray, "%s", disk->IsWriteProtected() ? "YES" : "NO");
             else
                 ImGui::TextColored(gray, "--");
 
             break;
         case 6:
             if (inserted)
-                ImGui::TextColored(disk->IsDirty() ? yellow : gray, "%s", disk->IsDirty() ? "YES" : "NO ");
+                ImGui::TextColored(disk->IsDirty() ? yellow : gray, "%s", disk->IsDirty() ? "YES" : "NO");
             else
                 ImGui::TextColored(gray, "--");
 
@@ -509,61 +610,92 @@ static void draw_drive_column(int drive, int row)
             ImGui::TextColored(white, "CYLINDER %d", fdc->GetState()->cylinders[drive]);
             break;
         case 8:
-            draw_flag(selected && fdc->IsSpinning() ? "ON " : "OFF", selected && fdc->IsSpinning());
+            draw_flag(selected && fdc->IsSpinning() ? "ON" : "OFF", selected && fdc->IsSpinning());
             break;
         case 9:
         {
             bool ready = selected && fdc->IsReady(core->GetScheduler()->GetClocks());
-            draw_flag(ready ? "YES" : "NO ", ready);
+            draw_flag(ready ? "YES" : "NO", ready);
             break;
         }
         default:
-            draw_flag(selected ? "YES" : "NO ", selected);
+            draw_flag(selected ? "YES" : "NO", selected);
             break;
     }
 }
 
+// D77 names are Shift-JIS, converted to UTF-8, with ASCII as the fallback
 void gui_debug_floppy_disk_name(FloppyDisk* disk, char* name, size_t size)
 {
     const u8* image = disk->GetImage();
+    char raw[18] = { };
     size_t length = 0;
 
-    if (IsValidPointer(image) && disk->GetImageSize() >= 17)
+    name[0] = 0;
+
+    if (!IsValidPointer(image) || disk->GetImageSize() < 17 || size == 0)
+        return;
+
+    while (length < 17 && image[length] != 0)
     {
-        while (length < 17 && length + 1 < size && image[length] != 0)
-        {
-            u8 c = image[length];
-            name[length] = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
-            length++;
-        }
+        raw[length] = (char)image[length];
+        length++;
     }
 
-    name[length] = 0;
+    char* converted = SDL_iconv_string("UTF-8", "SHIFT-JIS", raw, length + 1);
+
+    if (IsValidPointer(converted))
+    {
+        snprintf(name, size, "%s", converted);
+        SDL_free(converted);
+        return;
+    }
+
+    for (size_t i = 0; i < length && i + 1 < size; i++)
+    {
+        u8 c = (u8)raw[i];
+        name[i] = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
+        name[i + 1] = 0;
+    }
 }
 
-bool gui_debug_floppy_geometry(FloppyDisk* disk, int& cylinders, int& heads, int& sectors, int& sector_size)
+// Cylinders and heads cover every formatted track, sectors per track come from track 0
+// A disk whose tracks differ from track 0 is mixed, and its size adds up every sector
+bool gui_debug_floppy_geometry(FloppyDisk* disk, int& cylinders, int& heads, int& sectors, int& sector_size,
+    u32& total_size, bool& mixed)
 {
     FloppyDisk_Sector list[k_floppy_max_sectors];
     int last = -1;
     bool second_head = false;
 
+    sectors = disk->GetSectors(0, list);
+    sector_size = sectors > 0 ? list[0].size : 0;
+    total_size = 0;
+    mixed = false;
+
     for (int t = 0; t < k_floppy_tracks; t++)
     {
-        if (disk->GetSectors(t, list) == 0)
+        int count = disk->GetSectors(t, list);
+
+        if (count == 0)
             continue;
 
         last = t;
         second_head = second_head || (t & 1) != 0;
-    }
+        mixed = mixed || count != sectors;
 
-    sectors = disk->GetSectors(0, list);
+        for (int i = 0; i < count; i++)
+        {
+            total_size += list[i].size;
+            mixed = mixed || list[i].size != sector_size;
+        }
+    }
 
     if (last < 0 || sectors == 0)
         return false;
 
     cylinders = last / 2 + 1;
     heads = second_head ? 2 : 1;
-    sector_size = list[0].size;
     return true;
 }
 
@@ -574,7 +706,7 @@ static ImVec4 get_track_color(FloppyDisk* disk, int track)
     bool deleted = false;
 
     if (count == 0)
-        return dark_gray;
+        return gray;
 
     for (int i = 0; i < count; i++)
     {

@@ -27,6 +27,7 @@
 class PIC;
 class Scheduler;
 class StateSerializer;
+class TraceLogger;
 
 class PIT
 {
@@ -44,6 +45,7 @@ public:
     PIT();
     ~PIT();
     void Init(PIC* pic, Scheduler* scheduler);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
@@ -62,12 +64,15 @@ private:
     u64 GetTickClocks(u64 tick) const;
     void UpdateIRQ();
     void UpdateNextEvent();
+    void TraceTimeout(u8 previous_latch);
+    void TraceWrite(u16 port, u8 value);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     PIC* m_pic;
     Scheduler* m_scheduler;
+    TraceLogger* m_trace_logger;
     I8253 m_pit[2];
     PIT_State m_state;
 };

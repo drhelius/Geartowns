@@ -55,8 +55,11 @@
 #include "../debug/gui_debug_floppy.h"
 #include "../debug/gui_debug_disassembler.h"
 #include "../debug/gui_debug_i386_tables.h"
+#include "../debug/gui_debug_profiler.h"
 #include "../debug/gui_debug_rewind.h"
-#include "../debug/gui_debug_trace.h"
+#include "../debug/gui_debug_system.h"
+#include "../debug/gui_debug_trace_logger.h"
+#include "../debug/trace_logger_formatter.h"
 #include "../emu_floppy.h"
 #include "../utils.h"
 #include "../video_recorder.h"
@@ -93,6 +96,7 @@ static const char* k_mcp_area_flags[] =
 
 static const int k_mcp_max_read_size = 0x10000;
 static const int k_mcp_max_disassembly_lines = 1000;
+static const int k_mcp_max_symbols = 1000;
 
 static bool parse_hex_text(const std::string& text, u32& value)
 {
@@ -189,50 +193,14 @@ static int get_opcode_index(const I386_Disassembler_Record* record)
 
 static bool load_segment(I386_State& state, int index, u32 value, std::string& error)
 {
-    I386_Segment& segment = state.segments[index];
+    char text[GT_DEBUG_MEMORY_REASON_SIZE];
 
-    if (value > 0xFFFF)
+    if (!gui_debug_i386_load_segment(state, index, value, state.segments[index], text, sizeof(text)))
     {
-        error = "Segment selectors are 16-bit";
-        return false;
-    }
-
-    if (state.execution_mode != I386_MODE_PROTECTED)
-    {
-        segment.selector = (u16)value;
-        segment.base = value << 4;
-        segment.limit = 0xFFFF;
-        return true;
-    }
-
-    if ((value & 0xFFFC) == 0)
-    {
-        if (index == I386_SEGMENT_CS || index == I386_SEGMENT_SS)
-        {
-            error = "CS and SS cannot hold a null selector";
-            return false;
-        }
-
-        memset(&segment, 0, sizeof(segment));
-        segment.selector = (u16)value;
-        return true;
-    }
-
-    GuiDebugDescriptor descriptor;
-
-    if (!gui_debug_i386_read_descriptor((u16)value, descriptor) || descriptor.system || !descriptor.present)
-    {
-        char text[80];
-        snprintf(text, sizeof(text), "Selector %04X is not a present code or data descriptor", value);
         error = text;
         return false;
     }
 
-    segment.selector = (u16)value;
-    segment.base = descriptor.base;
-    segment.limit = descriptor.limit;
-    segment.attributes = gui_debug_i386_segment_attributes(descriptor);
-    segment.dpl = descriptor.dpl;
     return true;
 }
 
@@ -266,10 +234,10 @@ void DebugAdapter::StepOver()
     emu_debug_step_over();
 }
 
-void DebugAdapter::StepOut()
+bool DebugAdapter::StepOut()
 {
     config_debug.debug = true;
-    emu_debug_step_out();
+    return emu_debug_step_out();
 }
 
 void DebugAdapter::StepFrame()
@@ -465,10 +433,12 @@ static std::string breakpoint_address_text(u32 address, u8 space)
     return space == I386_BREAKPOINT_IO ? hex_text(address, 4) : hex_text(address, 8);
 }
 
+static int parse_interrupt_source(const std::string& source);
+
 json DebugAdapter::SetBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space)
 {
     if (!m_core->GetI386()->AddBreakpoint(address, range ? end_address : address, type, space))
-        return {{"error", "Invalid breakpoint: execute breakpoints are linear only and I/O ports end at FFFF"}};
+        return {{"error", "Invalid breakpoint: execute breakpoints are linear or physical and I/O ports end at FFFF"}};
 
     json result = {
         {"success", true},
@@ -527,7 +497,79 @@ json DebugAdapter::ListBreakpoints()
         breakpoints.push_back(breakpoint);
     }
 
-    return {{"breakpoints", breakpoints}, {"count", breakpoints.size()}};
+    return {{"breakpoints", breakpoints}, {"count", breakpoints.size()}, {"all_disabled", emu_debug_disable_breakpoints}};
+}
+
+json DebugAdapter::EnableBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space, bool enabled)
+{
+    std::vector<I386_Breakpoint>* items = m_core->GetI386()->GetBreakpoints();
+    u32 end = range ? end_address : address;
+    bool found = false;
+
+    for (size_t i = 0; i < items->size(); i++)
+    {
+        I386_Breakpoint& item = (*items)[i];
+
+        if (item.address1 == address && item.address2 == end && item.type == type && item.space == space)
+        {
+            item.enabled = enabled;
+            found = true;
+        }
+    }
+
+    json result = {
+        {"success", true},
+        {"found", found},
+        {"enabled", enabled},
+        {"type", breakpoint_type_name(type)},
+        {"space", k_mcp_breakpoint_spaces[space]},
+        {"address", breakpoint_address_text(address, space)}
+    };
+
+    if (range)
+        result["end_address"] = breakpoint_address_text(end_address, space);
+
+    return result;
+}
+
+json DebugAdapter::EnableInterruptBreakpoint(int vector, const std::string& source, bool enabled)
+{
+    int index = parse_interrupt_source(source);
+
+    if (vector < 0 || vector > 0xFF || index < 0)
+        return {{"error", "vector must be 0-255 and source any, exception, hardware or software"}};
+
+    std::vector<I386_Interrupt_Breakpoint>* items = m_core->GetI386()->GetInterruptBreakpoints();
+    bool found = false;
+
+    for (size_t i = 0; i < items->size(); i++)
+    {
+        if ((*items)[i].vector == vector && (*items)[i].source == index)
+        {
+            (*items)[i].enabled = enabled;
+            found = true;
+        }
+    }
+
+    return {{"success", true}, {"found", found}, {"enabled", enabled}, {"vector", hex_text(vector, 2)},
+        {"source", source}};
+}
+
+json DebugAdapter::EnableIRQBreakpoint(int irq, bool enabled)
+{
+    if (irq < 0 || irq > 15)
+        return {{"error", "irq must be 0-15"}};
+
+    bool found = m_core->GetI386()->IsIRQBreakpoint(irq);
+    m_core->GetI386()->EnableIRQBreakpoint(irq, enabled);
+    return {{"success", true}, {"found", found}, {"enabled", enabled}, {"irq", irq}};
+}
+
+// Like Disable All in the debugger, every breakpoint keeps its own enabled state
+json DebugAdapter::SetBreakpointsActive(bool active)
+{
+    emu_debug_disable_breakpoints = !active;
+    return {{"success", true}, {"active", active}};
 }
 
 static int parse_interrupt_source(const std::string& source)
@@ -553,7 +595,8 @@ json DebugAdapter::SetInterruptBreakpoint(int vector, const std::string& source)
     char description[64];
     gui_debug_i386_vector_name((u8)vector, name, sizeof(name), description, sizeof(description));
 
-    return {{"success", true}, {"vector", hex_text(vector, 2)}, {"vector_name", name}, {"source", source}};
+    return {{"success", true}, {"vector", hex_text(vector, 2)}, {"vector_name", name},
+        {"vector_description", description}, {"source", source}};
 }
 
 json DebugAdapter::ClearInterruptBreakpoint(int vector, const std::string& source)
@@ -579,6 +622,7 @@ json DebugAdapter::ListInterruptBreakpoints()
         char description[64];
         gui_debug_i386_vector_name(item.vector, name, sizeof(name), description, sizeof(description));
         list.push_back({{"enabled", item.enabled}, {"vector", hex_text(item.vector, 2)}, {"vector_name", name},
+            {"vector_description", description},
             {"source", k_mcp_interrupt_sources[item.source % I386_INTERRUPT_SOURCE_COUNT]}});
     }
 
@@ -631,6 +675,7 @@ json DebugAdapter::GetBreakpointHit()
         char description[64];
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
         json result = {{"kind", "interrupt"}, {"vector", hex_text(hit.vector, 2)}, {"vector_name", name},
+            {"vector_description", description},
             {"source", k_mcp_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]}};
 
         if (hit.line < 16)
@@ -658,6 +703,9 @@ json DebugAdapter::GetBreakpointHit()
     if (hit.type != I386_BREAKPOINT_EXECUTE)
         result["size"] = hit.size;
 
+    if (hit.dma)
+        result["dma"] = true;
+
     if (space == I386_BREAKPOINT_IO && IsValidPointer(gui_debug_port_label((u16)hit.address)))
         result["port_name"] = gui_debug_port_label((u16)hit.address);
 
@@ -673,7 +721,7 @@ json DebugAdapter::ListMemoryAreas()
     {
         GuiDebugMemoryArea area;
 
-        if (!gui_debug_memory_get_area(i, area) || area.size == 0)
+        if (!gui_debug_memory_get_area_at(i, area) || area.size == 0)
             continue;
 
         json flags = json::array();
@@ -692,8 +740,22 @@ json DebugAdapter::ListMemoryAreas()
             {"flags", flags}
         };
 
-        if ((area.flags & GT_DEBUG_REGION_MAPPED) != 0)
+        if ((area.flags & (GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_OVERLAY)) != 0)
             item["physical_base"] = Hex32(area.physical_base);
+
+        if (area.source.space == GT_DEBUG_MEMORY_REGION)
+        {
+            const char* group = gui_debug_memory_region_group(area.source.region);
+            const char* description = gui_debug_memory_region_description(area.source.region);
+
+            if (IsValidPointer(group))
+                item["group"] = group;
+
+            if (IsValidPointer(description))
+                item["description"] = description;
+        }
+        else
+            item["group"] = "address_space";
 
         areas.push_back(item);
     }
@@ -1081,7 +1143,7 @@ json DebugAdapter::ListMemoryWatches(int area)
             item["value"] = value.str();
         }
         else
-            item["value"] = NULL;
+            item["value"] = json();
 
         items.push_back(item);
     }
@@ -1304,19 +1366,25 @@ json DebugAdapter::GetI386Status()
     status["code_size"] = code32 ? 32 : 16;
     status["stack_size"] = stack32 ? 32 : 16;
 
-    if (state.last_exception_vector == 0xFF)
-        status["last_exception"] = NULL;
+    // Only exceptions the CPU raised, interrupts and INT n don't replace it
+    const I386_Exception_Info& exception = cpu->GetLastException();
+
+    if (!exception.valid)
+        status["last_exception"] = json();
     else
     {
         char name[16];
         char description[64];
-        u8 vector = state.last_exception_vector;
-        gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
+        gui_debug_i386_vector_name(exception.vector, name, sizeof(name), description, sizeof(description));
         status["last_exception"] = {
-            {"vector", Hex(vector, 2)},
+            {"vector", Hex(exception.vector, 2)},
             {"name", name},
-            {"description", description}
+            {"description", description},
+            {"return_address", Hex(exception.cs, 4) + ":" + Hex32(exception.eip)}
         };
+
+        if (exception.has_error_code)
+            status["last_exception"]["error_code"] = Hex(exception.error_code, 4);
     }
 
     status["halted"] = state.halted;
@@ -1416,8 +1484,29 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
     }
     else if (reg.size() == 3 && reg[0] == 'D' && reg[1] == 'R' && reg[2] >= '0' && reg[2] <= '7')
         state.debug_registers[reg[2] - '0'] = value;
+    else if (reg == "TR6" || reg == "TR7")
+        state.test_registers[reg[2] - '6'] = value;
+    else if (reg == "GDTR_BASE")
+        state.gdtr.base = value;
+    else if (reg == "GDTR_LIMIT" && value <= 0xFFFF)
+        state.gdtr.limit = (u16)value;
+    else if (reg == "IDTR_BASE")
+        state.idtr.base = value;
+    else if (reg == "IDTR_LIMIT" && value <= 0xFFFF)
+        state.idtr.limit = (u16)value;
+    else if (reg == "LDTR" || reg == "TR")
+    {
+        char text[GT_DEBUG_MEMORY_REASON_SIZE];
+        bool task = reg == "TR";
+
+        // Like LLDT and LTR, the selector loads its descriptor from the GDT
+        if (!gui_debug_i386_load_system_segment(state, task, value, task ? state.task_register : state.ldtr, text,
+            sizeof(text)))
+            return {{"error", text}};
+    }
     else
-        return {{"error", "Invalid register name, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7 or CS-GS"}};
+        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR6, TR7, "
+            "CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits are 16-bit)"}};
 
     state.repeat.active = false;
     cpu->SetState(state);
@@ -1453,11 +1542,14 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
     u32 address = start_address;
     json lines = json::array();
 
+    // A passive decode, so the GUI disassembler and its labels don't change
     while ((count > 0 ? (int)lines.size() < count : address <= end_address) &&
         (int)lines.size() < k_mcp_max_disassembly_lines)
     {
         u32 eip = address - code.base;
-        I386_Disassembler_Record* record = eip <= code.limit ? cpu->Disassemble(code, eip) : NULL;
+        I386_Disassembler_Record decoded;
+        I386_Disassembler_Record* record = eip <= code.limit && cpu->DisassemblePassive(code, eip, decoded) ?
+            &decoded : NULL;
 
         if (!IsValidPointer(record) || record->name[0] == 0 || record->size <= 0)
         {
@@ -1536,7 +1628,8 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
                 char description[64];
                 gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
                 line["vector"] = Hex(vector, 2);
-                line["vector_name"] = description;
+                line["vector_name"] = name;
+                line["vector_description"] = description;
 
                 // AX only names the function for the instruction about to run
                 if (record->linear == m_core->GetI386()->GetCurrentLinearPC())
@@ -1606,7 +1699,8 @@ json DebugAdapter::ListCallStack()
             char name[16];
             char description[64];
             gui_debug_i386_vector_name(entry.vector, name, sizeof(name), description, sizeof(description));
-            item["vector_name"] = description;
+            item["vector_name"] = name;
+            item["vector_description"] = description;
         }
 
         if (IsValidPointer(GetSymbolAt(entry.dest_linear)))
@@ -1641,19 +1735,27 @@ json DebugAdapter::ListDisassemblerBookmarks()
     return {{"bookmarks", items}, {"count", items.size()}};
 }
 
-json DebugAdapter::ListSymbols(const std::string& filter)
+// Pages through user symbols, then automatic labels, an address with a user symbol doesn't list its label
+json DebugAdapter::ListSymbols(const std::string& filter, int start, int count)
 {
     json symbols = json::array();
     std::string needle = to_lower(filter);
     const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
     std::map<u32, std::string>::const_iterator user;
+    int total = 0;
+
+    start = MAX(start, 0);
+    count = CLAMP(count, 1, k_mcp_max_symbols);
 
     for (user = users.begin(); user != users.end(); user++)
     {
         if (!needle.empty() && to_lower(user->second).find(needle) == std::string::npos)
             continue;
 
-        symbols.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
+        if (total >= start && (int)symbols.size() < count)
+            symbols.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
+
+        total++;
     }
 
     const std::map<u32, I386_Disassembler_Record>& records = m_core->GetI386()->GetDisassemblerRecords();
@@ -1661,20 +1763,26 @@ json DebugAdapter::ListSymbols(const std::string& filter)
 
     for (record = records.begin(); record != records.end(); record++)
     {
-        if (record->second.auto_symbol[0] == 0)
+        if (record->second.auto_symbol[0] == 0 || users.find(record->first) != users.end())
             continue;
 
         if (!needle.empty() && to_lower(record->second.auto_symbol).find(needle) == std::string::npos)
             continue;
 
-        symbols.push_back({
-            {"address", Hex32(record->first)},
-            {"name", record->second.auto_symbol},
-            {"type", "automatic"}
-        });
+        if (total >= start && (int)symbols.size() < count)
+        {
+            symbols.push_back({
+                {"address", Hex32(record->first)},
+                {"name", record->second.auto_symbol},
+                {"type", "automatic"}
+            });
+        }
+
+        total++;
     }
 
-    return {{"symbols", symbols}, {"count", symbols.size()}};
+    return {{"symbols", symbols}, {"count", symbols.size()}, {"start", start}, {"total", total},
+        {"has_more", start + (int)symbols.size() < total}};
 }
 
 json DebugAdapter::AddSymbol(u32 address, const std::string& name)
@@ -1692,32 +1800,43 @@ json DebugAdapter::RemoveSymbol(u32 address)
 
 json DebugAdapter::LoadSymbols(const std::string& file_path)
 {
-    int count = gui_debug_load_symbols(file_path.c_str());
+    int skipped = 0;
+    int count = gui_debug_load_symbols(file_path.c_str(), &skipped);
 
     if (count < 0)
         return {{"error", "Unable to read " + file_path}};
 
-    return {{"success", true}, {"file_path", file_path}, {"loaded", count}};
+    return {{"success", true}, {"file_path", file_path}, {"loaded", count}, {"skipped", skipped}};
 }
 
-json DebugAdapter::LookupSymbolByName(const std::string& name)
+// Exact names, or with partial a case-insensitive substring
+json DebugAdapter::LookupSymbolByName(const std::string& name, bool partial)
 {
     json matches = json::array();
+    std::string needle = to_lower(name);
     const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
     std::map<u32, std::string>::const_iterator user;
 
-    for (user = users.begin(); user != users.end(); user++)
+    for (user = users.begin(); user != users.end() && (int)matches.size() < k_mcp_max_symbols; user++)
     {
-        if (name == user->second)
+        bool match = partial ? to_lower(user->second).find(needle) != std::string::npos : name == user->second;
+
+        if (match)
             matches.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
     }
 
     const std::map<u32, I386_Disassembler_Record>& records = m_core->GetI386()->GetDisassemblerRecords();
     std::map<u32, I386_Disassembler_Record>::const_iterator record;
 
-    for (record = records.begin(); record != records.end(); record++)
+    for (record = records.begin(); record != records.end() && (int)matches.size() < k_mcp_max_symbols; record++)
     {
-        if (name == record->second.auto_symbol)
+        if (record->second.auto_symbol[0] == 0)
+            continue;
+
+        bool match = partial ? to_lower(record->second.auto_symbol).find(needle) != std::string::npos :
+            name == record->second.auto_symbol;
+
+        if (match)
         {
             matches.push_back({
                 {"address", Hex32(record->first)},
@@ -1762,7 +1881,7 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
 
     I386_State* state = m_core->GetI386()->GetState();
     u32 total = gui_debug_i386_table_entry_count(id);
-    bool ivt = id == GuiDebugDescriptorTable_IDT && state->execution_mode != I386_MODE_PROTECTED;
+    bool ivt = id == GuiDebugDescriptorTable_IDT && gui_debug_i386_idt_is_ivt();
     count = CLAMP(count, 1, 256);
     json entries = json::array();
 
@@ -1780,6 +1899,7 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
             char description[64];
             gui_debug_i386_vector_name((u8)i, name, sizeof(name), description, sizeof(description));
             entry["vector_name"] = name;
+            entry["vector_description"] = description;
         }
 
         if (!readable)
@@ -1815,7 +1935,7 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
             entry["target"] = hex_text(descriptor.gate_selector, 4) + ":" + Hex32(descriptor.gate_offset);
 
             if (descriptor.type != 0x05 &&
-                gui_debug_i386_selector_base(descriptor.gate_selector, base, limit, reason, sizeof(reason)))
+                gui_debug_i386_descriptor_base(descriptor.gate_selector, base, limit, reason, sizeof(reason)))
             {
                 entry["target_linear"] = Hex32(base + descriptor.gate_offset);
 
@@ -2129,6 +2249,8 @@ json DebugAdapter::GetRTCStatus()
 
 json DebugAdapter::GetSystemStatus()
 {
+    char serial_rom[32];
+    gui_debug_system_serial_rom_text(serial_rom, sizeof(serial_rom));
     const GT_Machine_Config& machine = m_core->GetMachineConfig();
     SystemControl::SystemControl_State* control = m_core->GetSystemControl()->GetState();
     Memory::Memory_State* memory = m_core->GetMemory()->GetState();
@@ -2140,7 +2262,7 @@ json DebugAdapter::GetSystemStatus()
             {"cpu_clock_hz", machine.cpu_clock_rate},
             {"ram_kb", machine.ram_size / 1024},
             {"floppy_drives", machine.floppy_drives},
-            {"machine_id", "0101"}
+            {"machine_id", Hex(gui_debug_system_machine_id(), 4)}
         }},
         {"reset", {
             {"cause", Hex(control->reset_cause, 2)},
@@ -2164,7 +2286,7 @@ json DebugAdapter::GetSystemStatus()
             {"chip_select", (control->serial_rom_control & 0x20) == 0},
             {"bit", control->serial_rom_bit},
             {"data", m_core->GetSystemControl()->Peek(0x0032) & 0x01},
-            {"contents", "FUJITSU, model 0101"}
+            {"contents", serial_rom}
         }}
     };
 }
@@ -2193,7 +2315,7 @@ json DebugAdapter::GetKeyboardStatus()
     for (int key = GT_KEY_NONE + 1; key < GT_KEY_COUNT; key++)
     {
         if (state->keys[key] && IsValidPointer(gui_debug_key_name(key)))
-            pressed.push_back(gui_debug_key_name(key));
+            pressed.push_back({{"code", Hex(key, 2)}, {"key", gui_debug_key_name(key)}});
     }
 
     return {
@@ -2231,9 +2353,10 @@ static json layer_json(Video* video, int layer)
         {"h_window", {{"start", hds}, {"end", hde}, {"dots", hde > hds ? hde - hds : 0}}},
         {"v_window", {{"start", vds}, {"end", vde}, {"lines", vde > vds ? (vde - vds) / 2 : 0}}},
         {"vram_start", hex_text(info.page_base + info.start, 5)},
+        {"fa", hex_text(crtc[k_video_crtc_fa0 + layer * 4], 4)},
         {"stride_bytes", info.stride},
         {"haj", crtc[k_video_crtc_haj0 + layer * 4]},
-        {"field_offset", crtc[k_video_crtc_fo0 + layer * 4]},
+        {"field_offset", hex_text(crtc[k_video_crtc_fo0 + layer * 4], 4)},
         {"zoom_x", (zoom & 0x0F) + 1},
         {"zoom_y", ((zoom >> 4) & 0x0F) + 1}
     };
@@ -2276,9 +2399,9 @@ json DebugAdapter::GetCRTCStatus()
         {"display", {
             {"dot_clock_hz", (u32)clock},
             {"line_dots", line_clocks},
-            {"line_rate_khz", clock / line_clocks / 1000.0},
+            {"line_rate_khz", state->running ? json(clock / line_clocks / 1000.0) : json(NULL)},
             {"frame_half_lines", half_lines},
-            {"refresh_hz", clock * 2.0 / ((double)half_lines * line_clocks)},
+            {"refresh_hz", state->running ? json(clock * 2.0 / ((double)half_lines * line_clocks)) : json(NULL)},
             {"interlaced", (half_lines & 1) != 0},
             {"hsw1", crtc[0x00]},
             {"hsw2", crtc[0x01]},
@@ -2405,11 +2528,17 @@ static json palette_entries(const u8 (*colors)[3], int count, bool nibbles)
 
 json DebugAdapter::GetPalettes(const std::string& palette)
 {
-    Video::Video_State* state = m_core->GetVideo()->GetState();
+    Video* video = m_core->GetVideo();
+    Video::Video_State* state = video->GetState();
     int selected = (state->output[1] >> 4) & 0x03;
     json result = {
         {"index", Hex(state->palette_index, 2)},
-        {"selected", selected == 0 ? "layer0" : selected == 2 ? "layer1" : "256"}
+        {"selected", selected == 0 ? "layer0" : selected == 2 ? "layer1" : "256"},
+        {"in_use", {
+            {"layer0", video->GetLayerFormat(0) == Video::VIDEO_LAYER_4BPP},
+            {"layer1", video->GetLayerFormat(1) == Video::VIDEO_LAYER_4BPP},
+            {"256", video->GetLayerFormat(0) == Video::VIDEO_LAYER_8BPP}
+        }}
     };
     bool all = palette.empty() || palette == "all";
 
@@ -2437,6 +2566,7 @@ json DebugAdapter::GetPalettes(const std::string& palette)
         }
 
         result["digital"] = digital;
+        result["dpmd"] = state->digital_palette_modified;
     }
 
     return result;
@@ -3119,8 +3249,10 @@ json DebugAdapter::GetCDROMAudioStatus()
 
         if (track >= 0)
         {
+            u32 position = state->current_lba - MIN(state->current_lba, media->GetTracks()[track].start_lba);
             result["track"] = track + 1;
-            result["track_position"] = msf_text(state->current_lba - MIN(state->current_lba, media->GetTracks()[track].start_lba));
+            result["track_position_lba"] = position;
+            result["track_position"] = msf_text(position);
         }
     }
 
@@ -3276,8 +3408,10 @@ json DebugAdapter::ListFloppyDrives()
             int heads = 0;
             int sectors = 0;
             int sector_size = 0;
+            u32 total_size = 0;
+            bool mixed = false;
 
-            char name[18] = { };
+            char name[64] = { };
             gui_debug_floppy_disk_name(disk, name, sizeof(name));
             entry["disk_name"] = name;
 
@@ -3289,9 +3423,9 @@ json DebugAdapter::ListFloppyDrives()
             entry["write_protected"] = disk->IsWriteProtected();
             entry["modified"] = disk->IsDirty();
 
-            if (gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size))
+            if (gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size, total_size, mixed))
                 entry["geometry"] = {{"cylinders", cylinders}, {"heads", heads}, {"sectors", sectors},
-                    {"sector_size", sector_size}};
+                    {"sector_size", sector_size}, {"total_size", total_size}, {"mixed", mixed}};
         }
 
         drives.push_back(entry);
@@ -3448,266 +3582,477 @@ json DebugAdapter::SetFloppyWriteProtect(int drive, bool write_protected)
     return {{"success", true}, {"drive", drive}, {"write_protected", disk->IsWriteProtected()}};
 }
 
-static const char* const k_mcp_trace_filters[TRACE_TYPE_COUNT] =
-{
-    "cpu", "interrupt", "io", "dma", "cdrom", "fdc", "vsync"
-};
-static const char* const k_mcp_trace_memory_sizes[4] = { "100K", "500K", "1M", "2M" };
-static const char* const k_mcp_trace_disk_sizes[4] = { "10MB", "100MB", "1GB", "unbounded" };
-
-static int find_name(const std::string& value, const char* const* names, int count)
-{
-    for (int i = 0; i < count; i++)
-    {
-        if (value == names[i])
-            return i;
-    }
-
-    return -1;
-}
-
-static json trace_status(TraceLogger* logger)
-{
-    json filters = json::array();
-
-    for (int i = 0; i < TRACE_TYPE_COUNT; i++)
-    {
-        if ((config_debug.trace_flags & (1 << i)) != 0)
-            filters.push_back(k_mcp_trace_filters[i]);
-    }
-
-    json result = {
-        {"running", logger->IsRunning()},
-        {"output", config_debug.trace_output == 1 ? "disk" : "memory"},
-        {"memory_size", k_mcp_trace_memory_sizes[CLAMP(config_debug.trace_capacity, 0, 3)]},
-        {"disk_size", k_mcp_trace_disk_sizes[CLAMP(config_debug.trace_disk_size, 0, 3)]},
-        {"registers", config_debug.trace_registers},
-        {"filters", filters},
-        {"retained", logger->GetCount()},
-        {"total_logged", logger->GetSequence()}
-    };
-
-    if (config_debug.trace_output == 1)
-    {
-        result["disk_path"] = gui_debug_trace_get_disk_path();
-        result["disk_bytes"] = gui_debug_trace_get_disk_bytes();
-    }
-
-    return result;
-}
-
 json DebugAdapter::GetTraceLog(s64 start, int count)
 {
-    TraceLogger* logger = m_core->GetTraceLogger();
-    u32 retained = logger->GetCount();
-    u64 total = logger->GetSequence();
+    json result;
+    TraceLogger* tl = m_core->GetTraceLogger();
+    u32 retained = tl->GetCount();
+    u64 total = tl->GetSequence();
     u64 oldest = total - retained;
-    bool overrun = false;
-    u64 first = 0;
 
-    count = CLAMP(count, 1, 1000);
+    if (count < 1)
+        count = 100;
+
+    if (count > 1000)
+        count = 1000;
+
+    u64 actual_start;
+    bool overrun = false;
 
     if (start < 0)
     {
-        u64 tail = (u64)(-start);
-        first = total - oldest > tail ? total - tail : oldest;
+        u64 tail = (u64)(-(start + 1)) + 1;
+        actual_start = (total - oldest > tail) ? (total - tail) : oldest;
     }
     else
     {
-        first = (u64)start;
+        actual_start = (u64)start;
 
-        if (first < oldest)
+        if (actual_start < oldest)
         {
-            first = oldest;
+            actual_start = oldest;
             overrun = true;
         }
     }
 
-    json lines = json::array();
-    u64 last = first;
-
-    for (u64 sequence = first; sequence < total && (int)lines.size() < count; sequence++)
+    if (actual_start >= total)
     {
-        char text[GUI_DEBUG_TRACE_TEXT_SIZE];
-        gui_debug_trace_format(logger->GetEntry((u32)(sequence - oldest)), text, sizeof(text), config_debug.trace_registers,
-            true);
-        lines.push_back(text);
-        last = sequence + 1;
+        result["total_entries"] = retained;
+        result["total_logged"] = total;
+        result["oldest_sequence"] = oldest;
+        result["start"] = actual_start;
+        result["next_sequence"] = actual_start;
+        result["count"] = 0;
+        result["overrun"] = overrun;
+        result["lines"] = json::array();
+        return result;
     }
 
-    json result = trace_status(logger);
-    result["start"] = first;
-    result["next_sequence"] = last;
+    u32 actual_count = (u32)count;
+
+    if ((u64)actual_count > total - actual_start)
+        actual_count = (u32)(total - actual_start);
+
+    u32 buffer_start = (u32)(actual_start - oldest);
+    json lines = json::array();
+
+    for (u32 i = 0; i < actual_count; i++)
+    {
+        const GT_Trace_Entry& entry = tl->GetEntry(buffer_start + i);
+        char buf[GT_TRACE_FORMAT_BUFFER_SIZE];
+
+        GT_Trace_Format_Options options = {};
+        options.linear = true;
+        options.registers = true;
+        options.segments = true;
+        options.flags = true;
+        options.bytes = true;
+        options.cycles = true;
+        options.previous_cycle_valid = (buffer_start + i) > 0;
+        options.previous_cycle = options.previous_cycle_valid ? tl->GetEntry(buffer_start + i - 1).cycle : 0;
+        trace_logger_format_entry(entry, options, buf, sizeof(buf));
+        lines.push_back(buf);
+    }
+
+    result["total_entries"] = retained;
+    result["total_logged"] = total;
     result["oldest_sequence"] = oldest;
+    result["start"] = actual_start;
+    result["next_sequence"] = actual_start + actual_count;
+    result["count"] = actual_count;
     result["overrun"] = overrun;
-    result["count"] = lines.size();
     result["lines"] = lines;
     return result;
 }
 
-json DebugAdapter::SetTraceLog(const json& arguments)
+json DebugAdapter::SetTraceLog(bool enabled, u32 flags, const std::string& output, const std::string& memory_size,
+    const std::string& disk_size, const std::string& output_path, const u32* event_filters,
+    const std::string& vblank_watch_address, const std::string& vblank_watch_operation)
 {
-    TraceLogger* logger = m_core->GetTraceLogger();
-    bool running = logger->IsRunning();
-    bool enable = arguments.contains("enabled") ? arguments["enabled"].get<bool>() : running;
+    static const char* const k_vblank_watch_operations[] = { "read", "write", "read_write" };
+    json result;
+    TraceLogger* tl = m_core->GetTraceLogger();
 
-    if (running && enable && (arguments.contains("filters") || arguments.contains("output") ||
-        arguments.contains("memory_size") || arguments.contains("disk_size") || arguments.contains("output_path")))
-        return {{"error", "Stop the trace logger before changing its settings"}};
-
-    if (arguments.contains("filters"))
+    if (!enabled)
     {
-        int flags = 0;
-
-        for (size_t i = 0; i < arguments["filters"].size(); i++)
+        if (!gui_debug_trace_logger_stop())
         {
-            int index = find_name(arguments["filters"][i].get<std::string>(), k_mcp_trace_filters, TRACE_TYPE_COUNT);
-
-            if (index < 0)
-                return {{"error", "filters take cpu, interrupt, io, dma, cdrom, fdc and vsync"}};
-
-            flags |= 1 << index;
+            result["error"] = "Unable to stop trace logger cleanly";
+            return result;
         }
 
-        config_debug.trace_flags = flags;
+        tl->SetEnabledFlags(0);
+        result["status"] = "stopped";
+        result["total_entries"] = tl->GetCount();
+        return result;
     }
 
-    if (arguments.contains("output"))
-        config_debug.trace_output = arguments["output"].get<std::string>() == "disk" ? 1 : 0;
+    bool was_enabled = gui_debug_trace_logger_is_enabled();
+    int output_value;
 
-    if (arguments.contains("memory_size"))
-        config_debug.trace_capacity = MAX(0, find_name(arguments["memory_size"].get<std::string>(), k_mcp_trace_memory_sizes, 4));
-
-    if (arguments.contains("disk_size"))
-        config_debug.trace_disk_size = MAX(0, find_name(arguments["disk_size"].get<std::string>(), k_mcp_trace_disk_sizes, 4));
-
-    if (arguments.contains("output_path"))
-        config_debug.trace_output_path = arguments["output_path"].get<std::string>();
-
-    if (arguments.contains("registers"))
-        config_debug.trace_registers = arguments["registers"].get<bool>();
-
-    if (enable && !running)
+    if (output.empty())
+        output_value = was_enabled ? config_debug.trace_output : gui_TraceOutput_Memory;
+    else if (output == "memory")
+        output_value = gui_TraceOutput_Memory;
+    else if (output == "disk")
+        output_value = gui_TraceOutput_Disk;
+    else
     {
-        if (!config_debug.debug)
-            return {{"error", "The trace logger records while the debugger is enabled"}};
-
-        if (!gui_debug_trace_start())
-            return {{"error", "Unable to start the trace logger"}};
+        result["error"] = "Invalid trace output";
+        return result;
     }
-    else if (!enable && running)
-        gui_debug_trace_stop();
 
-    json result = trace_status(logger);
-    result["success"] = true;
+    int memory_size_value = config_debug.trace_capacity;
+
+    if (!memory_size.empty())
+    {
+        memory_size_value = gui_debug_trace_logger_memory_size_index(memory_size.c_str());
+
+        if (memory_size_value < 0)
+        {
+            result["error"] = "Invalid trace memory size";
+            return result;
+        }
+    }
+
+    int disk_size_value = config_debug.trace_disk_size;
+
+    if (!disk_size.empty())
+    {
+        disk_size_value = gui_debug_trace_logger_disk_size_index(disk_size.c_str());
+
+        if (disk_size_value < 0)
+        {
+            result["error"] = "Invalid trace disk size";
+            return result;
+        }
+    }
+
+    int vblank_watch_address_value = config_debug.trace_vblank_watch_address;
+
+    if (!vblank_watch_address.empty())
+    {
+        u32 address = 0;
+
+        if (!parse_hex_with_prefix(vblank_watch_address, &address))
+        {
+            result["error"] = "Invalid vblank watch address";
+            return result;
+        }
+
+        vblank_watch_address_value = (int)address;
+    }
+
+    int vblank_watch_operation_value = config_debug.trace_vblank_watch_operation;
+
+    if (!vblank_watch_operation.empty())
+    {
+        vblank_watch_operation_value = -1;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (vblank_watch_operation == k_vblank_watch_operations[i])
+                vblank_watch_operation_value = i;
+        }
+
+        if (vblank_watch_operation_value < 0)
+        {
+            result["error"] = "Invalid vblank watch operation";
+            return result;
+        }
+    }
+
+    bool configuration_changed = output_value != config_debug.trace_output;
+
+    if (output_value == gui_TraceOutput_Memory)
+        configuration_changed = configuration_changed || memory_size_value != config_debug.trace_capacity;
+    else
+    {
+        configuration_changed = configuration_changed || disk_size_value != config_debug.trace_disk_size;
+
+        if (!output_path.empty())
+            configuration_changed = configuration_changed ||
+                config_debug.trace_disk_dir_option != Directory_Location_Custom ||
+                output_path != config_debug.trace_disk_path;
+    }
+
+    if (was_enabled && configuration_changed && !gui_debug_trace_logger_stop())
+    {
+        result["error"] = "Unable to stop trace logger cleanly";
+        return result;
+    }
+
+    if (!gui_debug_trace_logger_is_enabled() &&
+        !gui_debug_trace_logger_configure(output_value, memory_size_value, disk_size_value, output_path.c_str()))
+    {
+        result["error"] = "Unable to configure trace logger";
+        return result;
+    }
+
+    gui_debug_trace_logger_set_event_filters(event_filters);
+    config_debug.trace_vblank_watch_address = vblank_watch_address_value;
+    config_debug.trace_vblank_watch_operation = vblank_watch_operation_value;
+
+    if (!gui_debug_trace_logger_start(flags))
+    {
+        result["error"] = "Unable to start trace logger";
+        return result;
+    }
+
+    // Only the debugger run records, so starting a trace turns it on, like the profiler
+    if (!config_debug.debug)
+    {
+        config_debug.debug = true;
+        emu_debug_continue();
+    }
+
+    result["status"] = "started";
+    result["output"] = config_debug.trace_output == gui_TraceOutput_Disk ? "disk" : "memory";
+    result["memory_size"] = gui_debug_trace_logger_memory_size_name(config_debug.trace_capacity);
+    result["disk_size"] = gui_debug_trace_logger_disk_size_name(config_debug.trace_disk_size);
+
+    if (config_debug.trace_output == gui_TraceOutput_Disk)
+        result["output_path"] = gui_debug_trace_logger_get_output_path();
+
+    u32 enabled_flags = tl->GetEnabledFlags();
+    json event_filter_list = json::array();
+
+    for (int i = 0; i < k_mcp_trace_filter_count; i++)
+    {
+        const McpTraceFilter& filter = k_mcp_trace_filters[i];
+        u32 events = tl->GetEventFilter(filter.type);
+
+        if ((enabled_flags & (1U << filter.type)) != 0 && (events & filter.mask) == filter.mask)
+            event_filter_list.push_back(filter.name);
+    }
+
+    result["filters"] = event_filter_list;
+
+    if ((enabled_flags & TRACE_FLAG_VIDEO) != 0 &&
+        (tl->GetEventFilter(TRACE_VIDEO) & TRACE_VIDEO_EVENT_MISSED_VBLANK) != 0)
+    {
+        char address[16];
+        snprintf(address, sizeof(address), "%08X", (u32)config_debug.trace_vblank_watch_address);
+        result["vblank_watch_address"] = address;
+        result["vblank_watch_operation"] = k_vblank_watch_operations[config_debug.trace_vblank_watch_operation];
+    }
+
+    result["total_entries"] = tl->GetCount();
     return result;
+}
+
+struct ProfilerEntry
+{
+    u32 index;
+    u64 key;
+    std::string name;
+    const char* symbol;
+};
+
+static const char* const k_profiler_type_names[] = { "root", "call", "interrupt" };
+
+static bool profiler_entry_compare(const ProfilerEntry& a, const ProfilerEntry& b)
+{
+    if (a.key != b.key)
+        return a.key > b.key;
+
+    return a.index < b.index;
+}
+
+static double profiler_round(double value)
+{
+    return floor((value * 100.0) + 0.5) / 100.0;
 }
 
 json DebugAdapter::SetProfiler(const std::string& action)
 {
+    json result;
+
     Profiler* profiler = m_core->GetProfiler();
+
+    if (!IsValidPointer(profiler))
+    {
+        result["error"] = "Profiler not available";
+        return result;
+    }
 
     if (action == "start")
     {
         if (!config_debug.debug)
-            return {{"error", "The profiler collects while the debugger is enabled"}};
+        {
+            config_debug.debug = true;
+            emu_debug_continue();
+        }
 
-        config_debug.show_profiler = true;
-        profiler->Start();
+        gui_debug_profiler_show(true);
     }
     else if (action == "stop")
-    {
-        profiler->Stop();
-        config_debug.show_profiler = false;
-    }
+        gui_debug_profiler_show(false);
     else if (action == "reset")
-        profiler->Reset();
-    else
-        return {{"error", "action must be start, stop or reset"}};
-
-    return {{"success", true}, {"running", profiler->IsRunning()}, {"total_cycles", profiler->GetTotalCycles()},
-        {"frames", profiler->GetFrames()}};
-}
-
-static std::string profiler_function_name(const GT_Profiler_Function& function)
-{
-    if (function.type == PROFILER_FUNCTION_ROOT)
-        return "(outside calls)";
-
-    if (function.type == PROFILER_FUNCTION_INTERRUPT)
     {
-        char name[16];
-        char description[64];
-        gui_debug_i386_vector_name(function.vector, name, sizeof(name), description, sizeof(description));
-        return "INT " + hex_text(function.vector, 2) + " " + description;
+        profiler->Reset();
+        gui_debug_profiler_reset();
+    }
+    else
+    {
+        result["error"] = "Invalid profiler action";
+        return result;
     }
 
-    const char* symbol = gui_debug_get_symbol(function.address);
-    return IsValidPointer(symbol) ? std::string(symbol) : hex_text(function.address, 8);
+    result["success"] = true;
+    result["action"] = action;
+    result["window_open"] = config_debug.show_profiler;
+    return result;
 }
 
 json DebugAdapter::GetProfilerData(const std::string& sort, int count, const std::string& filter)
 {
+    json result;
+
     Profiler* profiler = m_core->GetProfiler();
+
+    if (!IsValidPointer(profiler) || !IsValidPointer(profiler->GetFunctions()))
+    {
+        result["error"] = "Profiler not available";
+        return result;
+    }
+
+    if (count < 1)
+        count = 50;
+
+    if (count > 1000)
+        count = 1000;
+
+    profiler->Sync();
+
     const GT_Profiler_Function* functions = profiler->GetFunctions();
-    u32 function_count = IsValidPointer(functions) ? profiler->GetFunctionCount() : 0;
+    u32 function_count = profiler->GetFunctionCount();
     u64 total = profiler->GetTotalCycles();
     u32 frames = profiler->GetFrames();
-    std::string needle = to_lower(filter);
-    std::vector<std::pair<u64, u32> > order;
 
-    if (sort != "inclusive" && sort != "exclusive" && sort != "calls" && sort != "average" && sort != "max")
-        return {{"error", "sort must be inclusive, exclusive, calls, average or max"}};
+    std::string filter_upper = filter;
+    std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), ::toupper);
+
+    std::vector<ProfilerEntry> entries;
 
     for (u32 i = 0; i < function_count; i++)
     {
         const GT_Profiler_Function& function = functions[i];
-        std::string name = profiler_function_name(function);
+        bool pseudo = (function.type == PROFILER_FUNCTION_ROOT);
 
-        if (!needle.empty() && to_lower(name).find(needle) == std::string::npos &&
-            to_lower(hex_text(function.address, 8)).find(needle) == std::string::npos)
-            continue;
+        ProfilerEntry entry;
+        entry.index = i;
+        entry.key = 0;
+        entry.symbol = "none";
 
-        u64 average = function.completed > 0 ? function.inclusive_cycles / function.completed : 0;
-        u64 key = sort == "exclusive" ? function.exclusive_cycles : sort == "calls" ? function.calls :
-            sort == "average" ? average : sort == "max" ? function.max_cycles : function.inclusive_cycles;
-        order.push_back(std::make_pair(key, i));
+        if (function.type == PROFILER_FUNCTION_ROOT)
+            entry.name = "[Root]";
+        else
+        {
+            bool is_manual = false;
+            const char* name = gui_debug_get_symbol_name(function.address, &is_manual);
+
+            if (IsValidPointer(name))
+            {
+                entry.name = name;
+                entry.symbol = is_manual ? "manual" : "auto";
+            }
+        }
+
+        if (!filter_upper.empty())
+        {
+            std::string name_upper = entry.name;
+            std::transform(name_upper.begin(), name_upper.end(), name_upper.begin(), ::toupper);
+
+            char address[16];
+            snprintf(address, sizeof(address), "%08X", function.address);
+
+            bool name_match = (name_upper.find(filter_upper) != std::string::npos);
+            bool address_match = !pseudo && (std::string(address).find(filter_upper) != std::string::npos);
+
+            if (!name_match && !address_match)
+                continue;
+        }
+
+        if (sort == "exclusive")
+            entry.key = function.exclusive_cycles;
+        else if (sort == "calls")
+            entry.key = function.calls;
+        else if (sort == "average")
+            entry.key = (function.completed > 0) ? function.inclusive_cycles / function.completed : 0;
+        else if (sort == "max")
+            entry.key = (function.completed > 0) ? function.max_cycles : 0;
+        else
+            entry.key = function.inclusive_cycles;
+
+        entries.push_back(entry);
     }
 
-    std::sort(order.begin(), order.end(), std::greater<std::pair<u64, u32> >());
-    json list = json::array();
+    std::sort(entries.begin(), entries.end(), profiler_entry_compare);
 
-    for (size_t i = 0; i < order.size() && (int)i < CLAMP(count, 1, 1000); i++)
+    json functions_array = json::array();
+
+    for (size_t i = 0; (i < entries.size()) && (i < (size_t)count); i++)
     {
-        const GT_Profiler_Function& function = functions[order[i].second];
-        json item = {
-            {"name", profiler_function_name(function)},
-            {"type", function.type == PROFILER_FUNCTION_ROOT ? "root" : function.type == PROFILER_FUNCTION_INTERRUPT ?
-                "interrupt" : "call"},
-            {"calls", function.calls},
-            {"calls_per_frame", frames > 0 ? (double)function.calls / frames : 0.0},
-            {"inclusive_cycles", function.inclusive_cycles},
-            {"inclusive_percent", total > 0 ? 100.0 * function.inclusive_cycles / total : 0.0},
-            {"exclusive_cycles", function.exclusive_cycles},
-            {"exclusive_percent", total > 0 ? 100.0 * function.exclusive_cycles / total : 0.0},
-            {"average_cycles", function.completed > 0 ? function.inclusive_cycles / function.completed : 0},
-            {"min_cycles", function.completed > 0 ? function.min_cycles : 0},
-            {"max_cycles", function.max_cycles}
-        };
+        const GT_Profiler_Function& function = functions[entries[i].index];
+        bool root = (function.type == PROFILER_FUNCTION_ROOT);
+        json item;
+        char text[16];
 
-        if (function.type != PROFILER_FUNCTION_ROOT)
-            item["address"] = Hex32(function.address);
+        item["name"] = entries[i].name;
+        item["type"] = k_profiler_type_names[function.type];
 
-        list.push_back(item);
+        if (!root)
+        {
+            item["symbol"] = entries[i].symbol;
+            snprintf(text, sizeof(text), "%08X", function.address);
+            item["address"] = text;
+        }
+
+        if (function.type == PROFILER_FUNCTION_INTERRUPT)
+        {
+            char name[16];
+            char description[64];
+            gui_debug_i386_vector_name(function.vector, name, sizeof(name), description, sizeof(description));
+            snprintf(text, sizeof(text), "%02X", function.vector);
+            item["vector"] = text;
+            item["vector_name"] = name;
+            item["vector_description"] = description;
+        }
+
+        if (!root)
+        {
+            item["calls"] = function.calls;
+            item["calls_per_frame"] = (frames > 0) ? profiler_round((double)function.calls / (double)frames) : 0.0;
+            item["inclusive_cycles"] = function.inclusive_cycles;
+            item["inclusive_percent"] = (total > 0) ?
+                profiler_round(((double)function.inclusive_cycles * 100.0) / (double)total) : 0.0;
+        }
+
+        item["exclusive_cycles"] = function.exclusive_cycles;
+        item["exclusive_percent"] = (total > 0) ?
+            profiler_round(((double)function.exclusive_cycles * 100.0) / (double)total) : 0.0;
+
+        if (!root && (function.completed > 0))
+        {
+            item["average_cycles"] = function.inclusive_cycles / function.completed;
+            item["min_cycles"] = function.min_cycles;
+            item["max_cycles"] = function.max_cycles;
+        }
+
+        functions_array.push_back(item);
     }
 
-    return {
-        {"running", profiler->IsRunning()},
-        {"total_cycles", total},
-        {"frames", frames},
-        {"functions", function_count},
-        {"results", list}
-    };
+    result["collecting"] = profiler->IsEnabled();
+    result["window_open"] = config_debug.show_profiler;
+    result["total_cycles"] = total;
+    result["frames"] = frames;
+    result["function_count"] = function_count - 1;
+    result["sort"] = sort;
+    result["count"] = functions_array.size();
+    result["functions"] = functions_array;
+
+    return result;
 }
 
 json DebugAdapter::GetScreenshot()
@@ -3929,22 +4274,18 @@ json DebugAdapter::ListRecentMedia()
 
     json recent_floppies = json::array();
 
-    for (int drive = 0; drive < config_floppy_drives; drive++)
+    for (int index = 0; index < config_max_recent_floppies; index++)
     {
-        for (int index = 0; index < config_max_recent_floppies; index++)
-        {
-            const std::string& path = config_emulator.recent_floppies[drive][index];
+        const std::string& path = config_emulator.recent_floppies[index];
 
-            if (path.empty())
-                continue;
+        if (path.empty())
+            continue;
 
-            recent_floppies.push_back({
-                {"drive", drive},
-                {"index", index},
-                {"file_path", path},
-                {"file_name", get_filename(path.c_str())}
-            });
-        }
+        recent_floppies.push_back({
+            {"index", index},
+            {"file_path", path},
+            {"file_name", get_filename(path.c_str())}
+        });
     }
 
     result["count"] = recent_media.size();
@@ -4194,7 +4535,6 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     if (name == "x") return GT_GAMEPAD_X;
     if (name == "y") return GT_GAMEPAD_Y;
     if (name == "z") return GT_GAMEPAD_Z;
-    if (name == "zoom") return GT_GAMEPAD_ZOOM;
 
     return 0;
 }
@@ -4465,12 +4805,12 @@ json DebugAdapter::GetInputState()
 {
     static const char* names[] = {
         "up", "down", "left", "right", "select", "run",
-        "A", "B", "C", "X", "Y", "Z", "zoom"
+        "A", "B", "C", "X", "Y", "Z"
     };
     static const u16 masks[] = {
         GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT, GT_GAMEPAD_RIGHT,
         GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_A, GT_GAMEPAD_B,
-        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z, GT_GAMEPAD_ZOOM
+        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z
     };
 
     json players = json::array();

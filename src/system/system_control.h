@@ -24,6 +24,7 @@
 #include "../common/common.h"
 
 class StateSerializer;
+class TraceLogger;
 
 class SystemControl
 {
@@ -43,9 +44,11 @@ public:
     SystemControl();
     ~SystemControl();
     void Init();
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port);
     u8 Peek(u16 port) const;
+    const u8* GetSerialRom() const;
     void Write(u16 port, u8 value);
     void RequestCPUReset(u8 cause);
     bool IsCPUResetPending() const;
@@ -61,6 +64,7 @@ private:
 
 private:
     SystemControl_State m_state;
+    TraceLogger* m_trace_logger;
 };
 
 static const u8 k_system_control_reset_soft = 0x01;

@@ -32,6 +32,7 @@
 #include "../gui.h"
 #include "../gui_actions.h"
 #include "../gui_filedialogs.h"
+#include "../gui_notifications.h"
 #include "gui_debug.h"
 #include "gui_debug_constants.h"
 #include "gui_debug_i386_tables.h"
@@ -44,9 +45,31 @@ struct DisassemblerLine
     bool symbol;
 };
 
+struct SymbolRow
+{
+    u32 address;
+    const char* name;
+    bool user;
+};
+
 static std::vector<DisassemblerLine> disassembler_lines;
+static bool lines_valid = false;
+static u32 lines_generation = 0;
+static u32 lines_symbols_version = 0;
+static bool lines_show_symbols = false;
+static bool lines_show_auto_symbols = false;
+static bool goto_missing = false;
 static std::vector<DisassemblerBookmark> bookmarks;
 static std::map<u32, std::string> user_symbols;
+static std::vector<LogicalSymbol> logical_symbols;
+static u32 user_symbols_version = 0;
+static bool logical_symbols_stopped = false;
+static std::vector<SymbolRow> symbol_rows;
+static bool symbol_rows_valid = false;
+static u32 symbol_rows_generation = 0;
+static u32 symbol_rows_symbols_version = 0;
+static bool symbol_rows_auto = false;
+static char symbol_rows_filter[64] = "";
 static bool add_symbol_open = false;
 static bool add_bookmark_open = false;
 
@@ -54,7 +77,6 @@ static bool selected_address_valid = false;
 static u32 selected_address = 0;
 
 static bool goto_address_requested = false;
-static bool goto_address_unavailable = false;
 static u32 goto_address_target = 0;
 
 static bool goto_back_requested = false;
@@ -62,7 +84,7 @@ static float goto_back = 0.0f;
 static int pc_position = 0;
 static int goto_position = 0;
 
-static char new_breakpoint_buffer[20] = "";
+static char new_breakpoint_buffer[40] = "";
 static char new_interrupt_buffer[4] = "";
 static int new_breakpoint_space = I386_BREAKPOINT_LINEAR;
 static int new_interrupt_source = I386_INTERRUPT_ANY;
@@ -70,8 +92,8 @@ static int new_irq_line = 0;
 static bool new_breakpoint_read = false;
 static bool new_breakpoint_write = false;
 static bool new_breakpoint_execute = true;
-static char goto_address_buffer[9] = "";
-static char runto_address_buffer[9] = "";
+static char goto_address_buffer[24] = "";
+static char runto_address_buffer[24] = "";
 
 static bool decode_ahead_valid = false;
 static u16 decode_ahead_cs = 0;
@@ -86,7 +108,7 @@ static void draw_controls(void);
 static void draw_breakpoints_content(void);
 static void prepare_drawable_lines(void);
 static void draw_disassembly(void);
-static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc);
+static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc, bool stale);
 static void draw_context_menu(DisassemblerLine* line);
 static void split_instruction(const char* instruction, char* prefixes, size_t prefixes_size, char* mnemonic,
     size_t mnemonic_size, char* operands, size_t operands_size);
@@ -99,18 +121,25 @@ static void save_full_disassembler(FILE* file);
 static void save_current_disassembler(FILE* file);
 static void save_instruction(FILE* file, const I386_Disassembler_Record* record, bool segment, bool bytes, bool labels);
 static bool parse_address(const char* text, u32& address);
-static bool parse_address_range(const char* text, u32& start, u32& end);
+static bool parse_address_range(const char* text, bool logical, u32& start, u32& end);
 static void request_goto_address(u32 address);
 static void add_bookmark_popup(void);
 static void add_symbol_popup(void);
-static bool parse_symbol_line(char* line, u32& address, char* name, size_t name_size);
-static bool parse_symbol_address(const char* text, u32& address);
+static bool parse_symbol_line(char* line, u32& address, bool& logical, u16& selector, char* name, size_t name_size);
+static bool parse_symbol_address(const char* text, u32& address, bool& logical, u16& selector);
 static bool is_symbol_name(const char* text);
 static int opcode_index(const I386_Disassembler_Record* record);
 static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate);
 static void port_tooltip(const I386_Disassembler_Record* record);
 static int get_interrupt_vector(const I386_Disassembler_Record* record);
 static void interrupt_tooltip(const I386_Disassembler_Record* record, int vector);
+static const I386_Disassembler_Record* find_covering_record(u32 address);
+static int find_line(u32 address);
+static bool is_record_stale(I386* cpu, const I386_Disassembler_Record* record);
+static void set_breakpoint_enabled(u32 address, bool enabled);
+static void prepare_symbol_rows(const char* filter);
+static bool contains_no_case(const char* text, const char* filter);
+static void resolve_logical_symbols(void);
 
 void gui_debug_disassembler_init(void)
 {
@@ -119,15 +148,40 @@ void gui_debug_disassembler_init(void)
 void gui_debug_disassembler_destroy(void)
 {
     disassembler_lines.clear();
+    symbol_rows.clear();
 }
 
 void gui_debug_disassembler_reset(void)
 {
     selected_address_valid = false;
     goto_address_requested = false;
-    goto_address_unavailable = false;
     goto_back_requested = false;
     decode_ahead_valid = false;
+    lines_valid = false;
+    symbol_rows_valid = false;
+}
+
+// Decoded code and its labels go away, the next stop decodes again from the PC
+void gui_debug_clear_disassembler(void)
+{
+    emu_get_core()->GetI386()->ClearDisassemblerRecords();
+    decode_ahead_valid = false;
+}
+
+void gui_debug_resolve_symbols(void)
+{
+    resolve_logical_symbols();
+}
+
+// SEL:OFF symbols follow the current tables, so they move to their new linear address each time execution stops
+void gui_debug_update_symbols(void)
+{
+    bool stopped = emu_is_debug_idle();
+
+    if (stopped && !logical_symbols_stopped)
+        resolve_logical_symbols();
+
+    logical_symbols_stopped = stopped;
 }
 
 void gui_debug_reset_breakpoints(void)
@@ -166,6 +220,8 @@ void gui_debug_add_symbol(void)
 void gui_debug_reset_symbols(void)
 {
     user_symbols.clear();
+    logical_symbols.clear();
+    user_symbols_version++;
 }
 
 bool gui_debug_load_symbols_file(const char* file_path)
@@ -179,12 +235,65 @@ bool gui_debug_add_user_symbol(u32 linear, const char* name)
         return false;
 
     user_symbols[linear] = name;
+    user_symbols_version++;
     return true;
 }
 
 bool gui_debug_remove_user_symbol(u32 linear)
 {
+    for (std::vector<LogicalSymbol>::iterator it = logical_symbols.begin(); it != logical_symbols.end(); )
+    {
+        if (it->resolved && it->linear == linear)
+            it = logical_symbols.erase(it);
+        else
+            it++;
+    }
+
+    user_symbols_version++;
     return user_symbols.erase(linear) != 0;
+}
+
+// Symbols kept as SEL:OFF, apart from the plain linear ones
+const std::vector<LogicalSymbol>& gui_debug_get_logical_symbols(void)
+{
+    return logical_symbols;
+}
+
+// The same SEL:OFF only changes its name, it resolves again with the next update
+bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name)
+{
+    if (!is_symbol_name(name))
+        return false;
+
+    for (size_t i = 0; i < logical_symbols.size(); i++)
+    {
+        LogicalSymbol& existing = logical_symbols[i];
+
+        if (existing.selector != selector || existing.offset != offset)
+            continue;
+
+        if (existing.resolved)
+        {
+            std::map<u32, std::string>::iterator previous = user_symbols.find(existing.linear);
+
+            if (previous != user_symbols.end() && previous->second == existing.name)
+                user_symbols.erase(previous);
+        }
+
+        existing.name = name;
+        existing.resolved = false;
+        user_symbols_version++;
+        return true;
+    }
+
+    LogicalSymbol symbol;
+    symbol.selector = selector;
+    symbol.offset = offset;
+    symbol.name = name;
+    symbol.resolved = false;
+    symbol.linear = 0;
+    logical_symbols.push_back(symbol);
+    return true;
 }
 
 const char* gui_debug_get_user_symbol(u32 linear)
@@ -200,9 +309,16 @@ const std::map<u32, std::string>& gui_debug_get_user_symbols(void)
 
 const char* gui_debug_get_symbol(u32 linear)
 {
-    const char* user = gui_debug_get_user_symbol(linear);
+    bool is_manual = false;
+    return gui_debug_get_symbol_name(linear, &is_manual);
+}
 
-    if (IsValidPointer(user))
+const char* gui_debug_get_symbol_name(u32 linear, bool* is_manual)
+{
+    const char* user = gui_debug_get_user_symbol(linear);
+    *is_manual = IsValidPointer(user);
+
+    if (*is_manual)
         return user;
 
     I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(linear);
@@ -225,8 +341,12 @@ bool gui_debug_save_disassembler(const char* file_path, bool full)
     return true;
 }
 
-int gui_debug_load_symbols(const char* file_path)
+// Blank and comment lines aren't counted as skipped
+int gui_debug_load_symbols(const char* file_path, int* skipped)
 {
+    if (IsValidPointer(skipped))
+        *skipped = 0;
+
     if (!IsValidPointer(file_path) || file_path[0] == 0)
         return -1;
 
@@ -237,18 +357,38 @@ int gui_debug_load_symbols(const char* file_path)
 
     char line[512];
     int count = 0;
+    int failed = 0;
 
     while (fgets(line, sizeof(line), file) != NULL)
     {
+        const char* first = line;
+
+        while (*first == ' ' || *first == '\t' || *first == '\r' || *first == '\n')
+            first++;
+
+        if (*first == 0 || *first == ';' || *first == '#')
+            continue;
+
         u32 address = 0;
+        u16 selector = 0;
+        bool logical = false;
         char name[64];
 
-        if (parse_symbol_line(line, address, name, sizeof(name)) && gui_debug_add_user_symbol(address, name))
+        if (!parse_symbol_line(line, address, logical, selector, name, sizeof(name)))
+            failed++;
+        else if (logical ? gui_debug_add_logical_symbol(selector, address, name) : gui_debug_add_user_symbol(address, name))
             count++;
+        else
+            failed++;
     }
 
     fclose(file);
-    Log("Loaded %d symbols from %s", count, file_path);
+    resolve_logical_symbols();
+
+    if (IsValidPointer(skipped))
+        *skipped = failed;
+
+    Log("Loaded %d symbols from %s, %d lines skipped", count, file_path, failed);
     return count;
 }
 
@@ -292,6 +432,16 @@ void gui_debug_add_disassembler_bookmark(u32 address, const char* name)
             snprintf(bookmark.name, sizeof(bookmark.name), "Bookmark_%08X", address);
     }
 
+    // One bookmark per address, a new name replaces the old one
+    for (size_t i = 0; i < bookmarks.size(); i++)
+    {
+        if (bookmarks[i].address == address)
+        {
+            bookmarks[i] = bookmark;
+            return;
+        }
+    }
+
     bookmarks.push_back(bookmark);
 }
 
@@ -322,8 +472,9 @@ std::vector<DisassemblerBookmark>* gui_debug_get_disassembler_bookmarks(void)
 void gui_debug_window_disassembler(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(330, 26), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(620, 600), ImGuiCond_FirstUseEver);
+    // The default layout lines up the 80386 window (227 wide), the disassembler and the output 6 pixels apart
+    ImGui::SetNextWindowPos(ImVec2(239.0f, gui_main_menu_height + 6.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(534, 575), ImGuiCond_FirstUseEver);
 
     ImGui::Begin("Intel 80386 Disassembler", &config_debug.show_disassembler, ImGuiWindowFlags_MenuBar);
 
@@ -355,6 +506,11 @@ static void disassembler_menu(void)
 
         if (ImGui::MenuItem("Save Current View As..."))
             gui_file_dialog_save_disassembler(false);
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Clear Disassembled Code"))
+            gui_debug_clear_disassembler();
 
         ImGui::EndMenu();
     }
@@ -395,17 +551,21 @@ static void disassembler_menu(void)
         if (ImGui::BeginMenu("Go To Address..."))
         {
             bool go = false;
-            ImGui::PushItemWidth(82.0f);
+            ImGui::PushItemWidth(120.0f);
 
             if (ImGui::InputTextWithHint("##menu_goto_address", "XXXXXXXX", goto_address_buffer,
                 IM_ARRAYSIZE(goto_address_buffer), ImGuiInputTextFlags_AutoSelectAll |
-                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal |
-                ImGuiInputTextFlags_CharsUppercase))
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsUppercase))
             {
                 go = true;
             }
 
             ImGui::PopItemWidth();
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset\n"
+                    "Code not decoded yet is decoded with the current CS");
+
             ImGui::SameLine();
 
             if (ImGui::Button("Go!", ImVec2(40.0f, 0.0f)))
@@ -415,8 +575,10 @@ static void disassembler_menu(void)
             {
                 u32 address = 0;
 
-                if (parse_address(goto_address_buffer, address))
+                if (gui_debug_i386_parse_linear(goto_address_buffer, address))
                     request_goto_address(address);
+                else
+                    gui_notify(gui_NotificationWarning, NULL, "Invalid address", goto_address_buffer);
 
                 goto_address_buffer[0] = 0;
             }
@@ -479,17 +641,20 @@ static void disassembler_menu(void)
         if (ImGui::BeginMenu("Run To Address..."))
         {
             bool run = false;
-            ImGui::PushItemWidth(82.0f);
+            ImGui::PushItemWidth(120.0f);
 
             if (ImGui::InputTextWithHint("##menu_runto_address", "XXXXXXXX", runto_address_buffer,
                 IM_ARRAYSIZE(runto_address_buffer), ImGuiInputTextFlags_AutoSelectAll |
-                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal |
-                ImGuiInputTextFlags_CharsUppercase))
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsUppercase))
             {
                 run = true;
             }
 
             ImGui::PopItemWidth();
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset");
+
             ImGui::SameLine();
 
             if (ImGui::Button("Run!", ImVec2(50.0f, 0.0f)))
@@ -499,8 +664,10 @@ static void disassembler_menu(void)
             {
                 u32 address = 0;
 
-                if (parse_address(runto_address_buffer, address))
+                if (gui_debug_i386_parse_linear(runto_address_buffer, address))
                     gui_debug_runto_address(address);
+                else
+                    gui_notify(gui_NotificationWarning, NULL, "Invalid address", runto_address_buffer);
 
                 runto_address_buffer[0] = 0;
             }
@@ -602,7 +769,7 @@ static void disassembler_menu(void)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Add Symbol...", NULL, false, selected_address_valid))
+        if (ImGui::MenuItem("Add Symbol..."))
             gui_debug_add_symbol();
 
         if (ImGui::MenuItem("Load Symbols..."))
@@ -680,41 +847,13 @@ static void draw_controls(void)
     if (ImGui::Button(ICON_MD_REPLAY))
         gui_action_reset();
 
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Reset (%s)", config_hotkeys[config_HotkeyIndex_Reset].str);
+
     ImGui::PopFont();
 
     ImGui::SameLine();
     ImGui::TextColored(emu_is_debug_idle() ? red : green, emu_is_debug_idle() ? "   PAUSED" : "   RUNNING");
-
-    ImGui::PushItemWidth(92.0f);
-    ImGui::InputTextWithHint("##goto_address", "Go to linear", goto_address_buffer, IM_ARRAYSIZE(goto_address_buffer),
-        ImGuiInputTextFlags_CharsHexadecimal);
-    ImGui::SameLine();
-
-    if (ImGui::Button("Go"))
-    {
-        u32 address = 0;
-
-        if (parse_address(goto_address_buffer, address))
-            request_goto_address(address);
-    }
-
-    ImGui::SameLine();
-    ImGui::InputTextWithHint("##runto_address", "Run to linear", runto_address_buffer,
-        IM_ARRAYSIZE(runto_address_buffer), ImGuiInputTextFlags_CharsHexadecimal);
-    ImGui::SameLine();
-
-    if (ImGui::Button("Run To"))
-    {
-        u32 address = 0;
-
-        if (parse_address(runto_address_buffer, address))
-            gui_debug_runto_address(address);
-    }
-
-    ImGui::PopItemWidth();
-
-    if (goto_address_unavailable)
-        ImGui::TextColored(violet, "Disassembly unavailable at %08X", goto_address_target);
 }
 
 static void draw_breakpoints_content(void)
@@ -753,9 +892,9 @@ static void draw_breakpoints_content(void)
         }
     }
     else if (cpu->GetBreakpointHit(hit))
-        ImGui::TextColored(yellow, "%s %s %0*X", hit.type == I386_BREAKPOINT_EXECUTE ? "EXEC" :
+        ImGui::TextColored(yellow, "%s %s %0*X%s", hit.type == I386_BREAKPOINT_EXECUTE ? "EXEC" :
             hit.type == I386_BREAKPOINT_WRITE ? "WRITE" : "READ", k_spaces[hit.space % I386_BREAKPOINT_SPACE_COUNT],
-            hit.space == I386_BREAKPOINT_IO ? 4 : 8, hit.address);
+            hit.space == I386_BREAKPOINT_IO ? 4 : 8, hit.address, hit.dma ? " DMA" : "");
     else
         ImGui::TextColored(gray, "--");
 
@@ -766,39 +905,57 @@ static void draw_breakpoints_content(void)
     ImGui::SetColumnOffset(1, 175);
 
     ImGui::PushItemWidth(145);
-    ImGui::Combo("##breakpoint_space", &new_breakpoint_space, "LINEAR\0PHYSICAL\0I/O\0\0");
+
+    if (ImGui::Combo("##breakpoint_space", &new_breakpoint_space, "LINEAR\0PHYSICAL\0I/O\0\0"))
+    {
+        new_breakpoint_read = new_breakpoint_space != I386_BREAKPOINT_LINEAR;
+        new_breakpoint_write = false;
+        new_breakpoint_execute = new_breakpoint_space == I386_BREAKPOINT_LINEAR;
+    }
+
     bool add = ImGui::InputTextWithHint("##add_breakpoint", "ADDR[-ADDR]", new_breakpoint_buffer,
         IM_ARRAYSIZE(new_breakpoint_buffer), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::PopItemWidth();
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Hex address or range: 1234ABCD, 8000-8FFF\nI/O ports: 0000-FFFF");
+        ImGui::SetTooltip("Hex address or range: 1234ABCD, 8000-8FFF\nLinear also takes SR:offset or SEL:offset\n"
+            "I/O ports: 0000-FFFF");
 
     ImGui::Checkbox("R##breakpoint_read", &new_breakpoint_read); ImGui::SameLine();
     ImGui::Checkbox("W##breakpoint_write", &new_breakpoint_write);
 
-    if (new_breakpoint_space == I386_BREAKPOINT_LINEAR)
+    if (new_breakpoint_space != I386_BREAKPOINT_IO)
     {
         ImGui::SameLine();
         ImGui::Checkbox("X##breakpoint_execute", &new_breakpoint_execute);
     }
 
+    u8 data = (new_breakpoint_read ? I386_BREAKPOINT_READ : 0) | (new_breakpoint_write ? I386_BREAKPOINT_WRITE : 0);
+    bool execute = new_breakpoint_execute && new_breakpoint_space != I386_BREAKPOINT_IO;
+
+    ImGui::BeginDisabled(data == 0 && !execute);
+
     if (ImGui::Button("Add##add_breakpoint_button", ImVec2(85, 0)))
         add = true;
 
-    if (add)
+    ImGui::EndDisabled();
+
+    if (add && (data != 0 || execute))
     {
         u32 start = 0;
         u32 end = 0;
-        u8 data = (new_breakpoint_read ? I386_BREAKPOINT_READ : 0) | (new_breakpoint_write ? I386_BREAKPOINT_WRITE : 0);
-        bool execute = new_breakpoint_execute && new_breakpoint_space == I386_BREAKPOINT_LINEAR;
+        bool linear = new_breakpoint_space == I386_BREAKPOINT_LINEAR;
 
-        if (parse_address_range(new_breakpoint_buffer, start, end) && (data != 0 || execute))
+        if (!parse_address_range(new_breakpoint_buffer, linear, start, end))
+            gui_notify(gui_NotificationWarning, NULL, "Invalid breakpoint address", new_breakpoint_buffer);
+        else if (new_breakpoint_space == I386_BREAKPOINT_IO && (start > 0xFFFF || end > 0xFFFF))
+            gui_notify(gui_NotificationWarning, NULL, "I/O ports go from 0000 to FFFF", new_breakpoint_buffer);
+        else
         {
             bool ok = true;
 
             if (execute)
-                ok = cpu->AddBreakpoint(start, end, I386_BREAKPOINT_EXECUTE, I386_BREAKPOINT_LINEAR);
+                ok = cpu->AddBreakpoint(start, end, I386_BREAKPOINT_EXECUTE, (u8)new_breakpoint_space);
 
             if (data != 0)
                 ok = cpu->AddBreakpoint(start, end, data, (u8)new_breakpoint_space) && ok;
@@ -826,10 +983,16 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove = (int)i;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Remove breakpoint");
+
         ImGui::SameLine();
 
         if (ImGui::SmallButton(breakpoint.enabled ? "-" : "+"))
             breakpoint.enabled = !breakpoint.enabled;
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(breakpoint.enabled ? "Disable breakpoint" : "Enable breakpoint");
 
         ImGui::SameLine();
         ImGui::TextColored(breakpoint.enabled ? violet : gray, "%-8s", k_spaces[breakpoint.space % I386_BREAKPOINT_SPACE_COUNT]);
@@ -842,7 +1005,9 @@ static void draw_breakpoints_content(void)
             ImGui::TextColored(color, "%0*X-%0*X", digits, breakpoint.address1, digits, breakpoint.address2);
         else
         {
-            ImGui::TextColored(color, "%0*X", digits, breakpoint.address1);
+            char address[9];
+            snprintf(address, sizeof(address), "%0*X", digits, breakpoint.address1);
+            ImGui::TextColored(color, "%-8s", address);
 
             if (breakpoint.space == I386_BREAKPOINT_IO)
             {
@@ -854,7 +1019,7 @@ static void draw_breakpoints_content(void)
                     ImGui::TextColored(breakpoint.enabled ? green : gray, "%s", label);
                 }
             }
-            else if (breakpoint.type == I386_BREAKPOINT_EXECUTE)
+            else if (breakpoint.type == I386_BREAKPOINT_EXECUTE && breakpoint.space == I386_BREAKPOINT_LINEAR)
             {
                 const char* symbol = gui_debug_get_symbol(breakpoint.address1);
 
@@ -949,15 +1114,23 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove_interrupt = (int)i;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Remove breakpoint");
+
         ImGui::SameLine();
 
         if (ImGui::SmallButton(breakpoint.enabled ? "-" : "+"))
             breakpoint.enabled = !breakpoint.enabled;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(breakpoint.enabled ? "Disable breakpoint" : "Enable breakpoint");
+
         ImGui::SameLine();
+        ImGui::BeginGroup();
         ImGui::TextColored(breakpoint.enabled ? cyan : gray, "INT $%02X", breakpoint.vector); ImGui::SameLine();
-        ImGui::TextColored(breakpoint.enabled ? orange : gray, "%-9s", name); ImGui::SameLine();
+        ImGui::TextColored(breakpoint.enabled ? orange : gray, "%-14s", name); ImGui::SameLine();
         ImGui::TextColored(breakpoint.enabled ? violet : gray, "%s", k_sources[breakpoint.source % I386_INTERRUPT_SOURCE_COUNT]);
+        ImGui::EndGroup();
 
         if (description[0] != 0 && ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", description);
@@ -988,15 +1161,23 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove_irq = line;
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Remove breakpoint");
+
         ImGui::SameLine();
 
         if (ImGui::SmallButton(enabled ? "-" : "+"))
             cpu->EnableIRQBreakpoint(line, !enabled);
 
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(enabled ? "Disable breakpoint" : "Enable breakpoint");
+
         ImGui::SameLine();
+        ImGui::BeginGroup();
         ImGui::TextColored(enabled ? cyan : gray, "%-7s", line_text); ImGui::SameLine();
-        ImGui::TextColored(enabled ? orange : gray, "%-9s", k_debug_irq_sources[line]); ImGui::SameLine();
+        ImGui::TextColored(enabled ? orange : gray, "%-14s", k_debug_irq_sources[line]); ImGui::SameLine();
         ImGui::TextColored(enabled ? violet : gray, "LINE");
+        ImGui::EndGroup();
 
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Breaks on this IRQ line whatever vector the PIC gives it");
@@ -1016,8 +1197,8 @@ static void draw_breakpoints_content(void)
 void gui_debug_window_breakpoints(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(795, 26), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(520, 360), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(182, 234), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(594, 346), ImGuiCond_FirstUseEver);
     ImGui::Begin("Breakpoints", &config_debug.show_breakpoints);
 
     draw_breakpoints_content();
@@ -1057,65 +1238,144 @@ static void prepare_drawable_lines(void)
         decode_ahead_count = config_debug.dis_look_ahead_count;
     }
 
-    const std::map<u32, I386_Disassembler_Record>& records = cpu->GetDisassemblerRecords();
-    std::map<u32, I386_Disassembler_Record>::const_iterator record;
-
-    if (goto_address_requested)
+    if (goto_address_requested && !IsValidPointer(find_covering_record(goto_address_target)))
     {
-        bool found = false;
-
-        for (record = records.begin(); record != records.end(); record++)
-        {
-            if (record->second.name[0] != 0 && (u32)(goto_address_target - record->first) < (u32)record->second.size)
-            {
-                found = true;
-                break;
-            }
-        }
-
         u32 eip = goto_address_target - state.segment[I386_SEGMENT_CS].base;
 
-        if (!found && emu_is_debug_idle() && eip <= state.segment[I386_SEGMENT_CS].limit)
+        if (emu_is_debug_idle() && eip <= state.segment[I386_SEGMENT_CS].limit)
             cpu->Disassemble(eip);
     }
 
-    disassembler_lines.clear();
-    pc_position = 0;
-    goto_position = -1;
+    // The line list only changes with the records, the symbols and the view options
+    bool rebuild = !lines_valid || (lines_generation != cpu->GetDisassemblerGeneration()) ||
+        (lines_symbols_version != user_symbols_version) || (lines_show_symbols != config_debug.dis_show_symbols) ||
+        (lines_show_auto_symbols != config_debug.dis_show_auto_symbols);
 
-    for (record = records.begin(); record != records.end(); record++)
+    if (rebuild)
     {
-        if (record->second.name[0] == 0)
-            continue;
+        const std::map<u32, I386_Disassembler_Record>& records = cpu->GetDisassemblerRecords();
+        std::map<u32, I386_Disassembler_Record>::const_iterator record;
 
-        int first_position = (int)disassembler_lines.size();
+        lines_valid = true;
+        lines_generation = cpu->GetDisassemblerGeneration();
+        lines_symbols_version = user_symbols_version;
+        lines_show_symbols = config_debug.dis_show_symbols;
+        lines_show_auto_symbols = config_debug.dis_show_auto_symbols;
+        disassembler_lines.clear();
 
-        bool user_symbol = IsValidPointer(gui_debug_get_user_symbol(record->first));
-
-        if (config_debug.dis_show_symbols &&
-            (user_symbol || (config_debug.dis_show_auto_symbols && record->second.auto_symbol[0] != 0)))
+        for (record = records.begin(); record != records.end(); record++)
         {
-            DisassemblerLine symbol_line;
+            if (record->second.name[0] == 0)
+                continue;
 
-            symbol_line.record = &record->second;
-            symbol_line.breakpoint = false;
-            symbol_line.symbol = true;
-            disassembler_lines.push_back(symbol_line);
+            bool user_symbol = IsValidPointer(gui_debug_get_user_symbol(record->first));
+
+            if (config_debug.dis_show_symbols &&
+                (user_symbol || (config_debug.dis_show_auto_symbols && record->second.auto_symbol[0] != 0)))
+            {
+                DisassemblerLine symbol_line;
+
+                symbol_line.record = &record->second;
+                symbol_line.breakpoint = false;
+                symbol_line.symbol = true;
+                disassembler_lines.push_back(symbol_line);
+            }
+
+            DisassemblerLine line;
+
+            line.record = &record->second;
+            line.breakpoint = false;
+            line.symbol = false;
+            disassembler_lines.push_back(line);
         }
+    }
 
-        DisassemblerLine line;
+    int count = (int)disassembler_lines.size();
+    int line = find_line(pc);
 
-        line.record = &record->second;
-        line.breakpoint = cpu->IsBreakpoint(record->first);
-        line.symbol = false;
+    if (line < count && disassembler_lines[line].symbol && disassembler_lines[line].record->linear == pc)
+        line++;
 
-        if (record->first == pc)
-            pc_position = (int)disassembler_lines.size();
+    pc_position = (line < count && disassembler_lines[line].record->linear == pc) ? line : 0;
+    goto_position = -1;
+    goto_missing = false;
 
-        if (goto_address_requested && (u32)(goto_address_target - record->first) < (u32)record->second.size)
-            goto_position = first_position;
+    if (goto_address_requested && count > 0)
+    {
+        const I386_Disassembler_Record* target = find_covering_record(goto_address_target);
 
-        disassembler_lines.push_back(line);
+        // Without code at the address the view goes to the next decoded instruction
+        goto_missing = !IsValidPointer(target);
+        goto_position = find_line(goto_missing ? goto_address_target : target->linear);
+
+        if (goto_position >= count)
+            goto_position = count - 1;
+    }
+}
+
+// The named record whose bytes include the address
+static const I386_Disassembler_Record* find_covering_record(u32 address)
+{
+    const std::map<u32, I386_Disassembler_Record>& records = emu_get_core()->GetI386()->GetDisassemblerRecords();
+    std::map<u32, I386_Disassembler_Record>::const_iterator record = records.upper_bound(address);
+
+    while (record != records.begin())
+    {
+        record--;
+
+        if (address - record->first >= GT_I386_MAX_INSTRUCTION_LENGTH)
+            break;
+
+        if (record->second.name[0] != 0)
+            return (address - record->first) < (u32)record->second.size ? &record->second : NULL;
+    }
+
+    return NULL;
+}
+
+// First line at or after the address, a symbol line comes before the instruction it labels
+static int find_line(u32 address)
+{
+    int low = 0;
+    int high = (int)disassembler_lines.size();
+
+    while (low < high)
+    {
+        int middle = low + ((high - low) / 2);
+
+        if (disassembler_lines[middle].record->linear < address)
+            low = middle + 1;
+        else
+            high = middle;
+    }
+
+    return low;
+}
+
+// Memory that no longer holds the decoded bytes, like an overlay or another page mapping
+static bool is_record_stale(I386* cpu, const I386_Disassembler_Record* record)
+{
+    for (int i = 0; i < record->size; i++)
+    {
+        u8 value = 0;
+
+        if (!cpu->TryPeekLinear(record->linear + (u32)i, value) || value != record->opcodes[i])
+            return true;
+    }
+
+    return false;
+}
+
+static void set_breakpoint_enabled(u32 address, bool enabled)
+{
+    std::vector<I386_Breakpoint>* breakpoints = emu_get_core()->GetI386()->GetBreakpoints();
+
+    for (size_t i = 0; i < breakpoints->size(); i++)
+    {
+        I386_Breakpoint& breakpoint = (*breakpoints)[i];
+
+        if (!breakpoint.range && breakpoint.address1 == address && breakpoint.type == I386_BREAKPOINT_EXECUTE)
+            breakpoint.enabled = enabled;
     }
 }
 
@@ -1148,9 +1408,15 @@ static void draw_disassembly(void)
         if (goto_address_requested)
         {
             goto_address_requested = false;
-            goto_address_unavailable = goto_position < 0;
 
-            if (!goto_address_unavailable)
+            if (goto_missing || goto_position < 0)
+            {
+                char detail[64];
+                snprintf(detail, sizeof(detail), "Nothing decoded at %08X yet", goto_address_target);
+                gui_notify(gui_NotificationWarning, NULL, "Showing the next decoded instruction", detail);
+            }
+
+            if (goto_position >= 0)
             {
                 goto_back = ImGui::GetScrollY();
                 ImGui::SetScrollY(goto_position * ImGui::GetTextLineHeightWithSpacing() + 2.0f);
@@ -1187,6 +1453,12 @@ static void draw_disassembly(void)
 
                 ImGui::PushID(item);
 
+                I386_Breakpoint_State breakpoint_state = cpu->GetBreakpointState(record->linear);
+                bool breakpoint = breakpoint_state == I386_BREAKPOINT_STATE_ENABLED;
+                bool stale = is_record_stale(cpu, record);
+
+                line.breakpoint = cpu->IsBreakpoint(record->linear);
+
                 bool selected = selected_address_valid && selected_address == record->linear;
 
                 if (ImGui::Selectable("", selected, ImGuiSelectableFlags_AllowDoubleClick))
@@ -1207,7 +1479,10 @@ static void draw_disassembly(void)
                 ImVec2 row_max = ImGui::GetItemRectMax();
                 bool hovered = ImGui::IsItemHovered();
 
-                if (line.breakpoint && !hovered)
+                if (stale && hovered)
+                    ImGui::SetTooltip("Memory no longer holds these bytes\nThe row updates when the code runs again");
+
+                if (breakpoint && !hovered)
                     draw_list->AddRectFilled(row_min, row_max, ImGui::GetColorU32(dark_red));
                 else if (record->linear == pc && !hovered)
                     draw_list->AddRectFilled(row_min, row_max, ImGui::GetColorU32(dark_yellow));
@@ -1219,18 +1494,21 @@ static void draw_disassembly(void)
 
                 draw_context_menu(&line);
 
+                // A disabled breakpoint only marks the address
+                bool marked = breakpoint_state != I386_BREAKPOINT_STATE_NONE;
+
                 if (config_debug.dis_show_segment)
                 {
                     ImGui::SameLine();
-                    ImGui::TextColored(line.breakpoint ? red : magenta, "%s:%08X", record->segment, record->eip);
+                    ImGui::TextColored(marked ? red : (stale ? gray : magenta), "%s:%08X", record->segment, record->eip);
                 }
 
                 ImGui::SameLine();
-                ImGui::TextColored(line.breakpoint ? red : cyan, "%08X", record->linear);
+                ImGui::TextColored(marked ? red : (stale ? gray : cyan), "%08X", record->linear);
                 ImGui::SameLine();
                 ImGui::TextColored(yellow, record->linear == pc ? "->" : "  ");
                 ImGui::SameLine();
-                draw_instruction(record, line.breakpoint, record->linear == pc);
+                draw_instruction(record, breakpoint, record->linear == pc, stale);
 
                 if (record->returns)
                 {
@@ -1253,9 +1531,9 @@ static void draw_disassembly(void)
     ImGui::PopFont();
 }
 
-static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc)
+static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc, bool stale)
 {
-    const int bytes_column = 25;
+    const int bytes_column = 29;
     char prefixes[24];
     char mnemonic[32];
     char operands[128];
@@ -1270,9 +1548,10 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
         sizeof(vector_name), replaced_jump_target, port, vector);
 
     bool light_theme = config_emulator.theme == config_Theme_Light;
-    ImVec4 mnemonic_color = current_pc ? (ImVec4)yellow : (breakpoint ? (ImVec4)red : (ImVec4)white);
+    ImVec4 mnemonic_color = current_pc ? (ImVec4)yellow :
+        (breakpoint ? (ImVec4)red : (stale ? (ImVec4)gray : (ImVec4)white));
     ImVec4 bytes_color = breakpoint ? (ImVec4)red : (light_theme ? (ImVec4)gray : (ImVec4)mid_gray);
-    bool override_color = current_pc || breakpoint;
+    bool override_color = current_pc || breakpoint || stale;
     float space_width = ImGui::CalcTextSize(" ").x;
     int instruction_length = (int)strlen(mnemonic);
 
@@ -1312,6 +1591,33 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
 
         ImGui::SameLine(0.0f, space_width * spacing);
         ImGui::TextColored(bytes_color, "; %s", record->bytes);
+    }
+}
+
+// Instruction text in the window colors, for other views that show it without its record
+void gui_debug_disassembler_draw_text(const char* instruction)
+{
+    char prefixes[24];
+    char mnemonic[32];
+    char operands[128];
+    float space_width = ImGui::CalcTextSize(" ").x;
+
+    split_instruction(instruction, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
+
+    if (prefixes[0] != 0)
+    {
+        ImGui::TextColored(blue, "%s", prefixes);
+        ImGui::SameLine(0.0f, space_width);
+    }
+
+    ImGui::TextColored(white, "%s", mnemonic);
+
+    if (operands[0] != 0)
+    {
+        ImGui::SameLine(0.0f, space_width);
+        ImGui::BeginGroup();
+        draw_operands(operands, false, false, white, NULL);
+        ImGui::EndGroup();
     }
 }
 
@@ -1612,6 +1918,9 @@ static void draw_context_menu(DisassemblerLine* line)
     if (!ImGui::BeginPopupContextItem())
         return;
 
+    selected_address_valid = true;
+    selected_address = line->record->linear;
+
     I386* cpu = emu_get_core()->GetI386();
 
     if (ImGui::Selectable(line->breakpoint ? "Remove Breakpoint" : "Add Breakpoint"))
@@ -1620,6 +1929,14 @@ static void draw_context_menu(DisassemblerLine* line)
             cpu->RemoveBreakpoint(line->record->linear);
         else
             cpu->AddBreakpoint(line->record->linear);
+    }
+
+    if (line->breakpoint)
+    {
+        bool enabled = cpu->GetBreakpointState(line->record->linear) == I386_BREAKPOINT_STATE_ENABLED;
+
+        if (ImGui::Selectable(enabled ? "Disable Breakpoint" : "Enable Breakpoint"))
+            set_breakpoint_enabled(line->record->linear, !enabled);
     }
 
     if (ImGui::Selectable("Run to Cursor"))
@@ -1642,8 +1959,8 @@ static void draw_context_menu(DisassemblerLine* line)
 void gui_debug_window_call_stack(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(795, 300), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(510, 250), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(223, 101), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(450, 141), ImGuiCond_FirstUseEver);
     ImGui::Begin("Intel 80386 Call Stack", &config_debug.show_call_stack);
 
     I386* cpu = emu_get_core()->GetI386();
@@ -1654,9 +1971,9 @@ void gui_debug_window_call_stack(void)
     if (ImGui::BeginTable("call_stack", 3, flags))
     {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn("Subroutine", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-        ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-        ImGui::TableSetupColumn("Return", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("Subroutine", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+        ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableSetupColumn("Return", ImGuiTableColumnFlags_WidthStretch, 0.9f);
         ImGui::TableHeadersRow();
         ImGui::PushFont(gui_default_font);
 
@@ -1665,29 +1982,55 @@ void gui_debug_window_call_stack(void)
         for (int i = (int)stack.size() - 1; i >= 0; i--)
         {
             const I386_CallStackEntry* entry = &stack[i];
-            I386_Disassembler_Record* record = cpu->GetDisassemblerRecord(entry->dest_linear);
+            const char* symbol = gui_debug_get_symbol(entry->dest_linear);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::PushID(row++);
 
-            if (ImGui::Selectable("##call", false, ImGuiSelectableFlags_SpanAllColumns))
+            if (ImGui::Selectable("##call", false))
                 request_goto_address(entry->dest_linear);
 
             ImGui::SameLine(0, 0);
             ImGui::TextColored(cyan, "%04X:%08X", entry->dest_cs, entry->dest);
 
-            if (IsValidPointer(record) && record->auto_symbol[0] != 0)
+            // Interrupt and exception frames show where they came from
+            if (entry->interrupt)
             {
+                char name[16];
+                char description[64];
+                const char* kind = entry->type == I386_CALL_HARDWARE_INTERRUPT ? "IRQ" :
+                    (entry->type == I386_CALL_EXCEPTION ? "EXC" : "INT");
+
+                gui_debug_i386_vector_name(entry->vector, name, sizeof(name), description, sizeof(description));
                 ImGui::SameLine();
-                ImGui::TextColored(green, "%s", record->auto_symbol);
+                ImGui::TextColored(orange, "%s $%02X", kind, entry->vector);
+
+                if (description[0] != 0 && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s %s", name, description);
             }
 
-            ImGui::PopID();
+            if (IsValidPointer(symbol))
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(green, "%s", symbol);
+            }
+
             ImGui::TableNextColumn();
+
+            if (ImGui::Selectable("##source", false))
+                request_goto_address(entry->src_linear);
+
+            ImGui::SameLine(0, 0);
             ImGui::TextColored(cyan, "%04X:%08X", entry->src_cs, entry->src);
             ImGui::TableNextColumn();
+
+            if (ImGui::Selectable("##return", false))
+                request_goto_address(entry->back_linear);
+
+            ImGui::SameLine(0, 0);
             ImGui::TextColored(cyan, "%04X:%08X", entry->back_cs, entry->back);
+            ImGui::PopID();
         }
 
         ImGui::TableNextRow();
@@ -1708,8 +2051,8 @@ void gui_debug_window_call_stack(void)
 void gui_debug_window_symbols(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(795, 560), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(390, 360), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(264, 168), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(389, 336), ImGuiCond_FirstUseEver);
     ImGui::Begin("Symbols", &config_debug.show_symbols);
 
     static char symbol_filter[64] = "";
@@ -1731,10 +2074,10 @@ void gui_debug_window_symbols(void)
     ImGui::PopItemWidth();
     ImGui::Separator();
 
-    I386* cpu = emu_get_core()->GetI386();
-    const std::map<u32, I386_Disassembler_Record>& records = cpu->GetDisassemblerRecords();
     ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
         ImGuiTableFlags_BordersV | ImGuiTableFlags_Resizable;
+
+    prepare_symbol_rows(symbol_filter);
 
     if (ImGui::BeginTable("symbols_table", 3, flags))
     {
@@ -1745,71 +2088,52 @@ void gui_debug_window_symbols(void)
         ImGui::TableHeadersRow();
         ImGui::PushFont(gui_default_font);
 
-        int row = 0;
         u32 remove_user = 0;
         bool remove_user_requested = false;
-        std::map<u32, std::string>::const_iterator user;
+        ImGuiListClipper clipper;
+        clipper.Begin((int)symbol_rows.size());
 
-        for (user = user_symbols.begin(); user != user_symbols.end(); user++)
+        while (clipper.Step())
         {
-            if (symbol_filter[0] != 0 && strstr(user->second.c_str(), symbol_filter) == NULL)
-                continue;
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::PushID(row++);
-
-            if (ImGui::Selectable("##symbol", false, ImGuiSelectableFlags_SpanAllColumns))
-                request_goto_address(user->first);
-
-            if (ImGui::BeginPopupContextItem())
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
             {
-                if (ImGui::MenuItem("Remove Symbol"))
+                const SymbolRow& symbol = symbol_rows[row];
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::PushID(row);
+
+                if (ImGui::Selectable("##symbol", false, ImGuiSelectableFlags_SpanAllColumns))
+                    request_goto_address(symbol.address);
+
+                if (symbol.user && ImGui::BeginPopupContextItem())
                 {
-                    remove_user = user->first;
-                    remove_user_requested = true;
+                    if (ImGui::MenuItem("Remove Symbol"))
+                    {
+                        remove_user = symbol.address;
+                        remove_user_requested = true;
+                    }
+
+                    ImGui::EndPopup();
                 }
 
-                ImGui::EndPopup();
-            }
+                ImGui::SameLine(0, 0);
+                ImGui::TextColored(cyan, "%08X", symbol.address);
+                ImGui::PopID();
+                ImGui::TableNextColumn();
 
-            ImGui::SameLine(0, 0);
-            ImGui::TextColored(cyan, "%08X", user->first);
-            ImGui::PopID();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(green, "%s", user->second.c_str());
-            ImGui::TableNextColumn();
-            ImGui::TextColored(orange, "User");
+                if (symbol.user)
+                    ImGui::TextColored(green, "%s", symbol.name);
+                else
+                    ImGui::TextColored(config_debug.dis_dim_auto_symbols ? dim_green : green, "%s", symbol.name);
+
+                ImGui::TableNextColumn();
+                ImGui::TextColored(symbol.user ? orange : brown, symbol.user ? "User" : "Auto");
+            }
         }
 
         if (remove_user_requested)
             gui_debug_remove_user_symbol(remove_user);
-
-        std::map<u32, I386_Disassembler_Record>::const_iterator record;
-
-        for (record = records.begin(); record != records.end(); record++)
-        {
-            if (record->second.auto_symbol[0] == 0 || !config_debug.dis_show_auto_symbols)
-                continue;
-
-            if (symbol_filter[0] != 0 && strstr(record->second.auto_symbol, symbol_filter) == NULL)
-                continue;
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::PushID(row++);
-
-            if (ImGui::Selectable("##symbol", false, ImGuiSelectableFlags_SpanAllColumns))
-                request_goto_address(record->first);
-
-            ImGui::SameLine(0, 0);
-            ImGui::TextColored(cyan, "%08X", record->first);
-            ImGui::PopID();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(config_debug.dis_dim_auto_symbols ? dim_green : green, "%s", record->second.auto_symbol);
-            ImGui::TableNextColumn();
-            ImGui::TextColored(brown, "Auto");
-        }
 
         ImGui::PopFont();
         ImGui::EndTable();
@@ -1817,6 +2141,81 @@ void gui_debug_window_symbols(void)
 
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+// Rows are rebuilt only when the symbols, the records or the filter change
+// An address with a user symbol doesn't list its automatic one
+static void prepare_symbol_rows(const char* filter)
+{
+    I386* cpu = emu_get_core()->GetI386();
+
+    if (symbol_rows_valid && symbol_rows_generation == cpu->GetDisassemblerGeneration() &&
+        symbol_rows_symbols_version == user_symbols_version && symbol_rows_auto == config_debug.dis_show_auto_symbols &&
+        strcmp(symbol_rows_filter, filter) == 0)
+        return;
+
+    symbol_rows_valid = true;
+    symbol_rows_generation = cpu->GetDisassemblerGeneration();
+    symbol_rows_symbols_version = user_symbols_version;
+    symbol_rows_auto = config_debug.dis_show_auto_symbols;
+    snprintf(symbol_rows_filter, sizeof(symbol_rows_filter), "%s", filter);
+    symbol_rows.clear();
+
+    std::map<u32, std::string>::const_iterator user;
+
+    for (user = user_symbols.begin(); user != user_symbols.end(); user++)
+    {
+        if (!contains_no_case(user->second.c_str(), filter))
+            continue;
+
+        SymbolRow row;
+        row.address = user->first;
+        row.name = user->second.c_str();
+        row.user = true;
+        symbol_rows.push_back(row);
+    }
+
+    if (!config_debug.dis_show_auto_symbols)
+        return;
+
+    const std::map<u32, I386_Disassembler_Record>& records = cpu->GetDisassemblerRecords();
+    std::map<u32, I386_Disassembler_Record>::const_iterator record;
+
+    for (record = records.begin(); record != records.end(); record++)
+    {
+        if (record->second.auto_symbol[0] == 0 || user_symbols.find(record->first) != user_symbols.end() ||
+            !contains_no_case(record->second.auto_symbol, filter))
+            continue;
+
+        SymbolRow row;
+        row.address = record->first;
+        row.name = record->second.auto_symbol;
+        row.user = false;
+        symbol_rows.push_back(row);
+    }
+}
+
+static bool contains_no_case(const char* text, const char* filter)
+{
+    if (filter[0] == 0)
+        return true;
+
+    for (const char* start = text; *start != 0; start++)
+    {
+        const char* t = start;
+        const char* f = filter;
+
+        while (*t != 0 && *f != 0 && toupper((unsigned char)*t) == toupper((unsigned char)*f))
+        {
+            t++;
+            f++;
+        }
+
+        if (*f == 0)
+            return true;
+    }
+
+    return false;
 }
 
 static bool parse_address(const char* text, u32& address)
@@ -1876,7 +2275,7 @@ static void save_current_disassembler(FILE* file)
 
 static void save_instruction(FILE* file, const I386_Disassembler_Record* record, bool segment, bool bytes, bool labels)
 {
-    const int bytes_column = 25;
+    const int bytes_column = 29;
     char prefixes[24];
     char mnemonic[32];
     char operands[128];
@@ -1913,7 +2312,8 @@ static void save_instruction(FILE* file, const I386_Disassembler_Record* record,
     fputs(record->returns ? "\n\n" : "\n", file);
 }
 
-static bool parse_address_range(const char* text, u32& start, u32& end)
+// Linear ends also take SR:offset and SEL:offset
+static bool parse_address_range(const char* text, bool logical, u32& start, u32& end)
 {
     if (!IsValidPointer(text))
         return false;
@@ -1922,14 +2322,14 @@ static bool parse_address_range(const char* text, u32& start, u32& end)
 
     if (!IsValidPointer(separator))
     {
-        if (!parse_address(text, start))
+        if (!(logical ? gui_debug_i386_parse_linear(text, start) : parse_address(text, start)))
             return false;
 
         end = start;
         return true;
     }
 
-    char first[9];
+    char first[24];
     size_t length = (size_t)(separator - text);
 
     if (length == 0 || length >= sizeof(first))
@@ -1937,6 +2337,9 @@ static bool parse_address_range(const char* text, u32& start, u32& end)
 
     memcpy(first, text, length);
     first[length] = 0;
+
+    if (logical)
+        return gui_debug_i386_parse_linear(first, start) && gui_debug_i386_parse_linear(separator + 1, end);
 
     return parse_address(first, start) && parse_address(separator + 1, end);
 }
@@ -2073,7 +2476,7 @@ static void add_bookmark_popup(void)
 
     if (ImGui::BeginPopupModal("Add Bookmark", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        static char address_bookmark[9] = "";
+        static char address_bookmark[24] = "";
         static char name_bookmark[32] = "";
         static bool bookmark_modified = false;
 
@@ -2086,16 +2489,19 @@ static void add_bookmark_popup(void)
         ImGui::InputText("##name", name_bookmark, IM_ARRAYSIZE(name_bookmark));
         ImGui::PopItemWidth();
 
-        ImGui::Text("Linear Address:");
-        ImGui::PushItemWidth(80);
+        ImGui::Text("Address:");
+        ImGui::PushItemWidth(120);
 
         if (ImGui::InputTextWithHint("##bookaddr", "XXXXXXXX", address_bookmark, IM_ARRAYSIZE(address_bookmark),
-            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase))
+            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CharsUppercase))
         {
             bookmark_modified = true;
         }
 
         ImGui::PopItemWidth();
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset");
 
         ImGui::Separator();
 
@@ -2103,7 +2509,7 @@ static void add_bookmark_popup(void)
         {
             u32 address = 0;
 
-            if (parse_address(address_bookmark, address))
+            if (gui_debug_i386_parse_linear(address_bookmark, address))
             {
                 gui_debug_add_disassembler_bookmark(address, name_bookmark);
                 ImGui::CloseCurrentPopup();
@@ -2131,7 +2537,6 @@ static void request_goto_address(u32 address)
 {
     goto_address_target = address;
     goto_address_requested = true;
-    goto_address_unavailable = false;
 }
 
 static void add_symbol_popup(void)
@@ -2144,9 +2549,10 @@ static void add_symbol_popup(void)
 
     if (ImGui::BeginPopupModal("Add Symbol", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        static char address_symbol[9] = "";
+        static char address_symbol[24] = "";
         static char name_symbol[64] = "";
         static bool symbol_modified = false;
+        static bool symbol_error = false;
 
         if (!symbol_modified && selected_address_valid)
             snprintf(address_symbol, sizeof(address_symbol), "%08X", selected_address);
@@ -2157,23 +2563,38 @@ static void add_symbol_popup(void)
         ImGui::InputText("##symbol_name", name_symbol, IM_ARRAYSIZE(name_symbol));
         ImGui::PopItemWidth();
 
-        ImGui::Text("Linear Address:");
-        ImGui::PushItemWidth(80);
+        ImGui::Text("Address:");
+        ImGui::PushItemWidth(120);
 
         if (ImGui::InputTextWithHint("##symbol_address", "XXXXXXXX", address_symbol, IM_ARRAYSIZE(address_symbol),
-            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase))
+            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CharsUppercase))
         {
             symbol_modified = true;
         }
 
         ImGui::PopItemWidth();
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset");
+
+        if (symbol_error)
+        {
+            ImGui::PushFont(gui_default_font);
+            ImGui::TextColored(red, "Invalid address or name");
+            ImGui::TextColored(gray, "Names use letters, digits, _ . @ ? $\nand don't start with a digit");
+            ImGui::PopFont();
+        }
+
         ImGui::Separator();
 
         if (ImGui::Button("OK", ImVec2(90, 0)))
         {
             u32 address = 0;
 
-            if (parse_address(address_symbol, address) && gui_debug_add_user_symbol(address, name_symbol))
+            symbol_error = !gui_debug_i386_parse_linear(address_symbol, address) ||
+                !gui_debug_add_user_symbol(address, name_symbol);
+
+            if (!symbol_error)
             {
                 ImGui::CloseCurrentPopup();
                 address_symbol[0] = 0;
@@ -2190,13 +2611,14 @@ static void add_symbol_popup(void)
             address_symbol[0] = 0;
             name_symbol[0] = 0;
             symbol_modified = false;
+            symbol_error = false;
         }
 
         ImGui::EndPopup();
     }
 }
 
-static bool parse_symbol_line(char* line, u32& address, char* name, size_t name_size)
+static bool parse_symbol_line(char* line, u32& address, bool& logical, u16& selector, char* name, size_t name_size)
 {
     char* comment = strpbrk(line, ";#");
 
@@ -2238,33 +2660,32 @@ static bool parse_symbol_line(char* line, u32& address, char* name, size_t name_
         value = tokens[0];
     }
 
-    if (!IsValidPointer(symbol) || !is_symbol_name(symbol) || !parse_symbol_address(value, address))
+    if (!IsValidPointer(symbol) || !is_symbol_name(symbol) || !parse_symbol_address(value, address, logical, selector))
         return false;
 
     snprintf(name, name_size, "%s", symbol);
     return true;
 }
 
-static bool parse_symbol_address(const char* text, u32& address)
+// SEL:OFF stays logical, so it can follow the descriptor tables
+static bool parse_symbol_address(const char* text, u32& address, bool& logical, u16& selector)
 {
     char value[32];
     snprintf(value, sizeof(value), "%s", text);
     char* colon = strchr(value, ':');
 
+    logical = false;
+
     if (IsValidPointer(colon))
     {
         *colon = 0;
-        u32 selector = 0;
-        u32 offset = 0;
-        u32 base = 0;
-        u32 limit = 0;
-        char reason[GT_DEBUG_MEMORY_REASON_SIZE];
+        u32 parsed = 0;
 
-        if (!parse_address(value, selector) || selector > 0xFFFF || !parse_address(colon + 1, offset) ||
-            !gui_debug_i386_selector_base((u16)selector, base, limit, reason, sizeof(reason)))
+        if (!parse_address(value, parsed) || parsed > 0xFFFF || !parse_address(colon + 1, address))
             return false;
 
-        address = base + offset;
+        logical = true;
+        selector = (u16)parsed;
         return true;
     }
 
@@ -2279,6 +2700,39 @@ static bool parse_symbol_address(const char* text, u32& address)
         start[length - 1] = 0;
 
     return parse_address(start, address);
+}
+
+// A selector that doesn't resolve now hides its symbol until it does
+static void resolve_logical_symbols(void)
+{
+    if (!IsValidPointer(emu_get_core()) || logical_symbols.empty())
+        return;
+
+    for (size_t i = 0; i < logical_symbols.size(); i++)
+    {
+        LogicalSymbol& symbol = logical_symbols[i];
+        u32 base = 0;
+        u32 limit = 0;
+        char reason[GT_DEBUG_MEMORY_REASON_SIZE];
+        bool resolved = gui_debug_i386_selector_base(symbol.selector, base, limit, reason, sizeof(reason));
+        u32 linear = base + symbol.offset;
+
+        if (symbol.resolved && (!resolved || linear != symbol.linear))
+        {
+            std::map<u32, std::string>::iterator previous = user_symbols.find(symbol.linear);
+
+            if (previous != user_symbols.end() && previous->second == symbol.name)
+                user_symbols.erase(previous);
+        }
+
+        if (resolved)
+            user_symbols[linear] = symbol.name;
+
+        symbol.resolved = resolved;
+        symbol.linear = linear;
+    }
+
+    user_symbols_version++;
 }
 
 static bool is_symbol_name(const char* text)

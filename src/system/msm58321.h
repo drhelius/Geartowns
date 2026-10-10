@@ -26,6 +26,7 @@
 #define MSM58321_REGISTERS 16
 
 class StateSerializer;
+class TraceLogger;
 
 class MSM58321
 {
@@ -43,6 +44,7 @@ public:
     MSM58321();
     ~MSM58321();
     void Init();
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset(u64 clocks);
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
@@ -59,11 +61,13 @@ private:
     int GetValue(int ones, u8 tens_mask) const;
     void SetValue(int ones, u8 tens_mask, int value);
     int GetDaysInMonth() const;
+    void TraceEvent(u8 event, u8 value);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     MSM58321_State m_state;
+    TraceLogger* m_trace_logger;
 };
 
 static const int k_msm58321_seconds = 0x00;

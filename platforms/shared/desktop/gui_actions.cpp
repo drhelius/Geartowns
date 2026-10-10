@@ -29,7 +29,9 @@
 #include "ogl_renderer.h"
 #include "events.h"
 #include "gui.h"
+#include "gui_notifications.h"
 #include "debug/gui_debug.h"
+#include "debug/gui_debug_trace_logger.h"
 #include "rewind.h"
 #include "utils.h"
 #include "video_recorder.h"
@@ -39,6 +41,9 @@ static std::string get_auto_file_path(int dir_option, const std::string& custom_
 void gui_action_load_defaults(void)
 {
     if (gui_is_rom_loading() || emu_is_media_loading())
+        return;
+
+    if (!gui_debug_trace_logger_stop())
         return;
 
     emu_stop_video_recording();
@@ -56,12 +61,14 @@ void gui_action_load_defaults(void)
     emu_reset();
 
     gui_debug_reset();
+    gui_debug_trace_logger_init();
     update_savestates_data();
     events_sync_input();
     ogl_renderer_unload_shader_preset();
     application_apply_settings();
 
     config_write();
+    gui_notify(gui_NotificationSuccess, ICON_MD_SETTINGS_BACKUP_RESTORE, "Default settings restored");
 }
 
 void gui_action_power_on(void)
@@ -73,11 +80,11 @@ void gui_action_power_on(void)
 
     if (!emu_power_on())
     {
-        gui_set_error_message("Unable to power on. Firmware is not loaded.");
+        gui_notify(gui_NotificationError, NULL, "Unable to power on", "Firmware is not loaded");
         return;
     }
 
-    gui_set_status_message("Powered on", 3000);
+    gui_notify(gui_NotificationInfo, ICON_MD_POWER_SETTINGS_NEW, "Powered on", NULL, "power");
 
     if (config_emulator.start_paused)
         emu_pause();
@@ -90,7 +97,7 @@ void gui_action_power_off(void)
 
     emu_resume();
     emu_power_off();
-    gui_set_status_message("Powered off", 3000);
+    gui_notify(gui_NotificationInfo, ICON_MD_POWER_SETTINGS_NEW, "Powered off", NULL, "power");
 }
 
 void gui_action_reset(void)
@@ -98,7 +105,8 @@ void gui_action_reset(void)
     if (emu_is_empty())
         return;
 
-    gui_set_status_message("Resetting...", 3000);
+    gui_notify(gui_NotificationInfo, ICON_MD_REFRESH, "Reset");
+    gui_debug_trace_logger_clear();
     emu_resume();
     emu_reset();
 
@@ -108,20 +116,10 @@ void gui_action_reset(void)
 
 void gui_action_reload_rom(void)
 {
-    if (emu_is_empty())
+    if (!config_debug.debug || emu_is_empty())
         return;
 
-#if defined(GT_ENABLE_PHYSICAL_CDROM)
-    if (emu_get_core()->GetMedia()->IsPhysicalCdRom())
-    {
-        gui_load_physical_cdrom(emu_get_core()->GetMedia()->GetPhysicalCdRomDeviceId());
-        return;
-    }
-#endif
-
-    char media_path[GT_MAX_PATH];
-    strncpy_fit(media_path, emu_get_core()->GetMedia()->GetFilePath(), sizeof(media_path));
-    gui_load_rom(media_path);
+    gui_reload_cdrom();
 }
 
 void gui_action_eject_media(void)
@@ -137,9 +135,9 @@ void gui_action_eject_media(void)
         application_update_title_with_rom(NULL);
 
     if (ejected)
-        gui_set_status_message("CD-ROM ejected", 3000);
+        gui_notify(gui_NotificationInfo, ICON_MD_EJECT, "CD-ROM ejected");
     else
-        gui_set_error_message("Unable to eject CD-ROM");
+        gui_notify(gui_NotificationError, NULL, "Unable to eject CD-ROM");
 }
 
 void gui_action_pause(void)
@@ -150,12 +148,12 @@ void gui_action_pause(void)
     if (emu_is_paused())
     {
         emu_resume();
-        gui_set_status_message("Resumed", 1500);
+        gui_notify(gui_NotificationInfo, ICON_MD_PLAY_ARROW, "Resumed", NULL, "pause", 1500);
     }
     else
     {
         emu_pause();
-        gui_set_status_message("Paused", 1500);
+        gui_notify(gui_NotificationInfo, ICON_MD_PAUSE, "Paused", NULL, "pause", 1500);
     }
 }
 
@@ -166,13 +164,13 @@ void gui_action_ffwd(void)
     if (config_emulator.ffwd)
     {
         display_disable_vsync();
-        gui_set_status_message("Fast Forward ON", 1500);
+        gui_notify(gui_NotificationInfo, ICON_MD_FAST_FORWARD, "Fast forward on", NULL, "ffwd", 1500);
     }
     else
     {
         display_use_vsync_if_enabled();
         emu_audio_reset();
-        gui_set_status_message("Fast Forward OFF", 1500);
+        gui_notify(gui_NotificationInfo, ICON_MD_FAST_FORWARD, "Fast forward off", NULL, "ffwd", 1500);
     }
 }
 
@@ -187,7 +185,7 @@ void gui_action_rewind_pressed(void)
     emu_reset_rewind_timing();
     rewind_set_active(true);
     display_use_vsync_if_enabled();
-    gui_set_status_message("Rewinding...", 500);
+    gui_notify(gui_NotificationInfo, ICON_MD_FAST_REWIND, "Rewinding", NULL, "rewind", 500);
 }
 
 void gui_action_rewind_released(void)
@@ -225,17 +223,9 @@ void gui_action_save_screenshot(const char* path)
         file_path = get_auto_file_path(config_emulator.screenshots_dir_option, config_emulator.screenshots_path, ".png");
 
     if (emu_save_screenshot(file_path.c_str()))
-    {
-        std::string message = "Screenshot saved to ";
-        message += file_path;
-        gui_set_status_message(message.c_str(), 3000);
-    }
+        gui_notify(gui_NotificationSuccess, ICON_MD_PHOTO_CAMERA, "Screenshot saved", file_path.c_str());
     else
-    {
-        std::string message = "Unable to save screenshot to ";
-        message += file_path;
-        gui_set_error_message(message.c_str());
-    }
+        gui_notify(gui_NotificationError, NULL, "Unable to save screenshot", file_path.c_str());
 }
 
 bool gui_action_start_video_recording(const char* path)
@@ -253,13 +243,11 @@ bool gui_action_start_video_recording(const char* path)
 
     if (!emu_start_video_recording(file_path.c_str()))
     {
-        gui_set_error_message("Unable to start video recording");
+        gui_notify(gui_NotificationError, NULL, "Unable to start video recording", file_path.c_str());
         return false;
     }
 
-    std::string message = "Recording video to ";
-    message += file_path;
-    gui_set_status_message(message.c_str(), 3000);
+    gui_notify(gui_NotificationInfo, ICON_MD_FIBER_MANUAL_RECORD, "Recording video", file_path.c_str(), "video");
     return true;
 }
 
@@ -268,10 +256,9 @@ void gui_action_stop_video_recording(void)
     if (!emu_is_video_recording())
         return;
 
-    std::string message = "Video saved to ";
-    message += video_recorder_get_file_path();
+    std::string file_path = video_recorder_get_file_path();
     emu_stop_video_recording();
-    gui_set_status_message(message.c_str(), 3000);
+    gui_notify(gui_NotificationSuccess, ICON_MD_VIDEOCAM, "Video saved", file_path.c_str(), "video");
 }
 
 void gui_action_toggle_video_recording(void)
@@ -280,6 +267,66 @@ void gui_action_toggle_video_recording(void)
         gui_action_stop_video_recording();
     else
         gui_action_start_video_recording(NULL);
+}
+
+void gui_action_save_state(const char* path)
+{
+    if (emu_is_empty())
+        return;
+
+    if (IsValidPointer(path) && path[0] != '\0')
+    {
+        if (emu_save_state_file(path))
+            gui_notify(gui_NotificationSuccess, ICON_MD_SAVE, "State saved", path);
+        else
+            gui_notify(gui_NotificationError, NULL, "Unable to save state", path);
+
+        return;
+    }
+
+    int slot = config_emulator.save_slot + 1;
+    char message[64];
+
+    if (emu_save_state_slot(slot))
+    {
+        snprintf(message, sizeof(message), "State saved to slot %d", slot);
+        gui_notify(gui_NotificationSuccess, ICON_MD_SAVE, message);
+    }
+    else
+    {
+        snprintf(message, sizeof(message), "Unable to save state to slot %d", slot);
+        gui_notify(gui_NotificationError, NULL, message);
+    }
+}
+
+void gui_action_load_state(const char* path)
+{
+    if (emu_is_empty())
+        return;
+
+    if (IsValidPointer(path) && path[0] != '\0')
+    {
+        if (emu_load_state_file(path))
+            gui_notify(gui_NotificationSuccess, ICON_MD_RESTORE, "State loaded", path);
+        else
+            gui_notify(gui_NotificationError, NULL, "Unable to load state", path);
+
+        return;
+    }
+
+    int slot = config_emulator.save_slot + 1;
+    char message[64];
+
+    if (emu_load_state_slot(slot))
+    {
+        snprintf(message, sizeof(message), "State loaded from slot %d", slot);
+        gui_notify(gui_NotificationSuccess, ICON_MD_RESTORE, message);
+    }
+    else
+    {
+        snprintf(message, sizeof(message), "Unable to load state from slot %d", slot);
+        gui_notify(gui_NotificationError, NULL, message);
+    }
 }
 
 static std::string get_auto_file_path(int dir_option, const std::string& custom_path, const char* extension)

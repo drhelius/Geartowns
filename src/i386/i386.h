@@ -331,6 +331,13 @@ enum I386_Breakpoint_Space
     I386_BREAKPOINT_SPACE_COUNT
 };
 
+enum I386_Breakpoint_State
+{
+    I386_BREAKPOINT_STATE_NONE = 0,
+    I386_BREAKPOINT_STATE_ENABLED,
+    I386_BREAKPOINT_STATE_DISABLED
+};
+
 enum I386_Interrupt_Source
 {
     I386_INTERRUPT_ANY = 0,
@@ -360,6 +367,7 @@ struct I386_Interrupt_Breakpoint
 struct I386_Breakpoint_Hit
 {
     bool interrupt;
+    bool dma;
     u8 type;
     u8 space;
     u32 address;
@@ -381,6 +389,16 @@ struct I386_Dynarec_Info
     u32 invalidations;
 };
 
+struct I386_Exception_Info
+{
+    bool valid;
+    u8 vector;
+    bool has_error_code;
+    u32 error_code;
+    u16 cs;
+    u32 eip;
+};
+
 struct I386_CallStackEntry
 {
     u16 src_cs;
@@ -392,6 +410,8 @@ struct I386_CallStackEntry
     u32 src_linear;
     u32 dest_linear;
     u32 back_linear;
+    u16 stack_selector;
+    u32 stack_pointer;
     bool interrupt;
     u8 type;
     u8 vector;
@@ -426,6 +446,7 @@ public:
     void LoadState(std::istream& stream);
 
     u8 GetLastExceptionVector() const;
+    const I386_Exception_Info& GetLastException() const;
     bool CopyDecodeState(I386_Decode_State& state);
 
     void SetTraceEnabled(bool enabled);
@@ -444,14 +465,18 @@ public:
 
     bool CopyDebugState(I386_Debug_State& state) const;
     bool GetDebugRegisterValue(const char* name, u32& value) const;
+    bool GetDebugPartialRegisterValue(const char* name, u32& value) const;
 
     I386_Disassembler_Record* Disassemble(u32 eip);
     I386_Disassembler_Record* Disassemble(const I386_Segment& code_segment, u32 eip);
+    bool DisassemblePassive(const I386_Segment& code_segment, u32 eip, I386_Disassembler_Record& record);
     void DisassembleAhead(int count);
     void DisassembleAhead(u32 start_eip, int count, int depth = 0);
     I386_Disassembler_Record* GetDisassemblerRecord(u32 linear);
     bool IsDisassemblerRecordCurrent(const I386_Disassembler_Record& record, const I386_Segment& code_segment) const;
     const std::map<u32, I386_Disassembler_Record>& GetDisassemblerRecords() const;
+    u32 GetDisassemblerGeneration() const;
+    void ClearDisassemblerRecords();
     void ResetDisassembler();
     void ResetDebuggerExecutionState();
 
@@ -460,10 +485,16 @@ public:
     void AddBreakpoint(u32 start_address, u32 end_address);
     bool AddBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space);
     void AddRunToBreakpoint(u32 address);
+    void AddRunToBreakpoint(u32 address, u16 stack_selector, u32 stack_pointer);
+    bool AddStepOutBreakpoint();
+    void ClearRunToBreakpoint();
     void RemoveBreakpoint(u32 address, u32 end_address = 0);
     bool RemoveBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space);
     bool IsBreakpoint(u32 address) const;
+    I386_Breakpoint_State GetBreakpointState(u32 address) const;
     std::vector<I386_Breakpoint>* GetBreakpoints();
+    void SetBreakpoints(const std::vector<I386_Breakpoint>& breakpoints,
+        const std::vector<I386_Interrupt_Breakpoint>& interrupt_breakpoints);
     bool AddInterruptBreakpoint(u8 vector, u8 source);
     bool RemoveInterruptBreakpoint(u8 vector, u8 source);
     std::vector<I386_Interrupt_Breakpoint>* GetInterruptBreakpoints();
@@ -474,6 +505,8 @@ public:
     u16 GetIRQBreakpoints() const;
     u16 GetDisabledIRQBreakpoints() const;
     void SetIRQBreakpoints(u16 lines, u16 disabled);
+    void SetVBlankWatch(bool read, bool write, u32 address);
+    void UpdateVBlankWatch();
     void EnableDebuggerChecks(bool enable);
     bool CheckDebuggerBreakpoints(bool regular, bool run_to);
     bool IsDebuggerHitPending() const;
@@ -482,11 +515,15 @@ public:
     bool GetBreakpointHitAddress(u32& address) const;
     bool GetBreakpointHit(I386_Breakpoint_Hit& hit) const;
     bool RunToBreakpointHit() const;
+    void ClearBreakpointHit();
+    void RecordDebuggerDMA(u32 physical, u32 size, bool write);
 
     const std::vector<I386_CallStackEntry>& GetDisassemblerCallStack() const;
     void SetDisassemblerCallStack(const std::vector<I386_CallStackEntry>& call_stack);
     bool GetStepCall(u32& return_linear) const;
     u32 GetCurrentLinearPC() const;
+    void GetStackPointer(u16& selector, u32& pointer) const;
+    bool IsRepeatActive() const;
 
     void EnableDynarec(bool enable);
     bool IsDynarecEnabled() const;
@@ -684,9 +721,11 @@ private:
     void DisassembleInstruction(u32 eip);
     void ClearDisassemblerCache();
     void PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_Type type, u8 vector);
+    void PopCallStack();
     bool TrackCall(bool completed, u16 cs, u32 base);
     bool TrackReturn(bool completed);
     bool DeferIO();
+    bool SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks);
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
 #if !defined(GT_DISABLE_DYNAREC)
@@ -892,14 +931,20 @@ private:
     bool CheckInstructionBreakpoint();
     void RecordDataBreakpoints(u32 linear, u32 size, bool write);
     void RecordDebuggerAccess(u32 linear, u32 size, bool write);
+    void ResetVBlankWatch();
     void RecordDebuggerIO(u16 port, u32 value, u32 size, bool write);
     void RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 from, bool has_error_code, u32 error_code);
     void TraceInstruction();
     NO_INLINE void TraceStep(I386_State& before);
     void RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source,
-        u8 line = 0xFF);
+        u8 line = 0xFF, bool dma = false);
+    bool IsRunToStackReached() const;
+    bool CheckExecuteBreakpoints(bool regular, bool run_to);
+    void UpdateExecuteFilter();
 
     bool DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 eip, I386_Decode_State& state);
+    bool FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I386_Disassembler_Record& record);
+    I386_Disassembler_Record& GetOrCreateDisassemblerRecord(u32 linear, u16 cs, u32 eip);
     void DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int count, int depth, int& branch_budget);
 
     template<int operation, int form, int width> bool OPCodes_ALU();
@@ -1134,7 +1179,9 @@ private:
     u8* const* m_write_pages;
     u32 m_memory_generation;
     bool m_batch_mode;
-    u32 m_batch_start_pc;
+    u32 m_io_sync_pc;
+    bool m_io_synced;
+    bool m_io_deferred;
     bool m_slow_memory;
     bool m_user_mode;
     u8 m_default_size;
@@ -1232,6 +1279,7 @@ private:
 #endif
 
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;
+    u32 m_disassembler_generation;
     I386_Disassembler_Record** m_disassembler_cache;
     std::vector<I386_Breakpoint> m_breakpoints;
     std::vector<I386_Interrupt_Breakpoint> m_interrupt_breakpoints;
@@ -1244,14 +1292,27 @@ private:
     bool m_debugger_memory_checks;
     bool m_debugger_io_checks;
     bool m_debugger_interrupt_checks;
+    bool m_debugger_exec_checks;
+    bool m_execute_filter_all;
+    u8 m_execute_filter[32];
     bool m_debugger_hit_pending;
+    I386_Exception_Info m_last_exception;
     TraceLogger* m_trace_logger;
     Profiler* m_profiler;
     bool m_trace_internal;
     bool m_trace_cpu;
     bool m_profiler_active;
+    bool m_vblank_watch_read;
+    bool m_vblank_watch_write;
+    u32 m_vblank_watch_address;
+    bool m_vblank_watch_hit;
+    bool m_vblank_watch_armed;
+    u32 m_vblank_watch_misses;
 
     u32 m_run_to_breakpoint;
+    u32 m_run_to_stack_pointer;
+    u16 m_run_to_stack_selector;
+    bool m_run_to_stack_check;
     u32 m_breakpoint_hit_address;
     u32 m_step_call_return_linear;
     bool m_step_call;

@@ -50,7 +50,7 @@ static int mouse_get_controller(void);
 
 bool events_shortcuts(const SDL_Event* event)
 {
-    bool keyboard_captured = keyboard_captures_event(event);
+    bool keyboard_captured = config_emulator.capture_keyboard && keyboard_captures_event(event);
 
     if (event->type == SDL_EVENT_KEY_UP)
     {
@@ -78,12 +78,18 @@ bool events_shortcuts(const SDL_Event* event)
         return true;
     }
 
-    // While the emulator window has focus every other key belongs to the Towns keyboard
+    // While the keyboard is captured every other key belongs to the Towns keyboard
     if (keyboard_captured)
     {
         if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_Fullscreen], false))
         {
             gui_shortcut(gui_ShortcutFullscreen);
+            return true;
+        }
+
+        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_CaptureKeyboard], false))
+        {
+            gui_shortcut(gui_ShortcutCaptureKeyboard);
             return true;
         }
 
@@ -269,7 +275,8 @@ static GT_GamePad_State input_build_state(int controller)
     GT_GamePad_State state = { 0 };
     SDL_Keymod mods = SDL_GetModState();
 
-    if (config_input.use_keyboard[controller] && (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
+    if (config_input.keyboard_mode[controller] == config_KeyboardMode_Gamepad &&
+        (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
     {
         const bool* keyboard = SDL_GetKeyboardState(NULL);
         const config_Input_Keyboard& keys = config_input_keyboard[controller];
@@ -476,7 +483,7 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
     {
         int type = config_input.controller_type[controller];
 
-        if (!config_input.use_keyboard[controller] || type == GT_CONTROLLER_NONE)
+        if (config_input.keyboard_mode[controller] != config_KeyboardMode_Gamepad || type == GT_CONTROLLER_NONE)
             continue;
 
         const config_Input_Keyboard& keys = config_input_keyboard[controller];

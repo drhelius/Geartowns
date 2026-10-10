@@ -76,6 +76,7 @@ struct Emu_Debug_Buffer_Info
     int window_y;
     int window_width;
     int window_height;
+    int window_wrap;
 };
 
 struct Emu_Debug_Sprite
@@ -125,6 +126,7 @@ EXTERN bool emu_debug_pc_changed;
 EXTERN int emu_debug_step_frames_pending;
 EXTERN bool emu_debug_disable_breakpoints;
 EXTERN u64 emu_frame_counter;
+EXTERN u64 emu_debug_breakpoint_stops;
 EXTERN bool emu_audio_sync;
 
 EXTERN bool emu_init(void);
@@ -145,6 +147,7 @@ EXTERN void emu_resume(void);
 EXTERN bool emu_is_paused(void);
 EXTERN bool emu_is_debug_idle(void);
 EXTERN bool emu_is_empty(void);
+EXTERN bool emu_is_powered_on(void);
 EXTERN bool emu_power_on(void);
 EXTERN void emu_power_off(void);
 EXTERN void emu_reset(void);
@@ -164,14 +167,17 @@ EXTERN void emu_apply_machine_settings(void);
 
 EXTERN void emu_audio_mute(bool mute);
 EXTERN void emu_audio_set_master_volume(float volume);
+EXTERN void emu_audio_set_source_volume(int source, float volume);
+EXTERN void emu_audio_set_source_mute(int source, bool mute);
+EXTERN bool emu_audio_is_source_muted(int source);
 EXTERN void emu_audio_reset(void);
 EXTERN bool emu_is_audio_enabled(void);
 EXTERN bool emu_is_audio_open(void);
 
-EXTERN void emu_save_state_slot(int index);
-EXTERN void emu_load_state_slot(int index);
-EXTERN void emu_save_state_file(const char* file_path);
-EXTERN void emu_load_state_file(const char* file_path);
+EXTERN bool emu_save_state_slot(int index);
+EXTERN bool emu_load_state_slot(int index);
+EXTERN bool emu_save_state_file(const char* file_path);
+EXTERN bool emu_load_state_file(const char* file_path);
 EXTERN void update_savestates_data(void);
 
 EXTERN void emu_get_runtime(GT_Runtime_Info& runtime);
@@ -181,7 +187,7 @@ EXTERN GeartownsCore* emu_get_core(void);
 
 EXTERN void emu_debug_step_over(void);
 EXTERN void emu_debug_step_into(void);
-EXTERN void emu_debug_step_out(void);
+EXTERN bool emu_debug_step_out(void);
 EXTERN void emu_debug_step_frame(void);
 EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);

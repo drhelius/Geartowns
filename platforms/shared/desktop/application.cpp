@@ -603,6 +603,8 @@ static void sdl_events_app(const SDL_Event* event)
         case SDL_EVENT_WINDOW_FOCUS_LOST:
         {
             display_disable_vsync();
+            events_release_keyboard();
+            events_release_mouse();
 
             if (config_emulator.pause_when_inactive)
             {

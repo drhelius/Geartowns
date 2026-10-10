@@ -35,8 +35,8 @@ EXTERN void gui_debug_update(void);
 EXTERN void gui_debug_windows(void);
 EXTERN void gui_debug_reset_symbols(void);
 EXTERN bool gui_debug_load_symbols_file(const char* file_path);
-EXTERN void gui_debug_save_settings(const char* file_path);
-EXTERN void gui_debug_load_settings(const char* file_path);
+EXTERN bool gui_debug_save_settings(const char* file_path);
+EXTERN bool gui_debug_load_settings(const char* file_path);
 EXTERN void gui_debug_auto_save_settings(void);
 EXTERN void gui_debug_auto_load_settings(void);
 

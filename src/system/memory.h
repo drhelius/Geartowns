@@ -27,6 +27,7 @@
 #include "../i386/dynarec_platform.h"
 
 class StateSerializer;
+class TraceLogger;
 
 typedef u8 (*GT_Memory_Read8_Fn)(void* device, u32 offset);
 typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
@@ -49,6 +50,7 @@ public:
     Memory();
     ~Memory();
     void Init();
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void ResetMapping();
     u8 ReadMappingControl(u16 port) const;
@@ -163,6 +165,7 @@ private:
 
     u8* m_video_ram;
     size_t m_video_ram_size;
+    TraceLogger* m_trace_logger;
 
 #if !defined(GT_DISABLE_DYNAREC)
     u8* m_code_pages;

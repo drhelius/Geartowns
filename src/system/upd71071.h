@@ -33,6 +33,7 @@ class StateSerializer;
 typedef bool (*GT_DMA_Read_Fn)(void* device, u16& value, bool word);
 typedef bool (*GT_DMA_Write_Fn)(void* device, u16 value, bool word);
 typedef void (*GT_DMA_End_Fn)(void* device, bool terminal_count);
+typedef void (*GT_DMA_Debug_Fn)(void* debugger, u32 address, u32 size, bool write);
 
 struct GT_DMA_Endpoint
 {
@@ -77,6 +78,7 @@ public:
     ~UPD71071();
     void Init(Memory* memory, Scheduler* scheduler);
     void SetTraceLogger(TraceLogger* trace_logger);
+    void SetDebugCallback(GT_DMA_Debug_Fn callback, void* debugger);
     void Reset();
     u8 Read(u16 port);
     void Write(u16 port, u8 value);
@@ -99,6 +101,7 @@ private:
     void FinishService(int channel, bool terminal_count);
     void CheckUnsupported();
     void UpdateNextEvent();
+    void TraceEvent(u8 event, int channel, u8 reg, u8 value, bool terminal);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -108,6 +111,8 @@ private:
     GT_DMA_Endpoint m_endpoints[UPD71071_CHANNELS];
     bool m_unsupported_logged;
     TraceLogger* m_trace_logger;
+    GT_DMA_Debug_Fn m_debug_callback;
+    void* m_debugger;
     UPD71071_State m_state;
 };
 

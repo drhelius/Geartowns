@@ -54,15 +54,15 @@ INLINE bool I386::OPCodes_OUTS(int width, int source_segment, u32 source_offset)
     {
         u16 port = m_state.registers[I386_REG_EDX].low;
 
+        if (unlikely(m_debugger_io_checks))
+            RecordDebuggerIO(port, value, (u32)width >> 3, true);
+
         if (width == 8)
             m_io->Write8(port, (u8)value, *m_bus_context);
         else if (width == 16)
             m_io->Write16(port, (u16)value, *m_bus_context);
         else
             m_io->Write32(port, value, *m_bus_context);
-
-        if (unlikely(m_debugger_io_checks))
-            RecordDebuggerIO(port, value, (u32)width >> 3, true);
     }
 
     m_bus_context->end_batch = true;
@@ -296,7 +296,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     u32 size = (opcode & 1) != 0 ? m_state.repeat.operand_size : 1;
     u32 source = GetRegister(I386_REG_ESI, address_width);
     u32 destination = GetRegister(I386_REG_EDI, address_width);
-    int segment = m_state.repeat.segment_override == 0xFF ? I386_SEGMENT_DS : m_state.repeat.segment_override;
+    int segment = m_state.repeat.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_state.repeat.segment_override;
     s64 destination_end = (s64)((u64)destination + size - 1);
 
     if (destination_end > m_write_limits[I386_SEGMENT_ES])
@@ -425,7 +425,7 @@ void I386::PrepareString()
 
     m_string.width = (opcode & 1) != 0 ? m_instruction.operand_size * 8 : 8;
     m_string.address_width = m_instruction.address_size * 8;
-    m_string.source_segment = m_instruction.segment_override == 0xFF ? I386_SEGMENT_DS : m_instruction.segment_override;
+    m_string.source_segment = m_instruction.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_instruction.segment_override;
     m_string.repeated = m_instruction.repeat != 0;
     m_string.index_mask = 0;
 

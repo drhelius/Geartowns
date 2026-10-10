@@ -451,7 +451,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ github.TOKEN }}
   release-notes:
-    if: ${{ false }}
     name: Release Notes
     needs: release
     runs-on: ubuntu-latest

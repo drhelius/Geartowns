@@ -2063,7 +2063,7 @@ bool I386::OPCodes_MOV_Moffs()
     u8 opcode = m_instruction.opcode;
     int operand_width = m_instruction.operand_size * 8;
     int width = (opcode == 0xA0 || opcode == 0xA2) ? 8 : operand_width;
-    int segment = m_instruction.segment_override == 0xFF ? I386_SEGMENT_DS : m_instruction.segment_override;
+    int segment = m_instruction.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_instruction.segment_override;
 
     if (opcode <= 0xA1)
     {
@@ -2208,7 +2208,7 @@ bool I386::OPCodes_XLAT()
 
     u32 offset = m_instruction.address_size == 2 ? (u16)(m_state.registers[I386_REG_EBX].low + GetRegister8(0)) :
         m_state.registers[I386_REG_EBX].value + GetRegister8(0);
-    int segment = m_instruction.segment_override == 0xFF ? I386_SEGMENT_DS : m_instruction.segment_override;
+    int segment = m_instruction.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_instruction.segment_override;
     u32 value = 0;
 
     if (!ReadMemory(segment, offset, 8, *m_bus_context, value))
@@ -2268,7 +2268,6 @@ bool I386::OPCodes_IN()
         RecordDebuggerIO(port, value, (u32)width >> 3, false);
 
     SetRegister(I386_REG_EAX, width, value);
-    m_bus_context->end_batch = true;
     CommitEIP(m_instruction);
     return true;
 }
@@ -2308,6 +2307,9 @@ bool I386::OPCodes_OUT()
 
     u32 value = GetRegister(I386_REG_EAX, width);
 
+    if (unlikely(m_debugger_io_checks))
+        RecordDebuggerIO(port, value, (u32)width >> 3, true);
+
     if (IsValidPointer(m_io))
     {
         if (width == 8)
@@ -2317,9 +2319,6 @@ bool I386::OPCodes_OUT()
         else
             m_io->Write32(port, value, *m_bus_context);
     }
-
-    if (unlikely(m_debugger_io_checks))
-        RecordDebuggerIO(port, value, (u32)width >> 3, true);
 
     m_bus_context->end_batch = true;
     CommitEIP(m_instruction);

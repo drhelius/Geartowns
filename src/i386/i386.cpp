@@ -56,8 +56,12 @@ I386::I386()
     m_trace_count = 0;
 
     m_disassembler_cache = new I386_Disassembler_Record*[k_i386_disassembler_cache_size];
+    m_disassembler_generation = 0;
     ClearDisassemblerCache();
     m_run_to_breakpoint = 0;
+    m_run_to_stack_pointer = 0;
+    m_run_to_stack_selector = 0;
+    m_run_to_stack_check = false;
     m_breakpoint_hit_address = 0;
     m_step_call_return_linear = 0;
     m_step_call = false;
@@ -70,7 +74,11 @@ I386::I386()
     m_debugger_memory_checks = false;
     m_debugger_io_checks = false;
     m_debugger_interrupt_checks = false;
+    m_debugger_exec_checks = false;
+    m_execute_filter_all = false;
+    memset(m_execute_filter, 0, sizeof(m_execute_filter));
     m_debugger_hit_pending = false;
+    memset(&m_last_exception, 0, sizeof(m_last_exception));
     m_irq_breakpoints = 0;
     m_irq_breakpoints_disabled = 0;
     m_external_line = -1;
@@ -79,6 +87,12 @@ I386::I386()
     m_trace_internal = false;
     m_trace_cpu = false;
     m_profiler_active = false;
+    m_vblank_watch_read = false;
+    m_vblank_watch_write = false;
+    m_vblank_watch_address = 0;
+    m_vblank_watch_hit = false;
+    m_vblank_watch_armed = false;
+    m_vblank_watch_misses = 0;
 
 #if !defined(GT_DISABLE_DYNAREC)
     m_dynarec_enabled = false;
@@ -150,6 +164,7 @@ void I386::Init(Memory* memory, IO* io)
 #endif
 
     m_disassembler_records.clear();
+    m_disassembler_generation++;
     ClearDisassemblerCache();
 
     Reset();
@@ -162,7 +177,9 @@ void I386::Reset()
     InitPointer(m_bus_context);
     m_memory_generation = 0;
     m_batch_mode = false;
-    m_batch_start_pc = 0;
+    m_io_sync_pc = 0;
+    m_io_synced = false;
+    m_io_deferred = false;
     m_state.execution_mode = I386_MODE_REAL;
 
     memset(&m_step, 0, sizeof(m_step));
@@ -211,11 +228,17 @@ void I386::Reset()
 
     // Decoded rows are debugger history and survive a machine reset
     m_disassembler_call_stack.clear();
+
+    if (IsValidPointer(m_profiler))
+        m_profiler->ResetStack();
+
     m_run_to_breakpoint_enabled = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
     m_breakpoint_hit_address = 0;
     m_debugger_hit_pending = false;
+    UpdateExecuteFilter();
+    ResetVBlankWatch();
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
         SetRealModeSegment((I386_Segment_Register)i, 0);
@@ -248,6 +271,7 @@ void I386::Reset()
 
     m_debug_data_breakpoints = 0;
     m_state.last_exception_vector = 0xFF;
+    m_last_exception.valid = false;
 
 #if !defined(GT_DISABLE_DYNAREC)
     // Memory may have been rewritten without the CPU seeing it, so blocks check their bytes before running again
@@ -326,13 +350,6 @@ void I386::CompleteFault(u16 old_task)
     result.end_batch = m_step_exception.end_batch;
 }
 
-u32 I386::RunInstruction(GT_Bus_Access_Context& context)
-{
-    m_batch_mode = false;
-    SetBusContext(context);
-    return RunCheckedStep();
-}
-
 I386_Run_Result I386::GetStepInfo() const
 {
     I386_Run_Result result = {};
@@ -368,7 +385,9 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     total.exception_vector = 0xFF;
 
     m_batch_mode = true;
-    m_batch_start_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_synced = true;
+    m_io_deferred = false;
     m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
@@ -510,7 +529,7 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
     m_external_line = -1;
 
     if (entered)
-        return clocks;
+        return (u32)clocks;
 
     if (m_exception.pending)
     {
@@ -528,7 +547,7 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
     else
         m_state.shutdown = true;
 
-    return clocks;
+    return (u32)clocks;
 }
 
 u32 I386::EnterNMI(GT_Bus_Access_Context& context)
@@ -545,11 +564,20 @@ void I386::CopyState(I386_State& state) const
     state = m_state;
 }
 
+// Moving CS:EIP away from a stop forgets it, so the old stop address hits normally when reached again
 bool I386::SetState(const I386_State& state)
 {
+    bool moved = state.eip != m_state.eip ||
+        state.segments[I386_SEGMENT_CS].selector != m_state.segments[I386_SEGMENT_CS].selector ||
+        state.segments[I386_SEGMENT_CS].base != m_state.segments[I386_SEGMENT_CS].base;
+
     m_state = state;
     SanitizeState();
     FlushTLB();
+
+    if (moved)
+        ClearBreakpointHit();
+
     return true;
 }
 
@@ -641,6 +669,7 @@ void I386::SanitizeState()
     m_debug_data_breakpoints = 0;
     m_step = {};
     m_step_exception = {};
+    ResetVBlankWatch();
 
 #if !defined(GT_DISABLE_DYNAREC)
     m_dynarec_epoch++;
@@ -709,6 +738,12 @@ void I386::SanitizeState()
 u8 I386::GetLastExceptionVector() const
 {
     return m_state.last_exception_vector;
+}
+
+// Only exceptions the CPU raised, unlike the last vector in the state, which interrupts also update
+const I386_Exception_Info& I386::GetLastException() const
+{
+    return m_last_exception;
 }
 
 // Passive copy of the bytes at CS:EIP before a single step executes them
@@ -1001,6 +1036,7 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
             m_state.debug_registers[7] &= ~0x00002000U;
 
         u64 entry_clocks = k_i386_real_interrupt_entry_clocks;
+        u16 return_cs = m_state.segments[I386_SEGMENT_CS].selector;
         bool ok = EnterInterrupt(current.vector, current_return_eip, context, false, current.has_error_code,
             current.error_code, current.exception_class == I386_EXCEPTION_FAULT, false, &entry_clocks, &result);
 
@@ -1012,6 +1048,12 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
             result.exception_vector = current.vector;
             result.end_batch = true;
             m_state.last_exception_vector = current.vector;
+            m_last_exception.valid = true;
+            m_last_exception.vector = current.vector;
+            m_last_exception.has_error_code = current.has_error_code;
+            m_last_exception.error_code = current.error_code;
+            m_last_exception.cs = return_cs;
+            m_last_exception.eip = current_return_eip;
             return true;
         }
 
@@ -1159,29 +1201,35 @@ void I386::TraceInstruction()
 {
     const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
     u32 linear = code.base + m_state.eip;
-    GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_CPU, 0);
+    GT_Trace_Entry entry = {};
 
-    entry->cpu.linear = linear;
-    entry->cpu.eip = m_state.eip;
-    entry->cpu.cs = code.selector;
-    entry->cpu.mode = (u8)m_state.execution_mode;
-    entry->cpu.eflags = m_state.eflags;
-    entry->cpu.size = 0;
-    entry->cpu.name[0] = 0;
+    entry.type = TRACE_CPU;
+    entry.cpu.linear = linear;
+    entry.cpu.eip = m_state.eip;
+    entry.cpu.eflags = m_state.eflags;
+    entry.cpu.cs = code.selector;
+    entry.cpu.ds = m_state.segments[I386_SEGMENT_DS].selector;
+    entry.cpu.es = m_state.segments[I386_SEGMENT_ES].selector;
+    entry.cpu.ss = m_state.segments[I386_SEGMENT_SS].selector;
+    entry.cpu.fs = m_state.segments[I386_SEGMENT_FS].selector;
+    entry.cpu.gs = m_state.segments[I386_SEGMENT_GS].selector;
+    entry.cpu.mode = (u8)m_state.execution_mode;
 
-    for (int i = 0; i < 8; i++)
-        entry->cpu.registers[i] = m_state.registers[i].value;
+    for (int i = 0; i < I386_REG_COUNT; i++)
+        entry.cpu.registers[i] = m_state.registers[i].value;
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
     const I386_Disassembler_Record* record = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
 
     if (IsValidPointer(record) && record->linear == linear && record->size > 0)
     {
-        entry->cpu.size = (u8)MIN(record->size, 15);
-        memcpy(entry->cpu.bytes, record->opcodes, entry->cpu.size);
-        strncpy_fit(entry->cpu.name, record->name, sizeof(entry->cpu.name));
+        entry.cpu.size = (u8)MIN(record->size, GT_I386_MAX_INSTRUCTION_LENGTH);
+        memcpy(entry.cpu.opcodes, record->opcodes, entry.cpu.size);
+        strncpy_fit(entry.cpu.name, record->name, sizeof(entry.cpu.name));
     }
 #endif
+
+    m_trace_logger->TraceLog(entry);
 }
 
 void I386::RecordTrace(const I386_State& before)
@@ -1239,6 +1287,46 @@ bool I386::GetDebugRegisterValue(const char* name, u32& value) const
         value = m_debug_state.cr2;
     else if (EqualName(name, "CR3"))
         value = m_debug_state.cr3;
+    else
+        return GetDebugPartialRegisterValue(name, value);
+
+    return true;
+}
+
+bool I386::GetDebugPartialRegisterValue(const char* name, u32& value) const
+{
+    static const char* k_names16[I386_REG_COUNT] = { "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI" };
+    static const char* k_names8[8] = { "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH" };
+    static const char* k_segments[I386_SEGMENT_COUNT] = { "ES", "CS", "SS", "DS", "FS", "GS" };
+
+    for (int i = 0; i < I386_REG_COUNT; i++)
+    {
+        if (EqualName(name, k_names16[i]))
+        {
+            value = m_state.registers[i].value & 0xFFFF;
+            return true;
+        }
+
+        if (EqualName(name, k_names8[i]))
+        {
+            value = (m_state.registers[i & 3].value >> (i < 4 ? 0 : 8)) & 0xFF;
+            return true;
+        }
+    }
+
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+    {
+        if (EqualName(name, k_segments[i]))
+        {
+            value = m_state.segments[i].selector;
+            return true;
+        }
+    }
+
+    if (EqualName(name, "IP"))
+        value = m_state.eip & 0xFFFF;
+    else if (EqualName(name, "FLAGS"))
+        value = m_state.eflags & 0xFFFF;
     else
         return false;
 

@@ -32,6 +32,7 @@ class CdRomAudio;
 class PIC;
 class Scheduler;
 class StateSerializer;
+class TraceLogger;
 
 class Audio
 {
@@ -62,6 +63,7 @@ public:
     Audio();
     ~Audio();
     void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void Mute(bool mute);
     void SetMasterVolume(float volume);
@@ -108,6 +110,10 @@ private:
     void UpdateIRQ();
     void UpdatePCMIRQ();
     u64 GetEventClocks(u64 cycles) const;
+    void TraceFM(u8 value);
+    void TracePCM(u8 event, u8 reg, u8 value, u8 channel);
+    void TraceMixer(u8 event, u16 port, u8 value);
+    void TraceIRQ();
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -117,6 +123,7 @@ private:
     CdRomAudio* m_cdrom_audio;
     Scheduler* m_scheduler;
     PIC* m_pic;
+    TraceLogger* m_trace_logger;
     bool m_mute;
     float m_master_volume;
     float m_fm_volume;

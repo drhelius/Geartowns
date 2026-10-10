@@ -178,6 +178,7 @@ private:
     void UpdateIRQ();
     void ScheduleEvent(CdRom_Event event, u64 clocks);
     void UpdateNextEvent();
+    void TraceEvent(u8 event, u8 value);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 

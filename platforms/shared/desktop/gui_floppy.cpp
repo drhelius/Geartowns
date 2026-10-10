@@ -25,11 +25,13 @@
 #include "gui.h"
 #include "gui_colors.h"
 #include "gui_filedialogs.h"
+#include "gui_notifications.h"
 #include "application.h"
 #include "config.h"
 #include "emu.h"
 #include "emu_floppy.h"
 #include "utils.h"
+#include "debug/gui_debug.h"
 
 enum Floppy_Action
 {
@@ -69,11 +71,12 @@ void gui_floppy_menu(int drive, const char* label, int drives)
     Emu_FloppyInfo info;
     emu_floppy_get_info(drive, &info);
     bool loading = gui_is_rom_loading() || emu_is_media_loading();
+    bool can_insert = !loading && !info.inserted;
 
-    if (ImGui::MenuItem("Insert...", NULL, false, !loading))
+    if (ImGui::MenuItem("Insert...", NULL, false, can_insert))
         gui_file_dialog_open_floppy(drive);
 
-    if (ImGui::MenuItem("New Blank Disk...", NULL, false, !loading))
+    if (ImGui::MenuItem("New Blank Disk...", NULL, false, can_insert))
     {
         dialog_drive = drive;
         open_blank = true;
@@ -101,7 +104,7 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Disk in Image", info.disk_count > 1))
+    if ((info.disk_count > 1) && ImGui::BeginMenu("Disk in Image"))
     {
         for (int i = 0; i < info.disk_count; i++)
         {
@@ -123,12 +126,14 @@ void gui_floppy_menu(int drive, const char* label, int drives)
         if (!info.inserted)
             config_emulator.floppy_write_protected[drive] = write_protected;
         else if (!emu_floppy_set_write_protected(drive, write_protected))
-            gui_set_error_message("Unable to change the write protection of this disk.");
+            gui_notify(gui_NotificationError, NULL, "Unable to change the write protection of this disk");
     }
 
     if (ImGui::MenuItem("Save Changes", NULL, false, info.dirty && info.working_path[0]))
     {
-        if (!emu_floppy_save(drive))
+        if (emu_floppy_save(drive))
+            gui_notify(gui_NotificationSuccess, ICON_MD_SAVE, "Disk saved", info.working_path);
+        else
             gui_set_error_message("Unable to save the disk changes.\nUse Save As to write them somewhere else.");
     }
 
@@ -146,18 +151,18 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Recent"))
+    if (ImGui::BeginMenu("Recent", can_insert))
     {
         for (int i = 0; i < config_max_recent_floppies; i++)
         {
-            const std::string& recent = config_emulator.recent_floppies[drive][i];
+            const std::string& recent = config_emulator.recent_floppies[i];
 
             if (recent.empty())
                 continue;
 
             ImGui::PushID(i);
 
-            if (ImGui::MenuItem(get_filename(recent.c_str()), NULL, false, !loading))
+            if (ImGui::MenuItem(get_filename(recent.c_str())))
                 request(drive, Floppy_Action_Insert, recent.c_str(), 0);
 
             if (ImGui::IsItemHovered())
@@ -171,8 +176,14 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     ImGui::Separator();
 
-    if (drives > 1 && ImGui::MenuItem("Swap Floppy 1 and 2"))
-        emu_floppy_swap();
+    if (drives > 1)
+    {
+        Emu_FloppyInfo other;
+        emu_floppy_get_info(drive ^ 1, &other);
+
+        if ((info.inserted || other.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
+            emu_floppy_swap();
+    }
 
     ImGui::MenuItem("Remember Changes", NULL, &config_emulator.floppy_persistence);
 
@@ -240,7 +251,7 @@ void gui_floppy_dialog_insert(int drive, const char* path)
 void gui_floppy_dialog_save_as(int drive, const char* path)
 {
     if (emu_floppy_save_as(drive, path))
-        gui_set_status_message("Disk saved", 3000);
+        gui_notify(gui_NotificationSuccess, ICON_MD_SAVE, "Disk saved", path);
     else
         gui_set_error_message("Unable to save the disk.\nRaw images need a standard 1.23 MB, 1.44 MB, 720 KB or "
             "640 KB layout, D77 takes any disk.");
@@ -279,6 +290,11 @@ static bool perform(bool discard_changes)
 {
     bool done = false;
     const char* error = "Unable to load the floppy image.";
+    bool floppy_session = !emu_get_core()->GetMedia()->IsReady();
+    std::string previous_content = emu_floppy_get_content_path();
+
+    if (floppy_session)
+        gui_debug_auto_save_settings();
 
     switch (pending_action)
     {
@@ -310,8 +326,29 @@ static bool perform(bool discard_changes)
 
         gui_set_error_message(message.c_str());
     }
-    else if (pending_action != Floppy_Action_Eject)
-        gui_set_status_message("Floppy inserted", 3000);
+    else
+    {
+        if (floppy_session && previous_content != emu_floppy_get_content_path())
+            gui_debug_auto_load_settings();
+
+        Emu_FloppyInfo info;
+        emu_floppy_get_info(pending_drive, &info);
+        bool eject = pending_action == Floppy_Action_Eject;
+        const char* detail = eject ? NULL : info.path;
+        char message[64];
+
+        if (pending_action == Floppy_Action_Select)
+            detail = emu_floppy_get_disk_name(pending_drive, pending_index);
+
+        if (eject)
+            snprintf(message, sizeof(message), "Disk ejected from floppy drive %d", pending_drive + 1);
+        else if (pending_action == Floppy_Action_Blank)
+            snprintf(message, sizeof(message), "Blank disk created in floppy drive %d", pending_drive + 1);
+        else
+            snprintf(message, sizeof(message), "Disk inserted in floppy drive %d", pending_drive + 1);
+
+        gui_notify(gui_NotificationInfo, eject ? ICON_MD_EJECT : ICON_MD_SAVE, message, detail);
+    }
 
     pending_action = Floppy_Action_None;
     return done;
@@ -368,7 +405,7 @@ static void draw_discard_popup(void)
         gui_dialog_in_use = false;
 
         if (!emu_floppy_discard(dialog_drive))
-            gui_set_error_message("Unable to reload the floppy image.");
+            gui_notify(gui_NotificationError, NULL, "Unable to reload the floppy image");
     }
 
     ImGui::SameLine();

@@ -24,6 +24,7 @@
 #include "../cdrom/cdrom_audio.h"
 #include "../system/pic.h"
 #include "../system/scheduler.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 // Data Book 5.1 puts an approximately 4 kHz reconstruction filter after the PCM DACs
@@ -60,6 +61,7 @@ Audio::Audio()
     InitPointer(m_cdrom_audio);
     InitPointer(m_scheduler);
     InitPointer(m_pic);
+    InitPointer(m_trace_logger);
     m_mute = false;
     m_master_volume = 1.0f;
     m_fm_volume = 1.0f;
@@ -108,6 +110,11 @@ void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic)
     m_ym3438->Init();
     m_rf5c68->Init();
     Reset();
+}
+
+void Audio::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void Audio::Reset()
@@ -179,6 +186,9 @@ void Audio::WriteVolume(u16 port, u8 value)
     }
 
     UpdateCDDAGain();
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_MIXER, TRACE_MIXER_VOLUME)))
+        TraceMixer(TRACE_MIXER_VOLUME, port, value);
 }
 
 // 04D5h bit 1 lets FM through and bit 0 PCM
@@ -196,6 +206,9 @@ void Audio::WriteGate(u16 port, u8 value)
         m_state.output_control = value;
 
     UpdateGates();
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_MIXER, TRACE_MIXER_MUTE)))
+        TraceMixer(TRACE_MIXER_MUTE, port, value);
 }
 
 // The gates only silence the outputs
@@ -212,24 +225,45 @@ void Audio::UpdateGates()
 void Audio::WriteFM(u8 port, u8 value)
 {
     m_ym3438->Write(port, value);
+
+    if (unlikely((port & 0x01) != 0 && IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_FM)))
+        TraceFM(value);
+
     UpdateIRQ();
 }
 
 void Audio::WritePCM(u16 address, u8 value)
 {
+    u8 channel = m_rf5c68->GetChannelBank();
+
     m_rf5c68->Write(address, value);
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_PCM)))
+    {
+        u8 event = address < 0x07 ? TRACE_PCM_CHANNEL : address == 0x07 ? TRACE_PCM_CONTROL : TRACE_PCM_KEY;
+        TracePCM(event, (u8)address, value, channel);
+    }
+
     UpdatePCMIRQ();
 }
 
 void Audio::WritePCMIRQMask(u8 value)
 {
     m_rf5c68->WriteIRQMask(value);
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_PCM)))
+        TracePCM(TRACE_PCM_IRQ_MASK, 0, value, 0);
+
     UpdatePCMIRQ();
 }
 
 u8 Audio::ReadPCMIRQFlags()
 {
     u8 flags = m_rf5c68->ReadIRQFlags();
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_PCM)))
+        TracePCM(TRACE_PCM_IRQ_READ, 0, flags, 0);
+
     UpdatePCMIRQ();
     return flags;
 }
@@ -240,6 +274,11 @@ void Audio::UpdateIRQ()
 {
     bool asserted = m_ym3438->IsIRQAsserted() || m_rf5c68->IsIRQAsserted();
     u64 next = GT_NO_EVENT;
+
+    if (unlikely(asserted && IsValidPointer(m_trace_logger) &&
+        (m_trace_logger->IsEventEnabled(TRACE_FM, TRACE_FM_IRQ) ||
+        m_trace_logger->IsEventEnabled(TRACE_PCM, TRACE_PCM_IRQ))))
+        TraceIRQ();
 
     m_pic->SetIRQLine(k_audio_irq, asserted);
 
@@ -269,6 +308,117 @@ void Audio::UpdatePCMIRQ()
 u64 Audio::GetEventClocks(u64 cycles) const
 {
     return m_state.clocks + (cycles * k_audio_cpu_clocks_per_sound_clock) - m_state.sound_clock_remainder;
+}
+
+// Data writes carry the register the address port latched, along with the channel it belongs to
+void Audio::TraceFM(u8 value)
+{
+    const YM3438::YM3438_State* state = m_ym3438->GetState();
+    u16 address = state->address;
+    int bank = (address >> 8) & 0x01;
+    u8 reg = (u8)address;
+    u8 event = TRACE_FM_GLOBAL;
+    u8 channel = (u8)((reg & 0x03) + bank * 3);
+    u16 frequency = 0;
+
+    if (reg == 0x28 && bank == 0)
+    {
+        event = TRACE_FM_KEY;
+        channel = (u8)((value & 0x03) + ((value & 0x04) != 0 ? 3 : 0));
+    }
+    else if (reg >= 0x24 && reg <= 0x27 && bank == 0)
+    {
+        event = TRACE_FM_TIMER;
+        frequency = reg == 0x26 ? state->timer_b_register : state->timer_a_register;
+    }
+    else if (reg == 0x2A && bank == 0)
+        event = TRACE_FM_DAC;
+    else if (reg >= 0x30 && reg <= 0x9F)
+        event = TRACE_FM_OPERATOR;
+    else if (reg >= 0xA0 && reg <= 0xAE)
+    {
+        event = TRACE_FM_FREQUENCY;
+        frequency = (u16)((state->registers[bank][reg | 0x04] << 8) | state->registers[bank][reg & ~0x04]);
+    }
+    else if (reg >= 0xB0 && reg <= 0xB6)
+        event = TRACE_FM_CHANNEL;
+
+    if (!m_trace_logger->IsEventEnabled(TRACE_FM, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_FM;
+    entry.event = event;
+    entry.fm.address = address;
+    entry.fm.frequency = frequency;
+    entry.fm.value = value;
+    entry.fm.channel = channel;
+    entry.fm.flags = (u8)(state->timer_a_flag | (state->timer_b_flag << 1) | (state->timer_a_enable << 2) |
+        (state->timer_b_enable << 3));
+    m_trace_logger->TraceLog(entry);
+}
+
+void Audio::TracePCM(u8 event, u8 reg, u8 value, u8 channel)
+{
+    if (!m_trace_logger->IsEventEnabled(TRACE_PCM, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_PCM;
+    entry.event = event;
+    entry.pcm.reg = reg;
+    entry.pcm.value = value;
+    entry.pcm.channel = channel;
+    entry.pcm.enabled = m_rf5c68->IsEnabled() ? 1 : 0;
+    entry.pcm.flags = m_rf5c68->GetIRQFlags();
+    entry.pcm.mask = m_rf5c68->GetIRQMask();
+    m_trace_logger->TraceLog(entry);
+}
+
+void Audio::TraceMixer(u8 event, u16 port, u8 value)
+{
+    int chip = (port >> 1) & 0x01;
+    int channel = m_state.volume_channel[chip];
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_MIXER;
+    entry.event = event;
+    entry.mixer.port = port;
+    entry.mixer.value = value;
+    entry.mixer.chip = (u8)chip;
+    entry.mixer.channel = (u8)channel;
+    entry.mixer.data = m_state.volume_data[chip][channel];
+    entry.mixer.control = m_state.volume_control[chip][channel];
+
+    if (event == TRACE_MIXER_MUTE)
+    {
+        entry.mixer.data = m_state.mute_control;
+        entry.mixer.control = m_state.output_control;
+    }
+
+    m_trace_logger->TraceLog(entry);
+}
+
+// Only a rising IRQ13 is logged, with the causes each chip holds at that point
+void Audio::TraceIRQ()
+{
+    if ((m_pic->GetSlave()->GetState()->input_levels & (1 << (k_audio_irq - 8))) != 0)
+        return;
+
+    const YM3438::YM3438_State* fm = m_ym3438->GetState();
+    u8 fm_flags = (u8)(fm->timer_a_flag | (fm->timer_b_flag << 1));
+    u8 pcm_flags = m_rf5c68->GetIRQFlags();
+
+    if (fm_flags != 0 && m_trace_logger->IsEventEnabled(TRACE_FM, TRACE_FM_IRQ))
+    {
+        GT_Trace_Entry entry = {};
+        entry.type = TRACE_FM;
+        entry.event = TRACE_FM_IRQ;
+        entry.fm.flags = (u8)(fm_flags | (fm->timer_a_enable << 2) | (fm->timer_b_enable << 3));
+        m_trace_logger->TraceLog(entry);
+    }
+
+    if (pcm_flags != 0)
+        TracePCM(TRACE_PCM_IRQ, 0, pcm_flags, 0);
 }
 
 void Audio::UpdateCDDAGain()

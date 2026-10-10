@@ -50,6 +50,7 @@ enum gui_ShortCutEvent
     gui_ShortcutVideoRecording,
     gui_ShortcutFullscreen,
     gui_ShortcutCaptureMouse,
+    gui_ShortcutCaptureKeyboard,
     gui_ShortcutDebugStepOver,
     gui_ShortcutDebugStepInto,
     gui_ShortcutDebugStepOut,
@@ -69,7 +70,7 @@ struct gui_HotkeyMapping
     bool allow_repeat;
 };
 
-#define GUI_HOTKEY_MAP_COUNT 27
+#define GUI_HOTKEY_MAP_COUNT 28
 
 const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutOpenROM, config_HotkeyIndex_OpenROM, false},
@@ -89,6 +90,7 @@ const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutVideoRecording, config_HotkeyIndex_VideoRecording, false},
     {gui_ShortcutFullscreen, config_HotkeyIndex_Fullscreen, false},
     {gui_ShortcutCaptureMouse, config_HotkeyIndex_CaptureMouse, false},
+    {gui_ShortcutCaptureKeyboard, config_HotkeyIndex_CaptureKeyboard, false},
     {gui_ShortcutShowMainMenu, config_HotkeyIndex_ShowMainMenu, false},
     {gui_ShortcutDebugStepInto, config_HotkeyIndex_DebugStepInto, true},
     {gui_ShortcutDebugStepOver, config_HotkeyIndex_DebugStepOver, true},
@@ -127,11 +129,11 @@ EXTERN void gui_shortcut(gui_ShortCutEvent event);
 EXTERN bool gui_load_rom(const char* path, const char* symbol_path = NULL);
 EXTERN bool gui_load_playlist_disc(int index);
 EXTERN void gui_load_physical_cdrom(const char* device_id);
+EXTERN void gui_reload_cdrom(void);
 EXTERN bool gui_is_rom_loading(void);
 EXTERN bool gui_finish_loading_rom(void);
 EXTERN void gui_load_bios(const char* path);
 EXTERN void gui_set_style(void);
-EXTERN void gui_set_status_message(const char* message, Uint64 milliseconds);
 EXTERN void gui_set_error_message(const char* message);
 
 #undef GUI_IMPORT

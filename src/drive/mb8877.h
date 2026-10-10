@@ -137,6 +137,7 @@ private:
     void WriteTrackCell(u64 clocks);
     void FinishWriteTrack();
     void End();
+    void TraceEvent(u8 event, u8 command);
     void SetDRQ();
     void DropDRQ();
     void SetINTRQ(bool active);

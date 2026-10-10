@@ -178,7 +178,7 @@ INLINE void I386::CalculateEffectiveOffset(InstructionContext& instruction)
 
     instruction.effective_offset = offset;
     instruction.segment = instruction.segment_override != 0xFF ? instruction.segment_override :
-        stack ? I386_SEGMENT_SS : I386_SEGMENT_DS;
+        (u8)(stack ? I386_SEGMENT_SS : I386_SEGMENT_DS);
 }
 
 template<bool passive>

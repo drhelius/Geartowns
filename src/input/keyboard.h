@@ -28,6 +28,7 @@
 class PIC;
 class Scheduler;
 class StateSerializer;
+class TraceLogger;
 
 // JIS keyboard behind the 8042 interface at 0600h-0604h
 class Keyboard
@@ -54,6 +55,7 @@ public:
     Keyboard();
     ~Keyboard();
     void Init(PIC* pic, Scheduler* scheduler);
+    void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port) const;
@@ -72,17 +74,19 @@ private:
     void WriteCommand(u8 value);
     void ResetController();
     void SendResetResponse(int count);
-    void PushEvent(u8 key, bool pressed);
+    void PushEvent(u8 key, u8 flags);
     bool IsValidKey(GT_Keys key) const;
     bool IsRepeatKey(u8 key) const;
     void UpdateIRQ();
     void UpdateNextEvent();
+    void TraceEvent(u8 event, u8 value, u8 flags, u8 key);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
 private:
     PIC* m_pic;
     Scheduler* m_scheduler;
+    TraceLogger* m_trace_logger;
     Keyboard_State m_state;
 };
 
@@ -90,6 +94,9 @@ static const int k_keyboard_irq = 1;
 static const u64 k_keyboard_rearm_clocks = GT_CPU_CLOCK_RATE / 1200;
 static const u16 k_keyboard_repeat_delay = 400;
 static const u16 k_keyboard_repeat_interval = 30;
+static const u8 k_keyboard_make = 0xA0;
+static const u8 k_keyboard_break = 0xB0;
+static const u8 k_keyboard_typematic = 0xF0;
 
 #include "keyboard_inline.h"
 

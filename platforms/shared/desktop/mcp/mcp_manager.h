@@ -20,6 +20,7 @@
 #ifndef MCP_MANAGER_H
 #define MCP_MANAGER_H
 
+#include <algorithm>
 #include <string>
 #include <vector>
 #include "mcp_server.h"
@@ -69,6 +70,8 @@ struct McpInputMacroState
     int command_count;
     int frames_waited;
     bool restore_pause;
+    u64 breakpoint_stops;
+    std::vector<GT_Keys> held_keys;
 };
 
 static const u64 k_mcp_tap_frames = 10;
@@ -153,13 +156,24 @@ public:
         m_server->Start();
     }
 
+    // Keys and buttons still waiting for their release are released, so nothing stays held
     void Stop()
     {
         SafeDelete(m_server);
         m_command_queue.Clear();
+
+        for (size_t i = 0; i < m_delayed_releases.size(); i++)
+        {
+            if (m_delayed_releases[i].key != GT_KEY_NONE)
+                emu_key_released(m_delayed_releases[i].key);
+            else if (IsValidPointer(m_debug_adapter))
+                m_debug_adapter->ControllerButton(m_delayed_releases[i].player, m_delayed_releases[i].button, "release");
+        }
+
         m_delayed_releases.clear();
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
+        release_input_macro_keys();
         reset_input_macro();
         reset_mouse_motion();
 
@@ -440,6 +454,16 @@ private:
         m_input_macro.command_count = 0;
         m_input_macro.frames_waited = 0;
         m_input_macro.restore_pause = false;
+        m_input_macro.breakpoint_stops = 0;
+        m_input_macro.held_keys.clear();
+    }
+
+    void release_input_macro_keys()
+    {
+        for (size_t i = 0; i < m_input_macro.held_keys.size(); i++)
+            emu_key_released(m_input_macro.held_keys[i]);
+
+        m_input_macro.held_keys.clear();
     }
 
     json start_keyboard_macro(const json& arguments, const json& request_id)
@@ -465,6 +489,7 @@ private:
         m_input_macro.request_id = request_id;
         m_input_macro.command_count = (int)text.size();
         m_input_macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
+        m_input_macro.breakpoint_stops = emu_debug_breakpoint_stops;
 
         for (size_t i = 0; i < text.size(); i++)
         {
@@ -545,10 +570,18 @@ private:
                 return;
             }
 
+            std::vector<GT_Keys>& held = m_input_macro.held_keys;
+
             if (step.type == MCP_INPUT_MACRO_STEP_KEY_PRESS)
+            {
                 emu_key_pressed(step.key);
+                held.push_back(step.key);
+            }
             else
+            {
                 emu_key_released(step.key);
+                held.erase(std::remove(held.begin(), held.end(), step.key), held.end());
+            }
 
             m_input_macro.step_index++;
         }
@@ -556,13 +589,14 @@ private:
         finish_input_macro_success();
     }
 
+    // Only a breakpoint that stopped the frames this macro ran interrupts it, not the stop it started from
     void continue_input_macro_wait(GeartownsCore* core)
     {
+        UNUSED(core);
+
         if (emu_is_debug_idle())
         {
-            u32 address = 0;
-
-            if (core->GetI386()->GetBreakpointHitAddress(address))
+            if (emu_debug_breakpoint_stops != m_input_macro.breakpoint_stops)
             {
                 finish_input_macro_error("Input macro interrupted by breakpoint");
                 return;
@@ -603,6 +637,8 @@ private:
     void finish_input_macro_error(const std::string& error)
     {
         bool restore_pause = m_input_macro.restore_pause;
+
+        release_input_macro_keys();
 
         DebugResponse* response = new DebugResponse();
         response->requestId = m_input_macro.request_id;

@@ -21,6 +21,7 @@
 #include "../system/pic.h"
 #include "../system/scheduler.h"
 #include "../system/upd71071.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 FDC::FDC()
@@ -28,6 +29,7 @@ FDC::FDC()
     InitPointer(m_pic);
     InitPointer(m_scheduler);
     InitPointer(m_dma);
+    InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
     m_internal_drives = FDC_DRIVES;
     m_three_mode = false;
@@ -48,6 +50,12 @@ void FDC::Init(PIC* pic, Scheduler* scheduler, UPD71071* dma)
     m_dma->SetEndpoint(k_fdc_dma_channel, endpoint);
 
     Reset();
+}
+
+void FDC::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
+    m_mb8877.SetTraceLogger(trace_logger);
 }
 
 // Disks stay in their drives, a disk present at power on is ready at once
@@ -148,6 +156,7 @@ void FDC::Write(u16 port, u8 value, u64 clocks)
             break;
         case 0x0208:
             m_state.drive_control = value;
+            TraceDrive(TRACE_FDC_DRIVE_CONTROL, value);
             UpdateIRQ();
             UpdateReady(clocks);
             break;
@@ -165,6 +174,7 @@ void FDC::Write(u16 port, u8 value, u64 clocks)
 
             m_state.drive_select = value;
             ChangeSelection(previous, clocks);
+            TraceDrive(TRACE_FDC_DRIVE_SELECT, value);
             break;
         }
         case 0x020E:
@@ -172,6 +182,7 @@ void FDC::Write(u16 port, u8 value, u64 clocks)
             int previous = GetSelectedDrive();
             m_state.drive_switch = value & 0x01;
             ChangeSelection(previous, clocks);
+            TraceDrive(TRACE_FDC_DRIVE_SELECT, value);
             break;
         }
     }
@@ -271,6 +282,25 @@ void FDC::UpdateNextEvent(u64 clocks)
 }
 
 // The controller is 8 bit, a word unit only carries the low byte
+// Drive select and drive switch writes both end as the drive select event, the value shows which port
+void FDC::TraceDrive(u8 event, u8 value)
+{
+    if (!IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_FDC, event))
+        return;
+
+    int drive = GetSelectedDrive();
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_FDC;
+    entry.event = event;
+    entry.fdc.command = m_state.drive_control;
+    entry.fdc.data = m_state.drive_select;
+    entry.fdc.status = m_state.drive_switch;
+    entry.fdc.value = value;
+    entry.fdc.drive = (s8)drive;
+    entry.fdc.cylinder = drive >= 0 ? m_state.cylinders[drive] : 0;
+    m_trace_logger->TraceLog(entry);
+}
+
 bool FDC::DMAReadCallback(void* device, u16& value, bool word)
 {
     UNUSED(word);

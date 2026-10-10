@@ -25,6 +25,7 @@
 #include "common/debug_memory.h"
 
 class DebugMemoryProvider;
+struct ImVec2;
 
 class MemEditor
 {
@@ -51,9 +52,10 @@ public:
     void RequestRefresh();
     void JumpToAddress(u32 address, bool add_history = true);
     void SetSource(const GT_Debug_Memory_Address& source);
+    void SetFollow(bool follow);
     const GT_Debug_Memory_Address& GetSource() const;
-    u32 GetWindowBase() const;
-    u32 GetWindowSize() const;
+    u32 GetBufferBase() const;
+    u32 GetBufferSize() const;
     void GetSelection(u32& start, u32& end) const;
     void SetSelection(u32 start, u32 end);
 
@@ -66,7 +68,7 @@ public:
 
     bool TakeBookmarkRequest(GT_Debug_Memory_Address& address, u32& end);
     bool TakeWatchRequest(GT_Debug_Memory_Address& address);
-    bool TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end);
+    bool TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end, u8& type);
     DebugMemoryProvider* GetProvider() const;
 
     Options GetOptions() const;
@@ -76,20 +78,32 @@ public:
     bool LoadSettings(std::istream& stream);
 
 private:
-    void DrawToolbar();
+    void DrawStatusBar();
     void DrawGrid();
     void DrawCell(u32 address, u32 offset, int column, int bytes_per_row, float cell_width);
+    void DrawSelectionFrame(u32 address, int column, int bytes_per_row, ImVec2 minimum, ImVec2 maximum);
     void DrawContextMenu(u32 address);
-    void DrawOptionsPopup();
+    void DrawOptions();
+    void DrawRightAligned(const char* label, const char* value);
+    void DrawButtonTooltip(const char* text);
 
     void UpdateTitle();
-    void SetWindowForAddress(u32 address);
+    int GetBytesPerRow() const;
+    s64 GetRowCount(int bytes_per_row) const;
+    void SetViewRow(s64 row, int bytes_per_row);
+    void KeepVisible(u32 address, int bytes_per_row);
+    void EnsureBuffer(u32 start, u32 end);
+    void MoveBuffer(u32 base);
+    void NavigateKeyboard(int bytes_per_row);
     bool ParseAddressInput(GT_Debug_Memory_Address& address, char* reason, size_t reason_size) const;
-    bool ReadSelection(std::vector<u8>& data, std::vector<GT_Debug_Memory_Status>& status) const;
+    bool ReadRange(u32 start, u32 end, std::vector<u8>& data, std::vector<GT_Debug_Memory_Status>& status) const;
+    void CopyRange(u32 start, u32 end, bool decimal);
+    void PasteRange(u32 start, u32 end);
 
     u32 GetSelectionStart() const;
     u32 GetSelectionEnd() const;
     u32 GetSelectionSize() const;
+    bool IsSelected(u64 address) const;
     bool IsAddressInSource(u32 address) const;
 
     void PushHistory(u32 address);
@@ -97,15 +111,21 @@ private:
     void HistoryForward();
 
 private:
-    static const u32 WINDOW_SIZE = 0x4000;
+    static const u32 BUFFER_SIZE = 0x4000;
     static const int HISTORY_SIZE = 32;
+    static const u8 CHANGE_HIGHLIGHT_REFRESHES = 60;
 
     DebugMemoryProvider* m_provider;
     int m_id;
     char m_title[96];
 
     GT_Debug_Memory_Address m_source;
-    u32 m_window_base;
+    u32 m_buffer_base;
+    u32 m_fresh_start;
+    u32 m_fresh_size;
+    u32 m_view_address;
+    int m_visible_rows;
+    float m_scroll_rows;
 
     u32 m_selection_start;
     u32 m_selection_end;
@@ -122,9 +142,11 @@ private:
 
     Options m_options;
     GT_Debug_Memory_Block_Info m_block_info;
+    u64 m_view_key;
 
     std::vector<u8> m_data;
     std::vector<u8> m_previous;
+    std::vector<u8> m_change_age;
     std::vector<GT_Debug_Memory_Status> m_status;
 
     bool m_available;
@@ -133,10 +155,14 @@ private:
     bool m_edit_focus;
     bool m_drag_selecting;
     bool m_follow_expression;
+    bool m_follow_valid;
+    GT_Debug_Memory_Address m_follow_target;
 
     bool m_bookmark_request;
     bool m_watch_request;
     bool m_breakpoint_request;
+    u8 m_breakpoint_type;
+    u32 m_request_start;
     u32 m_request_end;
 };
 

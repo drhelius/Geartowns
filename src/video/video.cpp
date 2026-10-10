@@ -56,6 +56,9 @@ Video::~Video()
 void Video::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
+
+    if (IsValidPointer(m_sprite))
+        m_sprite->SetTraceLogger(trace_logger);
 }
 
 void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom)
@@ -279,6 +282,9 @@ void Video::Write(u16 port, u8 value, u64 clocks)
         default:
             break;
     }
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_VIDEO)))
+        TraceWrite(port, value, clocks);
 }
 
 void Video::BeginFrame(u8* frame_buffer, bool render)
@@ -524,6 +530,11 @@ void Video::WriteFMRRegister(u32 offset, u8 value)
         default:
             break;
     }
+
+    bool fmr = offset == 0x0F81 || offset == 0x0F82 || offset == 0x0F83 || offset == 0x0F99;
+
+    if (unlikely(fmr && IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_FMR)))
+        TraceEvent(TRACE_VIDEO_FMR, (u8)offset, value, value, 0, 0, m_scheduler->GetClocks());
 }
 
 // A peek skips the glyph row advance and the buzzer strobe
@@ -659,8 +670,13 @@ void Video::RunNextEvent()
 
     m_state.event_half_line = half_line;
 
-    if (half_line == m_state.frame_vsync_half_lines && m_sprite->IsEnabled() && !m_sprite->IsBusy())
-        m_sprite->StartTransfer(clocks);
+    if (half_line == m_state.frame_vsync_half_lines && m_sprite->IsEnabled())
+    {
+        if (!m_sprite->IsBusy())
+            m_sprite->StartTransfer(clocks);
+        else
+            m_sprite->TraceBusyAtVSync();
+    }
 
     if ((half_line & 0x01) == 0)
         RenderRows(half_line);
@@ -698,11 +714,93 @@ void Video::CompleteFrame(u64 clocks)
     m_frame_ready = true;
     m_state.frame_count++;
     m_state.vsync_irq = true;
-    UpdateIRQ();
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_VIDEO))
-        m_trace_logger->Record(TRACE_VIDEO, TRACE_VIDEO_VSYNC)->video.frame = m_state.frame_count;
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_VSYNC)))
+        TraceEvent(TRACE_VIDEO_VSYNC, 0, 0, 0, 0, m_state.frame_count, clocks);
+
+    UpdateIRQ();
     StartFrame(clocks);
+}
+
+// Index writes only select, so the events are the data writes with what the register holds afterwards
+void Video::TraceWrite(u16 port, u8 value, u64 clocks)
+{
+    switch (port)
+    {
+        case 0x0442:
+        case 0x0443:
+        {
+            u8 reg = m_state.crtc_index;
+            TraceEvent(TRACE_VIDEO_CRTC, reg, m_state.crtc[reg], value, port & 0x01, 0, clocks);
+            break;
+        }
+        case 0x044A:
+            TraceEvent(TRACE_VIDEO_OUTPUT, m_state.output_index, value, value, 0, 0, clocks);
+            break;
+        case 0x045A:
+        case 0x045B:
+        {
+            const u8* mask = m_state.mask;
+            u32 full = mask[0] | (mask[1] << 8) | (mask[2] << 16) | ((u32)mask[3] << 24);
+            TraceEvent(TRACE_VIDEO_MASK, m_state.mask_index, value, value, port & 0x01, full, clocks);
+            break;
+        }
+        case 0x05CA:
+            TraceEvent(TRACE_VIDEO_VSYNC_CLEAR, 0, value, value, 0, 0, clocks);
+            break;
+        case 0xFD92:
+        case 0xFD94:
+        case 0xFD96:
+        {
+            u8 index = m_state.palette_index;
+            u8 bank = (m_state.output[1] >> 4) & 0x03;
+            const u8* color = bank == 0 ? m_state.palette16[0][index & 0x0F] : bank == 2 ?
+                m_state.palette16[1][index & 0x0F] : m_state.palette256[index];
+            u32 rgb = ((u32)color[1] << 16) | ((u32)color[2] << 8) | color[0];
+            TraceEvent(TRACE_VIDEO_PALETTE, index, (port - 0xFD92) >> 1, value, bank, rgb, clocks);
+            break;
+        }
+        case 0xFD98:
+        case 0xFD99:
+        case 0xFD9A:
+        case 0xFD9B:
+        case 0xFD9C:
+        case 0xFD9D:
+        case 0xFD9E:
+        case 0xFD9F:
+            TraceEvent(TRACE_VIDEO_DIGITAL_PALETTE, (u8)(port - 0xFD98), value & 0x0F, value, 0, 0, clocks);
+            break;
+        case 0xFDA0:
+            TraceEvent(TRACE_VIDEO_DISPLAY, 0, value, value, 0, 0, clocks);
+            break;
+        default:
+            break;
+    }
+}
+
+void Video::TraceEvent(u8 event, u8 reg, u16 value, u8 raw, u8 bank, u32 param, u64 clocks)
+{
+    if (!m_trace_logger->IsEventEnabled(TRACE_VIDEO, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_VIDEO;
+    entry.event = event;
+    entry.video.param = param;
+    entry.video.value = value;
+    entry.video.reg = reg;
+    entry.video.raw = raw;
+    entry.video.bank = bank;
+
+    entry.video.line = 0xFFFF;
+
+    if (m_state.running)
+    {
+        entry.video.line = (u16)(GetBeamHalfLine(clocks) / 2);
+        entry.video.dot = (u16)GetBeamClock(clocks);
+    }
+
+    m_trace_logger->TraceLog(entry);
 }
 
 void Video::UpdateGeometry()
@@ -892,6 +990,20 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     if (m_canvas_interlaced && (row & 0x01) != 0)
         start += (u32)crtc[k_video_crtc_fo0 + layer * 4] * unit;
 
+    // Without CEN the low 8 bits of the address counter don't carry, so rows turn around within 256 units
+    u32 skip = 0;
+    u32 wrap = k_video_no_wrap;
+
+    if ((crtc[k_video_crtc_cr0] & (0x10 << layer)) == 0)
+    {
+        Video_Layer_Format format = GetLayerFormat(layer);
+        u32 bits = format == VIDEO_LAYER_4BPP ? 4 : (format == VIDEO_LAYER_8BPP ? 8 : 16);
+        u32 block = unit << 8;
+        skip = ((start & (block - 1)) * 8) / bits;
+        wrap = (block * 8) / bits - 1;
+        start &= ~(block - 1);
+    }
+
     // The FM-R display mode picks the page and hides planes of layer 0
     u8 planes = 0x0F;
 
@@ -912,7 +1024,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     {
         for (; x < end; x++, position += divider)
         {
-            u32 pixel = position / zoom_x;
+            u32 pixel = (position / zoom_x + skip) & wrap;
             DecodeLayerPixels(colors, layer, start, pixel, 1, planes, opaque);
             destination[x] = BlendLayerColor(colors[pixel & 0x01], destination[x]);
         }
@@ -922,7 +1034,8 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
 
     u32 pixel = position / zoom_x;
     u32 count = (position + (u32)(end - x) - 1) / zoom_x - pixel + 1;
-    DecodeLayerPixels(colors, layer, start, pixel, count, planes, opaque);
+    pixel = (pixel + skip) & wrap;
+    DecodeLayerRun(colors, layer, start, pixel, count, wrap, planes, opaque);
     const u32* source = colors + (pixel & 0x01);
 
     if (zoom_x == 1)
@@ -967,6 +1080,21 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
             source++;
         }
     }
+}
+
+// A run that reaches the end of the block goes on from its beginning
+void Video::DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 count, u32 wrap, u8 planes, bool opaque)
+{
+    while (pixel + count > wrap + 1)
+    {
+        u32 part = wrap + 1 - pixel;
+        DecodeLayerPixels(colors, layer, start, pixel, part, planes, opaque);
+        colors += part + (pixel & 0x01);
+        count -= part;
+        pixel = 0;
+    }
+
+    DecodeLayerPixels(colors, layer, start, pixel, count, planes, opaque);
 }
 
 // Decoding starts at an even pixel so 4 bpp layers read whole bytes

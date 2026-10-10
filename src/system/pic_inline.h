@@ -25,7 +25,8 @@
 
 INLINE void PIC::SetIRQLine(int irq, bool high)
 {
-    if (unlikely(high && IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_INTERRUPT)))
+    if (unlikely(high && IsValidPointer(m_trace_logger) &&
+        m_trace_logger->IsEventEnabled(TRACE_PIC, TRACE_PIC_REQUEST)))
         TraceRequest(irq);
 
     if (irq >= 8)

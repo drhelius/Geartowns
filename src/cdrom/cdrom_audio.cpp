@@ -19,6 +19,7 @@
 
 #include "cdrom_audio.h"
 #include "cdrom_media.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 // First order fit of the 50/15 us de-emphasis curve at 44.1 kHz in Q16, within 0.25 dB up to 20 kHz
@@ -29,6 +30,7 @@ static const s64 k_cdrom_deemphasis_a1 = 40003;
 CdRomAudio::CdRomAudio(CdRomMedia* cdrom_media)
 {
     m_cdrom_media = cdrom_media;
+    InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
     memset(m_sector_cache, 0, sizeof(m_sector_cache));
     m_sector_cache_lba = 0;
@@ -46,6 +48,11 @@ CdRomAudio::~CdRomAudio()
 void CdRomAudio::Init()
 {
     Reset();
+}
+
+void CdRomAudio::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void CdRomAudio::Reset()
@@ -90,6 +97,7 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
 
     m_state.play_state = CDROM_AUDIO_PLAYING;
     m_cdrom_media->SetCurrentSector(start_lba);
+    TraceEvent(TRACE_CDROM_CDDA_PLAY, seek_ms);
 
     s32 track = m_cdrom_media->FindTrackFromLBA(start_lba);
 
@@ -106,18 +114,27 @@ void CdRomAudio::SetSeekScale(double scale)
 
 void CdRomAudio::Pause()
 {
-    if (m_state.play_state == CDROM_AUDIO_PLAYING)
-        m_state.play_state = CDROM_AUDIO_PAUSED;
+    if (m_state.play_state != CDROM_AUDIO_PLAYING)
+        return;
+
+    m_state.play_state = CDROM_AUDIO_PAUSED;
+    TraceEvent(TRACE_CDROM_CDDA_PAUSE, 0);
 }
 
 void CdRomAudio::Resume()
 {
-    if (m_state.play_state == CDROM_AUDIO_PAUSED)
-        m_state.play_state = CDROM_AUDIO_PLAYING;
+    if (m_state.play_state != CDROM_AUDIO_PAUSED)
+        return;
+
+    m_state.play_state = CDROM_AUDIO_PLAYING;
+    TraceEvent(TRACE_CDROM_CDDA_RESUME, 0);
 }
 
 void CdRomAudio::Stop()
 {
+    if (m_state.play_state != CDROM_AUDIO_IDLE)
+        TraceEvent(TRACE_CDROM_CDDA_STOP, 0);
+
     m_state.play_state = CDROM_AUDIO_IDLE;
     m_state.seek_samples = 0;
     m_sector_cache_valid = false;
@@ -203,9 +220,28 @@ void CdRomAudio::NextSector()
             m_state.current_lba = m_state.start_lba;
         else
             m_state.play_state = CDROM_AUDIO_IDLE;
+
+        TraceEvent(m_state.repeat ? TRACE_CDROM_CDDA_LOOP : TRACE_CDROM_CDDA_END, 0);
     }
 
     m_cdrom_media->SetCurrentSector(m_state.current_lba);
+}
+
+// The range end is reached while the mixer catches up, so END and LOOP carry the clock of that catch-up
+void CdRomAudio::TraceEvent(u8 event, u32 seek_ms)
+{
+    if (!IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_CDROM, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_CDROM;
+    entry.event = event;
+    entry.cdrom.lba = m_state.current_lba;
+    entry.cdrom.end_lba = m_state.end_lba;
+    entry.cdrom.size = (u16)MIN(seek_ms, 0xFFFFU);
+    entry.cdrom.value = (u8)m_state.play_state;
+    entry.cdrom.flags = m_state.repeat ? 0x01 : 0x00;
+    m_trace_logger->TraceLog(entry);
 }
 
 void CdRomAudio::SaveState(std::ostream& stream)

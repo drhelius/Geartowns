@@ -206,7 +206,9 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     total.exception_vector = 0xFF;
 
     m_batch_mode = true;
-    m_batch_start_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_synced = true;
+    m_io_deferred = false;
     m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
@@ -284,6 +286,12 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
 
                 if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
                 {
+                    if (m_io_deferred && SynchronizeIO(context, clocks))
+                    {
+                        entry = k_dynarec_entry_count;
+                        continue;
+                    }
+
                     if (m_step.exception)
                         CopyStepException(total);
 

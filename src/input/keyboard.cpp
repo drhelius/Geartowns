@@ -20,6 +20,7 @@
 #include "keyboard.h"
 #include "../system/pic.h"
 #include "../system/scheduler.h"
+#include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
 // Answer to a keyboard reset seen on a Towns II MX with a JIS keyboard
@@ -29,6 +30,7 @@ Keyboard::Keyboard()
 {
     InitPointer(m_pic);
     InitPointer(m_scheduler);
+    InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
 }
 
@@ -41,6 +43,11 @@ void Keyboard::Init(PIC* pic, Scheduler* scheduler)
     m_pic = pic;
     m_scheduler = scheduler;
     Reset();
+}
+
+void Keyboard::SetTraceLogger(TraceLogger* trace_logger)
+{
+    m_trace_logger = trace_logger;
 }
 
 void Keyboard::Reset()
@@ -75,6 +82,7 @@ u8 Keyboard::Read(u16 port, u64 clocks)
             m_state.rearm_clocks = clocks + k_keyboard_rearm_clocks;
             UpdateIRQ();
             UpdateNextEvent();
+            TraceEvent(TRACE_KEYBOARD_READ, value, 0, 0);
             return value;
         }
         case 0x0602:
@@ -109,14 +117,18 @@ void Keyboard::Write(u16 port, u8 value, u64 clocks)
     switch (port)
     {
         case 0x0600:
+            TraceEvent(TRACE_KEYBOARD_COMMAND, value, 0, 0);
+
             // FM-OASYS and the keyboard BIOS reset the keyboard here, keeping the IRQ enable
             if (value == 0xA1 || value == 0xA2)
                 SendResetResponse(4);
             break;
         case 0x0602:
+            TraceEvent(TRACE_KEYBOARD_COMMAND, value, 0x02, 0);
             WriteCommand(value);
             break;
         case 0x0604:
+            TraceEvent(TRACE_KEYBOARD_IRQ_ENABLE, value, 0, 0);
             m_state.irq_enabled = (value & 0x01) != 0;
 
             if (m_state.irq_enabled && m_state.fifo_count != 0 && !m_state.rearm_pending)
@@ -143,10 +155,10 @@ void Keyboard::Synchronize(u64 clocks)
         }
     }
 
-    // Typematic repeat sends the held key again as a plain make
+    // Typematic repeat sends the held key again with bits 7-4 set
     if (m_state.repeat_key != GT_KEY_NONE && clocks >= m_state.repeat_clocks)
     {
-        PushEvent(m_state.repeat_key, true);
+        PushEvent(m_state.repeat_key, k_keyboard_typematic);
         m_state.repeat_clocks += ((u64)m_state.repeat_interval * GT_CPU_CLOCK_RATE) / 1000;
         changed = true;
     }
@@ -162,7 +174,7 @@ void Keyboard::KeyPressed(GT_Keys key)
 
     Synchronize(m_scheduler->GetClocks());
     m_state.keys[key] = true;
-    PushEvent((u8)key, true);
+    PushEvent((u8)key, k_keyboard_make);
 
     if (IsRepeatKey((u8)key))
     {
@@ -180,7 +192,7 @@ void Keyboard::KeyReleased(GT_Keys key)
 
     Synchronize(m_scheduler->GetClocks());
     m_state.keys[key] = false;
-    PushEvent((u8)key, false);
+    PushEvent((u8)key, k_keyboard_break);
 
     if (m_state.repeat_key == key)
         m_state.repeat_key = GT_KEY_NONE;
@@ -259,13 +271,11 @@ void Keyboard::SendResetResponse(int count)
     UpdateNextEvent();
 }
 
-// A JIS keyboard message: type and make or break flags with CTRL and SHIFT, then the key code
-void Keyboard::PushEvent(u8 key, bool pressed)
+// A JIS keyboard message: make, break or typematic flags with CTRL and SHIFT, then the key code
+void Keyboard::PushEvent(u8 key, u8 flags)
 {
     if (m_state.fifo_count + 2 > KEYBOARD_FIFO_SIZE)
         return;
-
-    u8 flags = pressed ? 0xA0 : 0xB0;
 
     if (m_state.keys[GT_KEY_CTRL])
         flags |= 0x08;
@@ -278,7 +288,23 @@ void Keyboard::PushEvent(u8 key, bool pressed)
     m_state.fifo[(write + 1) & (KEYBOARD_FIFO_SIZE - 1)] = key;
     m_state.fifo_count += 2;
     m_state.kbint = true;
+    TraceEvent(TRACE_KEYBOARD_KEY, 0, flags, key);
     UpdateIRQ();
+}
+
+void Keyboard::TraceEvent(u8 event, u8 value, u8 flags, u8 key)
+{
+    if (!IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_KEYBOARD, event))
+        return;
+
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_KEYBOARD;
+    entry.event = event;
+    entry.keyboard.value = value;
+    entry.keyboard.flags = flags;
+    entry.keyboard.key = key;
+    entry.keyboard.pending = m_state.fifo_count;
+    m_trace_logger->TraceLog(entry);
 }
 
 bool Keyboard::IsRepeatKey(u8 key) const

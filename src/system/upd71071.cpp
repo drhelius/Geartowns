@@ -28,6 +28,8 @@ UPD71071::UPD71071()
     InitPointer(m_memory);
     InitPointer(m_scheduler);
     InitPointer(m_trace_logger);
+    InitPointer(m_debug_callback);
+    InitPointer(m_debugger);
     memset(m_endpoints, 0, sizeof(m_endpoints));
     m_unsupported_logged = false;
     memset(&m_state, 0, sizeof(m_state));
@@ -175,6 +177,9 @@ void UPD71071::Write(u16 port, u8 value)
 
     m_state.stalled = 0;
     UpdateNextEvent();
+
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_REGISTER)))
+        TraceEvent(TRACE_DMA_REGISTER, m_state.selected_channel, port & 0x0F, value, false);
 }
 
 void UPD71071::SetEndpoint(int channel, const GT_DMA_Endpoint& endpoint)
@@ -182,10 +187,15 @@ void UPD71071::SetEndpoint(int channel, const GT_DMA_Endpoint& endpoint)
     m_endpoints[channel & 0x03] = endpoint;
 }
 
-// Dropping the request ends demand service without a terminal count
 void UPD71071::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
+}
+
+void UPD71071::SetDebugCallback(GT_DMA_Debug_Fn callback, void* debugger)
+{
+    m_debug_callback = callback;
+    m_debugger = debugger;
 }
 
 void UPD71071::SetRequest(int channel, bool active)
@@ -193,16 +203,8 @@ void UPD71071::SetRequest(int channel, bool active)
     u8 bit = (u8)(1 << (channel & 0x03));
 
     if (active && (m_state.request_levels & bit) == 0 && IsValidPointer(m_trace_logger) &&
-        m_trace_logger->IsEnabled(TRACE_DMA))
-    {
-        const UPD71071_Channel& state = m_state.channels[channel & 0x03];
-        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_DMA, TRACE_DMA_REQUEST);
-        entry->dma.address = state.current_address;
-        entry->dma.count = state.current_count;
-        entry->dma.channel = (u8)(channel & 0x03);
-        entry->dma.mode = state.mode;
-        entry->dma.terminal = 0;
-    }
+        m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_REQUEST))
+        TraceEvent(TRACE_DMA_REQUEST, channel & 0x03, 0, 0, false);
 
     if (active)
     {
@@ -362,6 +364,11 @@ bool UPD71071::TransferUnit(int channel, u64 clocks, bool& terminal)
             return false;
     }
 
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (IsValidPointer(m_debug_callback))
+        m_debug_callback(m_debugger, address, word ? 2 : 1, direction == k_upd71071_io_to_memory);
+#endif
+
     int step = word ? 2 : 1;
 
     if ((state.mode & k_upd71071_mode_decrement) != 0)
@@ -380,15 +387,8 @@ void UPD71071::FinishService(int channel, bool terminal_count)
     UPD71071_Channel& state = m_state.channels[channel];
     u8 bit = (u8)(1 << channel);
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_DMA))
-    {
-        GT_Trace_Entry* entry = m_trace_logger->Record(TRACE_DMA, TRACE_DMA_END);
-        entry->dma.address = state.current_address;
-        entry->dma.count = state.current_count;
-        entry->dma.channel = (u8)channel;
-        entry->dma.mode = state.mode;
-        entry->dma.terminal = terminal_count ? 1 : 0;
-    }
+    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_END))
+        TraceEvent(TRACE_DMA_END, channel, 0, 0, terminal_count);
 
     m_state.status_tc |= bit;
 
@@ -423,6 +423,29 @@ void UPD71071::CheckUnsupported()
             m_state.selected_channel);
         m_unsupported_logged = true;
     }
+}
+
+// Register writes report the selected channel afterwards, from the base or current registers the CPU sees
+void UPD71071::TraceEvent(u8 event, int channel, u8 reg, u8 value, bool terminal)
+{
+    const UPD71071_Channel& state = m_state.channels[channel];
+    bool base = event == TRACE_DMA_REGISTER && m_state.base_access;
+    GT_Trace_Entry entry = {};
+    entry.type = TRACE_DMA;
+    entry.event = event;
+    entry.dma.address = ((u32)m_state.high_address << 24) | (base ? state.base_address : state.current_address);
+    entry.dma.count = base ? state.base_count : state.current_count;
+    entry.dma.channel = (u8)channel;
+    entry.dma.mode = state.mode;
+    entry.dma.reg = reg;
+    entry.dma.value = value;
+    entry.dma.terminal = terminal ? 1 : 0;
+    entry.dma.mask = m_state.mask;
+
+    if (reg == 0x08 || reg == 0x09)
+        entry.dma.count = m_state.device_control;
+
+    m_trace_logger->TraceLog(entry);
 }
 
 void UPD71071::UpdateNextEvent()

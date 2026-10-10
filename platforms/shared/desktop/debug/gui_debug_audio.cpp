@@ -863,7 +863,11 @@ static void draw_algorithm(int algorithm)
     ImGui::Dummy(ImVec2(3 * cell + box, 2 * cell + box));
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("ALGORITHM %d\nCARRIERS IN GREEN, MODULATORS IN ORANGE", algorithm);
+    {
+        ImGui::PushFont(gui_roboto_font);
+        ImGui::SetTooltip("Algorithm %d\nCarriers in green, modulators in orange", algorithm);
+        ImGui::PopFont();
+    }
 }
 
 static void draw_frequency(u16 f_number, u8 block, bool active)
@@ -1085,7 +1089,12 @@ static void draw_wave_ram(RF5C68* rf5c68)
         {
             ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             u32 offset = base + (u32)CLAMP((int)mouse.x, 0, 4095);
-            ImGui::SetTooltip("$%04X: $%02X\nCLICK TO OPEN PCM RAM", offset, state->wave_ram[offset]);
+            ImGui::BeginTooltip();
+            ImGui::TextColored(white, "$%04X: $%02X", offset, state->wave_ram[offset]);
+            ImGui::PushFont(gui_roboto_font);
+            ImGui::TextUnformatted("Click to open in Memory Workspace");
+            ImGui::PopFont();
+            ImGui::EndTooltip();
 
             if (ImGui::IsMouseClicked(0))
                 goto_pcm_ram(offset);

@@ -58,6 +58,7 @@ static bool open_physical_cdrom = false;
 static const GuiColor& firmware_unknown_color = cornflower;
 static const GuiColor& service_mcp_http_color = green;
 static const GuiColor& service_mcp_stdio_color = amber;
+static const GuiColor& video_recording_color = red;
 static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
 static const int machine_ram_sizes_mb[] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128 };
@@ -2093,25 +2094,46 @@ static void menu_about(void)
 
 static void draw_mcp_status(void)
 {
-    if (!emu_mcp_is_running())
+    bool video_recording = emu_is_video_recording();
+    bool mcp_running = emu_mcp_is_running();
+
+    if (!video_recording && !mcp_running)
         return;
 
-    char status[128];
-    ImVec4 color = service_mcp_http_color;
-    int transport_mode = emu_mcp_get_transport_mode();
+    const char* video_recording_status = "RECORDING";
+    char mcp_status[128];
+    ImVec4 mcp_color = service_mcp_http_color;
 
-    if (transport_mode == 0)
+    if (mcp_running)
     {
-        snprintf(status, sizeof(status), "MCP: STDIO");
-        color = service_mcp_stdio_color;
-    }
-    else
-    {
-        snprintf(status, sizeof(status), "MCP: HTTP (%s:%d)", emu_mcp_get_http_address(), emu_mcp_get_http_port());
+        int transport_mode = emu_mcp_get_transport_mode();
+
+        if (transport_mode == 0)
+        {
+            snprintf(mcp_status, sizeof(mcp_status), "MCP: STDIO");
+            mcp_color = service_mcp_stdio_color;
+        }
+        else
+        {
+            snprintf(mcp_status, sizeof(mcp_status), "MCP: HTTP (%s:%d)", emu_mcp_get_http_address(), emu_mcp_get_http_port());
+        }
     }
 
     ImGuiStyle& style = ImGui::GetStyle();
-    float text_width = ImGui::CalcTextSize(status).x;
+    float spacing = style.ItemSpacing.x * 2.0f;
+    float dot_radius = ImGui::GetFontSize() * 0.22f;
+    float dot_width = (dot_radius * 2.0f) + style.ItemInnerSpacing.x;
+    float text_width = 0.0f;
+
+    if (video_recording)
+        text_width += dot_width + ImGui::CalcTextSize(video_recording_status).x;
+    if (mcp_running)
+    {
+        if (text_width > 0.0f)
+            text_width += spacing;
+        text_width += ImGui::CalcTextSize(mcp_status).x;
+    }
+
     float status_x = ImGui::GetWindowWidth() - text_width -
         style.ItemSpacing.x - 10.0f;
     float cursor_x = ImGui::GetCursorPosX();
@@ -2121,7 +2143,25 @@ static void draw_mcp_status(void)
 
     ImGui::SameLine(status_x);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(color, "%s", status);
+
+    if (video_recording)
+    {
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + dot_width);
+        ImGui::TextColored(video_recording_color, "%s", video_recording_status);
+
+        ImVec2 text_min = ImGui::GetItemRectMin();
+        ImVec2 text_max = ImGui::GetItemRectMax();
+        ImVec2 dot_center = ImVec2(text_min.x - dot_width + dot_radius, (text_min.y + text_max.y) * 0.5f);
+        ImGui::GetWindowDrawList()->AddCircleFilled(dot_center, dot_radius, ImGui::GetColorU32(video_recording_color));
+    }
+
+    if (mcp_running)
+    {
+        if (video_recording)
+            ImGui::SameLine(0.0f, spacing);
+
+        ImGui::TextColored(mcp_color, "%s", mcp_status);
+    }
 }
 
 static void file_dialogs(void)

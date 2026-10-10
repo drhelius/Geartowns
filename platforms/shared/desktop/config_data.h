@@ -129,6 +129,9 @@ struct config_Audio
     bool enable;
     bool sync;
     float master_volume;
+    float fm_volume;
+    float pcm_volume;
+    float cdda_volume;
     int buffer_count;
 };
 

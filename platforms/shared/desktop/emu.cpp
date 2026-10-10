@@ -701,6 +701,40 @@ void emu_audio_set_master_volume(float volume)
         geartowns->GetAudio()->SetMasterVolume(volume);
 }
 
+void emu_audio_set_source_volume(int source, float volume)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    Audio* audio = geartowns->GetAudio();
+
+    switch (source)
+    {
+        case Audio::AUDIO_SOURCE_FM:
+            audio->SetFMVolume(volume);
+            break;
+        case Audio::AUDIO_SOURCE_PCM:
+            audio->SetPCMVolume(volume);
+            break;
+        case Audio::AUDIO_SOURCE_CDDA:
+            audio->SetCDDAVolume(volume);
+            break;
+        default:
+            break;
+    }
+}
+
+void emu_audio_set_source_mute(int source, bool mute)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetAudio()->SetSourceMute(source, mute);
+}
+
+bool emu_audio_is_source_muted(int source)
+{
+    return IsValidPointer(geartowns) && geartowns->GetAudio()->IsSourceMuted(source);
+}
+
 void emu_audio_reset(void)
 {
     sound_queue_stop();

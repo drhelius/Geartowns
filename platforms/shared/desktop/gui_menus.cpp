@@ -81,6 +81,8 @@ static bool shader_parameter_is_integer(const ShaderPresetParameter* parameter);
 static int shader_parameter_round_to_int(float value);
 static void menu_input(void);
 static void menu_audio(void);
+static void menu_audio_source_mute(const char* label, int source);
+static void menu_audio_source_volume(const char* label, const char* id, int source, float* volume);
 static void menu_debug(void);
 static void menu_about(void);
 static void draw_background_color_menu(const char* label, int theme);
@@ -1777,6 +1779,18 @@ static void menu_audio(void)
 
         ImGui::Separator();
 
+        menu_audio_source_mute("Mute FM", Audio::AUDIO_SOURCE_FM);
+        menu_audio_source_mute("Mute PCM", Audio::AUDIO_SOURCE_PCM);
+        menu_audio_source_mute("Mute CD-DA", Audio::AUDIO_SOURCE_CDDA);
+
+        ImGui::Separator();
+
+        menu_audio_source_volume("FM Volume", "##fm_volume", Audio::AUDIO_SOURCE_FM, &config_audio.fm_volume);
+        menu_audio_source_volume("PCM Volume", "##pcm_volume", Audio::AUDIO_SOURCE_PCM, &config_audio.pcm_volume);
+        menu_audio_source_volume("CD-DA Volume", "##cdda_volume", Audio::AUDIO_SOURCE_CDDA, &config_audio.cdda_volume);
+
+        ImGui::Separator();
+
         if (ImGui::BeginMenu("Buffer Size", config_audio.enable))
         {
             ImGui::PushItemWidth(150.0f);
@@ -1800,6 +1814,36 @@ static void menu_audio(void)
             }
 
             ImGui::EndMenu();
+        }
+
+        ImGui::EndMenu();
+    }
+}
+
+static void menu_audio_source_mute(const char* label, int source)
+{
+    bool mute = emu_audio_is_source_muted(source);
+
+    if (ImGui::MenuItem(label, "", &mute, config_audio.enable))
+        emu_audio_set_source_mute(source, mute);
+}
+
+static void menu_audio_source_volume(const char* label, const char* id, int source, float* volume)
+{
+    if (ImGui::BeginMenu(label, config_audio.enable))
+    {
+        ImGui::PushItemWidth(200.0f);
+
+        if (ImGui::SliderFloat(id, volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))
+            emu_audio_set_source_volume(source, *volume);
+
+        ImGui::PopItemWidth();
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Anything above 1.00 may cause clipping.");
+            ImGui::EndTooltip();
         }
 
         ImGui::EndMenu();

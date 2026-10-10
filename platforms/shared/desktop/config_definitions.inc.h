@@ -275,6 +275,9 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Audio", "Enable", config_audio.enable, true);
     CONFIG_BOOL("Audio", "Sync", config_audio.sync, true);
     CONFIG_FLOAT_RANGE("Audio", "MasterVolume", config_audio.master_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "FMVolume", config_audio.fm_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "PCMVolume", config_audio.pcm_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "CDDAVolume", config_audio.cdda_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_INT("Audio", "BufferCount", config_audio.buffer_count, 3);
 
     //**************************************

@@ -151,7 +151,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_dynarec",
         "CPU Dynarec",
         NULL,
-        "Translate the 80386 code into native code, with the same results as the interpreter. The core falls back to the interpreter when the frontend can't run generated code.",
+        "Use dynamic recompilation. Most games will run faster but some games may run slower.",
         NULL,
         "system",
         {

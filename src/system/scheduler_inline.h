@@ -100,6 +100,11 @@ INLINE u64 Scheduler::GetEventClocks(Scheduler_Event event) const
     return m_state.events[event];
 }
 
+INLINE u64 Scheduler::GetNextEventClocks() const
+{
+    return m_next_event_clocks;
+}
+
 INLINE Scheduler::Scheduler_State* Scheduler::GetState()
 {
     return &m_state;

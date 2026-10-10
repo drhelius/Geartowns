@@ -63,6 +63,7 @@ public:
     Scheduler_Event PopEvent();
     void Schedule(Scheduler_Event event, u64 clocks);
     u64 GetEventClocks(Scheduler_Event event) const;
+    u64 GetNextEventClocks() const;
     Scheduler_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);

@@ -2268,7 +2268,6 @@ bool I386::OPCodes_IN()
         RecordDebuggerIO(port, value, (u32)width >> 3, false);
 
     SetRegister(I386_REG_EAX, width, value);
-    m_bus_context->end_batch = true;
     CommitEIP(m_instruction);
     return true;
 }

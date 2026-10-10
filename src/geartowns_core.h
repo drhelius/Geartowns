@@ -137,8 +137,9 @@ private:
     void EndFrame(u64 frame_start, s16* sample_buffer, int* sample_count);
     bool IsFrameDone(u64 frame_start) const;
     u64 GetFrameLimit(u64 frame_start) const;
-    GT_Bus_Access_Context BeginSlice() const;
+    GT_Bus_Access_Context BeginSlice();
     void CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice);
+    static bool SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks);
     void DispatchEvents();
     void Reset();
     void ResetCPU();

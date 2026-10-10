@@ -187,7 +187,8 @@ void GeartownsCore::Init()
     m_fdc->Init(m_pic, m_scheduler, m_dma);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
-    m_io->Init(m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard, m_input, m_rtc, m_dma);
+    m_io->Init(m_scheduler, m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard,
+        m_input, m_rtc, m_dma);
     m_i386->Init(m_memory, m_io);
     m_input->Init();
     m_trace_logger->Init(&m_scheduler->GetState()->clocks);
@@ -356,12 +357,24 @@ INLINE u64 GeartownsCore::GetFrameLimit(u64 frame_start) const
     return frame_start + (m_video->IsRunning() ? GT_CPU_CLOCKS_PER_FRAME * 4 : GT_CPU_CLOCKS_PER_FRAME);
 }
 
-INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice() const
+INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice()
 {
     GT_Bus_Access_Context context = {};
     context.origin = GT_BUS_ORIGIN_CPU;
     context.clocks = m_scheduler->GetClocks();
+    context.synchronize = &GeartownsCore::SynchronizeIOCallback;
+    context.synchronize_context = this;
     return context;
+}
+
+// A port access inside a batch moves machine time up to it, unless an event falls due first
+bool GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks)
+{
+    Scheduler* scheduler = ((GeartownsCore*)core)->m_scheduler;
+    scheduler->AddCycles(elapsed_clocks - context.synchronized_clocks);
+    context.synchronized_clocks = elapsed_clocks;
+    context.clocks = scheduler->GetClocks();
+    return !scheduler->IsEventDue();
 }
 
 // A halted CPU idles through the slice
@@ -373,7 +386,7 @@ INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_A
     if (idle)
         m_scheduler->AddClocks(slice);
     else
-        m_scheduler->AddCycles((u32)(result.clocks + context.wait_clocks));
+        m_scheduler->AddCycles((u32)(result.clocks + context.wait_clocks - context.synchronized_clocks));
 
     if (m_scheduler->IsEventDue())
         DispatchEvents();

@@ -635,6 +635,7 @@ private:
     bool TrackCall(bool completed, u16 cs, u32 base);
     bool TrackReturn(bool completed);
     bool DeferIO();
+    bool SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks);
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
     void CopyStepException(I386_Run_Result& total) const;
@@ -1065,7 +1066,9 @@ private:
     u8* const* m_write_pages;
     u32 m_memory_generation;
     bool m_batch_mode;
-    u32 m_batch_start_pc;
+    u32 m_io_sync_pc;
+    bool m_io_synced;
+    bool m_io_deferred;
     bool m_slow_memory;
     bool m_user_mode;
     u8 m_default_size;

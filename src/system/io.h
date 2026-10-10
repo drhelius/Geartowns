@@ -36,14 +36,16 @@ class PIC;
 class PIT;
 class SystemControl;
 class Video;
+class Scheduler;
 
 class IO
 {
 public:
     IO();
     ~IO();
-    void Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-        CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc, UPD71071* dma);
+    void Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory,
+        SystemControl* system_control, CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc,
+        UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -54,6 +56,10 @@ public:
     bool Peek(u16 port, u64 clocks, u8& value) const;
 
 private:
+    u8 ReadPort(u16 port, GT_Bus_Access_Context& context);
+
+private:
+    Scheduler* m_scheduler;
     Audio* m_audio;
     YM3438* m_ym3438;
     RF5C68* m_rf5c68;

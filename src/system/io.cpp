@@ -28,6 +28,7 @@
 #include "memory.h"
 #include "pic.h"
 #include "pit.h"
+#include "scheduler.h"
 #include "msm58321.h"
 #include "system_control.h"
 #include "upd71071.h"
@@ -35,6 +36,7 @@
 
 IO::IO()
 {
+    InitPointer(m_scheduler);
     InitPointer(m_audio);
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
@@ -55,9 +57,11 @@ IO::~IO()
 {
 }
 
-void IO::Init(Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory, SystemControl* system_control,
-    CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc, UPD71071* dma)
+void IO::Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory,
+    SystemControl* system_control, CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc,
+    UPD71071* dma)
 {
+    m_scheduler = scheduler;
     m_audio = audio;
     m_ym3438 = audio->GetYM3438();
     m_rf5c68 = audio->GetRF5C68();
@@ -80,6 +84,18 @@ void IO::Reset()
 }
 
 u8 IO::Read8(u16 port, GT_Bus_Access_Context& context)
+{
+    u64 next_event = m_scheduler->GetNextEventClocks();
+    bool interrupt = m_pic->IsInterruptPending();
+    u8 value = ReadPort(port, context);
+
+    if (m_scheduler->GetNextEventClocks() != next_event || m_pic->IsInterruptPending() != interrupt)
+        context.end_batch = true;
+
+    return value;
+}
+
+u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
 {
     switch (port)
     {

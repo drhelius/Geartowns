@@ -112,7 +112,9 @@ void I386::Reset()
     InitPointer(m_bus_context);
     m_memory_generation = 0;
     m_batch_mode = false;
-    m_batch_start_pc = 0;
+    m_io_sync_pc = 0;
+    m_io_synced = false;
+    m_io_deferred = false;
     m_state.execution_mode = I386_MODE_REAL;
 
     memset(&m_step, 0, sizeof(m_step));
@@ -313,7 +315,9 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     total.exception_vector = 0xFF;
 
     m_batch_mode = true;
-    m_batch_start_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_synced = true;
+    m_io_deferred = false;
     m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
@@ -350,6 +354,9 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 
             if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
             {
+                if (m_io_deferred && SynchronizeIO(context, clocks))
+                    continue;
+
                 // Exceptions and software interrupts always end the batch
                 if (m_step.exception)
                     CopyStepException(total);

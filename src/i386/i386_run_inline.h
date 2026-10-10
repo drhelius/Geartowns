@@ -162,15 +162,37 @@ INLINE bool I386::TrackReturn(bool completed)
     return completed;
 }
 
-// Port accesses only run as the first step of a batch, where the context clocks are their access time
-// Elsewhere the batch ends before the instruction and the next batch starts with it
+// Port accesses only run where machine time has caught up with them, so the context clocks are their access time
+// Elsewhere the instruction stops before doing anything until RunFor synchronizes or ends the batch
 INLINE bool I386::DeferIO()
 {
-    if (!m_batch_mode || m_state.segments[I386_SEGMENT_CS].base + m_state.eip == m_batch_start_pc)
+    if (!m_batch_mode)
         return false;
 
+    if (m_io_synced && (m_state.segments[I386_SEGMENT_CS].base + m_state.eip == m_io_sync_pc))
+    {
+        m_io_synced = false;
+        return false;
+    }
+
+    m_io_deferred = true;
     m_step.instruction_completed = false;
     m_bus_context->end_batch = true;
+    return true;
+}
+
+// Machine time catches up with the deferred instruction, which then runs again, unless an event falls due first
+INLINE bool I386::SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks)
+{
+    m_io_deferred = false;
+
+    if (!IsValidPointer(context.synchronize) ||
+        !context.synchronize(context.synchronize_context, context, (u32)(clocks + context.wait_clocks)))
+        return false;
+
+    context.end_batch = false;
+    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_synced = true;
     return true;
 }
 

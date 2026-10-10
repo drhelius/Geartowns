@@ -40,6 +40,7 @@ ln -s ../lib/%{name}/%{name} %{buildroot}%{_bindir}/%{name}
 install -Dm644 platforms/shared/gamecontrollerdb.txt %{buildroot}%{_prefix}/lib/%{name}/gamecontrollerdb.txt
 
 install -dm755 %{buildroot}%{_prefix}/lib/%{name}/mcp/resources/hardware
+install -Dm644 platforms/shared/desktop/mcp/resources/hardware/*.md %{buildroot}%{_prefix}/lib/%{name}/mcp/resources/hardware/
 install -Dm644 platforms/shared/desktop/mcp/resources/hardware/toc.json %{buildroot}%{_prefix}/lib/%{name}/mcp/resources/hardware/toc.json
 
 install -dm755 %{buildroot}%{_prefix}/lib/%{name}/shaders

@@ -510,9 +510,9 @@ static void draw_visible_area(const Emu_Debug_Buffer_Info& info, ImVec2 position
 
 static void draw_visible_rect(ImDrawList* draw_list, ImVec2 position, float zoom, int x, int y, int width, int height)
 {
-    ImVec2 min(position.x + x * zoom, position.y + y * zoom);
-    ImVec2 max(min.x + width * zoom, min.y + height * zoom);
-    draw_list->AddRect(min, max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
+    ImVec2 rect_min(position.x + x * zoom, position.y + y * zoom);
+    ImVec2 rect_max(rect_min.x + width * zoom, rect_min.y + height * zoom);
+    draw_list->AddRect(rect_min, rect_max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
 }
 
 static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, int y)

@@ -484,7 +484,7 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
     m_external_line = -1;
 
     if (entered)
-        return clocks;
+        return (u32)clocks;
 
     if (m_exception.pending)
     {
@@ -502,7 +502,7 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
     else
         m_state.shutdown = true;
 
-    return clocks;
+    return (u32)clocks;
 }
 
 u32 I386::EnterNMI(GT_Bus_Access_Context& context)

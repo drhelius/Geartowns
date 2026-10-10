@@ -296,7 +296,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     u32 size = (opcode & 1) != 0 ? m_state.repeat.operand_size : 1;
     u32 source = GetRegister(I386_REG_ESI, address_width);
     u32 destination = GetRegister(I386_REG_EDI, address_width);
-    int segment = m_state.repeat.segment_override == 0xFF ? I386_SEGMENT_DS : m_state.repeat.segment_override;
+    int segment = m_state.repeat.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_state.repeat.segment_override;
     s64 destination_end = (s64)((u64)destination + size - 1);
 
     if (destination_end > m_write_limits[I386_SEGMENT_ES])
@@ -425,7 +425,7 @@ void I386::PrepareString()
 
     m_string.width = (opcode & 1) != 0 ? m_instruction.operand_size * 8 : 8;
     m_string.address_width = m_instruction.address_size * 8;
-    m_string.source_segment = m_instruction.segment_override == 0xFF ? I386_SEGMENT_DS : m_instruction.segment_override;
+    m_string.source_segment = m_instruction.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_instruction.segment_override;
     m_string.repeated = m_instruction.repeat != 0;
     m_string.index_mask = 0;
 

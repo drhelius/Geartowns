@@ -84,8 +84,9 @@ static void draw_rf5c68_channels(RF5C68* rf5c68, const s16* const* buffers, int 
 static void center_row_text(float height);
 static void draw_wave_ram(RF5C68* rf5c68);
 static void draw_volume_chip(Audio* audio, int chip);
+static void setup_control_columns(void);
 static void goto_pcm_ram(u32 offset);
-static void draw_msf(u32 lba);
+static void draw_position(u32 lba, u32 pregap, bool valid);
 
 void gui_debug_audio_init(void)
 {
@@ -190,7 +191,7 @@ void gui_debug_window_ym3438_registers(void)
                         bool latched = (latch >> 8) == part && (latch & 0xFF) == address;
 
                         ImGui::TableNextColumn();
-                        ImGui::TextColored(latched ? yellow : used ? white : dark_gray, "%02X",
+                        ImGui::TextColored(latched ? yellow : used ? white : gray, "%02X",
                             ym3438->GetRegister((u16)((part << 8) | address)));
 
                         if (ImGui::IsItemHovered())
@@ -261,7 +262,7 @@ void gui_debug_window_sound_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(180, 100), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 512), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound Control", &config_debug.show_sound_control);
 
     ImGui::PushFont(gui_default_font);
@@ -270,44 +271,81 @@ void gui_debug_window_sound_control(void)
     Audio::Audio_State* state = audio->GetState();
     YM3438::YM3438_State* fm = audio->GetYM3438()->GetState();
     RF5C68::RF5C68_State* pcm = audio->GetRF5C68()->GetState();
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float space = ImGui::CalcTextSize(" ").x;
 
     ImGui::TextColored(cyan, "ELECTRONIC VOLUME"); ImGui::Separator();
     draw_volume_chip(audio, 0);
+    ImGui::Spacing();
     draw_volume_chip(audio, 1);
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "OUTPUT GATES"); ImGui::Separator();
 
     u8 mute = state->mute_control;
     u8 output = state->output_control;
-    ImGui::TextColored(violet, "SOURCES    "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", mute); ImGui::SameLine();
-    ImGui::TextColored((mute & 0x02) ? green : gray, "FM "); ImGui::SameLine();
-    ImGui::TextColored((mute & 0x01) ? green : gray, "PCM"); ImGui::SameLine();
-    ImGui::TextColored(gray, "04D5");
-    ImGui::TextColored(violet, "OUTPUT     "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", output); ImGui::SameLine();
-    ImGui::TextColored((output & 0x40) ? green : gray, "%s", (output & 0x40) ? "ON " : "OFF"); ImGui::SameLine();
-    ImGui::TextColored((output & 0x80) ? gray : green, "LED"); ImGui::SameLine();
-    ImGui::TextColored(gray, "04EC");
+
+    if (ImGui::BeginTable("##sound_gates", 3, flags))
+    {
+        setup_control_columns();
+
+        ImGui::TableNextRow();
+        draw_grid_label("SOURCES");
+        ImGui::TextColored(white, "$%02X", mute); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((mute & 0x02) ? green : gray, "FM"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((mute & 0x01) ? green : gray, "PCM");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04D5)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("OUTPUT");
+        ImGui::TextColored(white, "$%02X", output); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((output & 0x40) ? green : gray, "%-3s", (output & 0x40) ? "ON" : "OFF");
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((output & 0x80) ? gray : green, "LED");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04EC)");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "INTERRUPTS"); ImGui::Separator();
 
-    bool fm_cause = fm->timer_a_flag || fm->timer_b_flag;
-    ImGui::TextColored(violet, "CAUSE 04E9 "); ImGui::SameLine();
-    ImGui::TextColored(fm_cause ? yellow : gray, "FM"); ImGui::SameLine();
-    ImGui::TextColored(pcm->irq_flags ? yellow : gray, "PCM");
-    ImGui::TextColored(violet, "FM TIMERS  "); ImGui::SameLine();
-    ImGui::TextColored(fm->timer_a_flag ? yellow : gray, "A"); ImGui::SameLine();
-    ImGui::TextColored(fm->timer_b_flag ? yellow : gray, "B");
-    ImGui::TextColored(violet, "PCM MASK   "); ImGui::SameLine();
-    ImGui::TextColored(white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(pcm->irq_mask)); ImGui::SameLine();
-    ImGui::TextColored(gray, "04EA");
-    ImGui::TextColored(violet, "PCM FLAGS  "); ImGui::SameLine();
-    ImGui::TextColored(pcm->irq_flags ? yellow : white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(pcm->irq_flags));
-    ImGui::SameLine();
-    ImGui::TextColored(gray, "04EB");
+    if (ImGui::BeginTable("##sound_interrupts", 3, flags))
+    {
+        bool fm_cause = fm->timer_a_flag || fm->timer_b_flag;
+
+        setup_control_columns();
+
+        ImGui::TableNextRow();
+        draw_grid_label("CAUSE");
+        ImGui::TextColored(fm_cause ? yellow : gray, "FM"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(pcm->irq_flags ? yellow : gray, "PCM");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04E9)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("FM TIMERS");
+        ImGui::TextColored(fm->timer_a_flag ? yellow : gray, "A"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(fm->timer_b_flag ? yellow : gray, "B");
+
+        ImGui::TableNextRow();
+        draw_grid_label("PCM MASK");
+        ImGui::TextColored(white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(pcm->irq_mask));
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04EA)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("PCM FLAGS");
+        ImGui::TextColored(pcm->irq_flags ? yellow : white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(pcm->irq_flags));
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04EB)");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "DEBUGGER MUTES"); ImGui::Separator();
+
+    ImGui::PopFont();
 
     static const char* sources[Audio::AUDIO_SOURCE_COUNT] = { "FM", "PCM", "CD-DA" };
 
@@ -322,8 +360,6 @@ void gui_debug_window_sound_control(void)
             ImGui::SameLine(0, 20);
     }
 
-    ImGui::PopFont();
-
     ImGui::End();
     ImGui::PopStyleVar();
 }
@@ -332,7 +368,7 @@ void gui_debug_window_cdrom_audio(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(200, 110), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(262, 400), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(262, 384), ImGuiCond_FirstUseEver);
     ImGui::Begin("CD Audio", &config_debug.show_cdrom_audio);
 
     GeartownsCore* core = emu_get_core();
@@ -351,58 +387,86 @@ void gui_debug_window_cdrom_audio(void)
 
     ImGui::PushFont(gui_default_font);
 
-    static const char* states[3] = { "IDLE   ", "PLAYING", "PAUSED " };
-    ImGui::TextColored(cyan, "PLAYBACK"); ImGui::Separator();
-    ImGui::TextColored(violet, "STATE    "); ImGui::SameLine();
-    ImGui::TextColored(active ? blue : gray, "%s", states[state->play_state % 3]);
-    ImGui::TextColored(violet, "END      "); ImGui::SameLine();
-    ImGui::TextColored(active ? white : gray, "%s", state->repeat ? "REPEAT" : "STOP  ");
-
+    static const char* states[3] = { "IDLE", "PLAYING", "PAUSED" };
+    float character = ImGui::CalcTextSize("0").x;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
     s32 track = media->IsReady() && active ? media->FindTrackFromLBA(state->current_lba, true) : -1;
-    ImGui::TextColored(violet, "TRACK    "); ImGui::SameLine();
 
-    if (track >= 0)
-        ImGui::TextColored(orange, "%02d", track + 1);
-    else
-        ImGui::TextColored(gray, "--");
+    ImGui::TextColored(cyan, "PLAYBACK"); ImGui::Separator();
+
+    if (ImGui::BeginTable("##cdda_playback", 2, flags))
+    {
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 9);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 8);
+
+        ImGui::TableNextRow();
+        draw_grid_label("STATE");
+        ImGui::TextColored(active ? blue : gray, "%s", states[state->play_state % 3]);
+
+        ImGui::TableNextRow();
+        draw_grid_label("END");
+        ImGui::TextColored(active ? white : gray, "%s", state->repeat ? "REPEAT" : "STOP");
+
+        ImGui::TableNextRow();
+        draw_grid_label("TRACK");
+
+        if (track >= 0)
+            ImGui::TextColored(orange, "%02d", track + 1);
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "POSITION"); ImGui::Separator();
 
-    static const char* rows[3] = { "START    ", "STOP     ", "CURRENT  " };
-    u32 values[3] = { state->start_lba, state->end_lba, state->current_lba };
-
-    for (int i = 0; i < 3; i++)
+    if (ImGui::BeginTable("##cdda_position", 3, flags))
     {
-        ImGui::TextColored(violet, "%s", rows[i]); ImGui::SameLine();
+        static const char* rows[3] = { "START", "STOP", "CURRENT" };
+        u32 values[3] = { state->start_lba, state->end_lba, state->current_lba };
 
-        if (active)
-            draw_msf(values[i]);
-        else
-            ImGui::TextColored(gray, "--");
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 9);
+        ImGui::TableSetupColumn("LBA", ImGuiTableColumnFlags_WidthFixed, character * 7);
+        ImGui::TableSetupColumn("MSF", ImGuiTableColumnFlags_WidthFixed, character * 8);
+        ImGui::TableHeadersRow();
+
+        for (int i = 0; i < 3; i++)
+        {
+            ImGui::TableNextRow();
+            draw_grid_label(rows[i]);
+            draw_position(values[i], 150, active);
+        }
+
+        u32 track_start = track >= 0 ? media->GetTracks()[track].start_lba : 0;
+
+        ImGui::TableNextRow();
+        draw_grid_label("TRACK POS");
+        draw_position(state->current_lba - MIN(state->current_lba, track_start), 0, track >= 0);
+
+        ImGui::EndTable();
     }
-
-    ImGui::TextColored(violet, "TRACK POS"); ImGui::SameLine();
-
-    if (track >= 0)
-    {
-        GT_CdRomMSF msf;
-        LbaToMsf(state->current_lba - MIN(state->current_lba, media->GetTracks()[track].start_lba), &msf);
-        ImGui::TextColored(white, "%02u:%02u:%02u", msf.minutes, msf.seconds, msf.frames);
-    }
-    else
-        ImGui::TextColored(gray, "--");
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "VOLUME"); ImGui::Separator();
 
-    for (int channel = 0; channel < 2; channel++)
+    if (ImGui::BeginTable("##cdda_volume", 2, flags))
     {
-        s32 gain = audio->GetVolumeGain(1, channel);
-        ImGui::TextColored(violet, "%s", channel == 0 ? "LEFT     " : "RIGHT    "); ImGui::SameLine();
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 9);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 8);
 
-        if (gain > 0)
-            ImGui::TextColored(white, "%6.1f dB", 20.0 * log10((double)gain / 32768.0));
-        else
-            ImGui::TextColored(gray, "MUTE");
+        for (int channel = 0; channel < 2; channel++)
+        {
+            s32 gain = audio->GetVolumeGain(1, channel);
+
+            ImGui::TableNextRow();
+            draw_grid_label(channel == 0 ? "LEFT" : "RIGHT");
+
+            if (gain > 0)
+                ImGui::TextColored(white, "%.1f dB", 20.0 * log10((double)gain / 32768.0));
+            else
+                ImGui::TextColored(gray, "MUTE");
+        }
+
+        ImGui::EndTable();
     }
 
     ImGui::PopFont();
@@ -484,7 +548,11 @@ static bool draw_mute_button(const char* id, bool muted, const char* tooltip)
     ImGui::PopFont();
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+        ImGui::PushFont(gui_roboto_font);
         ImGui::SetTooltip("%s", tooltip);
+        ImGui::PopFont();
+    }
 
     return pressed;
 }
@@ -501,7 +569,11 @@ static bool draw_solo_button(const char* id, bool solo)
     ImGui::PopFont();
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+        ImGui::PushFont(gui_roboto_font);
         ImGui::SetTooltip("Solo Channel");
+        ImGui::PopFont();
+    }
 
     return pressed;
 }
@@ -1029,14 +1101,16 @@ static void draw_wave_ram(RF5C68* rf5c68)
     ImGui::PopFont();
 }
 
+// Both chips share the column widths, so their tables line up
 static void draw_volume_chip(Audio* audio, int chip)
 {
     Audio::Audio_State* state = audio->GetState();
+    float character = ImGui::CalcTextSize("0").x;
     char id[32];
     snprintf(id, sizeof(id), "##volume%d", chip);
 
-    ImGui::TextColored(violet, "VOLUME %d   ", chip + 1); ImGui::SameLine();
-    ImGui::TextColored(gray, "%04X", 0x04E0 + chip * 2); ImGui::SameLine();
+    ImGui::TextColored(violet, "VOLUME %d", chip + 1); ImGui::SameLine();
+    ImGui::TextColored(gray, "(%04X)", 0x04E0 + chip * 2); ImGui::SameLine();
     ImGui::TextColored(violet, " COM"); ImGui::SameLine();
     ImGui::TextColored(white, "%d", state->volume_channel[chip]);
 
@@ -1045,11 +1119,11 @@ static void draw_volume_chip(Audio* audio, int chip)
     if (!ImGui::BeginTable(id, 5, flags))
         return;
 
-    ImGui::TableSetupColumn("CH");
-    ImGui::TableSetupColumn("DATA");
-    ImGui::TableSetupColumn("EN");
-    ImGui::TableSetupColumn("FIXED");
-    ImGui::TableSetupColumn("GAIN");
+    ImGui::TableSetupColumn("CH", ImGuiTableColumnFlags_WidthFixed, character * 6);
+    ImGui::TableSetupColumn("DATA", ImGuiTableColumnFlags_WidthFixed, character * 4);
+    ImGui::TableSetupColumn("EN", ImGuiTableColumnFlags_WidthFixed, character * 3);
+    ImGui::TableSetupColumn("FIXED", ImGuiTableColumnFlags_WidthFixed, character * 6);
+    ImGui::TableSetupColumn("GAIN", ImGuiTableColumnFlags_WidthFixed, character * 9);
     ImGui::TableHeadersRow();
 
     for (int channel = 0; channel < AUDIO_VOLUME_CHANNELS; channel++)
@@ -1063,39 +1137,58 @@ static void draw_volume_chip(Audio* audio, int chip)
 
         if (chip == 1 && channel < 2)
         {
-            ImGui::SameLine();
+            ImGui::SameLine(0.0f, character);
             ImGui::TextColored(gray, "%s", channel == 0 ? "CD L" : "CD R");
         }
 
         ImGui::TableNextColumn();
         ImGui::TextColored(white, "$%02X", state->volume_data[chip][channel]);
         ImGui::TableNextColumn();
-        ImGui::TextColored((control & 0x04) ? green : gray, "%s", (control & 0x04) ? "ON " : "OFF");
+        ImGui::TextColored((control & 0x04) ? green : gray, "%s", (control & 0x04) ? "ON" : "OFF");
         ImGui::TableNextColumn();
 
         if (control & 0x10)
             ImGui::TextColored(white, "-32 dB");
         else if (control & 0x08)
-            ImGui::TextColored(white, "0 dB  ");
+            ImGui::TextColored(white, "0 dB");
         else
-            ImGui::TextColored(gray, "--    ");
+            ImGui::TextColored(gray, "--");
 
         ImGui::TableNextColumn();
 
         if (gain > 0)
-            ImGui::TextColored(white, "%6.1f dB", 20.0 * log10((double)gain / 32768.0));
+            ImGui::TextColored(white, "%.1f dB", 20.0 * log10((double)gain / 32768.0));
         else
-            ImGui::TextColored(gray, "MUTE     ");
+            ImGui::TextColored(gray, "MUTE");
     }
 
     ImGui::EndTable();
 }
 
-static void draw_msf(u32 lba)
+static void setup_control_columns(void)
 {
+    float character = ImGui::CalcTextSize("0").x;
+
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 9);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 11);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
+}
+
+// Fills the LBA and MSF columns, MSF counts the pregap for absolute positions
+static void draw_position(u32 lba, u32 pregap, bool valid)
+{
+    if (!valid)
+    {
+        ImGui::TextColored(gray, "--");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "--");
+        return;
+    }
+
     GT_CdRomMSF msf;
-    LbaToMsf(lba + 150, &msf);
-    ImGui::TextColored(white, "%6u", lba); ImGui::SameLine();
+    LbaToMsf(lba + pregap, &msf);
+    ImGui::TextColored(white, "%u", lba);
+    ImGui::TableNextColumn();
     ImGui::TextColored(orange, "%02u:%02u:%02u", msf.minutes, msf.seconds, msf.frames);
 }
 

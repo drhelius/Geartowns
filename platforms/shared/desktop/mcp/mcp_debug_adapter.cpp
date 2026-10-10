@@ -3135,8 +3135,10 @@ json DebugAdapter::GetCDROMAudioStatus()
 
         if (track >= 0)
         {
+            u32 position = state->current_lba - MIN(state->current_lba, media->GetTracks()[track].start_lba);
             result["track"] = track + 1;
-            result["track_position"] = msf_text(state->current_lba - MIN(state->current_lba, media->GetTracks()[track].start_lba));
+            result["track_position_lba"] = position;
+            result["track_position"] = msf_text(position);
         }
     }
 

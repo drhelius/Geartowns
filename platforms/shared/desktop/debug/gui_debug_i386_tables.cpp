@@ -65,7 +65,7 @@ u32 gui_debug_i386_table_entry_count(GuiDebugDescriptorTable table)
             return MIN((state->ldtr.limit / 8) + 1, 8192U);
         default:
         {
-            u32 size = state->execution_mode == I386_MODE_PROTECTED ? 8 : 4;
+            u32 size = gui_debug_i386_idt_is_ivt() ? 4 : 8;
             return MIN(((u32)state->idtr.limit + 1) / size, 256U);
         }
     }
@@ -82,7 +82,7 @@ bool gui_debug_i386_read_table_entry(GuiDebugDescriptorTable table, u32 index, G
     I386* cpu = core->GetI386();
     I386_State* state = cpu->GetState();
 
-    if (table == GuiDebugDescriptorTable_IDT && state->execution_mode != I386_MODE_PROTECTED)
+    if (table == GuiDebugDescriptorTable_IDT && gui_debug_i386_idt_is_ivt())
     {
         u32 address = state->idtr.base + index * 4;
         u32 vector = 0;
@@ -155,10 +155,12 @@ void gui_debug_i386_descriptor_flags(const GuiDebugDescriptor& descriptor, char*
         (descriptor.type & 0x01) ? 'A' : '-');
 }
 
-void gui_debug_i386_vector_name(u8 vector, char* name, size_t name_size, char* description, size_t description_size)
+// Without the PIC bases a vector names only what it is by itself, for entries logged under other bases
+void gui_debug_i386_vector_name(u8 vector, char* name, size_t name_size, char* description, size_t description_size,
+    bool pic_bases)
 {
     GeartownsCore* core = emu_get_core();
-    PIC* pic = IsValidPointer(core) ? core->GetPIC() : NULL;
+    PIC* pic = IsValidPointer(core) && pic_bases ? core->GetPIC() : NULL;
     int irq = -1;
 
     if (IsValidPointer(pic))
@@ -260,6 +262,14 @@ u16 gui_debug_i386_segment_attributes(const GuiDebugDescriptor& descriptor)
     return attributes;
 }
 
+// Only real mode uses a 4-byte vector table, VM86 tasks still go through the protected-mode IDT
+bool gui_debug_i386_idt_is_ivt(void)
+{
+    GeartownsCore* core = emu_get_core();
+    return IsValidPointer(core) && core->GetI386()->GetState()->execution_mode == I386_MODE_REAL;
+}
+
+// A segment register value in the current mode, real and VM86 segments are paragraphs
 bool gui_debug_i386_selector_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size)
 {
     GeartownsCore* core = emu_get_core();
@@ -276,6 +286,12 @@ bool gui_debug_i386_selector_base(u16 selector, u32& base, u32& limit, char* rea
         return true;
     }
 
+    return gui_debug_i386_descriptor_base(selector, base, limit, reason, reason_size);
+}
+
+// A selector through the descriptor tables, like the IDT gates use in VM86 too
+bool gui_debug_i386_descriptor_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size)
+{
     if ((selector & 0xFFFC) == 0)
     {
         snprintf(reason, reason_size, "Null selector");
@@ -299,6 +315,137 @@ bool gui_debug_i386_selector_base(u16 selector, u32& base, u32& limit, char* rea
     base = descriptor.base;
     limit = descriptor.limit;
     return true;
+}
+
+// A selector loads its descriptor in protected mode, like a MOV to the segment register would
+bool gui_debug_i386_load_segment(const I386_State& state, int index, u32 selector, I386_Segment& segment,
+    char* error, size_t error_size)
+{
+    segment = state.segments[index];
+
+    if (selector > 0xFFFF)
+    {
+        snprintf(error, error_size, "Segment selectors are 16-bit");
+        return false;
+    }
+
+    if (state.execution_mode != I386_MODE_PROTECTED)
+    {
+        segment.selector = (u16)selector;
+        segment.base = selector << 4;
+        segment.limit = 0xFFFF;
+        return true;
+    }
+
+    if ((selector & 0xFFFC) == 0)
+    {
+        if (index == I386_SEGMENT_CS || index == I386_SEGMENT_SS)
+        {
+            snprintf(error, error_size, "CS and SS cannot hold a null selector");
+            return false;
+        }
+
+        memset(&segment, 0, sizeof(segment));
+        segment.selector = (u16)selector;
+        return true;
+    }
+
+    GuiDebugDescriptor descriptor;
+
+    if (!gui_debug_i386_read_descriptor((u16)selector, descriptor) || descriptor.system || !descriptor.present)
+    {
+        snprintf(error, error_size, "Selector %04X is not a present code or data descriptor", selector);
+        return false;
+    }
+
+    segment.selector = (u16)selector;
+    segment.base = descriptor.base;
+    segment.limit = descriptor.limit;
+    segment.attributes = gui_debug_i386_segment_attributes(descriptor);
+    segment.dpl = descriptor.dpl;
+    return true;
+}
+
+// LDTR and TR load an LDT or TSS descriptor from the GDT, like LLDT and LTR
+bool gui_debug_i386_load_system_segment(const I386_State& state, bool task, u32 selector, I386_Segment& segment,
+    char* error, size_t error_size)
+{
+    segment = task ? state.task_register : state.ldtr;
+
+    if (selector > 0xFFFF)
+    {
+        snprintf(error, error_size, "Selectors are 16-bit");
+        return false;
+    }
+
+    if (state.execution_mode == I386_MODE_REAL || ((selector & 0xFFFC) == 0 && !task))
+    {
+        segment.selector = (u16)selector;
+        return true;
+    }
+
+    GuiDebugDescriptor descriptor;
+    bool type_ok = false;
+
+    if ((selector & 0x0004) == 0 && gui_debug_i386_read_table_entry(GuiDebugDescriptorTable_GDT, selector >> 3,
+        descriptor))
+        type_ok = descriptor.system && descriptor.present && (task ? (descriptor.type & 0x05) == 0x01 :
+            descriptor.type == 0x02);
+
+    if (!type_ok)
+    {
+        snprintf(error, error_size, "Selector %04X is not a present %s descriptor in the GDT", selector,
+            task ? "TSS" : "LDT");
+        return false;
+    }
+
+    segment.selector = (u16)selector;
+    segment.base = descriptor.base;
+    segment.limit = descriptor.limit;
+    segment.attributes = gui_debug_i386_segment_attributes(descriptor);
+    segment.dpl = descriptor.dpl;
+    return true;
+}
+
+// The descriptor access byte, P DPL S TYPE, as the 386 manuals show it
+u8 gui_debug_i386_access_byte(const I386_Segment& segment)
+{
+    u16 attributes = segment.attributes;
+    bool system = (attributes & I386_SEGMENT_SYSTEM) != 0;
+    u8 type = (u8)((attributes & I386_SEGMENT_TYPE_MASK) >> I386_SEGMENT_TYPE_SHIFT);
+
+    if (!system)
+    {
+        bool executable = (attributes & I386_SEGMENT_EXECUTABLE) != 0;
+
+        type = executable ? 0x08 : 0x00;
+
+        if (executable)
+            type |= ((attributes & I386_SEGMENT_CONFORMING) != 0 ? 0x04 : 0) |
+                ((attributes & I386_SEGMENT_READABLE) != 0 ? 0x02 : 0);
+        else
+            type |= ((attributes & I386_SEGMENT_EXPAND_DOWN) != 0 ? 0x04 : 0) |
+                ((attributes & I386_SEGMENT_WRITABLE) != 0 ? 0x02 : 0);
+
+        type |= (attributes & I386_SEGMENT_ACCESSED) != 0 ? 0x01 : 0;
+    }
+
+    return (u8)(((attributes & I386_SEGMENT_PRESENT) != 0 ? 0x80 : 0) | ((segment.dpl & 3) << 5) |
+        (system ? 0 : 0x10) | type);
+}
+
+// G and D/B aren't part of the access byte, so they stay
+u16 gui_debug_i386_access_attributes(u8 access, u16 attributes)
+{
+    GuiDebugDescriptor descriptor;
+
+    memset(&descriptor, 0, sizeof(descriptor));
+    descriptor.type = access & 0x0F;
+    descriptor.present = (access & 0x80) != 0;
+    descriptor.system = (access & 0x10) == 0;
+    descriptor.default32 = (attributes & I386_SEGMENT_DEFAULT_32) != 0;
+    descriptor.granular = (attributes & I386_SEGMENT_GRANULAR) != 0;
+    return gui_debug_i386_segment_attributes(descriptor);
 }
 
 static bool read_linear32(I386* cpu, u32 address, u32& value)
@@ -391,7 +538,7 @@ void gui_debug_window_descriptor_tables(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(146, 102), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(389, 281), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(436, 278), ImGuiCond_FirstUseEver);
     ImGui::Begin("Descriptor Tables", &config_debug.show_i386_descriptors);
 
     if (ImGui::BeginTabBar("##descriptor_tabs"))
@@ -445,11 +592,10 @@ void gui_debug_window_paging(void)
     ImGui::NewLine(); ImGui::TextColored(cyan, "TRANSLATOR"); ImGui::Separator();
 
     static char input[32] = "";
+    const char* hint = "1234ABCD, DS:1234 or 0008:1234";
     ImGui::PopFont();
-    ImGui::PushItemWidth(160);
-    ImGui::InputTextWithHint("##translate", "1234ABCD, DS:1234 or 0008:1234", input, IM_ARRAYSIZE(input),
-        ImGuiInputTextFlags_CharsUppercase);
-    ImGui::PopItemWidth();
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize(hint).x + ImGui::GetStyle().FramePadding.x * 2.0f);
+    ImGui::InputTextWithHint("##translate", hint, input, IM_ARRAYSIZE(input), ImGuiInputTextFlags_CharsUppercase);
     ImGui::PushFont(gui_default_font);
 
     GT_Debug_Memory_Address address;
@@ -505,11 +651,17 @@ void gui_debug_window_paging(void)
 
     ImGui::TextColored(violet, "FLAGS   "); ImGui::SameLine();
 
+    // The page is user or writable only when both the PDE and the PTE allow it
     if (translated && paging && translation.physical_valid)
     {
         char flags[16];
-        gui_debug_i386_page_flags(translation.page_table_entry, flags, sizeof(flags));
+        u32 pte = translation.page_table_entry;
+        u32 effective = (pte & ~0x06U) | (pte & translation.page_directory_entry & 0x06U);
+        gui_debug_i386_page_flags(effective, flags, sizeof(flags));
         ImGui::TextColored(orange, "%s", flags);
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Effective flags: U/S and R/W combine the PDE and the PTE");
     }
     else
         ImGui::TextColored(gray, "--");
@@ -776,8 +928,7 @@ static void draw_interrupt_table(void)
     draw_table_header(GuiDebugDescriptorTable_IDT);
     ImGui::Separator();
 
-    I386_State* state = emu_get_core()->GetI386()->GetState();
-    bool protected_mode = state->execution_mode == I386_MODE_PROTECTED;
+    bool protected_mode = !gui_debug_i386_idt_is_ivt();
     ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
         ImGuiTableFlags_BordersV | ImGuiTableFlags_SizingFixedFit;
 
@@ -857,7 +1008,7 @@ static void draw_interrupt_table(void)
                 u32 limit = 0;
                 char reason[GT_DEBUG_MEMORY_REASON_SIZE];
                 bool target = gate && descriptor.type != 0x05 &&
-                    gui_debug_i386_selector_base(descriptor.gate_selector, base, limit, reason, sizeof(reason));
+                    gui_debug_i386_descriptor_base(descriptor.gate_selector, base, limit, reason, sizeof(reason));
 
                 ImGui::TextColored(gate ? (target ? cyan : white) : gray, "%04X:%08X", descriptor.gate_selector,
                     descriptor.gate_offset);
@@ -967,6 +1118,60 @@ static bool parse_translator_address(const char* text, GT_Debug_Memory_Address& 
         return false;
 
     address.segment = (u16)selector;
+    return true;
+}
+
+// Linear hex with an optional $, 0x or h, or a logical SR:offset or SEL:offset through the current tables
+bool gui_debug_i386_parse_linear(const char* text, u32& linear)
+{
+    if (!IsValidPointer(text))
+        return false;
+
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%s", text);
+
+    char* start = buffer;
+
+    while (*start == ' ')
+        start++;
+
+    size_t length = strlen(start);
+
+    while (length > 0 && start[length - 1] == ' ')
+        start[--length] = 0;
+
+    if (strchr(start, ':') == NULL)
+    {
+        if (start[0] == '$')
+            start++;
+        else if (start[0] == '0' && (start[1] == 'x' || start[1] == 'X'))
+            start += 2;
+        else if (length > 1 && (start[length - 1] == 'h' || start[length - 1] == 'H'))
+            start[length - 1] = 0;
+
+        if (strlen(start) > 8)
+            return false;
+    }
+
+    for (char* c = start; *c != 0; c++)
+        *c = (char)toupper((unsigned char)*c);
+
+    GT_Debug_Memory_Address address;
+    GT_Debug_Memory_Translation translation;
+
+    if (start[0] == 0 || !parse_translator_address(start, address))
+        return false;
+
+    if (address.space == GT_DEBUG_MEMORY_LINEAR)
+    {
+        linear = address.address;
+        return true;
+    }
+
+    if (!gui_debug_memory_translate(address, translation) || !translation.linear_valid)
+        return false;
+
+    linear = translation.linear;
     return true;
 }
 

@@ -47,6 +47,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "RTC", config_debug.show_rtc, false);
     CONFIG_BOOL("Debug", "SystemControl", config_debug.show_system_control, false);
     CONFIG_BOOL("Debug", "Keyboard", config_debug.show_keyboard, false);
+    CONFIG_BOOL("Debug", "GamePorts", config_debug.show_game_ports, false);
     CONFIG_BOOL("Debug", "CRTC", config_debug.show_crtc, false);
     CONFIG_BOOL("Debug", "CRTCRegisters", config_debug.show_crtc_registers, false);
     CONFIG_BOOL("Debug", "VideoOutput", config_debug.show_video_output, false);

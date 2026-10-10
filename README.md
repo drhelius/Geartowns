@@ -106,7 +106,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Video recording to AVI and screenshots.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
 - Supported platforms (libretro): RetroArch.
-- Full debugger with just-in-time disassembler, execute, data, I/O and interrupt breakpoints, code navigation, call stack, debug symbols, automatic labels, memory editor, trace logger, profiler, i386 registers, descriptor tables and paging inspectors, and viewers for CRTC, palettes, framebuffers, sprites, YM3438, RF5C68, CD-ROM, floppy controller and disks, interrupts, timers, DMA, RTC and keyboard.
+- Full debugger with just-in-time disassembler, execute, data, I/O and interrupt breakpoints, code navigation, call stack, debug symbols, automatic labels, memory editor, trace logger, profiler, i386 registers, descriptor tables and paging inspectors, and viewers for CRTC, palettes, framebuffers, sprites, YM3438, RF5C68, CD-ROM, floppy controller and disks, interrupts, timers, DMA, RTC, keyboard and game ports.
 - MCP server for AI-assisted debugging with GitHub Copilot, Claude, Codex and similar, exposing tools for execution control, memory inspection, hardware status, rewind and more.
 - Windows, Linux and macOS *Portable Mode*.
 - [Programmable Shader Chain](platforms/shared/desktop/shaders/README.md).

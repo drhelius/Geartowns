@@ -68,7 +68,7 @@ public:
 
     bool TakeBookmarkRequest(GT_Debug_Memory_Address& address, u32& end);
     bool TakeWatchRequest(GT_Debug_Memory_Address& address);
-    bool TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end);
+    bool TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end, u8& type);
     DebugMemoryProvider* GetProvider() const;
 
     Options GetOptions() const;
@@ -89,6 +89,8 @@ private:
 
     void UpdateTitle();
     void SetWindowForAddress(u32 address);
+    void ShiftWindow(bool up, int bytes_per_row, float row_height);
+    void NavigateKeyboard(int bytes_per_row, float row_height);
     bool ParseAddressInput(GT_Debug_Memory_Address& address, char* reason, size_t reason_size) const;
     bool ReadRange(u32 start, u32 end, std::vector<u8>& data, std::vector<GT_Debug_Memory_Status>& status) const;
     void CopyRange(u32 start, u32 end, bool decimal);
@@ -131,6 +133,7 @@ private:
 
     Options m_options;
     GT_Debug_Memory_Block_Info m_block_info;
+    u64 m_view_key;
 
     std::vector<u8> m_data;
     std::vector<u8> m_previous;
@@ -149,6 +152,7 @@ private:
     bool m_bookmark_request;
     bool m_watch_request;
     bool m_breakpoint_request;
+    u8 m_breakpoint_type;
     u32 m_request_start;
     u32 m_request_end;
 };

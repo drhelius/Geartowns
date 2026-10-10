@@ -28,6 +28,8 @@ UPD71071::UPD71071()
     InitPointer(m_memory);
     InitPointer(m_scheduler);
     InitPointer(m_trace_logger);
+    InitPointer(m_debug_callback);
+    InitPointer(m_debugger);
     memset(m_endpoints, 0, sizeof(m_endpoints));
     m_unsupported_logged = false;
     memset(&m_state, 0, sizeof(m_state));
@@ -185,10 +187,15 @@ void UPD71071::SetEndpoint(int channel, const GT_DMA_Endpoint& endpoint)
     m_endpoints[channel & 0x03] = endpoint;
 }
 
-// Dropping the request ends demand service without a terminal count
 void UPD71071::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
+}
+
+void UPD71071::SetDebugCallback(GT_DMA_Debug_Fn callback, void* debugger)
+{
+    m_debug_callback = callback;
+    m_debugger = debugger;
 }
 
 void UPD71071::SetRequest(int channel, bool active)
@@ -356,6 +363,11 @@ bool UPD71071::TransferUnit(int channel, u64 clocks, bool& terminal)
         if (!endpoint.write(endpoint.device, value, word))
             return false;
     }
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (IsValidPointer(m_debug_callback))
+        m_debug_callback(m_debugger, address, word ? 2 : 1, direction == k_upd71071_io_to_memory);
+#endif
 
     int step = word ? 2 : 1;
 

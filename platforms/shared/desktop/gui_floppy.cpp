@@ -31,6 +31,7 @@
 #include "emu.h"
 #include "emu_floppy.h"
 #include "utils.h"
+#include "debug/gui_debug.h"
 
 enum Floppy_Action
 {
@@ -289,6 +290,11 @@ static bool perform(bool discard_changes)
 {
     bool done = false;
     const char* error = "Unable to load the floppy image.";
+    bool floppy_session = !emu_get_core()->GetMedia()->IsReady();
+    std::string previous_content = emu_floppy_get_content_path();
+
+    if (floppy_session)
+        gui_debug_auto_save_settings();
 
     switch (pending_action)
     {
@@ -322,6 +328,9 @@ static bool perform(bool discard_changes)
     }
     else
     {
+        if (floppy_session && previous_content != emu_floppy_get_content_path())
+            gui_debug_auto_load_settings();
+
         Emu_FloppyInfo info;
         emu_floppy_get_info(pending_drive, &info);
         bool eject = pending_action == Floppy_Action_Eject;

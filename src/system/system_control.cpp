@@ -54,6 +54,11 @@ void SystemControl::SetTraceLogger(TraceLogger* trace_logger)
     m_trace_logger = trace_logger;
 }
 
+const u8* SystemControl::GetSerialRom() const
+{
+    return k_system_control_serial_rom;
+}
+
 // Power-on state, a CPU reset keeps the reset causes for the BIOS to read
 void SystemControl::Reset()
 {

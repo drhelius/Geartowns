@@ -237,7 +237,13 @@ void gui_debug_window_crtc_registers(void)
 
                 ImGui::TableNextColumn();
                 ImGui::TextColored(cyan, "%s", address); ImGui::SameLine();
-                ImGui::TextColored(violet, "%-4s", k_debug_crtc_register_names[index]); ImGui::SameLine();
+                ImGui::TextColored(violet, "%-4s", k_debug_crtc_register_names[index]);
+
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Edits go through 0440/0442 like a CPU write\n"
+                        "Timing updates and the trace logger records them");
+
+                ImGui::SameLine();
                 EditableRegister16(NULL, NULL, (u16)index, state->crtc[index], crtc_write_callback, video,
                     EditableRegisterFlags_ShowBinary);
             }

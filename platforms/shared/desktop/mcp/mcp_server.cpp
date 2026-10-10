@@ -405,7 +405,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "debug_step_into"},
         {"title", "Debug Step Into"},
-        {"description", "Step the next Intel 80386 instruction, entering calls and interrupts."},
+        {"description", "Step the next Intel 80386 instruction, entering calls and interrupts; a REP string instruction runs all its elements."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -417,7 +417,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "debug_step_over"},
         {"title", "Debug Step Over"},
-        {"description", "Step the next Intel 80386 instruction, running through CALL subroutines."},
+        {"description", "Step the next Intel 80386 instruction, running through CALL subroutines, INT n handlers and IRQs."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -429,7 +429,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "debug_step_out"},
         {"title", "Debug Step Out"},
-        {"description", "Run until the current subroutine or interrupt handler returns to its caller."},
+        {"description", "Run until the current subroutine or interrupt handler returns to its caller; with an empty call stack it steps one instruction and adds a note."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -531,7 +531,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "set_breakpoint"},
         {"title", "Set Breakpoint"},
-        {"description", "Add an Intel 80386 breakpoint. Execute breakpoints stop before the instruction runs. Read, write and access breakpoints stop after the instruction that made the CPU access: linear and physical match data accesses by address, io matches IN/OUT/INS/OUTS ports."},
+        {"description", "Add an Intel 80386 breakpoint. Execute breakpoints stop before the instruction runs, in linear space or in physical space through the current page mapping. Read, write and access breakpoints stop after the instruction that made the access: linear and physical match CPU data accesses by address, physical (and linear while paging is off) also DMA transfers, io matches IN/OUT/INS/OUTS ports. CPU accesses to descriptor tables, the TSS and page tables don't trigger them."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -618,9 +618,62 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "enable_breakpoint"},
+        {"title", "Enable Breakpoint"},
+        {"description", "Enable or disable a matching single or range breakpoint by address, end_address, type, and space, keeping it in the list."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"address", {
+                    {"type", "string"},
+                    {"description", "Breakpoint address; range breakpoints use this as the start. " MCP_ADDRESS_DESCRIPTION}
+                }},
+                {"end_address", {
+                    {"type", "string"},
+                    {"description", "Range end; required only for range breakpoints."}
+                }},
+                {"type", {
+                    {"type", "string"},
+                    {"description", "Breakpoint type: execute (default for linear), read (default for physical and io), write, or access."},
+                    {"enum", json::array({"execute", "read", "write", "access"})}
+                }},
+                {"space", {
+                    {"type", "string"},
+                    {"description", "Address space: linear (default), physical, or io."},
+                    {"enum", json::array({"linear", "physical", "io"})}
+                }},
+                {"enabled", {
+                    {"type", "boolean"},
+                    {"description", "true to enable, false to disable."}
+                }}
+            }},
+            {"required", json::array({"address", "enabled"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "set_breakpoints_active"},
+        {"title", "Set Breakpoints Active"},
+        {"description", "Turn every breakpoint on or off at once, like Disable All in the debugger; each one keeps its own enabled state."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"active", {
+                    {"type", "boolean"},
+                    {"description", "false stops no breakpoint, true stops at the enabled ones."}
+                }}
+            }},
+            {"required", json::array({"active"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "list_breakpoints"},
         {"title", "List Breakpoints"},
-        {"description", "List all breakpoints: type, space, address or range, and enabled state."},
+        {"description", "List all breakpoints: type, space, address or range, and enabled state, and whether all are disabled."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -667,6 +720,21 @@ json McpServer::BuildToolList()
         }}
     });
 
+    json enable_interrupt_properties = interrupt_properties;
+    enable_interrupt_properties["enabled"] = {{"type", "boolean"}, {"description", "true to enable, false to disable."}};
+
+    tools.push_back({
+        {"name", "enable_breakpoint_on_interrupt"},
+        {"title", "Enable Breakpoint On Interrupt"},
+        {"description", "Enable or disable an interrupt breakpoint by vector and source, keeping it in the list."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", enable_interrupt_properties},
+            {"required", json::array({"vector", "enabled"})}
+        }}
+    });
+
     tools.push_back({
         {"name", "list_breakpoints_on_interrupt"},
         {"title", "List Breakpoints On Interrupt"},
@@ -710,6 +778,21 @@ json McpServer::BuildToolList()
             {"type", "object"},
             {"properties", irq_properties},
             {"required", json::array({"irq"})}
+        }}
+    });
+
+    json enable_irq_properties = irq_properties;
+    enable_irq_properties["enabled"] = {{"type", "boolean"}, {"description", "true to enable, false to disable."}};
+
+    tools.push_back({
+        {"name", "enable_breakpoint_on_irq"},
+        {"title", "Enable Breakpoint On IRQ"},
+        {"description", "Enable or disable the breakpoint on an IRQ line, keeping it in the list."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", enable_irq_properties},
+            {"required", json::array({"irq", "enabled"})}
         }}
     });
 
@@ -1180,7 +1263,8 @@ json McpServer::BuildToolList()
         {"name", "write_i386_register"},
         {"title", "Write Intel 80386 Register"},
         {"description", "Write an Intel 80386 register. Segment writes reload base and limit in real and VM86 mode and "
-            "load the descriptor in protected mode, failing if it is invalid."},
+            "load the descriptor in protected mode, failing if it is invalid. LDTR and TR load their LDT or TSS "
+            "descriptor from the GDT, like LLDT and LTR."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1188,7 +1272,8 @@ json McpServer::BuildToolList()
                 {"name", {
                     {"type", "string"},
                     {"description", "Register: EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, EIP, EFLAGS, CR0, CR2, CR3, "
-                        "DR0-DR7, CS, DS, ES, FS, GS, or SS."}
+                        "DR0-DR7, TR6, TR7, CS, DS, ES, FS, GS, SS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or "
+                        "IDTR_LIMIT."}
                 }},
                 {"value", {
                     {"type", "string"},
@@ -1365,7 +1450,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "list_symbols"},
         {"title", "List Symbols"},
-        {"description", "List user symbols and automatic labels, with an optional case-insensitive name filter."},
+        {"description", "List user symbols and automatic labels, with an optional case-insensitive name filter, a page at a time: start and count select the page, total and has_more tell what is left."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1373,6 +1458,17 @@ json McpServer::BuildToolList()
                 {"filter", {
                     {"type", "string"},
                     {"description", "Substring the symbol name must contain; optional."}
+                }},
+                {"start", {
+                    {"type", "integer"},
+                    {"minimum", 0},
+                    {"description", "Index of the first symbol to return; default 0."}
+                }},
+                {"count", {
+                    {"type", "integer"},
+                    {"minimum", 1},
+                    {"maximum", 1000},
+                    {"description", "Symbols to return; default 200, at most 1000."}
                 }}
             }},
             {"additionalProperties", false}
@@ -1382,14 +1478,18 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "lookup_symbol_by_name"},
         {"title", "Lookup Symbol by Name"},
-        {"description", "Find an exact symbol name; return all matches."},
+        {"description", "Find a symbol by its exact name, or with partial by a case-insensitive part of it; return all matches, up to 1000."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
                 {"name", {
                     {"type", "string"},
-                    {"description", "Exact symbol name."}
+                    {"description", "Symbol name, or part of it with partial."}
+                }},
+                {"partial", {
+                    {"type", "boolean"},
+                    {"description", "Match a case-insensitive part of the name instead of all of it; default false."}
                 }}
             }},
             {"required", json::array({"name"})},
@@ -1516,7 +1616,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "write_crtc_register"},
         {"title", "Write CRTC Register"},
-        {"description", "Write a CRTC register through the 0440/0442 port path, so timing updates as for a CPU write, then restore the index."},
+        {"description", "Write a CRTC register through the 0440/0442 port path like a CPU write, so timing updates and the trace logger records it, then restore the index."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2239,8 +2339,8 @@ json McpServer::BuildToolList()
                 }},
                 {"button", {
                     {"type", "string"},
-                    {"description", "Button: up, down, left, right, select, run, A, B, C, X, Y, Z, zoom (Marty pad, not decoded yet)."},
-                    {"enum", json::array({"up", "down", "left", "right", "select", "run", "A", "B", "C", "X", "Y", "Z", "zoom"})}
+                    {"description", "Button: up, down, left, right, select, run, A, B, C, X, Y, Z."},
+                    {"enum", json::array({"up", "down", "left", "right", "select", "run", "A", "B", "C", "X", "Y", "Z"})}
                 }},
                 {"action", {
                     {"type", "string"},
@@ -2387,7 +2487,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "set_trace_log"},
         {"title", "Set Trace Logger"},
-        {"description", "Enable/disable trace logging to memory or disk; configure capacity, file limit, output directory, and event filters. It records while the debugger runs the machine."},
+        {"description", "Enable/disable trace logging to memory or disk; configure capacity, file limit, output directory, and event filters. It records while the debugger runs the machine, so enabling it turns the debugger on, like the profiler."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2842,9 +2942,9 @@ static bool ParseBreakpointType(const json& arguments, u8& type, u8& space, std:
         return false;
     }
 
-    if (type == I386_BREAKPOINT_EXECUTE && space != I386_BREAKPOINT_LINEAR)
+    if (type == I386_BREAKPOINT_EXECUTE && space == I386_BREAKPOINT_IO)
     {
-        error = "Execute breakpoints are linear only";
+        error = "Execute breakpoints are linear or physical";
         return false;
     }
 
@@ -2944,7 +3044,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "debug_step_out")
     {
-        m_debugAdapter.StepOut();
+        if (!m_debugAdapter.StepOut())
+            return {{"success", true}, {"pending", true},
+                {"note", "The call stack is empty, so it steps one instruction instead"}};
+
         return {{"success", true}, {"pending", true}};
     }
     else if (normalizedTool == "debug_step_frame")
@@ -3050,6 +3153,34 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "list_breakpoints")
     {
         return m_debugAdapter.ListBreakpoints();
+    }
+    else if (normalizedTool == "enable_breakpoint")
+    {
+        u8 type = 0;
+        u8 space = 0;
+        u32 start = 0;
+        u32 end = 0;
+        bool range = arguments.contains("end_address");
+
+        if (!ParseBreakpointType(arguments, type, space, error) ||
+            !ParseBreakpointAddress(m_debugAdapter, arguments.value("address", json()), space, start, error) ||
+            (range && !ParseBreakpointAddress(m_debugAdapter, arguments["end_address"], space, end, error)))
+            return {{"error", error}};
+
+        return m_debugAdapter.EnableBreakpoint(start, end, range, type, space, arguments.value("enabled", true));
+    }
+    else if (normalizedTool == "set_breakpoints_active")
+    {
+        return m_debugAdapter.SetBreakpointsActive(arguments.value("active", true));
+    }
+    else if (normalizedTool == "enable_breakpoint_on_interrupt")
+    {
+        return m_debugAdapter.EnableInterruptBreakpoint(arguments.value("vector", -1), arguments.value("source", "any"),
+            arguments.value("enabled", true));
+    }
+    else if (normalizedTool == "enable_breakpoint_on_irq")
+    {
+        return m_debugAdapter.EnableIRQBreakpoint(arguments.value("irq", -1), arguments.value("enabled", true));
     }
     // Memory
     else if (normalizedTool == "list_memory_areas")
@@ -3272,11 +3403,12 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "list_symbols")
     {
-        return m_debugAdapter.ListSymbols(arguments.value("filter", ""));
+        return m_debugAdapter.ListSymbols(arguments.value("filter", ""), arguments.value("start", 0),
+            arguments.value("count", 200));
     }
     else if (normalizedTool == "lookup_symbol_by_name")
     {
-        return m_debugAdapter.LookupSymbolByName(arguments["name"]);
+        return m_debugAdapter.LookupSymbolByName(arguments["name"], arguments.value("partial", false));
     }
     else if (normalizedTool == "lookup_symbol_at_address")
     {

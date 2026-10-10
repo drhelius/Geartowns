@@ -22,6 +22,7 @@
 
 #include "imgui.h"
 #include "geartowns.h"
+#include "system/io.h"
 #include "system/msm58321.h"
 #include "system/pic.h"
 #include "system/pit.h"
@@ -423,6 +424,33 @@ void gui_debug_window_dma(void)
     ImGui::PopStyleVar();
 }
 
+u16 gui_debug_system_machine_id(void)
+{
+    GeartownsCore* core = emu_get_core();
+    u64 clocks = core->GetScheduler()->GetClocks();
+    u8 low = 0;
+    u8 high = 0;
+
+    core->GetIO()->Peek(0x0030, clocks, low);
+    core->GetIO()->Peek(0x0031, clocks, high);
+    return (u16)((high << 8) | low);
+}
+
+void gui_debug_system_serial_rom_text(char* text, size_t text_size)
+{
+    const u8* rom = emu_get_core()->GetSystemControl()->GetSerialRom();
+    char maker[8];
+
+    for (int i = 0; i < 7; i++)
+    {
+        char value = (char)(((rom[i] & 0x0F) << 4) | (rom[i + 1] >> 4));
+        maker[i] = value >= 32 && value < 127 ? value : '.';
+    }
+
+    maker[7] = 0;
+    snprintf(text, text_size, "%s, MODEL %02X%02X", maker, rom[23], rom[24]);
+}
+
 void gui_debug_window_rtc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -452,6 +480,10 @@ void gui_debug_window_rtc(void)
         ImGui::TableNextRow();
         draw_grid_label("DATE");
         ImGui::TextColored(white, "%d%d-%d%d-%d%d", r[12], r[11], r[10] & 0x01, r[9], r[8] & 0x03, r[7]);
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("YY-MM-DD, the MSM58321 keeps a two-digit year");
+
         ImGui::SameLine(0.0f, space);
         ImGui::TextColored(blue, "%s", k_debug_weekday_names[r[6] % 7]);
 
@@ -565,7 +597,7 @@ void gui_debug_window_system_control(void)
 
         ImGui::TableNextRow();
         draw_grid_label("MACHINE ID");
-        ImGui::TextColored(white, "$0101"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(white, "$%04X", gui_debug_system_machine_id()); ImGui::SameLine(0.0f, space);
         ImGui::TextColored(gray, "(0030/0031)");
 
         ImGui::EndTable();
@@ -659,9 +691,12 @@ void gui_debug_window_system_control(void)
         draw_grid_label("DATA");
         ImGui::TextColored(white, "%d", core->GetSystemControl()->Peek(0x0032) & 0x01);
 
+        char contents[32];
+        gui_debug_system_serial_rom_text(contents, sizeof(contents));
+
         ImGui::TableNextRow();
         draw_grid_label("CONTENTS");
-        ImGui::TextColored(white, "FUJITSU, MODEL 0101");
+        ImGui::TextColored(white, "%s", contents);
 
         ImGui::EndTable();
     }
@@ -712,7 +747,7 @@ static void draw_vector_tooltip(u8 vector)
 
     if (!gui_debug_i386_read_table_entry(GuiDebugDescriptorTable_IDT, vector, gate))
         ImGui::TextColored(gray, "Gate unavailable");
-    else if (emu_get_core()->GetI386()->GetState()->execution_mode != I386_MODE_PROTECTED)
+    else if (gui_debug_i386_idt_is_ivt())
         ImGui::Text("IVT %04X:%04X (linear $%08X)", gate.gate_selector, gate.gate_offset, gate.base);
     else
     {

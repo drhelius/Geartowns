@@ -152,6 +152,15 @@ void DebugMemoryProvider::Update()
     {
         WriteTransaction transaction = m_pending_writes[i];
 
+        if (!transaction.undo)
+        {
+            char message[GT_DEBUG_MEMORY_REASON_SIZE];
+            strncpy_fit(message, m_last_message, sizeof(message));
+            ApplyTransaction(transaction, false);
+            SetMessage(message);
+            continue;
+        }
+
         if (ApplyTransaction(transaction, true))
         {
             m_undo_history.push_back(transaction);
@@ -187,9 +196,7 @@ int DebugMemoryProvider::GetRegionCount() const
         }
     }
 
-    Media* media = core->GetMedia();
-
-    if (!emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
+    if (HasMediaImageRegion())
         count++;
 
     for (int drive = 0; drive < FDC_DRIVES; drive++)
@@ -391,6 +398,8 @@ bool DebugMemoryProvider::Translate(const GT_Debug_Memory_Address& address, GT_D
         {
             translation.bus_valid = true;
             translation.bus = region.physical_base + address.address;
+            translation.physical_valid = true;
+            translation.physical = translation.bus;
         }
 
         return true;
@@ -425,7 +434,7 @@ bool DebugMemoryProvider::Translate(const GT_Debug_Memory_Address& address, GT_D
     return false;
 }
 
-bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size)
+bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size, bool undo)
 {
     if (!IsValidPointer(data) || size == 0 || size > DEBUG_MEMORY_MAX_TRANSACTION_SIZE)
     {
@@ -437,8 +446,12 @@ bool DebugMemoryProvider::QueueWrite(const GT_Debug_Memory_Address& address, con
     transaction.address = address;
     transaction.after.assign(data, data + size);
     transaction.map_generation = GetMapGeneration();
+    transaction.undo = undo;
     m_pending_writes.push_back(transaction);
-    SetMessage("Memory edit queued for the next safe point");
+
+    if (undo)
+        SetMessage("Memory edit queued for the next safe point");
+
     return true;
 }
 
@@ -454,6 +467,7 @@ bool DebugMemoryProvider::WriteNow(const GT_Debug_Memory_Address& address, const
     transaction.address = address;
     transaction.after.assign(data, data + size);
     transaction.map_generation = GetMapGeneration();
+    transaction.undo = true;
 
     if (!ApplyTransaction(transaction, true))
         return false;
@@ -503,6 +517,41 @@ bool DebugMemoryProvider::GetRegisterValue(const char* name, u32& value) const
     GeartownsCore* core = emu_get_core();
     return IsValidPointer(core) && IsValidPointer(core->GetI386()) &&
         core->GetI386()->GetDebugRegisterValue(name, value);
+}
+
+u64 DebugMemoryProvider::GetViewKey(const GT_Debug_Memory_Address& source) const
+{
+    GeartownsCore* core = emu_get_core();
+
+    if (!IsValidPointer(core) || source.space == GT_DEBUG_MEMORY_IO)
+        return 0;
+
+    u64 key = GetSnapshotId() ^ ((u64)GetMapGeneration() << 40);
+
+    if (source.space != GT_DEBUG_MEMORY_LINEAR && source.space != GT_DEBUG_MEMORY_LOGICAL)
+        return key | 1;
+
+    const I386_State* state = core->GetI386()->GetState();
+    u64 hash = 14695981039346656037ULL;
+    u32 values[4 + I386_SEGMENT_COUNT * 3];
+    int count = 0;
+
+    values[count++] = state->cr0;
+    values[count++] = state->cr3;
+    values[count++] = state->gdtr.base;
+    values[count++] = state->ldtr.base;
+
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+    {
+        values[count++] = state->segments[i].base;
+        values[count++] = state->segments[i].limit;
+        values[count++] = state->segments[i].attributes;
+    }
+
+    for (int i = 0; i < count; i++)
+        hash = (hash ^ values[i]) * 1099511628211ULL;
+
+    return (key ^ hash) | 1;
 }
 
 const char* DebugMemoryProvider::GetSpaceName(GT_Debug_Memory_Space space)
@@ -565,13 +614,13 @@ bool DebugMemoryProvider::GetExternalRegion(int index, GT_Debug_Memory_Region& r
 
     Media* media = core->GetMedia();
 
-    if (!emu_is_media_loading() && IsValidPointer(media) && media->IsReady())
+    if (HasMediaImageRegion())
     {
         if (index == 0)
         {
             memset(&region, 0, sizeof(region));
             region.id = GT_DEBUG_REGION_MEDIA_IMAGE;
-            strncpy_fit(region.name, media->IsCDROM() ? "CD-ROM Image" : "Media Image", sizeof(region.name));
+            strncpy_fit(region.name, "Media Image", sizeof(region.name));
             region.size = (u32)media->GetSize();
             region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM;
             return true;
@@ -691,18 +740,36 @@ bool DebugMemoryProvider::WriteBlock(const GT_Debug_Memory_Address& address, con
     if (address.space != GT_DEBUG_MEMORY_LINEAR && address.space != GT_DEBUG_MEMORY_LOGICAL)
         return false;
 
+    std::vector<u32> physical(size);
+
     for (u32 i = 0; i < size; i++)
     {
         GT_Debug_Memory_Translation translation;
         GT_Debug_Memory_Address current = address;
         current.address = address.address + i;
 
-        if (!Translate(current, translation) || !translation.physical_valid ||
-            !memory->DebugWritePhysicalBlock(translation.physical, &data[i], 1))
+        if (!Translate(current, translation) || !translation.physical_valid)
+            return false;
+
+        physical[i] = translation.physical;
+    }
+
+    for (u32 i = 0; i < size; i++)
+    {
+        if (!memory->DebugWritePhysicalBlock(physical[i], &data[i], 1))
             return false;
     }
 
     return true;
+}
+
+bool DebugMemoryProvider::HasMediaImageRegion() const
+{
+    GeartownsCore* core = emu_get_core();
+    Media* media = IsValidPointer(core) ? core->GetMedia() : NULL;
+
+    return !emu_is_media_loading() && IsValidPointer(media) && media->IsReady() && IsValidPointer(media->GetData()) &&
+        media->GetSize() > 0;
 }
 
 bool DebugMemoryProvider::ApplyTransaction(WriteTransaction& transaction, bool capture_before)

@@ -80,6 +80,7 @@ void gui_debug_memory_save_settings(std::ostream& stream);
 bool gui_debug_memory_load_settings(std::istream& stream);
 
 int gui_debug_memory_get_area_count(void);
+bool gui_debug_memory_get_area_at(int index, GuiDebugMemoryArea& area);
 bool gui_debug_memory_get_area(int id, GuiDebugMemoryArea& area);
 bool gui_debug_memory_same_source(const GT_Debug_Memory_Address& a, const GT_Debug_Memory_Address& b);
 void gui_debug_memory_read(const GT_Debug_Memory_Address& address, u8* data, GT_Debug_Memory_Status* status, u32 size);

@@ -239,7 +239,6 @@ void Profiler::Charge(u64 cycle)
     m_last_cycle = cycle;
 }
 
-// Interrupt handlers that ran during a call are not part of its cycles
 void Profiler::Leave(u64 cycle)
 {
     m_depth--;
@@ -254,9 +253,8 @@ void Profiler::Leave(u64 cycle)
     {
         function->inclusive_cycles += cycles;
         function->completed++;
+        AddSample(function, cycles);
     }
-
-    AddSample(function, cycles);
 
     if (frame->interrupt)
         m_interrupt_cycles += cycles;

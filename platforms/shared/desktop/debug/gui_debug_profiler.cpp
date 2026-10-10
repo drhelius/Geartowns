@@ -184,6 +184,9 @@ static void draw_profiler(Profiler* profiler)
     ImGui::SameLine();
     ImGui::Text("Functions: %u  Frames: %u  Cycles: %llu", count - 1, frames, (unsigned long long)total);
 
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Cycles are machine clocks, the 16 MHz timebase\nThey match CPU cycles only at 16 MHz");
+
     ImGui::SameLine();
     ImGui::PushItemWidth(-1);
 

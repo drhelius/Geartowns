@@ -79,7 +79,9 @@ GeartownsCore::GeartownsCore()
     m_pending_machine_config = m_machine_config;
     m_powered = false;
     m_paused = false;
-    m_skip_interrupts = false;
+    m_debug_step = GT_DEBUG_STEP_NONE;
+    m_debug_step_resume = false;
+    m_debug_interrupt_deferred = false;
 }
 
 GeartownsCore::~GeartownsCore()
@@ -248,6 +250,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     m_trace_logger->SetActive(debugging);
     m_profiler->SetActive(debugging);
     m_i386->EnableDebuggerChecks(debugging);
+    m_dma->SetDebugCallback(debugging ? &GeartownsCore::DMADebugCallback : NULL, m_i386);
 
     if (debugging)
     {
@@ -275,64 +278,213 @@ void GeartownsCore::RunFrame(u64 frame_start)
         u32 cycles = m_scheduler->GetSliceCycles(slice);
         GT_Bus_Access_Context context = BeginSlice();
         I386_Run_Result result = m_i386->RunFor(cycles, context, false, m_pic->IsInterruptPending());
-        CompleteSlice(result, context, slice);
+        CompleteSlice(result, context, slice, false);
     }
 }
 
 void GeartownsCore::RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug)
 {
-    debug->stopped = false;
-    debug->breakpoint_hit = false;
+    if (BeginDebuggerFrame(debug))
+        return;
 
-    // A step with "skip IRQs" leaves pending IRQs for the next run instead of entering their handlers
-    m_skip_interrupts = debug->step_debugger && debug->skip_interrupts_on_step;
+    if (unlikely(m_debug_step != GT_DEBUG_STEP_NONE))
+    {
+        RunDebuggerSteps(frame_start, debug);
+        return;
+    }
+
+    bool regular = debug->stop_on_breakpoint;
+    bool run_to = debug->stop_on_run_to_breakpoint;
 
     while (!IsFrameDone(frame_start))
     {
-        if (m_i386->CheckDebuggerBreakpoints(debug->stop_on_breakpoint, debug->stop_on_run_to_breakpoint))
+        if (m_i386->CheckDebuggerBreakpoints(regular, run_to))
         {
-            debug->stopped = true;
-            debug->breakpoint_hit = true;
+            StopDebugger(debug, true);
             break;
         }
 
         u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
         GT_Bus_Access_Context context = BeginSlice();
         m_i386->RunInstruction(context);
+        CompleteSlice(m_i386->GetStepInfo(), context, slice, regular);
 
-        if (debug->step_over)
-        {
-            u32 call_return_linear = 0;
-            bool call = m_i386->GetStepCall(call_return_linear);
-            debug->step_over = false;
-            debug->step_debugger = !call;
-
-            if (call)
-                m_i386->AddRunToBreakpoint(call_return_linear);
-        }
-
-        CompleteSlice(m_i386->GetStepInfo(), context, slice);
-
-        if (unlikely(m_i386->IsDebuggerHitPending()))
-        {
-            if (!debug->stop_on_breakpoint)
-                m_i386->DiscardDebuggerHit();
-            else if (m_i386->AcceptDebuggerHit())
-            {
-                debug->stopped = true;
-                debug->breakpoint_hit = true;
-                break;
-            }
-        }
-
-        if (debug->step_debugger)
-        {
-            debug->stopped = true;
+        if (unlikely(m_i386->IsDebuggerHitPending()) && AcceptDebuggerHit(debug))
             break;
+    }
+}
+
+NO_INLINE void GeartownsCore::RunDebuggerSteps(u64 frame_start, GT_Debug_Run* debug)
+{
+    bool regular = debug->stop_on_breakpoint;
+    bool run_to = debug->stop_on_run_to_breakpoint;
+
+    while (!IsFrameDone(frame_start))
+    {
+        if (m_i386->CheckDebuggerBreakpoints(regular, run_to) && BreakpointStopsDebugger(debug))
+            break;
+
+        if (m_debug_step == GT_DEBUG_STEP_INSTRUCTION)
+        {
+            if (RunDebuggerStep(frame_start, debug))
+                break;
+
+            continue;
         }
+
+        u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
+        GT_Bus_Access_Context context = BeginSlice();
+        m_i386->RunInstruction(context);
+        CompleteSlice(m_i386->GetStepInfo(), context, slice, regular);
+
+        if (unlikely(m_i386->IsDebuggerHitPending()) && AcceptDebuggerHit(debug))
+            break;
+    }
+}
+
+NO_INLINE bool GeartownsCore::BeginDebuggerFrame(GT_Debug_Run* debug)
+{
+    debug->stopped = false;
+    debug->breakpoint_hit = false;
+
+    if (!debug->step_debugger && !debug->step_over)
+        m_debug_step = GT_DEBUG_STEP_NONE;
+    else if (debug->step_start || (m_debug_step == GT_DEBUG_STEP_NONE))
+    {
+        m_debug_step = GT_DEBUG_STEP_INSTRUCTION;
+        m_debug_step_resume = false;
+        m_i386->ClearRunToBreakpoint();
     }
 
-    m_skip_interrupts = false;
+    if (!m_debug_interrupt_deferred)
+        return false;
+
+    m_debug_interrupt_deferred = false;
+    return RunDeferredInterrupt(debug);
+}
+
+// An IRQ handler that ran in the middle of the stepped instruction returned to it, so the step goes on
+NO_INLINE bool GeartownsCore::BreakpointStopsDebugger(GT_Debug_Run* debug)
+{
+    if ((m_debug_step == GT_DEBUG_STEP_RETURN) && m_debug_step_resume && m_i386->RunToBreakpointHit())
+    {
+        m_i386->ClearBreakpointHit();
+        m_debug_step = GT_DEBUG_STEP_INSTRUCTION;
+        m_debug_step_resume = false;
+        return false;
+    }
+
+    StopDebugger(debug, true);
+    return true;
+}
+
+// One instruction of a step, returns true when the debugger stops
+NO_INLINE bool GeartownsCore::RunDebuggerStep(u64 frame_start, GT_Debug_Run* debug)
+{
+    u16 stack_selector = 0;
+    u32 stack_pointer = 0;
+
+    if (debug->step_over)
+        m_i386->GetStackPointer(stack_selector, stack_pointer);
+
+    u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
+    GT_Bus_Access_Context context = BeginSlice();
+    m_i386->RunInstruction(context);
+
+    u32 call_return_linear = 0;
+
+    // Step Over runs a call or a software interrupt until it returns
+    if (debug->step_over && m_i386->GetStepCall(call_return_linear))
+    {
+        m_i386->AddRunToBreakpoint(call_return_linear, stack_selector, stack_pointer);
+        m_debug_step = GT_DEBUG_STEP_RETURN;
+        m_debug_step_resume = false;
+        CompleteSlice(m_i386->GetStepInfo(), context, slice, debug->stop_on_breakpoint);
+        return unlikely(m_i386->IsDebuggerHitPending()) && AcceptDebuggerHit(debug);
+    }
+
+    u32 return_linear = m_i386->GetCurrentLinearPC();
+    bool repeat = m_i386->IsRepeatActive();
+
+    m_i386->GetStackPointer(stack_selector, stack_pointer);
+
+    bool interrupted = CompleteSlice(m_i386->GetStepInfo(), context, slice, debug->stop_on_breakpoint);
+
+    if (unlikely(m_i386->IsDebuggerHitPending()) && AcceptDebuggerHit(debug))
+        return true;
+
+    if (interrupted)
+    {
+        if (!StepInterrupt(debug, return_linear, stack_selector, stack_pointer, repeat))
+            return false;
+    }
+    else if (m_i386->IsRepeatActive() || m_i386->Halted())
+        return false;
+
+    StopDebugger(debug, false);
+    return true;
+}
+
+bool GeartownsCore::RunDeferredInterrupt(GT_Debug_Run* debug)
+{
+    u32 return_linear = m_i386->GetCurrentLinearPC();
+    u16 stack_selector = 0;
+    u32 stack_pointer = 0;
+
+    m_i386->GetStackPointer(stack_selector, stack_pointer);
+
+    GT_Bus_Access_Context context = BeginSlice();
+
+    if (!EnterPendingInterrupt(context))
+        return false;
+
+    if (unlikely(m_i386->IsDebuggerHitPending()) && AcceptDebuggerHit(debug))
+        return true;
+
+    if ((m_debug_step == GT_DEBUG_STEP_INSTRUCTION) &&
+        StepInterrupt(debug, return_linear, stack_selector, stack_pointer, true))
+    {
+        StopDebugger(debug, false);
+        return true;
+    }
+
+    return false;
+}
+
+bool GeartownsCore::StepInterrupt(GT_Debug_Run* debug, u32 return_linear, u16 stack_selector, u32 stack_pointer,
+    bool resume)
+{
+    if (!debug->step_over && !debug->skip_interrupts_on_step)
+        return true;
+
+    m_i386->AddRunToBreakpoint(return_linear, stack_selector, stack_pointer);
+    m_debug_step = GT_DEBUG_STEP_RETURN;
+    m_debug_step_resume = resume;
+    return false;
+}
+
+NO_INLINE bool GeartownsCore::AcceptDebuggerHit(GT_Debug_Run* debug)
+{
+    if (!debug->stop_on_breakpoint)
+    {
+        m_i386->DiscardDebuggerHit();
+        return false;
+    }
+
+    if (!m_i386->AcceptDebuggerHit())
+        return false;
+
+    m_debug_interrupt_deferred = true;
+    StopDebugger(debug, true);
+    return true;
+}
+
+void GeartownsCore::StopDebugger(GT_Debug_Run* debug, bool breakpoint)
+{
+    debug->stopped = true;
+    debug->breakpoint_hit = breakpoint;
+    m_debug_step = GT_DEBUG_STEP_NONE;
+    m_i386->ClearRunToBreakpoint();
 }
 
 void GeartownsCore::EndFrame(u64 frame_start, s16* sample_buffer, int* sample_count)
@@ -367,6 +519,11 @@ INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice()
     return context;
 }
 
+void GeartownsCore::DMADebugCallback(void* cpu, u32 address, u32 size, bool write)
+{
+    ((I386*)cpu)->RecordDebuggerDMA(address, size, write);
+}
+
 // A port access inside a batch moves machine time up to it, unless an event falls due first
 bool GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks)
 {
@@ -379,7 +536,10 @@ bool GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& con
 
 // A halted CPU idles through the slice
 // Events due by the end of the slice run before the CPU samples INTR at its boundary
-INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice)
+// The debugger holds the IRQ back when the slice hit a breakpoint, so it stops right after the instruction
+// Returns whether an IRQ was entered
+INLINE bool GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice,
+    bool hold_on_hit)
 {
     bool idle = (result.steps == 0) && m_i386->Halted();
 
@@ -396,17 +556,31 @@ INLINE void GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_A
         m_system_control->RequestCPUReset(k_system_control_reset_shutdown);
 
     if (unlikely(m_system_control->IsCPUResetPending()))
-        ResetCPU();
-    else if (m_pic->IsInterruptPending() && !m_skip_interrupts && m_i386->CanAcceptMaskableInterrupt())
     {
-        int line = 0;
-        u8 vector = m_pic->AcknowledgeInterrupt(line);
-        u32 interrupt_cycles = m_i386->EnterExternalInterrupt(vector, context, line);
-        m_scheduler->AddCycles(interrupt_cycles);
-
-        if (m_scheduler->IsEventDue())
-            DispatchEvents();
+        ResetCPU();
+        return false;
     }
+
+    if (hold_on_hit && m_i386->IsDebuggerHitPending())
+        return false;
+
+    return EnterPendingInterrupt(context);
+}
+
+INLINE bool GeartownsCore::EnterPendingInterrupt(GT_Bus_Access_Context& context)
+{
+    if (!m_pic->IsInterruptPending() || !m_i386->CanAcceptMaskableInterrupt())
+        return false;
+
+    int line = 0;
+    u8 vector = m_pic->AcknowledgeInterrupt(line);
+    u32 interrupt_cycles = m_i386->EnterExternalInterrupt(vector, context, line);
+    m_scheduler->AddCycles(interrupt_cycles);
+
+    if (m_scheduler->IsEventDue())
+        DispatchEvents();
+
+    return true;
 }
 
 INLINE void GeartownsCore::DispatchEvents()
@@ -458,6 +632,9 @@ bool GeartownsCore::PowerOn()
 void GeartownsCore::PowerOff()
 {
     m_powered = false;
+
+    if (IsValidPointer(m_i386))
+        m_i386->ResetDisassembler();
 }
 
 // The new hardware takes effect on the next reset
@@ -1203,6 +1380,9 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 void GeartownsCore::Reset()
 {
     m_paused = false;
+    m_debug_step = GT_DEBUG_STEP_NONE;
+    m_debug_step_resume = false;
+    m_debug_interrupt_deferred = false;
     ApplyMachineConfig();
 
     if (IsValidPointer(m_scheduler))

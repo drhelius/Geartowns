@@ -299,6 +299,7 @@ struct config_Debug
     bool show_rtc;
     bool show_system_control;
     bool show_keyboard;
+    bool show_game_ports;
     bool show_crtc;
     bool show_crtc_registers;
     bool show_video_output;

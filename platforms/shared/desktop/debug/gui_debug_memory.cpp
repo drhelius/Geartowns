@@ -44,6 +44,7 @@ static const float MEMORY_SOURCES_WIDTH = 136.0f;
 static const float MEMORY_INSPECTOR_WIDTH = 173.0f;
 static const int MEMORY_SETTINGS_MAX_RECORDS = 0x10000;
 static const u32 MEMORY_SEARCH_MAX_SIZE = 0x04000000;
+static const u32 MEMORY_IMPORT_CHUNK_SIZE = 0x100000;
 static const int MEMORY_SEARCH_MAX_VISIBLE_RESULTS = 10000;
 static const int SEARCH_REFERENCE_PREVIOUS = 0;
 static const int SEARCH_REFERENCE_INITIAL = 1;
@@ -267,7 +268,8 @@ static void draw_row_tooltip(const char* text);
 static void process_editor_requests(MemEditor& editor);
 static void add_bookmark(const GT_Debug_Memory_Address& address, u32 end);
 static void add_watch(const GT_Debug_Memory_Address& address);
-static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end);
+static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end,
+    u8 type = I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE);
 static bool read_value(const GT_Debug_Memory_Address& address, int size, int endian, u64& value,
     GT_Debug_Memory_Status& status);
 static void format_address(const GT_Debug_Memory_Address& address, char* text, size_t text_size);
@@ -379,9 +381,12 @@ void gui_debug_memory_update(void)
                 data[destination] = (u8)(watch.frozen_value >> (b * 8));
             }
 
-            memory_provider.QueueWrite(watch.address, data, bytes);
+            memory_provider.QueueWrite(watch.address, data, bytes, false);
         }
     }
+
+    if (!config_debug.debug || !config_debug.show_memory)
+        return;
 
     for (int i = 0; i < MEMORY_VIEW_COUNT; i++)
     {
@@ -562,8 +567,18 @@ bool gui_debug_memory_load_dump(const char* file_path)
     u32 end = 0;
     editor->GetSelection(start, end);
     GT_Debug_Memory_Address address = editor->GetSource();
-    address.address = start;
-    memory_provider.QueueWrite(address, &data[0], size);
+
+    if ((u64)start + size - 1 > memory_provider.GetAddressLimit(address))
+        return false;
+
+    for (u32 offset = 0; offset < size; offset += MEMORY_IMPORT_CHUNK_SIZE)
+    {
+        address.address = start + offset;
+
+        if (!memory_provider.QueueWrite(address, &data[offset], MIN(size - offset, MEMORY_IMPORT_CHUNK_SIZE)))
+            return false;
+    }
+
     return true;
 }
 
@@ -1202,8 +1217,10 @@ static void process_editor_requests(MemEditor& editor)
     if (editor.TakeWatchRequest(address))
         add_watch(address);
 
-    if (editor.TakeBreakpointRequest(address, end))
-        add_breakpoint(address, end);
+    u8 type = 0;
+
+    if (editor.TakeBreakpointRequest(address, end, type) && !add_breakpoint(address, end, type))
+        gui_notify(gui_NotificationWarning, NULL, "This memory has no linear, physical or I/O address");
 }
 
 static void add_bookmark(const GT_Debug_Memory_Address& address, u32 end)
@@ -1233,10 +1250,9 @@ static void add_watch(const GT_Debug_Memory_Address& address)
     show_watches = true;
 }
 
-static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end)
+static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end, u8 type)
 {
     I386* cpu = emu_get_core()->GetI386();
-    u8 type = I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE;
     u32 size = end >= address.address ? end - address.address : 0;
     bool added = false;
 
@@ -1954,8 +1970,18 @@ static void draw_breakpoints_window()
 
             ImGui::TableNextColumn();
             ImGui::TextColored(read ? green : gray, "%s", read ? "R" : "-");
+
+            if (ImGui::IsItemClicked() && write)
+                breakpoint.type ^= I386_BREAKPOINT_READ;
+
+            draw_row_tooltip("Click to toggle read");
             ImGui::TableNextColumn();
             ImGui::TextColored(write ? green : gray, "%s", write ? "W" : "-");
+
+            if (ImGui::IsItemClicked() && read)
+                breakpoint.type ^= I386_BREAKPOINT_WRITE;
+
+            draw_row_tooltip("Click to toggle write");
             ImGui::PopID();
         }
 
@@ -2368,6 +2394,19 @@ const char* gui_debug_memory_region_description(int region_id)
     return NULL;
 }
 
+bool gui_debug_memory_get_area_at(int index, GuiDebugMemoryArea& area)
+{
+    if (index < GUI_DEBUG_MEMORY_AREA_REGIONS)
+        return gui_debug_memory_get_area(index, area);
+
+    GT_Debug_Memory_Region region;
+
+    if (!memory_provider.GetRegion(index - GUI_DEBUG_MEMORY_AREA_REGIONS, region))
+        return false;
+
+    return gui_debug_memory_get_area(GUI_DEBUG_MEMORY_AREA_REGIONS + region.id - 1, area);
+}
+
 bool gui_debug_memory_get_area(int id, GuiDebugMemoryArea& area)
 {
     memset(&area, 0, sizeof(area));
@@ -2401,7 +2440,8 @@ bool gui_debug_memory_get_area(int id, GuiDebugMemoryArea& area)
 
     GT_Debug_Memory_Region region;
 
-    if (id < GUI_DEBUG_MEMORY_AREA_REGIONS || !memory_provider.GetRegion(id - GUI_DEBUG_MEMORY_AREA_REGIONS, region))
+    if (id < GUI_DEBUG_MEMORY_AREA_REGIONS ||
+        !memory_provider.GetRegionById(id - GUI_DEBUG_MEMORY_AREA_REGIONS + 1, region))
         return false;
 
     area.source.space = GT_DEBUG_MEMORY_REGION;
@@ -2764,6 +2804,8 @@ bool gui_debug_memory_load_settings(std::istream& stream)
             return false;
 
         watches[i].name[sizeof(watches[i].name) - 1] = 0;
+
+        watches[i].freeze = false;
 
         if (watches[i].address.space < 0 || watches[i].address.space >= GT_DEBUG_MEMORY_SPACE_COUNT ||
             watches[i].size < 0 || watches[i].size > 3 || watches[i].format < 0 || watches[i].format > 4 ||

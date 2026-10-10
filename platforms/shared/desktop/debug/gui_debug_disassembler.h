@@ -31,6 +31,15 @@ struct DisassemblerBookmark
     char name[32];
 };
 
+struct LogicalSymbol
+{
+    u16 selector;
+    u32 offset;
+    std::string name;
+    bool resolved;
+    u32 linear;
+};
+
 #ifdef GUI_DEBUG_DISASSEMBLER_IMPORT
     #define EXTERN
 #else
@@ -40,6 +49,9 @@ struct DisassemblerBookmark
 EXTERN void gui_debug_disassembler_init(void);
 EXTERN void gui_debug_disassembler_destroy(void);
 EXTERN void gui_debug_disassembler_reset(void);
+EXTERN void gui_debug_clear_disassembler(void);
+EXTERN void gui_debug_update_symbols(void);
+EXTERN void gui_debug_resolve_symbols(void);
 EXTERN void gui_debug_reset_breakpoints(void);
 EXTERN void gui_debug_toggle_breakpoint(void);
 EXTERN void gui_debug_add_bookmark(void);
@@ -60,9 +72,11 @@ EXTERN bool gui_debug_add_user_symbol(u32 linear, const char* name);
 EXTERN bool gui_debug_remove_user_symbol(u32 linear);
 EXTERN const char* gui_debug_get_user_symbol(u32 linear);
 EXTERN const std::map<u32, std::string>& gui_debug_get_user_symbols(void);
+EXTERN const std::vector<LogicalSymbol>& gui_debug_get_logical_symbols(void);
+EXTERN bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name);
 EXTERN const char* gui_debug_get_symbol(u32 linear);
 EXTERN const char* gui_debug_get_symbol_name(u32 linear, bool* is_manual);
-EXTERN int gui_debug_load_symbols(const char* file_path);
+EXTERN int gui_debug_load_symbols(const char* file_path, int* skipped = NULL);
 EXTERN bool gui_debug_save_disassembler(const char* file_path, bool full);
 EXTERN void gui_debug_disassembler_draw_text(const char* instruction);
 

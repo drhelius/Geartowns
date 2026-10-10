@@ -30,6 +30,7 @@
 #include "gui_debug_memory.h"
 #include "gui_debug_widgets.h"
 #include "../gui.h"
+#include "../gui_notifications.h"
 #include "../config.h"
 #include "../emu.h"
 #include "../utils.h"
@@ -172,19 +173,38 @@ static void I386WriteCallback8(u16 reg_id, u8 value, void* user_data)
 
     cpu->CopyState(state);
 
+    bool pc_changed = false;
+
     if (reg_id >= I386RegId_SegmentDplBase && reg_id < I386RegId_SegmentDplBase + I386_SEGMENT_COUNT)
     {
         int segment = reg_id - I386RegId_SegmentDplBase;
         state.segments[segment].dpl = value & 3;
     }
+    else if (reg_id >= I386RegId_SegmentAccessBase && reg_id < I386RegId_SegmentAccessBase + I386_SEGMENT_COUNT)
+    {
+        int segment = reg_id - I386RegId_SegmentAccessBase;
+        state.segments[segment].attributes = gui_debug_i386_access_attributes(value, state.segments[segment].attributes);
+        state.segments[segment].dpl = (value >> 5) & 3;
+        pc_changed = segment == I386_SEGMENT_CS;
+    }
     else if (reg_id == I386RegId_LDTRDpl)
         state.ldtr.dpl = value & 3;
     else if (reg_id == I386RegId_TRDpl)
         state.task_register.dpl = value & 3;
+    else if (reg_id == I386RegId_LDTRAccess)
+    {
+        state.ldtr.attributes = gui_debug_i386_access_attributes(value, state.ldtr.attributes);
+        state.ldtr.dpl = (value >> 5) & 3;
+    }
+    else if (reg_id == I386RegId_TRAccess)
+    {
+        state.task_register.attributes = gui_debug_i386_access_attributes(value, state.task_register.attributes);
+        state.task_register.dpl = (value >> 5) & 3;
+    }
     else
         return;
 
-    write_state(cpu, state, false);
+    write_state(cpu, state, pc_changed);
 }
 
 static void I386WriteCallback16(u16 reg_id, u16 value, void* user_data)
@@ -195,37 +215,34 @@ static void I386WriteCallback16(u16 reg_id, u16 value, void* user_data)
 
     cpu->CopyState(state);
 
+    char error[GT_DEBUG_MEMORY_REASON_SIZE];
+    bool loaded = true;
+
+    // A selector loads its descriptor, like the instructions that load it
     if (reg_id >= I386RegId_SegmentSelectorBase && reg_id < I386RegId_SegmentSelectorBase + I386_SEGMENT_COUNT)
     {
         int segment = reg_id - I386RegId_SegmentSelectorBase;
-        state.segments[segment].selector = value;
-
-        if (state.execution_mode == I386_MODE_REAL || state.execution_mode == I386_MODE_VM86)
-        {
-            state.segments[segment].base = (u32)value << 4;
-            state.segments[segment].limit = 0xFFFF;
-        }
-
+        loaded = gui_debug_i386_load_segment(state, segment, value, state.segments[segment], error, sizeof(error));
         pc_changed = segment == I386_SEGMENT_CS;
     }
-    else if (reg_id >= I386RegId_SegmentAccessBase && reg_id < I386RegId_SegmentAccessBase + I386_SEGMENT_COUNT)
-    {
-        int segment = reg_id - I386RegId_SegmentAccessBase;
-        state.segments[segment].attributes = value;
-        pc_changed = segment == I386_SEGMENT_CS;
-    }
+    else if (reg_id == I386RegId_LDTRSelector)
+        loaded = gui_debug_i386_load_system_segment(state, false, value, state.ldtr, error, sizeof(error));
+    else if (reg_id == I386RegId_TRSelector)
+        loaded = gui_debug_i386_load_system_segment(state, true, value, state.task_register, error, sizeof(error));
     else
     {
         switch (reg_id)
         {
             case I386RegId_GDTRLimit: state.gdtr.limit = value; break;
             case I386RegId_IDTRLimit: state.idtr.limit = value; break;
-            case I386RegId_LDTRSelector: state.ldtr.selector = value; break;
-            case I386RegId_LDTRAccess: state.ldtr.attributes = value; break;
-            case I386RegId_TRSelector: state.task_register.selector = value; break;
-            case I386RegId_TRAccess: state.task_register.attributes = value; break;
             default: return;
         }
+    }
+
+    if (!loaded)
+    {
+        gui_notify(gui_NotificationWarning, NULL, "Selector not loaded", error);
+        return;
     }
 
     write_state(cpu, state, pc_changed);
@@ -471,8 +488,11 @@ static void draw_segments(I386* cpu, const I386_State& state)
         EditableRegister32(NULL, NULL, I386RegId_SegmentLimitBase + segment_index, segment.limit, I386WriteCallback32,
             cpu, EditableRegisterFlags_None);
         ImGui::TableNextColumn();
-        EditableRegister16(NULL, NULL, I386RegId_SegmentAccessBase + segment_index, segment.attributes,
-            I386WriteCallback16, cpu, EditableRegisterFlags_None);
+        EditableRegister8(NULL, NULL, I386RegId_SegmentAccessBase + segment_index, gui_debug_i386_access_byte(segment),
+            I386WriteCallback8, cpu, EditableRegisterFlags_None);
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Descriptor access byte: P DPL S TYPE");
         ImGui::TableNextColumn();
         EditableRegister8(NULL, NULL, I386RegId_SegmentDplBase + segment_index, segment.dpl, I386WriteCallback8, cpu,
             EditableRegisterFlags_None);
@@ -544,8 +564,8 @@ static void draw_descriptor_tables(I386* cpu, const I386_State& state)
         EditableRegister32(NULL, NULL, I386RegId_LDTRLimit, state.ldtr.limit, I386WriteCallback32, cpu,
             EditableRegisterFlags_None);
         ImGui::TableNextColumn();
-        EditableRegister16(NULL, NULL, I386RegId_LDTRAccess, state.ldtr.attributes, I386WriteCallback16, cpu,
-            EditableRegisterFlags_None);
+        EditableRegister8(NULL, NULL, I386RegId_LDTRAccess, gui_debug_i386_access_byte(state.ldtr), I386WriteCallback8,
+            cpu, EditableRegisterFlags_None);
         ImGui::TableNextColumn();
         EditableRegister8(NULL, NULL, I386RegId_LDTRDpl, state.ldtr.dpl, I386WriteCallback8, cpu,
             EditableRegisterFlags_None);
@@ -563,8 +583,8 @@ static void draw_descriptor_tables(I386* cpu, const I386_State& state)
         EditableRegister32(NULL, NULL, I386RegId_TRLimit, state.task_register.limit, I386WriteCallback32, cpu,
             EditableRegisterFlags_None);
         ImGui::TableNextColumn();
-        EditableRegister16(NULL, NULL, I386RegId_TRAccess, state.task_register.attributes, I386WriteCallback16, cpu,
-            EditableRegisterFlags_None);
+        EditableRegister8(NULL, NULL, I386RegId_TRAccess, gui_debug_i386_access_byte(state.task_register),
+            I386WriteCallback8, cpu, EditableRegisterFlags_None);
         ImGui::TableNextColumn();
         EditableRegister8(NULL, NULL, I386RegId_TRDpl, state.task_register.dpl, I386WriteCallback8, cpu,
             EditableRegisterFlags_None);
@@ -749,22 +769,27 @@ void gui_debug_window_i386(void)
         ImGui::TextColored(violet, " LAST EXCEPTION:");
         ImGui::SameLine();
 
-        if (state.last_exception_vector == 0xFF)
+        // Only exceptions the CPU raised, not interrupts or INT n
+        const I386_Exception_Info& exception = cpu->GetLastException();
+
+        if (!exception.valid)
             ImGui::TextColored(gray, "--       ");
         else
         {
             char name[16];
             char description[64];
-            u8 vector = state.last_exception_vector;
-            gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
+            gui_debug_i386_vector_name(exception.vector, name, sizeof(name), description, sizeof(description));
 
-            if (vector >= 32 && strncmp(name, "IRQ", 3) != 0)
-                snprintf(name, sizeof(name), "INT");
-
-            ImGui::TextColored(vector < 32 ? red : yellow, "$%02X %-5s", vector, name);
+            ImGui::TextColored(red, "$%02X %-5s", exception.vector, name);
 
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", description);
+            {
+                if (exception.has_error_code)
+                    ImGui::SetTooltip("%s\nError code: %04X\nReturn address: %04X:%08X", description,
+                        exception.error_code, exception.cs, exception.eip);
+                else
+                    ImGui::SetTooltip("%s\nReturn address: %04X:%08X", description, exception.cs, exception.eip);
+            }
         }
 
         ImGui::TextColored(state.halted ? yellow : gray, " HALTED");

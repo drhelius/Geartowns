@@ -121,7 +121,7 @@ public:
     void Resume();
     void StepInto();
     void StepOver();
-    void StepOut();
+    bool StepOut();
     void StepFrame();
     void Reset();
     json GetDebugStatus();
@@ -136,6 +136,10 @@ public:
     json SetBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space);
     json RemoveBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space);
     json ListBreakpoints();
+    json EnableBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space, bool enabled);
+    json EnableInterruptBreakpoint(int vector, const std::string& source, bool enabled);
+    json EnableIRQBreakpoint(int irq, bool enabled);
+    json SetBreakpointsActive(bool active);
     json SetInterruptBreakpoint(int vector, const std::string& source);
     json ClearInterruptBreakpoint(int vector, const std::string& source);
     json ListInterruptBreakpoints();
@@ -177,11 +181,11 @@ public:
     json AddDisassemblerBookmark(u32 address, const std::string& name);
     json RemoveDisassemblerBookmark(u32 address);
     json ListDisassemblerBookmarks();
-    json ListSymbols(const std::string& filter);
+    json ListSymbols(const std::string& filter, int start, int count);
     json AddSymbol(u32 address, const std::string& name);
     json RemoveSymbol(u32 address);
     json LoadSymbols(const std::string& file_path);
-    json LookupSymbolByName(const std::string& name);
+    json LookupSymbolByName(const std::string& name, bool partial);
     json LookupSymbolAtAddress(u32 address);
 
     // System hardware

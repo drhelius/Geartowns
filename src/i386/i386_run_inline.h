@@ -89,6 +89,13 @@ INLINE u32 I386::RunCheckedStep()
     return (u32)result.clocks;
 }
 
+INLINE u32 I386::RunInstruction(GT_Bus_Access_Context& context)
+{
+    m_batch_mode = false;
+    SetBusContext(context);
+    return RunCheckedStep();
+}
+
 INLINE void I386::CountInterruptShadow()
 {
     m_state.interrupt_shadow_steps--;

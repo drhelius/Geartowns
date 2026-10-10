@@ -23,6 +23,7 @@
 #include "trace_logger_formatter.h"
 #include "gui_debug_constants.h"
 #include "gui_debug_i386_tables.h"
+#include "../emu.h"
 #include "system/i8259.h"
 #include "drive/fdc.h"
 #include "video/sprite.h"
@@ -228,8 +229,19 @@ static void format_cpu(const GT_Trace_Entry& entry, const GT_Trace_Format_Option
     if (options.bytes)
         trace_log_format_cpu_bytes(entry, bytes, sizeof(bytes));
 
+    const char* name = entry.cpu.name[0] != 0 ? entry.cpu.name : "???";
+
+    if (strlen(entry.cpu.name) == GT_TRACE_NAME_SIZE - 1)
+    {
+        const I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(entry.cpu.linear);
+
+        if (IsValidPointer(record) && record->size == entry.cpu.size &&
+            memcmp(record->opcodes, entry.cpu.opcodes, entry.cpu.size) == 0)
+            name = record->name;
+    }
+
     snprintf(buffer, size, "%s%s  %s%s%s%-*s %s", linear, address, registers, segments, flags,
-        GT_TRACE_INSTRUCTION_WIDTH, entry.cpu.name[0] != 0 ? entry.cpu.name : "???", bytes);
+        GT_TRACE_INSTRUCTION_WIDTH, name, bytes);
 }
 
 static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t size)
@@ -240,7 +252,7 @@ static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t s
     u32 from = entry.interrupt.from;
     u32 to = entry.interrupt.to;
 
-    gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
+    gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description), false);
 
     switch (entry.event)
     {
@@ -534,7 +546,7 @@ static void format_video(const GT_Trace_Entry& entry, char* buffer, size_t size)
     switch (entry.event)
     {
         case TRACE_VIDEO_CRTC:
-            format_event(buffer, size, "VIDEO", "CRTC", "R%02u %-4s <- $%04X  %s:$%02X  %s", entry.video.reg,
+            format_event(buffer, size, "VIDEO", "CRTC", "R%02X %-4s <- $%04X  %s:$%02X  %s", entry.video.reg,
                 k_debug_crtc_register_names[entry.video.reg & 0x1F], entry.video.value, entry.video.bank ? "MSB" : "LSB",
                 raw, beam);
             break;

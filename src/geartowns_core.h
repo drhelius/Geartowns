@@ -48,6 +48,13 @@ class TraceLogger;
 class Profiler;
 struct I386_Run_Result;
 
+enum GT_Debug_Step
+{
+    GT_DEBUG_STEP_NONE = 0,
+    GT_DEBUG_STEP_INSTRUCTION,
+    GT_DEBUG_STEP_RETURN
+};
+
 class GeartownsCore
 {
 public:
@@ -55,6 +62,7 @@ public:
     {
         bool step_debugger;
         bool step_over;
+        bool step_start;
         bool stop_on_breakpoint;
         bool stop_on_run_to_breakpoint;
         bool skip_interrupts_on_step;
@@ -134,12 +142,22 @@ private:
         bool render);
     void RunFrame(u64 frame_start);
     void RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug);
+    void RunDebuggerSteps(u64 frame_start, GT_Debug_Run* debug);
+    bool BeginDebuggerFrame(GT_Debug_Run* debug);
+    bool BreakpointStopsDebugger(GT_Debug_Run* debug);
+    bool RunDebuggerStep(u64 frame_start, GT_Debug_Run* debug);
+    bool RunDeferredInterrupt(GT_Debug_Run* debug);
+    bool StepInterrupt(GT_Debug_Run* debug, u32 return_linear, u16 stack_selector, u32 stack_pointer, bool resume);
+    bool AcceptDebuggerHit(GT_Debug_Run* debug);
+    void StopDebugger(GT_Debug_Run* debug, bool breakpoint);
     void EndFrame(u64 frame_start, s16* sample_buffer, int* sample_count);
     bool IsFrameDone(u64 frame_start) const;
     u64 GetFrameLimit(u64 frame_start) const;
     GT_Bus_Access_Context BeginSlice();
-    void CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice);
+    bool CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice, bool hold_on_hit);
+    bool EnterPendingInterrupt(GT_Bus_Access_Context& context);
     static bool SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks);
+    static void DMADebugCallback(void* cpu, u32 address, u32 size, bool write);
     void DispatchEvents();
     void Reset();
     void ResetCPU();
@@ -180,7 +198,9 @@ private:
     GT_Machine_Config m_pending_machine_config;
     bool m_powered;
     bool m_paused;
-    bool m_skip_interrupts;
+    GT_Debug_Step m_debug_step;
+    bool m_debug_step_resume;
+    bool m_debug_interrupt_deferred;
 
     u8* m_frame_buffer;
 };

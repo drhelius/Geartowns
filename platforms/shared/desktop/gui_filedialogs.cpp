@@ -525,13 +525,19 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_LoadSymbols:
         {
-            int count = gui_debug_load_symbols(path);
+            int skipped = 0;
+            int count = gui_debug_load_symbols(path, &skipped);
 
             if (count >= 0)
             {
                 char message[64];
-                snprintf(message, sizeof(message), "%d symbols loaded", count);
-                gui_notify(gui_NotificationSuccess, ICON_MD_LABEL, message, path);
+
+                if (skipped > 0)
+                    snprintf(message, sizeof(message), "%d symbols loaded, %d lines skipped", count, skipped);
+                else
+                    snprintf(message, sizeof(message), "%d symbols loaded", count);
+
+                gui_notify(skipped > 0 ? gui_NotificationWarning : gui_NotificationSuccess, ICON_MD_LABEL, message, path);
             }
             else
                 gui_notify(gui_NotificationError, NULL, "Unable to load symbols", path);

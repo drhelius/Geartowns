@@ -40,7 +40,7 @@ public:
         GT_Debug_Memory_Block_Info* info) const;
     bool Translate(const GT_Debug_Memory_Address& address, GT_Debug_Memory_Translation& translation) const;
 
-    bool QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
+    bool QueueWrite(const GT_Debug_Memory_Address& address, const u8* data, u32 size, bool undo = true);
     bool WriteNow(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
     void RequestUndo();
     void RequestRedo();
@@ -50,6 +50,7 @@ public:
     const char* GetLastMessage() const;
 
     bool GetRegisterValue(const char* name, u32& value) const;
+    u64 GetViewKey(const GT_Debug_Memory_Address& source) const;
     static const char* GetSpaceName(GT_Debug_Memory_Space space);
     static const char* GetStatusName(GT_Debug_Memory_Status status);
 
@@ -60,9 +61,11 @@ private:
         std::vector<u8> before;
         std::vector<u8> after;
         u32 map_generation;
+        bool undo;
     };
 
     bool GetExternalRegion(int index, GT_Debug_Memory_Region& region) const;
+    bool HasMediaImageRegion() const;
     bool ReadExternalRegion(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
     bool WriteBlock(const GT_Debug_Memory_Address& address, const u8* data, u32 size);
     bool ApplyTransaction(WriteTransaction& transaction, bool capture_before);

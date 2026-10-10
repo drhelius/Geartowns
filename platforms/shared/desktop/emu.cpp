@@ -72,6 +72,7 @@ static bool audio_enabled = true;
 static McpManager* mcp_manager = NULL;
 static Uint64 rewind_last_counter = 0;
 static double rewind_pop_accumulator = 0.0;
+static bool emu_debug_step_start = false;
 
 static std::atomic<int> loading_state(Loading_State_None);
 static std::thread loading_thread;
@@ -100,6 +101,7 @@ static u32 debug_direct_color(u16 value);
 static u32 debug_checker(int x, int y);
 static u32 debug_single_to_canonical(u32 offset);
 static int debug_layer_format(const Video::Video_State* state, int layer);
+static u64 debug_video_key(void);
 static void debug_palette(const Video::Video_State* state, int palette, u32* colors);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 static void stop_physical_cdrom_after_error(void);
@@ -153,6 +155,7 @@ bool emu_init(void)
     emu_debug_pc_changed = false;
     emu_debug_step_frames_pending = 0;
     emu_debug_disable_breakpoints = false;
+    emu_debug_breakpoint_stops = 0;
     rewind_init();
     runahead_init();
 
@@ -251,6 +254,7 @@ void emu_update(void)
     if (config_debug.debug)
     {
         bool stopped = false;
+        bool breakpoint_hit = false;
         bool frames_stepped = false;
 
         if (emu_debug_command != Debug_Command_None && !geartowns->IsPaused())
@@ -259,6 +263,7 @@ void emu_update(void)
 
             debug_run.step_debugger = emu_debug_command == Debug_Command_Step;
             debug_run.step_over = emu_debug_command == Debug_Command_StepOver;
+            debug_run.step_start = emu_debug_step_start;
             debug_run.stop_on_breakpoint = !emu_debug_disable_breakpoints;
             debug_run.stop_on_run_to_breakpoint = true;
             debug_run.skip_interrupts_on_step = config_debug.step_skip_interrupts &&
@@ -272,9 +277,10 @@ void emu_update(void)
             frame_executed = result != GT_RUN_NOT_READY;
             frame_completed = result == GT_RUN_FRAME_READY && !debug_run.stopped;
             stopped = debug_run.stopped;
+            breakpoint_hit = debug_run.breakpoint_hit;
 
-            if (emu_debug_command == Debug_Command_StepOver && !debug_run.step_over)
-                emu_debug_command = Debug_Command_Continue;
+            if (result == GT_RUN_FRAME_READY)
+                emu_debug_step_start = false;
         }
 
         // Frame steps run whole frames with breakpoints active; a breakpoint ends the remaining frames
@@ -286,7 +292,11 @@ void emu_update(void)
             frames_stepped = emu_debug_step_frames_pending <= 0;
         }
 
-        if (stopped || emu_debug_command == Debug_Command_Step || frames_stepped)
+        if (stopped && breakpoint_hit)
+            emu_debug_breakpoint_stops++;
+
+        // Steps keep running frames until the core reports where they stop
+        if (stopped || frames_stepped)
         {
             emu_debug_command = Debug_Command_None;
             emu_debug_step_frames_pending = 0;
@@ -295,9 +305,6 @@ void emu_update(void)
             if (config_debug.dis_look_ahead_count > 0)
                 geartowns->GetI386()->DisassembleAhead(config_debug.dis_look_ahead_count);
         }
-        else if (emu_debug_command != Debug_Command_Continue && emu_debug_command != Debug_Command_StepFrame &&
-            frame_executed)
-            emu_debug_command = Debug_Command_None;
     }
     else if (!geartowns->IsPaused())
     {
@@ -929,32 +936,34 @@ void emu_debug_step_over(void)
         return;
 
     emu_debug_command = Debug_Command_StepOver;
+    emu_debug_step_start = true;
     emu_resume();
 }
 
 void emu_debug_step_into(void)
 {
     emu_debug_command = Debug_Command_Step;
+    emu_debug_step_start = true;
     emu_resume();
 }
 
-void emu_debug_step_out(void)
+bool emu_debug_step_out(void)
 {
     if (!IsValidPointer(geartowns))
-        return;
+        return false;
 
-    I386* cpu = geartowns->GetI386();
-    const std::vector<I386_CallStackEntry>& call_stack = cpu->GetDisassemblerCallStack();
+    bool call = geartowns->GetI386()->AddStepOutBreakpoint();
 
-    if (!call_stack.empty())
-    {
-        cpu->AddRunToBreakpoint(call_stack.back().back_linear);
+    if (call)
         emu_debug_command = Debug_Command_Continue;
-    }
     else
+    {
         emu_debug_command = Debug_Command_Step;
+        emu_debug_step_start = true;
+    }
 
     emu_resume();
+    return call;
 }
 
 void emu_debug_step_frame(void)
@@ -976,11 +985,21 @@ void emu_debug_break(void)
 {
     emu_resume();
     emu_debug_step_frames_pending = 0;
+    emu_debug_step_start = false;
 
-    if (emu_debug_command == Debug_Command_Continue || emu_debug_command == Debug_Command_StepFrame)
-        emu_debug_command = Debug_Command_Step;
-    else
-        emu_debug_command = Debug_Command_None;
+    if (!IsValidPointer(geartowns))
+        return;
+
+    geartowns->GetI386()->ClearRunToBreakpoint();
+
+    if (emu_debug_command == Debug_Command_None)
+        return;
+
+    emu_debug_command = Debug_Command_None;
+    emu_debug_pc_changed = true;
+
+    if (config_debug.dis_look_ahead_count > 0)
+        geartowns->GetI386()->DisassembleAhead(config_debug.dis_look_ahead_count);
 }
 
 void emu_debug_continue(void)
@@ -989,11 +1008,21 @@ void emu_debug_continue(void)
     emu_resume();
 }
 
-// Only the buffers of open windows are decoded
 void emu_debug_update(void)
 {
+    static u64 framebuffer_key = 0;
+    static u64 sprites_key = 0;
+
     if (emu_is_empty())
         return;
+
+    u64 state_key = debug_video_key();
+
+    if (!config_debug.show_framebuffers)
+        framebuffer_key = 0;
+
+    if (!config_debug.show_sprites)
+        sprites_key = 0;
 
     if (config_debug.show_framebuffers)
     {
@@ -1011,11 +1040,24 @@ void emu_debug_update(void)
         else if (buffer == 3)
             buffer = Emu_Debug_Buffer_Custom;
 
-        emu_debug_decode_buffer(buffer, &request, emu_debug_framebuffer, emu_debug_framebuffer_info);
+        u64 key = state_key;
+        u32 view[6] = { (u32)buffer, request.offset, (u32)request.format, (u32)request.width, (u32)request.height,
+            (u32)request.palette };
+
+        for (int i = 0; i < 6; i++)
+            key = (key ^ view[i]) * 1099511628211ULL;
+
+        if (key != framebuffer_key)
+        {
+            framebuffer_key = key;
+            emu_debug_decode_buffer(buffer, &request, emu_debug_framebuffer, emu_debug_framebuffer_info);
+        }
     }
 
-    if (config_debug.show_sprites)
+    if (config_debug.show_sprites && state_key != sprites_key)
     {
+        sprites_key = state_key;
+
         for (int i = 0; i < (int)k_sprite_entries; i++)
         {
             int x = (i & 31) * 16;
@@ -1029,7 +1071,19 @@ void emu_debug_update(void)
     }
 }
 
-// Pages are whole VRAM halves for layers, the sprite work halves, or a custom view of the two-page VRAM
+static u64 debug_video_key(void)
+{
+    Video::Video_State* state = geartowns->GetVideo()->GetState();
+    u64 key = geartowns->GetMemory()->GetDebugSnapshotId() * 1099511628211ULL;
+
+    key = (key ^ geartowns->GetScheduler()->GetClocks()) * 1099511628211ULL;
+
+    for (int i = 0; i < VIDEO_CRTC_REGISTER_COUNT; i++)
+        key = (key ^ state->crtc[i]) * 1099511628211ULL;
+
+    return key | 1;
+}
+
 void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info)
 {
     memset(&info, 0, sizeof(info));
@@ -1190,7 +1244,6 @@ void emu_debug_get_sprite(int index, Emu_Debug_Sprite& sprite)
         (sprite.screen_y >= 256 && sprite.screen_y + 15 < 512 + 2));
 }
 
-// 16x16 RGBA as the engine places it, transparent pixels as a checkerboard, stride in pixels
 void emu_debug_decode_sprite(int index, u8* output, int stride)
 {
     Emu_Debug_Sprite sprite;
@@ -1205,14 +1258,21 @@ void emu_debug_decode_sprite(int index, u8* output, int stride)
     u32* pixels = (u32*)output;
     int flip_x = sprite.flip_x ? 0x0F : 0x00;
     int flip_y = sprite.flip_y ? 0x0F : 0x00;
+    int shift_x = sprite.half_x ? 1 : 0;
+    int shift_y = sprite.half_y ? 1 : 0;
+
+    for (int y = 0; y < 16; y++)
+    {
+        for (int x = 0; x < 16; x++)
+            pixels[y * stride + x] = debug_checker(x, y);
+    }
 
     for (int py = 0; py < 16; py++)
     {
         for (int px = 0; px < 16; px++)
         {
-            int x = (sprite.swap ? py : px) ^ flip_x;
-            int y = (sprite.swap ? px : py) ^ flip_y;
-            u32 color = debug_checker(x, y);
+            int x = ((sprite.swap ? py : px) ^ flip_x) >> shift_x;
+            int y = ((sprite.swap ? px : py) ^ flip_y) >> shift_y;
 
             if (sprite.table)
             {
@@ -1220,17 +1280,15 @@ void emu_debug_decode_sprite(int index, u8* output, int stride)
                 int entry = (px & 0x01) != 0 ? data >> 4 : data & 0x0F;
 
                 if (entry != 0)
-                    color = debug_direct_color(read_u16_le(table + entry * 2));
+                    pixels[y * stride + x] = debug_direct_color(read_u16_le(table + entry * 2));
             }
             else
             {
                 u16 value = read_u16_le(pattern + (py << 5) + (px << 1));
 
                 if ((value & 0x8000) == 0)
-                    color = debug_direct_color(value);
+                    pixels[y * stride + x] = debug_direct_color(value);
             }
-
-            pixels[y * stride + x] = color;
         }
     }
 }

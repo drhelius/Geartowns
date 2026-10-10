@@ -55,8 +55,12 @@ I386::I386()
     m_trace_count = 0;
 
     m_disassembler_cache = new I386_Disassembler_Record*[k_i386_disassembler_cache_size];
+    m_disassembler_generation = 0;
     ClearDisassemblerCache();
     m_run_to_breakpoint = 0;
+    m_run_to_stack_pointer = 0;
+    m_run_to_stack_selector = 0;
+    m_run_to_stack_check = false;
     m_breakpoint_hit_address = 0;
     m_step_call_return_linear = 0;
     m_step_call = false;
@@ -69,7 +73,11 @@ I386::I386()
     m_debugger_memory_checks = false;
     m_debugger_io_checks = false;
     m_debugger_interrupt_checks = false;
+    m_debugger_exec_checks = false;
+    m_execute_filter_all = false;
+    memset(m_execute_filter, 0, sizeof(m_execute_filter));
     m_debugger_hit_pending = false;
+    memset(&m_last_exception, 0, sizeof(m_last_exception));
     m_irq_breakpoints = 0;
     m_irq_breakpoints_disabled = 0;
     m_external_line = -1;
@@ -100,6 +108,7 @@ void I386::Init(Memory* memory, IO* io)
     m_io = io;
 
     m_disassembler_records.clear();
+    m_disassembler_generation++;
     ClearDisassemblerCache();
 
     Reset();
@@ -172,6 +181,7 @@ void I386::Reset()
     m_run_to_hit = false;
     m_breakpoint_hit_address = 0;
     m_debugger_hit_pending = false;
+    UpdateExecuteFilter();
     ResetVBlankWatch();
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
@@ -205,6 +215,7 @@ void I386::Reset()
 
     m_debug_data_breakpoints = 0;
     m_state.last_exception_vector = 0xFF;
+    m_last_exception.valid = false;
 
     UpdateSegmentFastPaths();
     UpdateDebugState();
@@ -276,13 +287,6 @@ void I386::CompleteFault(u16 old_task)
     result.clocks = m_step_exception.clocks;
     result.exception = m_step_exception.exception;
     result.end_batch = m_step_exception.end_batch;
-}
-
-u32 I386::RunInstruction(GT_Bus_Access_Context& context)
-{
-    m_batch_mode = false;
-    SetBusContext(context);
-    return RunCheckedStep();
 }
 
 I386_Run_Result I386::GetStepInfo() const
@@ -526,11 +530,20 @@ void I386::CopyState(I386_State& state) const
     state = m_state;
 }
 
+// Moving CS:EIP away from a stop forgets it, so the old stop address hits normally when reached again
 bool I386::SetState(const I386_State& state)
 {
+    bool moved = state.eip != m_state.eip ||
+        state.segments[I386_SEGMENT_CS].selector != m_state.segments[I386_SEGMENT_CS].selector ||
+        state.segments[I386_SEGMENT_CS].base != m_state.segments[I386_SEGMENT_CS].base;
+
     m_state = state;
     SanitizeState();
     FlushTLB();
+
+    if (moved)
+        ClearBreakpointHit();
+
     return true;
 }
 
@@ -687,6 +700,12 @@ void I386::SanitizeState()
 u8 I386::GetLastExceptionVector() const
 {
     return m_state.last_exception_vector;
+}
+
+// Only exceptions the CPU raised, unlike the last vector in the state, which interrupts also update
+const I386_Exception_Info& I386::GetLastException() const
+{
+    return m_last_exception;
 }
 
 // Passive copy of the bytes at CS:EIP before a single step executes them
@@ -979,6 +998,7 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
             m_state.debug_registers[7] &= ~0x00002000U;
 
         u64 entry_clocks = k_i386_real_interrupt_entry_clocks;
+        u16 return_cs = m_state.segments[I386_SEGMENT_CS].selector;
         bool ok = EnterInterrupt(current.vector, current_return_eip, context, false, current.has_error_code,
             current.error_code, current.exception_class == I386_EXCEPTION_FAULT, false, &entry_clocks, &result);
 
@@ -990,6 +1010,12 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
             result.exception_vector = current.vector;
             result.end_batch = true;
             m_state.last_exception_vector = current.vector;
+            m_last_exception.valid = true;
+            m_last_exception.vector = current.vector;
+            m_last_exception.has_error_code = current.has_error_code;
+            m_last_exception.error_code = current.error_code;
+            m_last_exception.cs = return_cs;
+            m_last_exception.eip = current_return_eip;
             return true;
         }
 
@@ -1223,6 +1249,46 @@ bool I386::GetDebugRegisterValue(const char* name, u32& value) const
         value = m_debug_state.cr2;
     else if (EqualName(name, "CR3"))
         value = m_debug_state.cr3;
+    else
+        return GetDebugPartialRegisterValue(name, value);
+
+    return true;
+}
+
+bool I386::GetDebugPartialRegisterValue(const char* name, u32& value) const
+{
+    static const char* k_names16[I386_REG_COUNT] = { "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI" };
+    static const char* k_names8[8] = { "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH" };
+    static const char* k_segments[I386_SEGMENT_COUNT] = { "ES", "CS", "SS", "DS", "FS", "GS" };
+
+    for (int i = 0; i < I386_REG_COUNT; i++)
+    {
+        if (EqualName(name, k_names16[i]))
+        {
+            value = m_state.registers[i].value & 0xFFFF;
+            return true;
+        }
+
+        if (EqualName(name, k_names8[i]))
+        {
+            value = (m_state.registers[i & 3].value >> (i < 4 ? 0 : 8)) & 0xFF;
+            return true;
+        }
+    }
+
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+    {
+        if (EqualName(name, k_segments[i]))
+        {
+            value = m_state.segments[i].selector;
+            return true;
+        }
+    }
+
+    if (EqualName(name, "IP"))
+        value = m_state.eip & 0xFFFF;
+    else if (EqualName(name, "FLAGS"))
+        value = m_state.eflags & 0xFFFF;
     else
         return false;
 

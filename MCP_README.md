@@ -368,9 +368,9 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 ### Execution Control
 - `debug_pause` - Pause emulation
 - `debug_continue` - Resume emulation
-- `debug_step_into` - Step one instruction, entering calls and interrupts
-- `debug_step_over` - Step over subroutine calls
-- `debug_step_out` - Run until the current subroutine or interrupt handler returns
+- `debug_step_into` - Step one instruction, entering calls and interrupts. A `REP` string instruction runs all its elements and a `HLT` waits until an IRQ wakes the CPU
+- `debug_step_over` - Step over subroutine calls, `INT n` handlers and IRQs that come in during the step
+- `debug_step_out` - Run until the current subroutine or interrupt handler returns; with an empty call stack it steps one instruction and adds a `note`
 - `debug_step_frame` - Run one complete frame with breakpoints active, then pause
 - `debug_run_to_cursor` - Continue execution until reaching specified address
 - `debug_reset` - Reset emulation
@@ -379,13 +379,13 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`
 
 ### CPU & Registers
-- `get_i386_status` - Get the complete Intel 80386 status: general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode, CPL, IOPL, code and stack size, last exception or interrupt vector, segment descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers
-- `write_i386_register` - Write a register: EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, CS-GS. Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode
-- `get_i386_descriptors` - Decode `table` (`gdt`, `ldt`, `idt`) entries from `start`, up to `count`: selector, base, limit, type, DPL, flags, or gate targets with symbols; in real and VM86 mode the IDT is the IVT
+- `get_i386_status` - Get the complete Intel 80386 status: general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode, CPL, IOPL, code and stack size, the last exception the CPU raised with its error code and return address (interrupts and `INT n` don't replace it), segment descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers
+- `write_i386_register` - Write a register: EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE, IDTR_LIMIT. Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode; LDTR and TR load their LDT or TSS descriptor from the GDT
+- `get_i386_descriptors` - Decode `table` (`gdt`, `ldt`, `idt`) entries from `start`, up to `count`: selector, base, limit, type, DPL, flags, or gate targets with symbols; in real mode the IDT is the IVT, VM86 mode still uses the protected-mode gates
 - `get_page_directory` - List the present page-directory entries, or with `index` the present pages of that page table, with linear and physical addresses and flags
 
 ### Memory Operations
-- `list_memory_areas` - List memory areas: LINEAR, PHYSICAL, I/O PORTS, and every memory region, with `id`, `name`, `size`, `unit_size`, `flags`, `physical_base`, `group` (`address_space`, `memory`, `rom`, `media`, `cpu_window`) and `description`
+- `list_memory_areas` - List memory areas: LINEAR, PHYSICAL, I/O PORTS, and every memory region, with `id`, `name`, `size`, `unit_size`, `flags`, `physical_base`, `group` (`address_space`, `memory`, `rom`, `media`, `cpu_window`) and `description`. An area keeps its `id` when disks are inserted or ejected
 - `read_memory` - Read from a memory area; unmapped or unreadable bytes read as `??`. The LINEAR area takes logical addresses too
 - `write_memory` - Write to a memory area. ROMs and I/O PORTS are read-only
 - `translate_address` - Translate a logical or linear address: logical, linear, PDE and PTE with their indexes, page flags, physical, bus, region and offset, or the reason it fails
@@ -403,12 +403,12 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `memory_find` - Find hex byte sequences (`hex_bytes`) or text (`text`, optional `case_sensitive`) in memory; optional `start` and `size`
 
 ### Disassembly & Debugging
-- `get_disassembly` - Decode Intel 80386 instructions from current memory: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector`, `vector_name` and `vector_description` for INT, and `function` (the BIOS or DOS service picked by AX) when the INT is the current instruction
+- `get_disassembly` - Decode Intel 80386 instructions from current memory, without changing the debugger's disassembly or labels: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector`, `vector_name` and `vector_description` for INT, and `function` (the BIOS or DOS service picked by AX) when the INT is the current instruction
 - `add_symbol` - Add or rename a user symbol at an address; user symbols take precedence over automatic labels
 - `remove_symbol` - Remove the user symbol at an address
-- `load_symbols` - Load user symbols from a file: `ADDRESS NAME` or `NAME = ADDRESS` (or `EQU`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses
-- `list_symbols` - List user symbols and automatic labels, optional `filter`
-- `lookup_symbol_by_name` - Find all exact-name symbol matches
+- `load_symbols` - Load user symbols from a file: `ADDRESS NAME` or `NAME = ADDRESS` (or `EQU`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses. `SSSS:OOOOOOOO` symbols resolve through the current mode each time execution stops; `skipped` counts the lines that didn't parse
+- `list_symbols` - List user symbols and automatic labels a page at a time: optional `filter`, `start` and `count` (default 200, max 1000), with `total` and `has_more`
+- `lookup_symbol_by_name` - Find all symbols with an exact name, or with `partial` a case-insensitive part of it
 - `lookup_symbol_at_address` - Find the symbol at an address
 - `add_disassembler_bookmark` - Add bookmark in disassembler
 - `remove_disassembler_bookmark` - Remove disassembler bookmark
@@ -505,7 +505,7 @@ Hardware events are decoded as the guest sees them: register names and fields, I
 
 `sprite.busy` logs the VSYNCs where the sprite controller is still drawing the previous list, so no new transfer starts and the shown page stays the same.
 
-The trace logger records while the debugger runs the machine, so the debugger must be enabled, which is always the case when the MCP server is running. `set_trace_log` with `enabled` true opens the Trace Logger window and starts recording.
+The trace logger records while the debugger runs the machine, so `set_trace_log` with `enabled` true turns the debugger on, opens the Trace Logger window and starts recording. Memory output allocates its buffer when recording starts. Entry times are machine clocks (the 16 MHz timebase, not CPU cycles), and an event inside an instruction carries the instruction's start time.
 
 #### Trace storage
 
@@ -517,21 +517,25 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 
 ### Profiler
 - `set_profiler` - Start, stop, or reset the function profiler with `action` (`start`, `stop`, `reset`). `start` opens the Profiler debugger window and `stop` closes it. Statistics are only collected while the window is visible (in headless mode, while started) and the debugger runs the machine, starting on the next frame
-- `get_profiler_data` - Read profiler results: `collecting`, `window_open`, `total_cycles`, `frames`, `function_count`, and per-function `name`, `symbol`, `address`, `vector`, `vector_name` and `vector_description` (interrupt handlers), `type` (`call`, `interrupt`, or `root` for code running outside any call), `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Calls are listed per linear target and interrupt handlers per vector. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
+- `get_profiler_data` - Read profiler results: `collecting`, `window_open`, `total_cycles`, `frames`, `function_count`, and per-function `name`, `symbol`, `address`, `vector`, `vector_name` and `vector_description` (interrupt handlers), `type` (`call`, `interrupt`, or `root` for code running outside any call), `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Cycles are machine clocks, the 16 MHz timebase, which match CPU cycles only at 16 MHz. Average, min and max count completed outermost calls, so a recursive function's inner returns don't skew them. Calls are listed per linear target and interrupt handlers per vector. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
 
 ### Breakpoints
-- `set_breakpoint` - Set a breakpoint at an address. `type`: `execute` (stops before the instruction; default for linear), `read` (default for physical and io), `write` or `access` (stop after the instruction that made the CPU access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear only
+- `set_breakpoint` - Set a breakpoint at an address. `type`: `execute` (stops before the instruction; default for linear), `read` (default for physical and io), `write` or `access` (stop after the instruction that made the access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear or physical, a physical one follows the code through the current page mapping. Physical read and write breakpoints also see DMA transfers, and linear ones while paging is off. CPU accesses to descriptor tables, the TSS and page tables don't trigger breakpoints
 - `set_breakpoint_range` - Set a breakpoint over an inclusive address range, same `type` and `space`
 - `remove_breakpoint` - Remove a breakpoint matching address (and `end_address` for ranges), `type` and `space`
-- `list_breakpoints` - List all breakpoints with type, space, range and enabled state
+- `enable_breakpoint` - Enable or disable a breakpoint matching address (and `end_address` for ranges), `type` and `space`, with `enabled`
+- `set_breakpoints_active` - Turn every breakpoint on or off at once with `active`, like Disable All in the debugger; each keeps its own enabled state
+- `list_breakpoints` - List all breakpoints with type, space, range and enabled state, and `all_disabled`
 - `set_breakpoint_on_interrupt` - Break on entry to an interrupt `vector` (0-255), before the handler's first instruction; `source`: `any` (default), `exception`, `hardware` or `software`
 - `clear_breakpoint_on_interrupt` - Remove an interrupt breakpoint by `vector` and `source`
+- `enable_breakpoint_on_interrupt` - Enable or disable an interrupt breakpoint by `vector` and `source`, with `enabled`
 - `list_breakpoints_on_interrupt` - List interrupt breakpoints with `vector_name`, `vector_description`, sources and enabled state
 - `set_breakpoint_on_irq` - Break when the PIC delivers IRQ line `irq` (0-15), before the handler's first instruction. It follows the line, not the vector, so it keeps working if the program moves the PIC vector bases
 - `clear_breakpoint_on_irq` - Remove the breakpoint on an IRQ line
+- `enable_breakpoint_on_irq` - Enable or disable the breakpoint on an IRQ line, with `enabled`
 - `list_breakpoints_on_irq` - List the IRQ lines with a breakpoint, their sources and enabled state
 
-`debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access, or the vector and source of the interrupt, plus `irq` and `irq_name` for a hardware interrupt and `function` when a software interrupt calls a known BIOS or DOS service.
+`debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access (`dma` when a DMA transfer made it), or the vector and source of the interrupt, plus `irq` and `irq_name` for a hardware interrupt and `function` when a software interrupt calls a known BIOS or DOS service.
 
 ### System Hardware
 - `get_pic_status` - Get both 8259A PICs: per-IRQ source, input level, request, in-service, mask and vector; ICW1-ICW4 decoded, init state, read register, special mask, poll and priority
@@ -544,7 +548,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Video Hardware
 - `get_crtc_status` - Get the CRTC: dot clock, line and frame timing (rates are null while the CRTC is stopped), interlace, sync widths, beam line, dot, field and H/V state, the VSYNC IRQ, and per layer format, H/V windows, VRAM start (with the FA register), stride, HAJ, field offset, zoom and visible size
 - `get_crtc_registers` - Get the 32 CRTC registers R00-R1F with names and the selected index
-- `write_crtc_register` - Write a CRTC register (0-31) through the port path, restoring the index
+- `write_crtc_register` - Write a CRTC register (0-31) through the port path like a CPU write, so timing updates and the trace logger records it, restoring the index
 - `get_video_output_status` - Get the output controller (mode, layer formats, front layer, palette select), FDA0 layer enables, 044C status, the VRAM write mask and the FM-R display state
 - `get_palettes` - Get the palettes: `layer0` and `layer1` (16 colors, 4-bit B, R, G), `256` (8-bit B, R, G), `digital` (FM-R, with the DPMD flag), or `all`, plus which palettes the display layers use
 - `get_frame_buffer` - Decode a VRAM buffer as PNG: `layer0`, `layer1` (whole page with the layer's format and stride), `sprite_display`, `sprite_draw` (256x256, transparent pixels as a checkerboard), or `custom` with `offset`, `format`, `width`, `height` and `palette`
@@ -568,7 +572,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 
 ### Floppy Hardware
 - `get_fdc_status` - Get the MB8877: status with bit names for the last command type, decoded command, track, sector and data registers, BUSY/DRQ/INTRQ and IRQ6, drive control, status, select and switch
-- `list_floppy_drives` - Get both drives: image, D77 disk name, media, geometry, RPM, write protect, modified, head cylinder, motor, ready and selected
+- `list_floppy_drives` - Get both drives: image, D77 disk name (Shift-JIS converted to UTF-8), media, geometry (with `total_size` and `mixed` when tracks differ from track 0), RPM, write protect, modified, head cylinder, motor, ready and selected
 - `list_floppy_sectors` - List a track's sectors by `drive`, `cylinder`, `head`: C, H, R, N, size, density, deleted mark, status and image offset
 - `read_floppy_sector` - Read the sector with ID R (`sector`) on a track: IDs, status and data as hex
 
@@ -596,7 +600,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 
 ### Controller Input
-- `controller_button` - Control a button on a game port (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, select, run, A, B, C, X, Y, Z, zoom (Marty pad, not decoded yet). On a mouse port the directions move the mouse (4 counts per frame while held, 4 counts per tap) and A/B are the left/right buttons
+- `controller_button` - Control a button on a game port (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, select, run, A, B, C, X, Y, Z. On a mouse port the directions move the mouse (4 counts per frame while held, 4 counts per tap) and A/B are the left/right buttons
 - `controller_set_type` - Set the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse
 - `controller_get_type` - Read the device on a game port
 - `get_input_state` - Get each port's device type, effective pressed buttons, held keyboard keys and pending tap releases

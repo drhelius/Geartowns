@@ -62,8 +62,6 @@ static const AlgorithmLayout k_algorithm_layouts[8] =
 };
 
 static float* scope_buffer = NULL;
-static int fm_solo = -1;
-static int pcm_solo = -1;
 
 static void draw_scope(const char* id, const s16* data, int stride, int count, float scale, ImVec2 size,
     const ImVec4& color);
@@ -72,6 +70,8 @@ static bool draw_mute_button(const char* id, bool muted, const char* tooltip);
 static bool draw_solo_button(const char* id, bool solo);
 static void set_fm_solo(int channel);
 static void set_pcm_solo(int channel);
+static int get_fm_solo(YM3438* ym3438);
+static int get_pcm_solo(RF5C68* rf5c68);
 static void draw_fm_global(YM3438::YM3438_State* state);
 static void setup_fm_columns(int last);
 static void draw_grid_label(const char* label);
@@ -581,19 +581,55 @@ static bool draw_solo_button(const char* id, bool solo)
 static void set_fm_solo(int channel)
 {
     YM3438* ym3438 = emu_get_core()->GetAudio()->GetYM3438();
-    fm_solo = fm_solo == channel ? -1 : channel;
+    int solo = get_fm_solo(ym3438) == channel ? -1 : channel;
 
     for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
-        ym3438->SetChannelMute(i, fm_solo >= 0 && i != fm_solo);
+        ym3438->SetChannelMute(i, solo >= 0 && i != solo);
 }
 
 static void set_pcm_solo(int channel)
 {
     RF5C68* rf5c68 = emu_get_core()->GetAudio()->GetRF5C68();
-    pcm_solo = pcm_solo == channel ? -1 : channel;
+    int solo = get_pcm_solo(rf5c68) == channel ? -1 : channel;
 
     for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
-        rf5c68->SetChannelMute(i, pcm_solo >= 0 && i != pcm_solo);
+        rf5c68->SetChannelMute(i, solo >= 0 && i != solo);
+}
+
+static int get_fm_solo(YM3438* ym3438)
+{
+    int solo = -1;
+
+    for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+    {
+        if (ym3438->IsChannelMuted(i))
+            continue;
+
+        if (solo >= 0)
+            return -1;
+
+        solo = i;
+    }
+
+    return solo;
+}
+
+static int get_pcm_solo(RF5C68* rf5c68)
+{
+    int solo = -1;
+
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
+    {
+        if (rf5c68->IsChannelMuted(i))
+            continue;
+
+        if (solo >= 0)
+            return -1;
+
+        solo = i;
+    }
+
+    return solo;
 }
 
 static void draw_fm_global(YM3438::YM3438_State* state)
@@ -684,14 +720,11 @@ static void draw_fm_channel(YM3438* ym3438, int channel)
     snprintf(id, sizeof(id), "##fm_mute%d", channel);
 
     if (draw_mute_button(id, muted, "Mute Channel"))
-    {
-        fm_solo = -1;
         ym3438->SetChannelMute(channel, !muted);
-    }
 
     snprintf(id, sizeof(id), "##fm_solo%d", channel);
 
-    if (draw_solo_button(id, fm_solo == channel))
+    if (draw_solo_button(id, get_fm_solo(ym3438) == channel))
         set_fm_solo(channel);
 
     ImGui::EndGroup();
@@ -966,15 +999,12 @@ static void draw_rf5c68_channels(RF5C68* rf5c68, const s16* const* buffers, int 
         snprintf(id, sizeof(id), "##pcm_mute%d", i);
 
         if (draw_mute_button(id, muted, "Mute Channel"))
-        {
-            pcm_solo = -1;
             rf5c68->SetChannelMute(i, !muted);
-        }
 
         ImGui::SameLine(0, 2);
         snprintf(id, sizeof(id), "##pcm_solo%d", i);
 
-        if (draw_solo_button(id, pcm_solo == i))
+        if (draw_solo_button(id, get_pcm_solo(rf5c68) == i))
             set_pcm_solo(i);
 
         ImGui::TableNextColumn();

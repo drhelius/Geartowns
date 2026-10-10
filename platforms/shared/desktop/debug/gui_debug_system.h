@@ -20,6 +20,8 @@
 #ifndef GUI_DEBUG_SYSTEM_H
 #define GUI_DEBUG_SYSTEM_H
 
+#include "geartowns.h"
+
 #ifdef GUI_DEBUG_SYSTEM_IMPORT
     #define EXTERN
 #else
@@ -31,6 +33,8 @@ EXTERN void gui_debug_window_pit(void);
 EXTERN void gui_debug_window_dma(void);
 EXTERN void gui_debug_window_rtc(void);
 EXTERN void gui_debug_window_system_control(void);
+EXTERN u16 gui_debug_system_machine_id(void);
+EXTERN void gui_debug_system_serial_rom_text(char* text, size_t text_size);
 
 #undef GUI_DEBUG_SYSTEM_IMPORT
 #undef EXTERN

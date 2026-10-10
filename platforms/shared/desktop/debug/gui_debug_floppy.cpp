@@ -20,6 +20,7 @@
 #define GUI_DEBUG_FLOPPY_IMPORT
 #include "gui_debug_floppy.h"
 
+#include <SDL3/SDL.h>
 #include "imgui.h"
 #include "geartowns.h"
 #include "drive/fdc.h"
@@ -341,9 +342,9 @@ void gui_debug_window_disk_viewer(void)
     ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
         ImGuiTableFlags_BordersV | ImGuiTableFlags_SizingFixedFit;
 
-    // Sized to the track so common formats fit without scrolling, longer tracks scroll past 16 sectors
+    // Always 16 rows tall so the window keeps its layout, longer tracks scroll
     float row_height = ImGui::GetTextLineHeight() + style.CellPadding.y * 2.0f;
-    float table_height = (CLAMP(count, 1, 16) + 1) * row_height + 4.0f;
+    float table_height = 17 * row_height + 4.0f;
 
     if (ImGui::BeginTable("##disk_sectors", 10, flags, ImVec2(0, table_height)))
     {
@@ -543,7 +544,7 @@ static void draw_drive_column(int drive, int row)
         }
         case 1:
         {
-            char name[18] = { };
+            char name[64] = { };
 
             if (inserted)
                 gui_debug_floppy_disk_name(disk, name, sizeof(name));
@@ -568,10 +569,17 @@ static void draw_drive_column(int drive, int row)
             int heads = 0;
             int sectors = 0;
             int sector_size = 0;
+            u32 total_size = 0;
+            bool mixed = false;
 
-            if (inserted && gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size))
-                ImGui::TextColored(white, "%dx%dx%d %dK", cylinders, heads, sectors,
-                    cylinders * heads * sectors * sector_size / 1024);
+            if (inserted && gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size, total_size, mixed))
+            {
+                ImGui::TextColored(mixed ? yellow : white, "%dx%dx%d %uK", cylinders, heads, sectors, total_size / 1024);
+
+                if (mixed && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Tracks use different layouts\n"
+                        "Sectors per track are track 0's, the size counts every track");
+            }
             else
                 ImGui::TextColored(gray, "--");
 
@@ -616,47 +624,78 @@ static void draw_drive_column(int drive, int row)
     }
 }
 
+// D77 names are Shift-JIS, converted to UTF-8, with ASCII as the fallback
 void gui_debug_floppy_disk_name(FloppyDisk* disk, char* name, size_t size)
 {
     const u8* image = disk->GetImage();
+    char raw[18] = { };
     size_t length = 0;
 
-    if (IsValidPointer(image) && disk->GetImageSize() >= 17)
+    name[0] = 0;
+
+    if (!IsValidPointer(image) || disk->GetImageSize() < 17 || size == 0)
+        return;
+
+    while (length < 17 && image[length] != 0)
     {
-        while (length < 17 && length + 1 < size && image[length] != 0)
-        {
-            u8 c = image[length];
-            name[length] = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
-            length++;
-        }
+        raw[length] = (char)image[length];
+        length++;
     }
 
-    name[length] = 0;
+    char* converted = SDL_iconv_string("UTF-8", "SHIFT-JIS", raw, length + 1);
+
+    if (IsValidPointer(converted))
+    {
+        snprintf(name, size, "%s", converted);
+        SDL_free(converted);
+        return;
+    }
+
+    for (size_t i = 0; i < length && i + 1 < size; i++)
+    {
+        u8 c = (u8)raw[i];
+        name[i] = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
+        name[i + 1] = 0;
+    }
 }
 
-bool gui_debug_floppy_geometry(FloppyDisk* disk, int& cylinders, int& heads, int& sectors, int& sector_size)
+// Cylinders and heads cover every formatted track, sectors per track come from track 0
+// A disk whose tracks differ from track 0 is mixed, and its size adds up every sector
+bool gui_debug_floppy_geometry(FloppyDisk* disk, int& cylinders, int& heads, int& sectors, int& sector_size,
+    u32& total_size, bool& mixed)
 {
     FloppyDisk_Sector list[k_floppy_max_sectors];
     int last = -1;
     bool second_head = false;
 
+    sectors = disk->GetSectors(0, list);
+    sector_size = sectors > 0 ? list[0].size : 0;
+    total_size = 0;
+    mixed = false;
+
     for (int t = 0; t < k_floppy_tracks; t++)
     {
-        if (disk->GetSectors(t, list) == 0)
+        int count = disk->GetSectors(t, list);
+
+        if (count == 0)
             continue;
 
         last = t;
         second_head = second_head || (t & 1) != 0;
-    }
+        mixed = mixed || count != sectors;
 
-    sectors = disk->GetSectors(0, list);
+        for (int i = 0; i < count; i++)
+        {
+            total_size += list[i].size;
+            mixed = mixed || list[i].size != sector_size;
+        }
+    }
 
     if (last < 0 || sectors == 0)
         return false;
 
     cylinders = last / 2 + 1;
     heads = second_head ? 2 : 1;
-    sector_size = list[0].size;
     return true;
 }
 

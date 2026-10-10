@@ -126,6 +126,7 @@ EXTERN bool emu_debug_pc_changed;
 EXTERN int emu_debug_step_frames_pending;
 EXTERN bool emu_debug_disable_breakpoints;
 EXTERN u64 emu_frame_counter;
+EXTERN u64 emu_debug_breakpoint_stops;
 EXTERN bool emu_audio_sync;
 
 EXTERN bool emu_init(void);
@@ -184,7 +185,7 @@ EXTERN GeartownsCore* emu_get_core(void);
 
 EXTERN void emu_debug_step_over(void);
 EXTERN void emu_debug_step_into(void);
-EXTERN void emu_debug_step_out(void);
+EXTERN bool emu_debug_step_out(void);
 EXTERN void emu_debug_step_frame(void);
 EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);

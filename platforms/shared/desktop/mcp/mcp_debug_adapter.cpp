@@ -57,6 +57,7 @@
 #include "../debug/gui_debug_i386_tables.h"
 #include "../debug/gui_debug_profiler.h"
 #include "../debug/gui_debug_rewind.h"
+#include "../debug/gui_debug_system.h"
 #include "../debug/gui_debug_trace_logger.h"
 #include "../debug/trace_logger_formatter.h"
 #include "../emu_floppy.h"
@@ -95,6 +96,7 @@ static const char* k_mcp_area_flags[] =
 
 static const int k_mcp_max_read_size = 0x10000;
 static const int k_mcp_max_disassembly_lines = 1000;
+static const int k_mcp_max_symbols = 1000;
 
 static bool parse_hex_text(const std::string& text, u32& value)
 {
@@ -191,50 +193,14 @@ static int get_opcode_index(const I386_Disassembler_Record* record)
 
 static bool load_segment(I386_State& state, int index, u32 value, std::string& error)
 {
-    I386_Segment& segment = state.segments[index];
+    char text[GT_DEBUG_MEMORY_REASON_SIZE];
 
-    if (value > 0xFFFF)
+    if (!gui_debug_i386_load_segment(state, index, value, state.segments[index], text, sizeof(text)))
     {
-        error = "Segment selectors are 16-bit";
-        return false;
-    }
-
-    if (state.execution_mode != I386_MODE_PROTECTED)
-    {
-        segment.selector = (u16)value;
-        segment.base = value << 4;
-        segment.limit = 0xFFFF;
-        return true;
-    }
-
-    if ((value & 0xFFFC) == 0)
-    {
-        if (index == I386_SEGMENT_CS || index == I386_SEGMENT_SS)
-        {
-            error = "CS and SS cannot hold a null selector";
-            return false;
-        }
-
-        memset(&segment, 0, sizeof(segment));
-        segment.selector = (u16)value;
-        return true;
-    }
-
-    GuiDebugDescriptor descriptor;
-
-    if (!gui_debug_i386_read_descriptor((u16)value, descriptor) || descriptor.system || !descriptor.present)
-    {
-        char text[80];
-        snprintf(text, sizeof(text), "Selector %04X is not a present code or data descriptor", value);
         error = text;
         return false;
     }
 
-    segment.selector = (u16)value;
-    segment.base = descriptor.base;
-    segment.limit = descriptor.limit;
-    segment.attributes = gui_debug_i386_segment_attributes(descriptor);
-    segment.dpl = descriptor.dpl;
     return true;
 }
 
@@ -268,10 +234,10 @@ void DebugAdapter::StepOver()
     emu_debug_step_over();
 }
 
-void DebugAdapter::StepOut()
+bool DebugAdapter::StepOut()
 {
     config_debug.debug = true;
-    emu_debug_step_out();
+    return emu_debug_step_out();
 }
 
 void DebugAdapter::StepFrame()
@@ -467,10 +433,12 @@ static std::string breakpoint_address_text(u32 address, u8 space)
     return space == I386_BREAKPOINT_IO ? hex_text(address, 4) : hex_text(address, 8);
 }
 
+static int parse_interrupt_source(const std::string& source);
+
 json DebugAdapter::SetBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space)
 {
     if (!m_core->GetI386()->AddBreakpoint(address, range ? end_address : address, type, space))
-        return {{"error", "Invalid breakpoint: execute breakpoints are linear only and I/O ports end at FFFF"}};
+        return {{"error", "Invalid breakpoint: execute breakpoints are linear or physical and I/O ports end at FFFF"}};
 
     json result = {
         {"success", true},
@@ -529,7 +497,79 @@ json DebugAdapter::ListBreakpoints()
         breakpoints.push_back(breakpoint);
     }
 
-    return {{"breakpoints", breakpoints}, {"count", breakpoints.size()}};
+    return {{"breakpoints", breakpoints}, {"count", breakpoints.size()}, {"all_disabled", emu_debug_disable_breakpoints}};
+}
+
+json DebugAdapter::EnableBreakpoint(u32 address, u32 end_address, bool range, u8 type, u8 space, bool enabled)
+{
+    std::vector<I386_Breakpoint>* items = m_core->GetI386()->GetBreakpoints();
+    u32 end = range ? end_address : address;
+    bool found = false;
+
+    for (size_t i = 0; i < items->size(); i++)
+    {
+        I386_Breakpoint& item = (*items)[i];
+
+        if (item.address1 == address && item.address2 == end && item.type == type && item.space == space)
+        {
+            item.enabled = enabled;
+            found = true;
+        }
+    }
+
+    json result = {
+        {"success", true},
+        {"found", found},
+        {"enabled", enabled},
+        {"type", breakpoint_type_name(type)},
+        {"space", k_mcp_breakpoint_spaces[space]},
+        {"address", breakpoint_address_text(address, space)}
+    };
+
+    if (range)
+        result["end_address"] = breakpoint_address_text(end_address, space);
+
+    return result;
+}
+
+json DebugAdapter::EnableInterruptBreakpoint(int vector, const std::string& source, bool enabled)
+{
+    int index = parse_interrupt_source(source);
+
+    if (vector < 0 || vector > 0xFF || index < 0)
+        return {{"error", "vector must be 0-255 and source any, exception, hardware or software"}};
+
+    std::vector<I386_Interrupt_Breakpoint>* items = m_core->GetI386()->GetInterruptBreakpoints();
+    bool found = false;
+
+    for (size_t i = 0; i < items->size(); i++)
+    {
+        if ((*items)[i].vector == vector && (*items)[i].source == index)
+        {
+            (*items)[i].enabled = enabled;
+            found = true;
+        }
+    }
+
+    return {{"success", true}, {"found", found}, {"enabled", enabled}, {"vector", hex_text(vector, 2)},
+        {"source", source}};
+}
+
+json DebugAdapter::EnableIRQBreakpoint(int irq, bool enabled)
+{
+    if (irq < 0 || irq > 15)
+        return {{"error", "irq must be 0-15"}};
+
+    bool found = m_core->GetI386()->IsIRQBreakpoint(irq);
+    m_core->GetI386()->EnableIRQBreakpoint(irq, enabled);
+    return {{"success", true}, {"found", found}, {"enabled", enabled}, {"irq", irq}};
+}
+
+// Like Disable All in the debugger, every breakpoint keeps its own enabled state
+json DebugAdapter::SetBreakpointsActive(bool active)
+{
+    emu_debug_disable_breakpoints = !active;
+    return {{"success", true}, {"active", active}};
 }
 
 static int parse_interrupt_source(const std::string& source)
@@ -663,6 +703,9 @@ json DebugAdapter::GetBreakpointHit()
     if (hit.type != I386_BREAKPOINT_EXECUTE)
         result["size"] = hit.size;
 
+    if (hit.dma)
+        result["dma"] = true;
+
     if (space == I386_BREAKPOINT_IO && IsValidPointer(gui_debug_port_label((u16)hit.address)))
         result["port_name"] = gui_debug_port_label((u16)hit.address);
 
@@ -678,7 +721,7 @@ json DebugAdapter::ListMemoryAreas()
     {
         GuiDebugMemoryArea area;
 
-        if (!gui_debug_memory_get_area(i, area) || area.size == 0)
+        if (!gui_debug_memory_get_area_at(i, area) || area.size == 0)
             continue;
 
         json flags = json::array();
@@ -1100,7 +1143,7 @@ json DebugAdapter::ListMemoryWatches(int area)
             item["value"] = value.str();
         }
         else
-            item["value"] = NULL;
+            item["value"] = json();
 
         items.push_back(item);
     }
@@ -1323,19 +1366,25 @@ json DebugAdapter::GetI386Status()
     status["code_size"] = code32 ? 32 : 16;
     status["stack_size"] = stack32 ? 32 : 16;
 
-    if (state.last_exception_vector == 0xFF)
-        status["last_exception"] = NULL;
+    // Only exceptions the CPU raised, interrupts and INT n don't replace it
+    const I386_Exception_Info& exception = cpu->GetLastException();
+
+    if (!exception.valid)
+        status["last_exception"] = json();
     else
     {
         char name[16];
         char description[64];
-        u8 vector = state.last_exception_vector;
-        gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));
+        gui_debug_i386_vector_name(exception.vector, name, sizeof(name), description, sizeof(description));
         status["last_exception"] = {
-            {"vector", Hex(vector, 2)},
+            {"vector", Hex(exception.vector, 2)},
             {"name", name},
-            {"description", description}
+            {"description", description},
+            {"return_address", Hex(exception.cs, 4) + ":" + Hex32(exception.eip)}
         };
+
+        if (exception.has_error_code)
+            status["last_exception"]["error_code"] = Hex(exception.error_code, 4);
     }
 
     status["halted"] = state.halted;
@@ -1435,8 +1484,29 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
     }
     else if (reg.size() == 3 && reg[0] == 'D' && reg[1] == 'R' && reg[2] >= '0' && reg[2] <= '7')
         state.debug_registers[reg[2] - '0'] = value;
+    else if (reg == "TR6" || reg == "TR7")
+        state.test_registers[reg[2] - '6'] = value;
+    else if (reg == "GDTR_BASE")
+        state.gdtr.base = value;
+    else if (reg == "GDTR_LIMIT" && value <= 0xFFFF)
+        state.gdtr.limit = (u16)value;
+    else if (reg == "IDTR_BASE")
+        state.idtr.base = value;
+    else if (reg == "IDTR_LIMIT" && value <= 0xFFFF)
+        state.idtr.limit = (u16)value;
+    else if (reg == "LDTR" || reg == "TR")
+    {
+        char text[GT_DEBUG_MEMORY_REASON_SIZE];
+        bool task = reg == "TR";
+
+        // Like LLDT and LTR, the selector loads its descriptor from the GDT
+        if (!gui_debug_i386_load_system_segment(state, task, value, task ? state.task_register : state.ldtr, text,
+            sizeof(text)))
+            return {{"error", text}};
+    }
     else
-        return {{"error", "Invalid register name, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7 or CS-GS"}};
+        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR6, TR7, "
+            "CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits are 16-bit)"}};
 
     state.repeat.active = false;
     cpu->SetState(state);
@@ -1472,11 +1542,14 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
     u32 address = start_address;
     json lines = json::array();
 
+    // A passive decode, so the GUI disassembler and its labels don't change
     while ((count > 0 ? (int)lines.size() < count : address <= end_address) &&
         (int)lines.size() < k_mcp_max_disassembly_lines)
     {
         u32 eip = address - code.base;
-        I386_Disassembler_Record* record = eip <= code.limit ? cpu->Disassemble(code, eip) : NULL;
+        I386_Disassembler_Record decoded;
+        I386_Disassembler_Record* record = eip <= code.limit && cpu->DisassemblePassive(code, eip, decoded) ?
+            &decoded : NULL;
 
         if (!IsValidPointer(record) || record->name[0] == 0 || record->size <= 0)
         {
@@ -1662,19 +1735,27 @@ json DebugAdapter::ListDisassemblerBookmarks()
     return {{"bookmarks", items}, {"count", items.size()}};
 }
 
-json DebugAdapter::ListSymbols(const std::string& filter)
+// Pages through user symbols, then automatic labels, an address with a user symbol doesn't list its label
+json DebugAdapter::ListSymbols(const std::string& filter, int start, int count)
 {
     json symbols = json::array();
     std::string needle = to_lower(filter);
     const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
     std::map<u32, std::string>::const_iterator user;
+    int total = 0;
+
+    start = MAX(start, 0);
+    count = CLAMP(count, 1, k_mcp_max_symbols);
 
     for (user = users.begin(); user != users.end(); user++)
     {
         if (!needle.empty() && to_lower(user->second).find(needle) == std::string::npos)
             continue;
 
-        symbols.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
+        if (total >= start && (int)symbols.size() < count)
+            symbols.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
+
+        total++;
     }
 
     const std::map<u32, I386_Disassembler_Record>& records = m_core->GetI386()->GetDisassemblerRecords();
@@ -1682,20 +1763,26 @@ json DebugAdapter::ListSymbols(const std::string& filter)
 
     for (record = records.begin(); record != records.end(); record++)
     {
-        if (record->second.auto_symbol[0] == 0)
+        if (record->second.auto_symbol[0] == 0 || users.find(record->first) != users.end())
             continue;
 
         if (!needle.empty() && to_lower(record->second.auto_symbol).find(needle) == std::string::npos)
             continue;
 
-        symbols.push_back({
-            {"address", Hex32(record->first)},
-            {"name", record->second.auto_symbol},
-            {"type", "automatic"}
-        });
+        if (total >= start && (int)symbols.size() < count)
+        {
+            symbols.push_back({
+                {"address", Hex32(record->first)},
+                {"name", record->second.auto_symbol},
+                {"type", "automatic"}
+            });
+        }
+
+        total++;
     }
 
-    return {{"symbols", symbols}, {"count", symbols.size()}};
+    return {{"symbols", symbols}, {"count", symbols.size()}, {"start", start}, {"total", total},
+        {"has_more", start + (int)symbols.size() < total}};
 }
 
 json DebugAdapter::AddSymbol(u32 address, const std::string& name)
@@ -1713,32 +1800,43 @@ json DebugAdapter::RemoveSymbol(u32 address)
 
 json DebugAdapter::LoadSymbols(const std::string& file_path)
 {
-    int count = gui_debug_load_symbols(file_path.c_str());
+    int skipped = 0;
+    int count = gui_debug_load_symbols(file_path.c_str(), &skipped);
 
     if (count < 0)
         return {{"error", "Unable to read " + file_path}};
 
-    return {{"success", true}, {"file_path", file_path}, {"loaded", count}};
+    return {{"success", true}, {"file_path", file_path}, {"loaded", count}, {"skipped", skipped}};
 }
 
-json DebugAdapter::LookupSymbolByName(const std::string& name)
+// Exact names, or with partial a case-insensitive substring
+json DebugAdapter::LookupSymbolByName(const std::string& name, bool partial)
 {
     json matches = json::array();
+    std::string needle = to_lower(name);
     const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
     std::map<u32, std::string>::const_iterator user;
 
-    for (user = users.begin(); user != users.end(); user++)
+    for (user = users.begin(); user != users.end() && (int)matches.size() < k_mcp_max_symbols; user++)
     {
-        if (name == user->second)
+        bool match = partial ? to_lower(user->second).find(needle) != std::string::npos : name == user->second;
+
+        if (match)
             matches.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
     }
 
     const std::map<u32, I386_Disassembler_Record>& records = m_core->GetI386()->GetDisassemblerRecords();
     std::map<u32, I386_Disassembler_Record>::const_iterator record;
 
-    for (record = records.begin(); record != records.end(); record++)
+    for (record = records.begin(); record != records.end() && (int)matches.size() < k_mcp_max_symbols; record++)
     {
-        if (name == record->second.auto_symbol)
+        if (record->second.auto_symbol[0] == 0)
+            continue;
+
+        bool match = partial ? to_lower(record->second.auto_symbol).find(needle) != std::string::npos :
+            name == record->second.auto_symbol;
+
+        if (match)
         {
             matches.push_back({
                 {"address", Hex32(record->first)},
@@ -1783,7 +1881,7 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
 
     I386_State* state = m_core->GetI386()->GetState();
     u32 total = gui_debug_i386_table_entry_count(id);
-    bool ivt = id == GuiDebugDescriptorTable_IDT && state->execution_mode != I386_MODE_PROTECTED;
+    bool ivt = id == GuiDebugDescriptorTable_IDT && gui_debug_i386_idt_is_ivt();
     count = CLAMP(count, 1, 256);
     json entries = json::array();
 
@@ -1837,7 +1935,7 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
             entry["target"] = hex_text(descriptor.gate_selector, 4) + ":" + Hex32(descriptor.gate_offset);
 
             if (descriptor.type != 0x05 &&
-                gui_debug_i386_selector_base(descriptor.gate_selector, base, limit, reason, sizeof(reason)))
+                gui_debug_i386_descriptor_base(descriptor.gate_selector, base, limit, reason, sizeof(reason)))
             {
                 entry["target_linear"] = Hex32(base + descriptor.gate_offset);
 
@@ -2151,6 +2249,8 @@ json DebugAdapter::GetRTCStatus()
 
 json DebugAdapter::GetSystemStatus()
 {
+    char serial_rom[32];
+    gui_debug_system_serial_rom_text(serial_rom, sizeof(serial_rom));
     const GT_Machine_Config& machine = m_core->GetMachineConfig();
     SystemControl::SystemControl_State* control = m_core->GetSystemControl()->GetState();
     Memory::Memory_State* memory = m_core->GetMemory()->GetState();
@@ -2162,7 +2262,7 @@ json DebugAdapter::GetSystemStatus()
             {"cpu_clock_hz", machine.cpu_clock_rate},
             {"ram_kb", machine.ram_size / 1024},
             {"floppy_drives", machine.floppy_drives},
-            {"machine_id", "0101"}
+            {"machine_id", Hex(gui_debug_system_machine_id(), 4)}
         }},
         {"reset", {
             {"cause", Hex(control->reset_cause, 2)},
@@ -2186,7 +2286,7 @@ json DebugAdapter::GetSystemStatus()
             {"chip_select", (control->serial_rom_control & 0x20) == 0},
             {"bit", control->serial_rom_bit},
             {"data", m_core->GetSystemControl()->Peek(0x0032) & 0x01},
-            {"contents", "FUJITSU, model 0101"}
+            {"contents", serial_rom}
         }}
     };
 }
@@ -3308,8 +3408,10 @@ json DebugAdapter::ListFloppyDrives()
             int heads = 0;
             int sectors = 0;
             int sector_size = 0;
+            u32 total_size = 0;
+            bool mixed = false;
 
-            char name[18] = { };
+            char name[64] = { };
             gui_debug_floppy_disk_name(disk, name, sizeof(name));
             entry["disk_name"] = name;
 
@@ -3321,9 +3423,9 @@ json DebugAdapter::ListFloppyDrives()
             entry["write_protected"] = disk->IsWriteProtected();
             entry["modified"] = disk->IsDirty();
 
-            if (gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size))
+            if (gui_debug_floppy_geometry(disk, cylinders, heads, sectors, sector_size, total_size, mixed))
                 entry["geometry"] = {{"cylinders", cylinders}, {"heads", heads}, {"sectors", sectors},
-                    {"sector_size", sector_size}};
+                    {"sector_size", sector_size}, {"total_size", total_size}, {"mixed", mixed}};
         }
 
         drives.push_back(entry);
@@ -3695,6 +3797,13 @@ json DebugAdapter::SetTraceLog(bool enabled, u32 flags, const std::string& outpu
     {
         result["error"] = "Unable to start trace logger";
         return result;
+    }
+
+    // Only the debugger run records, so starting a trace turns it on, like the profiler
+    if (!config_debug.debug)
+    {
+        config_debug.debug = true;
+        emu_debug_continue();
     }
 
     result["status"] = "started";
@@ -4426,7 +4535,6 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     if (name == "x") return GT_GAMEPAD_X;
     if (name == "y") return GT_GAMEPAD_Y;
     if (name == "z") return GT_GAMEPAD_Z;
-    if (name == "zoom") return GT_GAMEPAD_ZOOM;
 
     return 0;
 }
@@ -4697,12 +4805,12 @@ json DebugAdapter::GetInputState()
 {
     static const char* names[] = {
         "up", "down", "left", "right", "select", "run",
-        "A", "B", "C", "X", "Y", "Z", "zoom"
+        "A", "B", "C", "X", "Y", "Z"
     };
     static const u16 masks[] = {
         GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT, GT_GAMEPAD_RIGHT,
         GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_A, GT_GAMEPAD_B,
-        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z, GT_GAMEPAD_ZOOM
+        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z
     };
 
     json players = json::array();

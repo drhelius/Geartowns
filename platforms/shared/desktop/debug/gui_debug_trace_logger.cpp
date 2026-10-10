@@ -134,7 +134,7 @@ void gui_debug_window_trace_logger(void)
 
     if (ImGui::Combo("##trace_output", &config_debug.trace_output, "Memory\0Disk\0\0"))
     {
-        if (!trace_logger_apply_capacity())
+        if (tl->GetCapacity() > 0 && !trace_logger_apply_capacity())
             config_debug.trace_output = previous_output;
     }
 
@@ -149,7 +149,7 @@ void gui_debug_window_trace_logger(void)
         int previous_capacity = config_debug.trace_capacity;
 
         if (ImGui::Combo("##trace_capacity", &config_debug.trace_capacity, k_trace_logger_capacity_labels,
-            IM_ARRAYSIZE(k_trace_logger_capacity_labels)) && !trace_logger_apply_capacity())
+            IM_ARRAYSIZE(k_trace_logger_capacity_labels)) && tl->GetCapacity() > 0 && !trace_logger_apply_capacity())
             config_debug.trace_capacity = previous_capacity;
     }
     else
@@ -162,14 +162,15 @@ void gui_debug_window_trace_logger(void)
     {
         double memory_mib = ((double)k_trace_logger_capacities[config_debug.trace_capacity] * sizeof(GT_Trace_Entry)) /
             (1024.0 * 1024.0);
-        ImGui::SetTooltip("Preallocated memory: %.1f MiB (%u bytes per entry).", memory_mib,
+        ImGui::SetTooltip("Memory allocated when tracing starts: %.1f MiB (%u bytes per entry).", memory_mib,
             (u32)sizeof(GT_Trace_Entry));
     }
 
     if (config_debug.trace_output == gui_TraceOutput_Memory)
     {
         ImGui::SameLine();
-        ImGui::Text("Entries: %u / %u", tl->GetCount(), tl->GetCapacity());
+        u32 capacity = tl->GetCapacity() > 0 ? tl->GetCapacity() : k_trace_logger_capacities[config_debug.trace_capacity];
+        ImGui::Text("Entries: %u / %u", tl->GetCount(), capacity);
     }
 
     if (config_debug.trace_output == gui_TraceOutput_Disk && trace_logger_disk_path[0] != '\0')
@@ -255,15 +256,10 @@ void gui_debug_window_trace_logger(void)
     }
 }
 
+// The buffer is allocated when tracing starts, so a session that never traces doesn't pay for it
 void gui_debug_trace_logger_init(void)
 {
     strncpy_fit(trace_logger_disk_directory, config_debug.trace_disk_path.c_str(), sizeof(trace_logger_disk_directory));
-
-    if (!trace_logger_apply_capacity())
-    {
-        config_debug.trace_capacity = 0;
-        trace_logger_apply_capacity();
-    }
 }
 
 void gui_debug_trace_logger_update(void)
@@ -504,7 +500,11 @@ static void trace_logger_menu(void)
     if (ImGui::BeginMenu("Settings"))
     {
         ImGui::MenuItem("Event Counter", "", &config_debug.trace_counter);
-        ImGui::MenuItem("Clock Cycles", "", &config_debug.trace_cycles);
+        ImGui::MenuItem("Machine Clocks", "", &config_debug.trace_cycles);
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Time in machine clocks, the 16 MHz timebase, not CPU cycles\n"
+                "An event inside an instruction carries the instruction's start time");
 
         if (ImGui::BeginMenu("CPU"))
         {
@@ -922,6 +922,9 @@ static bool trace_logger_start(u32 flags, bool update_config)
     }
 
     if (config_debug.trace_output == gui_TraceOutput_Disk && !trace_logger_start_disk())
+        return false;
+
+    if (config_debug.trace_output == gui_TraceOutput_Memory && !trace_logger_apply_capacity())
         return false;
 
     trace_logger_enabled = true;

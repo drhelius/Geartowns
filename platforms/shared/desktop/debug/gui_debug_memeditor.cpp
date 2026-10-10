@@ -111,6 +111,7 @@ void MemEditor::Reset()
     m_options.text_encoding = 0;
     m_options.preview_endian = 0;
     memset(&m_block_info, 0, sizeof(m_block_info));
+    m_view_key = 0;
     m_has_snapshot = false;
     m_refresh_requested = true;
     m_edit_focus = false;
@@ -121,6 +122,7 @@ void MemEditor::Reset()
     m_bookmark_request = false;
     m_watch_request = false;
     m_breakpoint_request = false;
+    m_breakpoint_type = I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE;
     m_request_start = 0;
     m_request_end = 0;
     UpdateTitle();
@@ -150,7 +152,14 @@ void MemEditor::Update()
     }
 
     if (m_options.auto_refresh && (m_update_counter % refresh_rate) == 0)
-        m_refresh_requested = true;
+    {
+        GT_Debug_Memory_Address source = m_source;
+        source.address = m_window_base;
+        u64 key = m_provider->GetViewKey(source);
+
+        if (key == 0 || key != m_view_key)
+            m_refresh_requested = true;
+    }
 
     if (m_refresh_requested)
         Refresh();
@@ -182,6 +191,7 @@ void MemEditor::Refresh(bool preserve_previous)
 
     GT_Debug_Memory_Address address = m_source;
     address.address = m_window_base;
+    m_view_key = m_provider->GetViewKey(address);
     m_provider->ReadBlock(address, &m_data[0], &m_status[0], WINDOW_SIZE, &m_block_info);
 
     for (u32 i = 0; i < WINDOW_SIZE; i++)
@@ -425,7 +435,7 @@ bool MemEditor::TakeWatchRequest(GT_Debug_Memory_Address& address)
     return true;
 }
 
-bool MemEditor::TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end)
+bool MemEditor::TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end, u8& type)
 {
     if (!m_breakpoint_request)
         return false;
@@ -434,6 +444,7 @@ bool MemEditor::TakeBreakpointRequest(GT_Debug_Memory_Address& address, u32& end
     address = m_source;
     address.address = m_request_start;
     end = m_request_end;
+    type = m_breakpoint_type;
     return true;
 }
 
@@ -513,7 +524,7 @@ void MemEditor::DrawStatusBar()
     {
         ImGui::PushFont(gui_roboto_font);
         ImGui::SetTooltip("Hex address or register expression, with an optional prefix\n"
-            "Examples: 1234, ESI+10, DS:ESI, L:$C0000, P:$FC000");
+            "Examples: 1234, ESI+10, DS:SI, L:C0000, P:FC000h");
         ImGui::PopFont();
     }
 
@@ -776,6 +787,10 @@ void MemEditor::DrawGrid()
         }
     }
 
+    float row_height = clipper.ItemsHeight > 0.0f ? clipper.ItemsHeight : ImGui::GetTextLineHeight();
+    bool drag_up = false;
+    bool drag_down = false;
+
     if (m_drag_selecting && ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
         float line_height = ImGui::GetTextLineHeightWithSpacing();
@@ -783,11 +798,24 @@ void MemEditor::DrawGrid()
         float window_top = ImGui::GetWindowPos().y + line_height * 2.0f;
         float window_bottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - line_height;
 
-        if (mouse_y < window_top)
+        drag_up = mouse_y < window_top;
+        drag_down = mouse_y > window_bottom;
+
+        if (drag_up)
             ImGui::SetScrollY(MAX(0.0f, ImGui::GetScrollY() - line_height));
-        else if (mouse_y > window_bottom)
+        else if (drag_down)
             ImGui::SetScrollY(ImGui::GetScrollY() + line_height);
     }
+
+    float wheel = ImGui::IsWindowHovered() ? ImGui::GetIO().MouseWheel : 0.0f;
+
+    if ((wheel > 0.0f || drag_up) && ImGui::GetScrollY() <= 0.0f)
+        ShiftWindow(true, bytes_per_row, row_height);
+    else if ((wheel < 0.0f || drag_down) && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+        ShiftWindow(false, bytes_per_row, row_height);
+
+    if (ImGui::IsWindowFocused() && m_editing_address == 0xFFFFFFFF && !ImGui::GetIO().WantTextInput)
+        NavigateKeyboard(bytes_per_row, row_height);
 
     ImGui::EndTable();
     ImGui::PopStyleVar();
@@ -1014,8 +1042,28 @@ void MemEditor::DrawContextMenu(u32 address)
     if (ImGui::MenuItem("Add Watch"))
         m_watch_request = true;
 
-    if (ImGui::MenuItem("Add Breakpoint"))
-        m_breakpoint_request = true;
+    if (ImGui::BeginMenu("Add Breakpoint"))
+    {
+        if (ImGui::MenuItem("Read"))
+        {
+            m_breakpoint_request = true;
+            m_breakpoint_type = I386_BREAKPOINT_READ;
+        }
+
+        if (ImGui::MenuItem("Write"))
+        {
+            m_breakpoint_request = true;
+            m_breakpoint_type = I386_BREAKPOINT_WRITE;
+        }
+
+        if (ImGui::MenuItem("Read and Write"))
+        {
+            m_breakpoint_request = true;
+            m_breakpoint_type = I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE;
+        }
+
+        ImGui::EndMenu();
+    }
 
     m_request_start = start;
     m_request_end = end;
@@ -1047,6 +1095,93 @@ void MemEditor::UpdateTitle()
     {
         snprintf(m_title, sizeof(m_title), "%s", DebugMemoryProvider::GetSpaceName(m_source.space));
     }
+}
+
+void MemEditor::ShiftWindow(bool up, int bytes_per_row, float row_height)
+{
+    u32 limit = m_provider->GetAddressLimit(m_source);
+
+    if ((u64)limit + 1 <= WINDOW_SIZE)
+        return;
+
+    u32 half = WINDOW_SIZE / 2;
+    u32 last = (limit - WINDOW_SIZE + 1) & ~0xFFFU;
+    u32 base = up ? (m_window_base > half ? m_window_base - half : 0) : MIN(m_window_base + half, last);
+
+    if (base == m_window_base)
+        return;
+
+    s64 delta = (s64)m_window_base - (s64)base;
+    m_window_base = base;
+    m_has_snapshot = false;
+    Refresh(false);
+    ImGui::SetScrollY(ImGui::GetScrollY() + (float)(delta / bytes_per_row) * row_height);
+}
+
+// Arrows, Page Up/Down and Home/End move the cursor, Ctrl+Home/End go to the ends of the source
+// Shift extends the selection and Enter edits the byte at the cursor
+void MemEditor::NavigateKeyboard(int bytes_per_row, float row_height)
+{
+    ImGuiIO& io = ImGui::GetIO();
+    s64 limit = m_provider->GetAddressLimit(m_source);
+    s64 cursor = m_selection_end;
+    s64 row_start = (s64)m_window_base + ((cursor - (s64)m_window_base) / bytes_per_row) * bytes_per_row;
+    int page_rows = MAX(1, (int)(ImGui::GetWindowHeight() / row_height) - 2);
+    s64 target = cursor;
+
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+        target = cursor - 1;
+    else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+        target = cursor + 1;
+    else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+        target = cursor - bytes_per_row;
+    else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+        target = cursor + bytes_per_row;
+    else if (ImGui::IsKeyPressed(ImGuiKey_PageUp))
+        target = cursor - (s64)bytes_per_row * page_rows;
+    else if (ImGui::IsKeyPressed(ImGuiKey_PageDown))
+        target = cursor + (s64)bytes_per_row * page_rows;
+    else if (ImGui::IsKeyPressed(ImGuiKey_Home))
+        target = io.KeyCtrl ? 0 : row_start;
+    else if (ImGui::IsKeyPressed(ImGuiKey_End))
+        target = io.KeyCtrl ? limit : row_start + bytes_per_row - 1;
+    else if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
+    {
+        u32 offset = (u32)(cursor - (s64)m_window_base);
+
+        if (cursor >= (s64)m_window_base && offset < WINDOW_SIZE && m_status[offset] == GT_DEBUG_MEMORY_VALID)
+        {
+            m_editing_address = (u32)cursor;
+            snprintf(m_edit_buffer, sizeof(m_edit_buffer), "%02X", m_data[offset]);
+            m_edit_focus = true;
+        }
+
+        return;
+    }
+    else
+        return;
+
+    target = CLAMP(target, 0, limit);
+
+    if (!io.KeyShift)
+        m_selection_start = (u32)target;
+
+    m_selection_end = (u32)target;
+
+    if (target < (s64)m_window_base || target >= (s64)m_window_base + WINDOW_SIZE)
+    {
+        SetWindowForAddress((u32)target);
+        Refresh(false);
+    }
+
+    float y = (float)((target - (s64)m_window_base) / bytes_per_row) * row_height;
+    float top = ImGui::GetScrollY();
+    float height = ImGui::GetWindowHeight() - row_height * 2.0f;
+
+    if (y < top)
+        ImGui::SetScrollY(y);
+    else if (y + row_height > top + height)
+        ImGui::SetScrollY(y + row_height - height);
 }
 
 void MemEditor::SetWindowForAddress(u32 address)
@@ -1341,7 +1476,15 @@ u64 MemoryExpressionParser::ParsePrimary()
         name[length] = 0;
         u32 value = 0;
 
-        if (!IsValidPointer(m_provider) || !m_provider->GetRegisterValue(name, value))
+        if (IsValidPointer(m_provider) && m_provider->GetRegisterValue(name, value))
+            return value;
+
+        size_t digits = (size_t)length;
+
+        if (digits > 1 && (name[digits - 1] == 'h' || name[digits - 1] == 'H'))
+            digits--;
+
+        if (!parse_hex_string(name, digits, &value))
             m_valid = false;
 
         return value;
@@ -1372,6 +1515,9 @@ u64 MemoryExpressionParser::ParsePrimary()
         m_cursor = start;
         m_valid = false;
     }
+
+    if (*m_cursor == 'h' || *m_cursor == 'H')
+        m_cursor++;
 
     return value;
 }

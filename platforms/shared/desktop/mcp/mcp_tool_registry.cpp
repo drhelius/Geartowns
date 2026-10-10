@@ -196,7 +196,7 @@ struct McpToolCategoryTools
 static const McpToolCategory kMcpToolCategories[] =
 {
     {"execution", "Execution Control", "Pause, resume, step, frame-step, reset, run-to-address, and fast-forward emulator execution."},
-    {"breakpoints", "Breakpoints", "Set, clear, and list Intel 80386 execute, read, write and I/O breakpoints by address or range, and interrupt breakpoints by vector."},
+    {"breakpoints", "Breakpoints", "Set, clear, enable, disable and list Intel 80386 execute, read, write and I/O breakpoints by address or range, and interrupt breakpoints by vector."},
     {"memory", "Memory", "List memory areas, read/write bytes, translate addresses, select ranges, fill selections, search memory, and manage watches/bookmarks."},
     {"cpu", "CPU", "Inspect Intel 80386 registers, flags, mode, segments, descriptor tables, control and debug registers, and write register values."},
     {"disassembly", "Disassembly", "Decode Intel 80386 code, inspect the call stack, and manage disassembly bookmarks."},
@@ -225,8 +225,9 @@ static const char* const kMcpExecutionTools[] =
 
 static const char* const kMcpBreakpointTools[] =
 {
-    "set_breakpoint", "set_breakpoint_range", "remove_breakpoint", "list_breakpoints", "set_breakpoint_on_interrupt",
-    "clear_breakpoint_on_interrupt", "list_breakpoints_on_interrupt", "set_breakpoint_on_irq", "clear_breakpoint_on_irq",
+    "set_breakpoint", "set_breakpoint_range", "remove_breakpoint", "enable_breakpoint", "set_breakpoints_active",
+    "list_breakpoints", "set_breakpoint_on_interrupt", "clear_breakpoint_on_interrupt", "enable_breakpoint_on_interrupt",
+    "list_breakpoints_on_interrupt", "set_breakpoint_on_irq", "clear_breakpoint_on_irq", "enable_breakpoint_on_irq",
     "list_breakpoints_on_irq"
 };
 

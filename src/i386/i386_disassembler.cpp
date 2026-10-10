@@ -276,7 +276,10 @@ static void set_relative_target(I386_Disassembly_Context& context, bool short_of
     context.record->jump_eip = target;
     context.record->jump_linear = context.cs_base + target;
 
-    snprintf(output, output_size, "0x%08X", target);
+    if (context.state->operand_size == 2)
+        snprintf(output, output_size, "0x%04X", target);
+    else
+        snprintf(output, output_size, "0x%08X", target);
 }
 
 static void format_moffs(const I386_Decode_State& state, int width, char* output, size_t output_size)
@@ -581,7 +584,14 @@ static void expand_token(const char* token, I386_Disassembly_Context& context, c
             snprintf(output, output_size, "0x%08X", state.immediate);
     }
     else if (strcmp(token, "Is") == 0)
-        snprintf(output, output_size, "%d", (s8)(u8)state.immediate);
+    {
+        s8 value = (s8)(u8)state.immediate;
+
+        if (value < 0)
+            snprintf(output, output_size, "-0x%02X", (u32)(0 - (s32)value));
+        else
+            snprintf(output, output_size, "0x%02X", (u32)value);
+    }
     else if (strcmp(token, "Jb") == 0)
         set_relative_target(context, true, output, output_size);
     else if (strcmp(token, "Jv") == 0)
@@ -749,20 +759,28 @@ static void format_instruction(I386_Disassembly_Context& context, char* output, 
 
     mark_control_flow(state, *context.record);
 
+    // Instructions with implicit memory or counter registers show the address size and segment they use
+    // An override on an instruction without memory operands shows too
+    // The ES:DI destination of a string doesn't take one
     if (!state.two_byte)
     {
         u8 opcode = state.opcode;
         bool string_source = opcode == 0x6E || opcode == 0x6F || (opcode >= 0xA4 && opcode <= 0xA7) ||
-            opcode == 0xAC || opcode == 0xAD;
+            opcode == 0xAC || opcode == 0xAD || opcode == 0xD7;
         bool string_destination = opcode == 0x6C || opcode == 0x6D || opcode == 0xAA || opcode == 0xAB ||
             opcode == 0xAE || opcode == 0xAF;
+        bool counter = opcode >= 0xE0 && opcode <= 0xE2;
+        bool moffs = opcode >= 0xA0 && opcode <= 0xA3;
 
-        if ((string_source || string_destination) && (state.address_size == 4) != context.default32)
+        if ((string_source || string_destination || counter) && (state.address_size == 4) != context.default32)
             append_format(output, output_size, length, "addr%d ", state.address_size * 8);
 
-        if (string_source && state.segment_override < I386_SEGMENT_COUNT)
+        if (state.segment_override < I386_SEGMENT_COUNT &&
+            (string_source || (!state.memory_operand && !moffs && !string_destination)))
             append_format(output, output_size, length, "%s ", k_i386_segment_names[state.segment_override]);
     }
+    else if (state.segment_override < I386_SEGMENT_COUNT && !state.memory_operand)
+        append_format(output, output_size, length, "%s ", k_i386_segment_names[state.segment_override]);
 
     const char* cursor = format;
 
@@ -816,15 +834,16 @@ static void uppercase_intel_identifiers(char* text)
     }
 }
 
-static void set_auto_symbol(I386_Disassembler_Record& record, bool subroutine)
+static bool set_auto_symbol(I386_Disassembler_Record& record, bool subroutine)
 {
     // A location first reached by a jump becomes a subroutine once something calls it
     bool upgrade = subroutine && strncmp(record.auto_symbol, "LOC_", 4) == 0;
 
     if (record.auto_symbol[0] != 0 && !upgrade)
-        return;
+        return false;
 
     snprintf(record.auto_symbol, sizeof(record.auto_symbol), "%s_%08X", subroutine ? "SUB" : "LOC", record.linear);
+    return true;
 }
 
 I386_Disassembler_Record* I386::Disassemble(u32 eip)
@@ -841,28 +860,29 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
     if (IsValidPointer(current) && current->eip == eip && IsDisassemblerRecordCurrent(*current, code_segment))
         return current;
 
-    I386_Decode_State state;
+    I386_Disassembler_Record decoded;
 
-    if (!DecodeInstructionForDebugger(code_segment, eip, state))
+    m_disassembler_generation++;
+
+    if (!FormatDisassemblerRecord(code_segment, eip, decoded))
     {
-        I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
-
-        if (IsValidPointer(record))
+        if (IsValidPointer(current))
         {
             // Preserve symbols, but stop exposing the old instruction as valid
-            record->name[0] = 0;
-            record->size = 0;
+            current->name[0] = 0;
+            current->size = 0;
         }
 
         return NULL;
     }
 
-    u64 new_end = (u64)linear + state.length;
+    u64 new_end = (u64)linear + decoded.size;
     u32 max_previous_length = GT_I386_MAX_INSTRUCTION_LENGTH - 1;
     u32 first_overlap = linear >= max_previous_length ? linear - max_previous_length : 0;
     std::map<u32, I386_Disassembler_Record>::iterator existing = m_disassembler_records.lower_bound(first_overlap);
 
     // Drop the records of other instructions that overlap the new one
+    // A record with a label keeps it as a symbol-only record
     while (existing != m_disassembler_records.end() && (u64)existing->first < new_end)
     {
         u64 existing_end = (u64)existing->first + existing->second.size;
@@ -875,22 +895,56 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
             if (cached == &existing->second)
                 InitPointer(cached);
 
-            existing = m_disassembler_records.erase(existing);
+            if (existing->second.auto_symbol[0] != 0)
+            {
+                existing->second.name[0] = 0;
+                existing->second.size = 0;
+                existing++;
+            }
+            else
+                existing = m_disassembler_records.erase(existing);
         }
         else
             existing++;
     }
 
     I386_Disassembler_Record& record = m_disassembler_records[linear];
-    char previous_symbol[sizeof(record.auto_symbol)];
 
-    snprintf(previous_symbol, sizeof(previous_symbol), "%s", record.auto_symbol);
+    memcpy(decoded.auto_symbol, record.auto_symbol, sizeof(decoded.auto_symbol));
+    record = decoded;
+
+    if (record.linear == 0xFFFFFFF0U && record.auto_symbol[0] == 0)
+        snprintf(record.auto_symbol, sizeof(record.auto_symbol), "RESET");
+
+    if (record.jump && record.jump_target_known)
+    {
+        I386_Disassembler_Record& target = GetOrCreateDisassemblerRecord(record.jump_linear, record.jump_cs,
+            record.jump_eip);
+
+        set_auto_symbol(target, record.subroutine);
+    }
+
+    return &record;
+}
+
+// Decodes into a caller record without touching the record map, symbols or the cache
+bool I386::DisassemblePassive(const I386_Segment& code_segment, u32 eip, I386_Disassembler_Record& record)
+{
+    return FormatDisassemblerRecord(code_segment, eip, record);
+}
+
+bool I386::FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I386_Disassembler_Record& record)
+{
+    I386_Decode_State state;
+
     memset(&record, 0, sizeof(record));
-    snprintf(record.auto_symbol, sizeof(record.auto_symbol), "%s", previous_symbol);
+
+    if (!DecodeInstructionForDebugger(code_segment, eip, state))
+        return false;
 
     record.cs = code_segment.selector;
     record.eip = eip;
-    record.linear = linear;
+    record.linear = code_segment.base + eip;
     record.size = state.length;
 
     memcpy(record.opcodes, state.bytes, state.length);
@@ -914,25 +968,24 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
 
     format_instruction(context, record.name, sizeof(record.name));
     uppercase_intel_identifiers(record.name);
+    return true;
+}
 
-    if (record.linear == 0xFFFFFFF0U && record.auto_symbol[0] == 0)
-        snprintf(record.auto_symbol, sizeof(record.auto_symbol), "RESET");
+// A record created only for a symbol has no instruction yet
+I386_Disassembler_Record& I386::GetOrCreateDisassemblerRecord(u32 linear, u16 cs, u32 eip)
+{
+    std::map<u32, I386_Disassembler_Record>::iterator record = m_disassembler_records.lower_bound(linear);
 
-    if (record.jump && record.jump_target_known)
+    if (record == m_disassembler_records.end() || record->first != linear)
     {
-        I386_Disassembler_Record& target = m_disassembler_records[record.jump_linear];
-
-        if (target.linear == 0)
-        {
-            target.cs = record.jump_cs;
-            target.eip = record.jump_eip;
-            target.linear = record.jump_linear;
-        }
-
-        set_auto_symbol(target, record.subroutine);
+        m_disassembler_generation++;
+        record = m_disassembler_records.insert(record, std::make_pair(linear, I386_Disassembler_Record()));
+        record->second.cs = cs;
+        record->second.eip = eip;
+        record->second.linear = linear;
     }
 
-    return &record;
+    return record->second;
 }
 
 void I386::DisassembleAhead(int count)
@@ -1063,10 +1116,22 @@ const std::map<u32, I386_Disassembler_Record>& I386::GetDisassemblerRecords() co
     return m_disassembler_records;
 }
 
-void I386::ResetDisassembler()
+// Changes whenever a record or its label is added, changed or removed
+u32 I386::GetDisassemblerGeneration() const
+{
+    return m_disassembler_generation;
+}
+
+void I386::ClearDisassemblerRecords()
 {
     m_disassembler_records.clear();
+    m_disassembler_generation++;
     ClearDisassemblerCache();
+}
+
+void I386::ResetDisassembler()
+{
+    ClearDisassemblerRecords();
     ResetDebuggerExecutionState();
 }
 
@@ -1079,9 +1144,13 @@ void I386::ResetDebuggerExecutionState()
 
     m_run_to_breakpoint = 0;
     m_run_to_breakpoint_enabled = false;
+    m_run_to_stack_check = false;
     m_breakpoint_hit = false;
     m_run_to_hit = false;
     m_breakpoint_hit_address = 0;
+    m_debugger_hit_pending = false;
+    m_last_exception.valid = false;
+    UpdateExecuteFilter();
 }
 
 void I386::ResetBreakpoints()
@@ -1107,7 +1176,7 @@ void I386::AddBreakpoint(u32 start_address, u32 end_address)
     AddBreakpoint(start_address, end_address, I386_BREAKPOINT_EXECUTE, I386_BREAKPOINT_LINEAR);
 }
 
-// Execute breakpoints only exist in linear space, and I/O ports are 16 bits
+// Execute breakpoints exist in linear and physical space, and I/O ports are 16 bits
 bool I386::AddBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space)
 {
     type &= I386_BREAKPOINT_EXECUTE | I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE;
@@ -1115,7 +1184,7 @@ bool I386::AddBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space)
     if (type == 0 || space >= I386_BREAKPOINT_SPACE_COUNT)
         return false;
 
-    if ((type & I386_BREAKPOINT_EXECUTE) != 0 && (type != I386_BREAKPOINT_EXECUTE || space != I386_BREAKPOINT_LINEAR))
+    if ((type & I386_BREAKPOINT_EXECUTE) != 0 && (type != I386_BREAKPOINT_EXECUTE || space == I386_BREAKPOINT_IO))
         return false;
 
     if (end_address < start_address)
@@ -1132,11 +1201,15 @@ bool I386::AddBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space)
 
     for (size_t i = 0; i < m_breakpoints.size(); i++)
     {
-        const I386_Breakpoint& existing = m_breakpoints[i];
+        I386_Breakpoint& existing = m_breakpoints[i];
 
         if (existing.address1 == start_address && existing.address2 == end_address && existing.range == range &&
             existing.type == type && existing.space == space)
+        {
+            existing.enabled = true;
+            EnableDebuggerChecks(m_debugger_checks);
             return true;
+        }
     }
 
     I386_Breakpoint breakpoint;
@@ -1156,6 +1229,43 @@ void I386::AddRunToBreakpoint(u32 address)
 {
     m_run_to_breakpoint = address;
     m_run_to_breakpoint_enabled = true;
+    m_run_to_stack_check = false;
+    UpdateExecuteFilter();
+}
+
+// Stops at the address only once the stack pointer is back at or above the given one in the same stack segment
+// so a recursive call returning through the same address doesn't stop
+void I386::AddRunToBreakpoint(u32 address, u16 stack_selector, u32 stack_pointer)
+{
+    m_run_to_breakpoint = address;
+    m_run_to_breakpoint_enabled = true;
+    m_run_to_stack_selector = stack_selector;
+    m_run_to_stack_pointer = stack_pointer;
+    m_run_to_stack_check = true;
+    UpdateExecuteFilter();
+}
+
+// The return of the innermost call or interrupt pops the stack above the pointer it had on entry
+bool I386::AddStepOutBreakpoint()
+{
+    if (m_disassembler_call_stack.empty())
+        return false;
+
+    const I386_CallStackEntry& entry = m_disassembler_call_stack.back();
+
+    if (entry.stack_pointer != 0xFFFFFFFFU)
+        AddRunToBreakpoint(entry.back_linear, entry.stack_selector, entry.stack_pointer + 1);
+    else
+        AddRunToBreakpoint(entry.back_linear);
+
+    return true;
+}
+
+void I386::ClearRunToBreakpoint()
+{
+    m_run_to_breakpoint_enabled = false;
+    m_run_to_stack_check = false;
+    UpdateExecuteFilter();
 }
 
 void I386::RemoveBreakpoint(u32 address, u32 end_address)
@@ -1195,9 +1305,56 @@ bool I386::IsBreakpoint(u32 address) const
     return false;
 }
 
+// Execute breakpoints that cover the linear address, or the physical address it maps to now, enabled ones first
+I386_Breakpoint_State I386::GetBreakpointState(u32 address) const
+{
+    I386_Breakpoint_State state = I386_BREAKPOINT_STATE_NONE;
+    u32 physical = 0;
+    int physical_valid = -1;
+
+    for (size_t i = 0; i < m_breakpoints.size(); i++)
+    {
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (breakpoint.type != I386_BREAKPOINT_EXECUTE)
+            continue;
+
+        u32 compare = address;
+
+        if (breakpoint.space == I386_BREAKPOINT_PHYSICAL)
+        {
+            if (physical_valid < 0)
+                physical_valid = TryTranslateLinear(address, physical) ? 1 : 0;
+
+            if (physical_valid == 0)
+                continue;
+
+            compare = physical;
+        }
+
+        if (compare < breakpoint.address1 || compare > breakpoint.address2)
+            continue;
+
+        if (breakpoint.enabled)
+            return I386_BREAKPOINT_STATE_ENABLED;
+
+        state = I386_BREAKPOINT_STATE_DISABLED;
+    }
+
+    return state;
+}
+
 std::vector<I386_Breakpoint>* I386::GetBreakpoints()
 {
     return &m_breakpoints;
+}
+
+void I386::SetBreakpoints(const std::vector<I386_Breakpoint>& breakpoints,
+    const std::vector<I386_Interrupt_Breakpoint>& interrupt_breakpoints)
+{
+    m_breakpoints = breakpoints;
+    m_interrupt_breakpoints = interrupt_breakpoints;
+    EnableDebuggerChecks(m_debugger_checks);
 }
 
 bool I386::AddInterruptBreakpoint(u8 vector, u8 source)
@@ -1358,6 +1515,8 @@ void I386::EnableDebuggerChecks(bool enable)
     m_trace_enabled = m_trace_internal || m_trace_cpu;
     m_profiler_active = enable && IsValidPointer(m_profiler) && m_profiler->IsEnabled();
 
+    UpdateExecuteFilter();
+
     if (!enable)
         return;
 
@@ -1384,8 +1543,13 @@ void I386::EnableDebuggerChecks(bool enable)
         m_debugger_interrupt_checks = true;
 }
 
-bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
+// A halted CPU starts no instruction, and the elements of a REP after the first belong to the instruction already checked
+// RF marks an instruction restarted after an interrupt or a fault, which doesn't hit its breakpoint again like on DR0-DR3
+bool I386::CheckExecuteBreakpoints(bool regular, bool run_to)
 {
+    if (m_state.halted)
+        return false;
+
     u32 address = GetCurrentLinearPC();
 
     // Resuming from the stop address executes that instruction once without stopping again
@@ -1396,17 +1560,26 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
         return false;
     }
 
-    if (run_to && m_run_to_breakpoint_enabled && address == m_run_to_breakpoint)
+    if (m_state.repeat.active)
+        return false;
+
+    if (run_to && m_run_to_breakpoint_enabled && address == m_run_to_breakpoint && IsRunToStackReached())
     {
         m_run_to_breakpoint_enabled = false;
+        m_run_to_stack_check = false;
+        UpdateExecuteFilter();
         m_breakpoint_hit = true;
         m_run_to_hit = true;
         m_breakpoint_hit_address = address;
         return true;
     }
 
-    if (!regular)
+    if (!regular || (m_state.eflags & I386_FLAG_RF) != 0)
         return false;
+
+    // Physical execute breakpoints follow the code through the current page mapping
+    u32 physical = 0;
+    int physical_valid = -1;
 
     for (size_t i = 0; i < m_breakpoints.size(); i++)
     {
@@ -1415,8 +1588,21 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
         if (!breakpoint.enabled || breakpoint.type != I386_BREAKPOINT_EXECUTE)
             continue;
 
-        bool hit = breakpoint.range ? address >= breakpoint.address1 && address <= breakpoint.address2 :
-            address == breakpoint.address1;
+        u32 compare = address;
+
+        if (breakpoint.space == I386_BREAKPOINT_PHYSICAL)
+        {
+            if (physical_valid < 0)
+                physical_valid = TryTranslateLinear(address, physical) ? 1 : 0;
+
+            if (physical_valid == 0)
+                continue;
+
+            compare = physical;
+        }
+
+        bool hit = breakpoint.range ? compare >= breakpoint.address1 && compare <= breakpoint.address2 :
+            compare == breakpoint.address1;
 
         if (hit)
         {
@@ -1424,9 +1610,10 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
             m_run_to_hit = false;
             m_breakpoint_hit_address = address;
             m_breakpoint_hit_info.interrupt = false;
+            m_breakpoint_hit_info.dma = false;
             m_breakpoint_hit_info.type = I386_BREAKPOINT_EXECUTE;
-            m_breakpoint_hit_info.space = I386_BREAKPOINT_LINEAR;
-            m_breakpoint_hit_info.address = address;
+            m_breakpoint_hit_info.space = breakpoint.space;
+            m_breakpoint_hit_info.address = compare;
             m_breakpoint_hit_info.size = 1;
             m_breakpoint_hit_info.line = 0xFF;
             return true;
@@ -1434,6 +1621,57 @@ bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
     }
 
     return false;
+}
+
+// The low byte of each enabled execute breakpoint and of the run-to, so most instructions skip the check
+// Physical breakpoints and long ranges match any address
+void I386::UpdateExecuteFilter()
+{
+    memset(m_execute_filter, 0, sizeof(m_execute_filter));
+    m_execute_filter_all = false;
+    m_debugger_exec_checks = m_run_to_breakpoint_enabled;
+
+    if (m_run_to_breakpoint_enabled)
+        m_execute_filter[(m_run_to_breakpoint & 0xFF) >> 3] |= (u8)(1U << (m_run_to_breakpoint & 7));
+
+    for (size_t i = 0; i < m_breakpoints.size(); i++)
+    {
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (!breakpoint.enabled || breakpoint.type != I386_BREAKPOINT_EXECUTE)
+            continue;
+
+        m_debugger_exec_checks = true;
+
+        u32 last = breakpoint.range ? breakpoint.address2 : breakpoint.address1;
+
+        if (breakpoint.space != I386_BREAKPOINT_LINEAR || last - breakpoint.address1 >= 0xFF)
+        {
+            m_execute_filter_all = true;
+            continue;
+        }
+
+        for (u32 address = breakpoint.address1; ; address++)
+        {
+            m_execute_filter[(address & 0xFF) >> 3] |= (u8)(1U << (address & 7));
+
+            if (address == last)
+                break;
+        }
+    }
+}
+
+// A stack segment change on the way back, like a task switch, falls back to the address alone
+bool I386::IsRunToStackReached() const
+{
+    if (!m_run_to_stack_check)
+        return true;
+
+    u16 selector = 0;
+    u32 pointer = 0;
+
+    GetStackPointer(selector, pointer);
+    return selector != m_run_to_stack_selector || pointer >= m_run_to_stack_pointer;
 }
 
 // A data, I/O or interrupt hit stops after the instruction or the interrupt entry that caused it
@@ -1478,13 +1716,22 @@ bool I386::RunToBreakpointHit() const
     return m_breakpoint_hit && m_run_to_hit;
 }
 
-void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source, u8 line)
+// The run loop goes on from a hit it handled without stopping
+void I386::ClearBreakpointHit()
+{
+    m_breakpoint_hit = false;
+    m_run_to_hit = false;
+}
+
+void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source, u8 line,
+    bool dma)
 {
     if (m_debugger_hit_pending)
         return;
 
     m_debugger_hit_pending = true;
     m_breakpoint_hit_info.interrupt = interrupt;
+    m_breakpoint_hit_info.dma = dma;
     m_breakpoint_hit_info.type = type;
     m_breakpoint_hit_info.space = space;
     m_breakpoint_hit_info.address = address;
@@ -1536,6 +1783,31 @@ void I386::RecordDebuggerAccess(u32 linear, u32 size, bool write)
         if (address <= breakpoint.address2 && address + size - 1 >= breakpoint.address1)
         {
             RecordDebuggerHit(false, type, breakpoint.space, address, size, 0, 0);
+            return;
+        }
+    }
+}
+
+// DMA units reach physical memory directly, so linear breakpoints only see them while paging is off
+void I386::RecordDebuggerDMA(u32 physical, u32 size, bool write)
+{
+    if (!m_debugger_memory_checks)
+        return;
+
+    u8 type = write ? I386_BREAKPOINT_WRITE : I386_BREAKPOINT_READ;
+    bool paging = (m_state.cr0 & 0x80000000U) != 0;
+
+    for (size_t i = 0; i < m_breakpoints.size(); i++)
+    {
+        const I386_Breakpoint& breakpoint = m_breakpoints[i];
+
+        if (!breakpoint.enabled || (breakpoint.type & type) == 0 || breakpoint.space == I386_BREAKPOINT_IO ||
+            (breakpoint.space == I386_BREAKPOINT_LINEAR && paging))
+            continue;
+
+        if (physical <= breakpoint.address2 && physical + size - 1 >= breakpoint.address1)
+        {
+            RecordDebuggerHit(false, type, breakpoint.space, physical, size, 0, 0, 0xFF, true);
             return;
         }
     }
@@ -1639,6 +1911,7 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_
     entry.back_cs = src_cs;
     entry.back = back;
     entry.back_linear = src_base + back;
+    GetStackPointer(entry.stack_selector, entry.stack_pointer);
 
     if (m_disassembler_call_stack.size() == 256)
         m_disassembler_call_stack.erase(m_disassembler_call_stack.begin());
@@ -1648,7 +1921,8 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_
     if (unlikely(m_profiler_active))
         m_profiler->Enter(entry.dest_linear, interrupt, vector);
 
-    if (!interrupt)
+    // Step over runs through calls and software interrupts
+    if (type == I386_CALL || type == I386_CALL_SOFTWARE_INTERRUPT)
     {
         m_step_call = true;
         m_step_call_return_linear = entry.back_linear;
@@ -1658,21 +1932,18 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_
     I386_Disassembler_Record* target = m_disassembler_cache[entry.dest_linear & (k_i386_disassembler_cache_size - 1)];
 
     if (!IsValidPointer(target) || target->linear != entry.dest_linear)
-    {
-        target = &m_disassembler_records[entry.dest_linear];
-
-        if (target->linear == 0)
-        {
-            target->cs = entry.dest_cs;
-            target->eip = entry.dest;
-            target->linear = entry.dest_linear;
-        }
-    }
+        target = &GetOrCreateDisassemblerRecord(entry.dest_linear, entry.dest_cs, entry.dest);
 
     if (!interrupt)
-        set_auto_symbol(*target, true);
+    {
+        if (set_auto_symbol(*target, true))
+            m_disassembler_generation++;
+    }
     else if (target->auto_symbol[0] == 0)
+    {
         snprintf(target->auto_symbol, sizeof(target->auto_symbol), "INT_%02X", vector);
+        m_disassembler_generation++;
+    }
 }
 
 void I386::PopCallStack()
@@ -1708,4 +1979,21 @@ bool I386::GetStepCall(u32& return_linear) const
 u32 I386::GetCurrentLinearPC() const
 {
     return m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+}
+
+// A 16-bit stack only uses SP
+void I386::GetStackPointer(u16& selector, u32& pointer) const
+{
+    const I386_Segment& stack = m_state.segments[I386_SEGMENT_SS];
+
+    selector = stack.selector;
+    pointer = m_state.registers[I386_REG_ESP].value;
+
+    if ((stack.attributes & I386_SEGMENT_DEFAULT_32) == 0)
+        pointer &= 0xFFFF;
+}
+
+bool I386::IsRepeatActive() const
+{
+    return m_state.repeat.active;
 }

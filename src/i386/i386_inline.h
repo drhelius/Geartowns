@@ -321,4 +321,20 @@ INLINE bool I386::IsDebuggerHitPending() const
     return m_debugger_hit_pending;
 }
 
+INLINE bool I386::CheckDebuggerBreakpoints(bool regular, bool run_to)
+{
+    if (likely(!m_breakpoint_hit))
+    {
+        if (likely(!m_debugger_exec_checks))
+            return false;
+
+        u32 low = (m_state.segments[I386_SEGMENT_CS].base + m_state.eip) & 0xFF;
+
+        if (!m_execute_filter_all && (m_execute_filter[low >> 3] & (1U << (low & 7))) == 0)
+            return false;
+    }
+
+    return CheckExecuteBreakpoints(regular, run_to);
+}
+
 #endif /* I386_INLINE_H */

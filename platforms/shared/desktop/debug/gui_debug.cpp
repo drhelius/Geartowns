@@ -25,6 +25,7 @@
 #include <vector>
 #include "../config.h"
 #include "../emu.h"
+#include "../emu_floppy.h"
 #include "gui_debug_audio.h"
 #include "gui_debug_cdrom.h"
 #include "gui_debug_disassembler.h"
@@ -43,9 +44,13 @@
 static const char* GTDEBUG_MAGIC = "GTDEBUG1";
 static const int GTDEBUG_MAGIC_SIZE = 8;
 
-static std::string get_auto_debug_settings_path(void);
+static std::string get_auto_debug_settings_path(bool legacy);
 static bool read_settings_data(std::istream& stream, void* data, size_t size);
 static bool read_settings_count(std::istream& stream, int& count, size_t record_size);
+static void write_settings_string(std::ostream& stream, const std::string& text);
+static bool read_settings_string(std::istream& stream, std::string& text);
+static void save_symbols(std::ostream& stream);
+static bool load_symbols(std::istream& stream);
 
 void gui_debug_init(void)
 {
@@ -65,6 +70,7 @@ void gui_debug_destroy(void)
 
 void gui_debug_reset(void)
 {
+    gui_debug_clear_disassembler();
     gui_debug_disassembler_reset();
     gui_debug_memory_reset();
     gui_debug_profiler_reset();
@@ -77,6 +83,7 @@ void gui_debug_update(void)
 {
     gui_debug_trace_logger_update();
     gui_debug_memory_update();
+    gui_debug_update_symbols();
 }
 
 void gui_debug_windows(void)
@@ -139,6 +146,9 @@ void gui_debug_windows(void)
 
         if (config_debug.show_keyboard)
             gui_debug_window_keyboard();
+
+        if (config_debug.show_game_ports)
+            gui_debug_window_game_ports();
 
         if (config_debug.show_crtc)
             gui_debug_window_crtc();
@@ -241,6 +251,7 @@ bool gui_debug_save_settings(const char* file_path)
     }
 
     gui_debug_memory_save_settings(file);
+    save_symbols(file);
     file.close();
     return !file.fail();
 }
@@ -309,7 +320,7 @@ bool gui_debug_load_settings(const char* file_path)
         }
     }
 
-    if (!valid || !gui_debug_memory_load_settings(file))
+    if (!valid || !gui_debug_memory_load_settings(file) || !load_symbols(file))
     {
         Log("Invalid debug settings file: %s", file_path);
         file.close();
@@ -318,8 +329,7 @@ bool gui_debug_load_settings(const char* file_path)
 
     file.close();
 
-    *emu_get_core()->GetI386()->GetBreakpoints() = breakpoints;
-    *emu_get_core()->GetI386()->GetInterruptBreakpoints() = interrupts;
+    emu_get_core()->GetI386()->SetBreakpoints(breakpoints, interrupts);
     emu_get_core()->GetI386()->SetIRQBreakpoints(irq_breakpoints, irq_breakpoints_disabled);
     *gui_debug_get_disassembler_bookmarks() = bookmarks;
 
@@ -332,30 +342,145 @@ void gui_debug_auto_save_settings(void)
     if (!config_debug.auto_debug_settings)
         return;
 
-    std::string path = get_auto_debug_settings_path();
+    std::string path = get_auto_debug_settings_path(false);
 
     if (!path.empty())
         gui_debug_save_settings(path.c_str());
 }
 
+// A file saved before settings were keyed by CRC still loads
 void gui_debug_auto_load_settings(void)
 {
     if (!config_debug.auto_debug_settings)
         return;
 
-    std::string path = get_auto_debug_settings_path();
+    for (int i = 0; i < 2; i++)
+    {
+        std::string path = get_auto_debug_settings_path(i == 1);
 
-    if (path.empty())
+        if (path.empty())
+            continue;
+
+        std::ifstream file;
+        open_ifstream_utf8(file, path.c_str(), std::ios::binary);
+
+        if (!file.is_open())
+            continue;
+
+        file.close();
+        gui_debug_load_settings(path.c_str());
         return;
+    }
+}
 
-    std::ifstream file;
-    open_ifstream_utf8(file, path.c_str(), std::ios::binary);
+static void write_settings_string(std::ostream& stream, const std::string& text)
+{
+    u8 length = (u8)MIN(text.size(), (size_t)255);
+    stream.write((const char*)&length, sizeof(length));
+    stream.write(text.c_str(), length);
+}
 
-    if (!file.is_open())
-        return;
+static bool read_settings_string(std::istream& stream, std::string& text)
+{
+    u8 length = 0;
+    char buffer[256];
 
-    file.close();
-    gui_debug_load_settings(path.c_str());
+    if (!read_settings_data(stream, &length, sizeof(length)) || !read_settings_data(stream, buffer, length))
+        return false;
+
+    text.assign(buffer, length);
+    return true;
+}
+
+static void save_symbols(std::ostream& stream)
+{
+    const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
+    const std::vector<LogicalSymbol>& logical = gui_debug_get_logical_symbols();
+    std::vector<u32> addresses;
+    std::map<u32, std::string>::const_iterator user;
+
+    for (user = users.begin(); user != users.end(); user++)
+    {
+        bool from_logical = false;
+
+        for (size_t i = 0; i < logical.size() && !from_logical; i++)
+            from_logical = logical[i].resolved && logical[i].linear == user->first && logical[i].name == user->second;
+
+        if (!from_logical)
+            addresses.push_back(user->first);
+    }
+
+    int count = (int)addresses.size();
+    stream.write((const char*)&count, sizeof(count));
+
+    for (int i = 0; i < count; i++)
+    {
+        stream.write((const char*)&addresses[i], sizeof(addresses[i]));
+        write_settings_string(stream, users.find(addresses[i])->second);
+    }
+
+    int logical_count = (int)logical.size();
+    stream.write((const char*)&logical_count, sizeof(logical_count));
+
+    for (int i = 0; i < logical_count; i++)
+    {
+        stream.write((const char*)&logical[i].selector, sizeof(logical[i].selector));
+        stream.write((const char*)&logical[i].offset, sizeof(logical[i].offset));
+        write_settings_string(stream, logical[i].name);
+    }
+}
+
+static bool load_symbols(std::istream& stream)
+{
+    if (stream.peek() == std::char_traits<char>::eof())
+    {
+        stream.clear();
+        return true;
+    }
+
+    int count = 0;
+    int logical_count = 0;
+    std::vector<u32> addresses;
+    std::vector<std::string> names;
+    std::vector<u16> selectors;
+    std::vector<u32> offsets;
+    std::vector<std::string> logical_names;
+
+    if (!read_settings_count(stream, count, sizeof(u32) + 1))
+        return false;
+
+    addresses.resize(count);
+    names.resize(count);
+
+    for (int i = 0; i < count; i++)
+    {
+        if (!read_settings_data(stream, &addresses[i], sizeof(addresses[i])) || !read_settings_string(stream, names[i]))
+            return false;
+    }
+
+    if (!read_settings_count(stream, logical_count, sizeof(u16) + sizeof(u32) + 1))
+        return false;
+
+    selectors.resize(logical_count);
+    offsets.resize(logical_count);
+    logical_names.resize(logical_count);
+
+    for (int i = 0; i < logical_count; i++)
+    {
+        if (!read_settings_data(stream, &selectors[i], sizeof(selectors[i])) ||
+            !read_settings_data(stream, &offsets[i], sizeof(offsets[i])) ||
+            !read_settings_string(stream, logical_names[i]))
+            return false;
+    }
+
+    for (int i = 0; i < count; i++)
+        gui_debug_add_user_symbol(addresses[i], names[i].c_str());
+
+    for (int i = 0; i < logical_count; i++)
+        gui_debug_add_logical_symbol(selectors[i], offsets[i], logical_names[i].c_str());
+
+    gui_debug_resolve_symbols();
+    return true;
 }
 
 static bool read_settings_data(std::istream& stream, void* data, size_t size)
@@ -377,18 +502,44 @@ static bool read_settings_count(std::istream& stream, int& count, size_t record_
     return !stream.fail() && end >= position && (u64)count <= (u64)(end - position) / record_size;
 }
 
-static std::string get_auto_debug_settings_path(void)
+static std::string get_auto_debug_settings_path(bool legacy)
 {
     GeartownsCore* core = emu_get_core();
 
-    if (!IsValidPointer(core) || !IsValidPointer(core->GetMedia()) || !core->GetMedia()->IsReady())
+    if (!IsValidPointer(core) || !IsValidPointer(core->GetMedia()))
         return "";
 
-    std::string filename = core->GetMedia()->GetFileName();
+    bool cdrom = core->GetMedia()->IsReady();
+    std::string filename;
+
+    if (cdrom)
+        filename = core->GetMedia()->GetFileName();
+    else
+    {
+        if (legacy)
+            return "";
+
+        filename = emu_floppy_get_content_path();
+        std::string::size_type separator = filename.find_last_of("/\\");
+
+        if (separator != std::string::npos)
+            filename = filename.substr(separator + 1);
+    }
+
+    if (filename.empty())
+        return "";
+
     std::string::size_type dot = filename.find_last_of('.');
 
     if (dot != std::string::npos)
         filename.resize(dot);
+
+    if (cdrom && !legacy && core->GetMedia()->GetCRC() != 0)
+    {
+        char crc[16];
+        snprintf(crc, sizeof(crc), "_%08X", core->GetMedia()->GetCRC());
+        filename += crc;
+    }
 
     filename += ".gtdebug";
 

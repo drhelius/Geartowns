@@ -54,8 +54,8 @@ public:
     void SetSource(const GT_Debug_Memory_Address& source);
     void SetFollow(bool follow);
     const GT_Debug_Memory_Address& GetSource() const;
-    u32 GetWindowBase() const;
-    u32 GetWindowSize() const;
+    u32 GetBufferBase() const;
+    u32 GetBufferSize() const;
     void GetSelection(u32& start, u32& end) const;
     void SetSelection(u32 start, u32 end);
 
@@ -88,9 +88,13 @@ private:
     void DrawButtonTooltip(const char* text);
 
     void UpdateTitle();
-    void SetWindowForAddress(u32 address);
-    void ShiftWindow(bool up, int bytes_per_row, float row_height);
-    void NavigateKeyboard(int bytes_per_row, float row_height);
+    int GetBytesPerRow() const;
+    s64 GetRowCount(int bytes_per_row) const;
+    void SetViewRow(s64 row, int bytes_per_row);
+    void KeepVisible(u32 address, int bytes_per_row);
+    void EnsureBuffer(u32 start, u32 end);
+    void MoveBuffer(u32 base);
+    void NavigateKeyboard(int bytes_per_row);
     bool ParseAddressInput(GT_Debug_Memory_Address& address, char* reason, size_t reason_size) const;
     bool ReadRange(u32 start, u32 end, std::vector<u8>& data, std::vector<GT_Debug_Memory_Status>& status) const;
     void CopyRange(u32 start, u32 end, bool decimal);
@@ -107,7 +111,7 @@ private:
     void HistoryForward();
 
 private:
-    static const u32 WINDOW_SIZE = 0x4000;
+    static const u32 BUFFER_SIZE = 0x4000;
     static const int HISTORY_SIZE = 32;
     static const u8 CHANGE_HIGHLIGHT_REFRESHES = 60;
 
@@ -116,7 +120,12 @@ private:
     char m_title[96];
 
     GT_Debug_Memory_Address m_source;
-    u32 m_window_base;
+    u32 m_buffer_base;
+    u32 m_fresh_start;
+    u32 m_fresh_size;
+    u32 m_view_address;
+    int m_visible_rows;
+    float m_scroll_rows;
 
     u32 m_selection_start;
     u32 m_selection_end;

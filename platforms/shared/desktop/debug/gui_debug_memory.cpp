@@ -1778,8 +1778,8 @@ static void set_search_error(const char* text)
 
 static void set_default_search_range(MemEditor& editor)
 {
-    u32 start = editor.GetWindowBase();
-    u32 size = editor.GetWindowSize();
+    u32 start = editor.GetBufferBase();
+    u32 size = editor.GetBufferSize();
 
     if (editor.GetSource().space == GT_DEBUG_MEMORY_REGION)
     {

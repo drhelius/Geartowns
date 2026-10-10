@@ -42,7 +42,9 @@ static const char* const k_pit_mode_short_names[6] =
     "0 INT ON TC", "1 ONE-SHOT", "2 RATE GEN", "3 SQUARE", "4 SW STROBE", "5 HW STROBE"
 };
 
-static void draw_flag(const char* name, bool on);
+static void setup_fixed_columns(const int* widths, int count);
+static void draw_grid_label(const char* label);
+static void draw_flag(const char* label, bool on);
 static void draw_bits4(u8 value);
 static void draw_vector_tooltip(u8 vector);
 static void draw_pic_column(const I8259::I8259_State* chip, bool master, int row);
@@ -52,7 +54,7 @@ void gui_debug_window_pic(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(440, 540), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(420, 600), ImGuiCond_FirstUseEver);
     ImGui::Begin("Interrupts", &config_debug.show_pic);
 
     ImGui::PushFont(gui_default_font);
@@ -60,6 +62,7 @@ void gui_debug_window_pic(void)
     PIC* pic = emu_get_core()->GetPIC();
     I8259::I8259_State* master = pic->GetMaster()->GetState();
     I8259::I8259_State* slave = pic->GetSlave()->GetState();
+    float character = ImGui::CalcTextSize("0").x;
 
     ImGui::TextColored(cyan, "IRQ LINES"); ImGui::Separator();
 
@@ -85,19 +88,19 @@ void gui_debug_window_pic(void)
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextColored(orange, "%2d", irq);
+            ImGui::TextColored(orange, "%d", irq);
             ImGui::TableNextColumn();
-            ImGui::TextColored(brown, "%-13s", k_debug_irq_sources[irq]);
+            ImGui::TextColored(brown, "%s", k_debug_irq_sources[irq]);
             ImGui::TableNextColumn();
-            ImGui::TextColored((chip->input_levels & bit) ? green : gray, " %s ", (chip->input_levels & bit) ? "HI" : "LO");
+            ImGui::TextColored((chip->input_levels & bit) ? green : gray, "%s", (chip->input_levels & bit) ? "HI" : "LO");
             ImGui::TableNextColumn();
-            ImGui::TextColored((chip->irr & bit) ? yellow : gray, " %d ", (chip->irr & bit) ? 1 : 0);
+            ImGui::TextColored((chip->irr & bit) ? yellow : gray, "%d", (chip->irr & bit) ? 1 : 0);
             ImGui::TableNextColumn();
-            ImGui::TextColored((chip->isr & bit) ? green : gray, " %d  ", (chip->isr & bit) ? 1 : 0);
+            ImGui::TextColored((chip->isr & bit) ? green : gray, "%d", (chip->isr & bit) ? 1 : 0);
             ImGui::TableNextColumn();
-            ImGui::TextColored((chip->imr & bit) ? red : gray, " %d  ", (chip->imr & bit) ? 1 : 0);
+            ImGui::TextColored((chip->imr & bit) ? red : gray, "%d", (chip->imr & bit) ? 1 : 0);
             ImGui::TableNextColumn();
-            ImGui::TextColored(white, " $%02X ", vector);
+            ImGui::TextColored(white, "$%02X", vector);
 
             if (ImGui::IsItemHovered())
                 draw_vector_tooltip(vector);
@@ -110,9 +113,9 @@ void gui_debug_window_pic(void)
 
     if (ImGui::BeginTable("##pics", 3, flags))
     {
-        ImGui::TableSetupColumn(" ");
-        ImGui::TableSetupColumn("MASTER");
-        ImGui::TableSetupColumn("SLAVE");
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 11);
+        ImGui::TableSetupColumn("MASTER", ImGuiTableColumnFlags_WidthFixed, character * 21);
+        ImGui::TableSetupColumn("SLAVE", ImGuiTableColumnFlags_WidthFixed, character * 21);
         ImGui::TableHeadersRow();
 
         static const char* rows[] = { "ICW1", "ICW2", "ICW3", "ICW4", "INIT", "READ REG", "SPEC MASK", "POLL",
@@ -121,9 +124,7 @@ void gui_debug_window_pic(void)
         for (int row = 0; row < (int)(sizeof(rows) / sizeof(rows[0])); row++)
         {
             ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(violet, "%-11s", rows[row]);
-            ImGui::TableNextColumn();
+            draw_grid_label(rows[row]);
             draw_pic_column(master, true, row);
             ImGui::TableNextColumn();
             draw_pic_column(slave, false, row);
@@ -142,7 +143,7 @@ void gui_debug_window_pit(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(90, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 300), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(610, 290), ImGuiCond_FirstUseEver);
     ImGui::Begin("Timers", &config_debug.show_pit);
 
     ImGui::PushFont(gui_default_font);
@@ -152,18 +153,30 @@ void gui_debug_window_pit(void)
     PIT::PIT_State* state = pit->GetState();
     u64 clocks = core->GetScheduler()->GetClocks();
     u8 board = pit->Peek(0x0060, clocks);
+    float character = ImGui::CalcTextSize("0").x;
 
     ImGui::TextColored(cyan, "BOARD (0060)"); ImGui::Separator();
 
-    draw_flag("TM0 ENABLE", (state->timer_enable & 0x01) != 0); ImGui::SameLine();
-    draw_flag(" TM1 ENABLE", (state->timer_enable & 0x02) != 0); ImGui::SameLine();
-    draw_flag(" SOUND", state->sound || state->sound_memory);
+    if (ImGui::BeginTable("##pit_board", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+    {
+        static const int widths[6] = { 10, 4, 10, 4, 5, 4 };
+        bool irq0 = (board & state->timer_enable & 0x03) != 0;
 
-    draw_flag("LATCH 0   ", (board & 0x01) != 0); ImGui::SameLine();
-    draw_flag(" LATCH 1   ", (board & 0x02) != 0); ImGui::SameLine();
-    ImGui::TextColored(violet, " IRQ0"); ImGui::SameLine();
-    bool irq0 = (board & state->timer_enable & 0x03) != 0;
-    ImGui::TextColored(irq0 ? yellow : gray, "%s", irq0 ? "HIGH" : "LOW ");
+        setup_fixed_columns(widths, 6);
+
+        ImGui::TableNextRow();
+        draw_flag("TM0 ENABLE", (state->timer_enable & 0x01) != 0);
+        draw_flag("TM1 ENABLE", (state->timer_enable & 0x02) != 0);
+        draw_flag("SOUND", state->sound || state->sound_memory);
+
+        ImGui::TableNextRow();
+        draw_flag("LATCH 0", (board & 0x01) != 0);
+        draw_flag("LATCH 1", (board & 0x02) != 0);
+        draw_grid_label("IRQ0");
+        ImGui::TextColored(irq0 ? yellow : gray, "%s", irq0 ? "HIGH" : "LOW");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "COUNTERS"); ImGui::Separator();
 
@@ -172,11 +185,12 @@ void gui_debug_window_pit(void)
 
     if (ImGui::BeginTable("##counters", 11, flags))
     {
-        static const char* headers[] = { "CH", "PORT", "USE", "CLOCK", "MODE", "ACCESS", "BCD", "RELOAD", "COUNT", "OUT",
+        static const char* headers[11] = { "CH", "PORT", "USE", "CLOCK", "MODE", "ACCESS", "BCD", "RELOAD", "COUNT", "OUT",
             "PERIOD" };
+        static const int widths[11] = { 2, 4, 14, 7, 11, 7, 3, 6, 5, 3, 10 };
 
         for (int i = 0; i < 11; i++)
-            ImGui::TableSetupColumn(headers[i]);
+            ImGui::TableSetupColumn(headers[i], ImGuiTableColumnFlags_WidthFixed, character * widths[i]);
 
         ImGui::TableHeadersRow();
 
@@ -195,25 +209,25 @@ void gui_debug_window_pit(void)
             ImGui::TableNextColumn();
             ImGui::TextColored(cyan, "%04X", (channel < 3 ? 0x0040 : 0x0050) + (channel % 3) * 2);
             ImGui::TableNextColumn();
-            ImGui::TextColored(brown, "%-14s", k_debug_pit_uses[channel]);
+            ImGui::TextColored(brown, "%s", k_debug_pit_uses[channel]);
             ImGui::TableNextColumn();
-            ImGui::TextColored(orange, "%s", channel == k_pit_serial_channel ? "1.2288M" : "307.2K ");
+            ImGui::TextColored(orange, "%s", channel == k_pit_serial_channel ? "1.2288M" : "307.2K");
             ImGui::TableNextColumn();
 
             if (programmed)
             {
-                ImGui::TextColored(blue, "%-11s", k_pit_mode_short_names[counter.mode % 6]);
+                ImGui::TextColored(blue, "%s", k_pit_mode_short_names[counter.mode % 6]);
 
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("%s", k_debug_pit_mode_names[counter.mode % 6]);
             }
             else
-                ImGui::TextColored(gray, "--         ");
+                ImGui::TextColored(gray, "--");
 
             ImGui::TableNextColumn();
-            ImGui::TextColored(color, "%-7s", programmed ? k_debug_pit_access_names[counter.access & 3] : "--");
+            ImGui::TextColored(color, "%s", programmed ? k_debug_pit_access_names[counter.access & 3] : "--");
             ImGui::TableNextColumn();
-            ImGui::TextColored(programmed && counter.bcd ? green : gray, "%s", counter.bcd ? "ON " : "OFF");
+            ImGui::TextColored(programmed && counter.bcd ? green : gray, "%s", counter.bcd ? "ON" : "OFF");
             ImGui::TableNextColumn();
             ImGui::TextColored(color, "$%04X", counter.reload);
             ImGui::TableNextColumn();
@@ -221,7 +235,7 @@ void gui_debug_window_pit(void)
             if (programmed)
                 ImGui::TextColored(white, "$%04X", chip->PeekCount(channel % 3, tick));
             else
-                ImGui::TextColored(gray, "--   ");
+                ImGui::TextColored(gray, "--");
 
             ImGui::TableNextColumn();
             bool out = chip->PeekOutput(channel % 3, tick);
@@ -234,12 +248,16 @@ void gui_debug_window_pit(void)
             if (count == 0)
                 count = counter.bcd ? 10000 : 0x10000;
 
+            double frequency = rate / count;
+
             if (!programmed || !counter.counting || counter.mode == 1 || counter.mode == 5)
-                ImGui::TextColored(gray, "--         ");
+                ImGui::TextColored(gray, "--");
+            else if ((counter.mode == 2 || counter.mode == 3) && frequency >= 1000.0)
+                ImGui::TextColored(white, "%.2f kHz", frequency / 1000.0);
             else if (counter.mode == 2 || counter.mode == 3)
-                ImGui::TextColored(white, "%9.2f Hz", rate / count);
+                ImGui::TextColored(white, "%.2f Hz", frequency);
             else
-                ImGui::TextColored(white, "%9.3f ms", (count * 1000.0) / rate);
+                ImGui::TextColored(white, "%.3f ms", (count * 1000.0) / rate);
         }
 
         ImGui::EndTable();
@@ -255,46 +273,78 @@ void gui_debug_window_dma(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(120, 120), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 320), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(560, 330), ImGuiCond_FirstUseEver);
     ImGui::Begin("DMA", &config_debug.show_dma);
 
     ImGui::PushFont(gui_default_font);
 
     UPD71071::UPD71071_State* state = emu_get_core()->GetDMA()->GetState();
+    ImGuiTableFlags grid = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float character = ImGui::CalcTextSize("0").x;
+    float space = ImGui::CalcTextSize(" ").x;
 
     ImGui::TextColored(cyan, "CONTROLLER (00A0-00AF)"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "DEVICE CONTROL "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%04X ", state->device_control); ImGui::SameLine(0, 0);
-
-    for (int i = 0; i < 10; i++)
+    if (ImGui::BeginTable("##dma_device_control", 2, grid))
     {
-        bool set = (state->device_control & (1 << i)) != 0;
-        ImGui::SameLine();
-        ImGui::TextColored(set ? (i == 2 ? red : green) : gray, "%s", k_debug_dma_control_names[i]);
+        static const int widths[2] = { 14, 42 };
+        setup_fixed_columns(widths, 2);
+
+        ImGui::TableNextRow();
+        draw_grid_label("DEVICE CONTROL");
+        ImGui::TextColored(white, "$%04X", state->device_control);
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TableNextColumn();
+
+        for (int i = 0; i < 10; i++)
+        {
+            bool set = (state->device_control & (1 << i)) != 0;
+
+            if (i > 0)
+                ImGui::SameLine(0.0f, space);
+
+            ImGui::TextColored(set ? (i == 2 ? red : green) : gray, "%s", k_debug_dma_control_names[i]);
+        }
+
+        ImGui::EndTable();
     }
 
-    ImGui::TextColored(violet, "STATE          "); ImGui::SameLine();
-    bool disabled = (state->device_control & k_upd71071_ddma) != 0;
-    ImGui::TextColored(disabled ? red : green, "%s", disabled ? "DMA DISABLED" : "DMA ENABLED "); ImGui::SameLine();
-    ImGui::TextColored(violet, "  BUS"); ImGui::SameLine();
-    ImGui::TextColored(white, "%s", state->bus_16bit ? "16-BIT" : "8-BIT ");
+    if (ImGui::BeginTable("##dma_controller", 4, grid))
+    {
+        static const int widths[4] = { 14, 14, 12, 12 };
+        bool disabled = (state->device_control & k_upd71071_ddma) != 0;
 
-    ImGui::TextColored(violet, "MASK           "); ImGui::SameLine();
-    draw_bits4(state->mask); ImGui::SameLine();
-    ImGui::TextColored(violet, "   SOFTWARE REQ"); ImGui::SameLine();
-    draw_bits4(state->software_requests);
+        setup_fixed_columns(widths, 4);
 
-    ImGui::TextColored(violet, "REQUEST LEVELS "); ImGui::SameLine();
-    draw_bits4(state->request_levels); ImGui::SameLine();
-    ImGui::TextColored(violet, "   TERMINAL CNT"); ImGui::SameLine();
-    draw_bits4(state->status_tc);
+        ImGui::TableNextRow();
+        draw_grid_label("STATE");
+        ImGui::TextColored(disabled ? red : green, "%s", disabled ? "DMA DISABLED" : "DMA ENABLED");
+        draw_grid_label("BUS");
+        ImGui::TextColored(white, "%s", state->bus_16bit ? "16-BIT" : "8-BIT");
 
-    ImGui::TextColored(violet, "SELECTED       "); ImGui::SameLine();
-    ImGui::TextColored(orange, "CH%d", state->selected_channel & 3); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", state->base_access ? "BASE   " : "CURRENT"); ImGui::SameLine();
-    ImGui::TextColored(violet, " HIGH ADDRESS"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", state->high_address);
+        ImGui::TableNextRow();
+        draw_grid_label("MASK");
+        draw_bits4(state->mask);
+        draw_grid_label("SOFTWARE REQ");
+        draw_bits4(state->software_requests);
+
+        ImGui::TableNextRow();
+        draw_grid_label("REQUEST LEVELS");
+        draw_bits4(state->request_levels);
+        draw_grid_label("TERMINAL CNT");
+        draw_bits4(state->status_tc);
+
+        ImGui::TableNextRow();
+        draw_grid_label("SELECTED");
+        ImGui::TextColored(orange, "CH%d", state->selected_channel & 3); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(blue, "%s", state->base_access ? "BASE" : "CURRENT");
+        draw_grid_label("HIGH ADDRESS");
+        ImGui::TextColored(white, "$%02X", state->high_address);
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "CHANNELS"); ImGui::Separator();
 
@@ -303,10 +353,11 @@ void gui_debug_window_dma(void)
 
     if (ImGui::BeginTable("##dma_channels", 8, flags))
     {
-        static const char* headers[] = { "CH", "DEVICE", "MODE", "ADDRESS", "COUNT", "MASK", "REQ", "TC" };
+        static const char* headers[8] = { "CH", "DEVICE", "MODE", "ADDRESS", "COUNT", "MASK", "REQ", "TC" };
+        static const int widths[8] = { 2, 7, 28, 9, 11, 4, 3, 2 };
 
         for (int i = 0; i < 8; i++)
-            ImGui::TableSetupColumn(headers[i]);
+            ImGui::TableSetupColumn(headers[i], ImGuiTableColumnFlags_WidthFixed, character * widths[i]);
 
         ImGui::TableHeadersRow();
 
@@ -315,26 +366,32 @@ void gui_debug_window_dma(void)
             const UPD71071::UPD71071_Channel& item = state->channels[channel];
             u8 bit = (u8)(1 << channel);
             u8 mode = item.mode;
+            bool request = ((state->request_levels | state->software_requests) & bit) != 0;
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextColored(orange, "%d", channel);
             ImGui::TableNextColumn();
-            ImGui::TextColored(brown, "%-7s", k_debug_dma_devices[channel]);
+            ImGui::TextColored(brown, "%s", k_debug_dma_devices[channel]);
             ImGui::TableNextColumn();
-            ImGui::TextColored(white, "%-7s %s %-6s %s %s", k_debug_dma_direction_names[(mode >> 2) & 3],
-                (mode & 0x01) ? "WORD" : "BYTE", k_debug_dma_service_names[(mode >> 6) & 3], (mode & 0x10) ? "AUTO" : "    ",
+            ImGui::TextColored(white, "%-7s %s %-6s %-4s %s", k_debug_dma_direction_names[(mode >> 2) & 3],
+                (mode & 0x01) ? "WORD" : "BYTE", k_debug_dma_service_names[(mode >> 6) & 3], (mode & 0x10) ? "AUTO" : "",
                 (mode & 0x20) ? "DEC" : "INC");
 
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
                 ImGui::TextColored(cyan, "MODE $%02X", mode);
-                ImGui::Text("Direction: %s", k_debug_dma_direction_names[(mode >> 2) & 3]);
-                ImGui::Text("Unit: %s", (mode & 0x01) ? "word" : "byte");
-                ImGui::Text("Service: %s", k_debug_dma_service_names[(mode >> 6) & 3]);
-                ImGui::Text("Auto-initialize: %s", (mode & 0x10) ? "on" : "off");
-                ImGui::Text("Address: %s", (mode & 0x20) ? "decrement" : "increment");
+                ImGui::TextColored(violet, "DIRECTION"); ImGui::SameLine();
+                ImGui::TextColored(white, "%s", k_debug_dma_direction_names[(mode >> 2) & 3]);
+                ImGui::TextColored(violet, "UNIT     "); ImGui::SameLine();
+                ImGui::TextColored(white, "%s", (mode & 0x01) ? "WORD" : "BYTE");
+                ImGui::TextColored(violet, "SERVICE  "); ImGui::SameLine();
+                ImGui::TextColored(white, "%s", k_debug_dma_service_names[(mode >> 6) & 3]);
+                ImGui::TextColored(violet, "AUTO INIT"); ImGui::SameLine();
+                ImGui::TextColored((mode & 0x10) ? green : gray, "%s", (mode & 0x10) ? "ON" : "OFF");
+                ImGui::TextColored(violet, "ADDRESS  "); ImGui::SameLine();
+                ImGui::TextColored(white, "%s", (mode & 0x20) ? "DECREMENT" : "INCREMENT");
                 ImGui::EndTooltip();
             }
 
@@ -342,7 +399,7 @@ void gui_debug_window_dma(void)
             ImGui::TextColored(cyan, "$%08X", item.current_address);
 
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Base $%08X", item.base_address);
+                ImGui::SetTooltip("BASE $%08X", item.base_address);
 
             if (ImGui::IsItemClicked())
                 goto_physical(item.current_address);
@@ -350,10 +407,9 @@ void gui_debug_window_dma(void)
             ImGui::TableNextColumn();
             ImGui::TextColored(white, "$%04X/$%04X", item.current_count, item.base_count);
             ImGui::TableNextColumn();
-            ImGui::TextColored((state->mask & bit) ? red : gray, " %d  ", (state->mask & bit) ? 1 : 0);
+            ImGui::TextColored((state->mask & bit) ? red : gray, "%d", (state->mask & bit) ? 1 : 0);
             ImGui::TableNextColumn();
-            bool request = ((state->request_levels | state->software_requests) & bit) != 0;
-            ImGui::TextColored(request ? yellow : gray, " %d ", request ? 1 : 0);
+            ImGui::TextColored(request ? yellow : gray, "%d", request ? 1 : 0);
             ImGui::TableNextColumn();
             ImGui::TextColored((state->status_tc & bit) ? green : gray, "%d", (state->status_tc & bit) ? 1 : 0);
         }
@@ -371,7 +427,7 @@ void gui_debug_window_rtc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(150, 150), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(260, 320), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 330), ImGuiCond_FirstUseEver);
     ImGui::Begin("RTC", &config_debug.show_rtc);
 
     ImGui::PushFont(gui_default_font);
@@ -383,47 +439,82 @@ void gui_debug_window_rtc(void)
     const u8* r = state->registers;
     bool hour24 = (r[5] & k_msm58321_24_hour) != 0;
     bool pm = (r[5] & k_msm58321_pm) != 0;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    static const int widths[2] = { 7, 22 };
+    float space = ImGui::CalcTextSize(" ").x;
 
     ImGui::TextColored(cyan, "DATE AND TIME"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "DATE   "); ImGui::SameLine();
-    ImGui::TextColored(white, "%d%d-%d%d-%d%d", r[12], r[11], r[10] & 0x01, r[9], r[8] & 0x03, r[7]); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", k_debug_weekday_names[r[6] % 7]);
+    if (ImGui::BeginTable("##rtc_date", 2, flags))
+    {
+        setup_fixed_columns(widths, 2);
 
-    ImGui::TextColored(violet, "TIME   "); ImGui::SameLine();
-    ImGui::TextColored(white, "%d%d:%d%d:%d%d", r[5] & 0x03, r[4], r[3] & 0x07, r[2], r[1] & 0x07, r[0]); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", hour24 ? "24H" : "12H"); ImGui::SameLine();
-    ImGui::TextColored(!hour24 && pm ? green : gray, "PM");
+        ImGui::TableNextRow();
+        draw_grid_label("DATE");
+        ImGui::TextColored(white, "%d%d-%d%d-%d%d", r[12], r[11], r[10] & 0x01, r[9], r[8] & 0x03, r[7]);
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(blue, "%s", k_debug_weekday_names[r[6] % 7]);
 
-    ImGui::TextColored(violet, "LEAP   "); ImGui::SameLine();
-    ImGui::TextColored(white, "YEAR %% 4 = %d", (r[8] >> 2) & 0x03);
+        ImGui::TableNextRow();
+        draw_grid_label("TIME");
+        ImGui::TextColored(white, "%d%d:%d%d:%d%d", r[5] & 0x03, r[4], r[3] & 0x07, r[2], r[1] & 0x07, r[0]);
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(blue, "%s", hour24 ? "24H" : "12H"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(!hour24 && pm ? green : gray, "PM");
+
+        ImGui::TableNextRow();
+        draw_grid_label("LEAP");
+        ImGui::TextColored(white, "YEAR %% 4 = %d", (r[8] >> 2) & 0x03);
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "INTERFACE (0070/0080)"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "ADDRESS"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%X", state->address & 0x0F); ImGui::SameLine();
-    ImGui::TextColored(violet, " DATA"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%X", state->data & 0x0F);
+    if (ImGui::BeginTable("##rtc_interface", 2, flags))
+    {
+        setup_fixed_columns(widths, 2);
 
-    ImGui::TextColored(violet, "COMMAND"); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", state->command); ImGui::SameLine();
-    ImGui::TextColored((state->command & 0x80) ? green : gray, "CS"); ImGui::SameLine();
-    ImGui::TextColored((state->command & 0x04) ? green : gray, "READ"); ImGui::SameLine();
-    ImGui::TextColored((state->command & 0x02) ? green : gray, "WRITE"); ImGui::SameLine();
-    ImGui::TextColored((state->command & 0x01) ? green : gray, "ADDR");
+        ImGui::TableNextRow();
+        draw_grid_label("ADDRESS");
+        ImGui::TextColored(white, "$%X", state->address & 0x0F);
+
+        ImGui::TableNextRow();
+        draw_grid_label("DATA");
+        ImGui::TextColored(white, "$%X", state->data & 0x0F);
+
+        ImGui::TableNextRow();
+        draw_grid_label("COMMAND");
+        ImGui::TextColored(white, "$%02X", state->command); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((state->command & 0x80) ? green : gray, "CS"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((state->command & 0x04) ? green : gray, "READ"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((state->command & 0x02) ? green : gray, "WRITE"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((state->command & 0x01) ? green : gray, "ADDR");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "REGISTERS"); ImGui::Separator();
 
-    for (int i = 0; i < 16; i++)
+    if (ImGui::BeginTable("##rtc_registers", 4, flags))
     {
-        if ((i & 3) != 0)
-            ImGui::SameLine();
+        static const int register_widths[4] = { 9, 9, 9, 9 };
+        setup_fixed_columns(register_widths, 4);
 
-        u8 value = i == k_msm58321_divider_reset ? 0 : r[i];
+        for (int i = 0; i < 16; i++)
+        {
+            u8 value = i == k_msm58321_divider_reset ? 0 : r[i];
 
-        ImGui::TextColored(cyan, "%X", i); ImGui::SameLine(0, 4);
-        ImGui::TextColored(violet, "%-5s", k_debug_rtc_register_names[i]); ImGui::SameLine(0, 2);
-        ImGui::TextColored(i >= k_msm58321_divider_reset ? gray : white, "%X", value & 0x0F);
+            if ((i & 3) == 0)
+                ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::TextColored(cyan, "%X", i); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(violet, "%-5s", k_debug_rtc_register_names[i]); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(i >= k_msm58321_divider_reset ? gray : white, "%X", value & 0x0F);
+        }
+
+        ImGui::EndTable();
     }
 
     ImGui::PopFont();
@@ -436,7 +527,7 @@ void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(180, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 460), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(270, 470), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);
@@ -445,66 +536,135 @@ void gui_debug_window_system_control(void)
     const GT_Machine_Config& machine = core->GetMachineConfig();
     SystemControl::SystemControl_State* control = core->GetSystemControl()->GetState();
     Memory::Memory_State* memory = core->GetMemory()->GetState();
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    static const int widths[2] = { 10, 22 };
+    float space = ImGui::CalcTextSize(" ").x;
 
     ImGui::TextColored(cyan, "MACHINE"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "MODEL      "); ImGui::SameLine();
-    ImGui::TextColored(white, "%s", k_machine_profiles[machine.model].name);
-    ImGui::TextColored(violet, "CPU        "); ImGui::SameLine();
-    ImGui::TextColored(white, "%s", k_machine_cpus[machine.cpu].name); ImGui::SameLine();
-    ImGui::TextColored(orange, "%.0f MHz", machine.cpu_clock_rate / 1000000.0);
-    ImGui::TextColored(violet, "RAM        "); ImGui::SameLine();
-    ImGui::TextColored(white, "%u KB", machine.ram_size / 1024);
-    ImGui::TextColored(violet, "FLOPPIES   "); ImGui::SameLine();
-    ImGui::TextColored(white, "%d", machine.floppy_drives);
-    ImGui::TextColored(violet, "MACHINE ID "); ImGui::SameLine();
-    ImGui::TextColored(white, "$0101"); ImGui::SameLine();
-    ImGui::TextColored(gray, "(0030/0031)");
+    if (ImGui::BeginTable("##system_machine", 2, flags))
+    {
+        setup_fixed_columns(widths, 2);
+
+        ImGui::TableNextRow();
+        draw_grid_label("MODEL");
+        ImGui::TextColored(white, "%s", k_machine_profiles[machine.model].name);
+
+        ImGui::TableNextRow();
+        draw_grid_label("CPU");
+        ImGui::TextColored(white, "%s", k_machine_cpus[machine.cpu].name); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(orange, "%.0f MHz", machine.cpu_clock_rate / 1000000.0);
+
+        ImGui::TableNextRow();
+        draw_grid_label("RAM");
+        ImGui::TextColored(white, "%u KB", machine.ram_size / 1024);
+
+        ImGui::TableNextRow();
+        draw_grid_label("FLOPPIES");
+        ImGui::TextColored(white, "%d", machine.floppy_drives);
+
+        ImGui::TableNextRow();
+        draw_grid_label("MACHINE ID");
+        ImGui::TextColored(white, "$0101"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(gray, "(0030/0031)");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "RESET (0020/0022)"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "CAUSE      "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", control->reset_cause); ImGui::SameLine();
-    ImGui::TextColored((control->reset_cause & k_system_control_reset_soft) ? green : gray, "SOFT"); ImGui::SameLine();
-    ImGui::TextColored((control->reset_cause & k_system_control_reset_shutdown) ? green : gray, "SHUTDOWN");
-    ImGui::TextColored(violet, "PENDING    "); ImGui::SameLine();
-    ImGui::TextColored(control->reset_pending ? yellow : gray, "%s", control->reset_pending ? "YES" : "NO ");
-    ImGui::TextColored(violet, "POWER OFF  "); ImGui::SameLine();
-    ImGui::TextColored(control->power_off ? red : gray, "%s", control->power_off ? "REQUESTED" : "NO       ");
+    if (ImGui::BeginTable("##system_reset", 2, flags))
+    {
+        setup_fixed_columns(widths, 2);
+
+        ImGui::TableNextRow();
+        draw_grid_label("CAUSE");
+        ImGui::TextColored(white, "$%02X", control->reset_cause); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((control->reset_cause & k_system_control_reset_soft) ? green : gray, "SOFT");
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((control->reset_cause & k_system_control_reset_shutdown) ? green : gray, "SHUTDOWN");
+
+        ImGui::TableNextRow();
+        draw_grid_label("PENDING");
+        ImGui::TextColored(control->reset_pending ? yellow : gray, "%s", control->reset_pending ? "YES" : "NO");
+
+        ImGui::TableNextRow();
+        draw_grid_label("POWER OFF");
+        ImGui::TextColored(control->power_off ? red : gray, "%s", control->power_off ? "REQUESTED" : "NO");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "MEMORY MAP"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "LOW WINDOW "); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", memory->main_memory ? "MAIN RAM    " : "FM-R DEVICES"); ImGui::SameLine();
-    ImGui::TextColored(gray, "0404");
-    ImGui::TextColored(violet, "F8000      "); ImGui::SameLine();
-    ImGui::TextColored(blue, "%s", memory->boot_ram ? "RAM         " : "BOOT ROM    "); ImGui::SameLine();
-    ImGui::TextColored(gray, "0480");
-    ImGui::TextColored(violet, "DICTIONARY "); ImGui::SameLine();
-    ImGui::TextColored(memory->dictionary ? green : gray, "%s", memory->dictionary ? "ON " : "OFF"); ImGui::SameLine();
-    ImGui::TextColored(violet, " BANK"); ImGui::SameLine();
-    ImGui::TextColored(orange, "%2d", memory->dictionary_bank & 0x0F); ImGui::SameLine();
-    ImGui::TextColored(gray, "     0484");
-    ImGui::TextColored(violet, "CMOS WP    "); ImGui::SameLine();
-    ImGui::TextColored(control->write_protect ? yellow : gray, "%s", control->write_protect ? "ON " : "OFF"); ImGui::SameLine();
-    ImGui::TextColored(gray, "         0020");
-    ImGui::TextColored(violet, "UNDOC      "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", control->port_05e0); ImGui::SameLine();
-    ImGui::TextColored(gray, "         05E0");
+    if (ImGui::BeginTable("##system_memory", 3, flags))
+    {
+        static const int memory_widths[3] = { 10, 12, 6 };
+        setup_fixed_columns(memory_widths, 3);
+
+        ImGui::TableNextRow();
+        draw_grid_label("LOW WINDOW");
+        ImGui::TextColored(blue, "%s", memory->main_memory ? "MAIN RAM" : "FM-R DEVICES");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0404)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("F8000");
+        ImGui::TextColored(blue, "%s", memory->boot_ram ? "RAM" : "BOOT ROM");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0480)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("DICTIONARY");
+        ImGui::TextColored(memory->dictionary ? green : gray, "%s", memory->dictionary ? "ON" : "OFF");
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(violet, "BANK"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored(orange, "%d", memory->dictionary_bank & 0x0F);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0484)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("CMOS WP");
+        ImGui::TextColored(control->write_protect ? yellow : gray, "%s", control->write_protect ? "ON" : "OFF");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0020)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("UNDOC");
+        ImGui::TextColored(white, "$%02X", control->port_05e0);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(05E0)");
+
+        ImGui::EndTable();
+    }
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "SERIAL ROM (0032)"); ImGui::Separator();
 
-    ImGui::TextColored(violet, "CONTROL    "); ImGui::SameLine();
-    ImGui::TextColored(white, "$%02X", control->serial_rom_control); ImGui::SameLine();
-    ImGui::TextColored((control->serial_rom_control & 0x80) ? green : gray, "RESET"); ImGui::SameLine();
-    ImGui::TextColored((control->serial_rom_control & 0x40) ? green : gray, "CLK"); ImGui::SameLine();
-    ImGui::TextColored((control->serial_rom_control & 0x20) ? gray : green, "CS");
-    ImGui::TextColored(violet, "BIT        "); ImGui::SameLine();
-    ImGui::TextColored(white, "%3d", control->serial_rom_bit); ImGui::SameLine();
-    ImGui::TextColored(violet, " DATA"); ImGui::SameLine();
-    ImGui::TextColored(white, "%d", core->GetSystemControl()->Peek(0x0032) & 0x01);
-    ImGui::TextColored(violet, "CONTENTS   "); ImGui::SameLine();
-    ImGui::TextColored(white, "FUJITSU, MODEL 0101");
+    if (ImGui::BeginTable("##system_serial_rom", 2, flags))
+    {
+        setup_fixed_columns(widths, 2);
+
+        ImGui::TableNextRow();
+        draw_grid_label("CONTROL");
+        ImGui::TextColored(white, "$%02X", control->serial_rom_control); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((control->serial_rom_control & 0x80) ? green : gray, "RESET"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((control->serial_rom_control & 0x40) ? green : gray, "CLK"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((control->serial_rom_control & 0x20) ? gray : green, "CS");
+
+        ImGui::TableNextRow();
+        draw_grid_label("BIT");
+        ImGui::TextColored(white, "%d", control->serial_rom_bit);
+
+        ImGui::TableNextRow();
+        draw_grid_label("DATA");
+        ImGui::TextColored(white, "%d", core->GetSystemControl()->Peek(0x0032) & 0x01);
+
+        ImGui::TableNextRow();
+        draw_grid_label("CONTENTS");
+        ImGui::TextColored(white, "FUJITSU, MODEL 0101");
+
+        ImGui::EndTable();
+    }
 
     ImGui::PopFont();
 
@@ -512,15 +672,30 @@ void gui_debug_window_system_control(void)
     ImGui::PopStyleVar();
 }
 
-static void draw_flag(const char* name, bool on)
+static void setup_fixed_columns(const int* widths, int count)
 {
-    ImGui::TextColored(violet, "%s", name); ImGui::SameLine();
-    ImGui::TextColored(on ? green : gray, "%s", on ? "ON " : "OFF");
+    float character = ImGui::CalcTextSize("0").x;
+
+    for (int i = 0; i < count; i++)
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * widths[i]);
+}
+
+static void draw_grid_label(const char* label)
+{
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+    ImGui::TableNextColumn();
+}
+
+static void draw_flag(const char* label, bool on)
+{
+    draw_grid_label(label);
+    ImGui::TextColored(on ? green : gray, "%s", on ? "ON" : "OFF");
 }
 
 static void draw_bits4(u8 value)
 {
-    ImGui::TextColored(white, "$%X ", value & 0x0F); ImGui::SameLine(0, 0);
+    ImGui::TextColored(white, "$%X", value & 0x0F); ImGui::SameLine(0.0f, ImGui::CalcTextSize(" ").x);
     ImGui::TextColored(gray, "(%d%d%d%d)", (value >> 3) & 1, (value >> 2) & 1, (value >> 1) & 1, value & 1);
 }
 
@@ -551,59 +726,64 @@ static void draw_vector_tooltip(u8 vector)
 
 static void draw_pic_column(const I8259::I8259_State* chip, bool master, int row)
 {
+    float space = ImGui::CalcTextSize(" ").x;
+
     switch (row)
     {
         case 0:
-            ImGui::TextColored(white, "$%02X", chip->icw1); ImGui::SameLine();
-            ImGui::TextColored(blue, "%s %s", (chip->icw1 & k_i8259_icw1_ltim) ? "LEVEL" : "EDGE ",
-                (chip->icw1 & k_i8259_icw1_sngl) ? "SINGLE " : "CASCADE");
+            ImGui::TextColored(white, "$%02X", chip->icw1); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(blue, "%s %s", (chip->icw1 & k_i8259_icw1_ltim) ? "LEVEL" : "EDGE",
+                (chip->icw1 & k_i8259_icw1_sngl) ? "SINGLE" : "CASCADE");
             break;
         case 1:
-            ImGui::TextColored(white, "$%02X", chip->icw2); ImGui::SameLine();
-            ImGui::TextColored(violet, "BASE"); ImGui::SameLine();
-            ImGui::TextColored(white, "$%02X     ", chip->icw2 & 0xF8);
+            ImGui::TextColored(white, "$%02X", chip->icw2); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(violet, "BASE"); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(white, "$%02X", chip->icw2 & 0xF8);
             break;
         case 2:
-            ImGui::TextColored(white, "$%02X", chip->icw3); ImGui::SameLine();
+            ImGui::TextColored(white, "$%02X", chip->icw3); ImGui::SameLine(0.0f, space);
 
             if (master)
-                ImGui::TextColored(violet, "SLAVE MASK   ");
+                ImGui::TextColored(violet, "SLAVE MASK");
             else
-                ImGui::TextColored(violet, "ID %d         ", chip->icw3 & 0x07);
+            {
+                ImGui::TextColored(violet, "ID"); ImGui::SameLine(0.0f, space);
+                ImGui::TextColored(white, "%d", chip->icw3 & 0x07);
+            }
 
             break;
         case 3:
-            ImGui::TextColored(white, "$%02X", chip->icw4); ImGui::SameLine();
-            ImGui::TextColored((chip->icw4 & k_i8259_icw4_upm) ? green : gray, "uPM"); ImGui::SameLine();
-            ImGui::TextColored((chip->icw4 & k_i8259_icw4_aeoi) ? green : gray, "AEOI"); ImGui::SameLine();
-            ImGui::TextColored((chip->icw4 & 0x08) ? green : gray, "BUF"); ImGui::SameLine();
+            ImGui::TextColored(white, "$%02X", chip->icw4); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored((chip->icw4 & k_i8259_icw4_upm) ? green : gray, "uPM"); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored((chip->icw4 & k_i8259_icw4_aeoi) ? green : gray, "AEOI"); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored((chip->icw4 & 0x08) ? green : gray, "BUF"); ImGui::SameLine(0.0f, space);
             ImGui::TextColored((chip->icw4 & k_i8259_icw4_sfnm) ? green : gray, "SFNM");
             break;
         case 4:
             if (chip->init_step == I8259::I8259_INIT_READY)
-                ImGui::TextColored(green, "READY        ");
+                ImGui::TextColored(green, "READY");
             else
-                ImGui::TextColored(yellow, "WAIT %-8s", k_debug_pic_init_names[chip->init_step & 3]);
+                ImGui::TextColored(yellow, "WAIT %s", k_debug_pic_init_names[chip->init_step & 3]);
 
             break;
         case 5:
             ImGui::TextColored(blue, "%s", chip->read_isr ? "ISR" : "IRR");
             break;
         case 6:
-            ImGui::TextColored(chip->special_mask ? green : gray, "%s", chip->special_mask ? "ON " : "OFF");
+            ImGui::TextColored(chip->special_mask ? green : gray, "%s", chip->special_mask ? "ON" : "OFF");
             break;
         case 7:
-            ImGui::TextColored(chip->poll_pending ? yellow : gray, "%s", chip->poll_pending ? "ARMED" : "OFF  ");
+            ImGui::TextColored(chip->poll_pending ? yellow : gray, "%s", chip->poll_pending ? "ARMED" : "OFF");
             break;
         case 8:
-            ImGui::TextColored(white, "IR%d", (chip->lowest_priority + 1) & 7); ImGui::SameLine();
+            ImGui::TextColored(white, "IR%d", (chip->lowest_priority + 1) & 7); ImGui::SameLine(0.0f, space);
             ImGui::TextColored(gray, "FIRST");
             break;
         case 9:
-            ImGui::TextColored(chip->rotate_on_aeoi ? green : gray, "%s", chip->rotate_on_aeoi ? "ON " : "OFF");
+            ImGui::TextColored(chip->rotate_on_aeoi ? green : gray, "%s", chip->rotate_on_aeoi ? "ON" : "OFF");
             break;
         default:
-            ImGui::TextColored(chip->int_output ? yellow : gray, "%s", chip->int_output ? "HIGH" : "LOW ");
+            ImGui::TextColored(chip->int_output ? yellow : gray, "%s", chip->int_output ? "HIGH" : "LOW");
             break;
     }
 }

@@ -686,7 +686,7 @@ static void main_window(void)
     {
         flags |= ImGuiWindowFlags_AlwaysAutoResize;
 
-        ImGui::SetNextWindowPos(ImVec2(631, 26), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(779.0f, gui_main_menu_height + 6.0f), ImGuiCond_FirstUseEver);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
         window_visible = ImGui::Begin("Output###debug_output", &config_debug.show_screen, flags);

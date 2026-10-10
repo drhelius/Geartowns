@@ -327,8 +327,9 @@ std::vector<DisassemblerBookmark>* gui_debug_get_disassembler_bookmarks(void)
 void gui_debug_window_disassembler(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(330, 26), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(620, 600), ImGuiCond_FirstUseEver);
+    // The default layout lines up the 80386 window (227 wide), the disassembler and the output 6 pixels apart
+    ImGui::SetNextWindowPos(ImVec2(239.0f, gui_main_menu_height + 6.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(534, 575), ImGuiCond_FirstUseEver);
 
     ImGui::Begin("Intel 80386 Disassembler", &config_debug.show_disassembler, ImGuiWindowFlags_MenuBar);
 
@@ -1029,8 +1030,8 @@ static void draw_breakpoints_content(void)
 void gui_debug_window_breakpoints(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(795, 26), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(520, 360), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(182, 234), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(594, 346), ImGuiCond_FirstUseEver);
     ImGui::Begin("Breakpoints", &config_debug.show_breakpoints);
 
     draw_breakpoints_content();
@@ -1684,8 +1685,8 @@ static void draw_context_menu(DisassemblerLine* line)
 void gui_debug_window_call_stack(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(795, 300), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(510, 250), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(223, 101), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(377, 157), ImGuiCond_FirstUseEver);
     ImGui::Begin("Intel 80386 Call Stack", &config_debug.show_call_stack);
 
     I386* cpu = emu_get_core()->GetI386();
@@ -1750,8 +1751,8 @@ void gui_debug_window_call_stack(void)
 void gui_debug_window_symbols(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(795, 560), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(390, 360), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(264, 168), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(389, 336), ImGuiCond_FirstUseEver);
     ImGui::Begin("Symbols", &config_debug.show_symbols);
 
     static char symbol_filter[64] = "";

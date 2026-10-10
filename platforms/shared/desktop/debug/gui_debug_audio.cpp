@@ -101,8 +101,8 @@ void gui_debug_audio_destroy(void)
 void gui_debug_window_ym3438(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(90, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(480, 530), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(202, 174), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(462, 528), ImGuiCond_FirstUseEver);
     ImGui::Begin("YM3438 FM", &config_debug.show_ym3438);
 
     Audio* audio = emu_get_core()->GetAudio();
@@ -146,8 +146,8 @@ void gui_debug_window_ym3438(void)
 void gui_debug_window_ym3438_registers(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(120, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(470, 330), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(243, 241), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(386, 375), ImGuiCond_FirstUseEver);
     ImGui::Begin("YM3438 Registers", &config_debug.show_ym3438_registers);
 
     YM3438* ym3438 = emu_get_core()->GetAudio()->GetYM3438();
@@ -221,8 +221,8 @@ void gui_debug_window_ym3438_registers(void)
 void gui_debug_window_rf5c68(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(150, 70), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(470, 610), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(284, 108), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(459, 611), ImGuiCond_FirstUseEver);
     ImGui::Begin("RF5C68 PCM", &config_debug.show_rf5c68);
 
     Audio* audio = emu_get_core()->GetAudio();
@@ -261,8 +261,8 @@ void gui_debug_window_rf5c68(void)
 void gui_debug_window_sound_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(180, 100), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(125, 175), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(253, 530), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound Control", &config_debug.show_sound_control);
 
     ImGui::PushFont(gui_default_font);
@@ -367,8 +367,8 @@ void gui_debug_window_sound_control(void)
 void gui_debug_window_cdrom_audio(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(200, 110), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(262, 384), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(166, 242), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(249, 371), ImGuiCond_FirstUseEver);
     ImGui::Begin("CD Audio", &config_debug.show_cdrom_audio);
 
     GeartownsCore* core = emu_get_core();

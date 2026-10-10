@@ -102,8 +102,8 @@ static void draw_empty(void);
 void gui_debug_window_profiler(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(180, 140), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(958, 383), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(233, 171), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(491, 438), ImGuiCond_FirstUseEver);
 
     profiler_visible = ImGui::Begin("Profiler", &config_debug.show_profiler);
 

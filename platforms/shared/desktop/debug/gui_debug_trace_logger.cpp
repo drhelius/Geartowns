@@ -100,8 +100,8 @@ static void render_entry_colored(const GT_Trace_Entry& entry, u64 index, bool pr
 void gui_debug_window_trace_logger(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(340, 168), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(544, 362), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(192, 104), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(560, 500), ImGuiCond_FirstUseEver);
 
     ImGui::Begin("Trace Logger", &config_debug.show_trace_logger, ImGuiWindowFlags_MenuBar);
 

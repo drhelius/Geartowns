@@ -50,8 +50,8 @@ static void goto_floppy_image(int drive, u32 offset);
 void gui_debug_window_fdc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(80, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(270, 550), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(289, 243), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(265, 545), ImGuiCond_FirstUseEver);
     ImGui::Begin("FDC", &config_debug.show_fdc);
 
     ImGui::PushFont(gui_default_font);
@@ -190,8 +190,8 @@ void gui_debug_window_fdc(void)
 void gui_debug_window_floppy_drives(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(110, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(410, 250), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(130, 110), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(382, 243), ImGuiCond_FirstUseEver);
     ImGui::Begin("Floppy Drives", &config_debug.show_floppy_drives);
 
     ImGui::PushFont(gui_default_font);
@@ -237,8 +237,8 @@ void gui_debug_window_floppy_drives(void)
 void gui_debug_window_disk_viewer(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(140, 70), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(540, 560), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(171, 177), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(508, 536), ImGuiCond_FirstUseEver);
     ImGui::Begin("Disk Viewer", &config_debug.show_disk_viewer);
 
     GeartownsCore* core = emu_get_core();

@@ -34,8 +34,8 @@ static void draw_grid_label(const char* label);
 void gui_debug_window_keyboard(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(210, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 330), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(217, 179), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(216, 332), ImGuiCond_FirstUseEver);
     ImGui::Begin("Keyboard", &config_debug.show_keyboard);
 
     ImGui::PushFont(gui_default_font);

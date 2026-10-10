@@ -53,8 +53,8 @@ static void goto_physical(u32 address);
 void gui_debug_window_pic(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(420, 600), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(212, 244), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(410, 597), ImGuiCond_FirstUseEver);
     ImGui::Begin("Interrupts", &config_debug.show_pic);
 
     ImGui::PushFont(gui_default_font);
@@ -142,8 +142,8 @@ void gui_debug_window_pic(void)
 void gui_debug_window_pit(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(90, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(610, 290), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(253, 111), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(616, 261), ImGuiCond_FirstUseEver);
     ImGui::Begin("Timers", &config_debug.show_pit);
 
     ImGui::PushFont(gui_default_font);
@@ -272,8 +272,8 @@ void gui_debug_window_pit(void)
 void gui_debug_window_dma(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(120, 120), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 330), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(294, 178), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(548, 301), ImGuiCond_FirstUseEver);
     ImGui::Begin("DMA", &config_debug.show_dma);
 
     ImGui::PushFont(gui_default_font);
@@ -426,8 +426,8 @@ void gui_debug_window_dma(void)
 void gui_debug_window_rtc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(150, 150), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 330), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(135, 245), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(277, 317), ImGuiCond_FirstUseEver);
     ImGui::Begin("RTC", &config_debug.show_rtc);
 
     ImGui::PushFont(gui_default_font);
@@ -526,8 +526,8 @@ void gui_debug_window_rtc(void)
 void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(180, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(270, 470), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(176, 112), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(236, 480), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);

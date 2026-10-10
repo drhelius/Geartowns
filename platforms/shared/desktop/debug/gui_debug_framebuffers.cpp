@@ -66,8 +66,8 @@ static bool sprite_passes_filter(const Emu_Debug_Sprite& sprite);
 void gui_debug_window_framebuffers(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(80, 60), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 520), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(120, 240), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(548, 483), ImGuiCond_FirstUseEver);
     ImGui::Begin("Framebuffers", &config_debug.show_framebuffers);
 
     if (ImGui::BeginTabBar("##framebuffer_tabs"))
@@ -106,8 +106,8 @@ void gui_debug_window_framebuffers(void)
 void gui_debug_window_sprites(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(110, 90), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(568, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(161, 107), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(583, 418), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sprites", &config_debug.show_sprites);
 
     ImGui::PushFont(gui_default_font);

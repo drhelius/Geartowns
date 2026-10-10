@@ -610,7 +610,7 @@ static void draw_debug_registers(I386* cpu, const I386_State& state)
 void gui_debug_window_i386(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(3, 26), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(6.0f, gui_main_menu_height + 6.0f), ImGuiCond_FirstUseEver);
 
     ImGui::Begin("Intel 80386", &config_debug.show_processor, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize);
 
@@ -782,8 +782,8 @@ void gui_debug_window_i386(void)
 void gui_debug_window_i386_details(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(130, 26), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(660, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(105, 235), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(566, 436), ImGuiCond_FirstUseEver);
 
     bool visible = ImGui::Begin("Intel 80386 System Registers", &config_debug.show_processor_details,
         ImGuiWindowFlags_HorizontalScrollbar);

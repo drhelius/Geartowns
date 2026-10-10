@@ -37,8 +37,8 @@ static void draw_lba(u32 lba);
 void gui_debug_window_cdrom(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(60, 50), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(240, 600), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(207, 109), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(213, 599), ImGuiCond_FirstUseEver);
     ImGui::Begin("CD-ROM Controller", &config_debug.show_cdrom);
 
     ImGui::PushFont(gui_default_font);
@@ -202,7 +202,7 @@ void gui_debug_window_cdrom(void)
 void gui_debug_window_cdrom_toc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(105, 95), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(248, 176), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(560, 420), ImGuiCond_FirstUseEver);
     ImGui::Begin("CD-ROM TOC", &config_debug.show_cdrom_toc);
 

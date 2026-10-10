@@ -302,8 +302,8 @@ void gui_debug_memory_update(void)
 void gui_debug_window_memory(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(740, 520), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(228, 236), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(997, 572), ImGuiCond_FirstUseEver);
     ImGui::Begin("Memory Workspace", &config_debug.show_memory, ImGuiWindowFlags_MenuBar);
 
     draw_memory_menu();
@@ -949,6 +949,7 @@ static bool add_breakpoint(const GT_Debug_Memory_Address& address, u32 end)
 
 static void draw_watches_window()
 {
+    ImGui::SetNextWindowPos(ImVec2(269, 103), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(650, 360), ImGuiCond_FirstUseEver);
     ImGui::Begin("Memory Watches", &show_watches);
 
@@ -1049,6 +1050,7 @@ static void draw_watches_window()
 
 static void draw_search_window()
 {
+    ImGui::SetNextWindowPos(ImVec2(110, 170), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(620, 520), ImGuiCond_FirstUseEver);
     ImGui::Begin("Memory Search", &show_search);
     MemEditor* editor = active_editor();
@@ -1242,7 +1244,8 @@ static void draw_breakpoints_window()
 {
     static const char* k_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "LINEAR", "PHYSICAL", "I/O" };
 
-    ImGui::SetNextWindowSize(ImVec2(420, 300), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(151, 237), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(720, 360), ImGuiCond_FirstUseEver);
     ImGui::Begin("Memory Breakpoints", &show_breakpoints);
 
     I386* cpu = emu_get_core()->GetI386();

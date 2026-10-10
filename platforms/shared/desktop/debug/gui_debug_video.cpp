@@ -50,8 +50,8 @@ static void goto_vram(u32 offset, bool single_page);
 void gui_debug_window_crtc(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(70, 50), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(156, 172), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(387, 490), ImGuiCond_FirstUseEver);
     ImGui::Begin("CRTC", &config_debug.show_crtc);
 
     ImGui::PushFont(gui_default_font);
@@ -208,8 +208,8 @@ void gui_debug_window_crtc(void)
 void gui_debug_window_crtc_registers(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(100, 80), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(520, 330), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(197, 239), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(536, 334), ImGuiCond_FirstUseEver);
     ImGui::Begin("CRTC Registers", &config_debug.show_crtc_registers);
 
     ImGui::PushFont(gui_default_font);
@@ -255,8 +255,8 @@ void gui_debug_window_crtc_registers(void)
 void gui_debug_window_video_output(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(130, 110), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 480), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(238, 106), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(240, 557), ImGuiCond_FirstUseEver);
     ImGui::Begin("Output Control", &config_debug.show_video_output);
 
     ImGui::PushFont(gui_default_font);
@@ -347,8 +347,8 @@ void gui_debug_window_video_output(void)
 void gui_debug_window_palettes(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(160, 140), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(404, 504), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(279, 173), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 491), ImGuiCond_FirstUseEver);
     ImGui::Begin("Palettes", &config_debug.show_palettes);
 
     ImGui::PushFont(gui_default_font);

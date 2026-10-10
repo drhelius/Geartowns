@@ -390,8 +390,8 @@ void gui_debug_i386_page_flags(u32 entry, char* text, size_t text_size)
 void gui_debug_window_descriptor_tables(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(120, 80), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 420), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(146, 102), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(389, 281), ImGuiCond_FirstUseEver);
     ImGui::Begin("Descriptor Tables", &config_debug.show_i386_descriptors);
 
     if (ImGui::BeginTabBar("##descriptor_tabs"))
@@ -424,8 +424,8 @@ void gui_debug_window_descriptor_tables(void)
 void gui_debug_window_paging(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-    ImGui::SetNextWindowPos(ImVec2(150, 110), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(560, 460), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(187, 169), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(550, 478), ImGuiCond_FirstUseEver);
     ImGui::Begin("Paging", &config_debug.show_i386_paging);
 
     ImGui::PushFont(gui_default_font);

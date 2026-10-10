@@ -1919,7 +1919,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "list_recent_media"},
         {"title", "List Recent Media"},
-        {"description", "List recent CD images with file_path values for load_media, and recent floppies with their drive."},
+        {"description", "List recent CD images with file_path values for load_media, and recent floppies."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

@@ -201,8 +201,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Floppy", "RememberChanges", config_emulator.floppy_persistence, true);
     CONFIG_BOOL("Floppy", "Drive1WriteProtected", config_emulator.floppy_write_protected[0], false);
     CONFIG_BOOL("Floppy", "Drive2WriteProtected", config_emulator.floppy_write_protected[1], false);
-    CONFIG_STRING_ARRAY("Floppy", "Drive1Recent%d", config_emulator.recent_floppies[0], config_max_recent_floppies, "");
-    CONFIG_STRING_ARRAY("Floppy", "Drive2Recent%d", config_emulator.recent_floppies[1], config_max_recent_floppies, "");
+    CONFIG_STRING_ARRAY("Floppy", "Recent%d", config_emulator.recent_floppies, config_max_recent_floppies, "");
 
     // Services
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);

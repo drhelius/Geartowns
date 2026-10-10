@@ -4151,22 +4151,18 @@ json DebugAdapter::ListRecentMedia()
 
     json recent_floppies = json::array();
 
-    for (int drive = 0; drive < config_floppy_drives; drive++)
+    for (int index = 0; index < config_max_recent_floppies; index++)
     {
-        for (int index = 0; index < config_max_recent_floppies; index++)
-        {
-            const std::string& path = config_emulator.recent_floppies[drive][index];
+        const std::string& path = config_emulator.recent_floppies[index];
 
-            if (path.empty())
-                continue;
+        if (path.empty())
+            continue;
 
-            recent_floppies.push_back({
-                {"drive", drive},
-                {"index", index},
-                {"file_path", path},
-                {"file_name", get_filename(path.c_str())}
-            });
-        }
+        recent_floppies.push_back({
+            {"index", index},
+            {"file_path", path},
+            {"file_name", get_filename(path.c_str())}
+        });
     }
 
     result["count"] = recent_media.size();

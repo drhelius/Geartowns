@@ -96,7 +96,7 @@ struct config_Emulator
     int mouse_sensitivity;
     bool floppy_persistence;
     bool floppy_write_protected[config_floppy_drives];
-    std::string recent_floppies[config_floppy_drives][config_max_recent_floppies];
+    std::string recent_floppies[config_max_recent_floppies];
 };
 
 struct config_Machine

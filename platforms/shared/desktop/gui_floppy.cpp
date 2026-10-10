@@ -150,18 +150,18 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Recent"))
+    if (ImGui::BeginMenu("Recent", can_insert))
     {
         for (int i = 0; i < config_max_recent_floppies; i++)
         {
-            const std::string& recent = config_emulator.recent_floppies[drive][i];
+            const std::string& recent = config_emulator.recent_floppies[i];
 
             if (recent.empty())
                 continue;
 
             ImGui::PushID(i);
 
-            if (ImGui::MenuItem(get_filename(recent.c_str()), NULL, false, can_insert))
+            if (ImGui::MenuItem(get_filename(recent.c_str())))
                 request(drive, Floppy_Action_Insert, recent.c_str(), 0);
 
             if (ImGui::IsItemHovered())

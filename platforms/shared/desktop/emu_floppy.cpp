@@ -134,7 +134,7 @@ bool emu_floppy_insert(int drive, const char* path, bool discard_changes)
         return false;
     }
 
-    config_push_recent_floppy(drive, path);
+    config_push_recent_floppy(path);
     Log("Floppy %d: %s", drive + 1, path);
     return true;
 }
@@ -238,7 +238,7 @@ bool emu_floppy_save_as(int drive, const char* path)
     host.working_path = path;
     host.state_owned = false;
     disk->ClearDirty();
-    config_push_recent_floppy(drive, path);
+    config_push_recent_floppy(path);
     rewind_reset();
     return true;
 }

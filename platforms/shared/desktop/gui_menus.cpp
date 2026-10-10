@@ -399,15 +399,13 @@ static void menu_cdrom(void)
 
     int discs = emu_cdrom_playlist_get_count();
 
-    if ((discs > 0) && ImGui::BeginMenu("Disc in Playlist", !loading))
+    if ((discs > 0) && ImGui::BeginMenu("Disc in Playlist", can_insert))
     {
-        int selected = inserted ? emu_cdrom_playlist_get_index() : -1;
-
         for (int i = 0; i < discs; i++)
         {
             ImGui::PushID(i);
 
-            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i), NULL, i == selected, can_insert) && (i != selected))
+            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i)))
                 gui_load_playlist_disc(i);
 
             ImGui::PopID();
@@ -475,13 +473,13 @@ static void menu_cdrom(void)
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Recent"))
+    if (ImGui::BeginMenu("Recent", can_insert))
     {
         for (int i = 0; i < config_max_recent_roms; i++)
         {
             if (config_emulator.recent_roms[i].length() > 0)
             {
-                if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), NULL, false, can_insert))
+                if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str()))
                 {
                     char media_path[4096];
                     strncpy_fit(media_path, config_emulator.recent_roms[i].c_str(), sizeof(media_path));

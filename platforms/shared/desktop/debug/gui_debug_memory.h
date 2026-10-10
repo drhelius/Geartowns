@@ -68,6 +68,8 @@ void gui_debug_memory_destroy(void);
 void gui_debug_memory_reset(void);
 void gui_debug_memory_update(void);
 void gui_debug_memory_goto(const GT_Debug_Memory_Address& address);
+const char* gui_debug_memory_region_group(int region_id);
+const char* gui_debug_memory_region_description(int region_id);
 void gui_debug_window_memory(void);
 void gui_debug_memory_auxiliary_windows(void);
 void gui_debug_memory_copy(void);

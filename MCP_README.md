@@ -344,7 +344,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `get_page_directory` - List the present page-directory entries, or with `index` the present pages of that page table, with linear and physical addresses and flags
 
 ### Memory Operations
-- `list_memory_areas` - List memory areas: LINEAR, PHYSICAL, I/O PORTS, and every memory region, with `id`, `name`, `size`, `unit_size`, `flags` and `physical_base`
+- `list_memory_areas` - List memory areas: LINEAR, PHYSICAL, I/O PORTS, and every memory region, with `id`, `name`, `size`, `unit_size`, `flags`, `physical_base`, `group` (`address_space`, `memory`, `rom`, `media`, `cpu_window`) and `description`
 - `read_memory` - Read from a memory area; unmapped or unreadable bytes read as `??`. The LINEAR area takes logical addresses too
 - `write_memory` - Write to a memory area. ROMs and I/O PORTS are read-only
 - `translate_address` - Translate a logical or linear address: logical, linear, PDE and PTE with their indexes, page flags, physical, bus, region and offset, or the reason it fails
@@ -533,7 +533,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 
 ### Screen Capture
 - `get_screenshot` - Capture current screen frame as base64 PNG
-- `start_video_recording` - Start recording video and audio to an AVI file (MJPEG or uncompressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`). Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses square pixels while debugging. Frames are recorded only while the emulator runs, so continue or step execution before stopping
+- `start_video_recording` - Start recording video and audio to an AVI file (MJPEG or uncompressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`). Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses the debug output screen aspect ratio while debugging. Frames are recorded only while the emulator runs, so continue or step execution before stopping
 - `stop_video_recording` - Stop the active recording and finalize the AVI file. Returns `file_path` and the number of recorded `frames`
 
 ### Media & State Management

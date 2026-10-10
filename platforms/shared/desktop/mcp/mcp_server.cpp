@@ -730,7 +730,8 @@ json McpServer::BuildToolList()
         {"name", "list_memory_areas"},
         {"title", "List Memory Areas"},
         {"description", "List memory areas: LINEAR and PHYSICAL 4 GB spaces, I/O PORTS (side-effect free reads), and every "
-            "memory region (Main RAM, ROMs, CMOS, VRAM, Sprite RAM, PCM RAM, media images); returns IDs, sizes and flags."},
+            "memory region (Main RAM, ROMs, CMOS, VRAM, Sprite RAM, PCM RAM, media images, and CPU windows that show a chip "
+            "through another mapping); returns IDs, sizes, flags, group and a description."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2072,7 +2073,7 @@ json McpServer::BuildToolList()
                 }},
                 {"aspect_ratio", {
                     {"type", "string"},
-                    {"description", "Output aspect ratio. screen follows the current display settings (square pixels while debugging)."},
+                    {"description", "Output aspect ratio. screen follows the current display settings (debug output screen settings while debugging)."},
                     {"enum", json::array({"screen", "square", "4:3", "16:9"})}
                 }},
                 {"quality", {

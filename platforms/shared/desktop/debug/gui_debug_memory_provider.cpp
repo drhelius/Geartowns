@@ -571,7 +571,7 @@ bool DebugMemoryProvider::GetExternalRegion(int index, GT_Debug_Memory_Region& r
         {
             memset(&region, 0, sizeof(region));
             region.id = GT_DEBUG_REGION_MEDIA_IMAGE;
-            strncpy_fit(region.name, "Media Image", sizeof(region.name));
+            strncpy_fit(region.name, media->IsCDROM() ? "CD-ROM Image" : "Media Image", sizeof(region.name));
             region.size = (u32)media->GetSize();
             region.flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM;
             return true;

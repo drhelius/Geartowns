@@ -1290,7 +1290,7 @@ void GeartownsCore::InitMemoryMap()
 
     u32 boot_rom_flags = (rom_flags & ~GT_DEBUG_REGION_MAPPED) | GT_DEBUG_REGION_OVERLAY;
 
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM_LOW_ALIAS, "System ROM (low boot window)", boot_rom,
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM_LOW_ALIAS, "Boot ROM Window", boot_rom,
         NULL, GT_FIRMWARE_SYSTEM_BOOT_SIZE, 0x000F8000U, boot_rom_flags))
         Error("Unable to register the low system ROM alias");
 
@@ -1307,12 +1307,12 @@ void GeartownsCore::InitMemoryMap()
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_VRAM, "VRAM", vram, vram, VIDEO_VRAM_SIZE, 0, vram_flags))
         Error("Unable to register VRAM");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM (two-page view)", VIDEO_VRAM_SIZE,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM Two-Page", VIDEO_VRAM_SIZE,
         0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPageCallback,
         Video::WriteVRAMTwoPageCallback, Video::PeekVRAMTwoPageCallback))
         Error("Unable to map the two-page VRAM view");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM (single-page view)", VIDEO_VRAM_SIZE,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM Single-Page", VIDEO_VRAM_SIZE,
         0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePageCallback,
         Video::WriteVRAMSinglePageCallback, Video::PeekVRAMSinglePageCallback))
         Error("Unable to map the single-page VRAM view");
@@ -1341,7 +1341,7 @@ void GeartownsCore::InitMemoryMap()
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED))
         Error("Unable to map CMOS RAM");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM wave RAM window", 0x1000, 0xC2200000U,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM Bank Window", 0x1000, 0xC2200000U,
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_AUDIO,
         m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback, Audio::PeekWaveWindowCallback))
         Error("Unable to map the PCM wave RAM window");
@@ -1350,39 +1350,39 @@ void GeartownsCore::InitMemoryMap()
 
     // All 64 KiB of wave RAM for raw debugger access
     // The CPU only reaches it through the 4 KiB window
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_PCM_RAM, "PCM wave RAM", wave_ram, wave_ram,
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_PCM_RAM, "PCM Wave RAM", wave_ram, wave_ram,
         RF5C68_WAVE_RAM_SIZE, 0, GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_AUDIO))
         Error("Unable to register PCM wave RAM");
 
     // The low windows are overlays that the mapping latches switch on and off
     u32 overlay_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_OVERLAY;
 
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM_LOW_WINDOW, "Dictionary ROM (low window)",
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM_LOW_WINDOW, "Dictionary Window",
         m_firmware->GetDictionaryRom(), NULL, 0x8000, 0x000D0000U,
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_OVERLAY))
         Error("Unable to register the low dictionary ROM window");
 
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_CMOS_LOW_WINDOW, "CMOS RAM (low window)", cmos, cmos,
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_CMOS_LOW_WINDOW, "CMOS Window", cmos, cmos,
         GT_CMOS_SIZE, 0x000D8000U, overlay_flags))
         Error("Unable to register the low CMOS RAM window");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_PLANES, "FM-R VRAM planes", 0x8000, 0x000C0000U,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_PLANES, "FM-R VRAM Planes", 0x8000, 0x000C0000U,
         overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRPlanesCallback, Video::WriteFMRPlanesCallback,
         Video::PeekFMRPlanesCallback))
         Error("Unable to register the FM-R VRAM planes");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_TEXT, "FM-R text RAM and ANK font", 0x7000, 0x000C8000U,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_TEXT, "FM-R Text RAM", 0x7000, 0x000C8000U,
         overlay_flags | GT_DEBUG_REGION_VIDEO, m_video, Video::ReadFMRTextCallback, Video::WriteFMRTextCallback,
         Video::PeekFMRTextCallback))
         Error("Unable to register the FM-R text window");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_REGISTERS, "FM-R registers", 0x1000, 0x000CF000U,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_FMR_REGISTERS, "FM-R Registers", 0x1000, 0x000CF000U,
         overlay_flags | GT_DEBUG_REGION_MMIO, m_video, Video::ReadFMRRegisterCallback, Video::WriteFMRRegisterCallback,
         Video::PeekFMRRegisterCallback))
         Error("Unable to register the FM-R registers");
 
     // Registered after the dictionary and CMOS windows so they take priority over it
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_FMR_VIEW, "FM-R view (unmapped)", NULL, NULL, 0x20000,
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_FMR_VIEW, "FM-R Unmapped", NULL, NULL, 0x20000,
         0x000D0000U, GT_DEBUG_REGION_OVERLAY))
         Error("Unable to register the FM-R view");
 

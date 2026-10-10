@@ -697,8 +697,22 @@ json DebugAdapter::ListMemoryAreas()
             {"flags", flags}
         };
 
-        if ((area.flags & GT_DEBUG_REGION_MAPPED) != 0)
+        if ((area.flags & (GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_OVERLAY)) != 0)
             item["physical_base"] = Hex32(area.physical_base);
+
+        if (area.source.space == GT_DEBUG_MEMORY_REGION)
+        {
+            const char* group = gui_debug_memory_region_group(area.source.region);
+            const char* description = gui_debug_memory_region_description(area.source.region);
+
+            if (IsValidPointer(group))
+                item["group"] = group;
+
+            if (IsValidPointer(description))
+                item["description"] = description;
+        }
+        else
+            item["group"] = "address_space";
 
         areas.push_back(item);
     }

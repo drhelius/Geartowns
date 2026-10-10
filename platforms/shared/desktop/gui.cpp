@@ -568,7 +568,7 @@ static void main_window(void)
     int physical_w = (int)floorf(logical_w * framebuffer_scale_x);
     int physical_h = (int)floorf(logical_h * framebuffer_scale_y);
 
-    int selected_ratio = config_debug.debug ? 0 : config_video.ratio;
+    int selected_ratio = config_debug.debug ? config_debug.ratio : config_video.ratio;
     float ratio = 0;
 
     switch (selected_ratio)
@@ -603,7 +603,7 @@ static void main_window(void)
     if (config_debug.debug)
     {
         scale_multiplier = config_debug.scale;
-        w_corrected = base_width;
+        w_corrected = selected_ratio == 0 ? base_width : (int)round(base_height * ratio);
         h_corrected = base_height;
     }
     else

@@ -1953,6 +1953,15 @@ static void menu_debug(void)
                 ImGui::EndMenu();
             }
 
+            if (ImGui::BeginMenu("Aspect Ratio", config_debug.debug))
+            {
+                ImGui::PushItemWidth(190.0f);
+                ImGui::Combo("##debug_ratio", &config_debug.ratio,
+                    "Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0\0");
+                ImGui::PopItemWidth();
+                ImGui::EndMenu();
+            }
+
             ImGui::EndMenu();
         }
 

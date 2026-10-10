@@ -154,6 +154,7 @@ static inline void process(config_Operation operation)
     // Interface
     CONFIG_INT_RANGE("Debug", "FontSize", config_debug.font_size, 0, 0, 3);
     CONFIG_INT_RANGE("Debug", "Scale", config_debug.scale, 1, 1, 10);
+    CONFIG_INT_RANGE("Debug", "AspectRatio", config_debug.ratio, 0, 0, 2);
     CONFIG_BOOL("Debug", "MultiViewport", config_debug.multi_viewport, false);
     CONFIG_BOOL("Debug", "SingleInstance", config_debug.single_instance, false);
 

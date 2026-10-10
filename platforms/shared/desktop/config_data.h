@@ -341,6 +341,7 @@ struct config_Debug
     bool step_skip_interrupts;
     int font_size;
     int scale;
+    int ratio;
     bool multi_viewport;
     bool single_instance;
 };

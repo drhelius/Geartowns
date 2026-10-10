@@ -1374,7 +1374,7 @@ bool emu_is_video_recording(void)
 
 static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width, int* height)
 {
-    int selected_ratio = config_video.ratio;
+    int selected_ratio = config_debug.debug ? config_debug.ratio : config_video.ratio;
     float ratio = 0.0f;
 
     if (config_video.recording_ratio > 0)

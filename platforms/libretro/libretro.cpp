@@ -53,6 +53,7 @@
 #define FLOPPY_IDLE_FRAMES 180
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
+#define INPUT_STATE_SIZE ((sizeof(float) * 2) + (sizeof(u16) * MAX_PADS))
 
 static retro_environment_t environ_cb;
 static retro_video_refresh_t video_cb;
@@ -160,6 +161,8 @@ static void update_frameskip(void);
 static void set_controller_info(void);
 static void clear_input_state(void);
 static void clear_keyboard_state(void);
+static void save_input_state(u8* data);
+static void load_input_state(const u8* data);
 static void sync_keyboard_state(void);
 static void sync_key(GT_Keys key);
 static void reset_controller_devices(void);
@@ -414,7 +417,7 @@ void retro_reset(void)
 
     check_variables();
     core->ResetMedia();
-    clear_keyboard_state();
+    clear_input_state();
 }
 
 void retro_set_controller_port_device(unsigned port, unsigned device)
@@ -556,28 +559,43 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 
 size_t retro_serialize_size(void)
 {
-    return savestate_size;
+    return savestate_size > 0 ? savestate_size + INPUT_STATE_SIZE : 0;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-    return core->SaveState(reinterpret_cast<u8*>(data), size);
+    u8* buffer = reinterpret_cast<u8*>(data);
+    size_t core_size = savestate_size;
+
+    if ((savestate_size == 0) || (size < savestate_size + INPUT_STATE_SIZE) || !core->SaveState(buffer, core_size) ||
+        (core_size != savestate_size))
+        return false;
+
+    save_input_state(buffer + savestate_size);
+    return true;
 }
 
 bool retro_unserialize(const void *data, size_t size)
 {
     const u8* buffer = reinterpret_cast<const u8*>(data);
+
+    if ((savestate_size == 0) || (size < savestate_size + INPUT_STATE_SIZE))
+        return false;
+
     GT_SaveState_Media media = {};
-    bool loaded = core->LoadState(buffer, size, &media);
+    bool loaded = core->LoadState(buffer, savestate_size, &media);
 
     if (!loaded && media.valid && mount_state_media(media))
     {
-        loaded = core->LoadState(buffer, size);
+        loaded = core->LoadState(buffer, savestate_size);
         disk_sync();
     }
 
     if (loaded)
+    {
+        load_input_state(buffer + savestate_size);
         sync_keyboard_state();
+    }
 
     return loaded;
 }
@@ -651,7 +669,7 @@ static bool load_content(const char* path)
     set_machine_config();
     memset(core->GetMemory()->GetCMOS(), 0, GT_CMOS_SIZE);
     disk_clear();
-    clear_keyboard_state();
+    clear_input_state();
 
     if (!disk_load(path))
     {
@@ -706,7 +724,7 @@ static void unload_content(void)
     core->EjectMedia();
     core->PowerOff();
     disk_clear();
-    clear_keyboard_state();
+    clear_input_state();
 
     content_loaded = false;
     retro_game_path[0] = 0;
@@ -976,6 +994,26 @@ static void sync_key(GT_Keys key)
         core->KeyPressed(key);
     else
         core->KeyReleased(key);
+}
+
+static void save_input_state(u8* data)
+{
+    memcpy(data, &mouse_remainder_x, sizeof(float));
+    memcpy(data + sizeof(float), &mouse_remainder_y, sizeof(float));
+    memcpy(data + (sizeof(float) * 2), joypad_previous, sizeof(joypad_previous));
+}
+
+static void load_input_state(const u8* data)
+{
+    memcpy(&mouse_remainder_x, data, sizeof(float));
+    memcpy(&mouse_remainder_y, data + sizeof(float), sizeof(float));
+    memcpy(joypad_previous, data + (sizeof(float) * 2), sizeof(joypad_previous));
+
+    if (!(fabsf(mouse_remainder_x) < 1.0f))
+        mouse_remainder_x = 0.0f;
+
+    if (!(fabsf(mouse_remainder_y) < 1.0f))
+        mouse_remainder_y = 0.0f;
 }
 
 static void reset_controller_devices(void)

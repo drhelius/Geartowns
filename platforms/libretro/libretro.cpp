@@ -30,6 +30,8 @@
 #include "geartowns.h"
 #include "media/media_file.h"
 #include "media/crc.h"
+#include "media/game_db.h"
+#include "drive/fdc.h"
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
 #include "libretro_core_options.h"
@@ -52,6 +54,7 @@ static const char slash = '/';
 #define BASE_SCREEN_HEIGHT 480
 #define MAX_SCREEN_WIDTH 1024
 #define MAX_SCREEN_HEIGHT 768
+#define FLOPPY_STATE_SIZE (k_floppy_header_size + 160 * 18 * (512 + k_floppy_sector_header_size))
 
 static retro_environment_t environ_cb;
 static retro_video_refresh_t video_cb;
@@ -119,10 +122,15 @@ static unsigned disk_initial_index = 0;
 static std::string disk_initial_path;
 static std::string floppy_working_path;
 static u32 floppy_base_crc = 0;
+static u32 floppy_state_size = FLOPPY_STATE_SIZE;
+static size_t savestate_size = 0;
 static GT_Runtime_Info runtime_info;
 static const retro_vfs_interface* vfs_interface = NULL;
 
-static void load_bios(void);
+static bool load_bios(void);
+static void check_bios(void);
+static void show_message(const char* message);
+static void update_savestate_size(void);
 static void set_controller_info(void);
 static void clear_input_state(void);
 static void clear_keyboard_state(void);
@@ -145,6 +153,9 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
 static bool disk_insert(unsigned index);
 static bool disk_eject(unsigned index);
 static void disk_clear(void);
+static bool floppy_read_image(unsigned index, std::vector<u8>& image, u32* base_crc, std::string& working,
+    bool* working_copy);
+static u32 floppy_image_size(unsigned index);
 static bool floppy_load_image(unsigned index);
 static bool floppy_flush(void);
 static void register_disk_control(void);
@@ -265,6 +276,9 @@ void retro_init(void)
         apply_controller_device(i, input_device[i], false);
 
     libretro_supports_bitmasks = environ_cb(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS, NULL);
+
+    uint64_t quirks = RETRO_SERIALIZATION_QUIRK_ENDIAN_DEPENDENT;
+    environ_cb(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS, &quirks);
 }
 
 void retro_deinit(void)
@@ -425,8 +439,14 @@ bool retro_load_game(const struct retro_game_info *info)
     if (is_cd_content && log_cb)
         log_cb(RETRO_LOG_INFO, "Loading CD content.\n");
 
-    load_bios();
+    if (!load_bios())
+    {
+        retro_game_path[0] = 0;
+        return false;
+    }
 
+    check_bios();
+    memset(core->GetMemory()->GetCMOS(), 0, GT_CMOS_SIZE);
     disk_clear();
 
     if (!disk_add_images(retro_game_path, disk_images))
@@ -452,7 +472,14 @@ bool retro_load_game(const struct retro_game_info *info)
 
     disk_ejected = false;
 
-    core->PowerOn();
+    if (!core->PowerOn())
+    {
+        log_cb(RETRO_LOG_ERROR, "Unable to power on the machine\n");
+        retro_game_path[0] = 0;
+        return false;
+    }
+
+    update_savestate_size();
 
     enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
 
@@ -488,21 +515,138 @@ void retro_unload_game(void)
 
     retro_game_path[0] = 0;
     current_fps = 60.0f;
+    savestate_size = 0;
 
     if (frame_buffer)
         memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u32));
 }
 
-static void load_bios(void)
+static bool load_bios(void)
 {
-    if (!core->LoadBios(retro_system_directory))
+    std::string directory(retro_system_directory);
+    append_path_component(directory, "geartowns");
+    MediaFile* file = MediaFile::OpenFile(Firmware::GetFilePath(directory.c_str(), GT_FIRMWARE_SYSTEM).c_str());
+
+    if (!IsValidPointer(file))
+        directory = retro_system_directory;
+
+    SafeDelete(file);
+
+    if (core->LoadBios(directory.c_str()))
+        return true;
+
+    std::string missing;
+    log_cb(RETRO_LOG_ERROR, "FM Towns firmware not loaded from %s\n", directory.c_str());
+
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
     {
-        struct retro_message msg = {};
-        msg.msg = "FM Towns firmware not found";
-        msg.frames = 360;
-        environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
-        log_cb(RETRO_LOG_ERROR, "%s\n", msg.msg);
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+
+        if (!Firmware::IsRequired(type))
+            continue;
+
+        const char* name = Firmware::GetFileName(type);
+        int expected = Firmware::GetExpectedSize(type);
+        std::string path = Firmware::GetFilePath(directory.c_str(), type);
+        file = MediaFile::OpenFile(path.c_str());
+        s64 size = IsValidPointer(file) ? file->GetSize() : -1;
+        SafeDelete(file);
+
+        if (size == expected)
+            continue;
+
+        if (size < 0)
+            log_cb(RETRO_LOG_ERROR, "Missing %s: %s or %s (%d bytes)\n", Firmware::GetComponentName(type), name,
+                Firmware::GetAlternativeFileName(type), expected);
+        else
+            log_cb(RETRO_LOG_ERROR, "Invalid %s: %s is %lld bytes, expected %d\n", Firmware::GetComponentName(type),
+                path.c_str(), (long long)size, expected);
+
+        for (int j = 0; k_game_database[j].title != 0; j++)
+        {
+            if (k_game_database[j].flags & Firmware::GetDatabaseFlag(type))
+                log_cb(RETRO_LOG_INFO, "Known %s dump: %s, CRC %08X\n", name, k_game_database[j].title,
+                    k_game_database[j].crc);
+        }
+
+        if (!missing.empty())
+            missing += ", ";
+
+        missing += name;
     }
+
+    log_cb(RETRO_LOG_INFO, "Firmware is read from %s%cgeartowns when it holds the system ROM, otherwise from %s\n",
+        retro_system_directory, slash, retro_system_directory);
+
+    static char message[256];
+
+    if (missing.empty())
+        snprintf(message, sizeof(message), "FM Towns firmware could not be loaded");
+    else
+        snprintf(message, sizeof(message), "Missing FM Towns firmware: %s", missing.c_str());
+
+    show_message(message);
+    log_cb(RETRO_LOG_ERROR, "%s\n", message);
+    return false;
+}
+
+static void check_bios(void)
+{
+    std::string unknown;
+    Firmware* firmware = core->GetFirmware();
+
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+    {
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+        const GT_Firmware_Info& info = firmware->GetInfo(type);
+
+        if (!info.loaded || info.recognized)
+            continue;
+
+        char entry[64];
+        snprintf(entry, sizeof(entry), "%s%s (CRC %08X)", unknown.empty() ? "" : ", ", Firmware::GetFileName(type),
+            info.crc);
+        unknown += entry;
+    }
+
+    if (unknown.empty())
+        return;
+
+    static char message[256];
+    snprintf(message, sizeof(message), "Unknown FM Towns firmware: %s, the Model 1/2 set is recommended",
+        unknown.c_str());
+    show_message(message);
+    log_cb(RETRO_LOG_WARN, "%s\n", message);
+}
+
+static void show_message(const char* message)
+{
+    struct retro_message msg = {};
+    msg.msg = message;
+    msg.frames = 360;
+    environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
+}
+
+static void update_savestate_size(void)
+{
+    size_t size = 0;
+    savestate_size = 0;
+    floppy_state_size = FLOPPY_STATE_SIZE;
+
+    if (!core->SaveState(NULL, size))
+        return;
+
+    for (int i = 0; i < FDC_DRIVES; i++)
+        size -= core->GetFloppy(i)->GetImageSize();
+
+    for (size_t i = 0; i < disk_images.size(); i++)
+    {
+        if (!disk_images[i].cdrom)
+            floppy_state_size = MAX(floppy_state_size, floppy_image_size((unsigned)i));
+    }
+
+    savestate_size = size + (FDC_DRIVES * (size_t)floppy_state_size) + MB8877_TRACK_BUFFER_SIZE;
+    log_cb(RETRO_LOG_INFO, "Save state size: %zu bytes\n", savestate_size);
 }
 
 static bool path_is_cdrom_uri(const char* path)
@@ -533,14 +677,24 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 
 size_t retro_serialize_size(void)
 {
-    size_t size = 0;
-    core->SaveState(NULL, size);
-    return size;
+    return savestate_size;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-    return core->SaveState(reinterpret_cast<u8*>(data), size);
+    if (savestate_size == 0 || size < savestate_size)
+        return false;
+
+    u8* buffer = reinterpret_cast<u8*>(data);
+    size_t used = savestate_size;
+
+    if (!core->SaveState(buffer, used))
+        return false;
+
+    size_t header_size = sizeof(GT_SaveState_Header_Libretro);
+    memmove(buffer + savestate_size - header_size, buffer + used - header_size, header_size);
+    memset(buffer + used - header_size, 0, savestate_size - used);
+    return true;
 }
 
 bool retro_unserialize(const void *data, size_t size)
@@ -563,6 +717,8 @@ void *retro_get_memory_data(unsigned id)
 {
     switch (id)
     {
+        case RETRO_MEMORY_SAVE_RAM:
+            return core->GetMemory()->GetCMOS();
         case RETRO_MEMORY_SYSTEM_RAM:
             return core->GetMemory()->GetWorkingRAM();
         case RETRO_MEMORY_VIDEO_RAM:
@@ -576,6 +732,8 @@ size_t retro_get_memory_size(unsigned id)
 {
     switch (id)
     {
+        case RETRO_MEMORY_SAVE_RAM:
+            return GT_CMOS_SIZE;
         case RETRO_MEMORY_SYSTEM_RAM:
             return core->GetMemory()->GetWorkingRAMSize();
         case RETRO_MEMORY_VIDEO_RAM:
@@ -1384,17 +1542,18 @@ static void disk_clear(void)
     floppy_base_crc = 0;
 }
 
-static bool floppy_load_image(unsigned index)
+static bool floppy_read_image(unsigned index, std::vector<u8>& image, u32* base_crc, std::string& working,
+    bool* working_copy)
 {
-    const DiskSetImage& image = disk_images[index];
+    const DiskSetImage& entry = disk_images[index];
     std::vector<u8> file;
     u32 offset = 0;
     u32 size = 0;
 
-    if (!read_content_file(image.path.c_str(), file))
+    if (!read_content_file(entry.path.c_str(), file))
         return false;
 
-    if (ends_with_no_case(image.path.c_str(), ".zip"))
+    if (ends_with_no_case(entry.path.c_str(), ".zip"))
     {
         u8* extracted = NULL;
         u32 extracted_size = 0;
@@ -1406,11 +1565,11 @@ static bool floppy_load_image(unsigned index)
         SafeDeleteArray(extracted);
     }
 
-    if (!FloppyImage::GetDisk(file.data(), (u32)file.size(), image.disk, &offset, &size))
+    if (!FloppyImage::GetDisk(file.data(), (u32)file.size(), entry.disk, &offset, &size))
         return false;
 
-    u32 base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
-    std::string name(image.path);
+    *base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
+    std::string name(entry.path);
     size_t separator = name.find_last_of("/\\");
 
     if (separator != std::string::npos)
@@ -1421,22 +1580,58 @@ static bool floppy_load_image(unsigned index)
     if (dot != std::string::npos)
         name = name.substr(0, dot);
 
-    char working[4096];
-    snprintf(working, sizeof(working), "%s%c%s.%08X.geartowns.d77", retro_save_directory, slash, name.c_str(),
-        base_crc);
+    char path[4096];
+    snprintf(path, sizeof(path), "%s%c%s.%08X.geartowns.d77", retro_save_directory, slash, name.c_str(), *base_crc);
+    working = path;
 
-    std::vector<u8> copy;
-    const u8* data = file.data() + offset;
+    *working_copy = read_content_file(path, image) && FloppyImage::IsD77(image.data(), (u32)image.size());
 
-    if (read_content_file(working, copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+    if (!*working_copy)
+        image.assign(file.begin() + offset, file.begin() + offset + size);
+
+    return true;
+}
+
+static u32 floppy_image_size(unsigned index)
+{
+    std::vector<u8> image;
+    std::string working;
+    u32 base_crc = 0;
+    bool working_copy = false;
+    u32 size = 0;
+
+    if (floppy_read_image(index, image, &base_crc, working, &working_copy))
     {
-        log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working);
-        data = copy.data();
-        size = (u32)copy.size();
+        u8* canonical = FloppyImage::Load(image.data(), (u32)image.size(), &size);
+        SafeDeleteArray(canonical);
     }
 
-    if (!core->InsertFloppy(0, data, size, false, base_crc))
+    return size;
+}
+
+static bool floppy_load_image(unsigned index)
+{
+    std::vector<u8> image;
+    std::string working;
+    u32 base_crc = 0;
+    bool working_copy = false;
+
+    if (!floppy_read_image(index, image, &base_crc, working, &working_copy))
         return false;
+
+    if (working_copy)
+        log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working.c_str());
+
+    if (!core->InsertFloppy(0, image.data(), (u32)image.size(), false, base_crc))
+        return false;
+
+    if (savestate_size > 0 && core->GetFloppy(0)->GetImageSize() > floppy_state_size)
+    {
+        core->EjectFloppy(0);
+        show_message("Floppy disk image is too large for this session, reload the content to use it");
+        log_cb(RETRO_LOG_ERROR, "Floppy disk image exceeds the %u bytes reserved in save states\n", floppy_state_size);
+        return false;
+    }
 
     floppy_working_path = working;
     floppy_base_crc = base_crc;

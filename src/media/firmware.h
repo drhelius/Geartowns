@@ -42,14 +42,16 @@ public:
 
     static const char* GetComponentName(GT_Firmware_Type type);
     static const char* GetFileName(GT_Firmware_Type type);
+    static const char* GetAlternativeFileName(GT_Firmware_Type type);
+    static std::string GetFilePath(const char* directory_path, GT_Firmware_Type type);
     static int GetExpectedSize(GT_Firmware_Type type);
     static bool IsRequired(GT_Firmware_Type type);
+    static u16 GetDatabaseFlag(GT_Firmware_Type type);
 
 private:
     bool LoadComponent(const char* file_path, GT_Firmware_Type type, u8** data, GT_Firmware_Info& info);
     void GatherDatabaseInfo(GT_Firmware_Type type, GT_Firmware_Info& info);
     u8* GetWritableData(GT_Firmware_Type type);
-    static u16 GetDatabaseFlag(GT_Firmware_Type type);
 
 private:
     char m_directory[GT_MAX_PATH];

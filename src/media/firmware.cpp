@@ -66,8 +66,7 @@ bool Firmware::LoadDirectory(const char* directory_path)
     for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
     {
         GT_Firmware_Type type = (GT_Firmware_Type)i;
-        std::string file_path(directory_path);
-        append_path_component(file_path, GetFileName(type));
+        std::string file_path = GetFilePath(directory_path, type);
 
         if (!LoadComponent(file_path.c_str(), type, &pending_data[i], pending_info[i]))
         {
@@ -247,6 +246,48 @@ const char* Firmware::GetFileName(GT_Firmware_Type type)
         default:
             return "";
     }
+}
+
+const char* Firmware::GetAlternativeFileName(GT_Firmware_Type type)
+{
+    switch (type)
+    {
+        case GT_FIRMWARE_SYSTEM:
+            return "fmt_sys.rom";
+        case GT_FIRMWARE_OS:
+            return "fmt_dos.rom";
+        case GT_FIRMWARE_FONT:
+            return "fmt_fnt.rom";
+        case GT_FIRMWARE_DICTIONARY:
+            return "fmt_dic.rom";
+        case GT_FIRMWARE_FONT20:
+            return "fmt_f20.rom";
+        default:
+            return "";
+    }
+}
+
+std::string Firmware::GetFilePath(const char* directory_path, GT_Firmware_Type type)
+{
+    std::string path(directory_path);
+    append_path_component(path, GetFileName(type));
+    MediaFile* file = MediaFile::OpenFile(path.c_str());
+
+    if (IsValidPointer(file))
+    {
+        SafeDelete(file);
+        return path;
+    }
+
+    std::string alternative(directory_path);
+    append_path_component(alternative, GetAlternativeFileName(type));
+    file = MediaFile::OpenFile(alternative.c_str());
+
+    if (!IsValidPointer(file))
+        return path;
+
+    SafeDelete(file);
+    return alternative;
 }
 
 int Firmware::GetExpectedSize(GT_Firmware_Type type)

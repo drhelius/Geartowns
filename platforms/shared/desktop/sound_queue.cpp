@@ -29,7 +29,6 @@ static SDL_AudioStream* sound_queue_stream;
 static bool sound_queue_sound_open;
 static bool sound_queue_playing;
 static int sound_queue_max_queued_bytes;
-static int sound_queue_buffer_size;
 static int sound_queue_bytes_per_second;
 
 static bool is_running_in_wsl(void);
@@ -94,7 +93,6 @@ bool sound_queue_start(int sample_rate, int channel_count, int buffer_size, int 
 {
     Debug("Sound Queue: Starting with %d Hz, %d channels, %d buffer size, %d buffers ...", sample_rate, channel_count, buffer_size, buffer_count);
 
-    sound_queue_buffer_size = buffer_size;
     sound_queue_max_queued_bytes = buffer_size * buffer_count * (int)sizeof(s16);
     sound_queue_bytes_per_second = sample_rate * channel_count * (int)sizeof(s16);
 
@@ -168,9 +166,9 @@ void sound_queue_write(s16* samples, int count, bool sync)
     int bytes = count * (int)sizeof(s16);
     int queued = SDL_GetAudioStreamQueued(sound_queue_stream);
 
-    if (count > sound_queue_buffer_size)
+    if (bytes > sound_queue_max_queued_bytes)
     {
-        Log("Sound Queue: Write exceeds queue buffer size (%d > %d)", count, sound_queue_buffer_size);
+        Log("Sound Queue: Write exceeds queue size (%d > %d bytes)", bytes, sound_queue_max_queued_bytes);
     }
 
     if (queued == 0)

@@ -66,7 +66,7 @@ public:
     bool ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count);
     u32 SeekTime(u32 start_lba, u32 end_lba);
     s32 FindTrackFromLBA(u32 lba, bool include_lead_in = false);
-    bool PreloadTrack(u32 track_number);
+    bool PreloadTrack(u32 track_number, u32 lba);
 
 private:
     bool IsCdRomUriPath(const char* path);

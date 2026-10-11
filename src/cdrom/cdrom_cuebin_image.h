@@ -33,6 +33,7 @@
 #define GT_CDROM_CUEBIN_KEEPALIVE_SECONDS 5
 #define GT_CDROM_CUEBIN_KEEPALIVE_SIZE 2352
 #define GT_CDROM_CUEBIN_PRELOAD_FULL_TRACK 0
+#define GT_CDROM_CUEBIN_OGG_CHUNK_SIZE (2352 * 4)
 #define GT_CDROM_CUEBIN_READAHEAD_QUEUE_SIZE 32
 
 struct GT_CdRomCueBinLoadOptions
@@ -116,7 +117,7 @@ public:
     virtual bool ReadRawSector2352(u32 lba, u8* buffer) override;
     virtual bool ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count) override;
     virtual bool PreloadDisc() override;
-    virtual bool PreloadTrack(u32 track_number) override;
+    virtual bool PreloadTrack(u32 track_number, u32 lba) override;
     void SetLoadOptions(const GT_CdRomCueBinLoadOptions& options);
 
 protected:
@@ -185,8 +186,8 @@ INLINE GT_CdRomCueBinLoadOptions GT_CdRomCueBinDefaultLoadOptions()
 {
     GT_CdRomCueBinLoadOptions options;
 
-    options.chunk_size = (2352 * 128);
-    options.max_preload_chunks = GT_CDROM_CUEBIN_PRELOAD_FULL_TRACK;
+    options.chunk_size = (2352 * 32);
+    options.max_preload_chunks = 1;
     options.read_ahead_chunks = 0;
     options.max_cached_chunks = 0;
     options.allow_disc_preload = true;

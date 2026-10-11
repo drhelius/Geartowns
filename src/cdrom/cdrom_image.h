@@ -60,7 +60,7 @@ public:
     virtual bool ReadRawSector2352(u32 lba, u8* buffer);
     virtual bool ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count) = 0;
     virtual bool PreloadDisc() = 0;
-    virtual bool PreloadTrack(u32 track_number) = 0;
+    virtual bool PreloadTrack(u32 track_number, u32 lba) = 0;
     bool IsReady();
     s32 GetTrackFromLBA(u32 lba);
     const char* GetFilePath();

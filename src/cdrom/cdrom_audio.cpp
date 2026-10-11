@@ -102,7 +102,7 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
     s32 track = m_cdrom_media->FindTrackFromLBA(start_lba);
 
     if (track >= 0)
-        m_cdrom_media->PreloadTrack((u32)track);
+        m_cdrom_media->PreloadTrack((u32)track, start_lba);
 
     Debug("CD AUDIO: Play LBA %u to %u, repeat %d, seek %u ms", start_lba, end_lba, repeat, seek_ms);
 }
@@ -287,6 +287,6 @@ void CdRomAudio::SanitizeState()
         s32 track = m_cdrom_media->FindTrackFromLBA(m_state.current_lba);
 
         if (track >= 0)
-            m_cdrom_media->PreloadTrack((u32)track);
+            m_cdrom_media->PreloadTrack((u32)track, m_state.current_lba);
     }
 }

@@ -190,11 +190,11 @@ bool CdRomMedia::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
     }
 }
 
-bool CdRomMedia::PreloadTrack(u32 track_number)
+bool CdRomMedia::PreloadTrack(u32 track_number, u32 lba)
 {
     if (IsValidPointer(m_current_image))
     {
-        return m_current_image->PreloadTrack(track_number);
+        return m_current_image->PreloadTrack(track_number, lba);
     }
     else
     {

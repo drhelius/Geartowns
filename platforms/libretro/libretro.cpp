@@ -1615,8 +1615,8 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
             return true;
 
         if (ends_with_no_case(path, ".zip"))
-            show_message("This ZIP file has no floppy disk image, zipped CD-ROM images are not supported", 3,
-                RETRO_LOG_ERROR);
+            show_message("This ZIP file has no floppy disk image, zipped CD-ROM images are not supported, use CHD instead",
+                3, RETRO_LOG_ERROR);
 
         log_cb(RETRO_LOG_ERROR, "Unable to read the floppy disk image %s\n", path);
         return false;

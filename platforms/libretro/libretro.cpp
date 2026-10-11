@@ -35,6 +35,7 @@
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
 #include "system/msm58321.h"
+#include "video/video.h"
 #include "libretro_core_options.h"
 #include "libretro_vfs_file.h"
 

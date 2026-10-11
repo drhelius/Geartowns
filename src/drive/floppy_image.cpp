@@ -161,6 +161,27 @@ bool FloppyImage::GetDisk(const u8* data, u32 size, int index, u32* offset, u32*
     return false;
 }
 
+bool FloppyImage::HasEarlierCopy(const u8* data, u32 size, int index)
+{
+    u32 offset = 0;
+    u32 disk_size = 0;
+
+    if (!GetDisk(data, size, index, &offset, &disk_size))
+        return false;
+
+    for (int i = 0; i < index; i++)
+    {
+        u32 earlier_offset = 0;
+        u32 earlier_size = 0;
+
+        if (GetDisk(data, size, i, &earlier_offset, &earlier_size) && (earlier_size == disk_size) &&
+            (memcmp(data + earlier_offset, data + offset, disk_size) == 0))
+            return true;
+    }
+
+    return false;
+}
+
 void FloppyImage::GetDiskName(const u8* disk, u32 disk_size, char* name, size_t name_size)
 {
     if (name_size == 0)

@@ -160,6 +160,8 @@ static void update_frameskip(void);
 static void set_controller_info(void);
 static void clear_input_state(void);
 static void clear_keyboard_state(void);
+static void sync_keyboard_state(void);
+static void sync_key(GT_Keys key);
 static void reset_controller_devices(void);
 static int get_mouse_port(void);
 static void apply_controller_device(unsigned port, unsigned device, bool log_device);
@@ -174,6 +176,7 @@ static GT_Keys key_from_retro_key(unsigned keycode);
 static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint16_t key_modifiers);
 static bool update_core_options_display(void);
 static void check_variables(void);
+static void update_floppy_drive(void);
 static bool path_is_cdrom_uri(const char* path);
 static bool path_is_cd_content(const char* path);
 static bool disk_load(const char* path);
@@ -565,15 +568,17 @@ bool retro_unserialize(const void *data, size_t size)
 {
     const u8* buffer = reinterpret_cast<const u8*>(data);
     GT_SaveState_Media media = {};
+    bool loaded = core->LoadState(buffer, size, &media);
 
-    if (core->LoadState(buffer, size, &media))
-        return true;
+    if (!loaded && media.valid && mount_state_media(media))
+    {
+        loaded = core->LoadState(buffer, size);
+        disk_sync();
+    }
 
-    if (!media.valid || !mount_state_media(media))
-        return false;
+    if (loaded)
+        sync_keyboard_state();
 
-    bool loaded = core->LoadState(buffer, size);
-    disk_sync();
     return loaded;
 }
 
@@ -945,6 +950,32 @@ static void clear_keyboard_state(void)
 
     if (core)
         core->ReleaseAllKeys();
+}
+
+static void sync_keyboard_state(void)
+{
+    for (int i = GT_KEY_NONE + 1; i < GT_KEY_COUNT; i++)
+    {
+        if ((key_references[i] == 0) && (i != GT_KEY_CTRL) && (i != GT_KEY_SHIFT))
+            core->KeyReleased((GT_Keys)i);
+    }
+
+    sync_key(GT_KEY_CTRL);
+    sync_key(GT_KEY_SHIFT);
+
+    for (int i = GT_KEY_NONE + 1; i < GT_KEY_COUNT; i++)
+    {
+        if (key_references[i] > 0)
+            core->KeyPressed((GT_Keys)i);
+    }
+}
+
+static void sync_key(GT_Keys key)
+{
+    if (key_references[key] > 0)
+        core->KeyPressed(key);
+    else
+        core->KeyReleased(key);
 }
 
 static void reset_controller_devices(void)
@@ -1450,19 +1481,7 @@ static void check_variables(void)
         core->GetMedia()->PreloadCdRom(strcmp(var.value, "Enabled") == 0);
     }
 
-    var.key = "geartowns_floppy_drive";
-    var.value = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-    {
-        int drive = strcmp(var.value, "Floppy 2") == 0 ? 1 : 0;
-
-        if (drive != floppy_drive)
-        {
-            floppy_drive = drive;
-            disk_sync();
-        }
-    }
+    update_floppy_drive();
 
     var.key = "geartowns_floppy_multidrive";
     var.value = NULL;
@@ -1530,6 +1549,22 @@ static void check_variables(void)
         }
     }
 #endif
+}
+
+static void update_floppy_drive(void)
+{
+    struct retro_variable var = { "geartowns_floppy_drive", NULL };
+
+    if (!environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) || !var.value)
+        return;
+
+    int drive = strcmp(var.value, "Floppy 2") == 0 ? 1 : 0;
+
+    if (drive != floppy_drive)
+    {
+        floppy_drive = drive;
+        disk_sync();
+    }
 }
 
 static bool path_is_cdrom_uri(const char* path)
@@ -1963,6 +1998,13 @@ static bool mount_state_media(const GT_SaveState_Media& media)
             return false;
     }
 
+    if (disk_ejected && disk_index < disk_images.size() && drive_entry[get_entry_drive(disk_index)] >= 0)
+    {
+        disk_ejected = false;
+        open_drive = -1;
+        open_entry = -1;
+    }
+
     log_cb(RETRO_LOG_INFO, "Disks changed to match the save state\n");
     return true;
 }
@@ -2049,6 +2091,8 @@ static void register_disk_control(void)
 
 static bool disk_set_eject_state(bool ejected)
 {
+    update_floppy_drive();
+
     if (disk_ejected == ejected)
         return true;
 
@@ -2087,16 +2131,20 @@ static bool disk_set_eject_state(bool ejected)
 
 static bool disk_get_eject_state(void)
 {
+    update_floppy_drive();
     return disk_ejected;
 }
 
 static unsigned disk_get_image_index(void)
 {
+    update_floppy_drive();
     return disk_index;
 }
 
 static bool disk_set_image_index(unsigned index)
 {
+    update_floppy_drive();
+
     if (!disk_ejected || index > disk_images.size())
         return false;
 
@@ -2333,7 +2381,12 @@ static bool floppy_load_image(unsigned index, int floppy)
             return false;
 
         char suffix[64];
-        snprintf(suffix, sizeof(suffix), ".%08X.geartowns.d77", image.crc);
+
+        if (FloppyImage::HasEarlierCopy(file.data(), (u32)file.size(), image.disk))
+            snprintf(suffix, sizeof(suffix), ".%08X.%d.geartowns.d77", image.crc, image.disk + 1);
+        else
+            snprintf(suffix, sizeof(suffix), ".%08X.geartowns.d77", image.crc);
+
         working = retro_save_directory;
         append_path_component(working, (get_file_name(image.path.c_str(), true) + suffix).c_str());
         data = file.data() + offset;
@@ -2400,6 +2453,9 @@ static void floppy_update(void)
             log_cb(RETRO_LOG_ERROR, "Unable to save the floppy %d changes\n", i + 1);
             show_message("Unable to save the floppy disk changes", 3, RETRO_LOG_ERROR);
         }
+
+        if (!saved)
+            floppy_idle_frames[i] = 0;
 
         floppy_flush_failed[i] = !saved;
     }

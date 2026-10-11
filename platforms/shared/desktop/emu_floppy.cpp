@@ -59,15 +59,17 @@ static Floppy_Host hosts[config_floppy_drives];
 
 static bool valid_drive(int drive);
 static void clear_host(int drive);
+static int find_disk(int drive, const std::string& path, int disk);
+static int find_file(int drive, const std::string& path);
 static bool read_file(const char* path, std::vector<u8>& data);
 static bool read_playlist(const char* path, std::vector<std::string>& entries);
 static bool load_source(const char* path, std::vector<u8>& data);
 static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries);
 static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entries);
-static std::string make_working_path(const char* source_path, u32 base_crc);
+static std::string make_working_path(const char* source_path, u32 base_crc, int copy);
 static bool is_raw_name(const char* path);
-static bool write_disk(FloppyDisk* disk, const char* path);
-static bool write_working_copy(int drive);
+static bool write_disk(FloppyDisk* disk, const char* path, bool report_errors = true);
+static bool write_working_copy(int drive, bool report_errors = true);
 static bool mount(int drive, int index, bool discard_changes);
 
 void emu_floppy_init(void)
@@ -127,11 +129,16 @@ bool emu_floppy_insert(int drive, const char* path, bool discard_changes)
         return false;
     }
 
+    int index = 0;
+
+    while ((index + 1 < (int)entries.size()) && (find_disk(drive, entries[index].path, entries[index].disk) >= 0))
+        index++;
+
     std::vector<Floppy_Entry> previous_entries = hosts[drive].entries;
     int previous_entry = hosts[drive].entry;
     hosts[drive].entries = entries;
 
-    if (!mount(drive, 0, discard_changes))
+    if (!mount(drive, index, discard_changes))
     {
         hosts[drive].entries = previous_entries;
         hosts[drive].entry = previous_entry;
@@ -156,6 +163,14 @@ bool emu_floppy_create_blank(int drive, const char* path, int type, bool formatt
 {
     if (!valid_drive(drive) || !IsValidPointer(path))
         return false;
+
+    int other = find_file(drive, path);
+
+    if (other >= 0)
+    {
+        Error("Floppy drive %d is using %s", other + 1, path);
+        return false;
+    }
 
     u32 size = 0;
     u8* image = FloppyImage::CreateBlank((FloppyImage_Blank)type, formatted, &size);
@@ -188,8 +203,10 @@ bool emu_floppy_create_blank(int drive, const char* path, int type, bool formatt
     if (!created)
         return false;
 
-    std::string working = make_working_path(path, base_crc);
-    SDL_RemovePath(working.c_str());
+    std::string working = make_working_path(path, base_crc, 0);
+
+    if (find_file(drive, working) < 0)
+        SDL_RemovePath(working.c_str());
 
     return emu_floppy_insert(drive, path, discard_changes);
 }
@@ -224,6 +241,14 @@ bool emu_floppy_save_as(int drive, const char* path)
 {
     if (!valid_drive(drive) || !IsValidPointer(path))
         return false;
+
+    int other = find_file(drive, path);
+
+    if (other >= 0)
+    {
+        Error("Floppy drive %d is using %s", other + 1, path);
+        return false;
+    }
 
     FloppyDisk* disk = emu_get_core()->GetFloppy(drive);
 
@@ -322,10 +347,13 @@ void emu_floppy_update(void)
         if (++host.idle_frames != k_idle_flush_frames)
             continue;
 
-        bool saved = write_working_copy(i);
+        bool saved = write_working_copy(i, !host.flush_failed);
 
         if (!saved && !host.flush_failed)
             Error("Unable to save the floppy %d changes to %s", i + 1, host.working_path.c_str());
+
+        if (!saved)
+            host.idle_frames = 0;
 
         host.flush_failed = !saved;
     }
@@ -364,6 +392,14 @@ const char* emu_floppy_get_disk_name(int drive, int index)
         return "";
 
     return hosts[drive].entries[index].name.c_str();
+}
+
+int emu_floppy_get_disk_drive(int drive, int index)
+{
+    if (!valid_drive(drive) || index < 0 || index >= (int)hosts[drive].entries.size())
+        return -1;
+
+    return find_disk(drive, hosts[drive].entries[index].path, hosts[drive].entries[index].disk);
 }
 
 // Names save states when no CD-ROM is in the drive
@@ -431,6 +467,31 @@ static void clear_host(int drive)
     host.write_count = 0;
     host.idle_frames = 0;
     host.flush_failed = false;
+}
+
+static int find_disk(int drive, const std::string& path, int disk)
+{
+    for (int i = 0; i < config_floppy_drives; i++)
+    {
+        const Floppy_Host& host = hosts[i];
+
+        if ((i != drive) && (host.entry < (int)host.entries.size()) && (host.source_path == path) &&
+            (host.entries[host.entry].disk == disk))
+            return i;
+    }
+
+    return -1;
+}
+
+static int find_file(int drive, const std::string& path)
+{
+    for (int i = 0; i < config_floppy_drives; i++)
+    {
+        if ((i != drive) && !path.empty() && ((hosts[i].source_path == path) || (hosts[i].working_path == path)))
+            return i;
+    }
+
+    return -1;
 }
 
 static bool read_playlist(const char* path, std::vector<std::string>& entries)
@@ -560,7 +621,7 @@ static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entrie
     return count > 0;
 }
 
-static std::string make_working_path(const char* source_path, u32 base_crc)
+static std::string make_working_path(const char* source_path, u32 base_crc, int copy)
 {
     char directory[GT_MAX_PATH];
 
@@ -581,7 +642,12 @@ static std::string make_working_path(const char* source_path, u32 base_crc)
     char file_name[GT_MAX_PATH];
     char path[GT_MAX_PATH];
     get_filename_without_extension(source_path, name, sizeof(name));
-    snprintf(file_name, sizeof(file_name), "%s.%08X.geartowns.d77", name, base_crc);
+
+    if (copy > 0)
+        snprintf(file_name, sizeof(file_name), "%s.%08X.%d.geartowns.d77", name, base_crc, copy);
+    else
+        snprintf(file_name, sizeof(file_name), "%s.%08X.geartowns.d77", name, base_crc);
+
     join_path(directory, file_name, path, sizeof(path));
     return path;
 }
@@ -594,7 +660,7 @@ static bool is_raw_name(const char* path)
 
 // Raw names get a raw image when every track has the standard layout, anything else is written as D77
 // The file is replaced only once it is fully written
-static bool write_disk(FloppyDisk* disk, const char* path)
+static bool write_disk(FloppyDisk* disk, const char* path, bool report_errors)
 {
     const u8* data = disk->GetImage();
     u32 size = disk->GetImageSize();
@@ -606,7 +672,9 @@ static bool write_disk(FloppyDisk* disk, const char* path)
 
         if (raw_size == 0)
         {
-            Error("This disk does not have a standard layout, save it as D77: %s", path);
+            if (report_errors)
+                Error("This disk does not have a standard layout, save it as D77: %s", path);
+
             return false;
         }
 
@@ -623,7 +691,9 @@ static bool write_disk(FloppyDisk* disk, const char* path)
 
     if (!file.is_open())
     {
-        Error("Unable to write floppy image: %s", path);
+        if (report_errors)
+            Error("Unable to write floppy image: %s", path);
+
         return false;
     }
 
@@ -633,21 +703,24 @@ static bool write_disk(FloppyDisk* disk, const char* path)
     if (!file.good() || !SDL_RenamePath(temporary.c_str(), path))
     {
         SDL_RemovePath(temporary.c_str());
-        Error("Unable to write floppy image: %s", path);
+
+        if (report_errors)
+            Error("Unable to write floppy image: %s", path);
+
         return false;
     }
 
     return true;
 }
 
-static bool write_working_copy(int drive)
+static bool write_working_copy(int drive, bool report_errors)
 {
     FloppyDisk* disk = emu_get_core()->GetFloppy(drive);
 
     if (!disk->IsInserted() || !disk->IsDirty())
         return true;
 
-    if (hosts[drive].working_path.empty() || !write_disk(disk, hosts[drive].working_path.c_str()))
+    if (hosts[drive].working_path.empty() || !write_disk(disk, hosts[drive].working_path.c_str(), report_errors))
         return false;
 
     disk->ClearDirty();
@@ -661,11 +734,18 @@ static bool mount(int drive, int index, bool discard_changes)
 {
     Floppy_Host& host = hosts[drive];
     FloppyDisk* current = emu_get_core()->GetFloppy(drive);
+    const Floppy_Entry& entry = host.entries[index];
+    int other = find_disk(drive, entry.path, entry.disk);
+
+    if (other >= 0)
+    {
+        Error("This disk is already in floppy drive %d: %s", other + 1, entry.path.c_str());
+        return false;
+    }
 
     if (current->IsDirty() && !discard_changes && !write_working_copy(drive))
         return false;
 
-    const Floppy_Entry& entry = host.entries[index];
     std::vector<u8> file;
     u32 offset = 0;
     u32 size = 0;
@@ -679,7 +759,17 @@ static bool mount(int drive, int index, bool discard_changes)
 
     u32 base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
     bool persistence = config_emulator.floppy_persistence;
-    std::string working = persistence ? make_working_path(entry.path.c_str(), base_crc) : std::string();
+
+    int number = FloppyImage::HasEarlierCopy(file.data(), (u32)file.size(), entry.disk) ? entry.disk + 1 : 0;
+    std::string working = persistence ? make_working_path(entry.path.c_str(), base_crc, number) : std::string();
+    other = find_file(drive, working);
+
+    if (other >= 0)
+    {
+        Error("Floppy drive %d is using %s", other + 1, working.c_str());
+        return false;
+    }
+
     std::vector<u8> copy;
     const u8* data = file.data() + offset;
 

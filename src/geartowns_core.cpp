@@ -1118,21 +1118,26 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
     state_media.valid = true;
 
-    if (IsValidPointer(media))
+    bool mount = IsValidPointer(media);
+
+    if (mount)
         *media = state_media;
 
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         FloppyDisk* disk = m_fdc->GetDisk(i);
+        bool other_disk = disk->IsInserted() ? state_media.floppy_crc[i] != disk->GetBaseCRC() : mount;
 
-        if (state_media.floppy_inserted[i] && disk->IsInserted() && state_media.floppy_crc[i] != disk->GetBaseCRC())
+        if (state_media.floppy_inserted[i] && other_disk)
         {
             Error("Save state is for another disk in floppy drive %d", i + 1);
             return false;
         }
     }
 
-    if (state_media.cdrom_inserted && m_media->IsReady() && state_media.cdrom_crc != m_media->GetCRC())
+    bool other_disc = m_media->IsReady() ? state_media.cdrom_crc != m_media->GetCRC() : mount;
+
+    if (state_media.cdrom_inserted && other_disc)
     {
         Error("Save state is for another CD-ROM disc");
         return false;

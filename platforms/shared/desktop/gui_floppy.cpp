@@ -111,9 +111,14 @@ void gui_floppy_menu(int drive, const char* label, int drives)
         for (int i = 0; i < info.disk_count; i++)
         {
             ImGui::PushID(i);
+            int other = emu_floppy_get_disk_drive(drive, i);
 
-            if (ImGui::MenuItem(emu_floppy_get_disk_name(drive, i), NULL, i == info.disk_index) && i != info.disk_index)
+            if (ImGui::MenuItem(emu_floppy_get_disk_name(drive, i), NULL, i == info.disk_index, other < 0) &&
+                i != info.disk_index)
                 request(drive, Floppy_Action_Select, NULL, i);
+
+            if ((other >= 0) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("In floppy drive %d", other + 1);
 
             ImGui::PopID();
         }

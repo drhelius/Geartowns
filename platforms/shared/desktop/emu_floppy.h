@@ -55,6 +55,7 @@ EXTERN bool emu_floppy_flush(void);
 EXTERN void emu_floppy_update(void);
 EXTERN bool emu_floppy_get_info(int drive, Emu_FloppyInfo* info);
 EXTERN const char* emu_floppy_get_disk_name(int drive, int index);
+EXTERN int emu_floppy_get_disk_drive(int drive, int index);
 EXTERN const char* emu_floppy_get_content_path(void);
 EXTERN void emu_floppy_reconcile(void);
 EXTERN void emu_floppy_check_drives(void);

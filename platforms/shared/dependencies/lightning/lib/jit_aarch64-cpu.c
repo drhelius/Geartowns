@@ -674,8 +674,8 @@ _xrshr(jit_state_t*,jit_bool_t,jit_int32_t,jit_int32_t,jit_int32_t,jit_int32_t);
 #  define xrshi(s, r0, r1, r2, i0)	_xrshi(_jit, s, r0, r1, r2, i0)
 static void
 _xrshi(jit_state_t*,jit_bool_t,jit_int32_t,jit_int32_t,jit_int32_t,jit_word_t);
-#  define lrotr(r0,r1,r2)		_lrotr(_jit,r0,r1,r2)
-static void _lrotr(jit_state_t*,jit_int32_t,jit_int32_t,jit_int32_t);
+#  define lrotr(r0,r1,r2)		_lrotr_r(_jit,r0,r1,r2)
+static void _lrotr_r(jit_state_t*,jit_int32_t,jit_int32_t,jit_int32_t);
 #  define lroti(r0,r1,i0)		rroti(r0,r1,64-i0)
 #  define rrotr(r0,r1,r2)		RORV(r0,r1,r2)
 #  define rroti(r0,r1,i0)		ROR(r0,r1,r1,i0)
@@ -1773,7 +1773,7 @@ _xrshi(jit_state_t *_jit, jit_bool_t sign,
 }
 
 static void
-_lrotr(jit_state_t *_jit, jit_int32_t r0, jit_int32_t r1, jit_int32_t r2)
+_lrotr_r(jit_state_t *_jit, jit_int32_t r0, jit_int32_t r1, jit_int32_t r2)
 {
     jit_int32_t		reg;
     if (r0 != r1 && r0 != r2) {

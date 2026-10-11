@@ -5114,7 +5114,8 @@ _patch_at(jit_state_t *_jit, jit_word_t instr, jit_word_t label)
     ++instr;
     switch (code[0]) {
 	/* movi_p */
-	case 0xb8 ... 0xbf:
+	case 0xb8: case 0xb9: case 0xba: case 0xbb:
+	case 0xbc: case 0xbd: case 0xbe: case 0xbf:
 	    *(jit_word_t *)instr = label;
 	    break;
 	    /* forward pc relative address known to be in range */
@@ -5141,7 +5142,10 @@ _patch_at(jit_state_t *_jit, jit_word_t instr, jit_word_t label)
 	    *(jit_int32_t *)instr = disp;
 	    break;
 	    /* jccs */
-	case 0x70 ... 0x7f:
+	case 0x70: case 0x71: case 0x72: case 0x73:
+	case 0x74: case 0x75: case 0x76: case 0x77:
+	case 0x78: case 0x79: case 0x7a: case 0x7b:
+	case 0x7c: case 0x7d: case 0x7e: case 0x7f:
 	    /* jmpsi */
 	case 0xeb:
 	    disp = label - (instr + 1);

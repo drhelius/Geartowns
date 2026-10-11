@@ -1,3 +1,25 @@
+--- lightning-2.2.3/lib/jit_aarch64-cpu.c
++++ lightning/lib/jit_aarch64-cpu.c
+@@ -674,8 +674,8 @@
+ #  define xrshi(s, r0, r1, r2, i0)	_xrshi(_jit, s, r0, r1, r2, i0)
+ static void
+ _xrshi(jit_state_t*,jit_bool_t,jit_int32_t,jit_int32_t,jit_int32_t,jit_word_t);
+-#  define lrotr(r0,r1,r2)		_lrotr(_jit,r0,r1,r2)
+-static void _lrotr(jit_state_t*,jit_int32_t,jit_int32_t,jit_int32_t);
++#  define lrotr(r0,r1,r2)		_lrotr_r(_jit,r0,r1,r2)
++static void _lrotr_r(jit_state_t*,jit_int32_t,jit_int32_t,jit_int32_t);
+ #  define lroti(r0,r1,i0)		rroti(r0,r1,64-i0)
+ #  define rrotr(r0,r1,r2)		RORV(r0,r1,r2)
+ #  define rroti(r0,r1,i0)		ROR(r0,r1,r1,i0)
+@@ -1773,7 +1773,7 @@
+ }
+ 
+ static void
+-_lrotr(jit_state_t *_jit, jit_int32_t r0, jit_int32_t r1, jit_int32_t r2)
++_lrotr_r(jit_state_t *_jit, jit_int32_t r0, jit_int32_t r1, jit_int32_t r2)
+ {
+     jit_int32_t		reg;
+     if (r0 != r1 && r0 != r2) {
 --- lightning-2.2.3/lib/jit_aarch64.c
 +++ lightning/lib/jit_aarch64.c
 @@ -82,11 +82,8 @@
@@ -305,6 +327,28 @@
  #endif
  
  #if CODE
+@@ -5114,7 +5114,8 @@
+     ++instr;
+     switch (code[0]) {
+ 	/* movi_p */
+-	case 0xb8 ... 0xbf:
++	case 0xb8: case 0xb9: case 0xba: case 0xbb:
++	case 0xbc: case 0xbd: case 0xbe: case 0xbf:
+ 	    *(jit_word_t *)instr = label;
+ 	    break;
+ 	    /* forward pc relative address known to be in range */
+@@ -5141,7 +5142,10 @@
+ 	    *(jit_int32_t *)instr = disp;
+ 	    break;
+ 	    /* jccs */
+-	case 0x70 ... 0x7f:
++	case 0x70: case 0x71: case 0x72: case 0x73:
++	case 0x74: case 0x75: case 0x76: case 0x77:
++	case 0x78: case 0x79: case 0x7a: case 0x7b:
++	case 0x7c: case 0x7d: case 0x7e: case 0x7f:
+ 	    /* jmpsi */
+ 	case 0xeb:
+ 	    disp = label - (instr + 1);
 --- lightning-2.2.3/lib/jit_x86.c
 +++ lightning/lib/jit_x86.c
 @@ -416,14 +416,26 @@

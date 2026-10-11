@@ -40,6 +40,7 @@
 #endif
 
 #define GT_MAX_GAMEPADS 2
+#define GT_MAX_FLOPPY_DRIVES 2
 
 #define GT_MAX_PATH 4096
 

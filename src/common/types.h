@@ -390,6 +390,15 @@ struct GT_SaveState_Header_Libretro
     u32 version;
 };
 
+struct GT_SaveState_Media
+{
+    bool valid;
+    bool floppy_inserted[GT_MAX_FLOPPY_DRIVES];
+    u32 floppy_crc[GT_MAX_FLOPPY_DRIVES];
+    bool cdrom_inserted;
+    u32 cdrom_crc;
+};
+
 struct GT_SaveState_Screenshot
 {
     u32 width;

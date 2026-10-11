@@ -52,6 +52,7 @@ EXTERN bool emu_floppy_discard(int drive);
 EXTERN bool emu_floppy_set_write_protected(int drive, bool write_protected);
 EXTERN bool emu_floppy_swap(void);
 EXTERN bool emu_floppy_flush(void);
+EXTERN void emu_floppy_update(void);
 EXTERN bool emu_floppy_get_info(int drive, Emu_FloppyInfo* info);
 EXTERN const char* emu_floppy_get_disk_name(int drive, int index);
 EXTERN const char* emu_floppy_get_content_path(void);

@@ -854,21 +854,19 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     Debug("Serializing save state...");
 
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, m_machine_config);
+
+    GT_SaveState_Media state_media = {};
 
     for (int i = 0; i < FDC_DRIVES; i++)
     {
-        FloppyDisk* disk = m_fdc->GetDisk(i);
-        bool inserted = disk->IsInserted();
-        u32 base_crc = disk->GetBaseCRC();
-        G_SERIALIZE(serializer, inserted);
-        G_SERIALIZE(serializer, base_crc);
+        state_media.floppy_inserted[i] = m_fdc->GetDisk(i)->IsInserted();
+        state_media.floppy_crc[i] = m_fdc->GetDisk(i)->GetBaseCRC();
     }
 
-    bool cdrom_inserted = m_media->IsReady();
-    u32 cdrom_crc = m_media->GetCRC();
-    G_SERIALIZE(serializer, cdrom_inserted);
-    G_SERIALIZE(serializer, cdrom_crc);
+    state_media.cdrom_inserted = m_media->IsReady();
+    state_media.cdrom_crc = m_media->GetCRC();
+    SerializeMedia(serializer, state_media);
 
     m_scheduler->SaveState(stream);
     m_memory->SaveState(stream);
@@ -986,7 +984,7 @@ bool GeartownsCore::LoadState(const char* path, int index)
     return ret;
 }
 
-bool GeartownsCore::LoadState(const u8* buffer, size_t size)
+bool GeartownsCore::LoadState(const u8* buffer, size_t size, GT_SaveState_Media* media)
 {
     Debug("Loading state from buffer [%zu bytes]...", size);
 
@@ -1003,10 +1001,10 @@ bool GeartownsCore::LoadState(const u8* buffer, size_t size)
     }
 
     memory_input_stream direct_stream(reinterpret_cast<const char*>(buffer), size);
-    return LoadState(direct_stream);
+    return LoadState(direct_stream, media);
 }
 
-bool GeartownsCore::LoadState(std::istream& stream)
+bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 {
     using namespace std;
 
@@ -1017,13 +1015,12 @@ bool GeartownsCore::LoadState(std::istream& stream)
     }
 
     GT_SaveState_Header_Libretro header = {};
-#if !defined(__LIBRETRO__)
-    bool is_desktop_savestate = false;
-#endif
 
     stream.seekg(0, ios::end);
     size_t size = static_cast<size_t>(stream.tellg());
 
+#if !defined(__LIBRETRO__)
+    bool is_desktop_savestate = false;
     GT_SaveState_Header desktop_header = {};
 
     if (size >= sizeof(desktop_header))
@@ -1035,12 +1032,11 @@ bool GeartownsCore::LoadState(std::istream& stream)
         {
             header.magic = desktop_header.magic;
             header.version = desktop_header.version;
-#if !defined(__LIBRETRO__)
             is_desktop_savestate = true;
-#endif
             Debug("Loading desktop save state");
         }
     }
+#endif
 
     if (header.magic != GT_SAVESTATE_MAGIC && size >= sizeof(header))
     {
@@ -1096,15 +1092,14 @@ bool GeartownsCore::LoadState(std::istream& stream)
 
     GT_Machine_Config machine_config = m_machine_config;
     StateSerializer serializer(stream);
-    Serialize(serializer);
-    SanitizeState();
+    Serialize(serializer, machine_config);
+    SanitizeMachineConfig(machine_config);
 
     // The CPU speed may differ, the hardware may not
     // The running machine keeps its own configuration either way
     bool same_machine = (m_machine_config.model == machine_config.model) &&
         (m_machine_config.cpu == machine_config.cpu) && (m_machine_config.ram_size == machine_config.ram_size) &&
         (m_machine_config.floppy_drives == machine_config.floppy_drives);
-    m_machine_config = machine_config;
 
     if (!same_machine)
     {
@@ -1112,27 +1107,32 @@ bool GeartownsCore::LoadState(std::istream& stream)
         return false;
     }
 
+    GT_SaveState_Media state_media = {};
+    SerializeMedia(serializer, state_media);
+
+    if (stream.fail())
+    {
+        Error("Failed to unserialize save state");
+        return false;
+    }
+
+    state_media.valid = true;
+
+    if (IsValidPointer(media))
+        *media = state_media;
+
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         FloppyDisk* disk = m_fdc->GetDisk(i);
-        bool inserted = false;
-        u32 base_crc = 0;
-        G_SERIALIZE(serializer, inserted);
-        G_SERIALIZE(serializer, base_crc);
 
-        if (inserted && disk->IsInserted() && base_crc != disk->GetBaseCRC())
+        if (state_media.floppy_inserted[i] && disk->IsInserted() && state_media.floppy_crc[i] != disk->GetBaseCRC())
         {
             Error("Save state is for another disk in floppy drive %d", i + 1);
             return false;
         }
     }
 
-    bool cdrom_inserted = false;
-    u32 cdrom_crc = 0;
-    G_SERIALIZE(serializer, cdrom_inserted);
-    G_SERIALIZE(serializer, cdrom_crc);
-
-    if (cdrom_inserted && m_media->IsReady() && cdrom_crc != m_media->GetCRC())
+    if (state_media.cdrom_inserted && m_media->IsReady() && state_media.cdrom_crc != m_media->GetCRC())
     {
         Error("Save state is for another CD-ROM disc");
         return false;
@@ -1284,18 +1284,25 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
     return success;
 }
 
-void GeartownsCore::Serialize(StateSerializer& serializer)
+void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& config)
 {
-    G_SERIALIZE(serializer, m_machine_config.model);
-    G_SERIALIZE(serializer, m_machine_config.cpu);
-    G_SERIALIZE(serializer, m_machine_config.ram_size);
-    G_SERIALIZE(serializer, m_machine_config.floppy_drives);
-    G_SERIALIZE(serializer, m_machine_config.cpu_clock_rate);
+    G_SERIALIZE(serializer, config.model);
+    G_SERIALIZE(serializer, config.cpu);
+    G_SERIALIZE(serializer, config.ram_size);
+    G_SERIALIZE(serializer, config.floppy_drives);
+    G_SERIALIZE(serializer, config.cpu_clock_rate);
 }
 
-void GeartownsCore::SanitizeState()
+void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media)
 {
-    SanitizeMachineConfig(m_machine_config);
+    for (int i = 0; i < FDC_DRIVES; i++)
+    {
+        G_SERIALIZE(serializer, media.floppy_inserted[i]);
+        G_SERIALIZE(serializer, media.floppy_crc[i]);
+    }
+
+    G_SERIALIZE(serializer, media.cdrom_inserted);
+    G_SERIALIZE(serializer, media.cdrom_crc);
 }
 
 void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)

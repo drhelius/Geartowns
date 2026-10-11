@@ -26,6 +26,7 @@
 FloppyDisk::FloppyDisk()
 {
     InitPointer(m_image);
+    m_write_count = 0;
     memset(&m_state, 0, sizeof(m_state));
     m_state.rpm = 300;
 }
@@ -65,10 +66,13 @@ void FloppyDisk::Swap(FloppyDisk& other)
 {
     FloppyDisk_State state = m_state;
     u8* image = m_image;
+    u32 write_count = m_write_count;
     m_state = other.m_state;
     m_image = other.m_image;
+    m_write_count = other.m_write_count;
     other.m_state = state;
     other.m_image = image;
+    other.m_write_count = write_count;
 }
 
 int FloppyDisk::GetSectors(int track, FloppyDisk_Sector* sectors) const
@@ -107,6 +111,7 @@ void FloppyDisk::SetSectorStatus(u32 header, bool deleted, u8 status)
     m_image[header + 7] = deleted ? k_floppy_deleted : 0x00;
     m_image[header + 8] = status;
     m_state.dirty = true;
+    m_write_count++;
 }
 
 bool FloppyDisk::ReplaceTrack(int track, const u8* sectors, u32 size, u32 rpm)
@@ -121,6 +126,7 @@ bool FloppyDisk::ReplaceTrack(int track, const u8* sectors, u32 size, u32 rpm)
     m_image = image;
     m_state.size = image_size;
     m_state.dirty = true;
+    m_write_count++;
 
     if (m_state.media == FLOPPY_MEDIA_2HD)
         m_state.rpm = (u16)rpm;
@@ -178,12 +184,15 @@ void FloppyDisk::SaveState(std::ostream& stream, bool media)
 void FloppyDisk::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer, false);
-    SanitizeState();
+    bool media = false;
+    Serialize(serializer, media);
+
+    if (media)
+        SanitizeState();
 }
 
 // A state without media keeps the disk in the drive and its writes
-void FloppyDisk::Serialize(StateSerializer& serializer, bool media)
+void FloppyDisk::Serialize(StateSerializer& serializer, bool& media)
 {
     G_SERIALIZE(serializer, media);
 

@@ -51,7 +51,7 @@ void Media::Reset()
     m_cdrom_media->Reset();
 }
 
-bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t size, std::vector<std::string>& entries)
+bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t size, std::vector<PlaylistEntry>& entries)
 {
     entries.clear();
 
@@ -76,12 +76,43 @@ bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t si
         size_t first = line.find_first_not_of(" \t\r\xEF\xBB\xBF");
         size_t last = line.find_last_not_of(" \t\r");
 
-        if (first == std::string::npos || line[first] == '#')
+        if (first == std::string::npos)
             continue;
 
         line = line.substr(first, last - first + 1);
+        PlaylistEntry entry;
+        entry.has_label = false;
+        entry.save_disk = false;
+
+        if (line.compare(0, 10, "#SAVEDISK:") == 0)
+        {
+            entry.label = line.substr(10);
+            entry.save_disk = true;
+            entries.push_back(entry);
+            continue;
+        }
+
+        if (line[0] == '#')
+            continue;
+
+        size_t bar = line.find('|');
+
+        if (bar != std::string::npos)
+        {
+            entry.label = line.substr(bar + 1);
+            entry.has_label = true;
+            line.erase(bar);
+            size_t path_end = line.find_last_not_of(" \t");
+
+            if (path_end == std::string::npos)
+                continue;
+
+            line.erase(path_end + 1);
+        }
+
         bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':');
-        entries.push_back(absolute ? line : directory + line);
+        entry.path = absolute ? line : directory + line;
+        entries.push_back(entry);
     }
 
     return !entries.empty();

@@ -328,7 +328,10 @@ void emu_update(void)
     if (frame_executed)
     {
         if (frame_completed)
+        {
             emu_frame_counter++;
+            emu_floppy_update();
+        }
 
         rewind_push();
 
@@ -567,7 +570,7 @@ bool emu_cdrom_playlist_load(const char* path, bool* floppies)
         return false;
 
     std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    std::vector<std::string> entries;
+    std::vector<Media::PlaylistEntry> entries;
 
     if (!Media::ParsePlaylist(path, text.c_str(), text.size(), entries))
         return false;
@@ -576,10 +579,15 @@ bool emu_cdrom_playlist_load(const char* path, bool* floppies)
 
     for (size_t i = 0; i < entries.size(); i++)
     {
-        if (ends_with_no_case(entries[i].c_str(), ".m3u") || emu_floppy_is_image(entries[i].c_str()))
+        const char* entry = entries[i].path.c_str();
+
+        if (entries[i].save_disk)
+            continue;
+
+        if (ends_with_no_case(entry, ".m3u") || emu_floppy_is_image(entry))
             others = true;
         else
-            cdrom_playlist.push_back(entries[i]);
+            cdrom_playlist.push_back(entries[i].path);
     }
 
     if (IsValidPointer(floppies))

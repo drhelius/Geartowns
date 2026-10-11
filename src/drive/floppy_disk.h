@@ -67,6 +67,7 @@ public:
     void SetWriteProtected(bool write_protected);
     bool IsDirty() const;
     void ClearDirty();
+    u32 GetWriteCount() const;
     u32 GetBaseCRC() const;
     FloppyDisk_Media GetMedia() const;
     u32 GetRPM() const;
@@ -83,12 +84,13 @@ public:
 
 private:
     void Identify();
-    void Serialize(StateSerializer& serializer, bool media);
+    void Serialize(StateSerializer& serializer, bool& media);
     void SanitizeState();
 
 private:
     FloppyDisk_State m_state;
     u8* m_image;
+    u32 m_write_count;
 };
 
 #include "floppy_disk_inline.h"

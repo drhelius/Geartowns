@@ -42,12 +42,21 @@ public:
         char physical_cdrom_device_id[256];
     };
 
+    struct PlaylistEntry
+    {
+        std::string path;
+        std::string label;
+        bool has_label;
+        bool save_disk;
+    };
+
 public:
     Media(CdRomMedia* cdrom_media);
     ~Media();
     void Init();
     void Reset();
-    static bool ParsePlaylist(const char* playlist_path, const char* text, size_t size, std::vector<std::string>& entries);
+    static bool ParsePlaylist(const char* playlist_path, const char* text, size_t size,
+        std::vector<PlaylistEntry>& entries);
     bool LoadMedia(const char* file_path);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     bool LoadPhysicalCdRom(const char* device_id);

@@ -25,7 +25,7 @@
 #include "mb8877.h"
 #include "floppy_disk.h"
 
-#define FDC_DRIVES 2
+#define FDC_DRIVES GT_MAX_FLOPPY_DRIVES
 
 class PIC;
 class Scheduler;

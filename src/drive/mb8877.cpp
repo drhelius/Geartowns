@@ -1218,11 +1218,10 @@ void MB8877::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.byte_count);
     G_SERIALIZE(serializer, m_state.track_size);
 
+    G_SERIALIZE_ARRAY(serializer, m_state.track_buffer, MB8877_TRACK_BUFFER_SIZE);
+
     if (serializer.IsLoading())
         m_state.track_size = MIN(m_state.track_size, (u32)MB8877_TRACK_BUFFER_SIZE);
-
-    if (m_state.track_size > 0)
-        G_SERIALIZE_ARRAY(serializer, m_state.track_buffer, m_state.track_size);
 }
 
 void MB8877::SanitizeState()

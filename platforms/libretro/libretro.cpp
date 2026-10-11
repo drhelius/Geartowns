@@ -1832,7 +1832,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
     if (ends_with_no_case(path, ".m3u"))
     {
         std::vector<u8> data;
-        std::vector<std::string> entries;
+        std::vector<Media::PlaylistEntry> entries;
 
         if (!read_content_file(path, data) ||
             !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries))
@@ -1840,9 +1840,14 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
 
         for (size_t i = 0; i < entries.size(); i++)
         {
-            if (ends_with_no_case(entries[i].c_str(), ".m3u") || !disk_add_images(entries[i].c_str(), images))
+            const char* entry = entries[i].path.c_str();
+
+            if (entries[i].save_disk)
+                continue;
+
+            if (ends_with_no_case(entry, ".m3u") || !disk_add_images(entry, images))
             {
-                log_cb(RETRO_LOG_ERROR, "Playlist entry is missing or not a disk image: %s\n", entries[i].c_str());
+                log_cb(RETRO_LOG_ERROR, "Playlist entry is missing or not a disk image: %s\n", entry);
                 return false;
             }
         }

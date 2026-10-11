@@ -49,8 +49,12 @@ struct Floppy_Host
     bool state_owned;
     std::vector<Floppy_Entry> entries;
     int entry;
+    u32 write_count;
+    int idle_frames;
+    bool flush_failed;
 };
 
+static const int k_idle_flush_frames = 180;
 static Floppy_Host hosts[config_floppy_drives];
 
 static bool valid_drive(int drive);
@@ -298,6 +302,35 @@ bool emu_floppy_flush(void)
     return flushed;
 }
 
+void emu_floppy_update(void)
+{
+    for (int i = 0; i < config_floppy_drives; i++)
+    {
+        FloppyDisk* disk = emu_get_core()->GetFloppy(i);
+        Floppy_Host& host = hosts[i];
+
+        if (!disk->IsInserted() || !disk->IsDirty() || host.working_path.empty())
+            continue;
+
+        if (disk->GetWriteCount() != host.write_count)
+        {
+            host.write_count = disk->GetWriteCount();
+            host.idle_frames = 0;
+            continue;
+        }
+
+        if (++host.idle_frames != k_idle_flush_frames)
+            continue;
+
+        bool saved = write_working_copy(i);
+
+        if (!saved && !host.flush_failed)
+            Error("Unable to save the floppy %d changes to %s", i + 1, host.working_path.c_str());
+
+        host.flush_failed = !saved;
+    }
+}
+
 bool emu_floppy_get_info(int drive, Emu_FloppyInfo* info)
 {
     if (!IsValidPointer(info))
@@ -395,13 +428,27 @@ static void clear_host(int drive)
     host.state_owned = false;
     host.entries.clear();
     host.entry = 0;
+    host.write_count = 0;
+    host.idle_frames = 0;
+    host.flush_failed = false;
 }
 
 static bool read_playlist(const char* path, std::vector<std::string>& entries)
 {
     std::vector<u8> data;
-    return read_file(path, data) &&
-        Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries);
+    std::vector<Media::PlaylistEntry> playlist;
+
+    if (!read_file(path, data) ||
+        !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), playlist))
+        return false;
+
+    for (size_t i = 0; i < playlist.size(); i++)
+    {
+        if (!playlist[i].save_disk)
+            entries.push_back(playlist[i].path);
+    }
+
+    return true;
 }
 
 static bool read_file(const char* path, std::vector<u8>& data)
@@ -656,6 +703,8 @@ static bool mount(int drive, int index, bool discard_changes)
     host.base_crc = base_crc;
     host.state_owned = false;
     host.entry = index;
+    host.idle_frames = 0;
+    host.flush_failed = false;
     rewind_reset();
     return true;
 }

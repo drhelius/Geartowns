@@ -190,6 +190,17 @@ void FloppyImage::GetDiskName(const u8* disk, u32 disk_size, char* name, size_t 
     name[length] = '\0';
 }
 
+void FloppyImage::SetDiskName(u8* disk, u32 disk_size, const char* name)
+{
+    if (!IsValidPointer(name) || !IsD77(disk, disk_size))
+        return;
+
+    memset(disk, 0, 17);
+
+    for (int i = 0; i < 16 && name[i] != 0; i++)
+        disk[i] = (name[i] < 0x20 || name[i] > 0x7E) ? '_' : (u8)name[i];
+}
+
 u8* FloppyImage::Load(const u8* data, u32 size, u32* image_size)
 {
     if (!IsValidPointer(data) || size == 0)

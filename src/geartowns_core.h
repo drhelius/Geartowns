@@ -107,7 +107,7 @@ public:
     bool SaveState(u8* buffer, size_t& size, bool screenshot = false, bool media = false);
     bool GetMaxSaveStateSize(size_t& size);
     bool LoadState(const char* path = NULL, int index = -1);
-    bool LoadState(const u8* buffer, size_t size);
+    bool LoadState(const u8* buffer, size_t size, GT_SaveState_Media* media = NULL);
     bool GetSaveStateHeader(int index, const char* path, GT_SaveState_Header* header);
     bool GetSaveStateScreenshot(int index, const char* path, GT_SaveState_Screenshot* screenshot);
 
@@ -165,9 +165,9 @@ private:
     void InitMemoryMap();
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
-    bool LoadState(std::istream& stream);
-    void Serialize(StateSerializer& serializer);
-    void SanitizeState();
+    bool LoadState(std::istream& stream, GT_SaveState_Media* media = NULL);
+    void Serialize(StateSerializer& serializer, GT_Machine_Config& config);
+    void SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media);
     void SanitizeMachineConfig(GT_Machine_Config& config);
     std::string GetSaveStatePath(const char* path, int index);
 

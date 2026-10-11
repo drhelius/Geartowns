@@ -47,6 +47,11 @@ INLINE void FloppyDisk::ClearDirty()
     m_state.dirty = false;
 }
 
+INLINE u32 FloppyDisk::GetWriteCount() const
+{
+    return m_write_count;
+}
+
 INLINE u32 FloppyDisk::GetBaseCRC() const
 {
     return m_state.base_crc;
@@ -84,6 +89,7 @@ INLINE void FloppyDisk::WriteByte(u32 offset, u8 value)
 
     m_image[offset] = value;
     m_state.dirty = true;
+    m_write_count++;
 }
 
 INLINE FloppyDisk::FloppyDisk_State* FloppyDisk::GetState()

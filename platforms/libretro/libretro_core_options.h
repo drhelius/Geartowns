@@ -294,10 +294,10 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "Floppy 1"
     },
     {
-        "geartowns_floppy_second",
-        "Second Floppy at Start (restart)",
+        "geartowns_floppy_multidrive",
+        "Floppy MultiDrive (restart)",
         NULL,
-        "Insert the next floppy disk of the content into floppy drive 2 at start, for software that uses both drives.",
+        "Also insert the floppy that follows the boot floppy into drive 2, for software that reads from both drives.",
         NULL,
         "floppy",
         {

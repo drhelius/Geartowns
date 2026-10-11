@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <ctype.h>
 #include <math.h>
 #include <string>
 #include <vector>
@@ -30,7 +29,6 @@
 #include "geartowns.h"
 #include "media/media_file.h"
 #include "media/crc.h"
-#include "media/game_db.h"
 #include "drive/fdc.h"
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
@@ -39,153 +37,162 @@
 #include "libretro_core_options.h"
 #include "libretro_vfs_file.h"
 
-#ifdef _WIN32
-static const char slash = '\\';
-#else
-static const char slash = '/';
-#endif
-
 #define RETRO_DEVICE_TOWNS_GAMEPAD    RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
 #define RETRO_DEVICE_TOWNS_6_BUTTON   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 1)
 #define RETRO_DEVICE_TOWNS_MARTY      RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 2)
 #define RETRO_DEVICE_TOWNS_MOUSE      RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_MOUSE, 0)
 #define RETRO_DEVICE_TOWNS_KEYBOARD   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_KEYBOARD, 0)
-#define RETRO_TOWNS_SUBSYSTEM_ID      0x7701
 
 #define MAX_PADS GT_MAX_GAMEPADS
-#define MAX_BUTTONS 12
-#define BASE_SCREEN_WIDTH 640
-#define BASE_SCREEN_HEIGHT 480
-#define MAX_SCREEN_WIDTH 1024
-#define MAX_SCREEN_HEIGHT 768
 #define FRAMESKIP_MAX 4
 #define RTC_FIXED_DATE 631152000
+#define DRIVE_CDROM 0
+#define DRIVE_FLOPPY_1 1
+#define DRIVE_FLOPPY_2 2
+#define DRIVE_COUNT (1 + FDC_DRIVES)
+#define FLOPPY_IDLE_FRAMES 180
+#define PLAYLIST_MAX_SIZE (1024 * 1024)
+#define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
 
 static retro_environment_t environ_cb;
 static retro_video_refresh_t video_cb;
 static retro_audio_sample_batch_t audio_batch_cb;
 static retro_input_poll_t input_poll_cb;
 static retro_input_state_t input_state_cb;
-
 static struct retro_log_callback logging;
 retro_log_printf_t log_cb;
+static const retro_vfs_interface* vfs_interface = NULL;
+static unsigned message_interface_version = 0;
+static bool libretro_supports_bitmasks = false;
+static bool libretro_supports_dupe = false;
+static bool categories_supported = false;
+static bool frameskip_threshold_visible = true;
+static bool analog_mouse_speed_visible = true;
 
 static char retro_system_directory[4096];
 static char retro_save_directory[4096];
 static char retro_game_path[4096];
+static bool content_loaded = false;
 
+static GeartownsCore* core;
+static GT_Runtime_Info runtime_info;
+static u8* frame_buffer;
 static s16 audio_buf[GT_AUDIO_BUFFER_SIZE];
 static int audio_sample_count = 0;
-static u8* frame_buffer;
+static size_t savestate_size = 0;
+static int machine_ram_mb = 2;
+static int machine_cpu_mhz = 16;
+static int machine_floppy_drives = 2;
+static int dynarec_option = -1;
 
 static int current_screen_width = 0;
 static int current_screen_height = 0;
 static float current_aspect_ratio = 0.0f;
 static float current_fps = 60.0f;
-
 static float aspect_ratio = 0.0f;
+static int frameskip_type = 0;
+static unsigned frameskip_threshold = 33;
+static unsigned frameskip_counter = 0;
+static bool frameskip_changed = false;
+static bool audio_buffer_active = false;
+static unsigned audio_buffer_occupancy = 0;
+static bool audio_buffer_underrun = false;
+
 static bool allow_up_down = false;
 static int mouse_sensitivity = 5;
 static int analog_mouse = 0;
 static int analog_mouse_speed = 5;
-static int cdrom_speed = 1;
-static bool libretro_supports_bitmasks = false;
-static bool libretro_supports_dupe = false;
-static int frameskip_type = 0;
-static unsigned frameskip_threshold = 33;
-static unsigned frameskip_counter = 0;
-static bool audio_buffer_active = false;
-static unsigned audio_buffer_occupancy = 0;
-static bool audio_buffer_underrun = false;
-static unsigned message_interface_version = 0;
-static int joypad_current[MAX_PADS][MAX_BUTTONS];
-static int joypad_old[MAX_PADS][MAX_BUTTONS];
-struct MouseState
-{
-    int delta_x;
-    int delta_y;
-    float remainder_x;
-    float remainder_y;
-    int button_left;
-    int button_right;
-    bool delta_applied;
-};
-
-static MouseState mouse_current[MAX_PADS];
-static bool retro_key_down[RETROK_LAST];
-static int key_references[GT_KEY_COUNT];
 static unsigned input_device[MAX_PADS] = {
     RETRO_DEVICE_TOWNS_GAMEPAD,
     RETRO_DEVICE_TOWNS_GAMEPAD
 };
+static u16 joypad_previous[MAX_PADS];
+static float mouse_remainder_x = 0.0f;
+static float mouse_remainder_y = 0.0f;
+static bool retro_key_down[RETROK_LAST];
+static int key_references[GT_KEY_COUNT];
+
+static const u16 k_joypad_buttons[RETRO_DEVICE_ID_JOYPAD_R + 1] = {
+    GT_GAMEPAD_B, GT_GAMEPAD_C, GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT,
+    GT_GAMEPAD_RIGHT, GT_GAMEPAD_A, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z
+};
+static const u16 k_gamepad_buttons = GT_GAMEPAD_UP | GT_GAMEPAD_DOWN | GT_GAMEPAD_LEFT | GT_GAMEPAD_RIGHT |
+    GT_GAMEPAD_SELECT | GT_GAMEPAD_RUN | GT_GAMEPAD_A | GT_GAMEPAD_B;
+static const u16 k_6_button_buttons = k_gamepad_buttons | GT_GAMEPAD_C | GT_GAMEPAD_X | GT_GAMEPAD_Y | GT_GAMEPAD_Z;
 
 struct DiskSetImage
 {
     std::string path;
     std::string label;
     int disk;
+    u32 crc;
+    bool crc_known;
     bool cdrom;
     bool save_disk;
 };
 
-static GeartownsCore* core;
 static std::vector<DiskSetImage> disk_images;
+static int drive_entry[DRIVE_COUNT] = { -1, -1, -1 };
 static unsigned disk_index = 0;
 static bool disk_ejected = true;
-static int disk_ejected_entry = -1;
-static int disk_ejected_drive = 0;
+static int open_drive = -1;
+static int open_entry = -1;
 static unsigned disk_initial_index = 0;
 static std::string disk_initial_path;
 static std::string floppy_working_path[FDC_DRIVES];
-static u32 floppy_base_crc[FDC_DRIVES];
-static int floppy_entry[FDC_DRIVES] = { -1, -1 };
+static u32 floppy_write_count[FDC_DRIVES];
+static int floppy_idle_frames[FDC_DRIVES];
+static bool floppy_flush_failed[FDC_DRIVES];
 static int floppy_drive = 0;
-static bool floppy_second = false;
+static bool floppy_multidrive = false;
 static bool save_disk = false;
-static int machine_ram_mb = 2;
-static int machine_cpu_mhz = 16;
-static int machine_floppy_drives = 2;
-static size_t savestate_size = 0;
-static GT_Runtime_Info runtime_info;
-static const retro_vfs_interface* vfs_interface = NULL;
 
-static bool begin_load(const char* path);
-static bool finish_load(void);
+static bool load_content(const char* path);
+static void unload_content(void);
 static bool load_bios(void);
+static s64 get_firmware_size(const char* directory, GT_Firmware_Type type);
 static void check_bios(void);
-static void show_message(const char* message, unsigned priority);
-static void update_savestate_size(void);
 static void set_machine_config(void);
+static void show_message(const char* message, unsigned priority, enum retro_log_level level);
+static void get_system_av_info(struct retro_system_av_info* info);
+static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely);
+static void update_frameskip(void);
 static void set_controller_info(void);
 static void clear_input_state(void);
 static void clear_keyboard_state(void);
-static GT_Keys key_from_retro_key(unsigned keycode);
-static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint16_t key_modifiers);
 static void reset_controller_devices(void);
+static int get_mouse_port(void);
 static void apply_controller_device(unsigned port, unsigned device, bool log_device);
 static void release_controller_input(unsigned port);
-static void poll_analog_mouse(MouseState& mouse);
 static void poll_input(void);
 static void apply_input(void);
-static bool categories_supported = false;
+static void apply_gamepad(int port);
+static u16 filter_opposing(u16 buttons, u16 previous, u16 first, u16 second);
+static void apply_mouse(int port);
+static void poll_analog_mouse(bool& left, bool& right);
+static GT_Keys key_from_retro_key(unsigned keycode);
+static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint16_t key_modifiers);
+static bool update_core_options_display(void);
 static void check_variables(void);
-static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely);
-static void update_frameskip(void);
 static bool path_is_cdrom_uri(const char* path);
 static bool path_is_cd_content(const char* path);
-static bool path_is_floppy_content(const char* path);
-static bool read_content_file(const char* path, std::vector<u8>& data);
-static bool write_content_file(const char* path, const u8* data, u32 size);
+static bool disk_load(const char* path);
 static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images);
+static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& images);
 static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images);
-static bool disk_add_save_disk(std::vector<DiskSetImage>& images);
+static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume,
+    std::vector<DiskSetImage>& images);
+static int get_entry_drive(unsigned index);
 static bool disk_insert(unsigned index, int drive);
-static bool disk_eject(unsigned index, int drive);
-static void disk_sync_drive(void);
-static int disk_drive(void);
+static bool disk_eject(int drive);
+static void disk_close_open_drive(int drive);
+static void disk_sync(void);
 static void disk_clear(void);
-static bool floppy_load_image(unsigned index, int drive);
-static bool floppy_flush(int drive);
+static void disk_shift_entry(int& entry, unsigned index, int delta);
+static bool mount_state_media(const GT_SaveState_Media& media);
+static int find_floppy_entry(u32 crc);
+static int find_cdrom_entry(u32 crc);
+static bool get_cdrom_crc(const char* path, u32* crc);
 static void register_disk_control(void);
 static bool disk_set_eject_state(bool ejected);
 static bool disk_get_eject_state(void);
@@ -197,6 +204,14 @@ static bool disk_add_image_index(void);
 static bool disk_set_initial_image(unsigned index, const char* path);
 static bool disk_get_image_path(unsigned index, char* path, size_t len);
 static bool disk_get_image_label(unsigned index, char* label, size_t len);
+static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_size);
+static bool load_source(const char* path, std::vector<u8>& data);
+static bool write_content_file(const char* path, const u8* data, u32 size);
+static bool rename_file(const char* from, const char* to, bool vfs);
+static void remove_file(const char* path, bool vfs);
+static bool floppy_load_image(unsigned index, int floppy);
+static bool floppy_flush(int floppy);
+static void floppy_update(void);
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -207,17 +222,41 @@ static void fallback_log(enum retro_log_level level, const char *fmt, ...)
     va_end(va);
 }
 
-static int IsButtonPressed(int joypad_bits, int button)
-{
-    return (joypad_bits & (1 << button)) ? 1 : 0;
-}
-
 static bool IsJoypadDevice(unsigned device)
 {
     return (device == RETRO_DEVICE_JOYPAD) ||
         (device == RETRO_DEVICE_TOWNS_GAMEPAD) ||
         (device == RETRO_DEVICE_TOWNS_MARTY) ||
         (device == RETRO_DEVICE_TOWNS_6_BUTTON);
+}
+
+static std::string get_file_name(const char* path, bool strip_extension)
+{
+    std::string name(path);
+    size_t separator = name.find_last_of("/\\");
+
+    if (separator != std::string::npos)
+        name = name.substr(separator + 1);
+
+    size_t dot = name.find_last_of('.');
+
+    if (strip_extension && dot != std::string::npos)
+        name = name.substr(0, dot);
+
+    return name;
+}
+
+static std::string get_save_disk_name(const std::string& name)
+{
+    std::string sanitized(name.empty() ? "geartowns" : name);
+
+    for (size_t i = 0; i < sanitized.size(); i++)
+    {
+        if ((unsigned char)sanitized[i] < 0x20 || strchr("<>:\"/\\|?*", sanitized[i]) != NULL)
+            sanitized[i] = '_';
+    }
+
+    return sanitized;
 }
 
 unsigned retro_api_version(void)
@@ -257,28 +296,21 @@ void retro_set_environment(retro_environment_t cb)
     bool support_no_game = true;
     environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &support_no_game);
 
-    static const struct retro_subsystem_rom_info towns_roms[] = {
-        { "CD-ROM", "cue|chd|iso|m3u", true, true, false, NULL, 0 },
-        { "Floppy 1", "d77|d88|hdm|xdf|img|zip|m3u", true, true, false, NULL, 0 },
-        { "Floppy 2", "d77|d88|hdm|xdf|img|zip|m3u", true, true, false, NULL, 0 }
-    };
-
-    static const struct retro_subsystem_info subsystems[] = {
-        { "FM Towns", "fmtowns", towns_roms, 3, RETRO_TOWNS_SUBSYSTEM_ID },
-        { NULL, NULL, NULL, 0, 0 }
-    };
-
-    environ_cb(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, (void*)subsystems);
-
     register_disk_control();
     set_controller_info();
     libretro_set_core_options(environ_cb, &categories_supported);
+
+    frameskip_threshold_visible = true;
+    analog_mouse_speed_visible = true;
+    struct retro_core_options_update_display_callback display_callback = { update_core_options_display };
+    environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK, &display_callback);
+    update_core_options_display();
 }
 
 void retro_init(void)
 {
     struct retro_vfs_interface_info vfs_interface_info = { };
-    vfs_interface_info.required_interface_version = 2;
+    vfs_interface_info.required_interface_version = 1;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_interface_info) && vfs_interface_info.iface)
         vfs_interface = vfs_interface_info.iface;
@@ -312,7 +344,7 @@ void retro_init(void)
     core->Init();
     core->GetRuntimeInfo(runtime_info);
 
-    frame_buffer = new u8[MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u32)];
+    frame_buffer = new u8[GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * sizeof(u32)];
 
     clear_input_state();
 
@@ -333,22 +365,41 @@ void retro_init(void)
 
 void retro_deinit(void)
 {
+    if (content_loaded)
+        unload_content();
+
     SafeDeleteArray(frame_buffer);
     SafeDelete(core);
     vfs_interface = NULL;
     MediaFile::SetVfsInterface(NULL);
 
+    message_interface_version = 0;
+    libretro_supports_bitmasks = false;
+    libretro_supports_dupe = false;
     audio_sample_count = 0;
+    machine_ram_mb = 2;
+    machine_cpu_mhz = 16;
+    machine_floppy_drives = 2;
+    dynarec_option = -1;
     current_screen_width = 0;
     current_screen_height = 0;
     current_aspect_ratio = 0.0f;
-    aspect_ratio = 0.0f;
     current_fps = 60.0f;
-    libretro_supports_bitmasks = false;
-    libretro_supports_dupe = false;
+    aspect_ratio = 0.0f;
     frameskip_type = 0;
+    frameskip_threshold = 33;
     frameskip_counter = 0;
+    frameskip_changed = false;
     audio_buffer_active = false;
+    allow_up_down = false;
+    mouse_sensitivity = 5;
+    analog_mouse = 0;
+    analog_mouse_speed = 5;
+    disk_initial_index = 0;
+    disk_initial_path.clear();
+    floppy_drive = 0;
+    floppy_multidrive = false;
+    save_disk = false;
 
     reset_controller_devices();
     clear_input_state();
@@ -356,16 +407,11 @@ void retro_deinit(void)
 
 void retro_reset(void)
 {
-    if (log_cb)
-        log_cb(RETRO_LOG_DEBUG, "Resetting...\n");
+    log_cb(RETRO_LOG_DEBUG, "Resetting...\n");
 
     check_variables();
-    load_bios();
     core->ResetMedia();
     clear_keyboard_state();
-
-    for (int i = 0; i < MAX_PADS; i++)
-        apply_controller_device(i, input_device[i], false);
 }
 
 void retro_set_controller_port_device(unsigned port, unsigned device)
@@ -378,15 +424,21 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
         return;
     }
 
+    int mouse_port = get_mouse_port();
+
+    if ((device == RETRO_DEVICE_TOWNS_MOUSE) && (mouse_port >= 0) && (mouse_port != (int)port))
+    {
+        if (log_cb)
+            log_cb(RETRO_LOG_WARN, "Only one mouse is supported, controller port %u is unplugged\n", port + 1);
+
+        device = RETRO_DEVICE_NONE;
+    }
+
     if ((input_device[port] != device) && core)
         release_controller_input(port);
 
     input_device[port] = device;
-
     apply_controller_device(port, device, true);
-
-    if (port == 0)
-        apply_controller_device(1, input_device[1], false);
 }
 
 void retro_get_system_info(struct retro_system_info *info)
@@ -399,28 +451,10 @@ void retro_get_system_info(struct retro_system_info *info)
     info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|m3u";
 }
 
-static void get_system_av_info(struct retro_system_av_info* info)
-{
-    runtime_info.frame_time = 0.0f;
-    if (core)
-        core->GetRuntimeInfo(runtime_info);
-
-    info->geometry.base_width   = runtime_info.screen_width;
-    info->geometry.base_height  = runtime_info.screen_height;
-    info->geometry.max_width    = MAX_SCREEN_WIDTH;
-    info->geometry.max_height   = MAX_SCREEN_HEIGHT;
-    info->geometry.aspect_ratio = aspect_ratio == 0.0f ?
-        (float)runtime_info.display_width / (float)runtime_info.display_height : aspect_ratio;
-    info->timing.fps            = runtime_info.frame_time > 0.0f ? 1000.0f / runtime_info.frame_time : 60.0f;
-    info->timing.sample_rate    = GT_AUDIO_SAMPLE_RATE;
-}
-
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
     get_system_av_info(info);
-    if (runtime_info.frame_time > 0.0f)
-        current_fps = (float)info->timing.fps;
-    info->timing.fps = current_fps;
+    current_fps = (float)info->timing.fps;
 }
 
 void retro_run(void)
@@ -428,9 +462,10 @@ void retro_run(void)
     bool core_options_updated = false;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &core_options_updated) && core_options_updated)
-    {
         check_variables();
-    }
+
+    if (frameskip_changed)
+        update_frameskip();
 
     poll_input();
     apply_input();
@@ -456,6 +491,7 @@ void retro_run(void)
 
     audio_sample_count = 0;
     core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
+    floppy_update();
 
     retro_system_av_info info;
     get_system_av_info(&info);
@@ -475,6 +511,9 @@ void retro_run(void)
         {
             log_cb(RETRO_LOG_INFO, "Refresh rate changed to %.2f Hz\n", current_fps);
             environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+
+            if (frameskip_type > 0)
+                frameskip_changed = true;
         }
         else
         {
@@ -491,308 +530,12 @@ void retro_run(void)
 
 bool retro_load_game(const struct retro_game_info *info)
 {
-    const char* path = (info && info->path) ? info->path : "";
-
-    if (!begin_load(path))
-        return false;
-
-    if (path[0] != 0 && !disk_add_images(path, disk_images))
-        return false;
-
-    if (save_disk && !disk_add_save_disk(disk_images))
-        return false;
-
-    if (!disk_images.empty())
-    {
-        bool initial = disk_initial_index < disk_images.size() &&
-            disk_images[disk_initial_index].path == disk_initial_path;
-        disk_index = initial ? disk_initial_index : 0;
-
-        if (disk_images[disk_index].save_disk)
-            disk_index = 0;
-
-        for (size_t i = 0; i < disk_images.size(); i++)
-        {
-            if (disk_images[i].cdrom != disk_images[disk_index].cdrom && !disk_images[i].save_disk)
-            {
-                if (!disk_insert((unsigned)i, 0))
-                    return false;
-
-                break;
-            }
-        }
-
-        if (!disk_images[disk_index].save_disk && !disk_insert(disk_index, 0))
-            return false;
-
-        for (size_t i = 1; floppy_second && disk_drive() == 1 && floppy_entry[0] >= 0 && i < disk_images.size(); i++)
-        {
-            unsigned second = (unsigned)((floppy_entry[0] + i) % disk_images.size());
-
-            if (!disk_images[second].cdrom && !disk_images[second].save_disk)
-            {
-                if (!disk_insert(second, 1))
-                    return false;
-
-                break;
-            }
-        }
-
-        disk_ejected = disk_images[disk_index].save_disk;
-    }
-
-    return finish_load();
+    return load_content((info && info->path) ? info->path : "");
 }
 
 void retro_unload_game(void)
 {
-    if (core)
-    {
-        for (int i = 0; i < FDC_DRIVES; i++)
-        {
-            if (!floppy_flush(i))
-                log_cb(RETRO_LOG_ERROR, "Unable to save the floppy %d changes\n", i + 1);
-
-            core->EjectFloppy(i);
-        }
-
-        core->EjectMedia();
-    }
-
-    disk_clear();
-
-    retro_game_path[0] = 0;
-    current_fps = 60.0f;
-    savestate_size = 0;
-
-    if (frame_buffer)
-        memset(frame_buffer, 0, MAX_SCREEN_WIDTH * MAX_SCREEN_HEIGHT * sizeof(u32));
-}
-
-static bool begin_load(const char* path)
-{
-    if (!core)
-        return false;
-
-    check_variables();
-
-    snprintf(retro_game_path, sizeof(retro_game_path), "%s", path);
-    log_cb(RETRO_LOG_INFO, "retro_load_game: %s\n", path[0] != 0 ? path : "no content");
-
-    if (path_is_cdrom_uri(path))
-        log_cb(RETRO_LOG_INFO, "Loading CD-ROM through libretro VFS: %s\n", path);
-
-    if (!load_bios())
-    {
-        retro_game_path[0] = 0;
-        return false;
-    }
-
-    check_bios();
-    set_machine_config();
-    memset(core->GetMemory()->GetCMOS(), 0, GT_CMOS_SIZE);
-    disk_clear();
-    return true;
-}
-
-static bool finish_load(void)
-{
-    if (!core->PowerOn())
-    {
-        log_cb(RETRO_LOG_ERROR, "Unable to power on the machine\n");
-        retro_game_path[0] = 0;
-        return false;
-    }
-
-    update_savestate_size();
-    disk_sync_drive();
-
-    struct retro_memory_descriptor descriptor = {};
-    descriptor.flags = RETRO_MEMDESC_SYSTEM_RAM;
-    descriptor.ptr = core->GetMemory()->GetWorkingRAM();
-    descriptor.len = core->GetMemory()->GetWorkingRAMSize();
-    struct retro_memory_map memory_map = { &descriptor, 1 };
-    environ_cb(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &memory_map);
-
-    bool achievements = true;
-    environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS, &achievements);
-
-    enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
-
-    if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
-    {
-        log_cb(RETRO_LOG_ERROR, "XRGB8888 is not supported.\n");
-        retro_game_path[0] = 0;
-        return false;
-    }
-
-    core->GetRuntimeInfo(runtime_info);
-    clear_keyboard_state();
-
-    struct retro_keyboard_callback keyboard = { keyboard_event };
-    environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &keyboard);
-    show_message("Enable Game Focus (Scroll Lock) to type on the FM Towns keyboard", 1);
-
-    return true;
-}
-
-static bool load_bios(void)
-{
-    std::string directory(retro_system_directory);
-    append_path_component(directory, "geartowns");
-    MediaFile* file = MediaFile::OpenFile(Firmware::GetFilePath(directory.c_str(), GT_FIRMWARE_SYSTEM).c_str());
-
-    if (!IsValidPointer(file))
-        directory = retro_system_directory;
-
-    SafeDelete(file);
-
-    if (core->LoadBios(directory.c_str()))
-        return true;
-
-    std::string missing;
-    log_cb(RETRO_LOG_ERROR, "FM Towns firmware not loaded from %s\n", directory.c_str());
-
-    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
-    {
-        GT_Firmware_Type type = (GT_Firmware_Type)i;
-
-        if (!Firmware::IsRequired(type))
-            continue;
-
-        const char* name = Firmware::GetFileName(type);
-        int expected = Firmware::GetExpectedSize(type);
-        std::string path = Firmware::GetFilePath(directory.c_str(), type);
-        file = MediaFile::OpenFile(path.c_str());
-        s64 size = IsValidPointer(file) ? file->GetSize() : -1;
-        SafeDelete(file);
-
-        if (size == expected)
-            continue;
-
-        if (size < 0)
-            log_cb(RETRO_LOG_ERROR, "Missing %s: %s or %s (%d bytes)\n", Firmware::GetComponentName(type), name,
-                Firmware::GetAlternativeFileName(type), expected);
-        else
-            log_cb(RETRO_LOG_ERROR, "Invalid %s: %s is %lld bytes, expected %d\n", Firmware::GetComponentName(type),
-                path.c_str(), (long long)size, expected);
-
-        for (int j = 0; k_game_database[j].title != 0; j++)
-        {
-            if (k_game_database[j].flags & Firmware::GetDatabaseFlag(type))
-                log_cb(RETRO_LOG_INFO, "Known %s dump: %s, CRC %08X\n", name, k_game_database[j].title,
-                    k_game_database[j].crc);
-        }
-
-        if (!missing.empty())
-            missing += ", ";
-
-        missing += name;
-    }
-
-    log_cb(RETRO_LOG_INFO, "Firmware is read from %s%cgeartowns when it holds the system ROM, otherwise from %s\n",
-        retro_system_directory, slash, retro_system_directory);
-
-    static char message[256];
-
-    if (missing.empty())
-        snprintf(message, sizeof(message), "FM Towns firmware could not be loaded");
-    else
-        snprintf(message, sizeof(message), "Missing FM Towns firmware: %s", missing.c_str());
-
-    show_message(message, 3);
-    log_cb(RETRO_LOG_ERROR, "%s\n", message);
-    return false;
-}
-
-static void check_bios(void)
-{
-    std::string unknown;
-    Firmware* firmware = core->GetFirmware();
-
-    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
-    {
-        GT_Firmware_Type type = (GT_Firmware_Type)i;
-        const GT_Firmware_Info& info = firmware->GetInfo(type);
-
-        if (!info.loaded || info.recognized)
-            continue;
-
-        char entry[64];
-        snprintf(entry, sizeof(entry), "%s%s (CRC %08X)", unknown.empty() ? "" : ", ", Firmware::GetFileName(type),
-            info.crc);
-        unknown += entry;
-    }
-
-    if (unknown.empty())
-        return;
-
-    static char message[256];
-    snprintf(message, sizeof(message), "Unknown FM Towns firmware: %s, the Model 1/2 set is recommended",
-        unknown.c_str());
-    show_message(message, 2);
-    log_cb(RETRO_LOG_WARN, "%s\n", message);
-}
-
-static void show_message(const char* message, unsigned priority)
-{
-    if (message_interface_version >= 1)
-    {
-        struct retro_message_ext msg = {};
-        msg.msg = message;
-        msg.duration = 6000;
-        msg.priority = priority;
-        msg.level = RETRO_LOG_INFO;
-        msg.target = RETRO_MESSAGE_TARGET_OSD;
-        msg.type = RETRO_MESSAGE_TYPE_NOTIFICATION;
-        msg.progress = -1;
-        environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE_EXT, &msg);
-        return;
-    }
-
-    struct retro_message msg = {};
-    msg.msg = message;
-    msg.frames = 360;
-    environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
-}
-
-static void set_machine_config(void)
-{
-    GT_Machine_Config config = core->GetPendingMachineConfig();
-    config.model = GT_MACHINE_MODEL1_2;
-    config.ram_size = (u32)machine_ram_mb * 1024 * 1024;
-    config.floppy_drives = machine_floppy_drives;
-    config.cpu_clock_rate = (u32)machine_cpu_mhz * 1000000;
-    core->SetMachineConfig(config);
-
-    const GT_Machine_Config& pending = core->GetPendingMachineConfig();
-    log_cb(RETRO_LOG_INFO, "Machine: %s, %u MB RAM, %u MHz, %d floppy drives\n", k_machine_profiles[pending.model].name,
-        pending.ram_size / (1024 * 1024), pending.cpu_clock_rate / 1000000, pending.floppy_drives);
-}
-
-static void update_savestate_size(void)
-{
-    size_t size = 0;
-    savestate_size = 0;
-
-    if (!core->SaveState(NULL, size))
-        return;
-
-    savestate_size = size + MB8877_TRACK_BUFFER_SIZE;
-    log_cb(RETRO_LOG_INFO, "Save state size: %zu bytes\n", savestate_size);
-}
-
-static bool path_is_cdrom_uri(const char* path)
-{
-    return path && (strncmp(path, "cdrom://", 8) == 0);
-}
-
-static bool path_is_cd_content(const char* path)
-{
-    return path_is_cdrom_uri(path) ||
-        ends_with_no_case(path, ".cue") ||
-        ends_with_no_case(path, ".chd") ||
-        ends_with_no_case(path, ".iso");
+    unload_content();
 }
 
 unsigned retro_get_region(void)
@@ -802,75 +545,10 @@ unsigned retro_get_region(void)
 
 bool retro_load_game_special(unsigned game_type, const struct retro_game_info *info, size_t num_info)
 {
-    if (game_type != RETRO_TOWNS_SUBSYSTEM_ID || !info || num_info != 3)
-        return false;
-
-    const char* paths[3];
-    const char* primary = "";
-    int first[3];
-
-    for (int i = 0; i < 3; i++)
-    {
-        paths[i] = info[i].path ? info[i].path : "";
-
-        if (primary[0] == 0)
-            primary = paths[i];
-    }
-
-    if (!begin_load(primary))
-        return false;
-
-    for (int i = 0; i < 3; i++)
-    {
-        size_t count = disk_images.size();
-        first[i] = -1;
-
-        if (paths[i][0] == 0)
-            continue;
-
-        if (!disk_add_images(paths[i], disk_images))
-            return false;
-
-        for (size_t j = count; j < disk_images.size(); j++)
-        {
-            if (disk_images[j].cdrom != (i == 0))
-            {
-                log_cb(RETRO_LOG_ERROR, "Not a %s image: %s\n", i == 0 ? "CD-ROM" : "floppy disk", paths[i]);
-                return false;
-            }
-        }
-
-        first[i] = (int)count;
-    }
-
-    if (save_disk && !disk_add_save_disk(disk_images))
-        return false;
-
-    if (first[0] >= 0 && !disk_insert((unsigned)first[0], 0))
-        return false;
-
-    if (first[1] >= 0 && !disk_insert((unsigned)first[1], 0))
-        return false;
-
-    if (first[2] >= 0)
-    {
-        if (core->GetPendingMachineConfig().floppy_drives < 2)
-            log_cb(RETRO_LOG_WARN, "The machine has one floppy drive, Floppy 2 is not inserted\n");
-        else if (!disk_insert((unsigned)first[2], 1))
-            return false;
-    }
-
-    for (int i = 0; i < 3; i++)
-    {
-        if (first[i] >= 0)
-        {
-            disk_index = (unsigned)first[i];
-            disk_ejected = false;
-            break;
-        }
-    }
-
-    return finish_load();
+    UNUSED(game_type);
+    UNUSED(info);
+    UNUSED(num_info);
+    return false;
 }
 
 size_t retro_serialize_size(void)
@@ -880,39 +558,23 @@ size_t retro_serialize_size(void)
 
 bool retro_serialize(void *data, size_t size)
 {
-    if (savestate_size == 0 || size < savestate_size)
-        return false;
-
-    u8* buffer = reinterpret_cast<u8*>(data);
-    size_t used = savestate_size;
-
-    if (!core->SaveState(buffer, used))
-        return false;
-
-    size_t header_size = sizeof(GT_SaveState_Header_Libretro);
-    memmove(buffer + savestate_size - header_size, buffer + used - header_size, header_size);
-    memset(buffer + used - header_size, 0, savestate_size - used);
-    return true;
+    return core->SaveState(reinterpret_cast<u8*>(data), size);
 }
 
 bool retro_unserialize(const void *data, size_t size)
 {
-    if (!core->LoadState(reinterpret_cast<const u8*>(data), size))
+    const u8* buffer = reinterpret_cast<const u8*>(data);
+    GT_SaveState_Media media = {};
+
+    if (core->LoadState(buffer, size, &media))
+        return true;
+
+    if (!media.valid || !mount_state_media(media))
         return false;
 
-    for (int i = 0; i < FDC_DRIVES; i++)
-    {
-        FloppyDisk* disk = core->GetFloppy(i);
-
-        if (!disk->IsInserted() || disk->GetBaseCRC() != floppy_base_crc[i])
-        {
-            floppy_working_path[i].clear();
-            floppy_entry[i] = -1;
-        }
-    }
-
-    disk_sync_drive();
-    return true;
+    bool loaded = core->LoadState(buffer, size);
+    disk_sync();
+    return loaded;
 }
 
 void *retro_get_memory_data(unsigned id)
@@ -954,6 +616,267 @@ void retro_cheat_set(unsigned index, bool enabled, const char *code)
     (void)index;
     (void)enabled;
     (void)code;
+}
+
+static bool load_content(const char* path)
+{
+    enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
+
+    if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
+    {
+        log_cb(RETRO_LOG_ERROR, "XRGB8888 is not supported.\n");
+        return false;
+    }
+
+    check_variables();
+
+    if (frameskip_type > 0)
+        frameskip_changed = true;
+
+    snprintf(retro_game_path, sizeof(retro_game_path), "%s", path);
+    log_cb(RETRO_LOG_INFO, "Loading %s\n", path[0] != 0 ? path : "no content");
+
+    if (!load_bios())
+    {
+        unload_content();
+        return false;
+    }
+
+    check_bios();
+    set_machine_config();
+    memset(core->GetMemory()->GetCMOS(), 0, GT_CMOS_SIZE);
+    disk_clear();
+    clear_keyboard_state();
+
+    if (!disk_load(path))
+    {
+        unload_content();
+        return false;
+    }
+
+    if (!core->PowerOn())
+    {
+        log_cb(RETRO_LOG_ERROR, "Unable to power on the machine\n");
+        unload_content();
+        return false;
+    }
+
+    content_loaded = true;
+
+    if (!core->GetMaxSaveStateSize(savestate_size))
+        savestate_size = 0;
+
+    log_cb(RETRO_LOG_INFO, "Save state size: %zu bytes\n", savestate_size);
+    disk_sync();
+
+    struct retro_memory_descriptor descriptor = {};
+    descriptor.flags = RETRO_MEMDESC_SYSTEM_RAM;
+    descriptor.ptr = core->GetMemory()->GetWorkingRAM();
+    descriptor.len = core->GetMemory()->GetWorkingRAMSize();
+    struct retro_memory_map memory_map = { &descriptor, 1 };
+    environ_cb(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &memory_map);
+
+    bool achievements = true;
+    environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS, &achievements);
+
+    core->GetRuntimeInfo(runtime_info);
+
+    struct retro_keyboard_callback keyboard = { keyboard_event };
+    environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &keyboard);
+    log_cb(RETRO_LOG_INFO, "Enable Game Focus (Scroll Lock) to type on the FM Towns keyboard\n");
+
+    return true;
+}
+
+static void unload_content(void)
+{
+    for (int i = 0; i < FDC_DRIVES; i++)
+    {
+        if (!floppy_flush(i))
+            log_cb(RETRO_LOG_ERROR, "Unable to save the floppy %d changes\n", i + 1);
+
+        core->EjectFloppy(i);
+    }
+
+    core->EjectMedia();
+    core->PowerOff();
+    disk_clear();
+    clear_keyboard_state();
+
+    content_loaded = false;
+    retro_game_path[0] = 0;
+    savestate_size = 0;
+    current_fps = 60.0f;
+    memset(frame_buffer, 0, GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * sizeof(u32));
+}
+
+static bool load_bios(void)
+{
+    std::string directory(retro_system_directory);
+    append_path_component(directory, "geartowns");
+
+    if (core->LoadBios(directory.c_str()) || core->LoadBios(retro_system_directory))
+        return true;
+
+    std::string reported(directory);
+
+    if (get_firmware_size(directory.c_str(), GT_FIRMWARE_SYSTEM) < 0 &&
+        get_firmware_size(retro_system_directory, GT_FIRMWARE_SYSTEM) >= 0)
+        reported = retro_system_directory;
+
+    std::string missing;
+
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+    {
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+        int expected = Firmware::GetExpectedSize(type);
+        s64 size = get_firmware_size(reported.c_str(), type);
+
+        if (!Firmware::IsRequired(type) || size == expected)
+            continue;
+
+        if (size < 0)
+            log_cb(RETRO_LOG_ERROR, "Missing %s: %s or %s (%d bytes)\n", Firmware::GetComponentName(type),
+                Firmware::GetFileName(type), Firmware::GetAlternativeFileName(type), expected);
+        else
+            log_cb(RETRO_LOG_ERROR, "Invalid %s: %s is %lld bytes, expected %d\n", Firmware::GetComponentName(type),
+                Firmware::GetFilePath(reported.c_str(), type).c_str(), (long long)size, expected);
+
+        if (!missing.empty())
+            missing += ", ";
+
+        missing += Firmware::GetFileName(type);
+    }
+
+    log_cb(RETRO_LOG_INFO, "FM Towns firmware is read from %s, or from %s when that folder has no complete set\n",
+        directory.c_str(), retro_system_directory);
+
+    static char message[256];
+
+    if (missing.empty())
+        snprintf(message, sizeof(message), "FM Towns firmware could not be loaded");
+    else
+        snprintf(message, sizeof(message), "Missing FM Towns firmware: %s", missing.c_str());
+
+    show_message(message, 3, RETRO_LOG_ERROR);
+    log_cb(RETRO_LOG_ERROR, "%s\n", message);
+    return false;
+}
+
+static s64 get_firmware_size(const char* directory, GT_Firmware_Type type)
+{
+    MediaFile* file = MediaFile::OpenFile(Firmware::GetFilePath(directory, type).c_str());
+    s64 size = IsValidPointer(file) ? file->GetSize() : -1;
+    SafeDelete(file);
+    return size;
+}
+
+static void check_bios(void)
+{
+    std::string unknown;
+    Firmware* firmware = core->GetFirmware();
+
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+    {
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+        const GT_Firmware_Info& info = firmware->GetInfo(type);
+
+        if (!info.loaded || info.recognized)
+            continue;
+
+        char entry[64];
+        snprintf(entry, sizeof(entry), "%s%s (CRC %08X)", unknown.empty() ? "" : ", ", Firmware::GetFileName(type),
+            info.crc);
+        unknown += entry;
+    }
+
+    if (unknown.empty())
+        return;
+
+    static char message[256];
+    snprintf(message, sizeof(message), "Unknown FM Towns firmware: %s, the Model 1/2 set is recommended",
+        unknown.c_str());
+    show_message(message, 2, RETRO_LOG_WARN);
+    log_cb(RETRO_LOG_WARN, "%s\n", message);
+}
+
+static void set_machine_config(void)
+{
+    GT_Machine_Config config = core->GetPendingMachineConfig();
+    config.model = GT_MACHINE_MODEL1_2;
+    config.ram_size = (u32)machine_ram_mb * 1024 * 1024;
+    config.floppy_drives = machine_floppy_drives;
+    config.cpu_clock_rate = (u32)machine_cpu_mhz * 1000000;
+    core->SetMachineConfig(config);
+
+    const GT_Machine_Config& pending = core->GetPendingMachineConfig();
+    log_cb(RETRO_LOG_INFO, "Machine: %s, %u MB RAM, %u MHz, %d floppy drives\n", k_machine_profiles[pending.model].name,
+        pending.ram_size / (1024 * 1024), pending.cpu_clock_rate / 1000000, pending.floppy_drives);
+
+    if (floppy_drive == 1 && pending.floppy_drives < 2)
+        log_cb(RETRO_LOG_WARN, "The machine has one floppy drive, disk control uses Floppy 1\n");
+}
+
+static void show_message(const char* message, unsigned priority, enum retro_log_level level)
+{
+    if (message_interface_version >= 1)
+    {
+        struct retro_message_ext msg = {};
+        msg.msg = message;
+        msg.duration = 6000;
+        msg.priority = priority;
+        msg.level = level;
+        msg.target = RETRO_MESSAGE_TARGET_OSD;
+        msg.type = RETRO_MESSAGE_TYPE_NOTIFICATION;
+        msg.progress = -1;
+        environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE_EXT, &msg);
+        return;
+    }
+
+    struct retro_message msg = {};
+    msg.msg = message;
+    msg.frames = 360;
+    environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
+}
+
+static void get_system_av_info(struct retro_system_av_info* info)
+{
+    core->GetRuntimeInfo(runtime_info);
+
+    info->geometry.base_width   = runtime_info.screen_width;
+    info->geometry.base_height  = runtime_info.screen_height;
+    info->geometry.max_width    = GT_MAX_FRAME_BUFFER_WIDTH;
+    info->geometry.max_height   = GT_MAX_FRAME_BUFFER_HEIGHT;
+    info->geometry.aspect_ratio = aspect_ratio == 0.0f ?
+        (float)runtime_info.display_width / (float)runtime_info.display_height : aspect_ratio;
+    info->timing.fps            = 1000.0f / runtime_info.frame_time;
+    info->timing.sample_rate    = GT_AUDIO_SAMPLE_RATE;
+}
+
+static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely)
+{
+    audio_buffer_active = active;
+    audio_buffer_occupancy = occupancy;
+    audio_buffer_underrun = underrun_likely;
+}
+
+static void update_frameskip(void)
+{
+    struct retro_audio_buffer_status_callback callback = { audio_buffer_status };
+    unsigned latency = 0;
+    frameskip_changed = false;
+    frameskip_counter = 0;
+    audio_buffer_active = false;
+
+    if (frameskip_type > 0 && environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK, &callback))
+    {
+        latency = (unsigned)ceilf(6.0f * 1000.0f / current_fps);
+        latency = ((latency + 31) / 32) * 32;
+    }
+    else
+        environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK, NULL);
+
+    environ_cb(RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY, &latency);
 }
 
 static void set_controller_info(void)
@@ -1010,23 +933,9 @@ static void set_controller_info(void)
 static void clear_input_state(void)
 {
     clear_keyboard_state();
-
-    for (int i = 0; i < MAX_PADS; i++)
-    {
-        for (int j = 0; j < MAX_BUTTONS; j++)
-        {
-            joypad_current[i][j] = 0;
-            joypad_old[i][j] = 0;
-        }
-
-        mouse_current[i].delta_x = 0;
-        mouse_current[i].delta_y = 0;
-        mouse_current[i].remainder_x = 0.0f;
-        mouse_current[i].remainder_y = 0.0f;
-        mouse_current[i].button_left = 0;
-        mouse_current[i].button_right = 0;
-        mouse_current[i].delta_applied = false;
-    }
+    memset(joypad_previous, 0, sizeof(joypad_previous));
+    mouse_remainder_x = 0.0f;
+    mouse_remainder_y = 0.0f;
 }
 
 static void clear_keyboard_state(void)
@@ -1038,25 +947,246 @@ static void clear_keyboard_state(void)
         core->ReleaseAllKeys();
 }
 
-static GT_Keys key_from_retro_key(unsigned keycode)
+static void reset_controller_devices(void)
 {
-    if (keycode >= RETROK_a && keycode <= RETROK_z)
-    {
-        static const GT_Keys letters[26] =
-        {
-            GT_KEY_A, GT_KEY_B, GT_KEY_C, GT_KEY_D, GT_KEY_E, GT_KEY_F, GT_KEY_G, GT_KEY_H, GT_KEY_I,
-            GT_KEY_J, GT_KEY_K, GT_KEY_L, GT_KEY_M, GT_KEY_N, GT_KEY_O, GT_KEY_P, GT_KEY_Q, GT_KEY_R,
-            GT_KEY_S, GT_KEY_T, GT_KEY_U, GT_KEY_V, GT_KEY_W, GT_KEY_X, GT_KEY_Y, GT_KEY_Z
-        };
+    for (int i = 0; i < MAX_PADS; i++)
+        input_device[i] = RETRO_DEVICE_TOWNS_GAMEPAD;
+}
 
-        return letters[keycode - RETROK_a];
+static int get_mouse_port(void)
+{
+    for (int i = 0; i < MAX_PADS; i++)
+    {
+        if (input_device[i] == RETRO_DEVICE_TOWNS_MOUSE)
+            return i;
     }
 
-    if (keycode >= RETROK_1 && keycode <= RETROK_9)
-        return (GT_Keys)(GT_KEY_1 + (keycode - RETROK_1));
+    return -1;
+}
 
+static void apply_controller_device(unsigned port, unsigned device, bool log_device)
+{
+    if (!core || port >= MAX_PADS)
+        return;
+
+    GT_Controller_Type type = GT_CONTROLLER_NONE;
+    const char* name = "Unplugged";
+
+    switch (device)
+    {
+        case RETRO_DEVICE_JOYPAD:
+        case RETRO_DEVICE_TOWNS_GAMEPAD:
+            type = GT_CONTROLLER_ORIGINAL_GAMEPAD;
+            name = "Original gamepad";
+            break;
+        case RETRO_DEVICE_TOWNS_MARTY:
+            type = GT_CONTROLLER_MARTY_GAMEPAD;
+            name = "Marty gamepad";
+            break;
+        case RETRO_DEVICE_TOWNS_6_BUTTON:
+            type = GT_CONTROLLER_6_BUTTON_GAMEPAD;
+            name = "6 button gamepad";
+            break;
+        case RETRO_DEVICE_TOWNS_MOUSE:
+            type = GT_CONTROLLER_MOUSE;
+            name = "Mouse";
+            break;
+        case RETRO_DEVICE_KEYBOARD:
+        case RETRO_DEVICE_TOWNS_KEYBOARD:
+            name = "Keyboard";
+            break;
+        case RETRO_DEVICE_NONE:
+            break;
+        default:
+            name = "Unsupported device";
+            break;
+    }
+
+    if (log_device && log_cb)
+        log_cb(RETRO_LOG_INFO, "Controller %u: %s\n", port, name);
+
+    core->GetInput()->SetControllerType((int)port, type);
+}
+
+static void release_controller_input(unsigned port)
+{
+    GT_GamePad_State state = { 0 };
+    core->GetInput()->SetGamePadState((int)port, state);
+    joypad_previous[port] = 0;
+
+    if (input_device[port] == RETRO_DEVICE_TOWNS_MOUSE)
+    {
+        mouse_remainder_x = 0.0f;
+        mouse_remainder_y = 0.0f;
+        core->GetInput()->ClearMouseInput((int)port);
+    }
+}
+
+static void poll_input(void)
+{
+    input_poll_cb();
+
+    for (unsigned i = 0; i < RETROK_LAST; i++)
+    {
+        if (retro_key_down[i] && !input_state_cb(0, RETRO_DEVICE_KEYBOARD, 0, i))
+            keyboard_event(false, i, 0, 0);
+    }
+}
+
+static void apply_input(void)
+{
+    int mouse_port = get_mouse_port();
+
+    for (int i = 0; i < MAX_PADS; i++)
+    {
+        if (i == mouse_port)
+            apply_mouse(i);
+        else
+            apply_gamepad(i);
+    }
+}
+
+static void apply_gamepad(int port)
+{
+    u16 buttons = 0;
+
+    if (IsJoypadDevice(input_device[port]))
+    {
+        int bits = 0;
+
+        if (libretro_supports_bitmasks)
+            bits = input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+        else
+        {
+            for (int i = 0; i <= RETRO_DEVICE_ID_JOYPAD_R; i++)
+                bits |= input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
+        }
+
+        for (int i = 0; i <= RETRO_DEVICE_ID_JOYPAD_R; i++)
+        {
+            if (bits & (1 << i))
+                buttons |= k_joypad_buttons[i];
+        }
+    }
+
+    if (!allow_up_down)
+    {
+        buttons = filter_opposing(buttons, joypad_previous[port], GT_GAMEPAD_UP, GT_GAMEPAD_DOWN);
+        buttons = filter_opposing(buttons, joypad_previous[port], GT_GAMEPAD_LEFT, GT_GAMEPAD_RIGHT);
+    }
+
+    joypad_previous[port] = buttons;
+
+    if (input_device[port] == RETRO_DEVICE_TOWNS_6_BUTTON)
+        buttons &= k_6_button_buttons;
+    else if (input_device[port] == RETRO_DEVICE_TOWNS_MARTY)
+        buttons = (u16)((buttons & k_gamepad_buttons) | ((buttons & GT_GAMEPAD_Z) ? GT_GAMEPAD_ZOOM : 0));
+    else
+        buttons &= k_gamepad_buttons;
+
+    GT_GamePad_State state = { buttons };
+    core->GetInput()->SetGamePadState(port, state);
+}
+
+static u16 filter_opposing(u16 buttons, u16 previous, u16 first, u16 second)
+{
+    if ((buttons & (first | second)) != (first | second))
+        return buttons;
+
+    bool second_held = (previous & second) && !(previous & first);
+    return (u16)(buttons & ~(second_held ? first : second));
+}
+
+static void apply_mouse(int port)
+{
+    float scale = (float)mouse_sensitivity / 6.0f;
+    mouse_remainder_x += (float)input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) * scale;
+    mouse_remainder_y += (float)input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) * scale;
+    bool left = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) != 0;
+    bool right = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT) != 0;
+
+    if (analog_mouse > 0)
+        poll_analog_mouse(left, right);
+
+    int delta_x = (int)mouse_remainder_x;
+    int delta_y = (int)mouse_remainder_y;
+    mouse_remainder_x -= (float)delta_x;
+    mouse_remainder_y -= (float)delta_y;
+    core->GetInput()->SetMouseDelta(port, delta_x, delta_y);
+
+    GT_GamePad_State state = { 0 };
+
+    if (left)
+        state.buttons |= GT_GAMEPAD_A;
+
+    if (right)
+        state.buttons |= GT_GAMEPAD_B;
+
+    core->GetInput()->SetGamePadState(port, state);
+}
+
+static void poll_analog_mouse(bool& left, bool& right)
+{
+    unsigned index = analog_mouse == 1 ? RETRO_DEVICE_INDEX_ANALOG_LEFT : RETRO_DEVICE_INDEX_ANALOG_RIGHT;
+    float x = (float)input_state_cb(0, RETRO_DEVICE_ANALOG, index, RETRO_DEVICE_ID_ANALOG_X) / 32767.0f;
+    float y = (float)input_state_cb(0, RETRO_DEVICE_ANALOG, index, RETRO_DEVICE_ID_ANALOG_Y) / 32767.0f;
+    float magnitude = sqrtf((x * x) + (y * y));
+    const float deadzone = 0.15f;
+
+    if (magnitude > deadzone)
+    {
+        float speed = (float)analog_mouse_speed * 1.6f;
+        float scale = ((MIN(magnitude, 1.0f) - deadzone) / (1.0f - deadzone)) * speed / magnitude;
+        mouse_remainder_x += x * scale;
+        mouse_remainder_y += y * scale;
+    }
+
+    if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2))
+        left = true;
+
+    if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2))
+        right = true;
+}
+
+static GT_Keys key_from_retro_key(unsigned keycode)
+{
     switch (keycode)
     {
+        case RETROK_a: return GT_KEY_A;
+        case RETROK_b: return GT_KEY_B;
+        case RETROK_c: return GT_KEY_C;
+        case RETROK_d: return GT_KEY_D;
+        case RETROK_e: return GT_KEY_E;
+        case RETROK_f: return GT_KEY_F;
+        case RETROK_g: return GT_KEY_G;
+        case RETROK_h: return GT_KEY_H;
+        case RETROK_i: return GT_KEY_I;
+        case RETROK_j: return GT_KEY_J;
+        case RETROK_k: return GT_KEY_K;
+        case RETROK_l: return GT_KEY_L;
+        case RETROK_m: return GT_KEY_M;
+        case RETROK_n: return GT_KEY_N;
+        case RETROK_o: return GT_KEY_O;
+        case RETROK_p: return GT_KEY_P;
+        case RETROK_q: return GT_KEY_Q;
+        case RETROK_r: return GT_KEY_R;
+        case RETROK_s: return GT_KEY_S;
+        case RETROK_t: return GT_KEY_T;
+        case RETROK_u: return GT_KEY_U;
+        case RETROK_v: return GT_KEY_V;
+        case RETROK_w: return GT_KEY_W;
+        case RETROK_x: return GT_KEY_X;
+        case RETROK_y: return GT_KEY_Y;
+        case RETROK_z: return GT_KEY_Z;
+        case RETROK_1: return GT_KEY_1;
+        case RETROK_2: return GT_KEY_2;
+        case RETROK_3: return GT_KEY_3;
+        case RETROK_4: return GT_KEY_4;
+        case RETROK_5: return GT_KEY_5;
+        case RETROK_6: return GT_KEY_6;
+        case RETROK_7: return GT_KEY_7;
+        case RETROK_8: return GT_KEY_8;
+        case RETROK_9: return GT_KEY_9;
         case RETROK_0: return GT_KEY_0;
         case RETROK_RETURN: return GT_KEY_RETURN;
         case RETROK_ESCAPE: return GT_KEY_BREAK;
@@ -1070,6 +1200,7 @@ static GT_Keys key_from_retro_key(unsigned keycode)
         case RETROK_AT: return GT_KEY_AT;
         case RETROK_RIGHTBRACKET: return GT_KEY_LEFT_BRACKET;
         case RETROK_BACKSLASH: return GT_KEY_YEN;
+        case RETROK_HASH: return GT_KEY_RIGHT_BRACKET;
         case RETROK_SEMICOLON: return GT_KEY_SEMICOLON;
         case RETROK_QUOTE: return GT_KEY_COLON;
         case RETROK_COLON: return GT_KEY_COLON;
@@ -1077,8 +1208,8 @@ static GT_Keys key_from_retro_key(unsigned keycode)
         case RETROK_COMMA: return GT_KEY_COMMA;
         case RETROK_PERIOD: return GT_KEY_PERIOD;
         case RETROK_SLASH: return GT_KEY_SLASH;
-        case RETROK_UNDERSCORE: return GT_KEY_UNDERSCORE;
         case RETROK_OEM_102: return GT_KEY_UNDERSCORE;
+        case RETROK_UNDERSCORE: return GT_KEY_UNDERSCORE;
         case RETROK_CAPSLOCK: return GT_KEY_CAPS;
         case RETROK_F1: return GT_KEY_PF1;
         case RETROK_F2: return GT_KEY_PF2;
@@ -1172,359 +1303,34 @@ static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint
     }
 }
 
-static void reset_controller_devices(void)
+static bool update_core_options_display(void)
 {
-    for (int i = 0; i < MAX_PADS; i++)
-        input_device[i] = RETRO_DEVICE_TOWNS_GAMEPAD;
-}
-
-static void apply_controller_device(unsigned port, unsigned device, bool log_device)
-{
-    if (!core || port >= MAX_PADS)
-        return;
-
-    GT_Controller_Type type = GT_CONTROLLER_NONE;
-
-    switch (device)
-    {
-        case RETRO_DEVICE_JOYPAD:
-        case RETRO_DEVICE_TOWNS_GAMEPAD:
-            type = GT_CONTROLLER_ORIGINAL_GAMEPAD;
-
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_INFO, "Controller %u: Original gamepad\n", port);
-
-            break;
-        case RETRO_DEVICE_TOWNS_MARTY:
-            type = GT_CONTROLLER_MARTY_GAMEPAD;
-
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_INFO, "Controller %u: Marty gamepad\n", port);
-
-            break;
-        case RETRO_DEVICE_TOWNS_6_BUTTON:
-            type = GT_CONTROLLER_6_BUTTON_GAMEPAD;
-
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_INFO, "Controller %u: 6 button gamepad\n", port);
-
-            break;
-        case RETRO_DEVICE_TOWNS_MOUSE:
-            if (port > 0 && input_device[0] == RETRO_DEVICE_TOWNS_MOUSE)
-            {
-                if (log_cb)
-                    log_cb(RETRO_LOG_WARN, "Controller %u: Only one mouse is supported, port %u is unplugged\n", port,
-                        port + 1);
-
-                break;
-            }
-
-            type = GT_CONTROLLER_MOUSE;
-
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_INFO, "Controller %u: Mouse\n", port);
-
-            break;
-        case RETRO_DEVICE_KEYBOARD:
-        case RETRO_DEVICE_TOWNS_KEYBOARD:
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_INFO, "Controller %u: Keyboard\n", port);
-
-            break;
-        case RETRO_DEVICE_NONE:
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_INFO, "Controller %u: Unplugged\n", port);
-
-            break;
-        default:
-            if (log_device && log_cb)
-                log_cb(RETRO_LOG_DEBUG, "Controller %u: Unsupported device\n", port);
-
-            break;
-    }
-
-    core->GetInput()->SetControllerType((int)port, type);
-}
-
-static void release_controller_input(unsigned port)
-{
-    if (core)
-    {
-        GT_GamePad_State state = { 0 };
-        core->GetInput()->SetGamePadState((int)port, state);
-    }
-
-    for (int i = 0; i < MAX_BUTTONS; i++)
-    {
-        joypad_current[port][i] = 0;
-        joypad_old[port][i] = 0;
-    }
-
-    mouse_current[port].delta_x = 0;
-    mouse_current[port].delta_y = 0;
-    mouse_current[port].remainder_x = 0.0f;
-    mouse_current[port].remainder_y = 0.0f;
-    mouse_current[port].button_left = 0;
-    mouse_current[port].button_right = 0;
-    mouse_current[port].delta_applied = false;
-
-    if ((input_device[port] == RETRO_DEVICE_TOWNS_MOUSE) && core)
-        core->GetInput()->ClearMouseInput((int)port);
-}
-
-static void poll_analog_mouse(MouseState& mouse)
-{
-    unsigned index = analog_mouse == 1 ? RETRO_DEVICE_INDEX_ANALOG_LEFT : RETRO_DEVICE_INDEX_ANALOG_RIGHT;
-    float x = (float)input_state_cb(0, RETRO_DEVICE_ANALOG, index, RETRO_DEVICE_ID_ANALOG_X) / 32767.0f;
-    float y = (float)input_state_cb(0, RETRO_DEVICE_ANALOG, index, RETRO_DEVICE_ID_ANALOG_Y) / 32767.0f;
-    float magnitude = sqrtf((x * x) + (y * y));
-    const float deadzone = 0.15f;
-
-    if (magnitude > deadzone)
-    {
-        float speed = (float)analog_mouse_speed * 1.6f;
-        float scale = ((MIN(magnitude, 1.0f) - deadzone) / (1.0f - deadzone)) * speed / magnitude;
-        mouse.remainder_x += x * scale;
-        mouse.remainder_y += y * scale;
-    }
-
-    if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2))
-        mouse.button_left = 1;
-
-    if (input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2))
-        mouse.button_right = 1;
-}
-
-static void poll_input(void)
-{
-    int joypad_bits[MAX_PADS];
-
-    if (!input_poll_cb || !input_state_cb || !core)
-        return;
-
-    input_poll_cb();
-
-    for (unsigned i = 0; i < RETROK_LAST; i++)
-    {
-        if (retro_key_down[i] && !input_state_cb(0, RETRO_DEVICE_KEYBOARD, 0, i))
-            keyboard_event(false, i, 0, 0);
-    }
-
-    if (libretro_supports_bitmasks)
-    {
-        for (int j = 0; j < MAX_PADS; j++)
-        {
-            if (IsJoypadDevice(input_device[j]))
-                joypad_bits[j] = input_state_cb(j, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
-            else
-                joypad_bits[j] = 0;
-        }
-    }
-    else
-    {
-        for (int j = 0; j < MAX_PADS; j++)
-        {
-            joypad_bits[j] = 0;
-
-            if (IsJoypadDevice(input_device[j]))
-            {
-                for (int i = 0; i < (RETRO_DEVICE_ID_JOYPAD_R3 + 1); i++)
-                    joypad_bits[j] |= input_state_cb(j, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
-            }
-        }
-    }
-
-    bool analog_mouse_pending = analog_mouse > 0;
-
-    for (int j = 0; j < MAX_PADS; j++)
-    {
-        mouse_current[j].delta_x = 0;
-        mouse_current[j].delta_y = 0;
-        mouse_current[j].button_left = 0;
-        mouse_current[j].button_right = 0;
-        mouse_current[j].delta_applied = false;
-
-        if (input_device[j] == RETRO_DEVICE_TOWNS_MOUSE)
-        {
-            float scale = (float)mouse_sensitivity / 6.0f;
-            mouse_current[j].remainder_x += (float)input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) * scale;
-            mouse_current[j].remainder_y += (float)input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) * scale;
-            mouse_current[j].button_left = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) ? 1 : 0;
-            mouse_current[j].button_right = input_state_cb(j, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT) ? 1 : 0;
-
-            if (analog_mouse_pending)
-            {
-                poll_analog_mouse(mouse_current[j]);
-                analog_mouse_pending = false;
-            }
-
-            mouse_current[j].delta_x = (int)mouse_current[j].remainder_x;
-            mouse_current[j].delta_y = (int)mouse_current[j].remainder_y;
-            mouse_current[j].remainder_x -= (float)mouse_current[j].delta_x;
-            mouse_current[j].remainder_y -= (float)mouse_current[j].delta_y;
-        }
-    }
-
-    for (int j = 0; j < MAX_PADS; j++)
-    {
-        for (int i = 0; i < MAX_BUTTONS; i++)
-            joypad_old[j][i] = joypad_current[j][i];
-    }
-
-    for (int j = 0; j < MAX_PADS; j++)
-    {
-        int up_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_UP);
-        int down_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_DOWN);
-        int left_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_LEFT);
-        int right_pressed = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_RIGHT);
-
-        if (allow_up_down)
-        {
-            joypad_current[j][0] = up_pressed;
-            joypad_current[j][1] = down_pressed;
-            joypad_current[j][2] = left_pressed;
-            joypad_current[j][3] = right_pressed;
-        }
-        else
-        {
-            int up = up_pressed;
-            int down = down_pressed;
-            int left = left_pressed;
-            int right = right_pressed;
-
-            if (up_pressed && down_pressed)
-            {
-                if (joypad_old[j][0])
-                {
-                    up = 1;
-                    down = 0;
-                }
-                else if (joypad_old[j][1])
-                {
-                    up = 0;
-                    down = 1;
-                }
-                else
-                {
-                    up = 1;
-                    down = 0;
-                }
-            }
-
-            if (left_pressed && right_pressed)
-            {
-                if (joypad_old[j][2])
-                {
-                    left = 1;
-                    right = 0;
-                }
-                else if (joypad_old[j][3])
-                {
-                    left = 0;
-                    right = 1;
-                }
-                else
-                {
-                    left = 1;
-                    right = 0;
-                }
-            }
-
-            joypad_current[j][0] = up;
-            joypad_current[j][1] = down;
-            joypad_current[j][2] = left;
-            joypad_current[j][3] = right;
-        }
-
-        joypad_current[j][4] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_START);
-        joypad_current[j][5] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_SELECT);
-        joypad_current[j][6] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_A);
-        joypad_current[j][7] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_B);
-        joypad_current[j][8] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_Y);
-        joypad_current[j][9] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_X);
-        joypad_current[j][10] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_L);
-        joypad_current[j][11] = IsButtonPressed(joypad_bits[j], RETRO_DEVICE_ID_JOYPAD_R);
-    }
-}
-
-static void apply_input(void)
-{
-    int mouse_port = -1;
-
-    for (int j = 0; j < MAX_PADS; j++)
-    {
-        if (input_device[j] == RETRO_DEVICE_TOWNS_MOUSE)
-        {
-            mouse_port = j;
-            break;
-        }
-    }
-
-    for (int j = 0; j < MAX_PADS; j++)
-    {
-        if (j == mouse_port)
-        {
-            if (!mouse_current[j].delta_applied)
-            {
-                core->GetInput()->SetMouseDelta(j, mouse_current[j].delta_x, mouse_current[j].delta_y);
-                mouse_current[j].delta_applied = true;
-            }
-
-            GT_GamePad_State state = { 0 };
-
-            if (mouse_current[j].button_left)
-                state.buttons |= GT_GAMEPAD_A;
-
-            if (mouse_current[j].button_right)
-                state.buttons |= GT_GAMEPAD_B;
-
-            core->GetInput()->SetGamePadState(j, state);
-            continue;
-        }
-
-        u16 buttons = 0;
-        if (joypad_current[j][0]) buttons |= GT_GAMEPAD_UP;
-
-        if (joypad_current[j][1]) buttons |= GT_GAMEPAD_DOWN;
-
-        if (joypad_current[j][2]) buttons |= GT_GAMEPAD_LEFT;
-
-        if (joypad_current[j][3]) buttons |= GT_GAMEPAD_RIGHT;
-
-        if (joypad_current[j][4]) buttons |= GT_GAMEPAD_RUN;
-
-        if (joypad_current[j][5]) buttons |= GT_GAMEPAD_SELECT;
-
-        if (joypad_current[j][6]) buttons |= GT_GAMEPAD_A;
-
-        if (joypad_current[j][7]) buttons |= GT_GAMEPAD_B;
-
-        if (input_device[j] == RETRO_DEVICE_TOWNS_MARTY)
-        {
-            if (joypad_current[j][11]) buttons |= GT_GAMEPAD_ZOOM;
-        }
-
-        if (input_device[j] == RETRO_DEVICE_TOWNS_6_BUTTON)
-        {
-            if (joypad_current[j][8]) buttons |= GT_GAMEPAD_C;
-
-            if (joypad_current[j][9]) buttons |= GT_GAMEPAD_X;
-
-            if (joypad_current[j][10]) buttons |= GT_GAMEPAD_Y;
-
-            if (joypad_current[j][11]) buttons |= GT_GAMEPAD_Z;
-        }
-
-        GT_GamePad_State state = { buttons };
-        core->GetInput()->SetGamePadState(j, state);
-    }
+    struct retro_variable var = { "geartowns_frameskip", NULL };
+    bool threshold_visible = environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+        (strcmp(var.value, "Manual") == 0);
+
+    var.key = "geartowns_analog_mouse";
+    var.value = NULL;
+    bool speed_visible = environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+        (strcmp(var.value, "Disabled") != 0);
+
+    if ((threshold_visible == frameskip_threshold_visible) && (speed_visible == analog_mouse_speed_visible))
+        return false;
+
+    struct retro_core_option_display display = { "geartowns_frameskip_threshold", threshold_visible };
+    environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &display);
+
+    display.key = "geartowns_analog_mouse_speed";
+    display.visible = speed_visible;
+    environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &display);
+
+    frameskip_threshold_visible = threshold_visible;
+    analog_mouse_speed_visible = speed_visible;
+    return true;
 }
 
 static void check_variables(void)
 {
-    if (!environ_cb)
-        return;
-
     struct retro_variable var = { };
 
     var.key = "geartowns_aspect_ratio";
@@ -1545,7 +1351,7 @@ static void check_variables(void)
     var.key = "geartowns_native_resolution";
     var.value = NULL;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetVideo()->EnableNativeResolution(strcmp(var.value, "Enabled") == 0);
     }
@@ -1560,7 +1366,7 @@ static void check_variables(void)
         if (type != frameskip_type)
         {
             frameskip_type = type;
-            update_frameskip();
+            frameskip_changed = true;
         }
     }
 
@@ -1607,7 +1413,7 @@ static void check_variables(void)
     var.key = "geartowns_fm_volume";
     var.value = NULL;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetAudio()->SetFMVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
     }
@@ -1615,7 +1421,7 @@ static void check_variables(void)
     var.key = "geartowns_pcm_volume";
     var.value = NULL;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetAudio()->SetPCMVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
     }
@@ -1623,7 +1429,7 @@ static void check_variables(void)
     var.key = "geartowns_cdda_volume";
     var.value = NULL;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetAudio()->SetCDDAVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
     }
@@ -1633,16 +1439,13 @@ static void check_variables(void)
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
-        cdrom_speed = CLAMP(atoi(var.value), 1, 8);
-
-        if (core)
-            core->GetCDROM()->SetReadSpeed(cdrom_speed);
+        core->GetCDROM()->SetReadSpeed(CLAMP(atoi(var.value), 1, 8));
     }
 
     var.key = "geartowns_cdrom_preload";
     var.value = NULL;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetMedia()->PreloadCdRom(strcmp(var.value, "Enabled") == 0);
     }
@@ -1654,14 +1457,27 @@ static void check_variables(void)
     {
         int drive = strcmp(var.value, "Floppy 2") == 0 ? 1 : 0;
 
-        if (core && drive != floppy_drive && core->GetPendingMachineConfig().floppy_drives < 2)
-            log_cb(RETRO_LOG_WARN, "The machine has one floppy drive, disk control keeps using Floppy 1\n");
-
         if (drive != floppy_drive)
         {
             floppy_drive = drive;
-            disk_sync_drive();
+            disk_sync();
         }
+    }
+
+    var.key = "geartowns_floppy_multidrive";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        floppy_multidrive = (strcmp(var.value, "Enabled") == 0);
+    }
+
+    var.key = "geartowns_save_disk";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        save_disk = (strcmp(var.value, "Enabled") == 0);
     }
 
     var.key = "geartowns_ram_size";
@@ -1680,6 +1496,14 @@ static void check_variables(void)
         machine_cpu_mhz = CLAMP(atoi(var.value), 16, 100);
     }
 
+    var.key = "geartowns_rtc";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->GetRTC()->SetStartTime(strcmp(var.value, "Fixed date") == 0 ? RTC_FIXED_DATE : 0);
+    }
+
     var.key = "geartowns_floppy_drives";
     var.value = NULL;
 
@@ -1688,181 +1512,118 @@ static void check_variables(void)
         machine_floppy_drives = CLAMP(atoi(var.value), 1, 2);
     }
 
-    var.key = "geartowns_rtc";
-    var.value = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
-    {
-        core->GetRTC()->SetStartTime(strcmp(var.value, "Fixed date") == 0 ? RTC_FIXED_DATE : 0);
-    }
-
-    var.key = "geartowns_floppy_second";
-    var.value = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-    {
-        floppy_second = (strcmp(var.value, "Enabled") == 0);
-    }
-
-    var.key = "geartowns_save_disk";
-    var.value = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-    {
-        save_disk = (strcmp(var.value, "Enabled") == 0);
-    }
-
 #if !defined(GT_DISABLE_DYNAREC)
     var.key = "geartowns_dynarec";
     var.value = NULL;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
-        bool dynarec = strcmp(var.value, "Enabled") == 0;
-        core->GetI386()->EnableDynarec(dynarec);
+        int dynarec = strcmp(var.value, "Enabled") == 0 ? 1 : 0;
 
-        if (dynarec && !core->GetI386()->IsDynarecEnabled())
-            log_cb(RETRO_LOG_WARN, "Dynarec unavailable, the CPU runs in the interpreter\n");
+        if (dynarec != dynarec_option)
+        {
+            dynarec_option = dynarec;
+            core->GetI386()->EnableDynarec(dynarec == 1);
+
+            if (dynarec == 1 && !core->GetI386()->IsDynarecEnabled())
+                log_cb(RETRO_LOG_WARN, "Dynarec unavailable, the CPU runs in the interpreter\n");
+        }
     }
 #endif
 }
 
-static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely)
+static bool path_is_cdrom_uri(const char* path)
 {
-    audio_buffer_active = active;
-    audio_buffer_occupancy = occupancy;
-    audio_buffer_underrun = underrun_likely;
+    return path && (strncmp(path, "cdrom://", 8) == 0);
 }
 
-static void update_frameskip(void)
+static bool path_is_cd_content(const char* path)
 {
-    struct retro_audio_buffer_status_callback callback = { audio_buffer_status };
-    unsigned latency = 0;
-    frameskip_counter = 0;
-    audio_buffer_active = false;
-
-    if (frameskip_type > 0 && environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK, &callback))
-        latency = (unsigned)((6.0f * 1000.0f / current_fps) + 0.5f);
-    else
-        environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK, NULL);
-
-    environ_cb(RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY, &latency);
+    return path_is_cdrom_uri(path) ||
+        ends_with_no_case(path, ".cue") ||
+        ends_with_no_case(path, ".chd") ||
+        ends_with_no_case(path, ".iso");
 }
 
-static bool path_is_floppy_content(const char* path)
+static bool disk_load(const char* path)
 {
-    if (FloppyImage::IsImageName(path))
+    if (path[0] != 0 && !disk_add_images(path, disk_images))
+        return false;
+
+    if (save_disk)
+    {
+        std::string name = get_save_disk_name(get_file_name(retro_game_path, true)) + ".save.d77";
+
+        if (!disk_add_save_disk(name, "Save Disk", NULL, disk_images))
+            return false;
+    }
+
+    unsigned boot = 0;
+
+    if (disk_initial_index < disk_images.size() && disk_images[disk_initial_index].cdrom &&
+        disk_images[disk_initial_index].path == disk_initial_path)
+        boot = disk_initial_index;
+
+    disk_initial_index = 0;
+    disk_initial_path.clear();
+
+    if (disk_images.empty() || disk_images[boot].save_disk)
         return true;
 
-    if (!ends_with_no_case(path, ".zip"))
+    if (!disk_insert(boot, disk_images[boot].cdrom ? DRIVE_CDROM : DRIVE_FLOPPY_1))
         return false;
 
-    std::vector<u8> archive;
-    u8* data = NULL;
-    u32 size = 0;
-
-    if (!read_content_file(path, archive) ||
-        !FloppyImage::ExtractFromZip(archive.data(), archive.size(), &data, &size, NULL, 0))
-        return false;
-
-    SafeDeleteArray(data);
-    return true;
-}
-
-static bool read_content_file(const char* path, std::vector<u8>& data)
-{
-    MediaFile* file = MediaFile::OpenFile(path);
-
-    if (!IsValidPointer(file))
-        return false;
-
-    s64 size = file->GetSize();
-    bool ok = size > 0 && size <= (s64)k_floppy_max_image_size * 4;
-
-    if (ok)
+    for (size_t i = 0; i < disk_images.size(); i++)
     {
-        data.resize((size_t)size);
-        ok = file->ReadExact(data.data(), (u64)size);
-    }
-
-    SafeDelete(file);
-    return ok;
-}
-
-static bool write_content_file(const char* path, const u8* data, u32 size)
-{
-    std::string temporary(path);
-    temporary += ".tmp";
-
-    if (IsValidPointer(vfs_interface) && IsValidPointer(vfs_interface->rename) && IsValidPointer(vfs_interface->remove))
-    {
-        LibretroVfsFile file(vfs_interface);
-
-        if (!file.Open(temporary.c_str(), RETRO_VFS_FILE_ACCESS_WRITE) || !file.WriteAll(data, size) ||
-            !file.Close())
+        if (disk_images[i].cdrom != disk_images[boot].cdrom && !disk_images[i].save_disk)
         {
-            vfs_interface->remove(temporary.c_str());
-            return false;
+            if (!disk_insert((unsigned)i, disk_images[i].cdrom ? DRIVE_CDROM : DRIVE_FLOPPY_1))
+                return false;
+
+            break;
         }
-
-        vfs_interface->remove(path);
-        return vfs_interface->rename(temporary.c_str(), path) == 0;
     }
 
-    FILE* file = fopen(temporary.c_str(), "wb");
+    int boot_floppy = drive_entry[DRIVE_FLOPPY_1];
+    bool multidrive = floppy_multidrive && boot_floppy >= 0 && core->GetPendingMachineConfig().floppy_drives > 1;
 
-    if (!IsValidPointer(file))
-        return false;
-
-    bool written = fwrite(data, 1, size, file) == size;
-    written = (fclose(file) == 0) && written;
-    remove(path);
-
-    if (!written || rename(temporary.c_str(), path) != 0)
+    for (size_t i = (size_t)(boot_floppy + 1); multidrive && i < disk_images.size(); i++)
     {
-        remove(temporary.c_str());
-        return false;
+        if (!disk_images[i].cdrom && !disk_images[i].save_disk)
+        {
+            if (!disk_insert((unsigned)i, DRIVE_FLOPPY_2))
+                log_cb(RETRO_LOG_WARN, "Floppy MultiDrive: %s is not inserted in Floppy 2\n",
+                    disk_images[i].path.c_str());
+
+            break;
+        }
     }
 
+    disk_index = boot;
+    disk_ejected = false;
     return true;
 }
 
 static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
 {
     if (ends_with_no_case(path, ".m3u"))
+        return disk_add_playlist(path, images);
+
+    if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".zip"))
     {
-        std::vector<u8> data;
-        std::vector<Media::PlaylistEntry> entries;
+        if (disk_add_floppy_images(path, images))
+            return true;
 
-        if (!read_content_file(path, data) ||
-            !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries))
-            return false;
+        if (ends_with_no_case(path, ".zip"))
+            show_message("This ZIP file has no floppy disk image, zipped CD-ROM images are not supported", 3,
+                RETRO_LOG_ERROR);
 
-        for (size_t i = 0; i < entries.size(); i++)
-        {
-            const char* entry = entries[i].path.c_str();
-
-            if (entries[i].save_disk)
-                continue;
-
-            if (ends_with_no_case(entry, ".m3u") || !disk_add_images(entry, images))
-            {
-                log_cb(RETRO_LOG_ERROR, "Playlist entry is missing or not a disk image: %s\n", entry);
-                return false;
-            }
-        }
-
-        return true;
+        log_cb(RETRO_LOG_ERROR, "Unable to read the floppy disk image %s\n", path);
+        return false;
     }
-
-    if (!path_is_cd_content(path) && path_is_floppy_content(path))
-        return disk_add_floppy_images(path, images);
 
     if (!path_is_cd_content(path))
     {
-        if (ends_with_no_case(path, ".zip"))
-            show_message("This ZIP file has no floppy disk image, zipped CD-ROM images are not supported", 3);
-
         log_cb(RETRO_LOG_ERROR, "Not a CD-ROM (CUE, CHD, ISO) or floppy disk image: %s\n", path);
         return false;
     }
@@ -1877,19 +1638,62 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
         SafeDelete(file);
     }
 
-    std::string label(path);
-    size_t separator = label.find_last_of("/\\");
-
-    if (separator != std::string::npos)
-        label = label.substr(separator + 1);
-
     DiskSetImage image;
     image.path = path;
-    image.label = label;
+    image.label = get_file_name(path, false);
     image.disk = 0;
+    image.crc = 0;
+    image.crc_known = false;
     image.cdrom = true;
     image.save_disk = false;
     images.push_back(image);
+    return true;
+}
+
+static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& images)
+{
+    std::vector<u8> data;
+    std::vector<Media::PlaylistEntry> entries;
+
+    if (!read_content_file(path, data, PLAYLIST_MAX_SIZE) ||
+        !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries))
+        return false;
+
+    std::string save_name = get_save_disk_name(get_file_name(path, true));
+    int save_disks = 0;
+
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        const Media::PlaylistEntry& entry = entries[i];
+
+        if (entry.save_disk)
+        {
+            char suffix[32];
+            char label[32];
+            snprintf(suffix, sizeof(suffix), ".save%d.d77", save_disks);
+            snprintf(label, sizeof(label), "Save Disk %d", save_disks);
+
+            if (!disk_add_save_disk(save_name + suffix, label, entry.label.c_str(), images))
+                return false;
+
+            save_disks++;
+            continue;
+        }
+
+        size_t first = images.size();
+
+        if (ends_with_no_case(entry.path.c_str(), ".m3u") || !disk_add_images(entry.path.c_str(), images))
+        {
+            log_cb(RETRO_LOG_ERROR, "Playlist entry is missing or not a disk image: %s\n", entry.path.c_str());
+            return false;
+        }
+
+        size_t name_length = get_file_name(entry.path.c_str(), false).length();
+
+        for (size_t j = first; entry.has_label && j < images.size(); j++)
+            images[j].label = entry.label.empty() ? "" : entry.label + images[j].label.substr(name_length);
+    }
+
     return true;
 }
 
@@ -1897,42 +1701,36 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
 {
     std::vector<u8> data;
 
-    if (!read_content_file(path, data))
+    if (!load_source(path, data))
         return false;
 
-    if (ends_with_no_case(path, ".zip"))
-    {
-        u8* extracted = NULL;
-        u32 size = 0;
-
-        if (!FloppyImage::ExtractFromZip(data.data(), data.size(), &extracted, &size, NULL, 0))
-            return false;
-
-        data.assign(extracted, extracted + size);
-        SafeDeleteArray(extracted);
-    }
-
     int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
-    std::string file_name(path);
-    size_t separator = file_name.find_last_of("/\\");
-
-    if (separator != std::string::npos)
-        file_name = file_name.substr(separator + 1);
+    std::string file_name = get_file_name(path, false);
 
     for (int i = 0; i < count; i++)
     {
+        u32 offset = 0;
+        u32 size = 0;
+
+        if (!FloppyImage::GetDisk(data.data(), (u32)data.size(), i, &offset, &size))
+            return false;
+
         DiskSetImage image;
         image.path = path;
-        image.disk = i;
         image.label = file_name;
+        image.disk = i;
+        image.crc = CalculateCRC32(0, data.data() + offset, (int)size);
+        image.crc_known = true;
         image.cdrom = false;
         image.save_disk = false;
 
         if (count > 1)
         {
-            char label[32];
-            snprintf(label, sizeof(label), " (Disk %d)", i + 1);
-            image.label += label;
+            char name[32];
+            char suffix[64];
+            FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
+            snprintf(suffix, sizeof(suffix), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
+            image.label += suffix;
         }
 
         images.push_back(image);
@@ -1941,25 +1739,12 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
     return count > 0;
 }
 
-static bool disk_add_save_disk(std::vector<DiskSetImage>& images)
+static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume,
+    std::vector<DiskSetImage>& images)
 {
-    std::string name(retro_game_path);
-    size_t separator = name.find_last_of("/\\");
-
-    if (separator != std::string::npos)
-        name = name.substr(separator + 1);
-
-    size_t dot = name.find_last_of('.');
-
-    if (dot != std::string::npos)
-        name = name.substr(0, dot);
-
-    if (name.empty())
-        name = "geartowns";
-
-    char path[4096];
-    snprintf(path, sizeof(path), "%s%c%s.save.d77", retro_save_directory, slash, name.c_str());
-    MediaFile* file = MediaFile::OpenFile(path);
+    std::string path(retro_save_directory);
+    append_path_component(path, name.c_str());
+    MediaFile* file = MediaFile::OpenFile(path.c_str());
     bool exists = IsValidPointer(file);
     SafeDelete(file);
 
@@ -1967,26 +1752,40 @@ static bool disk_add_save_disk(std::vector<DiskSetImage>& images)
     {
         u32 size = 0;
         u8* blank = FloppyImage::CreateBlank(FLOPPY_BLANK_2HD_1232, true, &size);
-        bool created = IsValidPointer(blank) && write_content_file(path, blank, size);
+
+        if (IsValidPointer(blank))
+            FloppyImage::SetDiskName(blank, size, volume);
+
+        bool created = IsValidPointer(blank) && write_content_file(path.c_str(), blank, size);
         SafeDeleteArray(blank);
 
         if (!created)
         {
-            log_cb(RETRO_LOG_ERROR, "Unable to create the save disk %s\n", path);
+            log_cb(RETRO_LOG_ERROR, "Unable to create the save disk %s\n", path.c_str());
             return false;
         }
 
-        log_cb(RETRO_LOG_INFO, "Save disk created: %s\n", path);
+        log_cb(RETRO_LOG_INFO, "Save disk created: %s\n", path.c_str());
     }
 
     DiskSetImage image;
     image.path = path;
-    image.label = "Save disk";
+    image.label = label;
     image.disk = 0;
+    image.crc = CalculateCRC32(0, reinterpret_cast<const u8*>(name.c_str()), (int)name.size());
+    image.crc_known = true;
     image.cdrom = false;
     image.save_disk = true;
     images.push_back(image);
     return true;
+}
+
+static int get_entry_drive(unsigned index)
+{
+    if (index < disk_images.size() && disk_images[index].cdrom)
+        return DRIVE_CDROM;
+
+    return DRIVE_FLOPPY_1 + (core->GetPendingMachineConfig().floppy_drives > 1 ? floppy_drive : 0);
 }
 
 static bool disk_insert(unsigned index, int drive)
@@ -1994,61 +1793,101 @@ static bool disk_insert(unsigned index, int drive)
     if (index >= disk_images.size() || disk_images[index].path.empty())
         return false;
 
-    if (disk_images[index].cdrom)
-        return core->LoadMedia(disk_images[index].path.c_str());
+    DiskSetImage& image = disk_images[index];
 
-    for (int i = 0; i < FDC_DRIVES; i++)
+    if (drive == DRIVE_CDROM)
     {
-        if (i != drive && floppy_entry[i] >= 0 && disk_images[floppy_entry[i]].path == disk_images[index].path &&
-            disk_images[floppy_entry[i]].disk == disk_images[index].disk)
+        bool loaded = core->LoadMedia(image.path.c_str());
+        drive_entry[DRIVE_CDROM] = loaded ? (int)index : -1;
+
+        if (loaded)
+        {
+            image.crc = core->GetMedia()->GetCRC();
+            image.crc_known = true;
+        }
+
+        return loaded;
+    }
+
+    for (int i = DRIVE_FLOPPY_1; i < DRIVE_COUNT; i++)
+    {
+        if (i != drive && drive_entry[i] >= 0 && disk_images[drive_entry[i]].path == image.path &&
+            disk_images[drive_entry[i]].disk == image.disk)
         {
             static char message[64];
-            snprintf(message, sizeof(message), "This floppy disk is already in Floppy %d", i + 1);
-            show_message(message, 2);
+            snprintf(message, sizeof(message), "This floppy disk is already in Floppy %d", i);
+            show_message(message, 2, RETRO_LOG_WARN);
             return false;
         }
     }
 
-    return floppy_flush(drive) && floppy_load_image(index, drive);
-}
+    int floppy = drive - DRIVE_FLOPPY_1;
 
-static bool disk_eject(unsigned index, int drive)
-{
-    if (index >= disk_images.size())
-        return true;
-
-    if (disk_images[index].cdrom)
-    {
-        core->EjectMedia();
-        return true;
-    }
-
-    if (!floppy_flush(drive))
+    if (!floppy_flush(floppy))
         return false;
 
-    core->EjectFloppy(drive);
-    floppy_working_path[drive].clear();
-    floppy_entry[drive] = -1;
+    if (floppy_load_image(index, floppy))
+        return true;
+
+    if (!core->GetFloppy(floppy)->IsInserted())
+    {
+        drive_entry[drive] = -1;
+        floppy_working_path[floppy].clear();
+    }
+
+    return false;
+}
+
+static bool disk_eject(int drive)
+{
+    if (drive == DRIVE_CDROM)
+        core->EjectMedia();
+    else
+    {
+        int floppy = drive - DRIVE_FLOPPY_1;
+
+        if (!floppy_flush(floppy))
+        {
+            show_message("Unable to save the floppy disk changes, the disk stays in the drive", 3, RETRO_LOG_ERROR);
+            return false;
+        }
+
+        core->EjectFloppy(floppy);
+        floppy_working_path[floppy].clear();
+    }
+
+    drive_entry[drive] = -1;
     return true;
 }
 
-static void disk_sync_drive(void)
+static void disk_close_open_drive(int drive)
 {
-    if (disk_index >= disk_images.size() || disk_images[disk_index].cdrom)
+    if (open_drive < 0 || open_drive == drive)
         return;
 
-    if (floppy_entry[disk_drive()] >= 0)
-    {
-        disk_index = (unsigned)floppy_entry[disk_drive()];
-        disk_ejected = false;
-    }
-    else
-        disk_ejected = true;
+    if (open_entry >= 0 && drive_entry[open_drive] < 0)
+        disk_insert((unsigned)open_entry, open_drive);
+
+    open_drive = -1;
+    open_entry = -1;
 }
 
-static int disk_drive(void)
+static void disk_sync(void)
 {
-    return core->GetPendingMachineConfig().floppy_drives > 1 ? floppy_drive : 0;
+    if (disk_ejected || disk_index >= disk_images.size())
+        return;
+
+    int drive = get_entry_drive(disk_index);
+
+    if (drive_entry[drive] >= 0)
+    {
+        disk_index = (unsigned)drive_entry[drive];
+        return;
+    }
+
+    disk_ejected = true;
+    open_drive = drive;
+    open_entry = -1;
 }
 
 static void disk_clear(void)
@@ -2056,108 +1895,125 @@ static void disk_clear(void)
     disk_images.clear();
     disk_index = 0;
     disk_ejected = true;
-    disk_ejected_entry = -1;
-    disk_ejected_drive = 0;
+    open_drive = -1;
+    open_entry = -1;
+
+    for (int i = 0; i < DRIVE_COUNT; i++)
+        drive_entry[i] = -1;
 
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         floppy_working_path[i].clear();
-        floppy_base_crc[i] = 0;
-        floppy_entry[i] = -1;
+        floppy_idle_frames[i] = 0;
+        floppy_flush_failed[i] = false;
     }
 }
 
-static bool floppy_load_image(unsigned index, int drive)
+static void disk_shift_entry(int& entry, unsigned index, int delta)
 {
-    const DiskSetImage& image = disk_images[index];
-    std::vector<u8> file;
-    u32 offset = 0;
-    u32 size = 0;
+    if (entry < (int)index)
+        return;
 
-    if (image.save_disk)
+    entry = (delta < 0 && entry == (int)index) ? -1 : entry + delta;
+}
+
+static bool mount_state_media(const GT_SaveState_Media& media)
+{
+    int entries[DRIVE_COUNT];
+    bool changed = false;
+
+    for (int i = 0; i < DRIVE_COUNT; i++)
+        entries[i] = drive_entry[i];
+
+    if (media.cdrom_inserted && (!core->GetMedia()->IsReady() || core->GetMedia()->GetCRC() != media.cdrom_crc))
     {
-        std::string name(image.path.substr(image.path.find_last_of("/\\") + 1));
-        u32 base_crc = CalculateCRC32(0, reinterpret_cast<const u8*>(name.c_str()), (int)name.size());
+        entries[DRIVE_CDROM] = find_cdrom_entry(media.cdrom_crc);
+        changed = true;
 
-        if (!read_content_file(image.path.c_str(), file) ||
-            !core->InsertFloppy(drive, file.data(), (u32)file.size(), false, base_crc))
+        if (entries[DRIVE_CDROM] < 0)
             return false;
-
-        floppy_working_path[drive] = image.path;
-        floppy_base_crc[drive] = base_crc;
-        floppy_entry[drive] = (int)index;
-        log_cb(RETRO_LOG_INFO, "Floppy %d: %s\n", drive + 1, image.label.c_str());
-        return true;
     }
 
-    if (!read_content_file(image.path.c_str(), file))
-        return false;
-
-    if (ends_with_no_case(image.path.c_str(), ".zip"))
+    for (int i = 0; i < FDC_DRIVES; i++)
     {
-        u8* extracted = NULL;
-        u32 extracted_size = 0;
+        FloppyDisk* disk = core->GetFloppy(i);
 
-        if (!FloppyImage::ExtractFromZip(file.data(), file.size(), &extracted, &extracted_size, NULL, 0))
+        if (!media.floppy_inserted[i] || (disk->IsInserted() && disk->GetBaseCRC() == media.floppy_crc[i]))
+            continue;
+
+        entries[DRIVE_FLOPPY_1 + i] = find_floppy_entry(media.floppy_crc[i]);
+        changed = true;
+
+        if (entries[DRIVE_FLOPPY_1 + i] < 0)
             return false;
-
-        file.assign(extracted, extracted + extracted_size);
-        SafeDeleteArray(extracted);
     }
 
-    if (!FloppyImage::GetDisk(file.data(), (u32)file.size(), image.disk, &offset, &size))
+    if (!changed)
         return false;
 
-    u32 base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
-    std::string name(image.path);
-    size_t separator = name.find_last_of("/\\");
-
-    if (separator != std::string::npos)
-        name = name.substr(separator + 1);
-
-    size_t dot = name.find_last_of('.');
-
-    if (dot != std::string::npos)
-        name = name.substr(0, dot);
-
-    char working[4096];
-    snprintf(working, sizeof(working), "%s%c%s.%08X.geartowns.d77", retro_save_directory, slash, name.c_str(),
-        base_crc);
-
-    std::vector<u8> copy;
-    const u8* data = file.data() + offset;
-
-    if (read_content_file(working, copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+    for (int i = DRIVE_FLOPPY_1; i < DRIVE_COUNT; i++)
     {
-        log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working);
-        data = copy.data();
-        size = (u32)copy.size();
+        if (entries[i] != drive_entry[i] && drive_entry[i] >= 0 && !disk_eject(i))
+            return false;
     }
 
-    if (!core->InsertFloppy(drive, data, size, false, base_crc))
-        return false;
+    for (int i = 0; i < DRIVE_COUNT; i++)
+    {
+        if (entries[i] != drive_entry[i] && !disk_insert((unsigned)entries[i], i))
+            return false;
+    }
 
-    floppy_working_path[drive] = working;
-    floppy_base_crc[drive] = base_crc;
-    floppy_entry[drive] = (int)index;
-    log_cb(RETRO_LOG_INFO, "Floppy %d: %s\n", drive + 1, image.label.c_str());
+    log_cb(RETRO_LOG_INFO, "Disks changed to match the save state\n");
     return true;
 }
 
-static bool floppy_flush(int drive)
+static int find_floppy_entry(u32 crc)
 {
-    FloppyDisk* disk = core->GetFloppy(drive);
+    for (size_t i = 0; i < disk_images.size(); i++)
+    {
+        if (!disk_images[i].cdrom && disk_images[i].crc_known && disk_images[i].crc == crc)
+            return (int)i;
+    }
 
-    if (!disk->IsInserted() || !disk->IsDirty())
-        return true;
+    return -1;
+}
 
-    if (floppy_working_path[drive].empty() ||
-        !write_content_file(floppy_working_path[drive].c_str(), disk->GetImage(), disk->GetImageSize()))
-        return false;
+static int find_cdrom_entry(u32 crc)
+{
+    for (size_t i = 0; i < disk_images.size(); i++)
+    {
+        DiskSetImage& image = disk_images[i];
 
-    disk->ClearDirty();
-    log_cb(RETRO_LOG_INFO, "Floppy changes saved to %s\n", floppy_working_path[drive].c_str());
-    return true;
+        if (!image.cdrom)
+            continue;
+
+        if (!image.crc_known)
+            image.crc_known = get_cdrom_crc(image.path.c_str(), &image.crc);
+
+        if (image.crc_known && image.crc == crc)
+            return (int)i;
+    }
+
+    return -1;
+}
+
+static bool get_cdrom_crc(const char* path, u32* crc)
+{
+    CdRomMedia media;
+    media.Init();
+    bool loaded = false;
+
+    if (ends_with_no_case(path, ".chd"))
+        loaded = media.LoadChdFromFile(path, false);
+    else if (ends_with_no_case(path, ".iso"))
+        loaded = media.LoadIsoFromFile(path, false);
+    else
+        loaded = media.LoadCueFromFile(path, false);
+
+    if (loaded)
+        *crc = media.GetCRC();
+
+    return loaded;
 }
 
 static void register_disk_control(void)
@@ -2193,28 +2049,38 @@ static void register_disk_control(void)
 
 static bool disk_set_eject_state(bool ejected)
 {
-    if (!core || disk_ejected == ejected)
+    if (disk_ejected == ejected)
         return true;
 
     if (ejected)
     {
-        if (!disk_eject(disk_index, disk_drive()))
-            return false;
+        if (disk_index < disk_images.size())
+        {
+            int drive = get_entry_drive(disk_index);
+            int entry = drive_entry[drive];
 
-        disk_ejected_entry = (int)disk_index;
-        disk_ejected_drive = disk_drive();
+            if (entry >= 0 && !disk_eject(drive))
+                return false;
+
+            open_drive = drive;
+            open_entry = entry;
+        }
+
         disk_ejected = true;
         return true;
     }
 
-    if (!disk_insert(disk_index, disk_drive()))
-        return false;
+    if (disk_index < disk_images.size())
+    {
+        int drive = get_entry_drive(disk_index);
+        disk_close_open_drive(drive);
 
-    if (disk_ejected_entry >= 0 && disk_ejected_entry < (int)disk_images.size() &&
-        disk_images[disk_ejected_entry].cdrom != disk_images[disk_index].cdrom)
-        disk_insert((unsigned)disk_ejected_entry, disk_ejected_drive);
+        if (!disk_insert(disk_index, drive))
+            return false;
+    }
 
-    disk_ejected_entry = -1;
+    open_drive = -1;
+    open_entry = -1;
     disk_ejected = false;
     return true;
 }
@@ -2234,6 +2100,9 @@ static bool disk_set_image_index(unsigned index)
     if (!disk_ejected || index > disk_images.size())
         return false;
 
+    if (index < disk_images.size())
+        disk_close_open_drive(get_entry_drive(index));
+
     disk_index = index;
     return true;
 }
@@ -2252,20 +2121,12 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
     {
         disk_images.erase(disk_images.begin() + index);
 
-        if (disk_ejected_entry == (int)index)
-            disk_ejected_entry = -1;
-        else if (disk_ejected_entry > (int)index)
-            disk_ejected_entry--;
+        for (int i = 0; i < DRIVE_COUNT; i++)
+            disk_shift_entry(drive_entry[i], index, -1);
 
-        for (int i = 0; i < FDC_DRIVES; i++)
-        {
-            if (floppy_entry[i] == (int)index)
-                floppy_entry[i] = -1;
-            else if (floppy_entry[i] > (int)index)
-                floppy_entry[i]--;
-        }
+        disk_shift_entry(open_entry, index, -1);
 
-        if (disk_index >= disk_images.size() && disk_index > 0)
+        if (disk_index > index || (disk_index >= disk_images.size() && disk_index > 0))
             disk_index--;
 
         return true;
@@ -2276,13 +2137,26 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
     if (!disk_add_images(info->path, images) || images.empty())
         return false;
 
-    disk_images[index] = images[0];
-
-    for (int i = 0; i < FDC_DRIVES; i++)
+    for (int i = 0; i < DRIVE_COUNT; i++)
     {
-        if (floppy_entry[i] == (int)index)
-            floppy_entry[i] = -1;
+        if (drive_entry[i] == (int)index)
+            drive_entry[i] = -1;
     }
+
+    if (open_entry == (int)index)
+        open_entry = -1;
+
+    int added = (int)images.size() - 1;
+    disk_images[index] = images[0];
+    disk_images.insert(disk_images.begin() + index + 1, images.begin() + 1, images.end());
+
+    for (int i = 0; i < DRIVE_COUNT; i++)
+        disk_shift_entry(drive_entry[i], index + 1, added);
+
+    disk_shift_entry(open_entry, index + 1, added);
+
+    if (disk_index > index)
+        disk_index += added;
 
     return true;
 }
@@ -2294,6 +2168,8 @@ static bool disk_add_image_index(void)
 
     DiskSetImage image;
     image.disk = 0;
+    image.crc = 0;
+    image.crc_known = false;
     image.cdrom = false;
     image.save_disk = false;
     disk_images.push_back(image);
@@ -2324,7 +2200,207 @@ static bool disk_get_image_label(unsigned index, char* label, size_t len)
     if (!label || len == 0 || index >= disk_images.size())
         return false;
 
-    const DiskSetImage& image = disk_images[index];
-    snprintf(label, len, "%s", !image.label.empty() ? image.label.c_str() : image.cdrom ? "CD-ROM" : "Floppy disk");
+    snprintf(label, len, "%s", disk_images[index].label.c_str());
     return true;
+}
+
+static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_size)
+{
+    MediaFile* file = MediaFile::OpenFile(path);
+
+    if (!IsValidPointer(file))
+        return false;
+
+    s64 size = file->GetSize();
+    bool ok = size > 0 && size <= max_size;
+
+    if (ok)
+    {
+        data.resize((size_t)size);
+        ok = file->ReadExact(data.data(), (u64)size);
+    }
+
+    SafeDelete(file);
+    return ok;
+}
+
+static bool load_source(const char* path, std::vector<u8>& data)
+{
+    if (!read_content_file(path, data, CONTENT_MAX_SIZE))
+        return false;
+
+    if (!ends_with_no_case(path, ".zip"))
+        return true;
+
+    u8* extracted = NULL;
+    u32 size = 0;
+
+    if (!FloppyImage::ExtractFromZip(data.data(), data.size(), &extracted, &size, NULL, 0))
+        return false;
+
+    data.assign(extracted, extracted + size);
+    SafeDeleteArray(extracted);
+    return true;
+}
+
+static bool write_content_file(const char* path, const u8* data, u32 size)
+{
+    std::string temporary = std::string(path) + ".tmp";
+    std::string backup = std::string(path) + ".bak";
+    bool vfs = IsValidPointer(vfs_interface) && IsValidPointer(vfs_interface->rename) &&
+        IsValidPointer(vfs_interface->remove);
+    bool written = false;
+
+    if (vfs)
+    {
+        LibretroVfsFile file(vfs_interface);
+
+        if (file.Open(temporary.c_str(), RETRO_VFS_FILE_ACCESS_WRITE))
+        {
+            written = file.WriteAll(data, size);
+            written = file.Close() && written;
+        }
+    }
+    else
+    {
+        FILE* file = fopen(temporary.c_str(), "wb");
+
+        if (IsValidPointer(file))
+        {
+            written = fwrite(data, 1, size, file) == size;
+            written = (fclose(file) == 0) && written;
+        }
+    }
+
+    if (!written)
+    {
+        remove_file(temporary.c_str(), vfs);
+        return false;
+    }
+
+    remove_file(backup.c_str(), vfs);
+    bool backed_up = rename_file(path, backup.c_str(), vfs);
+
+    if (!rename_file(temporary.c_str(), path, vfs))
+    {
+        if (backed_up)
+            rename_file(backup.c_str(), path, vfs);
+
+        remove_file(temporary.c_str(), vfs);
+        return false;
+    }
+
+    remove_file(backup.c_str(), vfs);
+    return true;
+}
+
+static bool rename_file(const char* from, const char* to, bool vfs)
+{
+    return vfs ? vfs_interface->rename(from, to) == 0 : rename(from, to) == 0;
+}
+
+static void remove_file(const char* path, bool vfs)
+{
+    if (vfs)
+        vfs_interface->remove(path);
+    else
+        remove(path);
+}
+
+static bool floppy_load_image(unsigned index, int floppy)
+{
+    const DiskSetImage& image = disk_images[index];
+    std::vector<u8> file;
+    std::vector<u8> copy;
+    std::string working(image.path);
+    const u8* data = NULL;
+    u32 size = 0;
+
+    if (image.save_disk)
+    {
+        if (!read_content_file(image.path.c_str(), file, CONTENT_MAX_SIZE))
+            return false;
+
+        data = file.data();
+        size = (u32)file.size();
+    }
+    else
+    {
+        u32 offset = 0;
+
+        if (!load_source(image.path.c_str(), file) ||
+            !FloppyImage::GetDisk(file.data(), (u32)file.size(), image.disk, &offset, &size))
+            return false;
+
+        char suffix[64];
+        snprintf(suffix, sizeof(suffix), ".%08X.geartowns.d77", image.crc);
+        working = retro_save_directory;
+        append_path_component(working, (get_file_name(image.path.c_str(), true) + suffix).c_str());
+        data = file.data() + offset;
+
+        if (read_content_file(working.c_str(), copy, CONTENT_MAX_SIZE) &&
+            FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+        {
+            log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working.c_str());
+            data = copy.data();
+            size = (u32)copy.size();
+        }
+    }
+
+    if (!core->InsertFloppy(floppy, data, size, false, image.crc))
+        return false;
+
+    floppy_working_path[floppy] = working;
+    floppy_idle_frames[floppy] = 0;
+    floppy_flush_failed[floppy] = false;
+    drive_entry[DRIVE_FLOPPY_1 + floppy] = (int)index;
+    log_cb(RETRO_LOG_INFO, "Floppy %d: %s\n", floppy + 1, image.path.c_str());
+    return true;
+}
+
+static bool floppy_flush(int floppy)
+{
+    FloppyDisk* disk = core->GetFloppy(floppy);
+
+    if (!disk->IsInserted() || !disk->IsDirty())
+        return true;
+
+    if (floppy_working_path[floppy].empty() ||
+        !write_content_file(floppy_working_path[floppy].c_str(), disk->GetImage(), disk->GetImageSize()))
+        return false;
+
+    disk->ClearDirty();
+    log_cb(RETRO_LOG_INFO, "Floppy changes saved to %s\n", floppy_working_path[floppy].c_str());
+    return true;
+}
+
+static void floppy_update(void)
+{
+    for (int i = 0; i < FDC_DRIVES; i++)
+    {
+        FloppyDisk* disk = core->GetFloppy(i);
+
+        if (!disk->IsInserted() || !disk->IsDirty())
+            continue;
+
+        if (disk->GetWriteCount() != floppy_write_count[i])
+        {
+            floppy_write_count[i] = disk->GetWriteCount();
+            floppy_idle_frames[i] = 0;
+            continue;
+        }
+
+        if (++floppy_idle_frames[i] != FLOPPY_IDLE_FRAMES)
+            continue;
+
+        bool saved = floppy_flush(i);
+
+        if (!saved && !floppy_flush_failed[i])
+        {
+            log_cb(RETRO_LOG_ERROR, "Unable to save the floppy %d changes\n", i + 1);
+            show_message("Unable to save the floppy disk changes", 3, RETRO_LOG_ERROR);
+        }
+
+        floppy_flush_failed[i] = !saved;
+    }
 }

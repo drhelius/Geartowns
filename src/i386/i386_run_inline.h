@@ -237,7 +237,7 @@ INLINE bool I386::SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks)
     m_io_deferred = false;
 
     if (!IsValidPointer(context.synchronize) ||
-        !context.synchronize(context.synchronize_context, context, (u32)(clocks + context.wait_clocks)))
+        !context.synchronize(context.synchronize_context, context, (u32)(clocks + context.wait_cycles)))
         return false;
 
     context.end_batch = false;

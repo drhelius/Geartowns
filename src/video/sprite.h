@@ -107,9 +107,9 @@ static const u32 k_sprite_work_base = 0x40000;
 static const u32 k_sprite_half_size = 0x20000;
 static const u32 k_sprite_clear_rows = 128;
 static const u32 k_sprite_clear_row_size = k_sprite_half_size / k_sprite_clear_rows;
-static const u32 k_sprite_clear_clocks = (GT_CPU_CLOCK_RATE / 1000000) * 32;
+static const u32 k_sprite_clear_clocks = (GT_MACHINE_CLOCK_RATE / 1000000) * 32;
 static const u32 k_sprite_clear_row_clocks = k_sprite_clear_clocks / k_sprite_clear_rows;
-static const u32 k_sprite_entry_clocks = (GT_CPU_CLOCK_RATE / 1000000) * 75;
+static const u32 k_sprite_entry_clocks = (GT_MACHINE_CLOCK_RATE / 1000000) * 75;
 
 #include "sprite_inline.h"
 

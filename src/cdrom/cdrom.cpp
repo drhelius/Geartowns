@@ -942,7 +942,7 @@ u64 CdRom::StartBuffer(u64 clocks)
     u64 delay = m_sector_clocks;
 
     if (lba != head)
-        delay = (u64)((((double)m_cdrom_media->SeekTime(head, lba) * GT_CPU_CLOCK_RATE) / 1000.0) * m_seek_scale);
+        delay = (u64)((((double)m_cdrom_media->SeekTime(head, lba) * GT_MACHINE_CLOCK_RATE) / 1000.0) * m_seek_scale);
 
     m_state.buffer_valid = true;
     m_state.buffer_capacity = capacity;

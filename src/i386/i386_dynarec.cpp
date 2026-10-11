@@ -221,7 +221,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     bool interrupt_pending = nmi_pending || intr_pending;
     u8 entry = k_dynarec_entry_count;
 
-    while (clocks + context.wait_clocks < cycle_budget)
+    while (clocks + context.wait_cycles < cycle_budget)
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
@@ -241,10 +241,10 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
             if (link != k_dynarec_none && IsValidPointer(block) && m_code_window_eip == m_dynarec_link_window)
                 LinkDynarecBlock(link, m_dynarec_link_slot, (u32)(block - m_dynarec_blocks));
 
-            if (IsValidPointer(block) && clocks + context.wait_clocks + block->fit_clocks < cycle_budget)
+            if (IsValidPointer(block) && clocks + context.wait_cycles + block->fit_clocks < cycle_budget)
             {
-                m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_clocks);
-                m_dynarec_wait = context.wait_clocks;
+                m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_cycles);
+                m_dynarec_wait = context.wait_cycles;
                 m_dynarec_clocks = 0;
                 m_dynarec_steps = 0;
                 m_dynarec_dirty = false;
@@ -318,13 +318,13 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
         {
             entry = k_dynarec_entry_count;
             m_dynarec_link_block = k_dynarec_none;
-            total.clocks = clocks;
+            total.cycles = clocks;
             total.steps = steps;
             total.instruction_completed = completed;
 
             bool more = RunForSlowStep(total, cycle_budget, nmi_pending, intr_pending);
 
-            clocks = total.clocks;
+            clocks = total.cycles;
             steps = total.steps;
             completed = total.instruction_completed;
 
@@ -338,7 +338,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     if (unlikely(m_dynarec_cool_clocks >= k_dynarec_cool_period_clocks))
         CoolDynarecPages();
 
-    total.clocks = clocks;
+    total.cycles = clocks;
     total.steps = steps;
     total.instruction_completed = completed;
     m_batch_mode = false;
@@ -714,7 +714,7 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
     // A real mode load of a data segment register starts an interrupt shadow, which the dispatcher counts down
     if (step.end_batch || context.end_batch || cpu->m_state.halted || cpu->m_state.shutdown ||
         !step.instruction_completed || cpu->m_state.repeat.active || cpu->m_state.interrupt_shadow_steps != 0 ||
-        cpu->m_dynarec_dirty || context.wait_clocks != cpu->m_dynarec_wait ||
+        cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait ||
         (s64)next_check + (s32)cpu->m_dynarec_clocks >= (s64)cpu->m_dynarec_remaining)
         return 1;
 

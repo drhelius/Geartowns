@@ -160,8 +160,8 @@ INLINE bool FDC::IsDoubleDensity() const
 // CLKSEL runs the controller at 2 MHz for 2HD or 1 MHz for 2DD, an MFM byte takes 32 controller cycles
 INLINE u32 FDC::GetCycleClocks() const
 {
-    return (m_state.drive_control & k_fdc_slow_clock) != 0 ? GT_CPU_CLOCK_RATE / 1000000 :
-        GT_CPU_CLOCK_RATE / 2000000;
+    return (m_state.drive_control & k_fdc_slow_clock) != 0 ? GT_MACHINE_CLOCK_RATE / 1000000 :
+        GT_MACHINE_CLOCK_RATE / 2000000;
 }
 
 INLINE u32 FDC::GetByteClocks() const

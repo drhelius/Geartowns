@@ -126,7 +126,7 @@ static const u8 k_fdc_motor = 0x10;
 static const u8 k_fdc_slow_clock = 0x20;
 
 // The drive stays not ready for a moment after a disk change, so the BIOS sees the change
-static const u64 k_fdc_disk_change_clocks = GT_CPU_CLOCK_RATE / 20;
+static const u64 k_fdc_disk_change_clocks = GT_MACHINE_CLOCK_RATE / 20;
 
 #include "fdc_inline.h"
 

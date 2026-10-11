@@ -91,7 +91,7 @@ private:
 };
 
 static const int k_keyboard_irq = 1;
-static const u64 k_keyboard_rearm_clocks = GT_CPU_CLOCK_RATE / 1200;
+static const u64 k_keyboard_rearm_clocks = GT_MACHINE_CLOCK_RATE / 1200;
 static const u16 k_keyboard_repeat_delay = 400;
 static const u16 k_keyboard_repeat_interval = 30;
 static const u8 k_keyboard_make = 0xA0;

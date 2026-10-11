@@ -175,7 +175,7 @@ u8 MSM58321::ReadRegister(u64 clocks) const
         case 0x0E:
         case 0x0F:
             // Reference outputs, the 1024 Hz signal on D0 and the slower ones idle
-            return 0x0E | (u8)(((clocks * 2048) / GT_CPU_CLOCK_RATE) & 0x01);
+            return 0x0E | (u8)(((clocks * 2048) / GT_MACHINE_CLOCK_RATE) & 0x01);
         default:
             return m_state.registers[m_state.address];
     }

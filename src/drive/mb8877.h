@@ -179,7 +179,7 @@ static const u32 k_mb8877_command_cycles = 12;
 static const u32 k_mb8877_write_protect_cycles = 145;
 static const u32 k_mb8877_track_load_cycles = 192;
 
-static const u64 k_mb8877_turn = (u64)GT_CPU_CLOCK_RATE * 60;
+static const u64 k_mb8877_turn = (u64)GT_MACHINE_CLOCK_RATE * 60;
 
 #include "mb8877_inline.h"
 

@@ -75,7 +75,7 @@ GeartownsCore::GeartownsCore()
     m_machine_config.cpu = GT_MACHINE_CPU_80386DX;
     m_machine_config.ram_size = GT_MAIN_RAM_SIZE;
     m_machine_config.floppy_drives = 2;
-    m_machine_config.cpu_clock_rate = GT_CPU_CLOCK_RATE;
+    m_machine_config.cpu_clock_rate = k_machine_profiles[GT_MACHINE_MODEL1_2].cpu_clock_rate;
     m_pending_machine_config = m_machine_config;
     m_powered = false;
     m_paused = false;
@@ -506,7 +506,7 @@ INLINE bool GeartownsCore::IsFrameDone(u64 frame_start) const
 
 INLINE u64 GeartownsCore::GetFrameLimit(u64 frame_start) const
 {
-    return frame_start + (m_video->IsRunning() ? GT_CPU_CLOCKS_PER_FRAME * 4 : GT_CPU_CLOCKS_PER_FRAME);
+    return frame_start + (m_video->IsRunning() ? GT_MACHINE_CLOCKS_PER_FRAME * 4 : GT_MACHINE_CLOCKS_PER_FRAME);
 }
 
 INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice()
@@ -525,11 +525,11 @@ void GeartownsCore::DMADebugCallback(void* cpu, u32 address, u32 size, bool writ
 }
 
 // A port access inside a batch moves machine time up to it, unless an event falls due first
-bool GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks)
+bool GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_cycles)
 {
     Scheduler* scheduler = ((GeartownsCore*)core)->m_scheduler;
-    scheduler->AddCycles(elapsed_clocks - context.synchronized_clocks);
-    context.synchronized_clocks = elapsed_clocks;
+    scheduler->AddCycles(elapsed_cycles - context.synchronized_cycles);
+    context.synchronized_cycles = elapsed_cycles;
     context.clocks = scheduler->GetClocks();
     return !scheduler->IsEventDue();
 }
@@ -546,7 +546,7 @@ INLINE bool GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_A
     if (idle)
         m_scheduler->AddClocks(slice);
     else
-        m_scheduler->AddCycles((u32)(result.clocks + context.wait_clocks - context.synchronized_clocks));
+        m_scheduler->AddCycles((u32)(result.cycles + context.wait_cycles - context.synchronized_cycles));
 
     if (m_scheduler->IsEventDue())
         DispatchEvents();
@@ -1373,7 +1373,7 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
     runtime_info.screen_height = IsValidPointer(m_video) ? m_video->GetFrameHeight() : GT_FRAME_BUFFER_HEIGHT;
     runtime_info.display_width = IsValidPointer(m_video) ? m_video->GetDisplayWidth() : GT_FRAME_BUFFER_WIDTH;
     runtime_info.display_height = IsValidPointer(m_video) ? m_video->GetDisplayHeight() : GT_FRAME_BUFFER_HEIGHT;
-    runtime_info.frame_time = (float)((GT_CPU_CLOCKS_PER_FRAME * 1000.0) / GT_CPU_CLOCK_RATE);
+    runtime_info.frame_time = (float)((GT_MACHINE_CLOCKS_PER_FRAME * 1000.0) / GT_MACHINE_CLOCK_RATE);
 
     // A running CRTC paces frames at its VSYNC rate
     if (IsValidPointer(m_video) && m_video->IsRunning())
@@ -1462,6 +1462,9 @@ void GeartownsCore::ApplyMachineConfig()
 
     if (IsValidPointer(m_scheduler))
         m_scheduler->SetCPUClockRate(m_machine_config.cpu_clock_rate);
+
+    if (IsValidPointer(m_profiler))
+        m_profiler->SetCPUClockRate(m_machine_config.cpu_clock_rate);
 
     if (IsValidPointer(m_memory))
         m_memory->SetMainRAMSize(m_machine_config.ram_size);

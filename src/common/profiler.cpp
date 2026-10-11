@@ -32,6 +32,7 @@ Profiler::Profiler()
     InitPointer(m_hash);
 #endif
     m_clocks = &k_profiler_no_clocks;
+    m_cpu_clock_rate = GT_MACHINE_CLOCK_RATE;
     m_function_count = 0;
     m_depth = 0;
     m_enabled = false;
@@ -53,6 +54,13 @@ Profiler::~Profiler()
 void Profiler::Init(const u64* clocks)
 {
     m_clocks = IsValidPointer(clocks) ? clocks : &k_profiler_no_clocks;
+    ResetStack();
+}
+
+void Profiler::SetCPUClockRate(u32 rate)
+{
+    Sync();
+    m_cpu_clock_rate = rate > 0 ? rate : GT_MACHINE_CLOCK_RATE;
     ResetStack();
 }
 
@@ -79,7 +87,7 @@ void Profiler::ResetStack()
 {
     m_depth = 0;
     m_interrupt_cycles = 0;
-    m_last_cycle = *m_clocks;
+    m_last_cycle = GetCycle();
 }
 
 void Profiler::Enable(bool enable)
@@ -97,12 +105,12 @@ void Profiler::SetActive(bool active)
 void Profiler::Sync()
 {
     if (m_enabled)
-        Charge(*m_clocks);
+        Charge(GetCycle());
 }
 
 void Profiler::Enter(u32 address, bool interrupt, u8 vector)
 {
-    u64 cycle = *m_clocks;
+    u64 cycle = GetCycle();
     Charge(cycle);
 
     u16 index = interrupt ? FindFunction(address, vector, PROFILER_FUNCTION_INTERRUPT) :
@@ -136,7 +144,7 @@ void Profiler::Return()
     if (m_depth == 0)
         return;
 
-    u64 cycle = *m_clocks;
+    u64 cycle = GetCycle();
     Charge(cycle);
     Leave(cycle);
 }
@@ -178,6 +186,17 @@ void Profiler::UpdateEnabled()
     Sync();
     m_enabled = enabled;
     ResetStack();
+}
+
+u64 Profiler::GetCycle() const
+{
+    u64 clocks = *m_clocks;
+
+    if (m_cpu_clock_rate == GT_MACHINE_CLOCK_RATE)
+        return clocks;
+
+    return ((clocks / GT_MACHINE_CLOCK_RATE) * m_cpu_clock_rate) +
+        (((clocks % GT_MACHINE_CLOCK_RATE) * m_cpu_clock_rate) / GT_MACHINE_CLOCK_RATE);
 }
 
 void Profiler::InitFunction(u16 index, u32 address, u8 vector, GT_Profiler_Function_Type type)

@@ -77,7 +77,7 @@ private:
     PIT_State m_state;
 };
 
-// 1,228,800 Hz and 307,200 Hz are 48 and 12 ticks every 625 clocks of the 16 MHz CPU
+// 1,228,800 Hz and 307,200 Hz are 48 and 12 ticks every 625 machine clocks
 static const u64 k_pit_fast_ticks = 48;
 static const u64 k_pit_base_ticks = 12;
 static const u64 k_pit_clock_divisor = 625;

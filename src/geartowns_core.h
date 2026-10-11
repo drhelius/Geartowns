@@ -156,7 +156,7 @@ private:
     GT_Bus_Access_Context BeginSlice();
     bool CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice, bool hold_on_hit);
     bool EnterPendingInterrupt(GT_Bus_Access_Context& context);
-    static bool SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks);
+    static bool SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_cycles);
     static void DMADebugCallback(void* cpu, u32 address, u32 size, bool write);
     void DispatchEvents();
     void Reset();

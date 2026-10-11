@@ -337,7 +337,7 @@ void I386::CompleteFault(u16 old_task)
     StepState& result = m_step;
 
     m_step_exception = {};
-    m_step_exception.clocks = result.clocks;
+    m_step_exception.cycles = result.clocks;
     m_step_exception.instruction_completed = result.instruction_completed;
     m_step_exception.end_batch = result.end_batch;
     m_step_exception.exception_after_instruction =
@@ -345,7 +345,7 @@ void I386::CompleteFault(u16 old_task)
 
     ResolveException(*m_bus_context, m_step_exception);
 
-    result.clocks = m_step_exception.clocks;
+    result.clocks = m_step_exception.cycles;
     result.exception = m_step_exception.exception;
     result.end_batch = m_step_exception.end_batch;
 }
@@ -353,7 +353,7 @@ void I386::CompleteFault(u16 old_task)
 I386_Run_Result I386::GetStepInfo() const
 {
     I386_Run_Result result = {};
-    result.clocks = m_step.clocks;
+    result.cycles = m_step.clocks;
     result.steps = m_step.steps;
     result.instruction_completed = m_step.instruction_completed;
     result.end_batch = m_step.end_batch;
@@ -399,7 +399,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     bool completed = true;
     bool interrupt_pending = nmi_pending || intr_pending;
 
-    while (clocks + context.wait_clocks < cycle_budget)
+    while (clocks + context.wait_cycles < cycle_budget)
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
@@ -408,13 +408,13 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
         }
         else
         {
-            total.clocks = clocks;
+            total.cycles = clocks;
             total.steps = steps;
             total.instruction_completed = completed;
 
             bool more = RunForSlowStep(total, cycle_budget, nmi_pending, intr_pending);
 
-            clocks = total.clocks;
+            clocks = total.cycles;
             steps = total.steps;
             completed = total.instruction_completed;
 
@@ -423,7 +423,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
         }
     }
 
-    total.clocks = clocks;
+    total.cycles = clocks;
     total.steps = steps;
     total.instruction_completed = completed;
     m_batch_mode = false;
@@ -439,11 +439,11 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
     if (m_state.repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_state.halted && !m_state.shutdown)
     {
         u32 clocks = 0;
-        u32 steps = RunRepeatBatch((u32)(cycle_budget - total.clocks - context.wait_clocks), clocks);
+        u32 steps = RunRepeatBatch((u32)(cycle_budget - total.cycles - context.wait_cycles), clocks);
 
         if (steps != 0)
         {
-            total.clocks += clocks;
+            total.cycles += clocks;
             total.steps += steps;
             total.instruction_completed = m_step.instruction_completed;
 
@@ -461,7 +461,7 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
     RunCheckedStep();
 
     const StepState& step = m_step;
-    total.clocks += step.clocks;
+    total.cycles += step.clocks;
     total.steps += step.steps;
     total.instruction_completed = step.instruction_completed;
     total.end_batch = total.end_batch || step.end_batch;
@@ -537,12 +537,12 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
         memset(&m_exception, 0, sizeof(m_exception));
 
         I386_Run_Result result = {};
-        result.clocks = clocks;
+        result.cycles = clocks;
         result.instruction_completed = true;
         result.exception_vector = 0xFF;
 
         DeliverException(exception, m_state.eip, context, result);
-        return (u32)result.clocks;
+        return (u32)result.cycles;
     }
     else
         m_state.shutdown = true;
@@ -1051,7 +1051,7 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
         bool ok = EnterInterrupt(current.vector, current_return_eip, context, false, current.has_error_code,
             current.error_code, current.exception_class == I386_EXCEPTION_FAULT, false, &entry_clocks, &result);
 
-        result.clocks += entry_clocks;
+        result.cycles += entry_clocks;
 
         if (ok)
         {

@@ -26,8 +26,8 @@
 #include "../cdrom/cdrom_audio.h"
 #include "../system/scheduler.h"
 
-// FM and PCM both run from the 8 MHz sound clock, half the CPU clock
-static const u32 k_audio_cpu_clocks_per_sound_clock = GT_CPU_CLOCK_RATE / GT_SOUND_CLOCK_RATE;
+// FM and PCM both run from the 8 MHz sound clock, half the machine clock
+static const u32 k_audio_clocks_per_sound_clock = GT_MACHINE_CLOCK_RATE / GT_SOUND_CLOCK_RATE;
 
 INLINE void Audio::Mute(bool mute)
 {
@@ -134,7 +134,7 @@ INLINE void Audio::Clock(u32 clocks)
 
     u64 sample_clock_counter = m_state.sample_clock_counter + (u64)clocks * GT_AUDIO_SAMPLE_RATE;
 
-    if (sample_clock_counter < GT_CPU_CLOCK_RATE)
+    if (sample_clock_counter < GT_MACHINE_CLOCK_RATE)
     {
         ClockSources(clocks);
         m_state.sample_clock_counter = sample_clock_counter;
@@ -144,7 +144,7 @@ INLINE void Audio::Clock(u32 clocks)
     while (clocks > 0)
     {
         u32 step = clocks;
-        u64 remaining = GT_CPU_CLOCK_RATE - m_state.sample_clock_counter;
+        u64 remaining = GT_MACHINE_CLOCK_RATE - m_state.sample_clock_counter;
         u64 clocks_to_sample = (remaining + GT_AUDIO_SAMPLE_RATE - 1) / GT_AUDIO_SAMPLE_RATE;
 
         if ((clocks_to_sample > 0) && (clocks_to_sample < step))
@@ -155,9 +155,9 @@ INLINE void Audio::Clock(u32 clocks)
         m_state.sample_clock_counter += (u64)step * GT_AUDIO_SAMPLE_RATE;
         clocks -= step;
 
-        while (m_state.sample_clock_counter >= GT_CPU_CLOCK_RATE)
+        while (m_state.sample_clock_counter >= GT_MACHINE_CLOCK_RATE)
         {
-            m_state.sample_clock_counter -= GT_CPU_CLOCK_RATE;
+            m_state.sample_clock_counter -= GT_MACHINE_CLOCK_RATE;
             SampleSources();
         }
     }
@@ -166,8 +166,8 @@ INLINE void Audio::Clock(u32 clocks)
 INLINE void Audio::ClockSources(u32 clocks)
 {
     u32 total_clocks = m_state.sound_clock_remainder + clocks;
-    u32 sound_clocks = total_clocks / k_audio_cpu_clocks_per_sound_clock;
-    m_state.sound_clock_remainder = total_clocks % k_audio_cpu_clocks_per_sound_clock;
+    u32 sound_clocks = total_clocks / k_audio_clocks_per_sound_clock;
+    m_state.sound_clock_remainder = total_clocks % k_audio_clocks_per_sound_clock;
 
     m_ym3438->Clock(sound_clocks);
     m_rf5c68->Clock(sound_clocks);

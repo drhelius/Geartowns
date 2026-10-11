@@ -125,7 +125,7 @@ static const u8 k_upd71071_io_to_memory = 0x01;
 static const u8 k_upd71071_memory_to_io = 0x02;
 static const u8 k_upd71071_demand = 0x00;
 static const u8 k_upd71071_single = 0x01;
-static const u64 k_upd71071_unit_clocks = ((u64)GT_CPU_CLOCK_RATE * 2) / 1000000;
+static const u64 k_upd71071_unit_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 2) / 1000000;
 
 #include "upd71071_inline.h"
 

@@ -201,12 +201,12 @@ static const int k_cdrom_dma_channel = 3;
 static const u8 k_cdrom_flag_irq = 0x40;
 static const u8 k_cdrom_flag_status = 0x20;
 static const u8 k_cdrom_command_mask = 0x9F;
-static const u64 k_cdrom_command_clocks = GT_CPU_CLOCK_RATE / 1000;
-static const u64 k_cdrom_sector_clocks = GT_CPU_CLOCK_RATE / 75;
-static const u64 k_cdrom_notify_clocks = GT_CPU_CLOCK_RATE / 1000;
-static const u64 k_cdrom_seek_clocks = GT_CPU_CLOCK_RATE / 10;
-static const u64 k_cdrom_lost_data_clocks = GT_CPU_CLOCK_RATE / 10;
-static const u64 k_cdrom_cdda_stop_clocks = GT_CPU_CLOCK_RATE / 1000;
+static const u64 k_cdrom_command_clocks = GT_MACHINE_CLOCK_RATE / 1000;
+static const u64 k_cdrom_sector_clocks = GT_MACHINE_CLOCK_RATE / 75;
+static const u64 k_cdrom_notify_clocks = GT_MACHINE_CLOCK_RATE / 1000;
+static const u64 k_cdrom_seek_clocks = GT_MACHINE_CLOCK_RATE / 10;
+static const u64 k_cdrom_lost_data_clocks = GT_MACHINE_CLOCK_RATE / 10;
+static const u64 k_cdrom_cdda_stop_clocks = GT_MACHINE_CLOCK_RATE / 1000;
 static const u32 k_cdrom_buffer_size = 8192;
 
 #include "cdrom_inline.h"

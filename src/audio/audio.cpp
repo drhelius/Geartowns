@@ -307,7 +307,7 @@ void Audio::UpdatePCMIRQ()
 // Machine clock at which the sound chips have run the given cycles past the last catch-up
 u64 Audio::GetEventClocks(u64 cycles) const
 {
-    return m_state.clocks + (cycles * k_audio_cpu_clocks_per_sound_clock) - m_state.sound_clock_remainder;
+    return m_state.clocks + (cycles * k_audio_clocks_per_sound_clock) - m_state.sound_clock_remainder;
 }
 
 // Data writes carry the register the address port latched, along with the channel it belongs to
@@ -564,8 +564,8 @@ void Audio::Serialize(StateSerializer& serializer)
 
 void Audio::SanitizeState()
 {
-    m_state.sound_clock_remainder %= k_audio_cpu_clocks_per_sound_clock;
-    m_state.sample_clock_counter %= GT_CPU_CLOCK_RATE;
+    m_state.sound_clock_remainder %= k_audio_clocks_per_sound_clock;
+    m_state.sample_clock_counter %= GT_MACHINE_CLOCK_RATE;
     m_state.pcm_lowpass_left = CLAMP(m_state.pcm_lowpass_left, -32768, 32767);
     m_state.pcm_lowpass_right = CLAMP(m_state.pcm_lowpass_right, -32768, 32767);
 

@@ -41,13 +41,13 @@ INLINE void Scheduler::AddClocks(u32 clocks)
 // The remainder carries over so no cycle is lost between slices
 INLINE void Scheduler::AddCycles(u32 cycles)
 {
-    if (m_cpu_clock_rate == GT_CPU_CLOCK_RATE)
+    if (m_cpu_clock_rate == GT_MACHINE_CLOCK_RATE)
     {
         m_state.clocks += cycles;
         return;
     }
 
-    u64 scaled = ((u64)cycles * GT_CPU_CLOCK_RATE) + m_state.cycle_remainder;
+    u64 scaled = ((u64)cycles * GT_MACHINE_CLOCK_RATE) + m_state.cycle_remainder;
     m_state.clocks += scaled / m_cpu_clock_rate;
     m_state.cycle_remainder = (u32)(scaled % m_cpu_clock_rate);
 }
@@ -62,10 +62,10 @@ INLINE u32 Scheduler::GetSliceClocks(u64 limit) const
 // CPU cycles that cover a whole slice of machine clocks
 INLINE u32 Scheduler::GetSliceCycles(u32 clocks) const
 {
-    if (m_cpu_clock_rate == GT_CPU_CLOCK_RATE)
+    if (m_cpu_clock_rate == GT_MACHINE_CLOCK_RATE)
         return clocks;
 
-    return (u32)((((u64)clocks * m_cpu_clock_rate) + GT_CPU_CLOCK_RATE - 1) / GT_CPU_CLOCK_RATE);
+    return (u32)((((u64)clocks * m_cpu_clock_rate) + GT_MACHINE_CLOCK_RATE - 1) / GT_MACHINE_CLOCK_RATE);
 }
 
 INLINE bool Scheduler::IsEventDue() const

@@ -622,7 +622,7 @@ static void format_video(const GT_Trace_Entry& entry, char* buffer, size_t size)
 
 static void format_sprite(const GT_Trace_Entry& entry, char* buffer, size_t size)
 {
-    double ms = (double)entry.sprite.clocks * 1000.0 / GT_CPU_CLOCK_RATE;
+    double ms = (double)entry.sprite.clocks * 1000.0 / GT_MACHINE_CLOCK_RATE;
 
     switch (entry.event)
     {

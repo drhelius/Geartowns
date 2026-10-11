@@ -199,7 +199,7 @@ struct I386_State
 
 struct I386_Run_Result
 {
-    u64 clocks;
+    u64 cycles;
     u32 steps;
     bool instruction_completed;
     bool end_batch;

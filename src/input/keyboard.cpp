@@ -159,7 +159,7 @@ void Keyboard::Synchronize(u64 clocks)
     if (m_state.repeat_key != GT_KEY_NONE && clocks >= m_state.repeat_clocks)
     {
         PushEvent(m_state.repeat_key, k_keyboard_typematic);
-        m_state.repeat_clocks += ((u64)m_state.repeat_interval * GT_CPU_CLOCK_RATE) / 1000;
+        m_state.repeat_clocks += ((u64)m_state.repeat_interval * GT_MACHINE_CLOCK_RATE) / 1000;
         changed = true;
     }
 
@@ -179,7 +179,7 @@ void Keyboard::KeyPressed(GT_Keys key)
     if (IsRepeatKey((u8)key))
     {
         m_state.repeat_key = (u8)key;
-        m_state.repeat_clocks = m_scheduler->GetClocks() + ((u64)m_state.repeat_delay * GT_CPU_CLOCK_RATE) / 1000;
+        m_state.repeat_clocks = m_scheduler->GetClocks() + ((u64)m_state.repeat_delay * GT_MACHINE_CLOCK_RATE) / 1000;
     }
 
     UpdateNextEvent();

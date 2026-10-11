@@ -207,23 +207,23 @@ INLINE u32 Video::GetKanjiOffset() const
 }
 
 // Half-lines count from the VSYNC that started the frame
-// rounded up to the CPU clock that reaches them
+// rounded up to the machine clock that reaches them
 INLINE u64 Video::GetHalfLineClocks(u32 half_line) const
 {
     u64 crtc_clocks = (u64)half_line * m_state.frame_line_clocks;
     u64 rate = (u64)m_state.frame_clock_rate * 2;
-    return m_state.frame_start_clocks + (crtc_clocks * GT_CPU_CLOCK_RATE + rate - 1) / rate;
+    return m_state.frame_start_clocks + (crtc_clocks * GT_MACHINE_CLOCK_RATE + rate - 1) / rate;
 }
 
 INLINE u32 Video::GetBeamHalfLine(u64 clocks) const
 {
     u64 elapsed = (clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate * 2;
-    return m_state.crtc[k_video_crtc_vst1] + (u32)(elapsed / ((u64)GT_CPU_CLOCK_RATE * m_state.frame_line_clocks));
+    return m_state.crtc[k_video_crtc_vst1] + (u32)(elapsed / ((u64)GT_MACHINE_CLOCK_RATE * m_state.frame_line_clocks));
 }
 
 INLINE u32 Video::GetBeamClock(u64 clocks) const
 {
-    u64 elapsed = ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_CPU_CLOCK_RATE;
+    u64 elapsed = ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_MACHINE_CLOCK_RATE;
     u64 origin = ((u64)m_state.crtc[k_video_crtc_vst1] * m_state.frame_line_clocks) / 2;
     return (u32)((origin + elapsed) % m_state.frame_line_clocks);
 }

@@ -66,6 +66,7 @@ public:
     Profiler();
     ~Profiler();
     void Init(const u64* clocks);
+    void SetCPUClockRate(u32 rate);
     void Reset();
     void ResetStack();
     void Enable(bool enable);
@@ -82,6 +83,7 @@ public:
 
 private:
     void UpdateEnabled();
+    u64 GetCycle() const;
     void InitFunction(u16 index, u32 address, u8 vector, GT_Profiler_Function_Type type);
     u16 FindFunction(u32 address, u8 vector, GT_Profiler_Function_Type type);
     void Charge(u64 cycle);
@@ -104,6 +106,7 @@ private:
     u64 m_interrupt_cycles;
     u32 m_frames;
     const u64* m_clocks;
+    u32 m_cpu_clock_rate;
 };
 
 // Calls and returns are only counted while the profiler is enabled and the debugger runs the machine

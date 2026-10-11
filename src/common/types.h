@@ -104,14 +104,14 @@ enum GT_Bus_Access_Origin
 
 struct GT_Bus_Access_Context;
 
-typedef bool (*GT_Synchronize_Hardware_Fn)(void* core, GT_Bus_Access_Context& context, u32 elapsed_clocks);
+typedef bool (*GT_Synchronize_Hardware_Fn)(void* core, GT_Bus_Access_Context& context, u32 elapsed_cycles);
 typedef void (*GT_Observe_Memory_Write_Fn)(void* observer, u32 bus_address, u8 previous, u8 value);
 
 struct GT_Bus_Access_Context
 {
     u64 clocks;
-    u32 synchronized_clocks;
-    u32 wait_clocks;
+    u32 synchronized_cycles;
+    u32 wait_cycles;
     GT_Bus_Access_Origin origin;
     GT_Synchronize_Hardware_Fn synchronize;
     void* synchronize_context;

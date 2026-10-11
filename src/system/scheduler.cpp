@@ -30,7 +30,7 @@ Scheduler::Scheduler()
     m_state.cycle_remainder = 0;
     m_next_event_clocks = GT_NO_EVENT;
     m_next_event = SCHEDULER_EVENT_PIT;
-    m_cpu_clock_rate = GT_CPU_CLOCK_RATE;
+    m_cpu_clock_rate = GT_MACHINE_CLOCK_RATE;
 }
 
 Scheduler::~Scheduler()
@@ -55,7 +55,7 @@ void Scheduler::Reset()
 
 void Scheduler::SetCPUClockRate(u32 rate)
 {
-    m_cpu_clock_rate = rate > 0 ? rate : GT_CPU_CLOCK_RATE;
+    m_cpu_clock_rate = rate > 0 ? rate : GT_MACHINE_CLOCK_RATE;
     m_state.cycle_remainder = 0;
 }
 

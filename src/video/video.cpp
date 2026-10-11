@@ -1149,7 +1149,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
         start += m_sprite->GetDisplayOffset();
 
     u32 position = h_start + (u32)x * divider - haj;
-    u32 colors[GT_MAX_FRAME_BUFFER_WIDTH + 4];
+    u32 colors[GT_MAX_FRAME_BUFFER_WIDTH];
 
     if ((zoom_x % divider) != 0)
     {
@@ -1157,7 +1157,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
         {
             u32 pixel = (position / zoom_x + skip) & wrap;
             DecodeLayerPixels(colors, layer, start, pixel, 1, planes, opaque);
-            destination[x] = BlendLayerColor(colors[pixel & 0x01], destination[x]);
+            destination[x] = BlendLayerColor(colors[0], destination[x]);
         }
 
         return;
@@ -1169,8 +1169,15 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     u32 pixel = position / zoom_x;
     u32 count = (position + (u32)(end - x) - 1) / zoom_x - pixel + 1;
     pixel = (pixel + skip) & wrap;
+
+    if (zoom_x == 1 && opaque)
+    {
+        DecodeLayerRun(destination + x, layer, start, pixel, count, wrap, planes, true);
+        return;
+    }
+
     DecodeLayerRun(colors, layer, start, pixel, count, wrap, planes, opaque);
-    const u32* source = colors + (pixel & 0x01);
+    const u32* source = colors;
 
     if (zoom_x == 1)
     {
@@ -1223,7 +1230,7 @@ void Video::DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 cou
     {
         u32 part = wrap + 1 - pixel;
         DecodeLayerPixels(colors, layer, start, pixel, part, planes, opaque);
-        colors += part + (pixel & 0x01);
+        colors += part;
         count -= part;
         pixel = 0;
     }
@@ -1231,26 +1238,22 @@ void Video::DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 cou
     DecodeLayerPixels(colors, layer, start, pixel, count, planes, opaque);
 }
 
-// Decoding starts at an even pixel so 4 bpp layers read whole bytes
 // Pixels the layer lets the back one through are k_video_transparent
 void Video::DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque)
 {
-    u32 even = pixel & ~0x01U;
-    count += pixel & 0x01;
-
     switch (GetLayerFormat(layer))
     {
         case VIDEO_LAYER_4BPP:
-            DecodeLayerPixelsTemplate<VIDEO_LAYER_4BPP, true>(colors, layer, start, even, count, planes, opaque);
+            DecodeLayerPixelsTemplate<VIDEO_LAYER_4BPP, true>(colors, layer, start, pixel, count, planes, opaque);
             break;
         case VIDEO_LAYER_8BPP:
-            DecodeLayerPixelsTemplate<VIDEO_LAYER_8BPP, false>(colors, layer, start, even, count, planes, opaque);
+            DecodeLayerPixelsTemplate<VIDEO_LAYER_8BPP, false>(colors, layer, start, pixel, count, planes, opaque);
             break;
         default:
             if (IsTwoPage())
-                DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, true>(colors, layer, start, even, count, planes, opaque);
+                DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, true>(colors, layer, start, pixel, count, planes, opaque);
             else
-                DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, false>(colors, layer, start, even, count, planes, opaque);
+                DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, false>(colors, layer, start, pixel, count, planes, opaque);
             break;
     }
 }
@@ -1264,8 +1267,17 @@ void Video::DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pix
     if (format == VIDEO_LAYER_4BPP)
     {
         const u32* palette = m_palette16_colors[layer];
+        u32 i = 0;
 
-        for (u32 i = 0; i < count; i += 2, pixel += 2)
+        if ((pixel & 0x01) != 0 && count > 0)
+        {
+            u8 data = ReadLayerVRAM<two_page>(page, start + (pixel >> 1));
+            u8 index = (data >> 4) & planes;
+            colors[i++] = opaque || index != 0 ? palette[index] : k_video_transparent;
+            pixel++;
+        }
+
+        for (; i + 1 < count; i += 2, pixel += 2)
         {
             u8 data = ReadLayerVRAM<two_page>(page, start + (pixel >> 1));
             u8 low = data & planes;
@@ -1274,6 +1286,13 @@ void Video::DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pix
             u32 high_color = palette[high];
             colors[i] = opaque || low != 0 ? low_color : k_video_transparent;
             colors[i + 1] = opaque || high != 0 ? high_color : k_video_transparent;
+        }
+
+        if (i < count)
+        {
+            u8 data = ReadLayerVRAM<two_page>(page, start + (pixel >> 1));
+            u8 index = data & planes;
+            colors[i] = opaque || index != 0 ? palette[index] : k_video_transparent;
         }
     }
     else if (format == VIDEO_LAYER_8BPP)
@@ -1290,8 +1309,8 @@ void Video::DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pix
         for (u32 i = 0; i < count; i++, pixel++)
         {
             u32 address = start + pixel * 2;
-            u16 value = (u16)(ReadLayerVRAM<two_page>(page, address) |
-                (ReadLayerVRAM<two_page>(page, address + 1) << 8));
+            u32 offset = two_page ? address & 0x3FFFF : SinglePageToCanonical(address);
+            u16 value = read_u16_le(page + offset);
             u32 color = m_direct_colors[value & 0x7FFF];
             colors[i] = opaque || (value & 0x8000) == 0 ? color : k_video_transparent;
         }

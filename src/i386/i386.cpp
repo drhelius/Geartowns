@@ -729,6 +729,7 @@ void I386::SanitizeState()
 
     u8 privilege = m_state.current_privilege_level;
 
+    InitPointer(m_bus_context);
     UpdateMemoryMode();
     UpdateExecutionMode();
 

@@ -696,7 +696,7 @@ void MemEditor::DrawGrid()
     ImRect scrollbar(position.x + grid_size.x, position.y, position.x + grid_size.x + scrollbar_size,
         position.y + grid_size.y);
     ImGuiIO& io = ImGui::GetIO();
-    s64 row = m_view_address / bytes_per_row;
+    ImS64 row = m_view_address / bytes_per_row;
 
     ImGui::ScrollbarEx(scrollbar, ImGui::GetID("##memory_scrollbar"), ImGuiAxis_Y, &row, m_visible_rows, row_count,
         ImDrawFlags_RoundCornersNone);

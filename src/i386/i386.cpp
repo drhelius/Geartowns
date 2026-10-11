@@ -572,6 +572,7 @@ bool I386::SetState(const I386_State& state)
         state.segments[I386_SEGMENT_CS].base != m_state.segments[I386_SEGMENT_CS].base;
 
     m_state = state;
+    UpdateExecutionMode();
     SanitizeState();
     FlushTLB();
 
@@ -726,8 +727,17 @@ void I386::SanitizeState()
         m_tlb_mru[set] = (plru & 1) != 0 ? ((plru & 2) != 0 ? 0 : 1) : ((plru & 4) != 0 ? 2 : 3);
     }
 
+    u8 privilege = m_state.current_privilege_level;
+
     UpdateMemoryMode();
     UpdateExecutionMode();
+
+    // CPL differs from the CS RPL between setting PE and the far jump
+    if (m_state.execution_mode == I386_MODE_PROTECTED)
+    {
+        m_state.current_privilege_level = privilege;
+        UpdateUserMode();
+    }
 
     if (m_state.repeat.active)
         PrepareString();

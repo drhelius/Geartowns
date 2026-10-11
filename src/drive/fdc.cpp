@@ -321,14 +321,14 @@ bool FDC::DMAWriteCallback(void* device, u16 value, bool word)
     return fdc->m_mb8877.WriteDMA((u8)value);
 }
 
-void FDC::SaveState(std::ostream& stream)
+void FDC::SaveState(std::ostream& stream, bool media)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
     m_mb8877.SaveState(stream);
 
     for (int i = 0; i < FDC_DRIVES; i++)
-        m_disks[i].SaveState(stream);
+        m_disks[i].SaveState(stream, media);
 }
 
 void FDC::LoadState(std::istream& stream)

@@ -46,6 +46,7 @@ public:
     void Init();
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset(u64 clocks);
+    void SetStartTime(s64 start_time);
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
@@ -68,6 +69,7 @@ private:
 private:
     MSM58321_State m_state;
     TraceLogger* m_trace_logger;
+    s64 m_start_time;
 };
 
 static const int k_msm58321_seconds = 0x00;

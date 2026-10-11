@@ -69,7 +69,7 @@ public:
     FloppyDisk* GetDisk(int drive);
     MB8877* GetMB8877();
     FDC_State* GetState();
-    void SaveState(std::ostream& stream);
+    void SaveState(std::ostream& stream, bool media = true);
     void LoadState(std::istream& stream);
 
     FloppyDisk* GetSelectedDisk();

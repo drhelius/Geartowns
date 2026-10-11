@@ -104,7 +104,7 @@ public:
     bool IsPaused();
 
     bool SaveState(const char* path = NULL, int index = -1, bool screenshot = false);
-    bool SaveState(u8* buffer, size_t& size, bool screenshot = false);
+    bool SaveState(u8* buffer, size_t& size, bool screenshot = false, bool media = false);
     bool GetMaxSaveStateSize(size_t& size);
     bool LoadState(const char* path = NULL, int index = -1);
     bool LoadState(const u8* buffer, size_t size);
@@ -164,7 +164,7 @@ private:
     void ApplyMachineConfig();
     void InitMemoryMap();
 
-    bool SaveState(std::ostream& stream, size_t& size, bool screenshot);
+    bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
     bool LoadState(std::istream& stream);
     void Serialize(StateSerializer& serializer);
     void SanitizeState();

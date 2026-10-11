@@ -78,12 +78,12 @@ public:
     void SetSectorStatus(u32 header, bool deleted, u8 status);
     bool ReplaceTrack(int track, const u8* sectors, u32 size, u32 rpm);
     FloppyDisk_State* GetState();
-    void SaveState(std::ostream& stream);
+    void SaveState(std::ostream& stream, bool media = true);
     void LoadState(std::istream& stream);
 
 private:
     void Identify();
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, bool media);
     void SanitizeState();
 
 private:

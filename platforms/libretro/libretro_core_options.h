@@ -42,6 +42,11 @@ struct retro_core_option_v2_category option_cats_us[] = {
         "Configure video output settings."
     },
     {
+        "audio",
+        "Audio",
+        "Configure the volume of each sound source."
+    },
+    {
         "input",
         "Input",
         "Configure controller and mouse behavior."
@@ -51,13 +56,16 @@ struct retro_core_option_v2_category option_cats_us[] = {
         "CD-ROM",
         "Configure CD-ROM settings."
     },
-#if !defined(GT_DISABLE_DYNAREC)
+    {
+        "floppy",
+        "Floppy",
+        "Configure floppy drives and save disks."
+    },
     {
         "system",
         "System",
-        "Configure how the emulated CPU runs."
+        "Configure the emulated machine."
     },
-#endif
     { NULL, NULL, NULL },
 };
 
@@ -68,16 +76,97 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_aspect_ratio",
         "Aspect Ratio",
         NULL,
-        "Select which aspect ratio will be presented by the core.",
+        "Select which aspect ratio will be presented by the core. '1:1 PAR' produces square pixels.",
         NULL,
         "video",
         {
-            { "Core Provided", NULL },
-            { "4:3",           NULL },
-            { "16:9",          NULL },
+            { "1:1 PAR",   NULL },
+            { "4:3 DAR",   NULL },
+            { "16:9 DAR",  NULL },
+            { "16:10 DAR", NULL },
             { NULL, NULL },
         },
-        "Core Provided"
+        "4:3 DAR"
+    },
+    {
+        "geartowns_frameskip",
+        "Frameskip",
+        NULL,
+        "Skip frames to avoid audio crackling when the device is too slow. 'Auto' skips when the frontend reports that the audio buffer is about to run out, 'Manual' uses the threshold below.",
+        NULL,
+        "video",
+        {
+            { "Disabled", NULL },
+            { "Auto",     NULL },
+            { "Manual",   NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+    {
+        "geartowns_frameskip_threshold",
+        "Frameskip Threshold (%)",
+        NULL,
+        "With 'Manual' frameskip, skip frames while the audio buffer is below this percentage. Higher values reduce crackling but skip more frames.",
+        NULL,
+        "video",
+        {
+            { "15", NULL }, { "18", NULL }, { "21", NULL }, { "24", NULL }, { "27", NULL }, { "30", NULL },
+            { "33", NULL }, { "36", NULL }, { "39", NULL }, { "42", NULL }, { "45", NULL }, { "48", NULL },
+            { "51", NULL }, { "54", NULL }, { "57", NULL }, { "60", NULL }, { NULL, NULL }
+        },
+        "33"
+    },
+
+    /* Audio */
+
+    {
+        "geartowns_fm_volume",
+        "FM Volume",
+        NULL,
+        "Volume of the FM synthesizer, as a percentage where 100 is the default.",
+        NULL,
+        "audio",
+        {
+            { "0",   NULL }, { "10",  NULL }, { "20",  NULL }, { "30",  NULL }, { "40",  NULL },
+            { "50",  NULL }, { "60",  NULL }, { "70",  NULL }, { "80",  NULL }, { "90",  NULL },
+            { "100", NULL }, { "110", NULL }, { "120", NULL }, { "130", NULL }, { "140", NULL },
+            { "150", NULL }, { "160", NULL }, { "170", NULL }, { "180", NULL }, { "190", NULL },
+            { "200", NULL }, { NULL, NULL }
+        },
+        "100"
+    },
+    {
+        "geartowns_pcm_volume",
+        "PCM Volume",
+        NULL,
+        "Volume of the PCM sound source, as a percentage where 100 is the default.",
+        NULL,
+        "audio",
+        {
+            { "0",   NULL }, { "10",  NULL }, { "20",  NULL }, { "30",  NULL }, { "40",  NULL },
+            { "50",  NULL }, { "60",  NULL }, { "70",  NULL }, { "80",  NULL }, { "90",  NULL },
+            { "100", NULL }, { "110", NULL }, { "120", NULL }, { "130", NULL }, { "140", NULL },
+            { "150", NULL }, { "160", NULL }, { "170", NULL }, { "180", NULL }, { "190", NULL },
+            { "200", NULL }, { NULL, NULL }
+        },
+        "100"
+    },
+    {
+        "geartowns_cdda_volume",
+        "CD-DA Volume",
+        NULL,
+        "Volume of the CD-ROM audio tracks, as a percentage where 100 is the default.",
+        NULL,
+        "audio",
+        {
+            { "0",   NULL }, { "10",  NULL }, { "20",  NULL }, { "30",  NULL }, { "40",  NULL },
+            { "50",  NULL }, { "60",  NULL }, { "70",  NULL }, { "80",  NULL }, { "90",  NULL },
+            { "100", NULL }, { "110", NULL }, { "120", NULL }, { "130", NULL }, { "140", NULL },
+            { "150", NULL }, { "160", NULL }, { "170", NULL }, { "180", NULL }, { "190", NULL },
+            { "200", NULL }, { NULL, NULL }
+        },
+        "100"
     },
 
     /* Input */
@@ -108,6 +197,35 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "5",  NULL }, { "6",  NULL }, { "7",  NULL }, { "8",  NULL },
             { "9",  NULL }, { "10", NULL }, { "11", NULL }, { "12", NULL },
             { "13", NULL }, { "14", NULL }, { "15", NULL }, { NULL, NULL }
+        },
+        "5"
+    },
+    {
+        "geartowns_analog_mouse",
+        "Analog Stick Mouse",
+        NULL,
+        "Move the FM Towns mouse with an analog stick of the first controller, L2 and R2 are the mouse buttons. A controller port must be set to Mouse.",
+        NULL,
+        "input",
+        {
+            { "Disabled",    NULL },
+            { "Left stick",  NULL },
+            { "Right stick", NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+    {
+        "geartowns_analog_mouse_speed",
+        "Analog Mouse Speed",
+        NULL,
+        "Adjust how fast the analog stick moves the FM Towns mouse.",
+        NULL,
+        "input",
+        {
+            { "1", NULL }, { "2", NULL }, { "3", NULL }, { "4", NULL }, { "5", NULL },
+            { "6", NULL }, { "7", NULL }, { "8", NULL }, { "9", NULL }, { "10", NULL },
+            { NULL, NULL }
         },
         "5"
     },
@@ -145,7 +263,117 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "1x"
     },
 
+    /* Floppy */
+
+    {
+        "geartowns_floppy_drive",
+        "Disk Control Floppy Drive",
+        NULL,
+        "Select the floppy drive that the frontend's disk control ejects and inserts floppy disks into.",
+        NULL,
+        "floppy",
+        {
+            { "Floppy 1", NULL },
+            { "Floppy 2", NULL },
+            { NULL, NULL },
+        },
+        "Floppy 1"
+    },
+    {
+        "geartowns_floppy_second",
+        "Second Floppy at Start (restart)",
+        NULL,
+        "Insert the next floppy disk of the content into floppy drive 2 at start, for software that uses both drives.",
+        NULL,
+        "floppy",
+        {
+            { "Disabled", NULL },
+            { "Enabled",  NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+    {
+        "geartowns_save_disk",
+        "Save Disk (restart)",
+        NULL,
+        "Add a blank 2HD floppy disk to the disk control list for software that asks for a user or save disk. It is stored in the save directory.",
+        NULL,
+        "floppy",
+        {
+            { "Disabled", NULL },
+            { "Enabled",  NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+
     /* System */
+
+    {
+        "geartowns_ram_size",
+        "RAM Size (restart)",
+        NULL,
+        "Main memory of the FM Towns Model 1/2. Some software needs more than the original 2 MB. Save states grow with it.",
+        NULL,
+        "system",
+        {
+            { "1 MB", NULL },
+            { "2 MB", "2 MB (Original)" },
+            { "4 MB", NULL },
+            { "6 MB", NULL },
+            { NULL, NULL },
+        },
+        "2 MB"
+    },
+    {
+        "geartowns_cpu_speed",
+        "CPU Speed (restart)",
+        NULL,
+        "Run the 80386 faster than the original 16 MHz. Some software may not expect a faster CPU.",
+        NULL,
+        "system",
+        {
+            { "16 MHz",  "16 MHz (Original)" },
+            { "20 MHz",  NULL },
+            { "25 MHz",  NULL },
+            { "33 MHz",  NULL },
+            { "40 MHz",  NULL },
+            { "50 MHz",  NULL },
+            { "66 MHz",  NULL },
+            { "100 MHz", NULL },
+            { NULL, NULL },
+        },
+        "16 MHz"
+    },
+    {
+        "geartowns_rtc",
+        "Clock Start (restart)",
+        NULL,
+        "Start the FM Towns clock from the host time or from a fixed date (January 1, 1990). A fixed date makes netplay and replays independent of each computer's clock.",
+        NULL,
+        "system",
+        {
+            { "Host time",  NULL },
+            { "Fixed date", NULL },
+            { NULL, NULL },
+        },
+        "Host time"
+    },
+    {
+        "geartowns_floppy_drives",
+        "Floppy Drives (restart)",
+        NULL,
+        "Number of internal floppy drives.",
+        NULL,
+        "system",
+        {
+            { "1", NULL },
+            { "2", NULL },
+            { NULL, NULL },
+        },
+        "2"
+    },
 #if !defined(GT_DISABLE_DYNAREC)
     {
         "geartowns_dynarec",

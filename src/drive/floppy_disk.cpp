@@ -169,21 +169,27 @@ void FloppyDisk::Identify()
     }
 }
 
-void FloppyDisk::SaveState(std::ostream& stream)
+void FloppyDisk::SaveState(std::ostream& stream, bool media)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, media);
 }
 
 void FloppyDisk::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, false);
     SanitizeState();
 }
 
-void FloppyDisk::Serialize(StateSerializer& serializer)
+// A state without media keeps the disk in the drive and its writes
+void FloppyDisk::Serialize(StateSerializer& serializer, bool media)
 {
+    G_SERIALIZE(serializer, media);
+
+    if (!media)
+        return;
+
     G_SERIALIZE(serializer, m_state.inserted);
     G_SERIALIZE(serializer, m_state.write_protected);
     G_SERIALIZE(serializer, m_state.dirty);

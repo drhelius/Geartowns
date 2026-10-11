@@ -776,7 +776,7 @@ bool GeartownsCore::SaveState(const char* path, int index, bool screenshot)
 
     size_t size = 0;
 
-    if (!SaveState(stream, size, screenshot))
+    if (!SaveState(stream, size, screenshot, true))
     {
         stream.close();
         Error("Failed to save state to file: %s", full_path.c_str());
@@ -795,7 +795,7 @@ bool GeartownsCore::SaveState(const char* path, int index, bool screenshot)
     return true;
 }
 
-bool GeartownsCore::SaveState(u8* buffer, size_t& size, bool screenshot)
+bool GeartownsCore::SaveState(u8* buffer, size_t& size, bool screenshot, bool media)
 {
     using namespace std;
 
@@ -811,7 +811,7 @@ bool GeartownsCore::SaveState(u8* buffer, size_t& size, bool screenshot)
     {
         stringstream stream;
 
-        if (!SaveState(stream, size, screenshot))
+        if (!SaveState(stream, size, screenshot, media))
         {
             Error("Failed to save state to stream to calculate size");
             return false;
@@ -822,7 +822,7 @@ bool GeartownsCore::SaveState(u8* buffer, size_t& size, bool screenshot)
 
     memory_stream direct_stream(reinterpret_cast<char*>(buffer), size);
 
-    if (!SaveState(direct_stream, size, screenshot))
+    if (!SaveState(direct_stream, size, screenshot, media))
     {
         Error("Failed to save state to buffer");
         return false;
@@ -843,7 +843,7 @@ bool GeartownsCore::GetMaxSaveStateSize(size_t& size)
     return SaveState(NULL, size, false);
 }
 
-bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screenshot)
+bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media)
 {
     if (!m_powered)
     {
@@ -881,7 +881,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_video->SaveState(stream);
     m_cdrom->SaveState(stream);
     m_cdrom_audio->SaveState(stream);
-    m_fdc->SaveState(stream);
+    m_fdc->SaveState(stream, media);
     m_keyboard->SaveState(stream);
     m_rtc->SaveState(stream);
     m_dma->SaveState(stream);

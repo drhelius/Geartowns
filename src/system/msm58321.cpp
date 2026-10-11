@@ -26,6 +26,7 @@ MSM58321::MSM58321()
 {
     memset(&m_state, 0, sizeof(m_state));
     InitPointer(m_trace_logger);
+    m_start_time = 0;
 }
 
 MSM58321::~MSM58321()
@@ -42,15 +43,16 @@ void MSM58321::SetTraceLogger(TraceLogger* trace_logger)
     m_trace_logger = trace_logger;
 }
 
-// Power on starts from the host local time in 24 hour mode, the year counter holds two digits
+// Power on starts from the host local time, or the fixed start time in UTC, in 24 hour mode
+// The year counter holds two digits
 void MSM58321::Reset(u64 clocks)
 {
     memset(&m_state, 0, sizeof(m_state));
     m_state.registers[k_msm58321_hours + 1] = k_msm58321_24_hour;
     m_state.update_clocks = clocks + k_msm58321_second_clocks;
 
-    time_t now = time(NULL);
-    struct tm* local = localtime(&now);
+    time_t now = m_start_time != 0 ? (time_t)m_start_time : time(NULL);
+    struct tm* local = m_start_time != 0 ? gmtime(&now) : localtime(&now);
 
     if (!IsValidPointer(local))
     {
@@ -66,6 +68,11 @@ void MSM58321::Reset(u64 clocks)
     SetValue(k_msm58321_day, 0x03, local->tm_mday);
     SetValue(k_msm58321_month, 0x01, local->tm_mon + 1);
     SetValue(k_msm58321_year, 0x0F, local->tm_year % 100);
+}
+
+void MSM58321::SetStartTime(s64 start_time)
+{
+    m_start_time = start_time;
 }
 
 u8 MSM58321::Read(u16 port, u64 clocks)

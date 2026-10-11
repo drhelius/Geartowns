@@ -671,12 +671,10 @@ static bool get_active_shader_preset_file(char* preset_file, size_t preset_file_
 
 static float get_original_aspect(void)
 {
-    if (current_runtime.screen_height <= 0)
+    if (current_runtime.display_height <= 0)
         return 1.0f;
 
-    int width_scale = current_runtime.width_scale > 0 ? current_runtime.width_scale : 1;
-    float logical_width = (float)current_runtime.screen_width / (float)width_scale;
-    return logical_width / (float)current_runtime.screen_height;
+    return (float)current_runtime.display_width / (float)current_runtime.display_height;
 }
 
 static void configure_texture_2d(bool filter_linear)

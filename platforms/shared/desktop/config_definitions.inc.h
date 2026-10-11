@@ -232,6 +232,7 @@ static inline void process(config_Operation operation)
     CONFIG_INT("Video", "Scale", config_video.scale, 0);
     CONFIG_INT_RANGE("Video", "ScaleManual", config_video.scale_manual, 1, 1, 20);
     CONFIG_INT_RANGE("Video", "AspectRatio", config_video.ratio, 1, 0, 2);
+    CONFIG_BOOL("Video", "NativeResolution", config_video.native_resolution, true);
     CONFIG_BOOL("Video", "FPS", config_video.fps, false);
     CONFIG_INT_RANGE("Video", "ShaderMode", config_video.shader_mode, config_ShaderMode_PixelPerfect, config_ShaderMode_PixelPerfect, config_ShaderMode_External);
 

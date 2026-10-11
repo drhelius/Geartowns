@@ -80,7 +80,8 @@ struct GT_Runtime_Info
 {
     int screen_width;
     int screen_height;
-    int width_scale;
+    int display_width;
+    int display_height;
     float frame_time;
     int sample_rate;
     bool media_ready;

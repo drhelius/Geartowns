@@ -916,8 +916,8 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     if (screenshot && IsValidPointer(m_frame_buffer))
     {
-        header.screenshot_width = GT_FRAME_BUFFER_WIDTH;
-        header.screenshot_height = GT_FRAME_BUFFER_HEIGHT;
+        header.screenshot_width = (u16)m_video->GetFrameWidth();
+        header.screenshot_height = (u16)m_video->GetFrameHeight();
         header.screenshot_size = header.screenshot_width * header.screenshot_height * 4;
         stream.write(reinterpret_cast<const char*>(m_frame_buffer), header.screenshot_size);
     }
@@ -1364,7 +1364,8 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 {
     runtime_info.screen_width = IsValidPointer(m_video) ? m_video->GetFrameWidth() : GT_FRAME_BUFFER_WIDTH;
     runtime_info.screen_height = IsValidPointer(m_video) ? m_video->GetFrameHeight() : GT_FRAME_BUFFER_HEIGHT;
-    runtime_info.width_scale = 1;
+    runtime_info.display_width = IsValidPointer(m_video) ? m_video->GetDisplayWidth() : GT_FRAME_BUFFER_WIDTH;
+    runtime_info.display_height = IsValidPointer(m_video) ? m_video->GetDisplayHeight() : GT_FRAME_BUFFER_HEIGHT;
     runtime_info.frame_time = (float)((GT_CPU_CLOCKS_PER_FRAME * 1000.0) / GT_CPU_CLOCK_RATE);
 
     // A running CRTC paces frames at its VSYNC rate

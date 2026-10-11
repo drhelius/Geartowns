@@ -58,11 +58,31 @@ INLINE int Video::GetFrameHeight() const
     return m_frame_height;
 }
 
+INLINE int Video::GetDisplayWidth() const
+{
+    return m_display_width;
+}
+
+INLINE int Video::GetDisplayHeight() const
+{
+    return m_display_height;
+}
+
 // Milliseconds between VSYNCs with the timing latched at the start of the frame
 INLINE float Video::GetFrameTime() const
 {
     double clocks = ((double)m_state.frame_half_lines * m_state.frame_line_clocks) / 2.0;
     return (float)((clocks * 1000.0) / m_state.frame_clock_rate);
+}
+
+INLINE void Video::EnableNativeResolution(bool enable)
+{
+    m_native_resolution = enable;
+}
+
+INLINE bool Video::IsNativeResolutionEnabled() const
+{
+    return m_native_resolution;
 }
 
 INLINE u8* Video::GetVRAM()
@@ -88,6 +108,11 @@ INLINE Video::Video_State* Video::GetState()
 INLINE bool Video::IsTwoPage() const
 {
     return (m_state.output[0] & 0x10) != 0;
+}
+
+INLINE u32 Video::GetLayerZoomKey() const
+{
+    return m_state.crtc[k_video_crtc_zoom] | ((u32)m_state.output[0] << 16) | ((u32)m_state.display_enable << 24);
 }
 
 INLINE Video::Video_Layer_Format Video::GetLayerFormat(int layer) const

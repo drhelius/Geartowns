@@ -39,12 +39,22 @@ Video::Video()
     m_next_event_half_line = 0;
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
+    m_display_width = GT_FRAME_BUFFER_WIDTH;
+    m_display_height = GT_FRAME_BUFFER_HEIGHT;
     m_render_width = GT_FRAME_BUFFER_WIDTH;
     m_render_height = GT_FRAME_BUFFER_HEIGHT;
     m_rendered_rows = 0;
+    m_native_resolution = true;
     m_canvas_h_start = 0;
     m_canvas_v_start = 0;
+    m_canvas_clocks = GT_FRAME_BUFFER_WIDTH;
+    m_canvas_width = GT_FRAME_BUFFER_WIDTH;
+    m_canvas_height = GT_FRAME_BUFFER_HEIGHT;
+    m_canvas_zoom_x = 1;
+    m_canvas_zoom_y = 1;
+    m_canvas_zoom_key = 0;
     m_canvas_h_divider = 1;
+    m_canvas_v_divider = 1;
     m_canvas_interlaced = false;
 }
 
@@ -87,6 +97,8 @@ void Video::Reset()
     m_rendered_rows = 0;
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
+    m_display_width = GT_FRAME_BUFFER_WIDTH;
+    m_display_height = GT_FRAME_BUFFER_HEIGHT;
     UpdateColorCaches();
     UpdateGeometry();
     UpdateNextEvent();
@@ -301,6 +313,8 @@ void Video::EndFrame()
 
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
+    m_display_width = GT_FRAME_BUFFER_WIDTH;
+    m_display_height = GT_FRAME_BUFFER_HEIGHT;
 
     if (!m_render || !IsValidPointer(m_frame_buffer))
         return;
@@ -706,11 +720,15 @@ void Video::StartFrame(u64 clocks)
 
 void Video::CompleteFrame(u64 clocks)
 {
+    UpdateCanvasZoom();
+
     for (; m_rendered_rows < m_render_height; m_rendered_rows++)
         RenderRow(m_rendered_rows);
 
     m_frame_width = m_render_width;
     m_frame_height = m_render_height;
+    m_display_width = m_canvas_width;
+    m_display_height = m_canvas_height;
     m_frame_ready = true;
     m_state.frame_count++;
     m_state.vsync_irq = true;
@@ -829,18 +847,22 @@ void Video::UpdateGeometry()
         v_end = MAX(v_end, vde);
     }
 
+    u32 zoom_x = m_canvas_zoom_x;
+    u32 zoom_y = m_canvas_zoom_y;
+    m_canvas_zoom_key = GetLayerZoomKey();
+
     if (!m_state.running || h_end <= h_start || v_end <= v_start)
     {
         m_canvas_h_start = 0;
         m_canvas_v_start = 0;
-        m_canvas_h_divider = 1;
-        m_render_width = GT_FRAME_BUFFER_WIDTH;
-        m_render_height = GT_FRAME_BUFFER_HEIGHT;
+        m_canvas_clocks = GT_FRAME_BUFFER_WIDTH;
+        m_canvas_width = GT_FRAME_BUFFER_WIDTH;
+        m_canvas_height = GT_FRAME_BUFFER_HEIGHT;
+        SetCanvasZoom(1, 1);
         return;
     }
 
     // The canvas covers both display windows, sampled at a whole number of CRTC clocks per output pixel
-    u32 clocks = h_end - h_start;
     u32 rows = (v_end - v_start) / 2;
 
     if (m_canvas_interlaced)
@@ -848,9 +870,119 @@ void Video::UpdateGeometry()
 
     m_canvas_h_start = h_start;
     m_canvas_v_start = v_start;
-    m_canvas_h_divider = (clocks + GT_MAX_FRAME_BUFFER_WIDTH - 1) / GT_MAX_FRAME_BUFFER_WIDTH;
-    m_render_width = MAX((int)(clocks / m_canvas_h_divider), 1);
-    m_render_height = CLAMP((int)rows, 1, GT_MAX_FRAME_BUFFER_HEIGHT);
+    m_canvas_clocks = h_end - h_start;
+    m_canvas_height = CLAMP((int)rows, 1, GT_MAX_FRAME_BUFFER_HEIGHT);
+    SetCanvasZoom(1, 1);
+    m_canvas_width = m_render_width;
+
+    if (!m_native_resolution)
+        return;
+
+    GetLayerZoom(&zoom_x, &zoom_y);
+    SetCanvasZoom(zoom_x, zoom_y);
+}
+
+void Video::UpdateCanvasZoom()
+{
+    if (!m_native_resolution)
+        return;
+
+    u32 key = GetLayerZoomKey();
+
+    if (key == m_canvas_zoom_key)
+        return;
+
+    m_canvas_zoom_key = key;
+
+    u32 zoom_x = m_canvas_zoom_x;
+    u32 zoom_y = m_canvas_zoom_y;
+    int rows = m_rendered_rows;
+
+    if (!GetLayerZoom(&zoom_x, &zoom_y))
+        return;
+
+    if (rows > 0)
+    {
+        zoom_x = CommonZoom(zoom_x, m_canvas_zoom_x);
+        zoom_y = CommonZoom(zoom_y, m_canvas_zoom_y);
+    }
+
+    if (zoom_x == m_canvas_zoom_x && zoom_y == m_canvas_zoom_y)
+        return;
+
+    u32 h_divider = m_canvas_h_divider;
+    u32 v_divider = m_canvas_v_divider;
+    int width = m_render_width;
+
+    SetCanvasZoom(zoom_x, zoom_y);
+
+    if (rows == 0)
+        return;
+
+    u32 new_h_divider = m_canvas_h_divider;
+    u32 new_v_divider = m_canvas_v_divider;
+    int new_width = m_render_width;
+    m_rendered_rows = MIN((int)(((u32)rows * v_divider + new_v_divider - 1) / new_v_divider), m_render_height);
+
+    if (!m_render || !IsValidPointer(m_frame_buffer))
+        return;
+
+    u32* buffer = (u32*)m_frame_buffer;
+
+    for (int y = m_rendered_rows - 1; y >= 0; y--)
+    {
+        const u32* source = buffer + (int)(((u32)y * new_v_divider) / v_divider) * width;
+        u32* destination = buffer + y * new_width;
+
+        for (int x = new_width - 1; x >= 0; x--)
+            destination[x] = source[MIN((int)(((u32)x * new_h_divider) / h_divider), width - 1)];
+    }
+}
+
+void Video::SetCanvasZoom(u32 zoom_x, u32 zoom_y)
+{
+    u32 fit = (m_canvas_clocks + GT_MAX_FRAME_BUFFER_WIDTH - 1) / GT_MAX_FRAME_BUFFER_WIDTH;
+
+    m_canvas_zoom_x = zoom_x;
+    m_canvas_zoom_y = zoom_y;
+    m_canvas_h_divider = (zoom_x % fit) == 0 ? zoom_x : fit;
+    m_canvas_v_divider = m_canvas_interlaced ? 1 : zoom_y;
+    m_render_width = MAX((int)(m_canvas_clocks / m_canvas_h_divider), 1);
+    m_render_height = MAX(m_canvas_height / (int)m_canvas_v_divider, 1);
+}
+
+bool Video::GetLayerZoom(u32* zoom_x, u32* zoom_y) const
+{
+    u32 zoom = m_state.crtc[k_video_crtc_zoom];
+    int layers = IsTwoPage() ? 2 : 1;
+    bool found = false;
+
+    for (int layer = 0; layer < layers; layer++)
+    {
+        if (GetLayerFormat(layer) == VIDEO_LAYER_OFF)
+            continue;
+
+        u32 layer_zoom = zoom >> (layer * 8);
+        u32 x = (layer_zoom & 0x0F) + 1;
+        u32 y = ((layer_zoom >> 4) & 0x0F) + 1;
+
+        *zoom_x = found ? CommonZoom(*zoom_x, x) : x;
+        *zoom_y = found ? CommonZoom(*zoom_y, y) : y;
+        found = true;
+    }
+
+    return found;
+}
+
+u32 Video::CommonZoom(u32 a, u32 b)
+{
+    if ((b % a) == 0)
+        return a;
+
+    if ((a % b) == 0)
+        return b;
+
+    return 1;
 }
 
 void Video::UpdateNextEvent()
@@ -918,11 +1050,10 @@ void Video::RenderRows(u32 half_line)
     if (beam <= m_canvas_v_start)
         return;
 
-    int rows = (int)((beam - m_canvas_v_start) / 2);
+    UpdateCanvasZoom();
 
-    if (m_canvas_interlaced)
-        rows *= 2;
-
+    u32 lines = (beam - m_canvas_v_start) / 2;
+    int rows = m_canvas_interlaced ? (int)(lines * 2) : (int)((lines + m_canvas_v_divider - 1) / m_canvas_v_divider);
     rows = MIN(rows, m_render_height);
 
     for (; m_rendered_rows < rows; m_rendered_rows++)
@@ -958,7 +1089,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
         return;
 
     const u16* crtc = m_state.crtc;
-    u32 field_line = m_canvas_interlaced ? (u32)row >> 1 : (u32)row;
+    u32 field_line = m_canvas_interlaced ? (u32)row >> 1 : (u32)row * m_canvas_v_divider;
     u32 half_line = m_canvas_v_start + field_line * 2;
     u32 vds = crtc[k_video_crtc_vds0 + layer * 2];
     u32 vde = crtc[k_video_crtc_vde0 + layer * 2];
@@ -1020,7 +1151,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     u32 position = h_start + (u32)x * divider - haj;
     u32 colors[GT_MAX_FRAME_BUFFER_WIDTH + 4];
 
-    if (divider != 1)
+    if ((zoom_x % divider) != 0)
     {
         for (; x < end; x++, position += divider)
         {
@@ -1031,6 +1162,9 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
 
         return;
     }
+
+    position /= divider;
+    zoom_x /= divider;
 
     u32 pixel = position / zoom_x;
     u32 count = (position + (u32)(end - x) - 1) / zoom_x - pixel + 1;

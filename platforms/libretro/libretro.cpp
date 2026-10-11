@@ -79,7 +79,6 @@ static u8* frame_buffer;
 
 static int current_screen_width = 0;
 static int current_screen_height = 0;
-static int current_width_scale = 1;
 static float current_aspect_ratio = 0.0f;
 static float current_fps = 60.0f;
 
@@ -341,7 +340,6 @@ void retro_deinit(void)
     audio_sample_count = 0;
     current_screen_width = 0;
     current_screen_height = 0;
-    current_width_scale = 1;
     current_aspect_ratio = 0.0f;
     aspect_ratio = 0.0f;
     current_fps = 60.0f;
@@ -411,7 +409,7 @@ static void get_system_av_info(struct retro_system_av_info* info)
     info->geometry.max_width    = MAX_SCREEN_WIDTH;
     info->geometry.max_height   = MAX_SCREEN_HEIGHT;
     info->geometry.aspect_ratio = aspect_ratio == 0.0f ?
-        (float)runtime_info.screen_width / (float)runtime_info.screen_height / (float)runtime_info.width_scale : aspect_ratio;
+        (float)runtime_info.display_width / (float)runtime_info.display_height : aspect_ratio;
     info->timing.fps            = runtime_info.frame_time > 0.0f ? 1000.0f / runtime_info.frame_time : 60.0f;
     info->timing.sample_rate    = GT_AUDIO_SAMPLE_RATE;
 }
@@ -463,15 +461,13 @@ void retro_run(void)
     bool fps_changed = fabsf((float)info.timing.fps - current_fps) > 0.1f;
     bool geometry_changed = (runtime_info.screen_width != current_screen_width) ||
                             (runtime_info.screen_height != current_screen_height) ||
-                            (runtime_info.width_scale != current_width_scale) ||
-                            (aspect_ratio != current_aspect_ratio);
+                            (info.geometry.aspect_ratio != current_aspect_ratio);
 
     if (fps_changed || geometry_changed)
     {
         current_screen_width = runtime_info.screen_width;
         current_screen_height = runtime_info.screen_height;
-        current_width_scale = runtime_info.width_scale;
-        current_aspect_ratio = aspect_ratio;
+        current_aspect_ratio = info.geometry.aspect_ratio;
         current_fps = (float)info.timing.fps;
 
         if (fps_changed)
@@ -1543,6 +1539,14 @@ static void check_variables(void)
             aspect_ratio = 16.0f / 10.0f;
         else
             aspect_ratio = 0.0f;
+    }
+
+    var.key = "geartowns_native_resolution";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && core)
+    {
+        core->GetVideo()->EnableNativeResolution(strcmp(var.value, "Enabled") == 0);
     }
 
     var.key = "geartowns_frameskip";

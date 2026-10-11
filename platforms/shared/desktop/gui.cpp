@@ -153,6 +153,7 @@ void gui_apply_settings(void)
     emu_set_preload_cdrom(config_emulator.preload_cdrom);
     emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
     emu_set_dynarec(config_emulator.dynarec);
+    emu_set_native_resolution(config_video.native_resolution);
     emu_apply_machine_settings();
 }
 
@@ -592,7 +593,7 @@ static void main_window(void)
             ratio = 6.0f / 5.0f;
             break;
         default:
-            ratio = ((float)runtime.screen_width / (float)runtime.width_scale) / (float)runtime.screen_height;
+            ratio = (float)runtime.display_width / (float)runtime.display_height;
     }
 
     if (!config_debug.debug && config_video.scale == 3)
@@ -600,8 +601,8 @@ static void main_window(void)
         ratio = logical_w / logical_h;
     }
 
-    int base_width = (int)(runtime.screen_width / runtime.width_scale);
-    int base_height = (int)(runtime.screen_height);
+    int base_width = runtime.display_width;
+    int base_height = runtime.display_height;
 
     int w_corrected, h_corrected;
     int scale_multiplier = 0;

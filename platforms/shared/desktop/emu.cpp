@@ -692,6 +692,12 @@ bool emu_is_dynarec_enabled(void)
     return IsValidPointer(geartowns) && geartowns->GetI386()->IsDynarecEnabled();
 }
 
+void emu_set_native_resolution(bool enabled)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetVideo()->EnableNativeResolution(enabled);
+}
+
 void emu_apply_machine_settings(void)
 {
     if (!IsValidPointer(geartowns))
@@ -897,7 +903,8 @@ void emu_get_runtime(GT_Runtime_Info& runtime)
     {
         runtime.screen_width = GT_FRAME_BUFFER_WIDTH;
         runtime.screen_height = GT_FRAME_BUFFER_HEIGHT;
-        runtime.width_scale = 1;
+        runtime.display_width = GT_FRAME_BUFFER_WIDTH;
+        runtime.display_height = GT_FRAME_BUFFER_HEIGHT;
         runtime.sample_rate = GT_AUDIO_SAMPLE_RATE;
     }
 }
@@ -1470,10 +1477,10 @@ static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width,
             ratio = 6.0f / 5.0f;
             break;
         default:
-            ratio = ((float)runtime.screen_width / (float)runtime.width_scale) / (float)runtime.screen_height;
+            ratio = (float)runtime.display_width / (float)runtime.display_height;
     }
 
-    *height = runtime.screen_height * config_video.recording_scale;
+    *height = runtime.display_height * config_video.recording_scale;
     *width = (int)roundf((float)*height * ratio);
     *width += *width & 1;
     *height += *height & 1;

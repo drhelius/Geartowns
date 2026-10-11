@@ -1248,6 +1248,16 @@ static void menu_video(void)
             ImGui::EndMenu();
         }
 
+        if (ImGui::MenuItem("Native Resolution", "", &config_video.native_resolution))
+            emu_set_native_resolution(config_video.native_resolution);
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Output one pixel per game pixel, as shaders expect.");
+            ImGui::Text("When disabled, zoomed modes are output at monitor resolution.");
+            ImGui::EndTooltip();
+        }
 
         ImGui::Separator();
 
@@ -2444,7 +2454,8 @@ static void draw_savestate_slot_info(int slot)
         {
             float width = (float)emu_savestates_screenshots[slot].width;
             float height = (float)emu_savestates_screenshots[slot].height;
-            ImGui::Image((ImTextureID)(intptr_t)ogl_renderer_emu_savestates, ImVec2(width * 0.5f, height * 0.5f),
+            float scale = 240.0f / height;
+            ImGui::Image((ImTextureID)(intptr_t)ogl_renderer_emu_savestates, ImVec2(width * scale, height * scale),
                 ImVec2(0, 0), ImVec2(width / (float)SYSTEM_TEXTURE_WIDTH, height / (float)SYSTEM_TEXTURE_HEIGHT));
         }
     }

@@ -89,6 +89,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "4:3 DAR"
     },
     {
+        "geartowns_native_resolution",
+        "Native Resolution",
+        NULL,
+        "Output one pixel per game pixel, as shaders expect. When disabled, zoomed modes are output at monitor resolution.",
+        NULL,
+        "video",
+        {
+            { "Enabled",  NULL },
+            { "Disabled", NULL },
+            { NULL, NULL },
+        },
+        "Enabled"
+    },
+    {
         "geartowns_frameskip",
         "Frameskip",
         NULL,

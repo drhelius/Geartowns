@@ -48,6 +48,8 @@ static Floppy_Action pending_action = Floppy_Action_None;
 static int pending_drive = -1;
 static int pending_index = 0;
 static std::string pending_path;
+static bool pending_symbols = false;
+static std::string pending_symbol_path;
 static int dialog_drive = 0;
 static int blank_type = 0;
 static bool blank_formatted = true;
@@ -56,7 +58,7 @@ static bool open_discard = false;
 static bool open_blank = false;
 static bool open_quit = false;
 
-static void request(int drive, Floppy_Action action, const char* path, int index);
+static bool request(int drive, Floppy_Action action, const char* path, int index);
 static bool perform(bool discard_changes);
 static void draw_dirty_popup(void);
 static void draw_discard_popup(void);
@@ -240,6 +242,18 @@ void gui_floppy_insert(int drive, const char* path)
     request(drive, Floppy_Action_Insert, path, 0);
 }
 
+bool gui_floppy_open(const char* path, const char* symbol_path)
+{
+    pending_symbols = true;
+    pending_symbol_path = IsValidPointer(symbol_path) ? symbol_path : "";
+    return request(0, Floppy_Action_Insert, path, 0);
+}
+
+bool gui_floppy_is_pending(void)
+{
+    return pending_action != Floppy_Action_None;
+}
+
 void gui_floppy_dialog_insert(int drive, const char* path)
 {
     std::string full_path(path);
@@ -267,7 +281,7 @@ void gui_floppy_open_quit_confirmation(void)
     open_quit = true;
 }
 
-static void request(int drive, Floppy_Action action, const char* path, int index)
+static bool request(int drive, Floppy_Action action, const char* path, int index)
 {
     pending_action = action;
     pending_drive = drive;
@@ -280,10 +294,10 @@ static void request(int drive, Floppy_Action action, const char* path, int index
     if (info.dirty)
     {
         open_dirty = true;
-        return;
+        return true;
     }
 
-    perform(false);
+    return perform(false);
 }
 
 static bool perform(bool discard_changes)
@@ -328,7 +342,13 @@ static bool perform(bool discard_changes)
     }
     else
     {
-        if (floppy_session && previous_content != emu_floppy_get_content_path())
+        if (pending_symbols && floppy_session)
+            gui_debug_reset_symbols();
+
+        if (pending_symbols)
+            gui_load_media_symbols(pending_path.c_str(), pending_symbol_path.c_str());
+
+        if (floppy_session && (pending_symbols || previous_content != emu_floppy_get_content_path()))
             gui_debug_auto_load_settings();
 
         Emu_FloppyInfo info;
@@ -351,6 +371,7 @@ static bool perform(bool discard_changes)
     }
 
     pending_action = Floppy_Action_None;
+    pending_symbols = false;
     return done;
 }
 
@@ -385,6 +406,7 @@ static void draw_dirty_popup(void)
         ImGui::CloseCurrentPopup();
         gui_dialog_in_use = false;
         pending_action = Floppy_Action_None;
+        pending_symbols = false;
     }
 
     ImGui::EndPopup();

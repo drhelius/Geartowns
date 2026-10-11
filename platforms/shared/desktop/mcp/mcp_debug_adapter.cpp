@@ -49,6 +49,7 @@
 #include "../events.h"
 #include "../gui.h"
 #include "../gui_actions.h"
+#include "../gui_floppy.h"
 #include "../rewind.h"
 #include "../debug/gui_debug_cdrom.h"
 #include "../debug/gui_debug_constants.h"
@@ -4321,8 +4322,11 @@ json DebugAdapter::StartLoadMedia(const std::string& file_path)
     if (file_path.empty())
         return {{"error", "File path is required"}};
 
-    if (!gui_load_rom(file_path.c_str()))
+    if (gui_is_rom_loading())
         return {{"error", "Another media load is already in progress"}};
+
+    if (!gui_load_rom(file_path.c_str()))
+        return {{"error", "Failed to load media file"}};
 
     return {{"file_path", file_path}};
 }
@@ -4336,6 +4340,14 @@ json DebugAdapter::FinishLoadMedia(const std::string& file_path)
 {
     if (gui_is_rom_loading() && !gui_finish_loading_rom())
         return {{"error", "Failed to load media file"}};
+
+    if (emu_floppy_is_image(file_path.c_str()))
+    {
+        if (gui_floppy_is_pending())
+            return {{"error", "The disk in drive 0 has unsaved changes, confirm the insert in the GUI or use insert_floppy"}};
+
+        return {{"success", true}, {"file_path", file_path}, {"drive", 0}};
+    }
 
     if (!m_core->GetMedia()->IsReady())
         return {{"error", "Failed to load media file"}};

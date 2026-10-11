@@ -171,7 +171,7 @@ void gui_file_dialog_load_symbols(void)
     if (!begin_dialog())
         return;
 
-    SDL_DialogFileFilter filters[] = { { "Symbol Files", "sym;txt" } };
+    SDL_DialogFileFilter filters[] = { { "Symbol Files", "sym;txt;map" } };
     SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadSymbols, application_sdl_window,
         filters, 1, NULL, false);
 }

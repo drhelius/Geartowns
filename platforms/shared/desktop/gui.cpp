@@ -376,8 +376,7 @@ bool gui_load_rom(const char* path, const char* symbol_path)
             return false;
         }
 
-        gui_floppy_insert(0, path);
-        return true;
+        return gui_floppy_open(path, symbol_path);
     }
 
     const char* media_path = path;
@@ -492,6 +491,24 @@ void gui_reload_cdrom(void)
 
     loading_reset = loading_rom_active;
     loading_keep_debug = loading_rom_active;
+}
+
+void gui_load_media_symbols(const char* media_path, const char* symbol_path)
+{
+    if (IsValidPointer(symbol_path) && symbol_path[0] != '\0')
+    {
+        gui_debug_load_symbols_file(symbol_path);
+        return;
+    }
+
+    std::string path(media_path);
+    size_t extension = path.find_last_of('.');
+    size_t separator = path.find_last_of("/\\");
+
+    if (extension != std::string::npos && (separator == std::string::npos || extension > separator))
+        path.resize(extension);
+
+    gui_debug_load_symbols_file((path + ".sym").c_str());
 }
 
 bool gui_is_rom_loading(void)
@@ -854,18 +871,8 @@ static bool finish_loading_rom(void)
     if (!loading_keep_debug)
         gui_debug_reset();
 
-    if (loading_symbol_path[0] != '\0')
-        gui_debug_load_symbols_file(loading_symbol_path);
-    else if (!loading_physical_cdrom)
-    {
-        std::string symbol_path(loading_rom_path);
-        size_t extension = symbol_path.find_last_of('.');
-
-        if (extension != std::string::npos)
-            symbol_path.resize(extension);
-
-        gui_debug_load_symbols_file((symbol_path + ".sym").c_str());
-    }
+    if (!loading_physical_cdrom)
+        gui_load_media_symbols(loading_rom_path, loading_symbol_path);
 
     if (!loading_keep_debug)
         gui_debug_auto_load_settings();

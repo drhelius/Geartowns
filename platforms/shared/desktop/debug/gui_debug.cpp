@@ -401,12 +401,12 @@ static void save_symbols(std::ostream& stream)
 
     for (user = users.begin(); user != users.end(); user++)
     {
-        bool from_logical = false;
+        bool skip = gui_debug_is_file_symbol(user->first);
 
-        for (size_t i = 0; i < logical.size() && !from_logical; i++)
-            from_logical = logical[i].resolved && logical[i].linear == user->first && logical[i].name == user->second;
+        for (size_t i = 0; i < logical.size() && !skip; i++)
+            skip = logical[i].resolved && logical[i].linear == user->first && logical[i].name == user->second;
 
-        if (!from_logical)
+        if (!skip)
             addresses.push_back(user->first);
     }
 
@@ -419,11 +419,21 @@ static void save_symbols(std::ostream& stream)
         write_settings_string(stream, users.find(addresses[i])->second);
     }
 
-    int logical_count = (int)logical.size();
+    int logical_count = 0;
+
+    for (size_t i = 0; i < logical.size(); i++)
+    {
+        if (!logical[i].file)
+            logical_count++;
+    }
+
     stream.write((const char*)&logical_count, sizeof(logical_count));
 
-    for (int i = 0; i < logical_count; i++)
+    for (size_t i = 0; i < logical.size(); i++)
     {
+        if (logical[i].file)
+            continue;
+
         stream.write((const char*)&logical[i].selector, sizeof(logical[i].selector));
         stream.write((const char*)&logical[i].offset, sizeof(logical[i].offset));
         write_settings_string(stream, logical[i].name);

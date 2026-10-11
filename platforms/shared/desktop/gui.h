@@ -130,6 +130,7 @@ EXTERN bool gui_load_rom(const char* path, const char* symbol_path = NULL);
 EXTERN bool gui_load_playlist_disc(int index);
 EXTERN void gui_load_physical_cdrom(const char* device_id);
 EXTERN void gui_reload_cdrom(void);
+EXTERN void gui_load_media_symbols(const char* media_path, const char* symbol_path);
 EXTERN bool gui_is_rom_loading(void);
 EXTERN bool gui_finish_loading_rom(void);
 EXTERN void gui_load_bios(const char* path);

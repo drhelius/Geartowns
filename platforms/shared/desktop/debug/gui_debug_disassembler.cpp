@@ -62,6 +62,7 @@ static bool goto_missing = false;
 static std::vector<DisassemblerBookmark> bookmarks;
 static std::map<u32, std::string> user_symbols;
 static std::vector<LogicalSymbol> logical_symbols;
+static std::map<u32, std::string> file_symbols;
 static u32 user_symbols_version = 0;
 static bool logical_symbols_stopped = false;
 static std::vector<SymbolRow> symbol_rows;
@@ -125,7 +126,8 @@ static bool parse_address_range(const char* text, bool logical, u32& start, u32&
 static void request_goto_address(u32 address);
 static void add_bookmark_popup(void);
 static void add_symbol_popup(void);
-static bool parse_symbol_line(char* line, u32& address, bool& logical, u16& selector, char* name, size_t name_size);
+static bool parse_symbol_line(char* line, bool nasm_labels, u32& address, bool& logical, u16& selector, char* name,
+    size_t name_size);
 static bool parse_symbol_address(const char* text, u32& address, bool& logical, u16& selector);
 static bool is_symbol_name(const char* text);
 static int opcode_index(const I386_Disassembler_Record* record);
@@ -221,6 +223,7 @@ void gui_debug_reset_symbols(void)
 {
     user_symbols.clear();
     logical_symbols.clear();
+    file_symbols.clear();
     user_symbols_version++;
 }
 
@@ -260,7 +263,7 @@ const std::vector<LogicalSymbol>& gui_debug_get_logical_symbols(void)
 }
 
 // The same SEL:OFF only changes its name, it resolves again with the next update
-bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name)
+bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name, bool file)
 {
     if (!is_symbol_name(name))
         return false;
@@ -282,6 +285,7 @@ bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name)
 
         existing.name = name;
         existing.resolved = false;
+        existing.file = file;
         user_symbols_version++;
         return true;
     }
@@ -292,8 +296,17 @@ bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name)
     symbol.name = name;
     symbol.resolved = false;
     symbol.linear = 0;
+    symbol.file = file;
     logical_symbols.push_back(symbol);
     return true;
+}
+
+bool gui_debug_is_file_symbol(u32 linear)
+{
+    std::map<u32, std::string>::const_iterator file = file_symbols.find(linear);
+    const char* user = gui_debug_get_user_symbol(linear);
+
+    return file != file_symbols.end() && IsValidPointer(user) && file->second == user;
 }
 
 const char* gui_debug_get_user_symbol(u32 linear)
@@ -341,7 +354,6 @@ bool gui_debug_save_disassembler(const char* file_path, bool full)
     return true;
 }
 
-// Blank and comment lines aren't counted as skipped
 int gui_debug_load_symbols(const char* file_path, int* skipped)
 {
     if (IsValidPointer(skipped))
@@ -358,6 +370,8 @@ int gui_debug_load_symbols(const char* file_path, int* skipped)
     char line[512];
     int count = 0;
     int failed = 0;
+    bool nasm_map = false;
+    bool nasm_labels = false;
 
     while (fgets(line, sizeof(line), file) != NULL)
     {
@@ -369,15 +383,35 @@ int gui_debug_load_symbols(const char* file_path, int* skipped)
         if (*first == 0 || *first == ';' || *first == '#')
             continue;
 
+        if (strncmp(first, "- NASM Map file", 15) == 0)
+            nasm_map = true;
+
+        if (nasm_map && (*first == '-' || strncmp(first, "Real ", 5) == 0))
+        {
+            nasm_labels = *first != '-';
+            continue;
+        }
+
+        if (nasm_map && !nasm_labels)
+            continue;
+
         u32 address = 0;
         u16 selector = 0;
         bool logical = false;
         char name[64];
 
-        if (!parse_symbol_line(line, address, logical, selector, name, sizeof(name)))
+        if (!parse_symbol_line(line, nasm_labels, address, logical, selector, name, sizeof(name)))
             failed++;
-        else if (logical ? gui_debug_add_logical_symbol(selector, address, name) : gui_debug_add_user_symbol(address, name))
+        else if (!logical && strchr(name, '.') != NULL && IsValidPointer(gui_debug_get_user_symbol(address)))
+            continue;
+        else if (logical ? gui_debug_add_logical_symbol(selector, address, name, true) :
+            gui_debug_add_user_symbol(address, name))
+        {
+            if (!logical)
+                file_symbols[address] = name;
+
             count++;
+        }
         else
             failed++;
     }
@@ -2618,7 +2652,8 @@ static void add_symbol_popup(void)
     }
 }
 
-static bool parse_symbol_line(char* line, u32& address, bool& logical, u16& selector, char* name, size_t name_size)
+static bool parse_symbol_line(char* line, bool nasm_labels, u32& address, bool& logical, u16& selector, char* name,
+    size_t name_size)
 {
     char* comment = strpbrk(line, ";#");
 
@@ -2649,10 +2684,25 @@ static bool parse_symbol_line(char* line, u32& address, bool& logical, u16& sele
     const char* symbol = NULL;
     const char* value = NULL;
 
-    if (count == 3 && (strcmp(tokens[1], "=") == 0 || (strlen(tokens[1]) == 3 && ends_with_no_case(tokens[1], "EQU"))))
+    if (nasm_labels && count == 3)
+    {
+        symbol = tokens[2];
+        value = tokens[1];
+    }
+    else if (count == 3 && (strcmp(tokens[1], "=") == 0 || (strlen(tokens[1]) == 3 && ends_with_no_case(tokens[1], "EQU"))))
     {
         symbol = tokens[0];
         value = tokens[2];
+    }
+    else if (count == 3 && strlen(tokens[1]) == 1 && strchr("TtDdBbRrAWV", tokens[1][0]) != NULL)
+    {
+        symbol = tokens[2];
+        value = tokens[0];
+    }
+    else if (count == 3 && strcmp(tokens[2], "=") == 0)
+    {
+        symbol = tokens[1];
+        value = tokens[0];
     }
     else if (count == 2)
     {
@@ -2737,7 +2787,8 @@ static void resolve_logical_symbols(void)
 
 static bool is_symbol_name(const char* text)
 {
-    if (!IsValidPointer(text) || text[0] == 0 || strlen(text) >= 64 || isdigit((unsigned char)text[0]))
+    if (!IsValidPointer(text) || text[0] == 0 || strlen(text) >= 64 || isdigit((unsigned char)text[0]) ||
+        strcmp(text, ".") == 0)
         return false;
 
     for (const char* c = text; *c != 0; c++)

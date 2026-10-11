@@ -1433,7 +1433,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "load_symbols"},
         {"title", "Load Symbols"},
-        {"description", "Load user symbols from a text file: one per line as 'ADDRESS NAME' or 'NAME = ADDRESS' (or EQU), comments after ; or #. Addresses are linear hex or SSSS:OOOOOOOO resolved with the current descriptor tables."},
+        {"description", "Load user symbols from a text file: one per line as 'ADDRESS NAME', 'NAME = ADDRESS' (or EQU) or GNU nm 'ADDRESS TYPE NAME', comments after ; or #. GNU ld and NASM map files load too. Addresses are linear hex or SSSS:OOOOOOOO resolved with the current descriptor tables."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},

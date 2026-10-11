@@ -127,7 +127,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - **Docking Windows**: In debug mode, you can dock windows together by pressing SHIFT and dragging a window onto another.
 - **Multi-viewport**: In Windows or macOS, you can enable "multi-viewport" in the debug menu. You must restart the emulator for the change to take effect. Once enabled, you can drag debugger windows outside the main window.
 - **Single Instance**: You can enable "Single Instance" in the `Emulator` menu. When enabled, opening a file while another instance is running will send it to the running instance instead of starting a new one.
-- **Debug Symbols**: The emulator automatically tries to load a symbol file when loading media. For example, for `path_to_image.cue` it tries to load `path_to_image.sym`. You can also load symbol files using the GUI or the CLI. Each line of a symbol file defines one symbol as `address name`, `name = address` or `name EQU address`, where the address can be linear or `selector:offset`. Comments start with `;` or `#`.
+- **Debug Symbols**: The emulator automatically tries to load a symbol file when loading a CD-ROM or floppy image. For example, for `path_to_image.cue` it tries to load `path_to_image.sym`. You can also load symbol files using the GUI or the CLI. Each line of a symbol file defines one symbol as `address name`, `name = address`, `name EQU address` or `address type name` (GNU `nm` output, for example `nm -n program.elf > program.sym`), where the address can be linear or `selector:offset`. Comments start with `;` or `#`. GNU ld and NASM map files can be loaded too.
 
 ### Command Line Usage
 ```

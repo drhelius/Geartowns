@@ -38,6 +38,7 @@ struct LogicalSymbol
     std::string name;
     bool resolved;
     u32 linear;
+    bool file;
 };
 
 #ifdef GUI_DEBUG_DISASSEMBLER_IMPORT
@@ -73,7 +74,8 @@ EXTERN bool gui_debug_remove_user_symbol(u32 linear);
 EXTERN const char* gui_debug_get_user_symbol(u32 linear);
 EXTERN const std::map<u32, std::string>& gui_debug_get_user_symbols(void);
 EXTERN const std::vector<LogicalSymbol>& gui_debug_get_logical_symbols(void);
-EXTERN bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name);
+EXTERN bool gui_debug_add_logical_symbol(u16 selector, u32 offset, const char* name, bool file = false);
+EXTERN bool gui_debug_is_file_symbol(u32 linear);
 EXTERN const char* gui_debug_get_symbol(u32 linear);
 EXTERN const char* gui_debug_get_symbol_name(u32 linear, bool* is_manual);
 EXTERN int gui_debug_load_symbols(const char* file_path, int* skipped = NULL);

@@ -406,7 +406,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `get_disassembly` - Decode Intel 80386 instructions from current memory, without changing the debugger's disassembly or labels: `start_address` and `end_address` or `count`; `code_size` (`auto`, `16`, `32`); `resolve_symbols`; `detailed` adds `flow` (call, jump, conditional, return, int, iret), `target`, I/O `port` and `port_name` for IN/OUT, `vector`, `vector_name` and `vector_description` for INT, and `function` (the BIOS or DOS service picked by AX) when the INT is the current instruction
 - `add_symbol` - Add or rename a user symbol at an address; user symbols take precedence over automatic labels
 - `remove_symbol` - Remove the user symbol at an address
-- `load_symbols` - Load user symbols from a file: `ADDRESS NAME` or `NAME = ADDRESS` (or `EQU`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses. `SSSS:OOOOOOOO` symbols resolve through the current mode each time execution stops; `skipped` counts the lines that didn't parse
+- `load_symbols` - Load user symbols from a file: `ADDRESS NAME`, `NAME = ADDRESS` (or `EQU`) or GNU `nm` output (`ADDRESS TYPE NAME`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses; GNU ld and NASM map files load too. `SSSS:OOOOOOOO` symbols resolve through the current mode each time execution stops; `skipped` counts the lines that didn't parse
 - `list_symbols` - List user symbols and automatic labels a page at a time: optional `filter`, `start` and `count` (default 200, max 1000), with `total` and `has_more`
 - `lookup_symbol_by_name` - Find all symbols with an exact name, or with `partial` a case-insensitive part of it
 - `lookup_symbol_at_address` - Find the symbol at an address

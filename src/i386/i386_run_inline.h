@@ -92,6 +92,7 @@ INLINE u32 I386::RunCheckedStep()
 INLINE u32 I386::RunInstruction(GT_Bus_Access_Context& context)
 {
     m_batch_mode = false;
+    m_io_start_cycles = 0;
     SetBusContext(context);
     return RunCheckedStep();
 }
@@ -212,8 +213,8 @@ INLINE bool I386::TrackReturn(bool completed)
     return completed;
 }
 
-// Port accesses only run where machine time has caught up with them, so the context clocks are their access time
-// Elsewhere the instruction stops before doing anything until RunFor synchronizes or ends the batch
+// Port instructions only run where the batch knows the cycles at their start: first in it, or resumed by RunFor
+// Elsewhere the instruction stops before doing anything until RunFor resumes it or ends the batch
 INLINE bool I386::DeferIO()
 {
     if (!m_batch_mode)
@@ -231,19 +232,45 @@ INLINE bool I386::DeferIO()
     return true;
 }
 
-// Machine time catches up with the deferred instruction, which then runs again, unless an event falls due first
+// The deferred instruction runs again, knowing the cycles at its start
 INLINE bool I386::SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks)
 {
     m_io_deferred = false;
 
-    if (!IsValidPointer(context.synchronize) ||
-        !context.synchronize(context.synchronize_context, context, (u32)(clocks + context.wait_cycles)))
+    if (!IsValidPointer(context.synchronize))
         return false;
 
     context.end_batch = false;
+    m_io_start_cycles = (u32)(clocks + context.wait_cycles);
     m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
     m_io_synced = true;
     return true;
+}
+
+// Machine time moves to the start of the instruction and then to its port access, on its last clock
+// Events due by the start stop the instruction, so their IRQs come first. Events due by the access run before it,
+// and their IRQs wait for the end of the instruction. Both end the batch. Returns false when the instruction stops
+INLINE bool I386::SynchronizeIOAccess()
+{
+    GT_Bus_Access_Context& context = *m_bus_context;
+
+    if (!IsValidPointer(context.synchronize))
+        return true;
+
+    GT_Synchronize_Result result = context.synchronize(context.synchronize_context, context, m_io_start_cycles,
+        m_io_start_cycles + (u32)m_step.clocks - 1);
+
+    if (result == GT_SYNC_NO_EVENTS)
+        return true;
+
+    context.end_batch = true;
+
+    if (result == GT_SYNC_EVENTS_AT_ACCESS)
+        return true;
+
+    m_step.clocks = 0;
+    m_step.instruction_completed = false;
+    return false;
 }
 
 #endif /* I386_RUN_INLINE_H */

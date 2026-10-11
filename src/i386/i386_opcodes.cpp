@@ -2252,6 +2252,9 @@ bool I386::OPCodes_IN()
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
+    if (!SynchronizeIOAccess())
+        return true;
+
     u32 value = width == 8 ? 0xFF : width == 16 ? 0xFFFF : 0xFFFFFFFFU;
 
     if (IsValidPointer(m_io))
@@ -2304,6 +2307,9 @@ bool I386::OPCodes_OUT()
 
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+
+    if (!SynchronizeIOAccess())
+        return true;
 
     u32 value = GetRegister(I386_REG_EAX, width);
 

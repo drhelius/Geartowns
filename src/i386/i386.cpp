@@ -178,6 +178,7 @@ void I386::Reset()
     m_memory_generation = 0;
     m_batch_mode = false;
     m_io_sync_pc = 0;
+    m_io_start_cycles = 0;
     m_io_synced = false;
     m_io_deferred = false;
     m_state.execution_mode = I386_MODE_REAL;
@@ -386,6 +387,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 
     m_batch_mode = true;
     m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_start_cycles = 0;
     m_io_synced = true;
     m_io_deferred = false;
     m_checked_valid = false;

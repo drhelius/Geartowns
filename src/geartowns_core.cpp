@@ -524,14 +524,32 @@ void GeartownsCore::DMADebugCallback(void* cpu, u32 address, u32 size, bool writ
     ((I386*)cpu)->RecordDebuggerDMA(address, size, write);
 }
 
-// A port access inside a batch moves machine time up to it, unless an event falls due first
-bool GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_cycles)
+// A port access moves machine time up to the start of its instruction and then to the access, running the events
+// due on the way. Events due by the start stop the instruction, so the CPU samples INTR before it
+GT_Synchronize_Result GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 start_cycles, u32 access_cycles)
 {
-    Scheduler* scheduler = ((GeartownsCore*)core)->m_scheduler;
-    scheduler->AddCycles(elapsed_cycles - context.synchronized_cycles);
-    context.synchronized_cycles = elapsed_cycles;
+    GeartownsCore* geartowns = (GeartownsCore*)core;
+    Scheduler* scheduler = geartowns->m_scheduler;
+    GT_Synchronize_Result result = GT_SYNC_NO_EVENTS;
+    scheduler->AddCycles(start_cycles - context.synchronized_cycles);
+    context.synchronized_cycles = start_cycles;
+
+    if (scheduler->IsEventDue())
+        result = GT_SYNC_EVENTS_AT_START;
+    else
+    {
+        scheduler->AddCycles(access_cycles - start_cycles);
+        context.synchronized_cycles = access_cycles;
+
+        if (scheduler->IsEventDue())
+            result = GT_SYNC_EVENTS_AT_ACCESS;
+    }
+
+    if (result != GT_SYNC_NO_EVENTS)
+        geartowns->DispatchEvents();
+
     context.clocks = scheduler->GetClocks();
-    return !scheduler->IsEventDue();
+    return result;
 }
 
 // A halted CPU idles through the slice

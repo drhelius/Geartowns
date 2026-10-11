@@ -726,6 +726,7 @@ private:
     bool TrackReturn(bool completed);
     bool DeferIO();
     bool SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks);
+    bool SynchronizeIOAccess();
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
 #if !defined(GT_DISABLE_DYNAREC)
@@ -1180,6 +1181,7 @@ private:
     u32 m_memory_generation;
     bool m_batch_mode;
     u32 m_io_sync_pc;
+    u32 m_io_start_cycles;
     bool m_io_synced;
     bool m_io_deferred;
     bool m_slow_memory;

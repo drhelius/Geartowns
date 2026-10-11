@@ -144,6 +144,9 @@ bool I386::ContinueRepeat()
     if (!ExecuteStringElement(repeat))
         return false;
 
+    if (!m_step.instruction_completed)
+        return true;
+
     if (repeat)
     {
         if (!m_state.repeat.active)
@@ -199,6 +202,9 @@ bool I386::ExecuteStringElement(bool& repeat)
 
         if (!allowed)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+
+        if (!SynchronizeIOAccess())
+            return true;
     }
 
     switch (opcode)

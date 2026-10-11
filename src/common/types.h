@@ -102,9 +102,17 @@ enum GT_Bus_Access_Origin
     GT_BUS_ORIGIN_DMA
 };
 
+enum GT_Synchronize_Result
+{
+    GT_SYNC_NO_EVENTS = 0,
+    GT_SYNC_EVENTS_AT_START,
+    GT_SYNC_EVENTS_AT_ACCESS
+};
+
 struct GT_Bus_Access_Context;
 
-typedef bool (*GT_Synchronize_Hardware_Fn)(void* core, GT_Bus_Access_Context& context, u32 elapsed_cycles);
+typedef GT_Synchronize_Result (*GT_Synchronize_Hardware_Fn)(void* core, GT_Bus_Access_Context& context,
+    u32 start_cycles, u32 access_cycles);
 typedef void (*GT_Observe_Memory_Write_Fn)(void* observer, u32 bus_address, u8 previous, u8 value);
 
 struct GT_Bus_Access_Context

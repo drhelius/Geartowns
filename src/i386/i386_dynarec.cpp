@@ -207,6 +207,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
 
     m_batch_mode = true;
     m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+    m_io_start_cycles = 0;
     m_io_synced = true;
     m_io_deferred = false;
     m_checked_valid = false;

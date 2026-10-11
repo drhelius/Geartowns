@@ -138,8 +138,7 @@ public:
 
 private:
     template<bool debugger>
-    GT_Run_Result RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug,
-        bool render);
+    GT_Run_Result RunToFrameTemplate(u8* frame_buffer, s16* sample_buffer, int* sample_count, GT_Debug_Run* debug, bool render);
     void RunFrame(u64 frame_start);
     void RunDebuggerFrame(u64 frame_start, GT_Debug_Run* debug);
     void RunDebuggerSteps(u64 frame_start, GT_Debug_Run* debug);
@@ -156,7 +155,7 @@ private:
     GT_Bus_Access_Context BeginSlice();
     bool CompleteSlice(const I386_Run_Result& result, GT_Bus_Access_Context& context, u32 slice, bool hold_on_hit);
     bool EnterPendingInterrupt(GT_Bus_Access_Context& context);
-    static bool SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 elapsed_cycles);
+    static GT_Synchronize_Result SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 start_cycles, u32 access_cycles);
     static void DMADebugCallback(void* cpu, u32 address, u32 size, bool write);
     void DispatchEvents();
     void Reset();

@@ -28,11 +28,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>Desktop x64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-windows-x64.zip">Geartowns-0.0.1-desktop-windows-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-windows-x64.zip">Geartowns-0.0.2-desktop-windows-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop ARM64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-windows-arm64.zip">Geartowns-0.0.1-desktop-windows-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-windows-arm64.zip">Geartowns-0.0.2-desktop-windows-arm64.zip</a></td>
     </tr>
     <tr>
       <td rowspan="3"><strong>macOS</strong></td>
@@ -41,11 +41,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Apple Silicon</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-macos-arm64.zip">Geartowns-0.0.1-desktop-macos-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-macos-arm64.zip">Geartowns-0.0.2-desktop-macos-arm64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Intel</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-macos-intel.zip">Geartowns-0.0.1-desktop-macos-intel.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-macos-intel.zip">Geartowns-0.0.2-desktop-macos-intel.zip</a></td>
     </tr>
     <tr>
       <td rowspan="6"><strong>Linux</strong></td>
@@ -58,19 +58,19 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Ubuntu 26.04 x64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-ubuntu26.04-x64.zip">Geartowns-0.0.1-desktop-ubuntu26.04-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-ubuntu26.04-x64.zip">Geartowns-0.0.2-desktop-ubuntu26.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 26.04 ARM64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-ubuntu26.04-arm64.zip">Geartowns-0.0.1-desktop-ubuntu26.04-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-ubuntu26.04-arm64.zip">Geartowns-0.0.2-desktop-ubuntu26.04-arm64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 x64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-ubuntu24.04-x64.zip">Geartowns-0.0.1-desktop-ubuntu24.04-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-ubuntu24.04-x64.zip">Geartowns-0.0.2-desktop-ubuntu24.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 ARM64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.1/Geartowns-0.0.1-desktop-ubuntu24.04-arm64.zip">Geartowns-0.0.1-desktop-ubuntu24.04-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.2/Geartowns-0.0.2-desktop-ubuntu24.04-arm64.zip">Geartowns-0.0.2-desktop-ubuntu24.04-arm64.zip</a></td>
     </tr>
     <tr>
       <td><strong>MCPB</strong></td>

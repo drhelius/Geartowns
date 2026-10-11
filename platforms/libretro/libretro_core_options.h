@@ -76,7 +76,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_aspect_ratio",
         "Aspect Ratio",
         NULL,
-        "Select which aspect ratio will be presented by the core. '1:1 PAR' produces square pixels.",
+        "Select which aspect ratio will be presented by the core. '1:1 PAR' produces square pixels at monitor resolution, also when Native Resolution outputs fewer pixels.",
         NULL,
         "video",
         {

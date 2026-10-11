@@ -66,6 +66,7 @@ static const retro_vfs_interface* vfs_interface = NULL;
 static unsigned message_interface_version = 0;
 static bool libretro_supports_bitmasks = false;
 static bool libretro_supports_dupe = false;
+static bool libretro_supports_keyboard = false;
 static bool categories_supported = false;
 static bool frameskip_threshold_visible = true;
 static bool analog_mouse_speed_visible = true;
@@ -382,6 +383,7 @@ void retro_deinit(void)
     message_interface_version = 0;
     libretro_supports_bitmasks = false;
     libretro_supports_dupe = false;
+    libretro_supports_keyboard = false;
     audio_sample_count = 0;
     machine_ram_mb = 2;
     machine_cpu_mhz = 16;
@@ -429,6 +431,9 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 
         return;
     }
+
+    if (device == RETRO_DEVICE_MOUSE)
+        device = RETRO_DEVICE_TOWNS_MOUSE;
 
     int mouse_port = get_mouse_port();
 
@@ -692,11 +697,26 @@ static bool load_content(const char* path)
     log_cb(RETRO_LOG_INFO, "Save state size: %zu bytes\n", savestate_size);
     disk_sync();
 
-    struct retro_memory_descriptor descriptor = {};
-    descriptor.flags = RETRO_MEMDESC_SYSTEM_RAM;
-    descriptor.ptr = core->GetMemory()->GetWorkingRAM();
-    descriptor.len = core->GetMemory()->GetWorkingRAMSize();
-    struct retro_memory_map memory_map = { &descriptor, 1 };
+    struct retro_memory_descriptor descriptors[2] = {};
+    unsigned count = 0;
+    u8* ram = core->GetMemory()->GetWorkingRAM();
+    u32 ram_size = core->GetMemory()->GetWorkingRAMSize();
+
+    for (u32 start = 0; (start < ram_size) && (count < 2); count++)
+    {
+        u32 length = 1;
+
+        while (length * 2 <= ram_size - start)
+            length *= 2;
+
+        descriptors[count].flags = RETRO_MEMDESC_SYSTEM_RAM;
+        descriptors[count].ptr = ram + start;
+        descriptors[count].start = start;
+        descriptors[count].len = length;
+        start += length;
+    }
+
+    struct retro_memory_map memory_map = { descriptors, count };
     environ_cb(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &memory_map);
 
     bool achievements = true;
@@ -705,7 +725,7 @@ static bool load_content(const char* path)
     core->GetRuntimeInfo(runtime_info);
 
     struct retro_keyboard_callback keyboard = { keyboard_event };
-    environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &keyboard);
+    libretro_supports_keyboard = environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &keyboard);
     log_cb(RETRO_LOG_INFO, "Enable Game Focus (Scroll Lock) to type on the FM Towns keyboard\n");
 
     return true;
@@ -1097,8 +1117,13 @@ static void poll_input(void)
 
     for (unsigned i = 0; i < RETROK_LAST; i++)
     {
-        if (retro_key_down[i] && !input_state_cb(0, RETRO_DEVICE_KEYBOARD, 0, i))
-            keyboard_event(false, i, 0, 0);
+        if (!retro_key_down[i] && libretro_supports_keyboard)
+            continue;
+
+        bool down = input_state_cb(0, RETRO_DEVICE_KEYBOARD, 0, i) != 0;
+
+        if (down != retro_key_down[i])
+            keyboard_event(down, i, 0, 0);
     }
 }
 
@@ -1688,8 +1713,8 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
             return true;
 
         if (ends_with_no_case(path, ".zip"))
-            show_message("This ZIP file has no floppy disk image, zipped CD-ROM images are not supported, use CHD instead",
-                3, RETRO_LOG_ERROR);
+            show_message("This ZIP file has no single floppy disk image, zipped CD-ROM images are not supported, "
+                "use CHD instead", 3, RETRO_LOG_ERROR);
 
         log_cb(RETRO_LOG_ERROR, "Unable to read the floppy disk image %s\n", path);
         return false;
@@ -2203,6 +2228,12 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
     if (!disk_ejected || index >= disk_images.size())
         return false;
 
+    for (int i = 0; i < DRIVE_COUNT; i++)
+    {
+        if (drive_entry[i] == (int)index)
+            return false;
+    }
+
     if (!info || !info->path)
     {
         disk_images.erase(disk_images.begin() + index);
@@ -2222,12 +2253,6 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
 
     if (!disk_add_images(info->path, images) || images.empty())
         return false;
-
-    for (int i = 0; i < DRIVE_COUNT; i++)
-    {
-        if (drive_entry[i] == (int)index)
-            drive_entry[i] = -1;
-    }
 
     if (open_entry == (int)index)
         open_entry = -1;

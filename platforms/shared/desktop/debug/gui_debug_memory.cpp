@@ -423,6 +423,8 @@ void gui_debug_window_memory(void)
     if (show_fill_popup)
         ImGui::OpenPopup("Fill Selection");
 
+    gui_center_next_window();
+
     if (ImGui::BeginPopupModal("Fill Selection", &show_fill_popup, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("Hex value:");
@@ -2087,6 +2089,8 @@ static void draw_bookmark_popup()
         ImGui::OpenPopup("Add Bookmark");
         show_bookmark_popup = false;
     }
+
+    gui_center_next_window();
 
     if (!ImGui::BeginPopupModal("Add Bookmark", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         return;

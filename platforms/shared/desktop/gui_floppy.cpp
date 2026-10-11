@@ -382,6 +382,8 @@ static bool perform(bool discard_changes)
 
 static void draw_dirty_popup(void)
 {
+    gui_center_next_window();
+
     if (!ImGui::BeginPopupModal("Unsaved Floppy Changes", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
@@ -419,6 +421,8 @@ static void draw_dirty_popup(void)
 
 static void draw_discard_popup(void)
 {
+    gui_center_next_window();
+
     if (!ImGui::BeginPopupModal("Discard Floppy Changes", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
@@ -449,6 +453,8 @@ static void draw_discard_popup(void)
 
 static void draw_blank_popup(void)
 {
+    gui_center_next_window();
+
     if (!ImGui::BeginPopupModal("New Blank Disk", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
@@ -482,6 +488,8 @@ static void draw_blank_popup(void)
 
 static void draw_quit_popup(void)
 {
+    gui_center_next_window();
+
     if (!ImGui::BeginPopupModal("Unsaved Floppy Changes on Quit", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 

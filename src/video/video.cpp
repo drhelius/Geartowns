@@ -1379,6 +1379,8 @@ void Video::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.kanji_high);
     G_SERIALIZE(serializer, m_state.kanji_low);
     G_SERIALIZE(serializer, m_state.kanji_row);
+    G_SERIALIZE(serializer, m_canvas_zoom_x);
+    G_SERIALIZE(serializer, m_canvas_zoom_y);
 }
 
 void Video::SanitizeState()
@@ -1396,6 +1398,9 @@ void Video::SanitizeState()
 
     if (m_state.frame_clock_rate == 0)
         m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
+
+    m_canvas_zoom_x = CLAMP(m_canvas_zoom_x, 1U, 16U);
+    m_canvas_zoom_y = CLAMP(m_canvas_zoom_y, 1U, 16U);
 
     // The rows drawn before saving are not part of the state, the rest of the frame redraws them
     m_rendered_rows = 0;

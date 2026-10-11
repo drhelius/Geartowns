@@ -568,6 +568,7 @@ void CdRomChdImage::CalculateCRC()
 
     u32 sector_data_size = 2048;
     u8* buffer = new u8[sector_data_size];
+    u32 current_sector = m_current_sector;
 
     u32 sectors_to_crc = 64;
     u32 first_sector = 1;
@@ -581,6 +582,7 @@ void CdRomChdImage::CalculateCRC()
         if (!ReadSector(sec + first_data_track->start_lba, buffer))
         {
             Error("CRC ReadSector failed for LBA %u", sec + first_data_track->start_lba);
+            m_current_sector = current_sector;
             SafeDeleteArray(buffer);
             return;
         }
@@ -588,6 +590,7 @@ void CdRomChdImage::CalculateCRC()
         m_crc = CalculateCRC32(m_crc, buffer, sector_data_size);
     }
 
+    m_current_sector = current_sector;
     SafeDeleteArray(buffer);
 }
 

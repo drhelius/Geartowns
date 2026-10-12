@@ -1228,6 +1228,8 @@ void I386::TraceInstruction()
         entry.cpu.registers[i] = m_state.registers[i].value;
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
+    FormatDisassemblerRecordText(linear);
+
     const I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
 
     if (IsValidPointer(record) && record->size > 0)

@@ -458,6 +458,8 @@ void gui_debug_add_disassembler_bookmark(u32 address, const char* name)
         snprintf(bookmark.name, sizeof(bookmark.name), "%s", name);
     else
     {
+        emu_get_core()->GetI386()->FormatDisassemblerRecordText(address);
+
         I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(address);
 
         if (IsValidPointer(record) && record->name[0] != 0)
@@ -1576,6 +1578,7 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
     int port = -1;
     int vector = -1;
 
+    emu_get_core()->GetI386()->FormatDisassemblerRecordText(record->linear);
     split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
 
     const char* operand_label = replace_operand_labels(record, operands, sizeof(operands), vector_name,
@@ -2318,6 +2321,7 @@ static void save_instruction(FILE* file, const I386_Disassembler_Record* record,
     int port = -1;
     int vector = -1;
 
+    emu_get_core()->GetI386()->FormatDisassemblerRecordText(record->linear);
     split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
 
     if (labels)

@@ -233,6 +233,8 @@ static void format_cpu(const GT_Trace_Entry& entry, const GT_Trace_Format_Option
 
     if (strlen(entry.cpu.name) == GT_TRACE_NAME_SIZE - 1)
     {
+        emu_get_core()->GetI386()->FormatDisassemblerRecordText(entry.cpu.linear);
+
         const I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(entry.cpu.linear);
 
         if (IsValidPointer(record) && record->size == entry.cpu.size &&

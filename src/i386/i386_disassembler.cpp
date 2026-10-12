@@ -834,6 +834,12 @@ static void uppercase_intel_identifiers(char* text)
     }
 }
 
+static bool is_prefix(u8 value)
+{
+    return value == 0x26 || value == 0x2E || value == 0x36 || value == 0x3E || value == 0x64 || value == 0x65 ||
+        value == 0x66 || value == 0x67 || value == 0xF0 || value == 0xF2 || value == 0xF3;
+}
+
 static bool set_auto_symbol(I386_Disassembler_Record& record, bool subroutine)
 {
     // A location first reached by a jump becomes a subroutine once something calls it
@@ -945,10 +951,25 @@ bool I386::FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I
     record.eip = eip;
     record.linear = code_segment.base + eip;
     record.size = state.length;
+    record.mode = m_state.execution_mode;
+    record.default32 = (code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0;
+
+    u32 position = 0;
+
+    while (position < state.length && is_prefix(state.bytes[position]))
+        position++;
+
+    position += (state.two_byte ? 2 : 1) + (state.has_modrm ? 1 : 0) + (state.has_sib ? 1 : 0);
+    record.operands_offset = (u8)MIN(position, (u32)state.length);
 
     memcpy(record.opcodes, state.bytes, state.length);
     snprintf(record.segment, sizeof(record.segment), "%04X", record.cs);
+    FormatDisassemblerText(state, record, code_segment.base);
+    return true;
+}
 
+void I386::FormatDisassemblerText(const I386_Decode_State& state, I386_Disassembler_Record& record, u32 cs_base)
+{
     size_t byte_length = 0;
 
     for (int i = 0; i < state.length; i++)
@@ -958,16 +979,37 @@ bool I386::FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I
     context.state = &state;
     context.record = &record;
     context.cs = record.cs;
-    context.cs_base = code_segment.base;
-    context.mode = m_state.execution_mode;
-    context.default32 = (code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0;
-
-    record.mode = m_state.execution_mode;
-    record.default32 = context.default32;
+    context.cs_base = cs_base;
+    context.mode = record.mode;
+    context.default32 = record.default32;
 
     format_instruction(context, record.name, sizeof(record.name));
     uppercase_intel_identifiers(record.name);
+}
+
+bool I386::UpdateDisassemblerRecordBytes(I386_Disassembler_Record& record, const u8* bytes)
+{
+    if (record.jump || record.subroutine || record.returns || memcmp(bytes, record.opcodes, record.operands_offset) != 0)
+        return false;
+
+    memcpy(record.opcodes, bytes, (size_t)record.size);
+    record.text_pending = true;
     return true;
+}
+
+void I386::FormatDisassemblerRecordText(u32 linear)
+{
+    I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
+
+    if (!IsValidPointer(record) || !record->text_pending)
+        return;
+
+    I386_Decode_State state;
+
+    record->text_pending = false;
+
+    if (DecodeInstructionBytes(record->opcodes, (u32)record->size, record->eip, record->default32, state))
+        FormatDisassemblerText(state, *record, record->linear - record->eip);
 }
 
 // A record created only for a symbol has no instruction yet
@@ -1078,7 +1120,7 @@ void I386::DisassembleExecuted(const I386_Segment& code, u32 eip)
 
         if (IsValidPointer(bytes))
         {
-            if (memcmp(bytes, record->opcodes, (size_t)record->size) == 0)
+            if (memcmp(bytes, record->opcodes, (size_t)record->size) == 0 || UpdateDisassemblerRecordBytes(*record, bytes))
                 return;
         }
         else if (IsDisassemblerRecordCurrent(*record, code))

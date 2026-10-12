@@ -301,6 +301,8 @@ struct I386_Disassembler_Record
     int size;
     I386_Execution_Mode mode;
     bool default32;
+    bool text_pending;
+    u8 operands_offset;
 
     bool jump;
     bool jump_far;
@@ -473,6 +475,7 @@ public:
     void DisassembleAhead(int count);
     void DisassembleAhead(u32 start_eip, int count, int depth = 0);
     I386_Disassembler_Record* GetDisassemblerRecord(u32 linear);
+    void FormatDisassemblerRecordText(u32 linear);
     bool IsDisassemblerRecordCurrent(const I386_Disassembler_Record& record, const I386_Segment& code_segment) const;
     const std::map<u32, I386_Disassembler_Record>& GetDisassemblerRecords() const;
     u32 GetDisassemblerGeneration() const;
@@ -946,7 +949,10 @@ private:
     void UpdateExecuteFilter();
 
     bool DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 eip, I386_Decode_State& state);
+    bool DecodeInstructionBytes(const u8* bytes, u32 count, u32 eip, bool default32, I386_Decode_State& state);
     bool FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I386_Disassembler_Record& record);
+    void FormatDisassemblerText(const I386_Decode_State& state, I386_Disassembler_Record& record, u32 cs_base);
+    bool UpdateDisassemblerRecordBytes(I386_Disassembler_Record& record, const u8* bytes);
     I386_Disassembler_Record& GetOrCreateDisassemblerRecord(u32 linear, u16 cs, u32 eip);
     void DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int count, int depth, int& branch_budget);
 

@@ -239,13 +239,18 @@ bool I386::DecodeInstructionForDebugger(const I386_Segment& code_segment, u32 ei
         (u64)eip + count <= code_segment.limit && TryPeekLinear(code_segment.base + eip + count, bytes[count]))
         count++;
 
+    return DecodeInstructionBytes(bytes, count, eip, (code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0, state);
+}
+
+bool I386::DecodeInstructionBytes(const u8* bytes, u32 count, u32 eip, bool default32, I386_Decode_State& state)
+{
     InstructionContext instruction;
 
     m_passive_bytes = bytes;
     m_passive_count = count;
     m_passive_index = 0;
 
-    if (!DecodeInstructionPassive(instruction, eip, (code_segment.attributes & I386_SEGMENT_DEFAULT_32) != 0))
+    if (!DecodeInstructionPassive(instruction, eip, default32))
         return false;
 
     FillDecodeState(instruction, bytes, instruction.next_eip - eip, state);

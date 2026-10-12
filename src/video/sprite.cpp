@@ -190,6 +190,7 @@ void Sprite::DrawPixels(u32 end)
 
 // Pixels are walked in pattern order, so a halved sprite keeps the last opaque pixel that lands on each spot
 // Lines 0 and 1 hold the clear pattern and are never drawn
+// Transparent pixels store back what is there, as branching on pattern data mispredicts too often
 template<bool indexed>
 void Sprite::DrawPattern(u32 pixel, u32 end)
 {
@@ -199,7 +200,7 @@ void Sprite::DrawPattern(u32 pixel, u32 end)
     u32 origin_y = m_state.entry_y;
     const u8* pattern = m_sprite_ram + ((u32)(attributes & (indexed ? 0x03FF : 0x03FC)) << 7);
     const u8* table = m_sprite_ram + ((u32)(color & 0x0FFF) << 5);
-    u8 through = (color & k_sprite_color_through) != 0 ? 0x80 : 0x00;
+    u16 through = (color & k_sprite_color_through) != 0 ? 0x8000 : 0x0000;
     bool swap = (attributes & k_sprite_attribute_swap) != 0;
     u32 flip_x = (attributes & k_sprite_attribute_flip_x) != 0 ? 0x0F : 0x00;
     u32 flip_y = (attributes & k_sprite_attribute_flip_y) != 0 ? 0x0F : 0x00;
@@ -211,35 +212,31 @@ void Sprite::DrawPattern(u32 pixel, u32 end)
     {
         u32 px = pixel & 0x0F;
         u32 py = pixel >> 4;
-        const u8* source;
-
-        if (indexed)
-        {
-            u8 data = pattern[(py << 3) + (px >> 1)];
-            u32 index = (px & 0x01) != 0 ? data >> 4 : data & 0x0F;
-
-            if (index == 0)
-                continue;
-
-            source = table + (index << 1);
-        }
-        else
-        {
-            source = pattern + (py << 5) + (px << 1);
-
-            if ((source[1] & 0x80) != 0)
-                continue;
-        }
-
         u32 x = (origin_x + (((swap ? py : px) ^ flip_x) >> shift_x)) & 0x1FF;
         u32 y = (origin_y + (((swap ? px : py) ^ flip_y) >> shift_y)) & 0x1FF;
 
         if (x >= 256 || y < 2 || y >= 256)
             continue;
 
+        u16 value;
+        bool opaque;
+
+        if (indexed)
+        {
+            u8 data = pattern[(py << 3) + (px >> 1)];
+            u32 index = (px & 0x01) != 0 ? data >> 4 : data & 0x0F;
+            value = read_u16_le(table + (index << 1));
+            opaque = index != 0;
+        }
+        else
+        {
+            value = read_u16_le(pattern + (py << 5) + (px << 1));
+            opaque = (value & 0x8000) == 0;
+        }
+
         u8* destination = work + (y << 9) + (x << 1);
-        destination[0] = source[0];
-        destination[1] = (u8)((source[1] & 0x7F) | through);
+        u16 previous = read_u16_le(destination);
+        write_u16_le(destination, opaque ? (u16)((value & 0x7FFF) | through) : previous);
     }
 }
 

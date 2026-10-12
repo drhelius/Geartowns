@@ -8,7 +8,19 @@
 Instructions and tips at:
 https://github.com/drhelius/Geartowns
 -----------------------------------------------------
-
+Geartowns is a cross-platform Fujitsu FM Towns emulator with an embedded MCP server for debugging and tooling.
+Created by Nacho Sánchez. Follow me on X: https://x.com/drhelius
+-----------------------------------------------------
+Features:
+    - Very accurate 80386 core that passes test386 and SingleStepTests/80386.
+    - CD-ROM support for CUE/BIN, ISO, CHD, M3U and ZIP formats, plus physical discs on Windows, macOS and Linux.
+    - Two floppy drives with D77, D88, HDM, XDF and IMG images, M3U playlists, write protection and optional persistence.
+    - Save states with preview and rewind, and run-ahead.
+    - Video recording to AVI and screenshots.
+    - Full debugger with disassembly, breakpoints, call stack, symbols, memory editor, trace logger, profiler, i386 descriptor and paging inspectors, and CRTC, sprite, YM3438, RF5C68, CD-ROM and floppy tools.
+    - MCP server for AI-assisted debugging and hardware inspection.
+    - Standalone builds for Windows, Linux, BSD and macOS, plus libretro support.
+    - Portable mode, programmable shader chains, command-line loading, drag and drop, and modern controller support.
 -----------------------------------------------------
 Licensing:
     - Geartowns code: Copyright 2026 Nacho Sanchez, GPL-3+.

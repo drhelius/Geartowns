@@ -44,6 +44,7 @@
 #define RETRO_DEVICE_TOWNS_KEYBOARD   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_KEYBOARD, 0)
 
 #define MAX_PADS GT_MAX_GAMEPADS
+#define AUTO_MOUSE_PORT 1
 #define FRAMESKIP_MAX 4
 #define RTC_FIXED_DATE 631152000
 #define DRIVE_CDROM 0
@@ -104,9 +105,13 @@ static bool allow_up_down = false;
 static int mouse_sensitivity = 5;
 static int analog_mouse = 0;
 static int analog_mouse_speed = 5;
+static unsigned requested_device[MAX_PADS] = {
+    RETRO_DEVICE_JOYPAD,
+    RETRO_DEVICE_JOYPAD
+};
 static unsigned input_device[MAX_PADS] = {
     RETRO_DEVICE_TOWNS_GAMEPAD,
-    RETRO_DEVICE_TOWNS_GAMEPAD
+    RETRO_DEVICE_TOWNS_MOUSE
 };
 static u16 joypad_previous[MAX_PADS];
 static float mouse_remainder_x = 0.0f;
@@ -168,6 +173,9 @@ static void sync_keyboard_state(void);
 static void sync_key(GT_Keys key);
 static void reset_controller_devices(void);
 static int get_mouse_port(void);
+static int get_requested_mouse_port(void);
+static unsigned resolve_controller_device(unsigned port);
+static void update_controller_devices(unsigned port);
 static void apply_controller_device(unsigned port, unsigned device, bool log_device);
 static void release_controller_input(unsigned port);
 static void poll_input(void);
@@ -435,7 +443,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
     if (device == RETRO_DEVICE_MOUSE)
         device = RETRO_DEVICE_TOWNS_MOUSE;
 
-    int mouse_port = get_mouse_port();
+    int mouse_port = get_requested_mouse_port();
 
     if ((device == RETRO_DEVICE_TOWNS_MOUSE) && (mouse_port >= 0) && (mouse_port != (int)port))
     {
@@ -445,11 +453,8 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
         device = RETRO_DEVICE_NONE;
     }
 
-    if ((input_device[port] != device) && core)
-        release_controller_input(port);
-
-    input_device[port] = device;
-    apply_controller_device(port, device, true);
+    requested_device[port] = device;
+    update_controller_devices(port);
 }
 
 void retro_get_system_info(struct retro_system_info *info)
@@ -925,6 +930,7 @@ static void update_frameskip(void)
 static void set_controller_info(void)
 {
     static const struct retro_controller_description port[] = {
+        { "Auto", RETRO_DEVICE_JOYPAD },
         { "Original gamepad", RETRO_DEVICE_TOWNS_GAMEPAD },
         { "Marty gamepad", RETRO_DEVICE_TOWNS_MARTY },
         { "6 button gamepad", RETRO_DEVICE_TOWNS_6_BUTTON },
@@ -933,8 +939,8 @@ static void set_controller_info(void)
     };
 
     static const struct retro_controller_info ports[] = {
-        { port, 5 },
-        { port, 5 },
+        { port, 6 },
+        { port, 6 },
         { NULL, 0 }
     };
 
@@ -1039,7 +1045,10 @@ static void load_input_state(const u8* data)
 static void reset_controller_devices(void)
 {
     for (int i = 0; i < MAX_PADS; i++)
-        input_device[i] = RETRO_DEVICE_TOWNS_GAMEPAD;
+        requested_device[i] = RETRO_DEVICE_JOYPAD;
+
+    for (int i = 0; i < MAX_PADS; i++)
+        input_device[i] = resolve_controller_device(i);
 }
 
 static int get_mouse_port(void)
@@ -1053,6 +1062,45 @@ static int get_mouse_port(void)
     return -1;
 }
 
+static int get_requested_mouse_port(void)
+{
+    for (int i = 0; i < MAX_PADS; i++)
+    {
+        if (requested_device[i] == RETRO_DEVICE_TOWNS_MOUSE)
+            return i;
+    }
+
+    return -1;
+}
+
+static unsigned resolve_controller_device(unsigned port)
+{
+    if (requested_device[port] != RETRO_DEVICE_JOYPAD)
+        return requested_device[port];
+
+    if ((port == AUTO_MOUSE_PORT) && (get_requested_mouse_port() < 0))
+        return RETRO_DEVICE_TOWNS_MOUSE;
+
+    return RETRO_DEVICE_TOWNS_GAMEPAD;
+}
+
+static void update_controller_devices(unsigned port)
+{
+    for (unsigned i = 0; i < MAX_PADS; i++)
+    {
+        unsigned device = resolve_controller_device(i);
+
+        if ((i != port) && (input_device[i] == device))
+            continue;
+
+        if ((input_device[i] != device) && core)
+            release_controller_input(i);
+
+        input_device[i] = device;
+        apply_controller_device(i, device, true);
+    }
+}
+
 static void apply_controller_device(unsigned port, unsigned device, bool log_device)
 {
     if (!core || port >= MAX_PADS)
@@ -1063,7 +1111,6 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
 
     switch (device)
     {
-        case RETRO_DEVICE_JOYPAD:
         case RETRO_DEVICE_TOWNS_GAMEPAD:
             type = GT_CONTROLLER_ORIGINAL_GAMEPAD;
             name = "Original gamepad";

@@ -84,7 +84,7 @@ private:
     void Exit(int steps, u32 clocks, u32 flags);
     void ExitLinked(int steps, u32 clocks, u32 flags, int slot);
     void StoreEIP(u32 eip);
-    void CallStep(u32 next_check, u32 native_clocks);
+    void CallStep(u32 next_check, u32 native_clocks, u32 before);
     intptr_t Offset(const void* member) const;
     intptr_t RegisterOffset(int index, int width) const;
     void LoadU32(int r, int base, intptr_t offset);

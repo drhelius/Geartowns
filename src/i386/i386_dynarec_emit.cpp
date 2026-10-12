@@ -691,7 +691,7 @@ void DynarecEmitter::EmitBlock()
         else
         {
             StoreEIP(instruction.context.start_eip);
-            CallStep(instruction.next_check, 0);
+            CallStep(instruction.next_check, 0, instruction.before);
 
             if (instruction.kind == DYNAREC_HELPER_LAST)
                 Exit(i + 1, instruction.before, k_dynarec_exit_end);
@@ -727,7 +727,7 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
 {
     jit_link(instruction.fallback);
     StoreEIP(instruction.context.start_eip);
-    CallStep(instruction.next_check, instruction.clocks);
+    CallStep(instruction.next_check, instruction.clocks, instruction.before);
 
     if (instruction.ends_block)
     {
@@ -816,13 +816,14 @@ void DynarecEmitter::StoreEIP(u32 eip)
 }
 
 // Helpers are reached through a register, so the code runs from any executable view
-void DynarecEmitter::CallStep(u32 next_check, u32 native_clocks)
+void DynarecEmitter::CallStep(u32 next_check, u32 native_clocks, u32 before)
 {
     jit_movi(DR_T3, (jit_word_t)(uintptr_t)&I386::DynarecStep);
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_pushargi((jit_word_t)next_check);
     jit_pushargi((jit_word_t)native_clocks);
+    jit_pushargi((jit_word_t)before);
     jit_finishr(DR_T3);
     jit_retval(JIT_R0);
 }

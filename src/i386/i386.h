@@ -725,7 +725,6 @@ private:
     bool TrackCall(bool completed, u16 cs, u32 base);
     bool TrackReturn(bool completed);
     bool DeferIO();
-    bool SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks);
     bool SynchronizeIOAccess();
     u32 RunRepeatBatch(u32 budget, u32& clocks);
     void CompleteFault(u16 old_task);
@@ -745,7 +744,7 @@ private:
     void CoolDynarecPages();
     void CheckDynarecMemory();
     static void DynarecCodeWrite(void* context, u32 offset, u32 size);
-    static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks);
+    static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before);
 #endif
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();
@@ -1179,11 +1178,7 @@ private:
     const u8* const* m_read_pages;
     u8* const* m_write_pages;
     u32 m_memory_generation;
-    bool m_batch_mode;
-    u32 m_io_sync_pc;
     u32 m_io_start_cycles;
-    bool m_io_synced;
-    bool m_io_deferred;
     bool m_slow_memory;
     bool m_user_mode;
     u8 m_default_size;
@@ -1278,6 +1273,7 @@ private:
     u32 m_dynarec_clocks;
     u32 m_dynarec_remaining;
     u32 m_dynarec_wait;
+    u32 m_dynarec_start;
 #endif
 
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;

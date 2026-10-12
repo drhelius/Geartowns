@@ -205,11 +205,6 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     total.instruction_completed = true;
     total.exception_vector = 0xFF;
 
-    m_batch_mode = true;
-    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
-    m_io_start_cycles = 0;
-    m_io_synced = true;
-    m_io_deferred = false;
     m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
@@ -246,6 +241,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
             {
                 m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_cycles);
                 m_dynarec_wait = context.wait_cycles;
+                m_dynarec_start = (u32)clocks + context.wait_cycles;
                 m_dynarec_clocks = 0;
                 m_dynarec_steps = 0;
                 m_dynarec_dirty = false;
@@ -287,12 +283,6 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
 
                 if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
                 {
-                    if (m_io_deferred && SynchronizeIO(context, clocks))
-                    {
-                        entry = k_dynarec_entry_count;
-                        continue;
-                    }
-
                     if (m_step.exception)
                         CopyStepException(total);
 
@@ -342,7 +332,6 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     total.cycles = clocks;
     total.steps = steps;
     total.instruction_completed = completed;
-    m_batch_mode = false;
     return total;
 }
 
@@ -692,10 +681,12 @@ void I386::CoolDynarecPages()
 // Runs one instruction of a block in the interpreter, as the fast loop of RunFor does
 // Returns zero while the block can go on: nothing ended the batch, the code window and the block are still valid
 // and the slice budget covers every instruction up to the next check
-uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks)
+uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before)
 {
     StepState& step = cpu->m_step;
     u16 old_task = cpu->m_state.task_register.selector;
+
+    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks + (u32)before;
 
     step.clocks = 0;
     step.instruction_completed = true;

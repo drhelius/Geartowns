@@ -91,7 +91,6 @@ INLINE u32 I386::RunCheckedStep()
 
 INLINE u32 I386::RunInstruction(GT_Bus_Access_Context& context)
 {
-    m_batch_mode = false;
     m_io_start_cycles = 0;
     SetBusContext(context);
     return RunCheckedStep();
@@ -116,6 +115,7 @@ INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
 INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
     bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending)
 {
+    m_io_start_cycles = (u32)clocks + context.wait_cycles;
 #if !defined(GT_DISABLE_DISASSEMBLER)
     DisassembleNextInstruction();
 #endif
@@ -137,9 +137,6 @@ INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& con
 
     if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
     {
-        if (m_io_deferred && SynchronizeIO(context, clocks))
-            return true;
-
         // Exceptions and software interrupts always end the batch
         if (m_step.exception)
             CopyStepException(total);
@@ -213,37 +210,15 @@ INLINE bool I386::TrackReturn(bool completed)
     return completed;
 }
 
-// Port instructions only run where the batch knows the cycles at their start: first in it, or resumed by RunFor
-// Elsewhere the instruction stops before doing anything until RunFor resumes it or ends the batch
+// Without a callback machine time can't move, so a port instruction later in the batch waits for the next one,
+// which starts at it
 INLINE bool I386::DeferIO()
 {
-    if (!m_batch_mode)
+    if (m_io_start_cycles == 0 || IsValidPointer(m_bus_context->synchronize))
         return false;
 
-    if (m_io_synced && (m_state.segments[I386_SEGMENT_CS].base + m_state.eip == m_io_sync_pc))
-    {
-        m_io_synced = false;
-        return false;
-    }
-
-    m_io_deferred = true;
     m_step.instruction_completed = false;
     m_bus_context->end_batch = true;
-    return true;
-}
-
-// The deferred instruction runs again, knowing the cycles at its start
-INLINE bool I386::SynchronizeIO(GT_Bus_Access_Context& context, u64 clocks)
-{
-    m_io_deferred = false;
-
-    if (!IsValidPointer(context.synchronize))
-        return false;
-
-    context.end_batch = false;
-    m_io_start_cycles = (u32)(clocks + context.wait_cycles);
-    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
-    m_io_synced = true;
     return true;
 }
 

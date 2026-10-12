@@ -132,6 +132,7 @@ I386::I386()
     m_dynarec_clocks = 0;
     m_dynarec_remaining = 0;
     m_dynarec_wait = 0;
+    m_dynarec_start = 0;
 #endif
 
     SetDynarecTuning(0, 0);
@@ -176,11 +177,7 @@ void I386::Reset()
     InitPointer(m_write_pages);
     InitPointer(m_bus_context);
     m_memory_generation = 0;
-    m_batch_mode = false;
-    m_io_sync_pc = 0;
     m_io_start_cycles = 0;
-    m_io_synced = false;
-    m_io_deferred = false;
     m_state.execution_mode = I386_MODE_REAL;
 
     memset(&m_step, 0, sizeof(m_step));
@@ -385,11 +382,6 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     total.instruction_completed = true;
     total.exception_vector = 0xFF;
 
-    m_batch_mode = true;
-    m_io_sync_pc = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
-    m_io_start_cycles = 0;
-    m_io_synced = true;
-    m_io_deferred = false;
     m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
@@ -428,7 +420,6 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     total.cycles = clocks;
     total.steps = steps;
     total.instruction_completed = completed;
-    m_batch_mode = false;
     return total;
 }
 
@@ -460,6 +451,7 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
         }
     }
 
+    m_io_start_cycles = (u32)total.cycles + context.wait_cycles;
     RunCheckedStep();
 
     const StepState& step = m_step;

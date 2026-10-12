@@ -458,14 +458,24 @@ static void draw_blank_popup(void)
     if (!ImGui::BeginPopupModal("New Blank Disk", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
-    ImGui::PushItemWidth(220.0f);
-    ImGui::Combo("Type", &blank_type, blank_types);
+    ImGui::Text("Create a blank disk in floppy drive %d.\n\n", dialog_drive + 1);
+
+    ImGui::Text("Disk type:");
+    ImGui::PushItemWidth(248.0f);
+    ImGui::Combo("##blank_type", &blank_type, blank_types);
     ImGui::PopItemWidth();
-    ImGui::Checkbox("Formatted (empty FAT12 data disk)", &blank_formatted);
+
+    ImGui::Checkbox("Formatted", &blank_formatted);
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Unformatted disks need formatting by Towns OS or the game before use.");
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Formatted disks are empty FAT12 data disks, ready to use.");
+        ImGui::Text("Unformatted disks need formatting by Towns OS or the game before use.");
+        ImGui::EndTooltip();
+    }
 
+    ImGui::NewLine();
     ImGui::Separator();
 
     if (ImGui::Button("Create...", ImVec2(120, 0)))
@@ -475,6 +485,7 @@ static void draw_blank_popup(void)
         gui_file_dialog_new_floppy(dialog_drive);
     }
 
+    ImGui::SetItemDefaultFocus();
     ImGui::SameLine();
 
     if (ImGui::Button("Cancel", ImVec2(120, 0)))

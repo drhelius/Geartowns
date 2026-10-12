@@ -1265,6 +1265,7 @@ private:
     u8* m_dynarec_page_heat;
     u16* m_dynarec_page_writes;
     u8* m_dynarec_page_cool;
+    u8* m_dynarec_page_backoff;
     u32 m_dynarec_page_count;
     const u8* m_dynarec_ram;
     u32 m_dynarec_region_generation;

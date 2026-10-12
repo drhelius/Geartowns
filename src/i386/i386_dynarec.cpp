@@ -45,9 +45,11 @@ static const u32 k_dynarec_default_block_limit = 64;
 
 // A RAM page whose code keeps being rewritten, or whose data is written very often through its checked path, runs in
 // the interpreter for k_dynarec_cool_periods cooling periods, which gives it its fast writes back
+// Each eviction doubles the next one, up to k_dynarec_max_backoff times, and each quiet period halves it again
 static const u8 k_dynarec_hot_rewrites = 16;
 static const u16 k_dynarec_hot_writes = 4096;
 static const u8 k_dynarec_cool_periods = 8;
+static const u8 k_dynarec_max_backoff = 4;
 static const u64 k_dynarec_cool_period_clocks = 1 << 20;
 
 // A block watches its own bytes and the bytes of the transfer targets it timed when it was compiled
@@ -176,6 +178,7 @@ void I386::CheckDynarecMemory()
     SafeDeleteArray(m_dynarec_page_heat);
     SafeDeleteArray(m_dynarec_page_writes);
     SafeDeleteArray(m_dynarec_page_cool);
+    SafeDeleteArray(m_dynarec_page_backoff);
 
     m_dynarec_ram = m_memory->GetWorkingRAM();
     m_dynarec_page_count = IsValidPointer(m_dynarec_ram) ? (u32)(m_memory->GetWorkingRAMSize() >> 12) : 0;
@@ -189,11 +192,13 @@ void I386::CheckDynarecMemory()
     m_dynarec_page_heat = new u8[m_dynarec_page_count];
     m_dynarec_page_writes = new u16[m_dynarec_page_count];
     m_dynarec_page_cool = new u8[m_dynarec_page_count];
+    m_dynarec_page_backoff = new u8[m_dynarec_page_count];
     memset(m_dynarec_page_blocks, 0xFF, m_dynarec_page_count * sizeof(u32));
     memset(m_dynarec_page_granules, 0, m_dynarec_page_count * 2 * sizeof(u64));
     memset(m_dynarec_page_heat, 0, m_dynarec_page_count);
     memset(m_dynarec_page_writes, 0, m_dynarec_page_count * sizeof(u16));
     memset(m_dynarec_page_cool, 0, m_dynarec_page_count);
+    memset(m_dynarec_page_backoff, 0, m_dynarec_page_count);
 }
 
 // RunFor with translated blocks: the interpreter steps whatever no block covers, with the same loop condition,
@@ -353,6 +358,12 @@ I386::DynarecBlock* I386::FindDynarecBlock(u8 entry)
     }
 
     const u8* host = m_code_window + offset;
+
+    // A cooling page has no blocks and compiles none
+    if (host >= m_dynarec_ram && host < m_dynarec_ram + ((size_t)m_dynarec_page_count << 12) &&
+        m_dynarec_page_cool[(host - m_dynarec_ram) >> 12] != 0)
+        return NULL;
+
     u64 key = ((u64)m_state.segments[I386_SEGMENT_CS].limit << 8) |
         (m_default_size == 4 ? k_dynarec_key_default32 : 0) |
         ((m_state.cr0 & 0x80000000U) != 0 ? k_dynarec_key_paging : 0) | (m_stack32 ? k_dynarec_key_stack32 : 0) |
@@ -435,22 +446,13 @@ u32 I386::LookupDynarecBlock(const u8* host, u32 eip, u64 key) const
     return index;
 }
 
-// Only main RAM and ROM pages are compiled. Everything else, and RAM pages that keep being written, runs in the
-// interpreter
+// Only main RAM and ROM pages are compiled, everything else runs in the interpreter
 void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
 {
     u32 page = k_dynarec_none;
 
     if (block.host >= m_dynarec_ram && block.host < m_dynarec_ram + ((size_t)m_dynarec_page_count << 12))
-    {
         page = (u32)((block.host - m_dynarec_ram) >> 12);
-
-        if (m_dynarec_page_cool[page] != 0)
-        {
-            block.hits = 0;
-            return;
-        }
-    }
     else if (!m_memory->IsReadOnlyHost(block.host))
     {
         block.state = k_dynarec_interpret;
@@ -660,8 +662,11 @@ void I386::EvictDynarecPage(u32 page)
 
     m_dynarec_page_granules[page * 2] = 0;
     m_dynarec_page_granules[page * 2 + 1] = 0;
-    m_dynarec_page_cool[page] = k_dynarec_cool_periods;
+    m_dynarec_page_cool[page] = (u8)(k_dynarec_cool_periods << m_dynarec_page_backoff[page]);
     m_memory->SetCodePage(page, false);
+
+    if (m_dynarec_page_backoff[page] < k_dynarec_max_backoff)
+        m_dynarec_page_backoff[page]++;
 }
 
 void I386::CoolDynarecPages()
@@ -670,11 +675,13 @@ void I386::CoolDynarecPages()
 
     for (u32 page = 0; page < m_dynarec_page_count; page++)
     {
-        m_dynarec_page_heat[page] = 0;
-        m_dynarec_page_writes[page] = 0;
-
         if (m_dynarec_page_cool[page] != 0)
             m_dynarec_page_cool[page]--;
+        else if (m_dynarec_page_backoff[page] != 0 && m_dynarec_page_heat[page] == 0 && m_dynarec_page_writes[page] == 0)
+            m_dynarec_page_backoff[page]--;
+
+        m_dynarec_page_heat[page] = 0;
+        m_dynarec_page_writes[page] = 0;
     }
 }
 

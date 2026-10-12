@@ -209,18 +209,26 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
     {
         const DebugRegion* region = FindMappedSpan(physical, 2);
 
-        if (IsValidPointer(region) && IsValidPointer(region->write_data) &&
-            (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
+        if (IsValidPointer(region) && (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
         {
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
-            u8* data = region->write_data + offset;
 
-            write_u16_le(data, value);
-            m_debug_snapshot_id += 2;
+            if (IsValidPointer(region->write_data))
+            {
+                write_u16_le(region->write_data + offset, value);
+                m_debug_snapshot_id += 2;
 #if !defined(GT_DISABLE_DYNAREC)
-            NotifyCodeWrite(region, offset, 2);
+                NotifyCodeWrite(region, offset, 2);
 #endif
-            return;
+                return;
+            }
+
+            if (IsValidPointer(region->write16))
+            {
+                region->write16(region->device, offset, value);
+                m_debug_snapshot_id += 2;
+                return;
+            }
         }
     }
 
@@ -234,18 +242,26 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
     {
         const DebugRegion* region = FindMappedSpan(physical, 4);
 
-        if (IsValidPointer(region) && IsValidPointer(region->write_data) &&
-            (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
+        if (IsValidPointer(region) && (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
         {
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
-            u8* data = region->write_data + offset;
 
-            write_u32_le(data, value);
-            m_debug_snapshot_id += 4;
+            if (IsValidPointer(region->write_data))
+            {
+                write_u32_le(region->write_data + offset, value);
+                m_debug_snapshot_id += 4;
 #if !defined(GT_DISABLE_DYNAREC)
-            NotifyCodeWrite(region, offset, 4);
+                NotifyCodeWrite(region, offset, 4);
 #endif
-            return;
+                return;
+            }
+
+            if (IsValidPointer(region->write32))
+            {
+                region->write32(region->device, offset, value);
+                m_debug_snapshot_id += 4;
+                return;
+            }
         }
     }
 
@@ -306,7 +322,7 @@ bool Memory::RegisterDebugRegion(int id, const char* name, const u8* read_data, 
     return true;
 }
 
-// Handler regions never get host pages, so every CPU access reaches the device
+// Handler regions only get host pages for the data given with SetRegionData, other CPU accesses reach the device
 // A read handler with side effects needs a peek handler for passive reads
 bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
     GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8, GT_Memory_Read8_Fn peek8)
@@ -346,6 +362,18 @@ bool Memory::RegisterHandlerRegion(int id, const char* name, u32 size, u32 physi
     return true;
 }
 
+bool Memory::SetRegionWideHandlers(int id, GT_Memory_Write16_Fn write16, GT_Memory_Write32_Fn write32)
+{
+    DebugRegion* region = FindRegion(id);
+
+    if (!IsValidPointer(region) || !IsValidPointer(region->write8))
+        return false;
+
+    region->write16 = write16;
+    region->write32 = write32;
+    return true;
+}
+
 // A banked view switches on or off, only the host pages it covers are rebuilt
 bool Memory::SetRegionMapped(int id, bool mapped)
 {
@@ -371,8 +399,10 @@ bool Memory::SetRegionData(int id, const u8* read_data, u8* write_data)
     DebugRegion* region = FindRegion(id);
 
     if (!IsValidPointer(region) ||
-        ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && !IsValidPointer(read_data)) ||
-        ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(write_data)))
+        ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && !IsValidPointer(read_data) &&
+        !IsValidPointer(region->read8)) ||
+        ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(write_data) &&
+        !IsValidPointer(region->write8)))
         return false;
 
     if (region->read_data == read_data && region->write_data == write_data)
@@ -994,8 +1024,7 @@ void Memory::UpdateCPUPage(u32 page)
     InitPointer(m_cpu_read_pages[page]);
     InitPointer(m_cpu_write_pages[page]);
 
-    if (!IsValidPointer(region) ||
-        (region->info.flags & (GT_DEBUG_REGION_MMIO | GT_DEBUG_REGION_VIDEO | GT_DEBUG_REGION_AUDIO)) != 0)
+    if (!IsValidPointer(region) || (region->info.flags & (GT_DEBUG_REGION_MMIO | GT_DEBUG_REGION_AUDIO)) != 0)
         return;
 
     u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;

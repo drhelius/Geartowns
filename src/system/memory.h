@@ -31,6 +31,8 @@ class TraceLogger;
 
 typedef u8 (*GT_Memory_Read8_Fn)(void* device, u32 offset);
 typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
+typedef void (*GT_Memory_Write16_Fn)(void* device, u32 offset, u16 value);
+typedef void (*GT_Memory_Write32_Fn)(void* device, u32 offset, u32 value);
 typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size);
 
 class Memory
@@ -67,6 +69,7 @@ public:
     bool RegisterDebugRegion(int id, const char* name, const u8* read_data, u8* write_data, u32 size, u32 physical_base, u32 flags);
     bool RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
         GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8, GT_Memory_Read8_Fn peek8);
+    bool SetRegionWideHandlers(int id, GT_Memory_Write16_Fn write16, GT_Memory_Write32_Fn write32);
     bool SetRegionMapped(int id, bool mapped);
     bool SetRegionData(int id, const u8* read_data, u8* write_data);
     int GetDebugRegionCount() const;
@@ -123,6 +126,8 @@ private:
         GT_Memory_Read8_Fn read8;
         GT_Memory_Write8_Fn write8;
         GT_Memory_Read8_Fn peek8;
+        GT_Memory_Write16_Fn write16;
+        GT_Memory_Write32_Fn write32;
     };
 
     const DebugRegion* FindRegion(int id) const;

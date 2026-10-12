@@ -183,7 +183,7 @@ void GeartownsCore::Init()
     m_audio->Init(m_scheduler, m_cdrom_audio, m_pic);
     m_pit->Init(m_pic, m_scheduler);
     m_system_control->Init();
-    m_video->Init(m_pic, m_pit, m_scheduler, m_firmware->GetFontRom());
+    m_video->Init(m_pic, m_pit, m_scheduler, m_memory, m_firmware->GetFontRom());
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
     m_fdc->Init(m_pic, m_scheduler, m_dma);
@@ -1536,12 +1536,16 @@ void GeartownsCore::InitMemoryMap()
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM Two-Page", VIDEO_VRAM_SIZE,
         0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPageCallback,
-        Video::WriteVRAMTwoPageCallback, Video::PeekVRAMTwoPageCallback))
+        Video::WriteVRAMTwoPageCallback, Video::PeekVRAMTwoPageCallback) ||
+        !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_VRAM_TWO_PAGE, Video::WriteVRAMTwoPage16Callback,
+        Video::WriteVRAMTwoPage32Callback))
         Error("Unable to map the two-page VRAM view");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM Single-Page", VIDEO_VRAM_SIZE,
         0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePageCallback,
-        Video::WriteVRAMSinglePageCallback, Video::PeekVRAMSinglePageCallback))
+        Video::WriteVRAMSinglePageCallback, Video::PeekVRAMSinglePageCallback) ||
+        !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, Video::WriteVRAMSinglePage16Callback,
+        Video::WriteVRAMSinglePage32Callback))
         Error("Unable to map the single-page VRAM view");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", sprite_ram, sprite_ram,
@@ -1614,4 +1618,5 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to register the FM-R view");
 
     m_memory->ResetMapping();
+    m_video->UpdateVRAMMapping();
 }

@@ -22,6 +22,7 @@
 #include "../system/pic.h"
 #include "../system/pit.h"
 #include "../system/scheduler.h"
+#include "../system/memory.h"
 #include "../common/state_serializer.h"
 
 Video::Video()
@@ -31,6 +32,7 @@ Video::Video()
     InitPointer(m_trace_logger);
     InitPointer(m_pit);
     InitPointer(m_scheduler);
+    InitPointer(m_memory);
     InitPointer(m_font_rom);
     InitPointer(m_frame_buffer);
     m_render = false;
@@ -71,11 +73,12 @@ void Video::SetTraceLogger(TraceLogger* trace_logger)
         m_sprite->SetTraceLogger(trace_logger);
 }
 
-void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom)
+void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, Memory* memory, const u8* font_rom)
 {
     m_pic = pic;
     m_pit = pit;
     m_scheduler = scheduler;
+    m_memory = memory;
     m_font_rom = font_rom;
 
     if (!IsValidPointer(m_sprite))
@@ -261,9 +264,11 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             break;
         case 0x045A:
             m_state.mask[(m_state.mask_index & 0x01) * 2] = value;
+            UpdateVRAMMapping();
             break;
         case 0x045B:
             m_state.mask[(m_state.mask_index & 0x01) * 2 + 1] = value;
+            UpdateVRAMMapping();
             break;
         case 0x05CA:
             m_state.vsync_irq = false;
@@ -345,6 +350,18 @@ void Video::WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value)
     video->WriteVRAMTwoPage(offset, value);
 }
 
+void Video::WriteVRAMTwoPage16Callback(void* device, u32 offset, u16 value)
+{
+    Video* video = (Video*)device;
+    video->WriteVRAMTwoPage16(offset, value);
+}
+
+void Video::WriteVRAMTwoPage32Callback(void* device, u32 offset, u32 value)
+{
+    Video* video = (Video*)device;
+    video->WriteVRAMTwoPage32(offset, value);
+}
+
 u8 Video::ReadVRAMSinglePageCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;
@@ -361,6 +378,18 @@ void Video::WriteVRAMSinglePageCallback(void* device, u32 offset, u8 value)
 {
     Video* video = (Video*)device;
     video->WriteVRAMSinglePage(offset, value);
+}
+
+void Video::WriteVRAMSinglePage16Callback(void* device, u32 offset, u16 value)
+{
+    Video* video = (Video*)device;
+    video->WriteVRAMSinglePage16(offset, value);
+}
+
+void Video::WriteVRAMSinglePage32Callback(void* device, u32 offset, u32 value)
+{
+    Video* video = (Video*)device;
+    video->WriteVRAMSinglePage32(offset, value);
 }
 
 u8 Video::ReadFMRPlanesCallback(void* device, u32 offset)
@@ -417,6 +446,12 @@ void Video::WriteFMRRegisterCallback(void* device, u32 offset, u8 value)
     video->WriteFMRRegister(offset, value);
 }
 
+void Video::UpdateVRAMMapping()
+{
+    u8* write_data = read_u32_le(m_state.mask) == 0xFFFFFFFF ? m_state.vram : NULL;
+    m_memory->SetRegionData(GT_DEBUG_REGION_VRAM_TWO_PAGE, m_state.vram, write_data);
+}
+
 u8 Video::ReadVRAMTwoPage(u32 offset) const
 {
     return m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
@@ -429,6 +464,20 @@ void Video::WriteVRAMTwoPage(u32 offset, u8 value)
     data = (u8)((data & ~mask) | (value & mask));
 }
 
+void Video::WriteVRAMTwoPage16(u32 offset, u16 value)
+{
+    u16 mask = (u16)GetVRAMMask(offset);
+    u8* data = &m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
+    write_u16_le(data, (u16)((read_u16_le(data) & ~mask) | (value & mask)));
+}
+
+void Video::WriteVRAMTwoPage32(u32 offset, u32 value)
+{
+    u32 mask = GetVRAMMask(offset);
+    u8* data = &m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
+    write_u32_le(data, (read_u32_le(data) & ~mask) | (value & mask));
+}
+
 u8 Video::ReadVRAMSinglePage(u32 offset) const
 {
     return m_state.vram[SinglePageToCanonical(offset)];
@@ -439,6 +488,34 @@ void Video::WriteVRAMSinglePage(u32 offset, u8 value)
     u8 mask = m_state.mask[offset & 0x03];
     u8& data = m_state.vram[SinglePageToCanonical(offset)];
     data = (u8)((data & ~mask) | (value & mask));
+}
+
+void Video::WriteVRAMSinglePage16(u32 offset, u16 value)
+{
+    if ((offset & 0x03) == 0x03)
+    {
+        WriteVRAMSinglePage(offset, (u8)value);
+        WriteVRAMSinglePage(offset + 1, (u8)(value >> 8));
+        return;
+    }
+
+    u16 mask = (u16)GetVRAMMask(offset);
+    u8* data = &m_state.vram[SinglePageToCanonical(offset)];
+    write_u16_le(data, (u16)((read_u16_le(data) & ~mask) | (value & mask)));
+}
+
+void Video::WriteVRAMSinglePage32(u32 offset, u32 value)
+{
+    if ((offset & 0x03) != 0)
+    {
+        WriteVRAMSinglePage16(offset, (u16)value);
+        WriteVRAMSinglePage16(offset + 2, (u16)(value >> 16));
+        return;
+    }
+
+    u32 mask = read_u32_le(m_state.mask);
+    u8* data = &m_state.vram[SinglePageToCanonical(offset)];
+    write_u32_le(data, (read_u32_le(data) & ~mask) | (value & mask));
 }
 
 // C0000-C7FFF reads the plane picked by mask bits 7-6
@@ -1427,4 +1504,5 @@ void Video::SanitizeState()
     UpdateGeometry();
     UpdateNextEvent();
     UpdateIRQ();
+    UpdateVRAMMapping();
 }

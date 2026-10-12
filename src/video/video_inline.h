@@ -178,6 +178,13 @@ INLINE u32 Video::FMRToCanonical(u32 offset) const
     return ((offset & 0x7FFF) << 2) + (m_state.fmr_page ? 0x20000 : 0);
 }
 
+INLINE u32 Video::GetVRAMMask(u32 offset) const
+{
+    u32 mask = read_u32_le(m_state.mask);
+    u32 shift = (offset & 0x03) * 8;
+    return (mask >> shift) | (mask << ((32 - shift) & 31));
+}
+
 // Unsigned arithmetic like the reference, so any JIS code lands inside the 256 KiB font ROM
 INLINE u32 Video::GetKanjiOffset() const
 {

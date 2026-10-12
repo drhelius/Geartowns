@@ -27,6 +27,7 @@
 #define VIDEO_SPRITE_RAM_SIZE 0x20000
 #define VIDEO_CRTC_REGISTER_COUNT 32
 
+class Memory;
 class PIC;
 class TraceLogger;
 class PIT;
@@ -84,7 +85,7 @@ public:
 public:
     Video();
     ~Video();
-    void Init(PIC* pic, PIT* pit, Scheduler* scheduler, const u8* font_rom);
+    void Init(PIC* pic, PIT* pit, Scheduler* scheduler, Memory* memory, const u8* font_rom);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void ResetFMRView();
@@ -115,6 +116,7 @@ public:
     void WriteFMRRegister(u32 offset, u8 value);
     Video_Layer_Format GetLayerFormat(int layer) const;
     bool IsTwoPage() const;
+    void UpdateVRAMMapping();
     u8 GetSyncStatus(u64 clocks) const;
     u32 GetBeamHalfLine(u64 clocks) const;
     u32 GetBeamClock(u64 clocks) const;
@@ -122,9 +124,13 @@ public:
     static u8 ReadVRAMTwoPageCallback(void* device, u32 offset);
     static u8 PeekVRAMTwoPageCallback(void* device, u32 offset);
     static void WriteVRAMTwoPageCallback(void* device, u32 offset, u8 value);
+    static void WriteVRAMTwoPage16Callback(void* device, u32 offset, u16 value);
+    static void WriteVRAMTwoPage32Callback(void* device, u32 offset, u32 value);
     static u8 ReadVRAMSinglePageCallback(void* device, u32 offset);
     static u8 PeekVRAMSinglePageCallback(void* device, u32 offset);
     static void WriteVRAMSinglePageCallback(void* device, u32 offset, u8 value);
+    static void WriteVRAMSinglePage16Callback(void* device, u32 offset, u16 value);
+    static void WriteVRAMSinglePage32Callback(void* device, u32 offset, u32 value);
     static u8 ReadFMRPlanesCallback(void* device, u32 offset);
     static u8 PeekFMRPlanesCallback(void* device, u32 offset);
     static void WriteFMRPlanesCallback(void* device, u32 offset, u8 value);
@@ -164,10 +170,15 @@ private:
     u32 BlendLayerColor(u32 color, u32 back) const;
     u32 SinglePageToCanonical(u32 offset) const;
     u32 FMRToCanonical(u32 offset) const;
+    u32 GetVRAMMask(u32 offset) const;
     u8 ReadVRAMTwoPage(u32 offset) const;
     void WriteVRAMTwoPage(u32 offset, u8 value);
+    void WriteVRAMTwoPage16(u32 offset, u16 value);
+    void WriteVRAMTwoPage32(u32 offset, u32 value);
     u8 ReadVRAMSinglePage(u32 offset) const;
     void WriteVRAMSinglePage(u32 offset, u8 value);
+    void WriteVRAMSinglePage16(u32 offset, u16 value);
+    void WriteVRAMSinglePage32(u32 offset, u32 value);
     u8 ReadFMRPlanes(u32 offset) const;
     void WriteFMRPlanes(u32 offset, u8 value);
     u8 ReadFMRText(u32 offset) const;
@@ -189,6 +200,7 @@ private:
     TraceLogger* m_trace_logger;
     PIT* m_pit;
     Scheduler* m_scheduler;
+    Memory* m_memory;
     const u8* m_font_rom;
     u8* m_frame_buffer;
     bool m_render;

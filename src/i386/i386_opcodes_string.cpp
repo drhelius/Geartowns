@@ -287,8 +287,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     u8 opcode = m_state.repeat.opcode;
     bool move = opcode == 0xA4 || opcode == 0xA5;
 
-    if ((!move && opcode != 0xAA && opcode != 0xAB) || (m_state.cr0 & 0x80000000U) != 0 || m_trace_enabled ||
-        (m_state.debug_registers[7] & 0xFF) != 0 ||
+    if ((!move && opcode != 0xAA && opcode != 0xAB) || m_trace_enabled || (m_state.debug_registers[7] & 0xFF) != 0 ||
         (m_state.eflags & I386_FLAG_TF) != 0 || IsValidPointer(m_bus_context->observe_memory_write) ||
         m_bus_context->end_batch)
         return 0;

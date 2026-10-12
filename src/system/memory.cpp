@@ -26,6 +26,7 @@ Memory::Memory()
 {
     InitPointer(m_cpu_read_pages);
     InitPointer(m_cpu_write_pages);
+    InitPointer(m_cpu_page_regions);
     m_cpu_map_generation = 0;
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
@@ -57,6 +58,7 @@ Memory::~Memory()
 {
     SafeDeleteArray(m_cpu_read_pages);
     SafeDeleteArray(m_cpu_write_pages);
+    SafeDeleteArray(m_cpu_page_regions);
     SafeDeleteArray(m_state.main_ram);
 #if !defined(GT_DISABLE_DYNAREC)
     SafeDeleteArray(m_code_pages);
@@ -145,6 +147,19 @@ INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size)
     return found;
 }
 
+INLINE const Memory::DebugRegion* Memory::FindPageSpan(u32 physical, u32 size) const
+{
+    if (m_cpu_map_generation == m_map_generation && size != 0 && (u64)(physical & 0xFFF) + size <= 0x1000)
+    {
+        u8 index = m_cpu_page_regions[physical >> 12];
+
+        if (index != 0)
+            return &m_debug_regions[index - 1];
+    }
+
+    return FindMappedSpan(physical, size);
+}
+
 #if !defined(GT_DISABLE_DYNAREC)
 // Writes that reach RAM pages holding translated code outside the CPU fast path
 INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size)
@@ -207,7 +222,7 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
 {
     if (!IsValidPointer(context.observe_memory_write))
     {
-        const DebugRegion* region = FindMappedSpan(physical, 2);
+        const DebugRegion* region = FindPageSpan(physical, 2);
 
         if (IsValidPointer(region) && (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
         {
@@ -240,7 +255,7 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
 {
     if (!IsValidPointer(context.observe_memory_write))
     {
-        const DebugRegion* region = FindMappedSpan(physical, 4);
+        const DebugRegion* region = FindPageSpan(physical, 4);
 
         if (IsValidPointer(region) && (region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0)
         {
@@ -490,7 +505,7 @@ const u8* Memory::GetPhysicalReadSpan(u32 physical, u32 size) const
         IsValidPointer(m_cpu_read_pages[physical >> 12]))
         return m_cpu_read_pages[physical >> 12] + (physical & 0xFFF);
 
-    const DebugRegion* region = FindMappedSpan(physical, size);
+    const DebugRegion* region = FindPageSpan(physical, size);
 
     if (!IsValidPointer(region) || !IsValidPointer(region->read_data) ||
         (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
@@ -905,7 +920,7 @@ GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset,
 // Registers end the CPU batch, so polling them sees time move like a port does
 u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
 {
-    const DebugRegion* region = FindMappedRegion(bus_address);
+    const DebugRegion* region = FindPageSpan(bus_address, 1);
 
     if (!IsValidPointer(region) || (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
         return 0xFF;
@@ -926,7 +941,7 @@ u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
 
 void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
 {
-    DebugRegion* region = FindMappedRegion(bus_address);
+    const DebugRegion* region = FindPageSpan(bus_address, 1);
 
     if (!IsValidPointer(region) ||
         (!IsValidPointer(region->write_data) && !IsValidPointer(region->write8)) ||
@@ -1001,10 +1016,12 @@ void Memory::PrepareCPUMap()
     {
         m_cpu_read_pages = new const u8*[page_count];
         m_cpu_write_pages = new u8*[page_count];
+        m_cpu_page_regions = new u8[page_count];
     }
 
     memset(m_cpu_read_pages, 0, page_count * sizeof(m_cpu_read_pages[0]));
     memset(m_cpu_write_pages, 0, page_count * sizeof(m_cpu_write_pages[0]));
+    memset(m_cpu_page_regions, 0, page_count);
 
     // A mask inside a page cannot be represented by a contiguous host pointer
     if ((m_physical_address_mask & 0xFFF) == 0xFFF)
@@ -1021,6 +1038,7 @@ void Memory::UpdateCPUPage(u32 page)
     u32 physical = page << 12;
     const DebugRegion* region = FindMappedSpan(physical, 0x1000);
 
+    m_cpu_page_regions[page] = IsValidPointer(region) ? (u8)(region - m_debug_regions + 1) : 0;
     InitPointer(m_cpu_read_pages[page]);
     InitPointer(m_cpu_write_pages[page]);
 

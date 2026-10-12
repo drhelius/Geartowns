@@ -135,6 +135,7 @@ private:
     const DebugRegion* FindMappedRegion(u32 bus_address) const;
     DebugRegion* FindMappedRegion(u32 bus_address);
     const DebugRegion* FindMappedSpan(u32 physical, u32 size) const;
+    const DebugRegion* FindPageSpan(u32 physical, u32 size) const;
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
     GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
@@ -154,6 +155,7 @@ private:
 private:
     const u8** m_cpu_read_pages;
     u8** m_cpu_write_pages;
+    u8* m_cpu_page_regions;
     u32 m_cpu_map_generation;
 
     DebugRegion m_debug_regions[GT_DEBUG_MEMORY_MAX_REGIONS];

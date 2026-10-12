@@ -99,10 +99,10 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 
 ## Features
 
-- CD-ROM drive emulation with `cue/bin`, `iso` and `chd` images, `m3u` disc playlists and disc swapping.
-- Support for playing physical CD-ROM discs on Windows, macOS and Linux.
+- Very accurate 80386 core that passes [test386](https://github.com/barotto/test386.asm) and [SingleStepTests/80386](https://github.com/singlesteptests/80386).
+- CD-ROM drive emulation with `cue/bin`, `iso` and `chd` images, `m3u` disc playlists and disc swapping, with optional compressed images (`zip`).
+- Physical CD-ROM discs on Windows, macOS and Linux.
 - Floppy disk emulation with two drives supporting `d77`, `d88`, `hdm`, `xdf` and `img` images, `m3u` playlists, write protection and optional persistence of disk changes.
-- Compressed image support (`zip`).
 - Save states with 5 slots and rewind support.
 - Run-ahead support to reduce input latency.
 - Video recording to AVI and screenshots.

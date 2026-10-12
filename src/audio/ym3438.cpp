@@ -189,9 +189,12 @@ void YM3438::Reset()
 
     m_state.csm_key_pending = 0;
     m_state.csm_key_active = 0;
+    m_state.key_update_samples = 2;
 
     m_state.envelope_counter = 0;
     m_state.envelope_divider = 0;
+    m_state.envelope_active = k_ym3438_all_operators;
+    m_state.channels_silent = 0;
 
     m_state.native_cycle = 0;
     m_state.elapsed_cycles = 0;
@@ -284,21 +287,53 @@ void YM3438::TimerAOverflow()
 void YM3438::GenerateNativeSample()
 {
     ClockTimers();
-    UpdateKeyStates();
+
+    // S1 settles two samples after a 0x28 write
+    // CSM keys channel 3 on for one sample and off on the next
+    if (m_state.key_update_samples || m_state.csm_key_pending || m_state.csm_key_active)
+        UpdateKeyStates();
+
     UpdateEnvelopes();
 
     s32 left = 0;
     s32 right = 0;
 
-    for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+    // Silent channels with settled feedback repeat their last output
+    // Only the DAC can still change the mix
+    if (m_state.channels_silent && m_state.envelope_active == 0)
     {
-        s16 output = CalculateChannel(i);
+        if (m_state.lfo_phase_changed)
+        {
+            for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+            {
+                if (m_state.channels[i].phase_modulation)
+                    m_state.channels[i].phase_dirty = 1;
+            }
+        }
 
-        if (m_pan_left[i])
-            left += output;
+        s16 dac = m_state.dac_enabled ? m_state.dac_data : 0;
+        m_state.channels[5].output = dac;
 
-        if (m_pan_right[i])
-            right += output;
+        if (m_pan_left[5])
+            left = dac;
+
+        if (m_pan_right[5])
+            right = dac;
+    }
+    else
+    {
+        m_state.channels_silent = 1;
+
+        for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+        {
+            s16 output = CalculateChannel(i);
+
+            if (m_pan_left[i])
+                left += output;
+
+            if (m_pan_right[i])
+                right += output;
+        }
     }
 
     m_state.lfo_phase_changed = 0;
@@ -316,6 +351,9 @@ void YM3438::UpdateKeyStates()
     // A Timer A overflow in CSM mode keys on channel 3 within the same sample, and only for that sample
     m_state.csm_key_active = m_state.csm_key_pending;
     m_state.csm_key_pending = 0;
+
+    if (m_state.key_update_samples > 0)
+        m_state.key_update_samples--;
 
     for (int channel_index = 0; channel_index < YM3438_CHANNEL_COUNT; channel_index++)
     {
@@ -374,11 +412,24 @@ void YM3438::UpdateEnvelopes()
             m_state.envelope_counter = 1;
     }
 
+    // Stationary operators sleep until a key event, CSM or an envelope register write wakes them
+    if (m_state.csm_key_active)
+        m_state.envelope_active |= 0x0F << (2 * YM3438_OPERATOR_COUNT);
+
+    if (m_state.envelope_active == 0)
+        return;
+
     for (int channel = 0; channel < YM3438_CHANNEL_COUNT; channel++)
     {
+        u32 active = (m_state.envelope_active >> (channel * YM3438_OPERATOR_COUNT)) & 0x0F;
+
+        if (active == 0)
+            continue;
+
         for (int operator_index = 0; operator_index < YM3438_OPERATOR_COUNT; operator_index++)
         {
-            UpdateEnvelope(m_state.channels[channel].operators[operator_index], channel, operator_index);
+            if (active & (1 << operator_index))
+                UpdateEnvelope(m_state.channels[channel].operators[operator_index], channel, operator_index);
         }
     }
 }
@@ -399,6 +450,7 @@ void YM3438::UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index
         ((op.state == YM3438_ENVELOPE_SUSTAIN && op.key_on && op.sustain_rate == 0 && !envelope_off) ||
          (op.state == YM3438_ENVELOPE_RELEASE && op.envelope == k_ym3438_envelope_max)))
     {
+        m_state.envelope_active &= ~(1U << (channel * YM3438_OPERATOR_COUNT + operator_index));
         return;
     }
 
@@ -590,6 +642,7 @@ void YM3438::SetKeyState(YM3438_Operator& op, bool key_on, int channel, int oper
             op.state = YM3438_ENVELOPE_ATTACK;
             op.phase = 0;
             op.ssg_direction = 0;
+            m_state.envelope_active |= 1U << (channel * YM3438_OPERATOR_COUNT + operator_index);
 
             if (GetEnvelopeRate(op, channel, operator_index) >= 62)
                 op.envelope = 0;
@@ -608,6 +661,7 @@ void YM3438::SetKeyState(YM3438_Operator& op, bool key_on, int channel, int oper
         op.key_on = 0;
         op.key_on_pending = 0;
         op.ssg_direction = 0;
+        m_state.envelope_active |= 1U << (channel * YM3438_OPERATOR_COUNT + operator_index);
     }
 }
 
@@ -618,6 +672,7 @@ void YM3438::KeyOnChannel(int channel, u8 slots)
 
     // S1 picks this up one sample later, in UpdateKeyStates
     m_state.channels[channel].s1_key_written = slots & 0x01;
+    m_state.key_update_samples = 2;
 
     for (int i = 1; i < YM3438_OPERATOR_COUNT; i++)
     {
@@ -667,8 +722,14 @@ s16 YM3438::CalculateChannel(int channel_index)
         channel.feedback_output[1] = channel.feedback_output[0];
         channel.feedback_output[0] = 0;
         channel.output = (channel_index == 5 && m_state.dac_enabled) ? m_state.dac_data : 0;
+
+        if (channel.feedback_output[1] != 0)
+            m_state.channels_silent = 0;
+
         return channel.output;
     }
+
+    m_state.channels_silent = 0;
 
     s32 feedback = 0;
 
@@ -1072,6 +1133,9 @@ void YM3438::WriteOperatorRegister(int bank, u8 address, u8 value)
         default:
             break;
     }
+
+    if (address >= 0x50)
+        m_state.envelope_active |= 1U << (channel * YM3438_OPERATOR_COUNT + slot);
 }
 
 void YM3438::WriteChannelRegister(int bank, u8 address, u8 value)
@@ -1302,8 +1366,11 @@ void YM3438::SanitizeState()
     m_state.timer_b_flag &= 0x01;
     m_state.csm_key_pending &= 0x01;
     m_state.csm_key_active &= 0x01;
+    m_state.key_update_samples = 2;
     m_state.envelope_counter &= 0x0FFF;
     m_state.envelope_divider %= 3;
+    m_state.envelope_active = k_ym3438_all_operators;
+    m_state.channels_silent = 0;
     m_state.native_cycle %= k_ym3438_native_sample_cycles;
     m_state.busy_cycles = MIN(m_state.busy_cycles, (u32)k_ym3438_busy_cycles);
     m_state.status &= 0x83;

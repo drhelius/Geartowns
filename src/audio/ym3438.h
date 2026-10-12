@@ -120,9 +120,12 @@ public:
 
         u8 csm_key_pending;
         u8 csm_key_active;
+        u8 key_update_samples;
 
         u32 envelope_counter;
         u8 envelope_divider;
+        u32 envelope_active;
+        u8 channels_silent;
 
         u32 native_cycle;
         u64 elapsed_cycles;
@@ -220,6 +223,7 @@ static const int k_ym3438_busy_cycles = 192;
 static const u32 k_ym3438_phase_mask = 0xFFFFF;
 static const int k_ym3438_envelope_max = 0x3FF;
 static const int k_ym3438_ssg_envelope_max = 0x200;
+static const u32 k_ym3438_all_operators = 0xFFFFFF;
 
 #include "ym3438_inline.h"
 

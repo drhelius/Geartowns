@@ -25,7 +25,6 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <SDL3/SDL.h>
 
 #include "../config.h"
 #include "../emu.h"
@@ -35,6 +34,7 @@
 #include "gui_debug_memory_provider.h"
 #include "../gui_filedialogs.h"
 #include "../gui_notifications.h"
+#include "../shift_jis.h"
 #include "../utils.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -1058,7 +1058,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         const int text_size = 8;
-        u8 text_data[text_size + 1];
+        u8 text_data[text_size];
         GT_Debug_Memory_Status text_status[text_size];
         memory_provider.ReadBlock(address, text_data, text_status, text_size, NULL);
         int readable = 0;
@@ -1087,18 +1087,14 @@ static void draw_inspector(MemEditor& editor)
         while (text_length < readable && text_data[text_length] != 0)
             text_length++;
 
-        text_data[text_length] = 0;
-        char* shift_jis = text_length > 0 ?
-            SDL_iconv_string("UTF-8", "SHIFT-JIS", (const char*)text_data, (size_t)text_length + 1) : NULL;
+        char shift_jis[text_size * 3 + 1];
+        shift_jis_to_utf8(text_data, text_length, shift_jis, sizeof(shift_jis));
 
         ImGui::TableNextRow();
         draw_inspector_label("SJIS");
 
-        if (IsValidPointer(shift_jis))
-        {
+        if (text_length > 0)
             ImGui::TextColored(white, "%s", shift_jis);
-            SDL_free(shift_jis);
-        }
         else
             ImGui::TextColored(gray, "--");
 
@@ -2309,16 +2305,15 @@ static bool parse_pattern(const char* text, int type, std::vector<u8>& pattern, 
 
     if (type == 2)
     {
-        char* converted = SDL_iconv_string("SHIFT-JIS", "UTF-8", text, strlen(text) + 1);
+        pattern.resize(strlen(text));
+        int length = shift_jis_from_utf8(text, pattern.data(), (int)pattern.size());
 
-        if (!IsValidPointer(converted))
+        if (length <= 0)
             return false;
 
-        size_t length = strlen(converted);
-        pattern.assign((u8*)converted, (u8*)converted + length);
+        pattern.resize(length);
         mask.assign(length, 0xFF);
-        SDL_free(converted);
-        return !pattern.empty();
+        return true;
     }
 
     std::string compact;

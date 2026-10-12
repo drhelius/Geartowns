@@ -27,6 +27,7 @@
 #include "gui_debug_memory.h"
 #include "../gui.h"
 #include "../gui_colors.h"
+#include "../shift_jis.h"
 #include "gui_debug_memory_provider.h"
 #include "i386/i386.h"
 #include "imgui.h"
@@ -681,10 +682,11 @@ void MemEditor::DrawGrid()
     s64 row_count = GetRowCount(bytes_per_row);
     u64 limit = m_provider->GetAddressLimit(m_source);
     ImVec2 character_size = ImGui::CalcTextSize("0");
+    float character_advance = ImGui::GetFontBaked()->GetCharAdvance('0');
     float address_width = ImGui::CalcTextSize("FFFFFFFF").x + 12.0f;
     float cell_width = character_size.x * 2.0f + 6.0f;
     const char* text_header = m_options.text_encoding == 0 ? "ASCII" : "SHIFT-JIS";
-    float text_width = MAX(character_size.x * bytes_per_row, ImGui::CalcTextSize(text_header).x) + 4.0f;
+    float text_width = MAX(character_advance * bytes_per_row, ImGui::CalcTextSize(text_header).x) + 4.0f;
     ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoKeepColumnsVisible;
     float inner_width = address_width + bytes_per_row * cell_width + text_width + 8.0f;
     float row_height = ImGui::GetTextLineHeight();
@@ -810,8 +812,8 @@ void MemEditor::DrawGrid()
             if (address > limit || address < GetSelectionStart() || address > GetSelectionEnd())
                 continue;
 
-            ImVec2 minimum = text_position + ImVec2(character_size.x * column, 0.0f);
-            ImVec2 maximum = minimum + ImVec2(character_size.x, character_size.y);
+            ImVec2 minimum = text_position + ImVec2(character_advance * column, 0.0f);
+            ImVec2 maximum = minimum + ImVec2(character_advance, character_size.y);
             draw_list->AddRectFilled(minimum, maximum, ImGui::GetColorU32(dark_cyan));
         }
 
@@ -819,19 +821,20 @@ void MemEditor::DrawGrid()
             ImGui::TextColored(magenta, "%s", text);
         else
         {
-            char raw[65];
-            int raw_length = MIN(bytes_per_row, 64);
+            u8 raw[64];
+            char converted[64 * 3 + 1];
+            int raw_length = (int)MIN((u64)MIN(bytes_per_row, 64), limit - row_address + 1);
 
             for (int i = 0; i < raw_length; i++)
             {
                 u32 offset = row_offset + i;
-                raw[i] = offset < m_data.size() && (u64)row_address + i <= limit ? (char)m_data[offset] : 0;
+                bool readable = offset < m_data.size() &&
+                    (m_status[offset] == GT_DEBUG_MEMORY_VALID || m_status[offset] == GT_DEBUG_MEMORY_READ_ONLY);
+                raw[i] = readable ? m_data[offset] : 0;
             }
 
-            raw[raw_length] = 0;
-            char* converted = SDL_iconv_string("UTF-8", "SHIFT-JIS", raw, (size_t)raw_length + 1);
-            ImGui::TextColored(magenta, "%s", IsValidPointer(converted) ? converted : text);
-            SDL_free(converted);
+            shift_jis_to_utf8(raw, raw_length, converted, sizeof(converted));
+            ImGui::TextColored(magenta, "%s", converted);
         }
     }
 

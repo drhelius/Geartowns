@@ -20,7 +20,6 @@
 #define GUI_DEBUG_FLOPPY_IMPORT
 #include "gui_debug_floppy.h"
 
-#include <SDL3/SDL.h>
 #include "imgui.h"
 #include "geartowns.h"
 #include "drive/fdc.h"
@@ -33,6 +32,7 @@
 #include "../emu_floppy.h"
 #include "../gui.h"
 #include "../gui_colors.h"
+#include "../shift_jis.h"
 #include "../utils.h"
 #include "gui_debug_constants.h"
 #include "gui_debug_memory.h"
@@ -624,12 +624,11 @@ static void draw_drive_column(int drive, int row)
     }
 }
 
-// D77 names are Shift-JIS, converted to UTF-8, with ASCII as the fallback
+// D77 names are Shift-JIS, converted to UTF-8
 void gui_debug_floppy_disk_name(FloppyDisk* disk, char* name, size_t size)
 {
     const u8* image = disk->GetImage();
-    char raw[18] = { };
-    size_t length = 0;
+    int length = 0;
 
     name[0] = 0;
 
@@ -637,26 +636,9 @@ void gui_debug_floppy_disk_name(FloppyDisk* disk, char* name, size_t size)
         return;
 
     while (length < 17 && image[length] != 0)
-    {
-        raw[length] = (char)image[length];
         length++;
-    }
 
-    char* converted = SDL_iconv_string("UTF-8", "SHIFT-JIS", raw, length + 1);
-
-    if (IsValidPointer(converted))
-    {
-        snprintf(name, size, "%s", converted);
-        SDL_free(converted);
-        return;
-    }
-
-    for (size_t i = 0; i < length && i + 1 < size; i++)
-    {
-        u8 c = (u8)raw[i];
-        name[i] = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
-        name[i + 1] = 0;
-    }
+    shift_jis_to_utf8(image, length, name, size);
 }
 
 // Cylinders and heads cover every formatted track, sectors per track come from track 0

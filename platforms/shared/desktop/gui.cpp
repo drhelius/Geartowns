@@ -23,6 +23,7 @@
 #include "fonts/RobotoMedium.h"
 #include "fonts/MaterialIcons.h"
 #include "fonts/IconsMaterialDesign.h"
+#include "fonts/BIZUDGothic.h"
 #include "config.h"
 #include "application.h"
 #include "emu.h"
@@ -103,12 +104,33 @@ bool gui_init(void)
     icons_config.GlyphOffset = { 0.0f, 5.0f };
     gui_material_icons_font = io.Fonts->AddFontFromMemoryCompressedTTF(MaterialIcons_compressed_data, MaterialIcons_compressed_size, iconFontSize, &icons_config, icons_ranges);
 
+    ImFontConfig japanese_config;
+    japanese_config.MergeMode = true;
+    japanese_config.FontDataOwnedByAtlas = false;
+    io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, 17.0f, &japanese_config);
+
+    // Memory editor columns need one ProggyClean cell (7 px per 13 px) per Shift-JIS byte
+    // Shift-JIS has these Latin-1 symbols as double-byte characters, so the Japanese font draws them
+    // ProggyClean glyphs sit 1 px lower per 13 px and the Japanese baseline follows
+    static const ImWchar latin_ranges[] = { 0x00A7, 0x00A8, 0x00B0, 0x00B1, 0x00B4, 0x00B4, 0x00B6, 0x00B6, 0x00D7, 0x00D7, 0x00F7, 0x00F7, 0 };
+    static const ImWchar not_half_width_ranges[] = { 0x0001, 0xFF60, 0xFFA0, 0xFFFF, 0 };
     ImFontConfig font_cfg;
+    font_cfg.GlyphExcludeRanges = latin_ranges;
 
     for (int i = 0; i < 4; i++)
     {
         font_cfg.SizePixels = (13.0f + (i * 3));
         gui_default_fonts[i] = io.Fonts->AddFontDefault(&font_cfg);
+
+        float cell = font_cfg.SizePixels * 7.0f / 13.0f;
+        japanese_config.GlyphOffset = { 0.0f, font_cfg.SizePixels / 13.0f };
+        japanese_config.GlyphExcludeRanges = not_half_width_ranges;
+        japanese_config.GlyphMinAdvanceX = japanese_config.GlyphMaxAdvanceX = cell;
+        io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, font_cfg.SizePixels, &japanese_config);
+
+        japanese_config.GlyphExcludeRanges = NULL;
+        japanese_config.GlyphMinAdvanceX = japanese_config.GlyphMaxAdvanceX = cell * 2.0f;
+        io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, font_cfg.SizePixels, &japanese_config);
     }
 
     gui_apply_settings();

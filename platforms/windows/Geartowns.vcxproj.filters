@@ -133,6 +133,9 @@
     <ClCompile Include="..\shared\desktop\single_instance.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\shift_jis.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -645,6 +648,9 @@
     <ClInclude Include="..\shared\desktop\single_instance.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\shift_jis.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\dependencies\json\json.hpp">
       <Filter>dependencies</Filter>
     </ClInclude>
@@ -696,6 +702,9 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="..\shared\dependencies\glad\glad.h">
       <Filter>dependencies\glad</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\dependencies\imgui\fonts\BIZUDGothic.h">
+      <Filter>dependencies\imgui\fonts</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\dependencies\imgui\fonts\IconsMaterialDesign.h">
       <Filter>dependencies\imgui\fonts</Filter>

@@ -58,6 +58,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/emu.cpp \
     $(DESKTOP_SRC_DIR)/emu_floppy.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
+    $(DESKTOP_SRC_DIR)/shift_jis.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_audio.cpp \

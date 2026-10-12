@@ -151,6 +151,7 @@
     <ClCompile Include="..\shared\desktop\emu.cpp" />
     <ClCompile Include="..\shared\desktop\emu_floppy.cpp" />
     <ClCompile Include="..\shared\desktop\single_instance.cpp" />
+    <ClCompile Include="..\shared\desktop\shift_jis.cpp" />
     <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp" />
     <ClCompile Include="..\shared\desktop\mcp\mcp_server.cpp" />
     <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp" />
@@ -324,6 +325,7 @@
     <ClInclude Include="..\shared\desktop\keyboard.h" />
     <ClInclude Include="..\shared\desktop\sound_queue.h" />
     <ClInclude Include="..\shared\desktop\single_instance.h" />
+    <ClInclude Include="..\shared\desktop\shift_jis.h" />
     <ClInclude Include="..\shared\desktop\application.h" />
     <ClInclude Include="..\shared\desktop\application_headless.h" />
     <ClInclude Include="..\shared\desktop\backers.h" />
@@ -371,6 +373,7 @@
     <ClInclude Include="..\shared\desktop\gui_floppy.h" />
     <ClInclude Include="..\shared\desktop\gui_notifications.h" />
     <ClInclude Include="..\shared\desktop\gui.h" />
+    <ClInclude Include="..\shared\dependencies\imgui\fonts\BIZUDGothic.h" />
     <ClInclude Include="..\shared\dependencies\imgui\fonts\IconsMaterialDesign.h" />
     <ClInclude Include="..\shared\dependencies\imgui\fonts\MaterialIcons.h" />
     <ClInclude Include="..\shared\dependencies\imgui\fonts\RobotoMedium.h" />

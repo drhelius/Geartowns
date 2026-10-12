@@ -144,6 +144,7 @@ private:
     u32 NormalizePhysicalAddress(u32 physical) const;
     void UpdateRAMRegions();
     void UpdateCPUPage(u32 page);
+    void UpdateCPUPage(u32 page, const DebugRegion* region);
     void RemapRange(u32 base, u32 size);
 #if !defined(GT_DISABLE_DYNAREC)
     void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size);

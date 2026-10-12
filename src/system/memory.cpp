@@ -1035,8 +1035,12 @@ void Memory::PrepareCPUMap()
 
 void Memory::UpdateCPUPage(u32 page)
 {
+    UpdateCPUPage(page, FindMappedSpan(page << 12, 0x1000));
+}
+
+void Memory::UpdateCPUPage(u32 page, const DebugRegion* region)
+{
     u32 physical = page << 12;
-    const DebugRegion* region = FindMappedSpan(physical, 0x1000);
 
     m_cpu_page_regions[page] = IsValidPointer(region) ? (u8)(region - m_debug_regions + 1) : 0;
     InitPointer(m_cpu_read_pages[page]);
@@ -1074,9 +1078,15 @@ void Memory::RemapRange(u32 base, u32 size)
         return;
 
     u32 last = (u32)(((u64)base + size - 1) >> 12);
+    const DebugRegion* region = ((base | size) & 0xFFF) == 0 ? FindMappedSpan(base, size) : NULL;
 
     for (u32 page = base >> 12; page <= last; page++)
-        UpdateCPUPage(page);
+    {
+        if (IsValidPointer(region))
+            UpdateCPUPage(page, region);
+        else
+            UpdateCPUPage(page);
+    }
 
     m_cpu_map_generation = m_map_generation;
 }

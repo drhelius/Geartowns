@@ -181,17 +181,6 @@ void gui_floppy_menu(int drive, const char* label, int drives)
         ImGui::EndMenu();
     }
 
-    ImGui::Separator();
-
-    if (drives > 1)
-    {
-        Emu_FloppyInfo other;
-        emu_floppy_get_info(drive ^ 1, &other);
-
-        if ((info.inserted || other.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
-            emu_floppy_swap();
-    }
-
     ImGui::MenuItem("Remember Changes", NULL, &config_emulator.floppy_persistence);
 
     if (ImGui::IsItemHovered())
@@ -201,6 +190,17 @@ void gui_floppy_menu(int drive, const char* label, int drives)
         ImGui::Text("Changes go to a working copy in the save files folder, the original image is never modified.");
         ImGui::Text("Disabled, disks are inserted write protected.");
         ImGui::EndTooltip();
+    }
+
+    if (drives > 1)
+    {
+        ImGui::Separator();
+
+        Emu_FloppyInfo other;
+        emu_floppy_get_info(drive ^ 1, &other);
+
+        if ((info.inserted || other.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
+            emu_floppy_swap();
     }
 
     ImGui::EndMenu();

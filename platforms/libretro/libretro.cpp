@@ -929,18 +929,25 @@ static void update_frameskip(void)
 
 static void set_controller_info(void)
 {
-    static const struct retro_controller_description port[] = {
-        { "Auto", RETRO_DEVICE_JOYPAD },
-        { "Original gamepad", RETRO_DEVICE_TOWNS_GAMEPAD },
+    static const struct retro_controller_description port_1[] = {
+        { "Original gamepad", RETRO_DEVICE_JOYPAD },
         { "Marty gamepad", RETRO_DEVICE_TOWNS_MARTY },
         { "6 button gamepad", RETRO_DEVICE_TOWNS_6_BUTTON },
         { "Mouse", RETRO_DEVICE_TOWNS_MOUSE },
         { "Keyboard", RETRO_DEVICE_TOWNS_KEYBOARD }
     };
 
+    static const struct retro_controller_description port_2[] = {
+        { "Mouse", RETRO_DEVICE_JOYPAD },
+        { "Original gamepad", RETRO_DEVICE_TOWNS_GAMEPAD },
+        { "Marty gamepad", RETRO_DEVICE_TOWNS_MARTY },
+        { "6 button gamepad", RETRO_DEVICE_TOWNS_6_BUTTON },
+        { "Keyboard", RETRO_DEVICE_TOWNS_KEYBOARD }
+    };
+
     static const struct retro_controller_info ports[] = {
-        { port, 6 },
-        { port, 6 },
+        { port_1, 5 },
+        { port_2, 5 },
         { NULL, 0 }
     };
 
@@ -1095,6 +1102,10 @@ static void update_controller_devices(unsigned port)
 
         if ((input_device[i] != device) && core)
             release_controller_input(i);
+
+        if ((i == AUTO_MOUSE_PORT) && (requested_device[i] == RETRO_DEVICE_JOYPAD) &&
+            (device == RETRO_DEVICE_TOWNS_GAMEPAD) && (input_device[i] != device))
+            show_message("Port 2: Original gamepad, the mouse is in port 1", 1, RETRO_LOG_INFO);
 
         input_device[i] = device;
         apply_controller_device(i, device, true);

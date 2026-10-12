@@ -183,7 +183,7 @@ void I386::LoadDescriptorCache(u16 selector, const Descriptor& descriptor, I386_
     segment.limit = descriptor.limit;
     segment.attributes = descriptor.attributes;
     segment.dpl = descriptor.dpl;
-    UpdateSegmentFastPaths();
+    UpdateSegmentFastPaths(segment);
 }
 
 // A null selector zeroes the cache, as the microcode does, so a real mode reload keeps a limit of 0
@@ -191,7 +191,7 @@ void I386::ClearSegmentCache(u16 selector, I386_Segment& segment)
 {
     memset(&segment, 0, sizeof(segment));
     segment.selector = selector;
-    UpdateSegmentFastPaths();
+    UpdateSegmentFastPaths(segment);
 }
 
 bool I386::SetDescriptorAccessed(const Descriptor& descriptor, GT_Bus_Access_Context& context)

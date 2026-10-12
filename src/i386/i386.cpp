@@ -968,7 +968,7 @@ bool I386::LoadRealSegment(int segment, u16 selector)
     state.selector = selector;
     state.base = (u32)selector << 4;
     state.attributes |= I386_SEGMENT_PRESENT;
-    UpdateSegmentFastPaths();
+    UpdateSegmentFastPaths(state);
     return true;
 }
 

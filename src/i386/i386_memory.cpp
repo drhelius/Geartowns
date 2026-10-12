@@ -55,49 +55,67 @@ void I386::UpdateSegmentFastPaths()
         m_code_limit = code.limit;
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+        UpdateSegmentFastPath(i);
+}
+
+// CS and SS also set the operand and stack sizes, the code window and the dynarec block key
+void I386::UpdateSegmentFastPaths(const I386_Segment& segment)
+{
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        const I386_Segment& segment = m_state.segments[i];
-        bool executable = (segment.attributes & I386_SEGMENT_EXECUTABLE) != 0;
-
-        m_read_limits[i] = -1;
-        m_write_limits[i] = -1;
-
-        if (!m_slow_memory && (segment.attributes & I386_SEGMENT_PRESENT) != 0)
+        if (&segment == &m_state.segments[i] && i != I386_SEGMENT_CS && i != I386_SEGMENT_SS)
         {
-            if (m_state.execution_mode != I386_MODE_PROTECTED)
-            {
-                if ((segment.attributes & I386_SEGMENT_EXPAND_DOWN) == 0)
-                    m_read_limits[i] = m_write_limits[i] = segment.limit;
-            }
-            else if ((segment.selector & 0xFFFC) != 0 &&
-                (segment.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
-            {
-                if (!executable || (segment.attributes & I386_SEGMENT_READABLE) != 0)
-                    m_read_limits[i] = segment.limit;
-
-                if (!executable && (segment.attributes & I386_SEGMENT_WRITABLE) != 0)
-                    m_write_limits[i] = segment.limit;
-            }
+            UpdateSegmentFastPath(i);
+            return;
         }
+    }
 
-        u8 access_flags = 0;
-        u16 flat_mask = I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN;
+    UpdateSegmentFastPaths();
+}
 
-        if ((segment.selector & 0xFFFC) != 0 && (segment.attributes & flat_mask) == I386_SEGMENT_PRESENT &&
-            segment.base == 0 && segment.limit == 0xFFFFFFFFU)
+void I386::UpdateSegmentFastPath(int index)
+{
+    const I386_Segment& segment = m_state.segments[index];
+    bool executable = (segment.attributes & I386_SEGMENT_EXECUTABLE) != 0;
+
+    m_read_limits[index] = -1;
+    m_write_limits[index] = -1;
+
+    if (!m_slow_memory && (segment.attributes & I386_SEGMENT_PRESENT) != 0)
+    {
+        if (m_state.execution_mode != I386_MODE_PROTECTED)
+        {
+            if ((segment.attributes & I386_SEGMENT_EXPAND_DOWN) == 0)
+                m_read_limits[index] = m_write_limits[index] = segment.limit;
+        }
+        else if ((segment.selector & 0xFFFC) != 0 &&
+            (segment.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
         {
             if (!executable || (segment.attributes & I386_SEGMENT_READABLE) != 0)
-                access_flags |= k_i386_segment_fast_read;
+                m_read_limits[index] = segment.limit;
 
             if (!executable && (segment.attributes & I386_SEGMENT_WRITABLE) != 0)
-                access_flags |= k_i386_segment_fast_write;
-
-            if (executable)
-                access_flags |= k_i386_segment_fast_execute;
+                m_write_limits[index] = segment.limit;
         }
-
-        m_segment_access_flags[i] = access_flags;
     }
+
+    u8 access_flags = 0;
+    u16 flat_mask = I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN;
+
+    if ((segment.selector & 0xFFFC) != 0 && (segment.attributes & flat_mask) == I386_SEGMENT_PRESENT &&
+        segment.base == 0 && segment.limit == 0xFFFFFFFFU)
+    {
+        if (!executable || (segment.attributes & I386_SEGMENT_READABLE) != 0)
+            access_flags |= k_i386_segment_fast_read;
+
+        if (!executable && (segment.attributes & I386_SEGMENT_WRITABLE) != 0)
+            access_flags |= k_i386_segment_fast_write;
+
+        if (executable)
+            access_flags |= k_i386_segment_fast_execute;
+    }
+
+    m_segment_access_flags[index] = access_flags;
 }
 
 void I386::RefreshMemoryPointers()
@@ -426,6 +444,17 @@ bool I386::ReadLinear(u32 linear, int width, GT_Bus_Access_Context& context, u32
 {
     u32 bytes = (u32)width >> 3;
     value = 0;
+
+    if ((linear & 0xFFF) + bytes <= 0x1000)
+    {
+        u32 physical = 0;
+
+        if (!TranslateLinear(linear, false, context, physical, supervisor))
+            return false;
+
+        value = ReadPhysical(physical, bytes, context);
+        return true;
+    }
 
     for (u32 i = 0; i < bytes; i++)
     {

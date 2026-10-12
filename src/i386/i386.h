@@ -763,6 +763,8 @@ private:
     void SetVM86Segment(I386_Segment_Register segment, u16 selector);
     void LoadRealCodeSegment(u16 selector, bool direct_jump);
     void UpdateSegmentFastPaths();
+    void UpdateSegmentFastPaths(const I386_Segment& segment);
+    void UpdateSegmentFastPath(int index);
     void UpdateExecutionMode();
     void UpdateDebugState() const;
     static bool EqualName(const char* left, const char* right);

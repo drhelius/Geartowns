@@ -890,11 +890,6 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
 
         if (overlaps)
         {
-            I386_Disassembler_Record*& cached = m_disassembler_cache[existing->first & (k_i386_disassembler_cache_size - 1)];
-
-            if (cached == &existing->second)
-                InitPointer(cached);
-
             if (existing->second.auto_symbol[0] != 0)
             {
                 existing->second.name[0] = 0;
@@ -902,7 +897,10 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
                 existing++;
             }
             else
+            {
+                SetDisassemblerRecord(existing->first, NULL);
                 existing = m_disassembler_records.erase(existing);
+            }
         }
         else
             existing++;
@@ -910,6 +908,7 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
 
     I386_Disassembler_Record& record = m_disassembler_records[linear];
 
+    SetDisassemblerRecord(linear, &record);
     memcpy(decoded.auto_symbol, record.auto_symbol, sizeof(decoded.auto_symbol));
     record = decoded;
 
@@ -983,6 +982,7 @@ I386_Disassembler_Record& I386::GetOrCreateDisassemblerRecord(u32 linear, u16 cs
         record->second.cs = cs;
         record->second.eip = eip;
         record->second.linear = linear;
+        SetDisassemblerRecord(linear, &record->second);
     }
 
     return record->second;
@@ -1066,9 +1066,48 @@ void I386::DisassembleAhead(const I386_Segment& code_segment, u32 start_eip, int
     }
 }
 
-void I386::ClearDisassemblerCache()
+void I386::DisassembleExecuted(const I386_Segment& code, u32 eip)
 {
-    memset(m_disassembler_cache, 0, k_i386_disassembler_cache_size * sizeof(m_disassembler_cache[0]));
+    u32 linear = code.base + eip;
+    I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
+
+    if (IsValidPointer(record) && record->eip == eip && record->size > 0 && record->cs == code.selector &&
+        record->mode == m_state.execution_mode && record->default32 == ((code.attributes & I386_SEGMENT_DEFAULT_32) != 0))
+    {
+        const u8* bytes = PeekReadHost(linear, (u32)record->size);
+
+        if (IsValidPointer(bytes))
+        {
+            if (memcmp(bytes, record->opcodes, (size_t)record->size) == 0)
+                return;
+        }
+        else if (IsDisassemblerRecordCurrent(*record, code))
+            return;
+    }
+
+    Disassemble(code, eip);
+}
+
+void I386::SetDisassemblerRecord(u32 linear, I386_Disassembler_Record* record)
+{
+    if (!IsValidPointer(m_disassembler_pages))
+        m_disassembler_pages = new I386_Disassembler_Record**[k_i386_disassembler_pages]();
+
+    I386_Disassembler_Record**& page = m_disassembler_pages[linear >> 12];
+
+    if (!IsValidPointer(page))
+        page = new I386_Disassembler_Record*[k_i386_disassembler_page_size]();
+
+    page[linear & (k_i386_disassembler_page_size - 1)] = record;
+}
+
+void I386::ClearDisassemblerPages()
+{
+    if (!IsValidPointer(m_disassembler_pages))
+        return;
+
+    for (u32 i = 0; i < k_i386_disassembler_pages; i++)
+        SafeDeleteArray(m_disassembler_pages[i]);
 }
 
 // Same selector, decoding mode and bytes as when the record was formatted
@@ -1103,12 +1142,12 @@ bool I386::IsDisassemblerRecordCurrent(const I386_Disassembler_Record& record, c
 
 I386_Disassembler_Record* I386::GetDisassemblerRecord(u32 linear)
 {
-    std::map<u32, I386_Disassembler_Record>::iterator record = m_disassembler_records.find(linear);
-
-    if (record == m_disassembler_records.end())
+    if (!IsValidPointer(m_disassembler_pages))
         return NULL;
 
-    return &record->second;
+    I386_Disassembler_Record** page = m_disassembler_pages[linear >> 12];
+
+    return IsValidPointer(page) ? page[linear & (k_i386_disassembler_page_size - 1)] : NULL;
 }
 
 const std::map<u32, I386_Disassembler_Record>& I386::GetDisassemblerRecords() const
@@ -1126,7 +1165,7 @@ void I386::ClearDisassemblerRecords()
 {
     m_disassembler_records.clear();
     m_disassembler_generation++;
-    ClearDisassemblerCache();
+    ClearDisassemblerPages();
 }
 
 void I386::ResetDisassembler()
@@ -1928,10 +1967,9 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_
         m_step_call_return_linear = entry.back_linear;
     }
 
-    // The destination gets its symbol, through the record cache when it already ran
-    I386_Disassembler_Record* target = m_disassembler_cache[entry.dest_linear & (k_i386_disassembler_cache_size - 1)];
+    I386_Disassembler_Record* target = GetDisassemblerRecord(entry.dest_linear);
 
-    if (!IsValidPointer(target) || target->linear != entry.dest_linear)
+    if (!IsValidPointer(target))
         target = &GetOrCreateDisassemblerRecord(entry.dest_linear, entry.dest_cs, entry.dest);
 
     if (!interrupt)

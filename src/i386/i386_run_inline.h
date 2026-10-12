@@ -157,28 +157,32 @@ INLINE void I386::DisassembleInstruction(u32 eip)
 {
     const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
     u32 linear = code.base + eip;
-    I386_Disassembler_Record*& cached = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
-    I386_Disassembler_Record* record = cached;
+    I386_Disassembler_Record** page = m_disassembler_pages[linear >> 12];
 
-    if (likely(IsValidPointer(record) && record->linear == linear && record->eip == eip && record->size > 0 &&
-        record->cs == code.selector && record->mode == m_state.execution_mode &&
-        record->default32 == ((code.attributes & I386_SEGMENT_DEFAULT_32) != 0)))
+    if (likely(IsValidPointer(page)))
     {
-        const u8* bytes = GetReadHost(linear, (u32)record->size);
+        I386_Disassembler_Record* record = page[linear & (k_i386_disassembler_page_size - 1)];
 
-        if (likely(IsValidPointer(bytes)))
+        if (likely(IsValidPointer(record) && record->eip == eip && record->size > 0 &&
+            record->cs == code.selector && record->mode == m_state.execution_mode &&
+            record->default32 == ((code.attributes & I386_SEGMENT_DEFAULT_32) != 0)))
         {
-            int i = 0;
+            const u8* bytes = GetReadHost(linear, (u32)record->size);
 
-            while (i < record->size && bytes[i] == record->opcodes[i])
-                i++;
+            if (likely(IsValidPointer(bytes)))
+            {
+                int i = 0;
 
-            if (likely(i == record->size))
-                return;
+                while (i < record->size && bytes[i] == record->opcodes[i])
+                    i++;
+
+                if (likely(i == record->size))
+                    return;
+            }
         }
     }
 
-    cached = Disassemble(code, eip);
+    DisassembleExecuted(code, eip);
 }
 
 // A task CALL that faults or traps after entering the new task keeps its frame below the exception's

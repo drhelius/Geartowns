@@ -829,6 +829,29 @@ bool I386::TryPeekLinear(u32 linear, u8& value) const
     return m_memory->TryPeekPhysical(physical, value);
 }
 
+const u8* I386::PeekReadHost(u32 linear, u32 size) const
+{
+    if ((linear & 0xFFF) + size > 0x1000)
+        return NULL;
+
+    const u8* page;
+
+    if ((m_state.cr0 & 0x80000000U) == 0)
+        page = m_read_pages[linear >> 12];
+    else
+    {
+        u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
+        int way = FindTLBWay(set, linear & 0xFFFFF000U);
+
+        if (way < 0)
+            return NULL;
+
+        page = m_tlb[set * I386_TLB_WAYS + way].read_page;
+    }
+
+    return IsValidPointer(page) ? page + (linear & 0xFFF) : NULL;
+}
+
 NO_INLINE bool I386::TranslatePagedPassive(u32 linear, u32& physical) const
 {
     u32 pde_address = 0;

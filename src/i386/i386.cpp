@@ -55,9 +55,12 @@ I386::I386()
     m_trace_enabled = false;
     m_trace_count = 0;
 
-    m_disassembler_cache = new I386_Disassembler_Record*[k_i386_disassembler_cache_size];
+#if defined(GT_DISABLE_DISASSEMBLER)
+    InitPointer(m_disassembler_pages);
+#else
+    m_disassembler_pages = new I386_Disassembler_Record**[k_i386_disassembler_pages]();
+#endif
     m_disassembler_generation = 0;
-    ClearDisassemblerCache();
     m_run_to_breakpoint = 0;
     m_run_to_stack_pointer = 0;
     m_run_to_stack_selector = 0;
@@ -142,7 +145,8 @@ I386::I386()
 I386::~I386()
 {
     SafeDeleteArray(m_trace);
-    SafeDeleteArray(m_disassembler_cache);
+    ClearDisassemblerPages();
+    SafeDeleteArray(m_disassembler_pages);
 #if !defined(GT_DISABLE_DYNAREC)
     SafeDelete(m_dynarec_memory);
     SafeDeleteArray(m_dynarec_blocks);
@@ -166,7 +170,7 @@ void I386::Init(Memory* memory, IO* io)
 
     m_disassembler_records.clear();
     m_disassembler_generation++;
-    ClearDisassemblerCache();
+    ClearDisassemblerPages();
 
     Reset();
 }
@@ -1224,9 +1228,9 @@ void I386::TraceInstruction()
         entry.cpu.registers[i] = m_state.registers[i].value;
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    const I386_Disassembler_Record* record = m_disassembler_cache[linear & (k_i386_disassembler_cache_size - 1)];
+    const I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
 
-    if (IsValidPointer(record) && record->linear == linear && record->size > 0)
+    if (IsValidPointer(record) && record->size > 0)
     {
         entry.cpu.size = (u8)MIN(record->size, GT_I386_MAX_INSTRUCTION_LENGTH);
         memcpy(entry.cpu.opcodes, record->opcodes, entry.cpu.size);

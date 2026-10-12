@@ -719,7 +719,9 @@ private:
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
     void DisassembleNextInstruction();
     void DisassembleInstruction(u32 eip);
-    void ClearDisassemblerCache();
+    NO_INLINE void DisassembleExecuted(const I386_Segment& code, u32 eip);
+    void SetDisassemblerRecord(u32 linear, I386_Disassembler_Record* record);
+    void ClearDisassemblerPages();
     void PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_Type type, u8 vector);
     void PopCallStack();
     bool TrackCall(bool completed, u16 cs, u32 base);
@@ -835,6 +837,7 @@ private:
     void SetUserMode(bool user);
     void RefreshMemoryPointers();
     const u8* GetReadHost(u32 linear, u32 size);
+    const u8* PeekReadHost(u32 linear, u32 size) const;
     u8* GetWriteHost(u32 linear, u32 size);
     u8* GetRMWHost(int segment, u32 offset, int width);
     u32 LoadHost(const u8* data, int width) const;
@@ -1278,7 +1281,7 @@ private:
 
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;
     u32 m_disassembler_generation;
-    I386_Disassembler_Record** m_disassembler_cache;
+    I386_Disassembler_Record*** m_disassembler_pages;
     std::vector<I386_Breakpoint> m_breakpoints;
     std::vector<I386_Interrupt_Breakpoint> m_interrupt_breakpoints;
     u16 m_irq_breakpoints;
@@ -1320,7 +1323,8 @@ private:
     bool m_run_to_hit;
 };
 
-static const u32 k_i386_disassembler_cache_size = 0x4000;
+static const u32 k_i386_disassembler_pages = 0x100000;
+static const u32 k_i386_disassembler_page_size = 0x1000;
 
 static const u8 k_i386_segment_fast_read = 0x01;
 static const u8 k_i386_segment_fast_write = 0x02;

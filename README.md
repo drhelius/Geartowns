@@ -14,6 +14,8 @@ This is an open source project with its ongoing development made possible thanks
 
 Don't hesitate to report bugs or ask for new features by [opening an issue](https://github.com/drhelius/Geartowns/issues).
 
+<img width="4064" height="2176" alt="image" src="https://github.com/user-attachments/assets/99e8ccdc-b110-4bf0-ac97-99aeab96a46e" />
+
 ## Downloads
 
 <table>

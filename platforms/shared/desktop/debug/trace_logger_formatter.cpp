@@ -633,9 +633,12 @@ static void format_sprite(const GT_Trace_Entry& entry, char* buffer, size_t size
             u8 reg = entry.sprite.reg;
             u8 value = entry.sprite.value;
 
-            if (reg == k_sprite_control0 || reg == k_sprite_control1)
-                format_event(buffer, size, "SPRITE", "REGISTER", "R%u <- $%02X  First:%u  Enabled:%u", reg,
-                    entry.sprite.raw, entry.sprite.first, reg == k_sprite_control1 ? (value >> 7) & 0x01 : 0);
+            if (reg == k_sprite_control0)
+                format_event(buffer, size, "SPRITE", "REGISTER", "R0 <- $%02X  First:%u", entry.sprite.raw,
+                    entry.sprite.first);
+            else if (reg == k_sprite_control1)
+                format_event(buffer, size, "SPRITE", "REGISTER", "R1 <- $%02X  First:%u  Enabled:%u", entry.sprite.raw,
+                    entry.sprite.first, (value >> 7) & 0x01);
             else if (reg == k_sprite_display_page)
                 format_event(buffer, size, "SPRITE", "REGISTER", "R6 <- $%02X  Display page:%u", entry.sprite.raw,
                     (value >> 7) & 0x01);

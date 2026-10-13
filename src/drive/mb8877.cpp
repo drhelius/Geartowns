@@ -657,7 +657,7 @@ void MB8877::Search(u64 clocks, bool restart)
     int count = GetTrackLayout(sectors, positions, &cells);
     int best = -1;
     u64 best_delta = GT_NO_EVENT;
-    bool bad = false;
+    u64 bad_delta = GT_NO_EVENT;
 
     for (int i = 0; i < count; i++)
     {
@@ -668,7 +668,7 @@ void MB8877::Search(u64 clocks, bool restart)
         u64 delta = ((u64)positions[i] * cell_units + k_mb8877_turn - angle) % k_mb8877_turn;
 
         if (!address && sectors[i].status == k_floppy_status_id_crc)
-            bad = true;
+            bad_delta = MIN(bad_delta, delta);
         else if (delta < best_delta)
         {
             best_delta = delta;
@@ -679,7 +679,7 @@ void MB8877::Search(u64 clocks, bool restart)
     m_state.phase = MB8877_PHASE_SEARCH;
     m_state.event_clocks = m_state.deadline_clocks;
     m_state.found = false;
-    m_state.crc_seen = bad;
+    m_state.crc_seen = bad_delta != GT_NO_EVENT;
 
     if (best < 0)
         return;
@@ -697,6 +697,7 @@ void MB8877::Search(u64 clocks, bool restart)
         crc = (u16)~crc;
 
     m_state.found = true;
+    m_state.crc_seen = bad_delta < best_delta;
     m_state.event_clocks = found_clocks;
     m_state.sector_header = sector.header;
     m_state.sector_size = sector.size;

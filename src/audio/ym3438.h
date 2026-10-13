@@ -187,6 +187,7 @@ private:
     u8 GetEnvelopeIncrement(u8 rate) const;
     u8 GetEnvelopeRate(const YM3438_Operator& op, int channel, int operator_index) const;
     bool HandleSSGEnvelope(YM3438_Operator& op);
+    bool IsSSGInverted(const YM3438_Operator& op) const;
 
     void SetKeyState(YM3438_Operator& op, bool key_on, int channel, int operator_index);
     void KeyOnChannel(int channel, u8 slots);

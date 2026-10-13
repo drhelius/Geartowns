@@ -593,12 +593,31 @@ u16 YM3438::GetEnvelopeOutput(const YM3438_Operator& op) const
 {
     u16 envelope = op.envelope;
 
-    if ((op.ssg_envelope & 0x08) && op.key_on && (op.ssg_direction ^ ((op.ssg_envelope >> 2) & 0x01)))
+    if (op.key_on && IsSSGInverted(op))
     {
         envelope = (k_ym3438_ssg_envelope_max - envelope) & k_ym3438_envelope_max;
     }
 
     return envelope;
+}
+
+bool YM3438::IsSSGInverted(const YM3438_Operator& op) const
+{
+    if ((op.ssg_envelope & 0x08) == 0)
+        return false;
+
+    u8 direction = op.ssg_direction;
+
+    // The inversion already takes the direction the next SSG step derives from this level
+    if (op.envelope >= k_ym3438_ssg_envelope_max)
+    {
+        if ((op.ssg_envelope & 0x03) == 2)
+            direction ^= 1;
+        else if ((op.ssg_envelope & 0x03) == 3)
+            direction = 1;
+    }
+
+    return (direction ^ ((op.ssg_envelope >> 2) & 0x01)) != 0;
 }
 
 bool YM3438::HandleSSGEnvelope(YM3438_Operator& op)
@@ -653,7 +672,7 @@ void YM3438::SetKeyState(YM3438_Operator& op, bool key_on, int channel, int oper
 
     if (op.key_on)
     {
-        if ((op.ssg_envelope & 0x08) && (op.ssg_direction ^ ((op.ssg_envelope >> 2) & 0x01)))
+        if (IsSSGInverted(op))
         {
             op.envelope = (k_ym3438_ssg_envelope_max - op.envelope) & k_ym3438_envelope_max;
         }

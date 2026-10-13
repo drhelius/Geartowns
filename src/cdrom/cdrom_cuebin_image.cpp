@@ -1584,7 +1584,7 @@ void CdRomCueBinImage::QueueChunk(ImgFile* img_file, u64 chunk_index)
 
     {
         std::lock_guard<std::mutex> lock(m_chunk_mutex);
-        if (img_file->chunks[chunk_index] != NULL)
+        if (IsChunkLoaded(img_file, chunk_index))
             return;
     }
 

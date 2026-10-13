@@ -168,6 +168,7 @@ private:
     void RenderLayerRow(u32* destination, int layer, int row, bool opaque);
     void DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 count, u32 wrap, u8 planes, bool opaque);
     void DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
+    void DecodeFMRPagePixels(u32* colors, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
     template<Video_Layer_Format format, bool two_page>
     void DecodeLayerPixelsTemplate(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
     template<bool two_page>

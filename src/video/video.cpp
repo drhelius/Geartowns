@@ -1453,14 +1453,39 @@ void Video::DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 
             DecodeLayerPixelsTemplate<VIDEO_LAYER_4BPP, true>(colors, layer, start, pixel, count, planes, opaque);
             break;
         case VIDEO_LAYER_8BPP:
-            DecodeLayerPixelsTemplate<VIDEO_LAYER_8BPP, false>(colors, layer, start, pixel, count, planes, opaque);
+            if (unlikely(layer == 0 && m_state.fmr_display_page))
+                DecodeFMRPagePixels(colors, start, pixel, count, planes, opaque);
+            else
+                DecodeLayerPixelsTemplate<VIDEO_LAYER_8BPP, false>(colors, layer, start, pixel, count, planes, opaque);
             break;
         default:
             if (IsTwoPage())
                 DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, true>(colors, layer, start, pixel, count, planes, opaque);
+            else if (unlikely(layer == 0 && m_state.fmr_display_page))
+                DecodeFMRPagePixels(colors, start, pixel, count, planes, opaque);
             else
                 DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, false>(colors, layer, start, pixel, count, planes, opaque);
             break;
+    }
+}
+
+// FM-R page 1 adds 20000h to the first VRAM half only
+// Single page mode interleaves the halves every four bytes, so only the groups from the first half move
+NO_INLINE void Video::DecodeFMRPagePixels(u32* colors, u32 start, u32 pixel, u32 count, u8 planes, bool opaque)
+{
+    u32 size = GetLayerFormat(0) == VIDEO_LAYER_8BPP ? 1 : 2;
+
+    // The row start comes with the two page offset already added
+    start -= 0x20000;
+
+    for (u32 i = 0; i < count; i++, pixel++)
+    {
+        u32 flip = ((start + pixel * size) & 0x04) == 0 ? 0x40000 : 0;
+
+        if (size == 1)
+            DecodeLayerPixelsTemplate<VIDEO_LAYER_8BPP, false>(colors + i, 0, start ^ flip, pixel, 1, planes, opaque);
+        else
+            DecodeLayerPixelsTemplate<VIDEO_LAYER_16BPP, false>(colors + i, 0, start ^ flip, pixel, 1, planes, opaque);
     }
 }
 

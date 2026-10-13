@@ -151,11 +151,14 @@ private:
     void CompleteFrame(u64 clocks);
     void UpdateGeometry();
     void UpdateCanvasZoom();
+    void UpdateCanvasOffset();
     void ResizeCanvas(u32 zoom_x, u32 zoom_y);
     void SetCanvasZoom(u32 zoom_x, u32 zoom_y);
     bool GetLayerZoom(u32* zoom_x, u32* zoom_y) const;
+    u32 GetLayerOffset() const;
     u32 GetLayerZoomKey() const;
     static u32 CommonZoom(u32 a, u32 b);
+    static u32 Gcd(u32 a, u32 b);
     void UpdateNextEvent();
     void UpdateIRQ();
     u64 GetHalfLineClocks(u32 half_line) const;
@@ -231,6 +234,8 @@ private:
     u32 m_canvas_zoom_x;
     u32 m_canvas_zoom_y;
     u32 m_canvas_zoom_key;
+    u32 m_canvas_offset;
+    u32 m_canvas_offset_key;
     u32 m_canvas_h_divider;
     u32 m_canvas_v_divider;
     bool m_canvas_interlaced;

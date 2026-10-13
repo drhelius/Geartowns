@@ -61,6 +61,8 @@ Video::Video()
     m_canvas_zoom_x = 1;
     m_canvas_zoom_y = 1;
     m_canvas_zoom_key = 0;
+    m_canvas_offset = 0;
+    m_canvas_offset_key = 0;
     m_canvas_h_divider = 1;
     m_canvas_v_divider = 1;
     m_canvas_interlaced = false;
@@ -1001,6 +1003,23 @@ void Video::UpdateGeometry()
     SetCanvasZoom(zoom_x, zoom_y);
 }
 
+// A layer whose HAJ is part of a pixel away from the canvas start needs a finer zoom
+// The finest one stays until the zoom, formats or enables change, so scrolling doesn't flip the size
+void Video::UpdateCanvasOffset()
+{
+    if (!m_native_resolution)
+        return;
+
+    if (m_canvas_zoom_key != m_canvas_offset_key)
+    {
+        m_canvas_offset_key = m_canvas_zoom_key;
+        m_canvas_offset = 0;
+    }
+
+    m_canvas_offset = Gcd(m_canvas_offset, GetLayerOffset());
+    SetCanvasZoom(Gcd(m_canvas_zoom_x, m_canvas_offset), m_canvas_zoom_y);
+}
+
 void Video::UpdateCanvasZoom()
 {
     if (!m_native_resolution)
@@ -1093,6 +1112,24 @@ bool Video::GetLayerZoom(u32* zoom_x, u32* zoom_y) const
     return found;
 }
 
+// Clocks from the canvas start to the pixel grid of the visible layers
+u32 Video::GetLayerOffset() const
+{
+    int layers = IsTwoPage() ? 2 : 1;
+    u32 offset = 0;
+
+    for (int layer = 0; layer < layers; layer++)
+    {
+        if (GetLayerFormat(layer) == VIDEO_LAYER_OFF)
+            continue;
+
+        u32 haj = m_state.crtc[k_video_crtc_haj0 + layer * 4];
+        offset = Gcd(offset, haj > m_canvas_h_start ? haj - m_canvas_h_start : m_canvas_h_start - haj);
+    }
+
+    return offset;
+}
+
 u32 Video::CommonZoom(u32 a, u32 b)
 {
     if ((b % a) == 0)
@@ -1102,6 +1139,18 @@ u32 Video::CommonZoom(u32 a, u32 b)
         return b;
 
     return 1;
+}
+
+u32 Video::Gcd(u32 a, u32 b)
+{
+    while (b != 0)
+    {
+        u32 remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+
+    return a;
 }
 
 void Video::UpdateNextEvent()
@@ -1205,6 +1254,10 @@ void Video::RenderRows(u32 half_line)
     }
 
     UpdateCanvasZoom();
+
+    // HAJ is often set after VSYNC, so it is checked when the first row is drawn
+    if (m_rendered_rows == 0)
+        UpdateCanvasOffset();
 
     int rows = m_canvas_interlaced ? (int)(lines * 2) : (int)((lines + m_canvas_v_divider - 1) / m_canvas_v_divider);
     rows = MIN(rows, m_render_height);
@@ -1553,6 +1606,8 @@ void Video::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.kanji_row);
     G_SERIALIZE(serializer, m_canvas_zoom_x);
     G_SERIALIZE(serializer, m_canvas_zoom_y);
+    G_SERIALIZE(serializer, m_canvas_offset);
+    G_SERIALIZE(serializer, m_canvas_offset_key);
 }
 
 void Video::SanitizeState()

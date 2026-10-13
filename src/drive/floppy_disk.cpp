@@ -85,7 +85,7 @@ int FloppyDisk::GetSectors(int track, FloppyDisk_Sector* sectors) const
     if (offset == 0)
         return 0;
 
-    int count = read_u16_le(m_image + offset + 4);
+    int count = MIN((int)read_u16_le(m_image + offset + 4), k_floppy_max_sectors);
 
     for (int i = 0; i < count; i++)
     {

@@ -62,7 +62,7 @@ bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t si
     size_t separator = directory.find_last_of("/\\");
     directory = separator == std::string::npos ? "" : directory.substr(0, separator + 1);
     std::string content(text, size);
-    size_t position = 0;
+    size_t position = content.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;
 
     while (position < content.size())
     {
@@ -73,7 +73,7 @@ bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t si
 
         std::string line = content.substr(position, end - position);
         position = end + 1;
-        size_t first = line.find_first_not_of(" \t\r\xEF\xBB\xBF");
+        size_t first = line.find_first_not_of(" \t\r");
         size_t last = line.find_last_not_of(" \t\r");
 
         if (first == std::string::npos)

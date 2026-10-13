@@ -51,6 +51,7 @@ Video::Video()
     m_render_width = GT_FRAME_BUFFER_WIDTH;
     m_render_height = GT_FRAME_BUFFER_HEIGHT;
     m_rendered_rows = 0;
+    m_line_changed = false;
     m_native_resolution = true;
     m_canvas_h_start = 0;
     m_canvas_v_start = 0;
@@ -63,6 +64,7 @@ Video::Video()
     m_canvas_h_divider = 1;
     m_canvas_v_divider = 1;
     m_canvas_interlaced = false;
+    m_canvas_split = false;
 }
 
 Video::~Video()
@@ -258,12 +260,27 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             m_state.output_index = value & 0x03;
             break;
         case 0x044A:
+        {
+            // PLT, YS and YM don't change the picture
+            u8 mask = m_state.output_index == 1 ? 0x01 : 0xFF;
+
+            if (((m_state.output[m_state.output_index] ^ value) & mask) != 0)
+                m_line_changed = true;
+
             m_state.output[m_state.output_index] = value;
             break;
+        }
         case 0x0450:
         case 0x0452:
+        {
+            u32 offset = m_sprite->GetDisplayOffset();
             m_sprite->Write(port, value);
+
+            if (m_sprite->GetDisplayOffset() != offset)
+                m_line_changed = true;
+
             break;
+        }
         case 0x0458:
             m_state.mask_index = value & 0x03;
             break;
@@ -299,6 +316,9 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             m_state.digital_palette_modified = true;
             break;
         case 0xFDA0:
+            if (m_state.display_enable != value)
+                m_line_changed = true;
+
             m_state.display_enable = value;
             break;
         default:
@@ -600,10 +620,18 @@ void Video::WriteFMRRegister(u32 offset, u8 value)
             m_state.fmr_mask = value;
             break;
         case 0x0F82:
+        {
             Synchronize(m_scheduler->GetClocks());
-            m_state.fmr_display_planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
-            m_state.fmr_display_page = (value & 0x10) != 0;
+            u8 planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
+            bool page = (value & 0x10) != 0;
+
+            if (planes != m_state.fmr_display_planes || page != m_state.fmr_display_page)
+                m_line_changed = true;
+
+            m_state.fmr_display_planes = planes;
+            m_state.fmr_display_page = page;
             break;
+        }
         case 0x0F83:
             m_state.fmr_page = (value & 0x10) != 0;
             break;
@@ -687,6 +715,9 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
     else
         m_state.crtc[index] = (u16)((previous & 0xFF00) | value);
 
+    if (m_state.crtc[index] != previous && index >= k_video_crtc_hds0 && index <= k_video_crtc_cr0)
+        m_line_changed = true;
+
     if (index != k_video_crtc_cr0)
         return;
 
@@ -716,6 +747,7 @@ u8 Video::ReadCRTC(bool high, u64 clocks) const
 void Video::WritePalette(int component, u8 value)
 {
     u8 index = m_state.palette_index;
+    u8 previous = ReadPalette(component);
 
     switch ((m_state.output[1] >> 4) & 0x03)
     {
@@ -732,6 +764,9 @@ void Video::WritePalette(int component, u8 value)
             UpdatePaletteColor(2, index);
             break;
     }
+
+    if (ReadPalette(component) != previous)
+        m_line_changed = true;
 }
 
 u8 Video::ReadPalette(int component) const
@@ -796,6 +831,8 @@ void Video::StartFrame(u64 clocks)
     m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
     m_state.event_half_line = 0;
     m_rendered_rows = 0;
+    m_line_changed = false;
+    m_canvas_split = false;
     UpdateGeometry();
     UpdateNextEvent();
 }
@@ -978,27 +1015,27 @@ void Video::UpdateCanvasZoom()
 
     u32 zoom_x = m_canvas_zoom_x;
     u32 zoom_y = m_canvas_zoom_y;
-    int rows = m_rendered_rows;
 
     if (!GetLayerZoom(&zoom_x, &zoom_y))
         return;
 
-    if (rows > 0)
-    {
-        zoom_x = CommonZoom(zoom_x, m_canvas_zoom_x);
-        zoom_y = CommonZoom(zoom_y, m_canvas_zoom_y);
-    }
+    if (m_rendered_rows == 0)
+        SetCanvasZoom(zoom_x, zoom_y);
+    else
+        ResizeCanvas(CommonZoom(zoom_x, m_canvas_zoom_x), CommonZoom(zoom_y, m_canvas_zoom_y));
+}
 
-    if (zoom_x == m_canvas_zoom_x && zoom_y == m_canvas_zoom_y)
-        return;
-
+// The rows already drawn are widened in place to the new dividers
+void Video::ResizeCanvas(u32 zoom_x, u32 zoom_y)
+{
     u32 h_divider = m_canvas_h_divider;
     u32 v_divider = m_canvas_v_divider;
     int width = m_render_width;
+    int rows = m_rendered_rows;
 
     SetCanvasZoom(zoom_x, zoom_y);
 
-    if (rows == 0)
+    if (m_canvas_h_divider == h_divider && m_canvas_v_divider == v_divider)
         return;
 
     u32 new_h_divider = m_canvas_h_divider;
@@ -1028,7 +1065,7 @@ void Video::SetCanvasZoom(u32 zoom_x, u32 zoom_y)
     m_canvas_zoom_x = zoom_x;
     m_canvas_zoom_y = zoom_y;
     m_canvas_h_divider = (zoom_x % fit) == 0 ? zoom_x : fit;
-    m_canvas_v_divider = m_canvas_interlaced ? 1 : zoom_y;
+    m_canvas_v_divider = m_canvas_interlaced || m_canvas_split ? 1 : zoom_y;
     m_render_width = MAX((int)(m_canvas_clocks / m_canvas_h_divider), 1);
     m_render_height = MAX(m_canvas_height / (int)m_canvas_v_divider, 1);
 }
@@ -1150,13 +1187,25 @@ u8 Video::GetSyncStatus(u64 clocks) const
 void Video::RenderRows(u32 half_line)
 {
     u32 beam = m_state.crtc[k_video_crtc_vst1] + half_line;
+    bool changed = m_line_changed;
+    m_line_changed = false;
 
     if (beam <= m_canvas_v_start)
         return;
 
+    u32 lines = (beam - m_canvas_v_start) / 2;
+    u32 divider = m_canvas_v_divider;
+
+    // Rows are drawn at the end of their first line, so a change during a later one splits them from there on
+    if (changed && lines > 0 && ((lines - 1) % divider) != 0 && (lines - 1) / divider < (u32)m_rendered_rows)
+    {
+        m_canvas_split = true;
+        ResizeCanvas(m_canvas_zoom_x, m_canvas_zoom_y);
+        m_rendered_rows = (int)lines - 1;
+    }
+
     UpdateCanvasZoom();
 
-    u32 lines = (beam - m_canvas_v_start) / 2;
     int rows = m_canvas_interlaced ? (int)(lines * 2) : (int)((lines + m_canvas_v_divider - 1) / m_canvas_v_divider);
     rows = MIN(rows, m_render_height);
 
@@ -1527,6 +1576,7 @@ void Video::SanitizeState()
 
     // The rows drawn before saving are not part of the state, the rest of the frame redraws them
     m_rendered_rows = 0;
+    m_canvas_split = false;
     UpdateColorCaches();
     UpdateGeometry();
     UpdateNextEvent();

@@ -415,7 +415,7 @@ inline bool remove_directory_and_contents(const char* path)
     if (attributes & FILE_ATTRIBUTE_REPARSE_POINT)
         return RemoveDirectoryW(wpath.c_str()) != 0;
 
-    std::wstring search = wpath + L"\\*";
+    std::wstring search = utf8_to_wstring((std::string(path) + "\\*").c_str());
     WIN32_FIND_DATAW fd;
     HANDLE find = FindFirstFileW(search.c_str(), &fd);
     bool ok = true;

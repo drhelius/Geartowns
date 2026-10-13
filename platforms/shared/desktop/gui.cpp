@@ -379,7 +379,29 @@ void gui_load_bios(const char* path)
 
     config_emulator.bios_path = path;
     strncpy_fit(gui_bios_path, path, sizeof(gui_bios_path));
-    gui_notify(gui_NotificationSuccess, ICON_MD_MEMORY, "Firmware loaded", path);
+
+    std::string unknown;
+    Firmware* firmware = emu_get_core()->GetFirmware();
+
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+    {
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+        const GT_Firmware_Info& info = firmware->GetInfo(type);
+
+        if (!info.loaded || info.recognized)
+            continue;
+
+        char entry[64];
+        snprintf(entry, sizeof(entry), "%s%s (CRC %08X)", unknown.empty() ? "" : ", ", Firmware::GetFileName(type),
+            info.crc);
+        unknown += entry;
+    }
+
+    if (unknown.empty())
+        gui_notify(gui_NotificationSuccess, ICON_MD_MEMORY, "Firmware loaded", path);
+    else
+        gui_notify(gui_NotificationWarning, ICON_MD_MEMORY, "Unknown firmware, the Model 1/2 set is recommended",
+            unknown.c_str());
 }
 
 bool gui_load_rom(const char* path, const char* symbol_path)

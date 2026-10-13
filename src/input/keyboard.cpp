@@ -158,7 +158,9 @@ void Keyboard::Synchronize(u64 clocks)
     // Typematic repeat sends the held key again with bits 7-4 set
     if (m_state.repeat_key != GT_KEY_NONE && clocks >= m_state.repeat_clocks)
     {
-        PushEvent(m_state.repeat_key, k_keyboard_typematic);
+        if (HasRoom(1))
+            PushEvent(m_state.repeat_key, k_keyboard_typematic);
+
         m_state.repeat_clocks += ((u64)m_state.repeat_interval * GT_MACHINE_CLOCK_RATE) / 1000;
         changed = true;
     }
@@ -173,6 +175,10 @@ void Keyboard::KeyPressed(GT_Keys key)
         return;
 
     Synchronize(m_scheduler->GetClocks());
+
+    if (!HasRoom(2))
+        return;
+
     m_state.keys[key] = true;
     PushEvent((u8)key, k_keyboard_make);
 
@@ -290,6 +296,17 @@ void Keyboard::PushEvent(u8 key, u8 flags)
     m_state.kbint = true;
     TraceEvent(TRACE_KEYBOARD_KEY, 0, flags, key);
     UpdateIRQ();
+}
+
+// Makes and repeats leave room for the break of every held key, so a release is never dropped
+bool Keyboard::HasRoom(int messages) const
+{
+    int held = 0;
+
+    for (int i = GT_KEY_NONE + 1; i < GT_KEY_COUNT; i++)
+        held += m_state.keys[i] ? 1 : 0;
+
+    return m_state.fifo_count + ((messages + held) * 2) <= KEYBOARD_FIFO_SIZE;
 }
 
 void Keyboard::TraceEvent(u8 event, u8 value, u8 flags, u8 key)

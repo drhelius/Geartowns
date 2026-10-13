@@ -75,6 +75,7 @@ private:
     void ResetController();
     void SendResetResponse(int count);
     void PushEvent(u8 key, u8 flags);
+    bool HasRoom(int messages) const;
     bool IsValidKey(GT_Keys key) const;
     bool IsRepeatKey(u8 key) const;
     void UpdateIRQ();

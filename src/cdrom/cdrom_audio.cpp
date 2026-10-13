@@ -140,7 +140,7 @@ void CdRomAudio::Stop()
     m_sector_cache_valid = false;
 }
 
-// Data sectors inside the range and unreadable sectors play as silence
+// Data sectors, pregaps without stored audio and unreadable sectors inside the range play as silence
 // Tracks mastered with pre-emphasis go through the de-emphasis filter once per sector
 void CdRomAudio::LoadSector()
 {
@@ -148,7 +148,7 @@ void CdRomAudio::LoadSector()
     m_sector_cache_valid = true;
     m_deemphasis_end_valid = false;
 
-    if (!m_cdrom_media->IsAudioSector(m_state.current_lba) ||
+    if (!m_cdrom_media->IsPlayableAudioSector(m_state.current_lba) ||
         !m_cdrom_media->ReadSamples(m_state.current_lba, 0, m_sector_cache, CDROM_AUDIO_SECTOR_SAMPLES * 2))
     {
         memset(m_sector_cache, 0, sizeof(m_sector_cache));
@@ -156,7 +156,7 @@ void CdRomAudio::LoadSector()
         return;
     }
 
-    s32 track = m_cdrom_media->FindTrackFromLBA(m_state.current_lba);
+    s32 track = m_cdrom_media->FindTrackFromLBA(m_state.current_lba, true);
 
     if ((track >= 0) && ((m_cdrom_media->GetTracks()[track].control_flags & k_cdrom_control_pre_emphasis) != 0))
         Deemphasize();

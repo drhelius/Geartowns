@@ -39,6 +39,7 @@ public:
         GT_CdRomMSF end_msf;
         bool has_lead_in;
         u32 lead_in_lba;
+        bool lead_in_stored;
         u64 file_offset;
         u8 control_flags;
     };
@@ -72,6 +73,7 @@ public:
     u32 GetCurrentSector();
     void SetCurrentSector(u32 sector);
     bool IsAudioSector(u32 lba, bool include_lead_in = false);
+    bool IsPlayableAudioSector(u32 lba);
     s32 FindTrackFromLBA(u32 lba, bool include_lead_in = false);
 
 protected:

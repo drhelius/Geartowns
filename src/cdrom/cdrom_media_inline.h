@@ -154,6 +154,18 @@ INLINE bool CdRomMedia::IsAudioSector(u32 lba)
     }
 }
 
+INLINE bool CdRomMedia::IsPlayableAudioSector(u32 lba)
+{
+    if (IsValidPointer(m_current_image))
+    {
+        return m_current_image->IsPlayableAudioSector(lba);
+    }
+    else
+    {
+        return false;
+    }
+}
+
 INLINE GT_CdRomMSF CdRomMedia::GetCdRomLength()
 {
     if (IsValidPointer(m_current_image))

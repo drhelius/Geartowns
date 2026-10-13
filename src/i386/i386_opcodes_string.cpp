@@ -282,6 +282,41 @@ bool I386::ExecuteStringElement(bool& repeat)
     return true;
 }
 
+// Pages without a host pointer take the slow path's physical accesses, each element from its own start cycle
+// An access that ends the batch or changes the memory map stops the elements after it
+INLINE u32 I386::RunRepeatAccesses(const u8* input, u8* output, u32 source, u32 destination, u32 elements, u32 size,
+    u32 iteration_clocks, bool move, bool reverse)
+{
+    GT_Bus_Access_Context& context = *m_bus_context;
+    int width = (int)size * 8;
+    s32 step = reverse ? -(s32)size : (s32)size;
+    s32 offset = 0;
+    u32 value = m_state.registers[I386_REG_EAX].value;
+    u32 start_cycles = m_io_start_cycles;
+    u32 generation = m_memory->GetMapGeneration();
+
+    for (u32 i = 0; i < elements; i++)
+    {
+        m_io_start_cycles = start_cycles + i * iteration_clocks;
+
+        if (move)
+            value = IsValidPointer(input) ? LoadHost(input + offset, width) :
+                ReadPhysical(source + (u32)offset, size, context);
+
+        if (IsValidPointer(output))
+            StoreHost(output + offset, value, width);
+        else
+            WritePhysical(destination + (u32)offset, value, size, context);
+
+        if (unlikely(context.end_batch || generation != m_memory->GetMapGeneration()))
+            return i + 1;
+
+        offset += step;
+    }
+
+    return elements;
+}
+
 u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 {
     u8 opcode = m_state.repeat.opcode;
@@ -311,15 +346,17 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
         return 0;
 
     u32 destination_linear = m_state.segments[I386_SEGMENT_ES].base + destination;
+    u32 source_linear = m_state.segments[segment].base + source;
     u8* output = GetWriteHost(destination_linear, size);
+    const u8* input = move ? GetReadHost(source_linear, size) : NULL;
+    bool host = IsValidPointer(output) && (!move || IsValidPointer(input));
+    u32 destination_physical = 0;
+    u32 source_physical = 0;
 
-    if (!IsValidPointer(output))
+    if (!IsValidPointer(output) && !TranslateRepeatPage(destination_linear, size, true, destination_physical))
         return 0;
 
-    u32 source_linear = m_state.segments[segment].base + source;
-    const u8* input = move ? GetReadHost(source_linear, size) : NULL;
-
-    if (move && !IsValidPointer(input))
+    if (move && !IsValidPointer(input) && !TranslateRepeatPage(source_linear, size, false, source_physical))
         return 0;
 
     u32 iteration_clocks = move ? 4 : 5;
@@ -357,7 +394,13 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 
     u32 bytes = elements * size;
 
-    if (move)
+    if (!host)
+    {
+        elements = RunRepeatAccesses(input, output, source_physical, destination_physical, elements, size,
+            iteration_clocks, move, reverse);
+        bytes = elements * size;
+    }
+    else if (move)
     {
         const u8* input_start = reverse ? input - (elements - 1) * size : input;
         u8* output_start = reverse ? output - (elements - 1) * size : output;
@@ -417,7 +460,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     m_step.clocks = iteration_clocks;
     m_step.steps = 1;
     m_step.instruction_completed = !m_state.repeat.active;
-    m_step.end_batch = false;
+    m_step.end_batch = m_bus_context->end_batch;
     m_step.exception = false;
 
     clocks = elements * iteration_clocks;

@@ -634,6 +634,40 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
     return true;
 }
 
+// A REP batch reaches pages without a host pointer only through hits on the most recent way that need no table walk
+// and raise no fault, so it leaves the TLB as the slow path's TranslatePagedWay would
+bool I386::TranslateRepeatPage(u32 linear, u32 size, bool write, u32& physical)
+{
+    if ((linear & 0xFFF) + size > 0x1000)
+        return false;
+
+    if ((m_state.cr0 & 0x80000000U) == 0)
+    {
+        physical = linear;
+        return true;
+    }
+
+    if (m_memory_generation != m_memory->GetMapGeneration())
+        return false;
+
+    u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
+    TLBEntry& entry = m_tlb[set * I386_TLB_WAYS + m_tlb_mru[set]];
+    bool user = m_state.execution_mode == I386_MODE_VM86 || m_state.current_privilege_level == 3;
+
+    if ((entry.flags & k_i386_tlb_valid) == 0 || entry.linear_page != (linear & 0xFFFFF000U) ||
+        (write && (entry.flags & k_i386_tlb_dirty) == 0))
+        return false;
+
+    if (user && ((entry.flags & k_i386_tlb_user) == 0 || (write && (entry.flags & k_i386_tlb_writable) == 0)))
+        return false;
+
+    if (!IsValidPointer(entry.read_page))
+        CacheTLBPages(entry);
+
+    physical = entry.physical_page | (linear & 0xFFF);
+    return true;
+}
+
 // Writing CR3 clears every valid bit and, the replacement state
 void I386::FlushTLB()
 {

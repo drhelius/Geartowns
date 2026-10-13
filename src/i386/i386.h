@@ -733,6 +733,8 @@ private:
     bool DeferIO();
     bool SynchronizeIOAccess();
     u32 RunRepeatBatch(u32 budget, u32& clocks);
+    u32 RunRepeatAccesses(const u8* input, u8* output, u32 source, u32 destination, u32 elements, u32 size,
+        u32 iteration_clocks, bool move, bool reverse);
     void CompleteFault(u16 old_task);
 #if !defined(GT_DISABLE_DYNAREC)
     I386_Run_Result RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
@@ -868,6 +870,7 @@ private:
     bool TranslateLinearPaged(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor);
     bool TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor,
         u32 set, int way);
+    bool TranslateRepeatPage(u32 linear, u32 size, bool write, u32& physical);
     bool TranslatePagedPassive(u32 linear, u32& physical) const;
     bool TranslateLinearForDebugger(u32 linear, u32& physical, u32& pde_address, u32& pte_address, u32& page_flags,
         char* reason, size_t reason_size) const;

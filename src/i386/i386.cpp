@@ -434,6 +434,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending)
 {
     GT_Bus_Access_Context& context = *m_bus_context;
+    m_io_start_cycles = (u32)total.cycles + context.wait_cycles;
 
     if (m_state.repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_state.halted && !m_state.shutdown)
     {
@@ -445,19 +446,19 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
             total.cycles += clocks;
             total.steps += steps;
             total.instruction_completed = m_step.instruction_completed;
+            total.end_batch = total.end_batch || m_step.end_batch;
 
             // A shadow from the instruction before the REP ends with it, as on the slow path
             if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
             {
                 CountInterruptShadow();
-                return !IsInterruptReady(nmi_pending, intr_pending);
+                return !m_step.end_batch && !IsInterruptReady(nmi_pending, intr_pending);
             }
 
-            return true;
+            return !m_step.end_batch;
         }
     }
 
-    m_io_start_cycles = (u32)total.cycles + context.wait_cycles;
     RunCheckedStep();
 
     const StepState& step = m_step;

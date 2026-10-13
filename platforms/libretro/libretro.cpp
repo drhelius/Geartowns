@@ -86,7 +86,9 @@ static size_t savestate_size = 0;
 static int machine_ram_mb = 2;
 static int machine_cpu_mhz = 16;
 static int machine_floppy_drives = 2;
+#if !defined(GT_DISABLE_DYNAREC)
 static int dynarec_option = -1;
+#endif
 
 static int current_screen_width = 0;
 static int current_screen_height = 0;
@@ -396,7 +398,9 @@ void retro_deinit(void)
     machine_ram_mb = 2;
     machine_cpu_mhz = 16;
     machine_floppy_drives = 2;
+#if !defined(GT_DISABLE_DYNAREC)
     dynarec_option = -1;
+#endif
     current_screen_width = 0;
     current_screen_height = 0;
     current_aspect_ratio = 0.0f;

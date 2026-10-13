@@ -154,10 +154,10 @@ bool Firmware::LoadComponent(const char* file_path, GT_Firmware_Type type, u8** 
         return false;
     }
 
-    s64 read = file->Read(buffer, (u64)expected_size);
+    bool ok = file->ReadExact(buffer, (u64)expected_size);
     SafeDelete(file);
 
-    if (read != expected_size)
+    if (!ok)
     {
         Error("Unable to read firmware file %s", file_path);
         SafeDeleteArray(buffer);

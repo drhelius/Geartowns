@@ -272,10 +272,10 @@ bool Media::LoadFile(const char* file_path)
         return false;
     }
 
-    s64 read = file->Read(data, (u64)data_size);
+    bool ok = file->ReadExact(data, (u64)data_size);
     SafeDelete(file);
 
-    if (read != data_size)
+    if (!ok)
     {
         Error("Unable to read media file %s", file_path);
         SafeDeleteArray(data);

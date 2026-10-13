@@ -112,6 +112,12 @@ jit_init_debug(const char *progname, FILE *stream)
 #  if defined(__s390__) || defined(__s390x__)
     disasm_info.disassembler_options = "zarch";
 #  endif
+#  if defined(__sh__)
+    disasm_info.arch = bfd_arch_sh;
+    disasm_info.mach = bfd_mach_sh4;
+    disasm_info.endian = disasm_info.display_endian = BFD_ENDIAN_LITTLE;
+#  endif
+
     disasm_info.print_address_func = disasm_print_address;
 
 # if BINUTILS_2_29
@@ -241,12 +247,12 @@ disasm_compare_symbols(const void *ap, const void *bp)
     return (0);
 }
 
-#if __WORDSIZE == 32
+#if !defined(BFD64)
 #  define address_buffer_length		16
-#  define address_buffer_format		"%llx"
+#  define address_buffer_format		"%x"
 #else
 #  define address_buffer_length		32
-#  define address_buffer_format		"%lx"
+#  define address_buffer_format		"%llx"
 #endif
 static void
 disasm_print_address(bfd_vma addr, struct disassemble_info *info)

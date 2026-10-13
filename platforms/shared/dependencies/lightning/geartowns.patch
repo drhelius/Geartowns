@@ -1,4 +1,4 @@
---- lightning-2.2.3/lib/jit_aarch64-cpu.c
+--- lightning-7965700/lib/jit_aarch64-cpu.c
 +++ lightning/lib/jit_aarch64-cpu.c
 @@ -674,8 +674,8 @@
  #  define xrshi(s, r0, r1, r2, i0)	_xrshi(_jit, s, r0, r1, r2, i0)
@@ -20,7 +20,7 @@
  {
      jit_int32_t		reg;
      if (r0 != r1 && r0 != r2) {
---- lightning-2.2.3/lib/jit_aarch64.c
+--- lightning-7965700/lib/jit_aarch64.c
 +++ lightning/lib/jit_aarch64.c
 @@ -82,11 +82,8 @@
   */
@@ -51,7 +51,7 @@
  }
  
  void
---- lightning-2.2.3/lib/jit_arm.c
+--- lightning-7965700/lib/jit_arm.c
 +++ lightning/lib/jit_arm.c
 @@ -185,45 +185,27 @@
  void
@@ -135,9 +135,9 @@
  }
  
  void
---- lightning-2.2.3/lib/jit_fallback.c
+--- lightning-7965700/lib/jit_fallback.c
 +++ lightning/lib/jit_fallback.c
-@@ -409,15 +409,13 @@
+@@ -413,15 +413,13 @@
  {
      jit_int32_t		r1_reg, iscasi;
      jit_word_t		jump, done;
@@ -154,7 +154,7 @@
      fallback_load(r1);
      ldr(r0, r1);
      fallback_load(r2);
-@@ -433,7 +431,6 @@
+@@ -437,7 +435,6 @@
      /* done: */
      fallback_flush();
      done = _jit->pc.w;
@@ -162,7 +162,7 @@
      fallback_load(r0);
      fallback_flush();
      fallback_patch_bnei(jump, done);
---- lightning-2.2.3/lib/jit_loongarch.c
+--- lightning-7965700/lib/jit_loongarch.c
 +++ lightning/lib/jit_loongarch.c
 @@ -1892,14 +1892,7 @@
  void
@@ -180,7 +180,7 @@
  }
  
  void
---- lightning-2.2.3/lib/jit_mips.c
+--- lightning-7965700/lib/jit_mips.c
 +++ lightning/lib/jit_mips.c
 @@ -192,36 +192,7 @@
      jit_cpu.sll_delay = jit_cpu.cop1_delay = jit_cpu.lwl_lwr_delay =
@@ -229,7 +229,7 @@
  		    goto restart_function;
  		}
  		/* remember label is defined */
-@@ -2406,14 +2379,7 @@
+@@ -2405,14 +2378,7 @@
  void
  jit_flush(void *fptr, void *tptr)
  {
@@ -245,7 +245,7 @@
  }
  
  void
---- lightning-2.2.3/lib/jit_ppc.c
+--- lightning-7965700/lib/jit_ppc.c
 +++ lightning/lib/jit_ppc.c
 @@ -241,22 +241,9 @@
  	    sigaction(SIGILL, &old_action, NULL);
@@ -289,7 +289,7 @@
  }
  
  void
---- lightning-2.2.3/lib/jit_riscv.c
+--- lightning-7965700/lib/jit_riscv.c
 +++ lightning/lib/jit_riscv.c
 @@ -2113,14 +2113,7 @@
  void
@@ -307,27 +307,22 @@
  }
  
  void
---- lightning-2.2.3/lib/jit_x86-cpu.c
+--- lightning-7965700/lib/jit_x86-cpu.c
 +++ lightning/lib/jit_x86-cpu.c
-@@ -867,13 +867,13 @@
- #    if __X32
- #      define ffsl(i)			__builtin_ffs(i)
- #    else
--#      define ffsl(l)			__builtin_ffsl(l)
-+#      define ffsl(l)			__builtin_ffsll(l)
- #    endif
+@@ -878,9 +878,9 @@
+ #    define ctzl(x)			__builtin_ctzl(x)
  #  endif
  #  define jit_cmov_p()			jit_cpu.cmov
--#  define is_low_mask(im)		(((im) & 1) ? (__builtin_popcountl((im) + 1) <= 1) : 0)
--#  define is_high_mask(im)		((im) ? (__builtin_popcountl((im) + (1 << __builtin_ctzl(im))) == 0) : 0)
--#  define unmasked_bits_count(im)	(__WORDSIZE - __builtin_popcountl(im))
-+#  define is_low_mask(im)		(((im) & 1) ? (__builtin_popcountll((jit_uword_t)(im) + 1) <= 1) : 0)
-+#  define is_high_mask(im)		((im) ? (__builtin_popcountll((jit_uword_t)(im) + ((jit_uword_t)1 << __builtin_ctzll(im))) == 0) : 0)
-+#  define unmasked_bits_count(im)	(__WORDSIZE - __builtin_popcountll((jit_uword_t)(im)))
+-#  define is_low_mask(im)		(((im) & 1) ? (popcntl((im) + 1) <= 1) : 0)
+-#  define is_high_mask(im)		((im) ? (popcntl((im) + (1 << ctzl(im))) == 0) : 0)
+-#  define unmasked_bits_count(im)	(__WORDSIZE - popcntl(im))
++#  define is_low_mask(im)		(((im) & 1) ? (popcntl((jit_uword_t)(im) + 1) <= 1) : 0)
++#  define is_high_mask(im)		((im) ? (popcntl((jit_uword_t)(im) + ((jit_uword_t)1 << ctzl(im))) == 0) : 0)
++#  define unmasked_bits_count(im)	(__WORDSIZE - popcntl((jit_uword_t)(im)))
  #endif
  
  #if CODE
-@@ -4845,8 +4845,8 @@
+@@ -4852,8 +4852,8 @@
  #if __X64 && (__CYGWIN__ || _WIN32)
      for (reg = 0; reg < jit_size(fregs); reg++) {
  	if (jit_regset_tstbit(&_jitc->function->regset, fregs[reg])) {
@@ -338,7 +333,7 @@
  	}
      }
  #endif
-@@ -4918,8 +4918,8 @@
+@@ -4925,8 +4925,8 @@
  #if __X64 && (__CYGWIN__ || _WIN32)
      for (reg = 0; reg < jit_size(fregs); reg++) {
  	if (jit_regset_tstbit(&_jitc->function->regset, fregs[reg])) {
@@ -349,7 +344,7 @@
  	}
      }
  #endif
-@@ -5114,7 +5114,8 @@
+@@ -5121,7 +5121,8 @@
      ++instr;
      switch (code[0]) {
  	/* movi_p */
@@ -359,7 +354,7 @@
  	    *(jit_word_t *)instr = label;
  	    break;
  	    /* forward pc relative address known to be in range */
-@@ -5141,7 +5142,10 @@
+@@ -5148,7 +5149,10 @@
  	    *(jit_int32_t *)instr = disp;
  	    break;
  	    /* jccs */
@@ -371,7 +366,7 @@
  	    /* jmpsi */
  	case 0xeb:
  	    disp = label - (instr + 1);
---- lightning-2.2.3/lib/jit_x86-sse.c
+--- lightning-7965700/lib/jit_x86-sse.c
 +++ lightning/lib/jit_x86-sse.c
 @@ -115,6 +115,8 @@
  #  define movsdmr(md,rb,ri,ms,rd)	ssexrx(0xf2,X86_SSE_MOV,md,rb,ri,ms,rd)
@@ -382,7 +377,7 @@
  static void
  _ssexrx(jit_state_t*, jit_int32_t, jit_int32_t, jit_int32_t,
  	jit_int32_t, jit_int32_t, jit_int32_t, jit_int32_t);
---- lightning-2.2.3/lib/jit_x86.c
+--- lightning-7965700/lib/jit_x86.c
 +++ lightning/lib/jit_x86.c
 @@ -47,7 +47,7 @@
  #    define jit_arg_f_reg_p(i)		jit_arg_reg_p(i)
@@ -472,7 +467,7 @@
  #endif
      /* Make sure functions called have a 16 byte aligned stack */
      _jitc->framesize = (_jitc->framesize + 15) & -16;
---- lightning-2.2.3/include/lightning.h.in
+--- lightning-7965700/include/lightning.h.in
 +++ lightning/include/lightning.h
 @@ -20,12 +20,11 @@
  #ifndef _lightning_h

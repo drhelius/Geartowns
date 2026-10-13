@@ -21,10 +21,13 @@
 #    define __arm__		1
 #  endif
 
-/* Every Windows target is little-endian */
+/* Every Windows target is little-endian and has a 32-bit long */
 #  define __LITTLE_ENDIAN	1234
 #  define __BIG_ENDIAN		4321
 #  define __BYTE_ORDER		__LITTLE_ENDIAN
+#  if !defined(__SIZEOF_LONG__)
+#    define __SIZEOF_LONG__	4
+#  endif
 
 static __inline int __builtin_popcountll(unsigned long long value)
 {

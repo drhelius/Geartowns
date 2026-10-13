@@ -177,6 +177,13 @@ typedef jit_uint64_t		jit_regset_t;
 #  define JIT_RET		_A0
 #  define JIT_FRET		_FA0
 typedef jit_uint64_t		jit_regset_t;
+#elif defined(__sh__)
+#  define JIT_RA0		_R4
+#  define JIT_FA0		_XF4
+#  define JIT_SP		_R15
+#  define JIT_RET		_R0
+#  define JIT_FRET		_XF0
+typedef jit_uint32_t		jit_regset_t;
 #endif
 
 #define jit_data(u,v,w)		_jit_data(_jit,u,v,w)
@@ -447,7 +454,7 @@ typedef struct jit_value	jit_value_t;
 typedef struct jit_compiler	jit_compiler_t;
 typedef struct jit_function	jit_function_t;
 typedef struct jit_register	jit_register_t;
-#if __arm__
+#if __arm__ || __sh__
 #  if DISASSEMBLER
 typedef struct jit_data_info	jit_data_info_t;
 #  endif
@@ -522,7 +529,7 @@ typedef struct {
     jit_node_t		*node;
 } jit_patch_t;
 
-#if __arm__ && DISASSEMBLER
+#if (__arm__ || __sh__) && DISASSEMBLER
 struct jit_data_info {
     jit_uword_t		  code;		/* pointer in code buffer */
     jit_word_t		  length;	/* length of constant vector */
@@ -747,6 +754,25 @@ struct jit_compiler {
 	    jit_word_t	  offset;	/* offset in instrs/values vector */
 	    jit_word_t	  length;	/* length of instrs/values vector */
 	} vector;
+    } consts;
+#elif defined(__sh__)
+#  if DISASSEMBLER
+    struct {
+	jit_data_info_t	 *ptr;
+	jit_word_t	  offset;
+	jit_word_t	  length;
+    } data_info;			/* constant pools information */
+#  endif
+    jit_bool_t mode_d;
+    jit_bool_t no_flag;
+    jit_bool_t uses_fpu;
+    struct {
+	jit_uint8_t	 *data;		/* pointer to code */
+	jit_word_t	  size;		/* size data */
+	jit_word_t	  offset;	/* pending patches */
+	jit_word_t	  length;	/* number of pending constants */
+	jit_int32_t	  values[1024];	/* pending constants */
+	jit_word_t	  patches[2048];
     } consts;
 #endif
 #if GET_JIT_SIZE

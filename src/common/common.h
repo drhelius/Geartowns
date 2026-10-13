@@ -31,6 +31,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#if !defined(__LIBRETRO__)
+#include <dirent.h>
+#include <unistd.h>
+#endif
 #endif
 #include "defines.h"
 #include "types.h"
@@ -389,6 +393,80 @@ inline FILE* fopen_utf8(const char* path, const char* mode)
 inline FILE* fopen_utf8(const char* path, const char* mode)
 {
     return fopen(path, mode);
+}
+#endif
+
+#if !defined(__LIBRETRO__)
+inline bool remove_directory_and_contents(const char* path)
+{
+#if defined(_WIN32)
+    std::wstring wpath = utf8_to_wstring(path);
+    DWORD attributes = GetFileAttributesW(wpath.c_str());
+
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+    {
+        DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+    }
+
+    if (!(attributes & FILE_ATTRIBUTE_DIRECTORY))
+        return DeleteFileW(wpath.c_str()) != 0;
+
+    if (attributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        return RemoveDirectoryW(wpath.c_str()) != 0;
+
+    std::wstring search = wpath + L"\\*";
+    WIN32_FIND_DATAW fd;
+    HANDLE find = FindFirstFileW(search.c_str(), &fd);
+    bool ok = true;
+
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if (wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L".."))
+            {
+                std::string item = std::string(path) + "\\" + wstring_to_utf8(fd.cFileName);
+                ok = remove_directory_and_contents(item.c_str()) && ok;
+            }
+        }
+        while (FindNextFileW(find, &fd));
+
+        FindClose(find);
+    }
+
+    return ok && (RemoveDirectoryW(wpath.c_str()) != 0);
+#else
+    struct stat st;
+
+    if (lstat(path, &st) != 0)
+        return errno == ENOENT;
+
+    if (!S_ISDIR(st.st_mode))
+        return unlink(path) == 0;
+
+    DIR* dir = opendir(path);
+
+    if (!dir)
+        return false;
+
+    bool ok = true;
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        const char* name = entry->d_name;
+
+        if (strcmp(name, ".") && strcmp(name, ".."))
+        {
+            std::string item = std::string(path) + "/" + name;
+            ok = remove_directory_and_contents(item.c_str()) && ok;
+        }
+    }
+
+    closedir(dir);
+    return ok && (rmdir(path) == 0);
+#endif
 }
 #endif
 

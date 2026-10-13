@@ -329,12 +329,28 @@ bool Media::LoadCdRomFromZipFile(const char* file_path)
 
     m_media_info.cdrom = true;
 
-    string temp_path(m_temp_path[0] ? m_temp_path : m_media_info.directory);
+#if defined(__LIBRETRO__)
+    Error("CD-ROM images in ZIP files are not supported: %s", file_path);
+    return false;
+#else
+    if (m_temp_path[0] == '\0')
+    {
+        Error("No temp path to extract ZIP file %s", file_path);
+        return false;
+    }
+
+    string temp_path(m_temp_path);
     temp_path += "/";
     temp_path += m_media_info.name;
     temp_path += "_tmp";
 
     Debug("Extracting %s to %s", file_path, temp_path.c_str());
+
+    if (!remove_directory_and_contents(temp_path.c_str()))
+    {
+        Error("Unable to clear the extraction folder %s", temp_path.c_str());
+        return false;
+    }
 
     if (!extract_zip_to_folder(file_path, temp_path.c_str()))
     {
@@ -344,6 +360,7 @@ bool Media::LoadCdRomFromZipFile(const char* file_path)
 
     string cue_path = temp_path + "/" + cue_name;
     return m_cdrom_media->LoadCueFromFile(cue_path.c_str(), m_preload_cdrom);
+#endif
 }
 
 void Media::ResetMediaInfo()

@@ -162,7 +162,7 @@ void FloppyDisk::Identify()
 
     u8 media = m_image[0x1B];
 
-    if (largest > 4608 || (last_track < 0 && media == k_floppy_media_2hd))
+    if (largest > 4608 || media == k_floppy_media_2hd)
     {
         m_state.media = FLOPPY_MEDIA_2HD;
         m_state.rpm = longest > 10416 ? 300 : 360;

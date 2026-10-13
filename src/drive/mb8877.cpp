@@ -238,6 +238,36 @@ void MB8877::MediaChanged()
     m_state.media_valid = false;
 }
 
+// A state without media keeps the current image, where a later format may have moved the cached sector
+void MB8877::RelocateSector()
+{
+    bool cached = (m_state.phase == MB8877_PHASE_SEARCH && m_state.found) || m_state.phase == MB8877_PHASE_READ_DATA ||
+        (m_state.phase >= MB8877_PHASE_WRITE_REQUEST && m_state.phase <= MB8877_PHASE_WRITE_END);
+
+    if (!cached || !m_state.media_valid)
+        return;
+
+    FloppyDisk* disk = m_fdc->GetSelectedDisk();
+    int track = m_fdc->GetSelectedTrack();
+    FloppyDisk_Sector sectors[k_floppy_max_sectors];
+    int count = (IsValidPointer(disk) && track >= 0) ? disk->GetSectors(track, sectors) : 0;
+    int match = -1;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (memcmp(sectors[i].id, m_state.id, 4) != 0 || sectors[i].size != m_state.sector_size)
+            continue;
+
+        if (match < 0 || sectors[i].header == m_state.sector_header)
+            match = i;
+    }
+
+    if (match < 0)
+        m_state.media_valid = false;
+    else
+        m_state.sector_header = sectors[match].header;
+}
+
 void MB8877::RunPhase(u64 clocks)
 {
     u32 byte_clocks = m_fdc->GetByteClocks();

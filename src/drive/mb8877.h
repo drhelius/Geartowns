@@ -113,6 +113,7 @@ public:
     bool WriteDMA(u8 value);
     void ReadyChanged(bool ready);
     void MediaChanged();
+    void RelocateSector();
     MB8877_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);

@@ -364,6 +364,7 @@ void FDC::SanitizeState()
 
     m_state.drive_switch &= 0x01;
     m_state.mode_b = m_three_mode && m_state.mode_b;
+    m_mb8877.RelocateSector();
     UpdateIRQ();
     UpdateNextEvent(m_scheduler->GetClocks());
 }

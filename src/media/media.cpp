@@ -110,7 +110,8 @@ bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t si
             line.erase(path_end + 1);
         }
 
-        bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':');
+        bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':') ||
+            line.compare(0, 8, "cdrom://") == 0;
         entry.path = absolute ? line : directory + line;
         entries.push_back(entry);
     }

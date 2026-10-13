@@ -238,8 +238,6 @@ void Input::SanitizeState()
         m_state.mouse_x[i] = CLAMP(m_state.mouse_x[i], -k_input_mouse_limit, k_input_mouse_limit);
         m_state.mouse_y[i] = CLAMP(m_state.mouse_y[i], -k_input_mouse_limit, k_input_mouse_limit);
         m_state.mouse_phase[i] &= 0x03;
-        m_physical_gamepads[i] = m_state.gamepads[i];
-        memset(&m_injected_gamepads[i], 0, sizeof(m_injected_gamepads[i]));
     }
 }
 

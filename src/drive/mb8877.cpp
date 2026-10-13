@@ -233,13 +233,16 @@ void MB8877::ReadyChanged(bool ready)
         SetINTRQ(true);
 }
 
-void MB8877::MediaChanged()
+void MB8877::MediaChanged(u64 clocks)
 {
     m_state.media_valid = false;
+
+    if (m_state.phase == MB8877_PHASE_SEARCH)
+        Search(clocks, false);
 }
 
 // A state without media keeps the current image, where a later format may have moved the cached sector
-void MB8877::RelocateSector()
+void MB8877::RelocateSector(u64 clocks)
 {
     bool cached = (m_state.phase == MB8877_PHASE_SEARCH && m_state.found) || m_state.phase == MB8877_PHASE_READ_DATA ||
         (m_state.phase >= MB8877_PHASE_WRITE_REQUEST && m_state.phase <= MB8877_PHASE_WRITE_END);
@@ -263,7 +266,7 @@ void MB8877::RelocateSector()
     }
 
     if (match < 0)
-        m_state.media_valid = false;
+        MediaChanged(clocks);
     else
         m_state.sector_header = sectors[match].header;
 }
@@ -316,7 +319,8 @@ void MB8877::RunPhase(u64 clocks)
             }
             break;
         case MB8877_PHASE_READ_END:
-            if (m_state.sector_status == k_floppy_status_data_crc || m_state.sector_size != m_state.byte_count)
+            if (m_state.sector_status == k_floppy_status_data_crc || m_state.sector_size != m_state.byte_count ||
+                !m_state.media_valid)
             {
                 m_state.status |= k_mb8877_crc_error;
                 End();

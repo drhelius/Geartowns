@@ -239,7 +239,7 @@ void FDC::ChangeDisk(int drive)
     m_state.ready_clocks[drive] = clocks + k_fdc_disk_change_clocks;
 
     if (drive == GetSelectedDrive())
-        m_mb8877.MediaChanged();
+        m_mb8877.MediaChanged(clocks);
 
     UpdateReady(clocks);
     UpdateNextEvent(clocks);
@@ -248,7 +248,7 @@ void FDC::ChangeDisk(int drive)
 void FDC::ChangeSelection(int previous, u64 clocks)
 {
     if (GetSelectedDrive() != previous)
-        m_mb8877.MediaChanged();
+        m_mb8877.MediaChanged(clocks);
 
     UpdateReady(clocks);
 }
@@ -364,7 +364,7 @@ void FDC::SanitizeState()
 
     m_state.drive_switch &= 0x01;
     m_state.mode_b = m_three_mode && m_state.mode_b;
-    m_mb8877.RelocateSector();
+    m_mb8877.RelocateSector(m_scheduler->GetClocks());
     UpdateIRQ();
     UpdateNextEvent(m_scheduler->GetClocks());
 }

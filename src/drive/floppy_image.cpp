@@ -497,7 +497,7 @@ u32 FloppyImage::GetTrackRun(const u8* data, u32 size, u32 header_size, int trac
     if (offset == 0)
         return 0;
 
-    if (offset < header_size || offset + k_floppy_sector_header_size > size)
+    if (offset < header_size || offset > size - k_floppy_sector_header_size)
         return 0xFFFFFFFF;
 
     int count = MIN((int)read_u16_le(data + offset + 4), k_floppy_max_sectors);

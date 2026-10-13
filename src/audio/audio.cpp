@@ -461,11 +461,13 @@ u8 Audio::PeekWaveWindowCallback(void* device, u32 offset)
 void Audio::WriteWaveWindowCallback(void* device, u32 offset, u8 value)
 {
     Audio* audio = (Audio*)device;
+    RF5C68* rf5c68 = audio->m_rf5c68;
+    bool marker = rf5c68->GetWaveRAM()[((u16)rf5c68->GetWaveBank() << 12) | (offset & 0x0FFF)] == 0xFF;
     audio->Synchronize(audio->m_scheduler->GetClocks());
-    audio->m_rf5c68->Write((u16)(0x1000 | (offset & 0x0FFF)), value);
+    rf5c68->Write((u16)(0x1000 | (offset & 0x0FFF)), value);
 
-    // A new loop marker can change where a playing channel crosses its next block
-    if (value == 0xFF)
+    // Adding or removing a loop marker can change where a playing channel crosses its next block
+    if (marker != (value == 0xFF))
         audio->UpdatePCMIRQ();
 }
 

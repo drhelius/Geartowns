@@ -154,33 +154,38 @@ u64 RF5C68::GetCyclesToBlockIRQ() const
     {
         const RF5C68_Channel& channel = m_state.channels[i];
 
-        if (!channel.enabled || channel.step == 0)
+        if (!channel.enabled)
             continue;
 
         u32 address = channel.address;
         u32 offset = address >> k_rf5c68_address_fraction_bits;
-        u32 block_end = (offset | 0x0FFF) + 1;
-        const u8* marker = (const u8*)memchr(&m_state.wave_ram[offset], 0xFF, block_end - offset);
         u64 channel_samples = 0;
 
-        if (IsValidPointer(marker))
+        if (m_state.wave_ram[offset] == 0xFF)
         {
-            u32 marker_offset = (u32)(marker - m_state.wave_ram);
-
-            // A channel parked on a marker loop start only raises causes from the last byte of a block
-            if (marker_offset == offset && m_state.wave_ram[channel.loop_start] == 0xFF &&
+            // Markers only raise causes from the last byte of a block, a marker loop start parks the channel there
+            if ((offset & 0x0FFF) != 0x0FFF && m_state.wave_ram[channel.loop_start] == 0xFF &&
                 (channel.loop_start & 0x0FFF) != 0x0FFF)
                 continue;
-
-            u64 marker_address = (u64)marker_offset << k_rf5c68_address_fraction_bits;
-
-            if (marker_address > address)
-                channel_samples = (marker_address - address + channel.step - 1) / channel.step;
         }
         else
         {
-            u64 boundary = (u64)block_end << k_rf5c68_address_fraction_bits;
-            channel_samples = (boundary - address + channel.step - 1) / channel.step - 1;
+            if (channel.step == 0)
+                continue;
+
+            u32 block_end = (offset | 0x0FFF) + 1;
+            const u8* marker = (const u8*)memchr(&m_state.wave_ram[offset], 0xFF, block_end - offset);
+
+            if (IsValidPointer(marker))
+            {
+                u64 marker_address = (u64)(marker - m_state.wave_ram) << k_rf5c68_address_fraction_bits;
+                channel_samples = (marker_address - address + channel.step - 1) / channel.step;
+            }
+            else
+            {
+                u64 boundary = (u64)block_end << k_rf5c68_address_fraction_bits;
+                channel_samples = (boundary - address + channel.step - 1) / channel.step - 1;
+            }
         }
 
         samples = MIN(samples, channel_samples);

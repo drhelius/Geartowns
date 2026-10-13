@@ -40,6 +40,7 @@
 #include "sound_queue.h"
 #include "utils.h"
 #include "video_recorder.h"
+#include "ogl_renderer.h"
 #include "video/sprite.h"
 #include "video/video.h"
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
@@ -72,6 +73,7 @@ static bool audio_enabled = true;
 static McpManager* mcp_manager = NULL;
 static Uint64 rewind_last_counter = 0;
 static double rewind_pop_accumulator = 0.0;
+static bool video_recording_output = false;
 static bool emu_debug_step_start = false;
 
 static std::atomic<int> loading_state(Loading_State_None);
@@ -85,7 +87,6 @@ static int cdrom_playlist_index = -1;
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
-static const u8* get_rgba_frame(int width, int height);
 static void reset_run_state(void);
 static const char* get_configurated_dir(int option, const char* path);
 static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width, int* height);
@@ -341,12 +342,17 @@ void emu_update(void)
 
             if (frame_completed)
             {
-                GT_Runtime_Info runtime;
-                emu_get_runtime(runtime);
-                const u8* rgba = get_rgba_frame(runtime.screen_width, runtime.screen_height);
+                if (video_recording_output)
+                    emu_video_recording_frame_pending = true;
+                else
+                {
+                    GT_Runtime_Info runtime;
+                    emu_get_runtime(runtime);
+                    const u8* rgba = emu_get_rgba_frame(runtime.screen_width, runtime.screen_height);
 
-                if (IsValidPointer(rgba))
-                    video_recorder_add_video(rgba, runtime.screen_width, runtime.screen_height, 4);
+                    if (IsValidPointer(rgba))
+                        video_recorder_add_video(rgba, runtime.screen_width, runtime.screen_height, 4);
+                }
             }
         }
     }
@@ -1392,7 +1398,7 @@ bool emu_save_screenshot(const char* file_path)
 
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
-    const u8* rgba = get_rgba_frame(runtime.screen_width, runtime.screen_height);
+    const u8* rgba = emu_get_rgba_frame(runtime.screen_width, runtime.screen_height);
     int result = 0;
 
     if (IsValidPointer(rgba))
@@ -1414,7 +1420,7 @@ int emu_get_screenshot_png(unsigned char** out_buffer)
     *out_buffer = NULL;
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
-    const u8* rgba = get_rgba_frame(runtime.screen_width, runtime.screen_height);
+    const u8* rgba = emu_get_rgba_frame(runtime.screen_width, runtime.screen_height);
 
     if (!IsValidPointer(rgba))
         return 0;
@@ -1438,13 +1444,22 @@ bool emu_start_video_recording(const char* file_path)
 
     int width = 0;
     int height = 0;
-    get_video_recording_size(runtime, &width, &height);
+    video_recording_output = ogl_renderer_get_output_size(&width, &height) && (width > 1) && (height > 1);
+    emu_video_recording_frame_pending = false;
+
+    if (video_recording_output)
+    {
+        width &= ~1;
+        height &= ~1;
+    }
+    else
+        get_video_recording_size(runtime, &width, &height);
 
     if (!video_recorder_start(file_path, width, height, emu_get_frame_rate(), GT_AUDIO_SAMPLE_RATE,
         (Video_Recorder_Quality)config_video.recording_quality))
         return false;
 
-    Log("Video recording started: %s (%dx%d)", file_path, width, height);
+    Log("Video recording started: %s (%dx%d%s)", file_path, width, height, video_recording_output ? ", shader output" : "");
     return true;
 }
 
@@ -1570,7 +1585,7 @@ static void reset_buffers(void)
     memset(audio_buffer, 0, GT_AUDIO_BUFFER_SIZE * sizeof(s16));
 }
 
-static const u8* get_rgba_frame(int width, int height)
+const u8* emu_get_rgba_frame(int width, int height)
 {
     if (!IsValidPointer(rgba_frame_buffer))
         rgba_frame_buffer = new (std::nothrow) u8[(size_t)GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4];

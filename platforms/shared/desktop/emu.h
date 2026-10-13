@@ -126,6 +126,7 @@ EXTERN bool emu_debug_pc_changed;
 EXTERN int emu_debug_step_frames_pending;
 EXTERN bool emu_debug_disable_breakpoints;
 EXTERN u64 emu_frame_counter;
+EXTERN bool emu_video_recording_frame_pending;
 EXTERN u64 emu_debug_breakpoint_stops;
 EXTERN bool emu_audio_sync;
 
@@ -182,6 +183,7 @@ EXTERN bool emu_load_state_file(const char* file_path);
 EXTERN void update_savestates_data(void);
 
 EXTERN void emu_get_runtime(GT_Runtime_Info& runtime);
+EXTERN const u8* emu_get_rgba_frame(int width, int height);
 EXTERN double emu_get_frame_rate(void);
 EXTERN void emu_get_info(char* info, int buffer_size);
 EXTERN GeartownsCore* emu_get_core(void);

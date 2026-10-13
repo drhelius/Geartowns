@@ -108,7 +108,7 @@ bool events_shortcuts(const SDL_Event* event)
     }
 
     if (event->key.repeat == 0 && event->key.scancode == SDL_SCANCODE_ESCAPE &&
-        config_emulator.fullscreen && !config_emulator.always_show_menu)
+        config_emulator.fullscreen && !config_emulator.always_show_menu && !emu_is_video_recording())
     {
         application_trigger_fullscreen(false);
         return true;

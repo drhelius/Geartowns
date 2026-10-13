@@ -174,17 +174,15 @@ u64 RF5C68::GetCyclesToBlockIRQ() const
                 continue;
 
             u32 block_end = (offset | 0x0FFF) + 1;
+            u64 boundary = (u64)block_end << k_rf5c68_address_fraction_bits;
             const u8* marker = (const u8*)memchr(&m_state.wave_ram[offset], 0xFF, block_end - offset);
+            channel_samples = (boundary - address + channel.step - 1) / channel.step - 1;
 
+            // A step that jumps over a marker can cross the block end before reaching it
             if (IsValidPointer(marker))
             {
                 u64 marker_address = (u64)(marker - m_state.wave_ram) << k_rf5c68_address_fraction_bits;
-                channel_samples = (marker_address - address + channel.step - 1) / channel.step;
-            }
-            else
-            {
-                u64 boundary = (u64)block_end << k_rf5c68_address_fraction_bits;
-                channel_samples = (boundary - address + channel.step - 1) / channel.step - 1;
+                channel_samples = MIN(channel_samples, (marker_address - address + channel.step - 1) / channel.step);
             }
         }
 

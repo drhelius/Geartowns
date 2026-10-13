@@ -438,6 +438,9 @@ NO_INLINE u32 I386::GetNextInstructionComponentsChecked() const
 {
     TimingCursor cursor;
     cursor.eip = m_state.eip;
+    cursor.linear_page = 0;
+    cursor.physical_page = 0;
+    cursor.data = NULL;
     cursor.length = 0;
     cursor.remaining = 0;
     cursor.translated = false;

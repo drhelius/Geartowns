@@ -47,10 +47,10 @@
 #define AUTO_MOUSE_PORT 1
 #define FRAMESKIP_MAX 4
 #define RTC_FIXED_DATE 631152000
-#define DRIVE_CDROM 0
-#define DRIVE_FLOPPY_1 1
-#define DRIVE_FLOPPY_2 2
-#define DRIVE_COUNT (1 + FDC_DRIVES)
+#define DISK_DRIVE_CDROM 0
+#define DISK_DRIVE_FLOPPY_1 1
+#define DISK_DRIVE_FLOPPY_2 2
+#define DISK_DRIVE_COUNT (1 + FDC_DRIVES)
 #define FLOPPY_IDLE_FRAMES 180
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
@@ -139,7 +139,7 @@ struct DiskSetImage
 };
 
 static std::vector<DiskSetImage> disk_images;
-static int drive_entry[DRIVE_COUNT] = { -1, -1, -1 };
+static int drive_entry[DISK_DRIVE_COUNT] = { -1, -1, -1 };
 static unsigned disk_index = 0;
 static bool disk_ejected = true;
 static int open_drive = -1;
@@ -1726,28 +1726,28 @@ static bool disk_load(const char* path)
     if (disk_images.empty() || disk_images[boot].save_disk)
         return true;
 
-    if (!disk_insert(boot, disk_images[boot].cdrom ? DRIVE_CDROM : DRIVE_FLOPPY_1))
+    if (!disk_insert(boot, disk_images[boot].cdrom ? DISK_DRIVE_CDROM : DISK_DRIVE_FLOPPY_1))
         return false;
 
     for (size_t i = 0; i < disk_images.size(); i++)
     {
         if (disk_images[i].cdrom != disk_images[boot].cdrom && !disk_images[i].save_disk)
         {
-            if (!disk_insert((unsigned)i, disk_images[i].cdrom ? DRIVE_CDROM : DRIVE_FLOPPY_1))
+            if (!disk_insert((unsigned)i, disk_images[i].cdrom ? DISK_DRIVE_CDROM : DISK_DRIVE_FLOPPY_1))
                 return false;
 
             break;
         }
     }
 
-    int boot_floppy = drive_entry[DRIVE_FLOPPY_1];
+    int boot_floppy = drive_entry[DISK_DRIVE_FLOPPY_1];
     bool multidrive = floppy_multidrive && boot_floppy >= 0 && core->GetPendingMachineConfig().floppy_drives > 1;
 
     for (size_t i = (size_t)(boot_floppy + 1); multidrive && i < disk_images.size(); i++)
     {
         if (!disk_images[i].cdrom && !disk_images[i].save_disk)
         {
-            if (!disk_insert((unsigned)i, DRIVE_FLOPPY_2))
+            if (!disk_insert((unsigned)i, DISK_DRIVE_FLOPPY_2))
                 log_cb(RETRO_LOG_WARN, "Floppy MultiDrive: %s is not inserted in Floppy 2\n",
                     disk_images[i].path.c_str());
 
@@ -1939,9 +1939,9 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
 static int get_entry_drive(unsigned index)
 {
     if (index < disk_images.size() && disk_images[index].cdrom)
-        return DRIVE_CDROM;
+        return DISK_DRIVE_CDROM;
 
-    return DRIVE_FLOPPY_1 + (core->GetPendingMachineConfig().floppy_drives > 1 ? floppy_drive : 0);
+    return DISK_DRIVE_FLOPPY_1 + (core->GetPendingMachineConfig().floppy_drives > 1 ? floppy_drive : 0);
 }
 
 static bool disk_insert(unsigned index, int drive)
@@ -1951,10 +1951,10 @@ static bool disk_insert(unsigned index, int drive)
 
     DiskSetImage& image = disk_images[index];
 
-    if (drive == DRIVE_CDROM)
+    if (drive == DISK_DRIVE_CDROM)
     {
         bool loaded = core->LoadMedia(image.path.c_str());
-        drive_entry[DRIVE_CDROM] = loaded ? (int)index : -1;
+        drive_entry[DISK_DRIVE_CDROM] = loaded ? (int)index : -1;
 
         if (loaded)
         {
@@ -1965,7 +1965,7 @@ static bool disk_insert(unsigned index, int drive)
         return loaded;
     }
 
-    for (int i = DRIVE_FLOPPY_1; i < DRIVE_COUNT; i++)
+    for (int i = DISK_DRIVE_FLOPPY_1; i < DISK_DRIVE_COUNT; i++)
     {
         if (i != drive && drive_entry[i] >= 0 && disk_images[drive_entry[i]].path == image.path &&
             disk_images[drive_entry[i]].disk == image.disk)
@@ -1977,7 +1977,7 @@ static bool disk_insert(unsigned index, int drive)
         }
     }
 
-    int floppy = drive - DRIVE_FLOPPY_1;
+    int floppy = drive - DISK_DRIVE_FLOPPY_1;
 
     if (!floppy_flush(floppy))
         return false;
@@ -1996,11 +1996,11 @@ static bool disk_insert(unsigned index, int drive)
 
 static bool disk_eject(int drive)
 {
-    if (drive == DRIVE_CDROM)
+    if (drive == DISK_DRIVE_CDROM)
         core->EjectMedia();
     else
     {
-        int floppy = drive - DRIVE_FLOPPY_1;
+        int floppy = drive - DISK_DRIVE_FLOPPY_1;
 
         if (!floppy_flush(floppy))
         {
@@ -2054,7 +2054,7 @@ static void disk_clear(void)
     open_drive = -1;
     open_entry = -1;
 
-    for (int i = 0; i < DRIVE_COUNT; i++)
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
         drive_entry[i] = -1;
 
     for (int i = 0; i < FDC_DRIVES; i++)
@@ -2075,18 +2075,18 @@ static void disk_shift_entry(int& entry, unsigned index, int delta)
 
 static bool mount_state_media(const GT_SaveState_Media& media)
 {
-    int entries[DRIVE_COUNT];
+    int entries[DISK_DRIVE_COUNT];
     bool changed = false;
 
-    for (int i = 0; i < DRIVE_COUNT; i++)
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
         entries[i] = drive_entry[i];
 
     if (media.cdrom_inserted && (!core->GetMedia()->IsReady() || core->GetMedia()->GetCRC() != media.cdrom_crc))
     {
-        entries[DRIVE_CDROM] = find_cdrom_entry(media.cdrom_crc);
+        entries[DISK_DRIVE_CDROM] = find_cdrom_entry(media.cdrom_crc);
         changed = true;
 
-        if (entries[DRIVE_CDROM] < 0)
+        if (entries[DISK_DRIVE_CDROM] < 0)
             return false;
     }
 
@@ -2097,23 +2097,23 @@ static bool mount_state_media(const GT_SaveState_Media& media)
         if (!media.floppy_inserted[i] || (disk->IsInserted() && disk->GetBaseCRC() == media.floppy_crc[i]))
             continue;
 
-        entries[DRIVE_FLOPPY_1 + i] = find_floppy_entry(media.floppy_crc[i]);
+        entries[DISK_DRIVE_FLOPPY_1 + i] = find_floppy_entry(media.floppy_crc[i]);
         changed = true;
 
-        if (entries[DRIVE_FLOPPY_1 + i] < 0)
+        if (entries[DISK_DRIVE_FLOPPY_1 + i] < 0)
             return false;
     }
 
     if (!changed)
         return false;
 
-    for (int i = DRIVE_FLOPPY_1; i < DRIVE_COUNT; i++)
+    for (int i = DISK_DRIVE_FLOPPY_1; i < DISK_DRIVE_COUNT; i++)
     {
         if (entries[i] != drive_entry[i] && drive_entry[i] >= 0 && !disk_eject(i))
             return false;
     }
 
-    for (int i = 0; i < DRIVE_COUNT; i++)
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
     {
         if (entries[i] != drive_entry[i] && !disk_insert((unsigned)entries[i], i))
             return false;
@@ -2286,7 +2286,7 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
     if (!disk_ejected || index >= disk_images.size())
         return false;
 
-    for (int i = 0; i < DRIVE_COUNT; i++)
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
     {
         if (drive_entry[i] == (int)index)
             return false;
@@ -2296,7 +2296,7 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
     {
         disk_images.erase(disk_images.begin() + index);
 
-        for (int i = 0; i < DRIVE_COUNT; i++)
+        for (int i = 0; i < DISK_DRIVE_COUNT; i++)
             disk_shift_entry(drive_entry[i], index, -1);
 
         disk_shift_entry(open_entry, index, -1);
@@ -2319,7 +2319,7 @@ static bool disk_replace_image_index(unsigned index, const struct retro_game_inf
     disk_images[index] = images[0];
     disk_images.insert(disk_images.begin() + index + 1, images.begin() + 1, images.end());
 
-    for (int i = 0; i < DRIVE_COUNT; i++)
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
         disk_shift_entry(drive_entry[i], index + 1, added);
 
     disk_shift_entry(open_entry, index + 1, added);
@@ -2527,7 +2527,7 @@ static bool floppy_load_image(unsigned index, int floppy)
     floppy_working_path[floppy] = working;
     floppy_idle_frames[floppy] = 0;
     floppy_flush_failed[floppy] = false;
-    drive_entry[DRIVE_FLOPPY_1 + floppy] = (int)index;
+    drive_entry[DISK_DRIVE_FLOPPY_1 + floppy] = (int)index;
     log_cb(RETRO_LOG_INFO, "Floppy %d: %s\n", floppy + 1, image.path.c_str());
     return true;
 }

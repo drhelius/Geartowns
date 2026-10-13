@@ -63,6 +63,7 @@ public:
     bool IsBusy() const;
     bool GetPage() const;
     u32 GetDisplayOffset() const;
+    u32 GetWorkOffset() const;
     Sprite_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);

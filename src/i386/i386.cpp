@@ -512,6 +512,7 @@ bool I386::CanAcceptNMI() const
 u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int line)
 {
     SetBusContext(context);
+    m_io_start_cycles = 0;
     m_state.halted = false;
 
     // An interrupted REP restarts with RF set, so its instruction breakpoint doesn't hit again

@@ -515,6 +515,7 @@ INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice()
     context.origin = GT_BUS_ORIGIN_CPU;
     context.clocks = m_scheduler->GetClocks();
     context.synchronize = &GeartownsCore::SynchronizeIOCallback;
+    context.synchronize_memory = &GeartownsCore::SynchronizeMemoryCallback;
     context.synchronize_context = this;
     return context;
 }
@@ -550,6 +551,29 @@ GT_Synchronize_Result GeartownsCore::SynchronizeIOCallback(void* core, GT_Bus_Ac
 
     context.clocks = scheduler->GetClocks();
     return result;
+}
+
+// A memory access that a device must see in time moves machine time up to the start of its instruction
+// Events due by then run before the access, and their IRQs wait for the end of the instruction
+void GeartownsCore::SynchronizeMemoryCallback(void* core, GT_Bus_Access_Context& context)
+{
+    GeartownsCore* geartowns = (GeartownsCore*)core;
+    Scheduler* scheduler = geartowns->m_scheduler;
+    u32 start_cycles = geartowns->m_i386->GetStartCycles();
+
+    if (start_cycles <= context.synchronized_cycles)
+        return;
+
+    scheduler->AddCycles(start_cycles - context.synchronized_cycles);
+    context.synchronized_cycles = start_cycles;
+
+    if (scheduler->IsEventDue())
+    {
+        context.end_batch = true;
+        geartowns->DispatchEvents();
+    }
+
+    context.clocks = scheduler->GetClocks();
 }
 
 // A halted CPU idles through the slice
@@ -1548,8 +1572,11 @@ void GeartownsCore::InitMemoryMap()
         Video::WriteVRAMSinglePage32Callback))
         Error("Unable to map the single-page VRAM view");
 
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", sprite_ram, sprite_ram,
-        VIDEO_SPRITE_RAM_SIZE, 0x81000000U, sprite_ram_flags))
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", VIDEO_SPRITE_RAM_SIZE, 0x81000000U,
+        sprite_ram_flags, m_video, Video::ReadSpriteRAMCallback, Video::WriteSpriteRAMCallback, NULL) ||
+        !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_SPRITE_RAM, Video::WriteSpriteRAM16Callback,
+        Video::WriteSpriteRAM32Callback) ||
+        !m_memory->SetRegionData(GT_DEBUG_REGION_SPRITE_RAM, sprite_ram, sprite_ram))
         Error("Unable to map sprite RAM");
 
     u32 data_rom_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED;

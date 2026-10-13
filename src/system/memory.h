@@ -72,6 +72,8 @@ public:
     bool SetRegionWideHandlers(int id, GT_Memory_Write16_Fn write16, GT_Memory_Write32_Fn write32);
     bool SetRegionMapped(int id, bool mapped);
     bool SetRegionData(int id, const u8* read_data, u8* write_data);
+    bool SetRegionHandlerRange(int id, u32 offset, u32 size, bool reads);
+    void SynchronizeAccess();
     int GetDebugRegionCount() const;
     bool GetDebugRegion(int index, GT_Debug_Memory_Region& region) const;
     void DebugReadRegionBlock(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
@@ -128,6 +130,9 @@ private:
         GT_Memory_Read8_Fn peek8;
         GT_Memory_Write16_Fn write16;
         GT_Memory_Write32_Fn write32;
+        u32 handler_offset;
+        u32 handler_size;
+        bool handler_reads;
     };
 
     const DebugRegion* FindRegion(int id) const;
@@ -136,6 +141,7 @@ private:
     DebugRegion* FindMappedRegion(u32 bus_address);
     const DebugRegion* FindMappedSpan(u32 physical, u32 size) const;
     const DebugRegion* FindPageSpan(u32 physical, u32 size) const;
+    bool IsHandlerSpan(const DebugRegion* region, u32 offset, u32 size) const;
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
     GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
@@ -174,6 +180,7 @@ private:
     u8* m_video_ram;
     size_t m_video_ram_size;
     TraceLogger* m_trace_logger;
+    GT_Bus_Access_Context* m_access_context;
 
 #if !defined(GT_DISABLE_DYNAREC)
     u8* m_code_pages;

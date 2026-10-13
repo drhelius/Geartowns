@@ -39,6 +39,7 @@ Video::Video()
     m_frame_ready = false;
     m_next_event_clocks = GT_NO_EVENT;
     m_next_event_half_line = 0;
+    m_sprite_handler_offset = 0;
     m_beam_event_clocks = 0;
     m_beam_middle_clocks = 0;
     m_beam_event_crtc_clocks = 0;
@@ -362,6 +363,7 @@ void Video::EndFrame()
 u8 Video::ReadVRAMTwoPageCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;
+    video->SynchronizeSpriteWork(offset & (VIDEO_VRAM_SIZE - 1), 1);
     return video->ReadVRAMTwoPage(offset);
 }
 
@@ -392,6 +394,7 @@ void Video::WriteVRAMTwoPage32Callback(void* device, u32 offset, u32 value)
 u8 Video::ReadVRAMSinglePageCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;
+    video->SynchronizeSpriteWork(video->SinglePageToCanonical(offset), 1);
     return video->ReadVRAMSinglePage(offset);
 }
 
@@ -417,6 +420,49 @@ void Video::WriteVRAMSinglePage32Callback(void* device, u32 offset, u32 value)
 {
     Video* video = (Video*)device;
     video->WriteVRAMSinglePage32(offset, value);
+}
+
+u8 Video::ReadSpriteRAMCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
+    return video->m_state.sprite_ram[offset];
+}
+
+// The engine only reads sprite RAM, so a write that keeps the data can't change what it draws
+void Video::WriteSpriteRAMCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    u8* data = &video->m_state.sprite_ram[offset];
+
+    if (*data != value)
+    {
+        video->SynchronizeSpriteRAM();
+        *data = value;
+    }
+}
+
+void Video::WriteSpriteRAM16Callback(void* device, u32 offset, u16 value)
+{
+    Video* video = (Video*)device;
+    u8* data = &video->m_state.sprite_ram[offset];
+
+    if (read_u16_le(data) != value)
+    {
+        video->SynchronizeSpriteRAM();
+        write_u16_le(data, value);
+    }
+}
+
+void Video::WriteSpriteRAM32Callback(void* device, u32 offset, u32 value)
+{
+    Video* video = (Video*)device;
+    u8* data = &video->m_state.sprite_ram[offset];
+
+    if (read_u32_le(data) != value)
+    {
+        video->SynchronizeSpriteRAM();
+        write_u32_le(data, value);
+    }
 }
 
 u8 Video::ReadFMRPlanesCallback(void* device, u32 offset)
@@ -477,6 +523,24 @@ void Video::UpdateVRAMMapping()
 {
     u8* write_data = read_u32_le(m_state.mask) == 0xFFFFFFFF ? m_state.vram : NULL;
     m_memory->SetRegionData(GT_DEBUG_REGION_VRAM_TWO_PAGE, m_state.vram, write_data);
+    UpdateSpriteMapping();
+}
+
+// While a transfer runs, CPU writes to sprite RAM and accesses to the half being drawn reach the handlers
+void Video::UpdateSpriteMapping()
+{
+    u32 work = GetSpriteHandlerOffset();
+    bool busy = work != 0;
+    m_sprite_handler_offset = work;
+    m_memory->SetRegionHandlerRange(GT_DEBUG_REGION_SPRITE_RAM, 0, busy ? VIDEO_SPRITE_RAM_SIZE : 0, false);
+    m_memory->SetRegionHandlerRange(GT_DEBUG_REGION_VRAM_TWO_PAGE, work, busy ? k_sprite_half_size : 0, true);
+}
+
+// Machine time moves up to the access first, then the engine catches up with it
+NO_INLINE void Video::SynchronizeSpriteAccess()
+{
+    m_memory->SynchronizeAccess();
+    Synchronize(m_scheduler->GetClocks());
 }
 
 u8 Video::ReadVRAMTwoPage(u32 offset) const
@@ -486,6 +550,7 @@ u8 Video::ReadVRAMTwoPage(u32 offset) const
 
 void Video::WriteVRAMTwoPage(u32 offset, u8 value)
 {
+    SynchronizeSpriteWork(offset & (VIDEO_VRAM_SIZE - 1), 1);
     u8 mask = m_state.mask[offset & 0x03];
     u8& data = m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
     data = (u8)((data & ~mask) | (value & mask));
@@ -493,6 +558,7 @@ void Video::WriteVRAMTwoPage(u32 offset, u8 value)
 
 void Video::WriteVRAMTwoPage16(u32 offset, u16 value)
 {
+    SynchronizeSpriteWork(offset & (VIDEO_VRAM_SIZE - 1), 2);
     u16 mask = (u16)GetVRAMMask(offset);
     u8* data = &m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
     write_u16_le(data, (u16)((read_u16_le(data) & ~mask) | (value & mask)));
@@ -500,6 +566,7 @@ void Video::WriteVRAMTwoPage16(u32 offset, u16 value)
 
 void Video::WriteVRAMTwoPage32(u32 offset, u32 value)
 {
+    SynchronizeSpriteWork(offset & (VIDEO_VRAM_SIZE - 1), 4);
     u32 mask = GetVRAMMask(offset);
     u8* data = &m_state.vram[offset & (VIDEO_VRAM_SIZE - 1)];
     write_u32_le(data, (read_u32_le(data) & ~mask) | (value & mask));
@@ -512,8 +579,10 @@ u8 Video::ReadVRAMSinglePage(u32 offset) const
 
 void Video::WriteVRAMSinglePage(u32 offset, u8 value)
 {
+    u32 canonical = SinglePageToCanonical(offset);
+    SynchronizeSpriteWork(canonical, 1);
     u8 mask = m_state.mask[offset & 0x03];
-    u8& data = m_state.vram[SinglePageToCanonical(offset)];
+    u8& data = m_state.vram[canonical];
     data = (u8)((data & ~mask) | (value & mask));
 }
 
@@ -526,8 +595,10 @@ void Video::WriteVRAMSinglePage16(u32 offset, u16 value)
         return;
     }
 
+    u32 canonical = SinglePageToCanonical(offset);
+    SynchronizeSpriteWork(canonical, 2);
     u16 mask = (u16)GetVRAMMask(offset);
-    u8* data = &m_state.vram[SinglePageToCanonical(offset)];
+    u8* data = &m_state.vram[canonical];
     write_u16_le(data, (u16)((read_u16_le(data) & ~mask) | (value & mask)));
 }
 
@@ -540,8 +611,10 @@ void Video::WriteVRAMSinglePage32(u32 offset, u32 value)
         return;
     }
 
+    u32 canonical = SinglePageToCanonical(offset);
+    SynchronizeSpriteWork(canonical, 4);
     u32 mask = read_u32_le(m_state.mask);
-    u8* data = &m_state.vram[SinglePageToCanonical(offset)];
+    u8* data = &m_state.vram[canonical];
     write_u32_le(data, (read_u32_le(data) & ~mask) | (value & mask));
 }
 
@@ -609,6 +682,7 @@ void Video::WriteFMRText(u32 offset, u8 value)
     if (offset >= 0x3000)
         return;
 
+    SynchronizeSpriteRAM();
     m_state.sprite_ram[offset] = value;
     m_state.fmr_text_written = true;
 }
@@ -810,6 +884,9 @@ void Video::RunNextEvent()
         else
             m_sprite->TraceBusyAtVSync();
     }
+
+    if (GetSpriteHandlerOffset() != m_sprite_handler_offset)
+        UpdateSpriteMapping();
 
     if ((half_line & 0x01) == 0)
         RenderRows(half_line);

@@ -45,6 +45,7 @@ Memory::Memory()
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     InitPointer(m_trace_logger);
+    InitPointer(m_access_context);
     memset(m_debug_regions, 0, sizeof(m_debug_regions));
 #if !defined(GT_DISABLE_DYNAREC)
     InitPointer(m_code_pages);
@@ -160,6 +161,11 @@ INLINE const Memory::DebugRegion* Memory::FindPageSpan(u32 physical, u32 size) c
     return FindMappedSpan(physical, size);
 }
 
+INLINE bool Memory::IsHandlerSpan(const DebugRegion* region, u32 offset, u32 size) const
+{
+    return offset < region->handler_offset + region->handler_size && offset + size > region->handler_offset;
+}
+
 #if !defined(GT_DISABLE_DYNAREC)
 // Writes that reach RAM pages holding translated code outside the CPU fast path
 INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size)
@@ -228,7 +234,7 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
         {
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
 
-            if (IsValidPointer(region->write_data))
+            if (IsValidPointer(region->write_data) && !IsHandlerSpan(region, offset, 2))
             {
                 write_u16_le(region->write_data + offset, value);
                 m_debug_snapshot_id += 2;
@@ -240,7 +246,10 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
 
             if (IsValidPointer(region->write16))
             {
+                GT_Bus_Access_Context* outer = m_access_context;
+                m_access_context = &context;
                 region->write16(region->device, offset, value);
+                m_access_context = outer;
                 m_debug_snapshot_id += 2;
                 return;
             }
@@ -261,7 +270,7 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
         {
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
 
-            if (IsValidPointer(region->write_data))
+            if (IsValidPointer(region->write_data) && !IsHandlerSpan(region, offset, 4))
             {
                 write_u32_le(region->write_data + offset, value);
                 m_debug_snapshot_id += 4;
@@ -273,7 +282,10 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
 
             if (IsValidPointer(region->write32))
             {
+                GT_Bus_Access_Context* outer = m_access_context;
+                m_access_context = &context;
                 region->write32(region->device, offset, value);
+                m_access_context = outer;
                 m_debug_snapshot_id += 4;
                 return;
             }
@@ -434,6 +446,55 @@ bool Memory::SetRegionData(int id, const u8* read_data, u8* write_data)
     return true;
 }
 
+// CPU writes to these pages, and reads too when asked, reach the handlers even though the region has host data
+bool Memory::SetRegionHandlerRange(int id, u32 offset, u32 size, bool reads)
+{
+    DebugRegion* region = FindRegion(id);
+
+    if (size == 0)
+        offset = 0;
+
+    if (!IsValidPointer(region) ||
+        ((offset | size) & 0xFFF) != 0 ||
+        (u64)offset + size > region->info.size ||
+        ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && !IsValidPointer(region->read8)) ||
+        ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && !IsValidPointer(region->write8)))
+        return false;
+
+    if (region->handler_offset == offset && region->handler_size == size && region->handler_reads == reads)
+        return true;
+
+    u32 old_offset = region->handler_offset;
+    u32 old_size = region->handler_size;
+    region->handler_offset = offset;
+    region->handler_size = size;
+    region->handler_reads = reads;
+
+    if ((region->info.flags & GT_DEBUG_REGION_MAPPED) == 0)
+    {
+        m_debug_snapshot_id++;
+        return true;
+    }
+
+    if (old_size != 0)
+        RemapRange(region->info.physical_base + old_offset, old_size);
+
+    if (size != 0 && (offset != old_offset || size != old_size))
+        RemapRange(region->info.physical_base + offset, size);
+
+    return true;
+}
+
+// A handler that must see its access in time moves machine time up to it first
+// Debugger accesses have no context and stay at the current machine time
+void Memory::SynchronizeAccess()
+{
+    GT_Bus_Access_Context* context = m_access_context;
+
+    if (IsValidPointer(context) && IsValidPointer(context->synchronize_memory))
+        context->synchronize_memory(context->synchronize_context, *context);
+}
+
 int Memory::GetDebugRegionCount() const
 {
     return m_debug_region_count;
@@ -511,7 +572,12 @@ const u8* Memory::GetPhysicalReadSpan(u32 physical, u32 size) const
         (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
         return NULL;
 
-    return region->read_data + (NormalizePhysicalAddress(physical) - region->info.physical_base);
+    u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+
+    if (region->handler_reads && IsHandlerSpan(region, offset, size))
+        return NULL;
+
+    return region->read_data + offset;
 }
 
 bool Memory::TryPeekPhysicalBlock(u32 physical, u8* data, u32 size) const
@@ -931,7 +997,13 @@ u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
         context.end_batch = true;
 
     if (IsValidPointer(region->read8))
-        return region->read8(region->device, offset);
+    {
+        GT_Bus_Access_Context* outer = m_access_context;
+        m_access_context = &context;
+        u8 value = region->read8(region->device, offset);
+        m_access_context = outer;
+        return value;
+    }
 
     if (IsValidPointer(region->read_data))
         return region->read_data[offset];
@@ -961,7 +1033,12 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
     }
 
     if (IsValidPointer(region->write8))
+    {
+        GT_Bus_Access_Context* outer = m_access_context;
+        m_access_context = &context;
         region->write8(region->device, offset, value);
+        m_access_context = outer;
+    }
     else
     {
         region->write_data[offset] = value;
@@ -1050,11 +1127,13 @@ void Memory::UpdateCPUPage(u32 page, const DebugRegion* region)
         return;
 
     u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+    bool handler = IsHandlerSpan(region, offset, 0x1000);
 
-    if ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && IsValidPointer(region->read_data))
+    if ((region->info.flags & GT_DEBUG_REGION_READABLE) != 0 && IsValidPointer(region->read_data) &&
+        !(handler && region->handler_reads))
         m_cpu_read_pages[page] = region->read_data + offset;
 
-    if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data))
+    if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data) && !handler)
     {
 #if !defined(GT_DISABLE_DYNAREC)
         if (region->write_data == m_working_ram && IsValidPointer(m_code_pages) && (offset >> 12) < m_code_page_count &&

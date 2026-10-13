@@ -27,6 +27,12 @@ INLINE I386_State* I386::GetState()
     return &m_state;
 }
 
+// Batch cycles at the start of the running instruction, zero outside a batch
+INLINE u32 I386::GetStartCycles() const
+{
+    return m_io_start_cycles;
+}
+
 INLINE u32 I386::GetRegister(int index, int width) const
 {
     if (width == 8)

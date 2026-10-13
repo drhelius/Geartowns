@@ -185,6 +185,30 @@ INLINE u32 Video::GetVRAMMask(u32 offset) const
     return (mask >> shift) | (mask << ((32 - shift) & 31));
 }
 
+// VRAM offset of the half that reaches the handlers, zero while no transfer runs
+INLINE u32 Video::GetSpriteHandlerOffset() const
+{
+    return m_sprite->IsBusy() ? m_sprite->GetWorkOffset() : 0;
+}
+
+// Accesses to the half a running transfer draws wait for it to catch up first
+INLINE void Video::SynchronizeSpriteWork(u32 canonical, u32 size)
+{
+    if (unlikely(m_sprite->IsBusy()))
+    {
+        u32 work = m_sprite->GetWorkOffset();
+
+        if (canonical < work + k_sprite_half_size && canonical + size > work)
+            SynchronizeSpriteAccess();
+    }
+}
+
+INLINE void Video::SynchronizeSpriteRAM()
+{
+    if (unlikely(m_sprite->IsBusy()))
+        SynchronizeSpriteAccess();
+}
+
 // Unsigned arithmetic like the reference, so any JIS code lands inside the 256 KiB font ROM
 INLINE u32 Video::GetKanjiOffset() const
 {

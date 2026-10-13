@@ -117,6 +117,7 @@ public:
     Video_Layer_Format GetLayerFormat(int layer) const;
     bool IsTwoPage() const;
     void UpdateVRAMMapping();
+    void UpdateSpriteMapping();
     u8 GetSyncStatus(u64 clocks) const;
     u32 GetBeamHalfLine(u64 clocks) const;
     u32 GetBeamClock(u64 clocks) const;
@@ -131,6 +132,10 @@ public:
     static void WriteVRAMSinglePageCallback(void* device, u32 offset, u8 value);
     static void WriteVRAMSinglePage16Callback(void* device, u32 offset, u16 value);
     static void WriteVRAMSinglePage32Callback(void* device, u32 offset, u32 value);
+    static u8 ReadSpriteRAMCallback(void* device, u32 offset);
+    static void WriteSpriteRAMCallback(void* device, u32 offset, u8 value);
+    static void WriteSpriteRAM16Callback(void* device, u32 offset, u16 value);
+    static void WriteSpriteRAM32Callback(void* device, u32 offset, u32 value);
     static u8 ReadFMRPlanesCallback(void* device, u32 offset);
     static u8 PeekFMRPlanesCallback(void* device, u32 offset);
     static void WriteFMRPlanesCallback(void* device, u32 offset, u8 value);
@@ -177,6 +182,10 @@ private:
     u32 SinglePageToCanonical(u32 offset) const;
     u32 FMRToCanonical(u32 offset) const;
     u32 GetVRAMMask(u32 offset) const;
+    u32 GetSpriteHandlerOffset() const;
+    void SynchronizeSpriteWork(u32 canonical, u32 size);
+    void SynchronizeSpriteRAM();
+    void SynchronizeSpriteAccess();
     u8 ReadVRAMTwoPage(u32 offset) const;
     void WriteVRAMTwoPage(u32 offset, u8 value);
     void WriteVRAMTwoPage16(u32 offset, u16 value);
@@ -213,6 +222,7 @@ private:
     bool m_frame_ready;
     u64 m_next_event_clocks;
     u32 m_next_event_half_line;
+    u32 m_sprite_handler_offset;
     u64 m_beam_event_clocks;
     u64 m_beam_middle_clocks;
     u64 m_beam_event_crtc_clocks;

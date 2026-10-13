@@ -228,11 +228,15 @@ INLINE u32 Video::GetBeamHalfLine(u64 clocks) const
     return m_state.crtc[k_video_crtc_vst1] + (u32)(elapsed / ((u64)GT_MACHINE_CLOCK_RATE * m_state.frame_line_clocks));
 }
 
+INLINE u64 Video::GetElapsedCRTCClocks(u64 clocks) const
+{
+    return ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_MACHINE_CLOCK_RATE;
+}
+
 INLINE u32 Video::GetBeamClock(u64 clocks) const
 {
-    u64 elapsed = ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_MACHINE_CLOCK_RATE;
     u64 origin = ((u64)m_state.crtc[k_video_crtc_vst1] * m_state.frame_line_clocks) / 2;
-    return (u32)((origin + elapsed) % m_state.frame_line_clocks);
+    return (u32)((origin + GetElapsedCRTCClocks(clocks)) % m_state.frame_line_clocks);
 }
 
 INLINE u32 Video::ToXRGB(u8 red, u8 green, u8 blue) const

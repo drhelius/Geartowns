@@ -158,6 +158,7 @@ private:
     void UpdateNextEvent();
     void UpdateIRQ();
     u64 GetHalfLineClocks(u32 half_line) const;
+    u64 GetElapsedCRTCClocks(u64 clocks) const;
     void RenderRows(u32 half_line);
     void RenderRow(int row);
     void RenderLayerRow(u32* destination, int layer, int row, bool opaque);
@@ -207,6 +208,11 @@ private:
     bool m_frame_ready;
     u64 m_next_event_clocks;
     u32 m_next_event_half_line;
+    u64 m_beam_event_clocks;
+    u64 m_beam_middle_clocks;
+    u64 m_beam_event_crtc_clocks;
+    u32 m_beam_event_dot;
+    u16 m_beam_vst1;
     int m_frame_width;
     int m_frame_height;
     int m_display_width;

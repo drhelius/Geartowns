@@ -39,6 +39,11 @@ Video::Video()
     m_frame_ready = false;
     m_next_event_clocks = GT_NO_EVENT;
     m_next_event_half_line = 0;
+    m_beam_event_clocks = 0;
+    m_beam_middle_clocks = 0;
+    m_beam_event_crtc_clocks = 0;
+    m_beam_event_dot = 0;
+    m_beam_vst1 = 0;
     m_frame_width = GT_FRAME_BUFFER_WIDTH;
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
     m_display_width = GT_FRAME_BUFFER_WIDTH;
@@ -1081,6 +1086,12 @@ void Video::UpdateNextEvent()
     m_next_event_half_line = MIN(next, m_state.frame_half_lines);
     m_next_event_clocks = GetHalfLineClocks(m_next_event_half_line);
     m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
+
+    m_beam_event_clocks = GetHalfLineClocks(half_line);
+    m_beam_middle_clocks = half_line + 1 < m_next_event_half_line ? GetHalfLineClocks(half_line + 1) : m_next_event_clocks;
+    m_beam_event_crtc_clocks = GetElapsedCRTCClocks(m_beam_event_clocks);
+    m_beam_event_dot = GetBeamClock(m_beam_event_clocks);
+    m_beam_vst1 = m_state.crtc[k_video_crtc_vst1];
 }
 
 void Video::UpdateIRQ()
@@ -1095,8 +1106,24 @@ u8 Video::GetSyncStatus(u64 clocks) const
         return 0x00;
 
     const u16* crtc = m_state.crtc;
-    u32 half_line = GetBeamHalfLine(clocks);
-    u32 clock = GetBeamClock(clocks);
+    u32 half_line;
+    u32 clock;
+
+    // Polling between two events starts from the position cached at the first one instead of dividing
+    if (clocks >= m_beam_event_clocks && clocks < m_next_event_clocks && crtc[k_video_crtc_vst1] == m_beam_vst1)
+    {
+        half_line = m_beam_vst1 + m_state.event_half_line + (clocks >= m_beam_middle_clocks ? 1 : 0);
+        clock = m_beam_event_dot + (u32)(GetElapsedCRTCClocks(clocks) - m_beam_event_crtc_clocks);
+
+        while (clock >= m_state.frame_line_clocks)
+            clock -= m_state.frame_line_clocks;
+    }
+    else
+    {
+        half_line = GetBeamHalfLine(clocks);
+        clock = GetBeamClock(clocks);
+    }
+
     u8 status = 0x00;
 
     if (clock < crtc[k_video_crtc_hsw1])

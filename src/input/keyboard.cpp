@@ -293,7 +293,10 @@ void Keyboard::PushEvent(u8 key, u8 flags)
     m_state.fifo[write & (KEYBOARD_FIFO_SIZE - 1)] = flags;
     m_state.fifo[(write + 1) & (KEYBOARD_FIFO_SIZE - 1)] = key;
     m_state.fifo_count += 2;
-    m_state.kbint = true;
+
+    if (!m_state.rearm_pending)
+        m_state.kbint = true;
+
     TraceEvent(TRACE_KEYBOARD_KEY, 0, flags, key);
     UpdateIRQ();
 }

@@ -327,6 +327,28 @@
  #endif
  
  #if CODE
+@@ -4845,8 +4845,8 @@
+ #if __X64 && (__CYGWIN__ || _WIN32)
+     for (reg = 0; reg < jit_size(fregs); reg++) {
+ 	if (jit_regset_tstbit(&_jitc->function->regset, fregs[reg])) {
+-	    sse_stxi_d(offs, _RSP_REGNO, rn(fregs[reg]));
+-	    offs += sizeof(jit_float64_t);
++	    movupdrm(rn(fregs[reg]), offs, _RSP_REGNO, _NOREG, _SCL1);
++	    offs += 16;
+ 	}
+     }
+ #endif
+@@ -4918,8 +4918,8 @@
+ #if __X64 && (__CYGWIN__ || _WIN32)
+     for (reg = 0; reg < jit_size(fregs); reg++) {
+ 	if (jit_regset_tstbit(&_jitc->function->regset, fregs[reg])) {
+-	    sse_ldxi_d(rn(fregs[reg]), _RSP_REGNO, offs);
+-	    offs += sizeof(jit_float64_t);
++	    movupdmr(offs, _RSP_REGNO, _NOREG, _SCL1, rn(fregs[reg]));
++	    offs += 16;
+ 	}
+     }
+ #endif
 @@ -5114,7 +5114,8 @@
      ++instr;
      switch (code[0]) {
@@ -349,8 +371,28 @@
  	    /* jmpsi */
  	case 0xeb:
  	    disp = label - (instr + 1);
+--- lightning-2.2.3/lib/jit_x86-sse.c
++++ lightning/lib/jit_x86-sse.c
+@@ -115,6 +115,8 @@
+ #  define movsdmr(md,rb,ri,ms,rd)	ssexrx(0xf2,X86_SSE_MOV,md,rb,ri,ms,rd)
+ #  define movssrm(rs,md,mb,mi,ms)	ssexrx(0xf3,X86_SSE_MOV1,md,mb,mi,ms,rs)
+ #  define movsdrm(rs,md,mb,mi,ms)	ssexrx(0xf2,X86_SSE_MOV1,md,mb,mi,ms,rs)
++#  define movupdmr(md,rb,ri,ms,rd)	ssexrx(0x66,X86_SSE_MOV,md,rb,ri,ms,rd)
++#  define movupdrm(rs,md,mb,mi,ms)	ssexrx(0x66,X86_SSE_MOV1,md,mb,mi,ms,rs)
+ static void
+ _ssexrx(jit_state_t*, jit_int32_t, jit_int32_t, jit_int32_t,
+ 	jit_int32_t, jit_int32_t, jit_int32_t, jit_int32_t);
 --- lightning-2.2.3/lib/jit_x86.c
 +++ lightning/lib/jit_x86.c
+@@ -47,7 +47,7 @@
+ #    define jit_arg_f_reg_p(i)		jit_arg_reg_p(i)
+ /* callee save                                                + 16 byte align
+  * align16(%rbp+%rbx+%rdi+%rsi+%r1[2-5]+%xmm[6-9]+%xmm1[0-5]) + (16 - 8) */
+-#    define stack_framesize		152
++#    define stack_framesize		232
+ #    define va_fp_increment		8
+ #  else
+ #    define jit_arg_reg_p(i)		((i) >= 0 && (i) < 6)
 @@ -416,14 +416,26 @@
  #endif
  
@@ -421,6 +463,15 @@
      jit_cpu.lahf	= !!(ecx.cpuid & 1);
      jit_cpu.abm		= !!(ecx.cpuid & 32);
      jit_cpu.fma4	= !!(ecx.cpuid & (1 << 16));
+@@ -2860,7 +2887,7 @@
+ #if __X64 && (__CYGWIN__ || _WIN32)
+     for (reg = 0; reg < jit_size(fregs); reg++)
+ 	if (jit_regset_tstbit(&_jitc->function->regset, fregs[reg]))
+-	    _jitc->framesize += sizeof(jit_float64_t);
++	    _jitc->framesize += 16;
+ #endif
+     /* Make sure functions called have a 16 byte aligned stack */
+     _jitc->framesize = (_jitc->framesize + 15) & -16;
 --- lightning-2.2.3/include/lightning.h.in
 +++ lightning/include/lightning.h
 @@ -20,12 +20,11 @@

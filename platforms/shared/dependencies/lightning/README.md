@@ -22,6 +22,9 @@ includes the backend of the host.
 - `jit_get_cpu` for arm, mips and ppc takes the CPU features from compiler macros instead of `/proc/cpuinfo`, so the
   code never uses more than the ISA the core is compiled for (an ARMv6 build gets ARMv6 code on any board).
 - x86: `cpuid` through `__cpuidex` with MSVC, and 64-bit mask helpers that also hold where `long` has 32 bits.
+- x86 Win64: the prolog and epilog save and restore all 128 bits of XMM6-XMM15 with `movupd` in 16-byte slots.
+  Upstream restores them with `movsd`, which clears bits 127:64, so every return from generated code breaks the
+  caller's vector registers.
 - MSVC: no GNU case ranges in x86 `patch_at`, and the aarch64 `_lrotr` is `_lrotr_r`, since `_lrotr` is an intrinsic.
 - The compare and swap fallback of `jit_fallback.c` (arm, mips, ppc, riscv, loongarch) takes no mutex, so the library
   needs no pthread. Geartowns never emits `casr` or `casi`.

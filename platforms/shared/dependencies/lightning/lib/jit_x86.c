@@ -47,7 +47,7 @@
 #    define jit_arg_f_reg_p(i)		jit_arg_reg_p(i)
 /* callee save                                                + 16 byte align
  * align16(%rbp+%rbx+%rdi+%rsi+%r1[2-5]+%xmm[6-9]+%xmm1[0-5]) + (16 - 8) */
-#    define stack_framesize		152
+#    define stack_framesize		232
 #    define va_fp_increment		8
 #  else
 #    define jit_arg_reg_p(i)		((i) >= 0 && (i) < 6)
@@ -2887,7 +2887,7 @@ _compute_framesize(jit_state_t *_jit)
 #if __X64 && (__CYGWIN__ || _WIN32)
     for (reg = 0; reg < jit_size(fregs); reg++)
 	if (jit_regset_tstbit(&_jitc->function->regset, fregs[reg]))
-	    _jitc->framesize += sizeof(jit_float64_t);
+	    _jitc->framesize += 16;
 #endif
     /* Make sure functions called have a 16 byte aligned stack */
     _jitc->framesize = (_jitc->framesize + 15) & -16;

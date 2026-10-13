@@ -115,6 +115,8 @@ _sselxr(jit_state_t*, jit_int32_t, jit_int32_t, jit_int32_t, jit_int32_t);
 #  define movsdmr(md,rb,ri,ms,rd)	ssexrx(0xf2,X86_SSE_MOV,md,rb,ri,ms,rd)
 #  define movssrm(rs,md,mb,mi,ms)	ssexrx(0xf3,X86_SSE_MOV1,md,mb,mi,ms,rs)
 #  define movsdrm(rs,md,mb,mi,ms)	ssexrx(0xf2,X86_SSE_MOV1,md,mb,mi,ms,rs)
+#  define movupdmr(md,rb,ri,ms,rd)	ssexrx(0x66,X86_SSE_MOV,md,rb,ri,ms,rd)
+#  define movupdrm(rs,md,mb,mi,ms)	ssexrx(0x66,X86_SSE_MOV1,md,mb,mi,ms,rs)
 static void
 _ssexrx(jit_state_t*, jit_int32_t, jit_int32_t, jit_int32_t,
 	jit_int32_t, jit_int32_t, jit_int32_t, jit_int32_t);

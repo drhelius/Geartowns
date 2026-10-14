@@ -85,6 +85,8 @@ static char loading_file_path[GT_MAX_PATH] = { };
 static Loading_Request_Type loading_request_type = Loading_Request_File;
 static std::vector<std::string> cdrom_playlist;
 static int cdrom_playlist_index = -1;
+static int cmos_model = -1;
+static u8 cmos_saved[GT_CMOS_SIZE];
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
@@ -95,6 +97,10 @@ static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
 static bool unload_media(void);
 static bool get_floppy_state_path(int index, char* path, size_t path_size);
+static bool get_cmos_path(int model, char* path, size_t path_size);
+static void load_cmos(int model);
+static void save_cmos(void);
+static void sync_cmos(void);
 static bool init_debug(void);
 static void destroy_debug(void);
 static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride, Emu_Debug_Buffer_Info& info);
@@ -196,6 +202,7 @@ void emu_destroy(void)
     if (!emu_floppy_flush())
         Error("Unable to save one or more floppy disks on exit");
 
+    save_cmos();
     runahead_destroy();
     rewind_destroy();
     SafeDelete(mcp_manager);
@@ -541,6 +548,7 @@ bool emu_power_on(void)
         return false;
 
     gui_debug_trace_logger_reset();
+    sync_cmos();
 
     if (!geartowns->PowerOn())
         return false;
@@ -558,6 +566,7 @@ void emu_power_off(void)
 
     gui_debug_trace_logger_reset();
     geartowns->PowerOff();
+    save_cmos();
     reset_run_state();
     update_savestates_data();
 }
@@ -568,6 +577,7 @@ void emu_reset(void)
         return;
 
     gui_debug_trace_logger_reset();
+    sync_cmos();
     geartowns->ResetMedia();
     emu_floppy_check_drives();
     reset_run_state();
@@ -1527,6 +1537,7 @@ bool emu_load_bios(const char* path)
     if (!IsValidPointer(geartowns))
         return false;
 
+    sync_cmos();
     return geartowns->LoadBios(path);
 }
 
@@ -1701,6 +1712,87 @@ static bool get_floppy_state_path(int index, char* path, size_t path_size)
 
     snprintf(file_name, sizeof(file_name), "%s.state%d", name, index);
     return join_path(directory, file_name, path, path_size);
+}
+
+static bool get_cmos_path(int model, char* path, size_t path_size)
+{
+    const char* directory = get_configurated_dir(config_emulator.savefiles_dir_option, config_emulator.savefiles_path.c_str());
+    char file_name[GT_MAX_PATH];
+
+    if (!IsValidPointer(directory))
+        directory = config_root_path;
+
+    snprintf(file_name, sizeof(file_name), "%s.geartowns.cmos", k_machine_profiles[model].short_name);
+    return join_path(directory, file_name, path, path_size);
+}
+
+static void load_cmos(int model)
+{
+    Memory* memory = geartowns->GetMemory();
+    char path[GT_MAX_PATH];
+    std::ifstream file;
+
+    memory->ResetCMOS();
+    cmos_model = model;
+
+    if (get_cmos_path(model, path, sizeof(path)))
+        open_ifstream_utf8(file, path, std::ios::in | std::ios::binary);
+
+    if (file.is_open())
+    {
+        file.read(reinterpret_cast<char*>(memory->GetCMOS()), GT_CMOS_SIZE);
+
+        if (file.gcount() != GT_CMOS_SIZE)
+        {
+            Error("Invalid CMOS file: %s", path);
+            memory->ResetCMOS();
+        }
+        else
+        {
+            Log("CMOS loaded from %s", path);
+        }
+    }
+
+    memcpy(cmos_saved, memory->GetCMOS(), GT_CMOS_SIZE);
+}
+
+static void save_cmos(void)
+{
+    if (cmos_model < 0)
+        return;
+
+    const u8* cmos = geartowns->GetMemory()->GetCMOS();
+    char path[GT_MAX_PATH];
+
+    if (memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0 || !get_cmos_path(cmos_model, path, sizeof(path)))
+        return;
+
+    std::string temporary(path);
+    temporary += ".tmp";
+    std::ofstream file;
+    open_ofstream_utf8(file, temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+    file.write(reinterpret_cast<const char*>(cmos), GT_CMOS_SIZE);
+    file.close();
+
+    if (!file.good() || !SDL_RenamePath(temporary.c_str(), path))
+    {
+        SDL_RemovePath(temporary.c_str());
+        Error("Unable to save CMOS: %s", path);
+        return;
+    }
+
+    memcpy(cmos_saved, cmos, GT_CMOS_SIZE);
+    Log("CMOS saved to %s", path);
+}
+
+static void sync_cmos(void)
+{
+    int model = geartowns->GetPendingMachineConfig().model;
+
+    save_cmos();
+
+    if (model != cmos_model)
+        load_cmos(model);
 }
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM)

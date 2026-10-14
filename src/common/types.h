@@ -360,6 +360,7 @@ struct GT_Machine_CPU_Info
 struct GT_Machine_Profile
 {
     const char* name;
+    const char* short_name;
     const char* models;
     bool emulated;
     GT_Machine_CPU cpu;

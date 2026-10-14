@@ -111,6 +111,7 @@ public:
     u32 GetMainRAMSize() const;
     void SetMainRAMSize(u32 size);
     u8* GetCMOS();
+    void ResetCMOS();
     u8 ReadCMOS(u32 index) const;
     void WriteCMOS(u32 index, u8 value);
     u8* GetVideoRAM();

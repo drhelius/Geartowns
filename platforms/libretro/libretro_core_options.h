@@ -388,6 +388,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         },
         "2"
     },
+    {
+        "geartowns_cmos",
+        "CMOS (restart)",
+        NULL,
+        "Where the battery-backed CMOS with the machine settings and the OAK/2 user dictionary is kept. 'Shared' keeps one CMOS for all content in the save directory, like the real machine. 'Per Game' keeps a separate CMOS in each content's save file, a better choice for netplay.",
+        NULL,
+        "system",
+        {
+            { "Shared",   NULL },
+            { "Per Game", NULL },
+            { NULL, NULL },
+        },
+        "Shared"
+    },
 #if !defined(GT_DISABLE_DYNAREC)
     {
         "geartowns_dynarec",

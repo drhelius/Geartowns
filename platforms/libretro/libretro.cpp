@@ -52,6 +52,7 @@
 #define DISK_DRIVE_FLOPPY_2 2
 #define DISK_DRIVE_COUNT (1 + FDC_DRIVES)
 #define FLOPPY_IDLE_FRAMES 180
+#define CMOS_SAVE_FRAMES 180
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
 #define INPUT_STATE_SIZE ((sizeof(float) * 2) + (sizeof(u16) * MAX_PADS))
@@ -155,6 +156,12 @@ static bool floppy_flush_failed[FDC_DRIVES];
 static int floppy_drive = 0;
 static bool floppy_multidrive = false;
 static bool save_disk = false;
+static bool cmos_shared = true;
+static bool cmos_shared_active = false;
+static std::string cmos_path;
+static u8 cmos_saved[GT_CMOS_SIZE];
+static int cmos_frames = 0;
+static bool cmos_save_failed = false;
 
 static bool load_content(const char* path);
 static void unload_content(void);
@@ -229,6 +236,9 @@ static void remove_file(const char* path, bool vfs);
 static bool floppy_load_image(unsigned index, int floppy);
 static bool floppy_flush(int floppy);
 static void floppy_update(void);
+static void cmos_load(void);
+static void cmos_save(void);
+static void cmos_update(void);
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -420,6 +430,9 @@ void retro_deinit(void)
     floppy_drive = 0;
     floppy_multidrive = false;
     save_disk = false;
+    cmos_shared = true;
+    cmos_shared_active = false;
+    cmos_path.clear();
 
     reset_controller_devices();
     clear_input_state();
@@ -430,6 +443,7 @@ void retro_reset(void)
     log_cb(RETRO_LOG_DEBUG, "Resetting...\n");
 
     check_variables();
+    cmos_save();
     core->ResetMedia();
     clear_input_state();
 }
@@ -513,6 +527,7 @@ void retro_run(void)
     bool powered = core->IsPoweredOn();
     core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
     floppy_update();
+    cmos_update();
 
     if (powered && !core->IsPoweredOn())
     {
@@ -627,7 +642,7 @@ void *retro_get_memory_data(unsigned id)
     switch (id)
     {
         case RETRO_MEMORY_SAVE_RAM:
-            return core->GetMemory()->GetCMOS();
+            return cmos_shared_active ? NULL : core->GetMemory()->GetCMOS();
         case RETRO_MEMORY_SYSTEM_RAM:
             return core->GetMemory()->GetWorkingRAM();
         case RETRO_MEMORY_VIDEO_RAM:
@@ -642,7 +657,7 @@ size_t retro_get_memory_size(unsigned id)
     switch (id)
     {
         case RETRO_MEMORY_SAVE_RAM:
-            return GT_CMOS_SIZE;
+            return cmos_shared_active ? 0 : GT_CMOS_SIZE;
         case RETRO_MEMORY_SYSTEM_RAM:
             return core->GetMemory()->GetWorkingRAMSize();
         case RETRO_MEMORY_VIDEO_RAM:
@@ -689,7 +704,7 @@ static bool load_content(const char* path)
 
     check_bios();
     set_machine_config();
-    memset(core->GetMemory()->GetCMOS(), 0, GT_CMOS_SIZE);
+    cmos_load();
     disk_clear();
     clear_input_state();
 
@@ -758,6 +773,8 @@ static void unload_content(void)
         core->EjectFloppy(i);
     }
 
+    cmos_save();
+    cmos_shared_active = false;
     core->EjectMedia();
     core->PowerOff();
     disk_clear();
@@ -1662,6 +1679,14 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         machine_floppy_drives = CLAMP(atoi(var.value), 1, 2);
+    }
+
+    var.key = "geartowns_cmos";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        cmos_shared = (strcmp(var.value, "Shared") == 0);
     }
 
 #if !defined(GT_DISABLE_DYNAREC)
@@ -2592,4 +2617,65 @@ static void floppy_update(void)
 
         floppy_flush_failed[i] = !saved;
     }
+}
+
+static void cmos_load(void)
+{
+    Memory* memory = core->GetMemory();
+    std::vector<u8> data;
+    std::string name(k_machine_profiles[core->GetPendingMachineConfig().model].short_name);
+
+    memory->ResetCMOS();
+    cmos_shared_active = cmos_shared;
+    cmos_frames = 0;
+    cmos_save_failed = false;
+    cmos_path = retro_save_directory;
+    append_path_component(cmos_path, (name + ".geartowns.cmos").c_str());
+
+    if (cmos_shared_active && read_content_file(cmos_path.c_str(), data, CONTENT_MAX_SIZE))
+    {
+        if (data.size() == GT_CMOS_SIZE)
+        {
+            memcpy(memory->GetCMOS(), data.data(), GT_CMOS_SIZE);
+            log_cb(RETRO_LOG_INFO, "CMOS loaded from %s\n", cmos_path.c_str());
+        }
+        else
+        {
+            log_cb(RETRO_LOG_ERROR, "Invalid CMOS file: %s\n", cmos_path.c_str());
+        }
+    }
+
+    memcpy(cmos_saved, memory->GetCMOS(), GT_CMOS_SIZE);
+}
+
+static void cmos_save(void)
+{
+    const u8* cmos = core->GetMemory()->GetCMOS();
+
+    if (!cmos_shared_active || memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0)
+        return;
+
+    bool saved = write_content_file(cmos_path.c_str(), cmos, GT_CMOS_SIZE);
+
+    if (saved)
+    {
+        memcpy(cmos_saved, cmos, GT_CMOS_SIZE);
+        log_cb(RETRO_LOG_INFO, "CMOS saved to %s\n", cmos_path.c_str());
+    }
+    else if (!cmos_save_failed)
+    {
+        log_cb(RETRO_LOG_ERROR, "Unable to save the CMOS to %s\n", cmos_path.c_str());
+        show_message("Unable to save the CMOS", 3, RETRO_LOG_ERROR);
+    }
+
+    cmos_save_failed = !saved;
+}
+
+static void cmos_update(void)
+{
+    if (++cmos_frames < CMOS_SAVE_FRAMES)
+        return;
+
+    cmos_frames = 0;
+    cmos_save();
 }

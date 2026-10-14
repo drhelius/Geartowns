@@ -54,6 +54,7 @@ public:
     void Write16(u16 port, u16 value, GT_Bus_Access_Context& context);
     void Write32(u16 port, u32 value, GT_Bus_Access_Context& context);
     bool Peek(u16 port, u64 clocks, u8& value) const;
+    u64 GetReadStableUntil(u16 port, int width, u64 clocks) const;
 
 private:
     u8 ReadPort(u16 port, GT_Bus_Access_Context& context);

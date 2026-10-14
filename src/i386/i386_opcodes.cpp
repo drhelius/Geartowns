@@ -2272,6 +2272,10 @@ bool I386::OPCodes_IN()
 
     SetRegister(I386_REG_EAX, width, value);
     CommitEIP(m_instruction);
+
+    if (m_poll_active)
+        SkipPolling(port, width);
+
     return true;
 }
 

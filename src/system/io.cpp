@@ -618,6 +618,28 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
     return true;
 }
 
+// Machine clock until which reads of the port repeat the last one without side effects, 0 when unknown
+u64 IO::GetReadStableUntil(u16 port, int width, u64 clocks) const
+{
+    if (width != 8)
+        return 0;
+
+    switch (port)
+    {
+        case 0x044C:
+            // Palette and sprite status
+            return m_video->GetStatusStableUntil();
+        case 0x04C0:
+            // CD-ROM master status, changes only at CD-ROM and DMA events
+            return GT_NO_EVENT;
+        case 0xFDA0:
+            // VSYNC and HSYNC status
+            return m_video->GetSyncStableUntil(clocks);
+        default:
+            return 0;
+    }
+}
+
 void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
 {
     switch (port)

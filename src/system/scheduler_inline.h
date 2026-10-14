@@ -68,6 +68,20 @@ INLINE u32 Scheduler::GetSliceCycles(u32 clocks) const
     return (u32)((((u64)clocks * m_cpu_clock_rate) + GT_MACHINE_CLOCK_RATE - 1) / GT_MACHINE_CLOCK_RATE);
 }
 
+// The most CPU cycles AddCycles can take from now while machine time stays before the given clock
+INLINE u32 Scheduler::GetCyclesBefore(u64 clocks) const
+{
+    if (clocks <= m_state.clocks)
+        return 0;
+
+    u64 limit = MIN(clocks - m_state.clocks, (u64)GT_MACHINE_CLOCK_RATE);
+
+    if (m_cpu_clock_rate == GT_MACHINE_CLOCK_RATE)
+        return (u32)(limit - 1);
+
+    return (u32)(((limit * m_cpu_clock_rate) - 1 - m_state.cycle_remainder) / GT_MACHINE_CLOCK_RATE);
+}
+
 INLINE bool Scheduler::IsEventDue() const
 {
     return m_state.clocks >= m_next_event_clocks;

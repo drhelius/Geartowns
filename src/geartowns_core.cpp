@@ -523,6 +523,7 @@ INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice()
     context.clocks = m_scheduler->GetClocks();
     context.synchronize = &GeartownsCore::SynchronizeIOCallback;
     context.synchronize_memory = &GeartownsCore::SynchronizeMemoryCallback;
+    context.poll_port = &GeartownsCore::PollPortCallback;
     context.synchronize_context = this;
     return context;
 }
@@ -581,6 +582,16 @@ void GeartownsCore::SynchronizeMemoryCallback(void* core, GT_Bus_Access_Context&
     }
 
     context.clocks = scheduler->GetClocks();
+}
+
+// CPU cycles from the read just synchronized while the port reads the same, without side effects or due events
+u32 GeartownsCore::PollPortCallback(void* core, u16 port, int width)
+{
+    GeartownsCore* geartowns = (GeartownsCore*)core;
+    Scheduler* scheduler = geartowns->m_scheduler;
+    u64 stable = geartowns->m_io->GetReadStableUntil(port, width, scheduler->GetClocks());
+
+    return scheduler->GetCyclesBefore(MIN(stable, scheduler->GetNextEventClocks()));
 }
 
 // A halted CPU idles through the slice

@@ -220,11 +220,16 @@ INLINE bool I386::BranchTo(u32 target, int width)
 
 INLINE bool I386::CheckCondition(int condition) const
 {
-    bool cf = (m_state.eflags & I386_FLAG_CF) != 0;
-    bool pf = (m_state.eflags & I386_FLAG_PF) != 0;
-    bool zf = (m_state.eflags & I386_FLAG_ZF) != 0;
-    bool sf = (m_state.eflags & I386_FLAG_SF) != 0;
-    bool of = (m_state.eflags & I386_FLAG_OF) != 0;
+    return EvaluateCondition(m_state.eflags, condition);
+}
+
+INLINE bool I386::EvaluateCondition(u32 eflags, int condition)
+{
+    bool cf = (eflags & I386_FLAG_CF) != 0;
+    bool pf = (eflags & I386_FLAG_PF) != 0;
+    bool zf = (eflags & I386_FLAG_ZF) != 0;
+    bool sf = (eflags & I386_FLAG_SF) != 0;
+    bool of = (eflags & I386_FLAG_OF) != 0;
 
     switch (condition & 15)
     {

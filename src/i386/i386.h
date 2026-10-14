@@ -30,6 +30,7 @@
 #define I386_TLB_SETS 8
 #define I386_TLB_WAYS 4
 #define I386_TLB_SIZE (I386_TLB_SETS * I386_TLB_WAYS)
+#define I386_POLL_CODE_SIZE 48
 
 class Memory;
 class Profiler;
@@ -533,6 +534,7 @@ public:
     bool IsDynarecEnabled() const;
     void GetDynarecInfo(I386_Dynarec_Info& info) const;
     void SetDynarecTuning(u32 threshold, u32 block_limit);
+    void EnablePollSkip(bool enable);
 
 private:
     friend class DynarecEmitter;
@@ -544,6 +546,20 @@ private:
         bool instruction_completed;
         bool end_batch;
         bool exception;
+    };
+
+    struct PollState
+    {
+        u32 batch;
+        u32 linear;
+        u32 start_cycles;
+        u32 registers[I386_REG_COUNT];
+        u32 eflags;
+        u32 code_eip;
+        u32 code_size;
+        u8 code[I386_POLL_CODE_SIZE];
+        u16 port;
+        u8 width;
     };
 
     struct InstructionContext
@@ -756,6 +772,8 @@ private:
 #endif
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();
+    void SkipPolling(u16 port, int width);
+    bool IsPollingLoop(u32 port, u32& steps);
     void UpdateStepMode();
     bool ExecuteOPCode();
     bool ExecuteOPCodeDebug(const I386_State& before);
@@ -836,6 +854,7 @@ private:
     void SetSZP(u32 value, int width);
     u32 GetSZP(u32 value, int width) const;
     bool CheckCondition(int condition) const;
+    static bool EvaluateCondition(u32 eflags, int condition);
     template<int width> u32 RotateShift(u32 value, int shift_operation, u32 count);
 
     void SetBusContext(GT_Bus_Access_Context& context);
@@ -1334,8 +1353,16 @@ private:
     bool m_run_to_breakpoint_enabled;
     bool m_breakpoint_hit;
     bool m_run_to_hit;
+
+    PollState m_poll;
+    u32 m_poll_batch;
+    u32 m_poll_budget;
+    u32 m_poll_steps;
+    bool m_poll_active;
+    bool m_poll_enabled;
 };
 
+static const u32 k_i386_poll_max_instructions = 16;
 static const u32 k_i386_disassembler_pages = 0x100000;
 static const u32 k_i386_disassembler_page_size = 0x1000;
 

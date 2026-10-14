@@ -59,6 +59,7 @@ public:
     void AddCycles(u32 cycles);
     u32 GetSliceClocks(u64 limit) const;
     u32 GetSliceCycles(u32 clocks) const;
+    u32 GetCyclesBefore(u64 clocks) const;
     bool IsEventDue() const;
     Scheduler_Event PopEvent();
     void Schedule(Scheduler_Event event, u64 clocks);

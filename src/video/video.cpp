@@ -244,6 +244,43 @@ u8 Video::Peek(u16 port, u64 clocks) const
     }
 }
 
+// After a read only busy changes on its own: the palette flag needs a write and the page flips at a video event
+u64 Video::GetStatusStableUntil() const
+{
+    if (m_state.digital_palette_modified)
+        return 0;
+
+    return m_sprite->IsBusy() ? m_sprite->GetFinishClocks() : GT_NO_EVENT;
+}
+
+// FDA0 changes at the next HSYNC edge or at the half-line that ends VSYNC, new frames start at events
+u64 Video::GetSyncStableUntil(u64 clocks) const
+{
+    if (!m_state.running)
+        return GT_NO_EVENT;
+
+    const u16* crtc = m_state.crtc;
+    u32 line = m_state.frame_line_clocks;
+    u64 rate = m_state.frame_clock_rate;
+    u64 until = GT_NO_EVENT;
+    u64 half_line = ((clocks - m_state.frame_start_clocks) * rate * 2) / ((u64)GT_MACHINE_CLOCK_RATE * line);
+    s64 vsync_half_lines = (s64)crtc[k_video_crtc_vst2] - (s64)crtc[k_video_crtc_vst1];
+
+    if ((s64)half_line < vsync_half_lines)
+        until = GetHalfLineClocks((u32)vsync_half_lines);
+
+    if (crtc[k_video_crtc_hsw1] != 0)
+    {
+        u64 crtc_clocks = GetElapsedCRTCClocks(clocks);
+        u64 origin = ((u64)crtc[k_video_crtc_vst1] * line) / 2;
+        u32 clock = (u32)((origin + crtc_clocks) % line);
+        u64 edge = crtc_clocks + (clock < crtc[k_video_crtc_hsw1] ? crtc[k_video_crtc_hsw1] - clock : line - clock);
+        until = MIN(until, m_state.frame_start_clocks + (edge * GT_MACHINE_CLOCK_RATE + rate - 1) / rate);
+    }
+
+    return until;
+}
+
 void Video::Write(u16 port, u8 value, u64 clocks)
 {
     Synchronize(clocks);

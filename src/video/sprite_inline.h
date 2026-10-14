@@ -38,6 +38,13 @@ INLINE bool Sprite::IsBusy() const
     return m_state.busy;
 }
 
+// The first clock at which Run clears busy
+INLINE u64 Sprite::GetFinishClocks() const
+{
+    return m_state.start_clocks + k_sprite_clear_clocks +
+        (u64)(k_sprite_entries - m_state.first_index) * k_sprite_entry_clocks;
+}
+
 INLINE bool Sprite::GetPage() const
 {
     return m_state.page;

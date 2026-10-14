@@ -61,6 +61,7 @@ public:
     void TraceBusyAtVSync();
     bool IsEnabled() const;
     bool IsBusy() const;
+    u64 GetFinishClocks() const;
     bool GetPage() const;
     u32 GetDisplayOffset() const;
     u32 GetWorkOffset() const;

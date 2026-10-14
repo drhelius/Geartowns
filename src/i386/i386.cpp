@@ -80,6 +80,12 @@ I386::I386()
     m_debugger_exec_checks = false;
     m_execute_filter_all = false;
     memset(m_execute_filter, 0, sizeof(m_execute_filter));
+    memset(&m_poll, 0, sizeof(m_poll));
+    m_poll_batch = 0;
+    m_poll_budget = 0;
+    m_poll_steps = 0;
+    m_poll_active = false;
+    m_poll_enabled = true;
     m_debugger_hit_pending = false;
     memset(&m_last_exception, 0, sizeof(m_last_exception));
     m_irq_breakpoints = 0;
@@ -184,6 +190,9 @@ void I386::Reset()
     InitPointer(m_bus_context);
     m_memory_generation = 0;
     m_io_start_cycles = 0;
+    m_poll.batch = 0;
+    m_poll_steps = 0;
+    m_poll_active = false;
     m_state.execution_mode = I386_MODE_REAL;
 
     memset(&m_step, 0, sizeof(m_step));
@@ -379,6 +388,10 @@ I386_Run_Result I386::GetStepInfo() const
 
 I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending)
 {
+    m_poll_batch++;
+    m_poll_budget = cycle_budget;
+    m_poll_active = m_poll_enabled;
+
 #if !defined(GT_DISABLE_DYNAREC)
     if (m_dynarec_enabled)
         return RunDynarec(cycle_budget, context, nmi_pending, intr_pending);
@@ -424,8 +437,10 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     }
 
     total.cycles = clocks;
-    total.steps = steps;
+    total.steps = steps + m_poll_steps;
     total.instruction_completed = completed;
+    m_poll_steps = 0;
+    m_poll_active = false;
     return total;
 }
 
@@ -488,6 +503,305 @@ void I386::CopyStepException(I386_Run_Result& total) const
 void I386::UpdateStepMode()
 {
     m_step_slow = m_state.halted || m_state.shutdown || m_trace_enabled || (m_state.debug_registers[7] & 0xFF) != 0;
+}
+
+void I386::EnablePollSkip(bool enable)
+{
+    m_poll_enabled = enable;
+}
+
+// 8-bit encodings 4-7 are AH, CH, DH and BH
+static u32 GetPollRegister(const u32* registers, int index, int width)
+{
+    if (width == 8)
+        return index < 4 ? registers[index] & 0xFF : (registers[index & 3] >> 8) & 0xFF;
+
+    return width == 16 ? registers[index] & 0xFFFF : registers[index];
+}
+
+static void SetPollRegister(u32* registers, int index, int width, u32 value)
+{
+    if (width == 8 && index < 4)
+        registers[index] = (registers[index] & 0xFFFFFF00U) | (value & 0xFF);
+    else if (width == 8)
+        registers[index & 3] = (registers[index & 3] & 0xFFFF00FFU) | ((value & 0xFF) << 8);
+    else if (width == 16)
+        registers[index] = (registers[index] & 0xFFFF0000U) | (value & 0xFFFF);
+    else
+        registers[index] = value;
+}
+
+// Polling iterations that can't see a new value, an event or the batch end are counted instead of run
+void I386::SkipPolling(u16 port, int width)
+{
+    GT_Bus_Access_Context& context = *m_bus_context;
+    PollState& poll = m_poll;
+    u32 eip = m_instruction.start_eip;
+    u32 offset = eip - m_code_window_eip;
+
+    if (offset >= m_code_window_size)
+    {
+        poll.batch = 0;
+        return;
+    }
+
+    u32 linear = m_state.segments[I386_SEGMENT_CS].base + eip;
+    u32 start = m_io_start_cycles;
+    bool repeated = poll.batch == m_poll_batch && poll.linear == linear && poll.port == port && poll.width == width &&
+        poll.eflags == m_state.eflags && start > poll.start_cycles;
+
+    for (int i = 0; repeated && i < I386_REG_COUNT; i++)
+        repeated = poll.registers[i] == m_state.registers[i].value;
+
+    u32 period = start - poll.start_cycles;
+    poll.start_cycles = start;
+
+    if (!repeated)
+    {
+        poll.batch = m_poll_batch;
+        poll.linear = linear;
+        poll.port = port;
+        poll.width = (u8)width;
+        poll.eflags = m_state.eflags;
+        poll.code_size = 0;
+
+        for (int i = 0; i < I386_REG_COUNT; i++)
+            poll.registers[i] = m_state.registers[i].value;
+
+        return;
+    }
+
+    if (context.end_batch || m_step.end_batch || m_step_slow || m_debugger_io_checks ||
+        (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0 || m_state.interrupt_shadow_steps != 0 ||
+        !IsValidPointer(context.poll_port))
+        return;
+
+    u32 count = context.poll_port(context.synchronize_context, port, width) / period;
+    count = start < m_poll_budget ? MIN(count, (m_poll_budget - 1 - start) / period) : 0;
+
+    if (count == 0)
+        return;
+
+    // The previous read must have run this same code
+    u32 back = MIN(offset, (u32)(I386_POLL_CODE_SIZE / 3));
+    u32 code_eip = eip - back;
+    u32 code_size = MIN(m_code_window_size - (offset - back), (u32)I386_POLL_CODE_SIZE);
+    const u8* code = m_code_window + (offset - back);
+    bool same_code = poll.code_eip == code_eip && poll.code_size == code_size && memcmp(poll.code, code, code_size) == 0;
+
+    if (!same_code)
+    {
+        poll.code_eip = code_eip;
+        poll.code_size = code_size;
+        memcpy(poll.code, code, code_size);
+        return;
+    }
+
+    u32 steps = 0;
+
+    if (!IsPollingLoop(port, steps))
+        return;
+
+    m_step.clocks += (u64)count * period;
+    m_poll_steps += count * steps;
+    poll.start_cycles = start + count * period;
+}
+
+// Runs the loop on the current registers: register operands only, no exit taken, one backward branch to the IN
+bool I386::IsPollingLoop(u32 port, u32& steps)
+{
+    const PollState& poll = m_poll;
+    u32 registers[I386_REG_COUNT];
+    u32 eflags = m_state.eflags;
+    u32 in_eip = m_instruction.start_eip;
+    u32 eip = m_instruction.next_eip;
+    bool default32 = m_default_size == 4;
+    bool returned = false;
+
+    for (int i = 0; i < I386_REG_COUNT; i++)
+        registers[i] = m_state.registers[i].value;
+
+    for (u32 count = 1; count <= k_i386_poll_max_instructions; count++)
+    {
+        u32 offset = eip - poll.code_eip;
+
+        if (offset >= poll.code_size)
+            return false;
+
+        InstructionContext c;
+        m_passive_bytes = poll.code + offset;
+        m_passive_count = MIN(poll.code_size - offset, (u32)GT_I386_MAX_INSTRUCTION_LENGTH);
+        m_passive_index = 0;
+
+        if (!DecodeInstructionPassive(c, eip, default32) || c.lock || c.repeat != 0 || c.memory_operand)
+            return false;
+
+        if (returned && eip == in_eip)
+        {
+            bool dx = c.opcode == 0xEC || c.opcode == 0xED;
+
+            if (c.two_byte || c.opcode != m_instruction.opcode || c.operand_size != m_instruction.operand_size ||
+                (dx && (registers[I386_REG_EDX] & 0xFFFF) != port))
+                return false;
+
+            steps = count;
+            return true;
+        }
+
+        int width = c.operand_size * 8;
+        u32 mask = width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
+        u8 opcode = c.opcode;
+        u32 next = c.next_eip;
+        u32 target = 0;
+        int condition = -1;
+        int operation = -1;
+        int alu_width = width;
+        int destination = -1;
+        u32 source = 0;
+
+        if (c.two_byte)
+        {
+            if (c.opcode2 < 0x80 || c.opcode2 > 0x8F)
+                return false;
+
+            condition = c.opcode2 & 15;
+            target = (next + c.immediate) & mask;
+        }
+        else if (opcode >= 0x70 && opcode <= 0x7F)
+        {
+            condition = opcode & 15;
+            target = (next + (u32)(s32)(s8)c.immediate) & mask;
+        }
+        else if (opcode == 0xEB || opcode == 0xE9)
+        {
+            condition = 16;
+            target = (next + (opcode == 0xEB ? (u32)(s32)(s8)c.immediate : c.immediate)) & mask;
+        }
+        else if (opcode == 0x90)
+        {
+        }
+        else if (opcode >= 0xB0 && opcode <= 0xBF)
+        {
+            // MOV r,imm
+            if (opcode < 0xB8)
+                SetPollRegister(registers, opcode & 7, 8, c.immediate);
+            else
+                SetPollRegister(registers, opcode & 7, width, c.immediate);
+        }
+        else if ((opcode == 0x88 || opcode == 0x89 || opcode == 0x8A || opcode == 0x8B) && (c.modrm >> 6) == 3)
+        {
+            // MOV between registers
+            int move_width = (opcode & 1) == 0 ? 8 : width;
+            int to = (opcode & 2) == 0 ? c.rm : c.reg;
+            int from = (opcode & 2) == 0 ? c.reg : c.rm;
+            SetPollRegister(registers, to, move_width, GetPollRegister(registers, from, move_width));
+        }
+        else if (opcode == 0xA8 || opcode == 0xA9)
+        {
+            operation = 8;
+            alu_width = opcode == 0xA8 ? 8 : width;
+            destination = I386_REG_EAX;
+            source = c.immediate;
+        }
+        else if (opcode < 0x40 && (opcode & 7) >= 4 && (opcode & 7) <= 5)
+        {
+            // OR, AND, XOR and CMP of the accumulator with an immediate
+            operation = opcode >> 3;
+            alu_width = (opcode & 1) == 0 ? 8 : width;
+            destination = I386_REG_EAX;
+            source = c.immediate;
+        }
+        else if (opcode < 0x40 && (opcode & 7) <= 3 && (c.modrm >> 6) == 3)
+        {
+            // OR, AND, XOR and CMP between registers
+            operation = opcode >> 3;
+            alu_width = (opcode & 1) == 0 ? 8 : width;
+            destination = (opcode & 2) == 0 ? c.rm : c.reg;
+            source = GetPollRegister(registers, (opcode & 2) == 0 ? c.reg : c.rm, alu_width);
+        }
+        else if ((opcode == 0x84 || opcode == 0x85) && (c.modrm >> 6) == 3)
+        {
+            operation = 8;
+            alu_width = opcode == 0x84 ? 8 : width;
+            destination = c.rm;
+            source = GetPollRegister(registers, c.reg, alu_width);
+        }
+        else if ((opcode >= 0x80 && opcode <= 0x83) && (c.modrm >> 6) == 3)
+        {
+            operation = c.reg;
+            alu_width = opcode == 0x80 || opcode == 0x82 ? 8 : width;
+            destination = c.rm;
+            source = opcode == 0x83 ? (u32)(s32)(s8)c.immediate : c.immediate;
+        }
+        else if ((opcode == 0xF6 || opcode == 0xF7) && c.reg == 0 && (c.modrm >> 6) == 3)
+        {
+            operation = 8;
+            alu_width = opcode == 0xF6 ? 8 : width;
+            destination = c.rm;
+            source = c.immediate;
+        }
+        else
+            return false;
+
+        if (operation >= 0)
+        {
+            // OR, AND, XOR, CMP and TEST, whose condition flags are all defined
+            if (operation != 1 && operation != 4 && operation != 6 && operation != 7 && operation != 8)
+                return false;
+
+            u32 width_mask = alu_width == 8 ? 0xFFU : alu_width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
+            u32 sign = alu_width == 8 ? 0x80U : alu_width == 16 ? 0x8000U : 0x80000000U;
+            u32 a = GetPollRegister(registers, destination, alu_width);
+            u32 b = source & width_mask;
+            u32 result = 0;
+
+            eflags &= ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF);
+
+            if (operation == 7)
+            {
+                result = (a - b) & width_mask;
+
+                if (a < b)
+                    eflags |= I386_FLAG_CF;
+
+                if (((a ^ b) & (a ^ result) & sign) != 0)
+                    eflags |= I386_FLAG_OF;
+            }
+            else
+            {
+                result = operation == 1 ? (a | b) : operation == 6 ? (a ^ b) : (a & b);
+
+                if (operation != 8)
+                    SetPollRegister(registers, destination, alu_width, result);
+            }
+
+            eflags |= k_szp_flags[result & 0xFF] & I386_FLAG_PF;
+
+            if (result == 0)
+                eflags |= I386_FLAG_ZF;
+
+            if ((result & sign) != 0)
+                eflags |= I386_FLAG_SF;
+        }
+
+        if (condition >= 0)
+        {
+            bool taken = condition == 16 || EvaluateCondition(eflags, condition);
+            bool backward = target <= c.start_eip;
+
+            if (taken && backward && !returned && target <= in_eip)
+            {
+                returned = true;
+                next = target;
+            }
+            else if (taken || backward)
+                return false;
+        }
+
+        eip = next;
+    }
+
+    return false;
 }
 
 bool I386::Halted() const

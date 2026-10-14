@@ -335,8 +335,10 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
         CoolDynarecPages();
 
     total.cycles = clocks;
-    total.steps = steps;
+    total.steps = steps + m_poll_steps;
     total.instruction_completed = completed;
+    m_poll_steps = 0;
+    m_poll_active = false;
     return total;
 }
 

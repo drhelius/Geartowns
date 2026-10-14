@@ -25,6 +25,7 @@
 
 class StateSerializer;
 class TraceLogger;
+class Memory;
 
 class SystemControl
 {
@@ -43,7 +44,7 @@ public:
 public:
     SystemControl();
     ~SystemControl();
-    void Init();
+    void Init(Memory* memory);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port);
@@ -65,6 +66,7 @@ private:
 
 private:
     SystemControl_State m_state;
+    Memory* m_memory;
     TraceLogger* m_trace_logger;
 };
 

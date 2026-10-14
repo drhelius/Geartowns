@@ -30,6 +30,7 @@ Memory::Memory()
     m_cpu_map_generation = 0;
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
+    m_nmi_vector_protect = false;
     m_map_generation = 1;
     m_region_generation = 1;
     m_debug_snapshot_id = 1;
@@ -84,6 +85,7 @@ void Memory::Reset()
 {
     ClearDebugRegions();
     m_physical_address_mask = 0xFFFFFFFF;
+    m_nmi_vector_protect = false;
 
     if (IsValidPointer(m_state.main_ram))
         memset(m_state.main_ram, 0, m_main_ram_size);
@@ -166,6 +168,13 @@ INLINE bool Memory::IsHandlerSpan(const DebugRegion* region, u32 offset, u32 siz
     return offset < region->handler_offset + region->handler_size && offset + size > region->handler_offset;
 }
 
+// WRPROT keeps every bus master from writing the NMI vector in main RAM
+INLINE bool Memory::IsProtectedSpan(const DebugRegion* region, u32 offset, u32 size) const
+{
+    return offset < k_memory_nmi_vector + k_memory_nmi_vector_size && offset + size > k_memory_nmi_vector &&
+        m_nmi_vector_protect && region->info.id == GT_DEBUG_REGION_MAIN_RAM;
+}
+
 #if !defined(GT_DISABLE_DYNAREC)
 // Writes that reach RAM pages holding translated code outside the CPU fast path
 INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size)
@@ -234,7 +243,7 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
         {
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
 
-            if (IsValidPointer(region->write_data) && !IsHandlerSpan(region, offset, 2))
+            if (IsValidPointer(region->write_data) && !IsHandlerSpan(region, offset, 2) && !IsProtectedSpan(region, offset, 2))
             {
                 write_u16_le(region->write_data + offset, value);
                 m_debug_snapshot_id += 2;
@@ -270,7 +279,7 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
         {
             u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
 
-            if (IsValidPointer(region->write_data) && !IsHandlerSpan(region, offset, 4))
+            if (IsValidPointer(region->write_data) && !IsHandlerSpan(region, offset, 4) && !IsProtectedSpan(region, offset, 4))
             {
                 write_u32_le(region->write_data + offset, value);
                 m_debug_snapshot_id += 4;
@@ -778,6 +787,15 @@ void Memory::SetPhysicalAddressMask(u32 mask)
     }
 }
 
+void Memory::SetNMIVectorProtect(bool protect)
+{
+    if (m_nmi_vector_protect == protect)
+        return;
+
+    m_nmi_vector_protect = protect;
+    RemapRange(k_memory_nmi_vector & ~0xFFFU, 0x1000);
+}
+
 u32 Memory::GetRegionGeneration() const
 {
     return m_region_generation;
@@ -1047,7 +1065,7 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
         region->write8(region->device, offset, value);
         m_access_context = outer;
     }
-    else
+    else if (!IsProtectedSpan(region, offset, 1))
     {
         region->write_data[offset] = value;
 #if !defined(GT_DISABLE_DYNAREC)
@@ -1141,7 +1159,8 @@ void Memory::UpdateCPUPage(u32 page, const DebugRegion* region)
         !(handler && region->handler_reads))
         m_cpu_read_pages[page] = region->read_data + offset;
 
-    if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data) && !handler)
+    if ((region->info.flags & GT_DEBUG_REGION_WRITABLE) != 0 && IsValidPointer(region->write_data) && !handler &&
+        !IsProtectedSpan(region, offset, 0x1000))
     {
 #if !defined(GT_DISABLE_DYNAREC)
         if (region->write_data == m_working_ram && IsValidPointer(m_code_pages) && (offset >> 12) < m_code_page_count &&

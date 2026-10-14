@@ -94,6 +94,7 @@ public:
     u8* const* GetCPUWritePages() const;
 
     void SetPhysicalAddressMask(u32 mask);
+    void SetNMIVectorProtect(bool protect);
     u32 GetMapGeneration() const;
     u32 GetRegionGeneration() const;
 #if !defined(GT_DISABLE_DYNAREC)
@@ -142,6 +143,7 @@ private:
     const DebugRegion* FindMappedSpan(u32 physical, u32 size) const;
     const DebugRegion* FindPageSpan(u32 physical, u32 size) const;
     bool IsHandlerSpan(const DebugRegion* region, u32 offset, u32 size) const;
+    bool IsProtectedSpan(const DebugRegion* region, u32 offset, u32 size) const;
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
     GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
@@ -169,6 +171,7 @@ private:
     DebugRegion m_debug_regions[GT_DEBUG_MEMORY_MAX_REGIONS];
     int m_debug_region_count;
     u32 m_physical_address_mask;
+    bool m_nmi_vector_protect;
     u32 m_map_generation;
     u32 m_region_generation;
     u64 m_debug_snapshot_id;
@@ -190,6 +193,10 @@ private:
     GT_Memory_Code_Write_Fn m_code_write_callback;
 #endif
 };
+
+// The real mode NMI vector, interrupt 2
+static const u32 k_memory_nmi_vector = 0x00008;
+static const u32 k_memory_nmi_vector_size = 4;
 
 #include "memory_inline.h"
 

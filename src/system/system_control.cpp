@@ -18,6 +18,7 @@
  */
 
 #include "system_control.h"
+#include "memory.h"
 #include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
@@ -30,6 +31,7 @@ static const u8 k_system_control_serial_rom[32] =
 
 SystemControl::SystemControl()
 {
+    InitPointer(m_memory);
     InitPointer(m_trace_logger);
     m_state.reset_cause = 0;
     m_state.reset_pending = false;
@@ -44,8 +46,9 @@ SystemControl::~SystemControl()
 {
 }
 
-void SystemControl::Init()
+void SystemControl::Init(Memory* memory)
 {
+    m_memory = memory;
     Reset();
 }
 
@@ -69,6 +72,7 @@ void SystemControl::Reset()
     m_state.serial_rom_control = 0;
     m_state.serial_rom_bit = 0;
     m_state.port_05e0 = 0;
+    m_memory->SetNMIVectorProtect(false);
 }
 
 u8 SystemControl::Read(u16 port)
@@ -120,6 +124,7 @@ void SystemControl::Write(u16 port, u8 value)
     {
         case 0x0020:
             m_state.write_protect = (value & 0x80) != 0;
+            m_memory->SetNMIVectorProtect(m_state.write_protect);
 
             if ((value & 0x40) != 0)
             {
@@ -203,4 +208,5 @@ void SystemControl::Serialize(StateSerializer& serializer)
 void SystemControl::SanitizeState()
 {
     m_state.reset_cause &= 0x03;
+    m_memory->SetNMIVectorProtect(m_state.write_protect);
 }

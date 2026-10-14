@@ -82,6 +82,7 @@ private:
     void EmitFallback(Instruction& instruction, int index, int last);
     void Exit(int steps, u32 clocks, u32 flags);
     void ExitLinked(int steps, u32 clocks, u32 flags, int slot);
+    void ExitTo(u32 target, int steps, u32 clocks, int slot);
     void StoreEIP(u32 eip);
     void CallStep(u32 next_check, u32 native_clocks, u32 before);
     intptr_t Offset(const void* member) const;
@@ -128,6 +129,7 @@ private:
     I386* m_cpu;
     jit_state* _jit;
     I386::DynarecBlock* m_block;
+    jit_node* m_block_start;
     u8 m_key;
     int m_count;
     Instruction m_instructions[64];

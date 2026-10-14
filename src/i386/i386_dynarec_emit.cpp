@@ -93,6 +93,7 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_cpu = cpu;
     InitPointer(_jit);
     InitPointer(m_block);
+    InitPointer(m_block_start);
     m_count = 0;
     m_key = 0;
 }
@@ -667,6 +668,7 @@ void DynarecEmitter::EmitBlock()
     // Blocks run in the frame of the entry function, with the CPU in V0
     jit_prolog();
     jit_tramp(k_dynarec_frame);
+    m_block_start = jit_label();
 
     for (int i = 0; i < m_count; i++)
     {
@@ -765,6 +767,32 @@ void DynarecEmitter::ExitLinked(int steps, u32 clocks, u32 flags, int slot)
     jit_movi(DR_T3, (jit_word_t)(uintptr_t)&m_block->link[slot]);
     jit_movi(DR_T4, (jit_word_t)(uintptr_t)m_cpu->m_dynarec_link);
     jit_jmpr(DR_T4);
+}
+
+// A jump to its own block start loops while the budget fits, writes to its code leave through a helper first
+void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot)
+{
+    if (target != m_block->eip)
+    {
+        ExitLinked(steps, clocks, k_dynarec_exit_end, slot);
+        return;
+    }
+
+    intptr_t step_total = Offset(&m_cpu->m_dynarec_steps);
+    intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+
+    LoadU32(DR_T0, DR_CPU, step_total);
+    jit_addi(DR_T0, DR_T0, (jit_word_t)steps);
+    jit_stxi_i(step_total, DR_CPU, DR_T0);
+    LoadU32(DR_T0, DR_CPU, clock_total);
+    jit_addi(DR_T0, DR_T0, (jit_word_t)clocks);
+    jit_stxi_i(clock_total, DR_CPU, DR_T0);
+    jit_addi(DR_T0, DR_T0, (jit_word_t)m_block->fit_clocks);
+    LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_dynarec_remaining));
+    jit_node_t* full = jit_bger_u(DR_T0, DR_T1);
+    jit_patch_at(jit_jmpi(), m_block_start);
+    jit_patch(full);
+    Exit(0, 0, k_dynarec_exit_end | k_dynarec_exit_link | (slot != 0 ? k_dynarec_exit_slot : 0));
 }
 
 // Takes the exit flags in R0, the steps and clocks of the block in R1 and R2 and its link slot in T3. Once the
@@ -2048,7 +2076,7 @@ void DynarecEmitter::EmitJcc(Instruction& instruction, int index, int condition,
     StoreEIP(target);
 
     if (known)
-        ExitLinked(index + 1, instruction.before + 7 + components, k_dynarec_exit_end, 1);
+        ExitTo(target, index + 1, instruction.before + 7 + components, 1);
     else
         Exit(index + 1, instruction.before + 7, k_dynarec_exit_transfer | k_dynarec_exit_end);
 }
@@ -2106,7 +2134,7 @@ void DynarecEmitter::EmitLoop(Instruction& instruction, int index, s32 displacem
     StoreEIP(target);
 
     if (target_known)
-        ExitLinked(index + 1, instruction.before + target_clocks + target_components, k_dynarec_exit_end, 1);
+        ExitTo(target, index + 1, instruction.before + target_clocks + target_components, 1);
     else
         Exit(index + 1, instruction.before + target_clocks, k_dynarec_exit_transfer | k_dynarec_exit_end);
 }
@@ -2127,7 +2155,7 @@ void DynarecEmitter::EmitJump(Instruction& instruction, int index, s32 displacem
     StoreEIP(target);
 
     if (known)
-        ExitLinked(index + 1, instruction.before + 7 + components, k_dynarec_exit_end, 1);
+        ExitTo(target, index + 1, instruction.before + 7 + components, 1);
     else
         Exit(index + 1, instruction.before + 7, k_dynarec_exit_transfer | k_dynarec_exit_end);
 }

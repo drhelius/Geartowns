@@ -50,6 +50,7 @@ public:
         u8 lowest_priority;
         bool read_isr;
         bool poll_pending;
+        u8 poll_edges;
         bool special_mask;
         bool rotate_on_aeoi;
         bool int_output;

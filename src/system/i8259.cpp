@@ -50,6 +50,7 @@ void I8259::Reset()
     m_state.lowest_priority = 7;
     m_state.read_isr = false;
     m_state.poll_pending = false;
+    m_state.poll_edges = 0;
     m_state.special_mask = false;
     m_state.rotate_on_aeoi = false;
     m_state.int_output = false;
@@ -57,11 +58,15 @@ void I8259::Reset()
 
 u8 I8259::Read(int a0)
 {
-    // An armed poll turns the next read into an acknowledge
+    // An armed poll turns the next read into an acknowledge of the frozen requests
+    // The input changes held back since the poll command reach the requests after it
     if (m_state.poll_pending)
     {
         m_state.poll_pending = false;
         int line = Acknowledge();
+        m_state.irr = (m_state.irr | m_state.poll_edges) & m_state.input_levels;
+        m_state.poll_edges = 0;
+        UpdateOutput();
         return line < 0 ? 0x00 : (u8)(0x80 | line);
     }
 
@@ -123,6 +128,7 @@ void I8259::WriteICW1(u8 value)
     m_state.lowest_priority = 7;
     m_state.read_isr = false;
     m_state.poll_pending = false;
+    m_state.poll_edges = 0;
     m_state.special_mask = false;
     m_state.rotate_on_aeoi = false;
 
@@ -261,6 +267,7 @@ void I8259::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.lowest_priority);
     G_SERIALIZE(serializer, m_state.read_isr);
     G_SERIALIZE(serializer, m_state.poll_pending);
+    G_SERIALIZE(serializer, m_state.poll_edges);
     G_SERIALIZE(serializer, m_state.special_mask);
     G_SERIALIZE(serializer, m_state.rotate_on_aeoi);
 }

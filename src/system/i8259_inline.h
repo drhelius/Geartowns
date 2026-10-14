@@ -29,6 +29,17 @@ INLINE void I8259::SetInputLine(int line, bool high)
     if (high == ((m_state.input_levels & mask) != 0))
         return;
 
+    // Requests are frozen from the poll command to its read
+    if (m_state.poll_pending)
+    {
+        m_state.input_levels ^= mask;
+
+        if (high)
+            m_state.poll_edges |= mask;
+
+        return;
+    }
+
     // A request only stands while its input is high, in both trigger modes
     if (high)
     {

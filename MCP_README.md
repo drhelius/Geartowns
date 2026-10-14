@@ -18,29 +18,29 @@ This server provides tools for game development, rom hacking, translation, rever
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.3/Geartowns-0.0.3-mcpb-windows-x64.mcpb">Geartowns-0.0.3-mcpb-windows-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.4/Geartowns-0.0.4-mcpb-windows-x64.mcpb">Geartowns-0.0.4-mcpb-windows-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.3/Geartowns-0.0.3-mcpb-windows-arm64.mcpb">Geartowns-0.0.3-mcpb-windows-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.4/Geartowns-0.0.4-mcpb-windows-arm64.mcpb">Geartowns-0.0.4-mcpb-windows-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>macOS</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.3/Geartowns-0.0.3-mcpb-macos-x64.mcpb">Geartowns-0.0.3-mcpb-macos-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.4/Geartowns-0.0.4-mcpb-macos-x64.mcpb">Geartowns-0.0.4-mcpb-macos-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.3/Geartowns-0.0.3-mcpb-macos-arm64.mcpb">Geartowns-0.0.3-mcpb-macos-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.4/Geartowns-0.0.4-mcpb-macos-arm64.mcpb">Geartowns-0.0.4-mcpb-macos-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>Linux</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.3/Geartowns-0.0.3-mcpb-linux-x64.mcpb">Geartowns-0.0.3-mcpb-linux-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.4/Geartowns-0.0.4-mcpb-linux-x64.mcpb">Geartowns-0.0.4-mcpb-linux-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.3/Geartowns-0.0.3-mcpb-linux-arm64.mcpb">Geartowns-0.0.3-mcpb-linux-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Geartowns/releases/download/0.0.4/Geartowns-0.0.4-mcpb-linux-arm64.mcpb">Geartowns-0.0.4-mcpb-linux-arm64.mcpb</a></td>
     </tr>
   </tbody>
 </table>

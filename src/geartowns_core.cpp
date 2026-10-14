@@ -272,6 +272,13 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
 
 void GeartownsCore::RunFrame(u64 frame_start)
 {
+    if (unlikely(m_debug_interrupt_deferred))
+    {
+        m_debug_interrupt_deferred = false;
+        GT_Bus_Access_Context context = BeginSlice();
+        EnterPendingInterrupt(context);
+    }
+
     while (!IsFrameDone(frame_start))
     {
         u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));

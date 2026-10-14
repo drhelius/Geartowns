@@ -133,6 +133,13 @@ bool Media::LoadMedia(const char* file_path)
     const char* extension = m_media_info.extension;
     bool ok = false;
 
+    if (extension[0] == '\0')
+    {
+        Error("Media file has no extension: %s", file_path);
+        Reset();
+        return false;
+    }
+
     if (strcmp(extension, "cue") == 0)
     {
         m_media_info.cdrom = true;

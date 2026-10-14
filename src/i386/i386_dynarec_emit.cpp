@@ -382,9 +382,10 @@ void DynarecEmitter::Classify(Instruction& instruction)
 
             break;
         case 0xE0: case 0xE1: case 0xE2: case 0xE3:
-            // LOOP and JCXZ
-            instruction.kind = DYNAREC_HELPER_LAST;
+            // LOOPNE, LOOPE, LOOP and JCXZ
+            SetNative(instruction, opcode == 0xE3 ? 5 : 11, false);
             instruction.ends_block = true;
+            instruction.uses = opcode <= 0xE1 ? I386_FLAG_ZF : 0;
             break;
         case 0xE4: case 0xE5: case 0xEC: case 0xED:
             // IN, DynarecStep leaves the block when the read ends the batch
@@ -1445,6 +1446,9 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         case 0xC6: case 0xC7:
             EmitMoveImmediate(instruction, opcode == 0xC6 ? 8 : width);
             break;
+        case 0xE0: case 0xE1: case 0xE2: case 0xE3:
+            EmitLoop(instruction, index, SignExtend(c.immediate, 8));
+            break;
         case 0xE8:
             EmitCall(instruction, index, width);
             break;
@@ -2047,6 +2051,64 @@ void DynarecEmitter::EmitJcc(Instruction& instruction, int index, int condition,
         ExitLinked(index + 1, instruction.before + 7 + components, k_dynarec_exit_end, 1);
     else
         Exit(index + 1, instruction.before + 7, k_dynarec_exit_transfer | k_dynarec_exit_end);
+}
+
+// LOOPcc leaves the flags alone and adds the next instruction's m clocks either way, JCXZ only when it jumps
+void DynarecEmitter::EmitLoop(Instruction& instruction, int index, s32 displacement)
+{
+    const I386::InstructionContext& c = instruction.context;
+    u8 opcode = c.opcode;
+    int count_width = c.address_size * 8;
+    u32 target = c.next_eip + (u32)displacement;
+
+    if (c.operand_size == 2)
+        target &= 0xFFFF;
+
+    m_block->eip_limit = MAX(m_block->eip_limit, target);
+
+    u32 target_components = 0;
+    bool target_known = GetTargetComponents(target, target_components);
+    u32 next_components = 0;
+    bool next_known = opcode == 0xE3 || GetTargetComponents(c.next_eip, next_components);
+    u32 next_clocks = opcode == 0xE3 ? 5 : 11;
+    u32 target_clocks = opcode == 0xE3 ? 9 : 11;
+    jit_node_t* taken = NULL;
+
+    LoadRegister(DR_T0, I386_REG_ECX, count_width);
+
+    if (opcode == 0xE3)
+        taken = jit_beqi(DR_T0, 0);
+    else
+    {
+        jit_subi(DR_T0, DR_T0, 1);
+        Mask(DR_T0, count_width);
+        StoreRegister(I386_REG_ECX, count_width, DR_T0);
+
+        if (opcode == 0xE2)
+            taken = jit_bnei(DR_T0, 0);
+        else
+        {
+            jit_node_t* zero = jit_beqi(DR_T0, 0);
+            EmitCondition(DR_T0, DR_T1, opcode == 0xE1 ? 4 : 5);
+            taken = jit_bnei(DR_T0, 0);
+            jit_patch(zero);
+        }
+    }
+
+    StoreEIP(c.next_eip);
+
+    if (next_known)
+        ExitLinked(index + 1, instruction.before + next_clocks + next_components, k_dynarec_exit_end, 0);
+    else
+        Exit(index + 1, instruction.before + next_clocks, k_dynarec_exit_transfer | k_dynarec_exit_end);
+
+    jit_patch(taken);
+    StoreEIP(target);
+
+    if (target_known)
+        ExitLinked(index + 1, instruction.before + target_clocks + target_components, k_dynarec_exit_end, 1);
+    else
+        Exit(index + 1, instruction.before + target_clocks, k_dynarec_exit_transfer | k_dynarec_exit_end);
 }
 
 void DynarecEmitter::EmitJump(Instruction& instruction, int index, s32 displacement)

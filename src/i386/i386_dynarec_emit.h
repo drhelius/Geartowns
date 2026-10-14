@@ -120,6 +120,7 @@ private:
     void EmitPush(Instruction& instruction, int width);
     void EmitPop(Instruction& instruction, int index, int width);
     void EmitJcc(Instruction& instruction, int index, int condition, s32 displacement);
+    void EmitLoop(Instruction& instruction, int index, s32 displacement);
     void EmitJump(Instruction& instruction, int index, s32 displacement);
     void EmitCall(Instruction& instruction, int index, int width);
     void EmitReturn(Instruction& instruction, int index, int width, u16 release);

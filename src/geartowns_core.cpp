@@ -1600,8 +1600,9 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to map CMOS RAM");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM Bank Window", 0x1000, 0xC2200000U,
-        GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_AUDIO,
-        m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback, Audio::PeekWaveWindowCallback))
+        GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_MMIO |
+        GT_DEBUG_REGION_AUDIO, m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback,
+        Audio::PeekWaveWindowCallback))
         Error("Unable to map the PCM wave RAM window");
 
     u8* wave_ram = m_audio->GetRF5C68()->GetState()->wave_ram;

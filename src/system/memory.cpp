@@ -495,6 +495,14 @@ void Memory::SynchronizeAccess()
         context->synchronize_memory(context->synchronize_context, *context);
 }
 
+void Memory::SynchronizeRegister(GT_Bus_Access_Context& context)
+{
+    context.end_batch = true;
+
+    if (IsValidPointer(context.synchronize_memory))
+        context.synchronize_memory(context.synchronize_context, context);
+}
+
 int Memory::GetDebugRegionCount() const
 {
     return m_debug_region_count;
@@ -983,7 +991,7 @@ GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset,
 }
 
 // Unmapped and unreadable addresses float high like the I/O space
-// Registers end the CPU batch, so polling them sees time move like a port does
+// Registers move machine time up to the start of their instruction and end the CPU batch
 u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
 {
     const DebugRegion* region = FindPageSpan(bus_address, 1);
@@ -994,7 +1002,7 @@ u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
     u32 offset = bus_address - region->info.physical_base;
 
     if ((region->info.flags & GT_DEBUG_REGION_MMIO) != 0)
-        context.end_batch = true;
+        SynchronizeRegister(context);
 
     if (IsValidPointer(region->read8))
     {
@@ -1021,7 +1029,7 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
         return;
 
     if ((region->info.flags & GT_DEBUG_REGION_MMIO) != 0)
-        context.end_batch = true;
+        SynchronizeRegister(context);
 
     u32 offset = bus_address - region->info.physical_base;
 

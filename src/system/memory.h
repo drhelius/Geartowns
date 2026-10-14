@@ -147,6 +147,7 @@ private:
     GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
     u8 ReadBus(u32 bus_address, GT_Bus_Access_Context& context);
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
+    void SynchronizeRegister(GT_Bus_Access_Context& context);
     u32 NormalizePhysicalAddress(u32 physical) const;
     void UpdateRAMRegions();
     void UpdateCPUPage(u32 page);

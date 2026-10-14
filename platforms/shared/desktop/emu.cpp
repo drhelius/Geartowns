@@ -34,6 +34,7 @@
 #include "debug/gui_debug_trace_logger.h"
 #include "emu_floppy.h"
 #include "events.h"
+#include "gui_notifications.h"
 #include "mcp/mcp_manager.h"
 #include "rewind.h"
 #include "runahead.h"
@@ -368,6 +369,13 @@ void emu_update(void)
 
     if (config_debug.debug)
         emu_debug_update();
+
+    if (!geartowns->IsPoweredOn())
+    {
+        reset_run_state();
+        update_savestates_data();
+        gui_notify(gui_NotificationInfo, ICON_MD_POWER_SETTINGS_NEW, "Powered off by software", NULL, "power");
+    }
 }
 
 void emu_load_media_async(const char* file_path)

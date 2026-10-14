@@ -38,6 +38,11 @@ INLINE void SystemControl::AcknowledgeCPUReset()
     m_state.reset_pending = false;
 }
 
+INLINE bool SystemControl::IsPowerOffPending() const
+{
+    return m_state.power_off;
+}
+
 INLINE SystemControl::SystemControl_State* SystemControl::GetState()
 {
     return &m_state;

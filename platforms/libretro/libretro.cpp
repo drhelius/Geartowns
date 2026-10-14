@@ -510,8 +510,16 @@ void retro_run(void)
     }
 
     audio_sample_count = 0;
+    bool powered = core->IsPoweredOn();
     core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
     floppy_update();
+
+    if (powered && !core->IsPoweredOn())
+    {
+        show_message("Powered off by software", 2, RETRO_LOG_INFO);
+        log_cb(RETRO_LOG_INFO, "Powered off by software\n");
+        environ_cb(RETRO_ENVIRONMENT_SHUTDOWN, NULL);
+    }
 
     retro_system_av_info info;
     get_system_av_info(&info);

@@ -84,6 +84,9 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
         core->RunToFrame(frame_buffer, runahead_audio, &discarded_samples, render);
     }
 
+    if (!core->IsPoweredOn())
+        return;
+
     // Roll back to the authoritative frame. If restoring ever fails, the
     // authoritative state is unrecoverable, so keep the (valid) speculative
     // state as the new timeline and disable run-ahead. Emulation continues

@@ -501,7 +501,7 @@ void GeartownsCore::EndFrame(u64 frame_start, s16* sample_buffer, int* sample_co
 
 INLINE bool GeartownsCore::IsFrameDone(u64 frame_start) const
 {
-    return m_video->IsFrameReady() || (m_scheduler->GetClocks() >= GetFrameLimit(frame_start));
+    return m_video->IsFrameReady() || (m_scheduler->GetClocks() >= GetFrameLimit(frame_start)) || !m_powered;
 }
 
 INLINE u64 GeartownsCore::GetFrameLimit(u64 frame_start) const
@@ -596,6 +596,12 @@ INLINE bool GeartownsCore::CompleteSlice(const I386_Run_Result& result, GT_Bus_A
     // The board answers a shutdown cycle by resetting the CPU
     if (unlikely(m_i386->Shutdown()))
         m_system_control->RequestCPUReset(k_system_control_reset_shutdown);
+
+    if (unlikely(m_system_control->IsPowerOffPending()))
+    {
+        PowerOff();
+        return false;
+    }
 
     if (unlikely(m_system_control->IsCPUResetPending()))
     {

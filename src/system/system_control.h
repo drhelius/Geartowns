@@ -53,6 +53,7 @@ public:
     void RequestCPUReset(u8 cause);
     bool IsCPUResetPending() const;
     void AcknowledgeCPUReset();
+    bool IsPowerOffPending() const;
     SystemControl_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);

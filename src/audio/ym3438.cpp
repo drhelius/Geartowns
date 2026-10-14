@@ -261,7 +261,7 @@ void YM3438::ClockTimers()
     // Timer B's divide-by-16 prescaler keeps running while its counter is stopped
     m_state.timer_b_prescaler = (m_state.timer_b_prescaler + 1) & 0x0F;
 
-    if (m_state.timer_b_load && m_state.timer_b_prescaler == 0)
+    if (m_state.timer_b_prescaler == 0 && m_state.timer_b_load)
     {
         m_state.timer_b_counter++;
 

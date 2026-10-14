@@ -319,7 +319,7 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // Expansion NMI mask
         case 0x05C2:
             // Expansion NMI status
-            break;
+            return m_system_control->Read(port);
         case 0x05C8:
             // Text VRAM written
             return m_video->Read(port, context.clocks);
@@ -573,8 +573,6 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x04F6:
         case 0x04F7:
         case 0x04F8:
-        case 0x05C0:
-        case 0x05C2:
         case 0x05CA:
         case 0x0800:
         case 0x0802:
@@ -588,6 +586,8 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x0C30:
         case 0x0C32:
             break;
+        case 0x05C0:
+        case 0x05C2:
         case 0x05E0:
             value = m_system_control->Peek(port);
             break;
@@ -857,6 +857,8 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x05C0:
             // Expansion NMI mask
+            m_system_control->Write(port, value);
+            break;
         case 0x05C2:
             // Expansion NMI status
             break;

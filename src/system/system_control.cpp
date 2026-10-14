@@ -39,6 +39,7 @@ SystemControl::SystemControl()
     m_state.power_off = false;
     m_state.serial_rom_control = 0;
     m_state.serial_rom_bit = 0;
+    m_state.expansion_nmi = false;
     m_state.port_05e0 = 0;
 }
 
@@ -71,6 +72,7 @@ void SystemControl::Reset()
     m_state.power_off = false;
     m_state.serial_rom_control = 0;
     m_state.serial_rom_bit = 0;
+    m_state.expansion_nmi = false;
     m_state.port_05e0 = 0;
     m_memory->SetNMIVectorProtect(false);
 }
@@ -91,6 +93,12 @@ u8 SystemControl::Read(u16 port)
             u8 data = (k_system_control_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
             return (m_state.serial_rom_control & 0xC0) | data;
         }
+        case 0x05C0:
+            // Only BNMI is driven, the undefined bits float high
+            return m_state.expansion_nmi ? 0xFF : 0xF7;
+        case 0x05C2:
+            // No expansion board, so the expansion bus never raised the NMI
+            return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
         default:
@@ -111,6 +119,10 @@ u8 SystemControl::Peek(u16 port) const
             u8 data = (k_system_control_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
             return (m_state.serial_rom_control & 0xC0) | data;
         }
+        case 0x05C0:
+            return m_state.expansion_nmi ? 0xFF : 0xF7;
+        case 0x05C2:
+            return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
         default:
@@ -144,6 +156,9 @@ void SystemControl::Write(u16 port, u8 value)
             break;
         case 0x0032:
             WriteSerialROM(value);
+            break;
+        case 0x05C0:
+            m_state.expansion_nmi = (value & 0x08) != 0;
             break;
         case 0x05E0:
             m_state.port_05e0 = value;
@@ -202,6 +217,7 @@ void SystemControl::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.power_off);
     G_SERIALIZE(serializer, m_state.serial_rom_control);
     G_SERIALIZE(serializer, m_state.serial_rom_bit);
+    G_SERIALIZE(serializer, m_state.expansion_nmi);
     G_SERIALIZE(serializer, m_state.port_05e0);
 }
 

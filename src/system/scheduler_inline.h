@@ -86,7 +86,7 @@ INLINE void Scheduler::Schedule(Scheduler_Event event, u64 clocks)
 {
     m_state.events[event] = clocks;
 
-    if (clocks <= m_next_event_clocks)
+    if ((clocks < m_next_event_clocks) || ((clocks == m_next_event_clocks) && (event <= m_next_event)))
     {
         m_next_event_clocks = clocks;
         m_next_event = event;

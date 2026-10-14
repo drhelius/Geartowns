@@ -269,7 +269,7 @@ void DynarecEmitter::ComputeLiveness()
 
 // Natives are translated. Helpers run in the interpreter and the block goes on, which needs the instruction to
 // leave CS, SS, IF, the mode and the debug state alone. Everything else runs in the interpreter as the last
-// instruction of its block: transfers it can't follow, interrupts, system instructions, I/O and repeated strings
+// instruction of its block: transfers it can't follow, interrupts, system instructions, OUT, INS, OUTS and REP strings
 void DynarecEmitter::Classify(Instruction& instruction)
 {
     const I386::InstructionContext& c = instruction.context;
@@ -385,6 +385,10 @@ void DynarecEmitter::Classify(Instruction& instruction)
             // LOOP and JCXZ
             instruction.kind = DYNAREC_HELPER_LAST;
             instruction.ends_block = true;
+            break;
+        case 0xE4: case 0xE5: case 0xEC: case 0xED:
+            // IN, DynarecStep leaves the block when the read ends the batch
+            instruction.kind = DYNAREC_HELPER;
             break;
         case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
         case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F:

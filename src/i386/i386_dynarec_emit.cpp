@@ -2151,16 +2151,18 @@ void DynarecEmitter::EmitCall(Instruction& instruction, int index, int width)
     EmitPush(instruction, width);
     StoreEIP(target);
 
-#if defined(GT_DISABLE_DISASSEMBLER)
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    // The debugger call stack takes the call before the link
+    jit_movi(DR_T3, (jit_word_t)(uintptr_t)&I386::DynarecCall);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_finishr(DR_T3);
+#endif
+
     if (known)
         ExitLinked(index + 1, instruction.before + instruction.clocks + components, k_dynarec_exit_end, 1);
     else
         Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_transfer | k_dynarec_exit_end);
-#else
-    // The debugger call stack takes the call in the dispatcher
-    Exit(index + 1, instruction.before + instruction.clocks + components,
-        (known ? 0 : k_dynarec_exit_transfer) | k_dynarec_exit_call | k_dynarec_exit_end);
-#endif
 }
 
 void DynarecEmitter::EmitReturn(Instruction& instruction, int index, int width, u16 release)

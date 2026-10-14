@@ -769,6 +769,9 @@ private:
     void CheckDynarecMemory();
     static void DynarecCodeWrite(void* context, u32 offset, u32 size);
     static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before);
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    static void DynarecCall(I386* cpu);
+#endif
 #endif
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();

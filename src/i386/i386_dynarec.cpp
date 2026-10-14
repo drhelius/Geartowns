@@ -276,13 +276,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                     clocks += GetNextInstructionComponents();
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
-                if ((exit & k_dynarec_exit_call) != 0)
-                {
-                    const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
-                    const DynarecBlock& caller = m_dynarec_blocks[last];
-                    PushCallStack(code.selector, code.base, caller.call_eip, caller.call_next_eip, I386_CALL, 0);
-                }
-                else if ((exit & k_dynarec_exit_return) != 0)
+                if ((exit & k_dynarec_exit_return) != 0)
                     TrackReturn(true);
 #endif
 
@@ -733,6 +727,16 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
 
     return 0;
 }
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+// The debugger call stack entry of a translated CALL
+void I386::DynarecCall(I386* cpu)
+{
+    const I386_Segment& code = cpu->m_state.segments[I386_SEGMENT_CS];
+    const DynarecBlock& caller = cpu->m_dynarec_blocks[cpu->m_dynarec_current];
+    cpu->PushCallStack(code.selector, code.base, caller.call_eip, caller.call_next_eip, I386_CALL, 0);
+}
+#endif
 
 #else
 

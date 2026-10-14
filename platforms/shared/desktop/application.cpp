@@ -77,7 +77,6 @@ extern "C" void macos_set_native_fullscreen(void* nswindow, bool enter);
 extern "C" void macos_refocus_window(void* nswindow);
 extern "C" void macos_install_dock_menu(void);
 extern "C" void macos_remove_dock_menu(void);
-extern "C" void macos_launch_new_instance(void);
 #endif
 
 int application_init(const ApplicationParams& params)
@@ -345,19 +344,6 @@ bool application_check_single_instance(const char* rom_file, const char* symbol_
 
     return true;
 }
-
-#if defined(__APPLE__)
-bool application_can_launch_new_instance(void)
-{
-    return macos_new_instance_enabled;
-}
-
-void application_launch_new_instance(void)
-{
-    if (macos_new_instance_enabled)
-        macos_launch_new_instance();
-}
-#endif
 
 static bool sdl_init(void)
 {

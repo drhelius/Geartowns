@@ -244,7 +244,6 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
             break;
     }
 
-    m_block->length = (u16)position;
     m_block->watch_eip = block.eip;
     m_block->watch_length = (u16)position;
     return m_count != 0;

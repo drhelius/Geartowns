@@ -95,7 +95,7 @@ public:
     MemorySearch();
     void Reset();
     bool Start(DebugMemoryProvider& provider, const GT_Debug_Memory_Address& source, u32 start, u32 size, int width,
-        int endian, bool signed_values, bool aligned, bool known, u64 known_value);
+        int endian, bool aligned, bool known, u64 known_value);
     bool FilterOperator(DebugMemoryProvider& provider, int comparison, int reference, u64 value, bool signed_values);
     void Undo();
     bool FindPattern(DebugMemoryProvider& provider, const GT_Debug_Memory_Address& source, u32 start, u32 size,
@@ -126,7 +126,6 @@ private:
     u32 m_size;
     int m_width;
     int m_endian;
-    bool m_signed;
     bool m_aligned;
 
     u32 m_candidate_count;
@@ -288,7 +287,7 @@ void gui_debug_memory_init(void)
 
     for (int i = 0; i < MEMORY_VIEW_COUNT; i++)
     {
-        memory_editor[i].Init(&memory_provider, i);
+        memory_editor[i].Init(&memory_provider);
         memory_editor[i].SetAvailable(i == 0);
     }
 
@@ -1521,7 +1520,7 @@ static void draw_search_window()
                 if (!parse_u32(search_start, start) || !parse_u32(search_size, size))
                     set_search_error("Invalid range");
                 else if (!memory_search.Start(memory_provider, editor->GetSource(), start, size, widths[search_width],
-                    search_endian, search_type == SEARCH_TYPE_SIGNED, search_aligned, false, 0))
+                    search_endian, search_aligned, false, 0))
                     set_search_error("The range does not fit the source");
                 else
                     search_error[0] = 0;
@@ -2636,7 +2635,7 @@ void gui_debug_memory_get_watches(const GT_Debug_Memory_Address& source, std::ve
 
 bool gui_debug_memory_search_capture(const GT_Debug_Memory_Address& source, u32 start, u32 size, int width)
 {
-    return memory_search.Start(memory_provider, source, start, size, width, 0, false, true, false, 0);
+    return memory_search.Start(memory_provider, source, start, size, width, 0, true, false, 0);
 }
 
 int gui_debug_memory_search(const GT_Debug_Memory_Address& source, int comparison, bool previous, u64 value,
@@ -2876,7 +2875,6 @@ void MemorySearch::Reset()
     m_size = 0;
     m_width = 1;
     m_endian = 0;
-    m_signed = false;
     m_aligned = true;
     m_candidate_count = 0;
     m_pattern_size = 0;
@@ -2892,7 +2890,7 @@ void MemorySearch::Reset()
 }
 
 bool MemorySearch::Start(DebugMemoryProvider& provider, const GT_Debug_Memory_Address& source, u32 start, u32 size,
-    int width, int endian, bool signed_values, bool aligned, bool known, u64 known_value)
+    int width, int endian, bool aligned, bool known, u64 known_value)
 {
     Reset();
 
@@ -2904,7 +2902,6 @@ bool MemorySearch::Start(DebugMemoryProvider& provider, const GT_Debug_Memory_Ad
     m_size = size;
     m_width = width;
     m_endian = endian;
-    m_signed = signed_values;
     m_aligned = aligned;
 
     m_initial_data.resize(size);

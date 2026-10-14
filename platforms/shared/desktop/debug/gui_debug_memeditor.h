@@ -20,7 +20,6 @@
 #ifndef GUI_DEBUG_MEMEDITOR_H
 #define GUI_DEBUG_MEMEDITOR_H
 
-#include <iosfwd>
 #include <vector>
 #include "common/debug_memory.h"
 
@@ -44,7 +43,7 @@ public:
 public:
     MemEditor();
     ~MemEditor();
-    void Init(DebugMemoryProvider* provider, int id);
+    void Init(DebugMemoryProvider* provider);
     void Reset();
     void Update();
     void Draw();
@@ -73,9 +72,6 @@ public:
 
     Options GetOptions() const;
     void SetOptions(const Options& options);
-
-    void SaveSettings(std::ostream& stream) const;
-    bool LoadSettings(std::istream& stream);
 
 private:
     void DrawStatusBar();
@@ -116,7 +112,6 @@ private:
     static const u8 CHANGE_HIGHLIGHT_REFRESHES = 60;
 
     DebugMemoryProvider* m_provider;
-    int m_id;
     char m_title[96];
 
     GT_Debug_Memory_Address m_source;

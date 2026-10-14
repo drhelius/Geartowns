@@ -79,7 +79,6 @@ EXTERN bool ogl_shader_chain_resize_pass_texture(const OglShaderChainFramebuffer
 EXTERN bool ogl_shader_chain_load_preset(const char* path);
 EXTERN void ogl_shader_chain_unload_preset(void);
 EXTERN bool ogl_shader_chain_has_preset(void);
-EXTERN uint32_t ogl_shader_chain_get_preset_program(void);
 EXTERN uint32_t ogl_shader_chain_get_preset_pass_program(int index);
 EXTERN const char* ogl_shader_chain_get_preset_name(void);
 EXTERN const char* ogl_shader_chain_get_preset_path(void);

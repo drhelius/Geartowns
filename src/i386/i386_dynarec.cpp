@@ -478,7 +478,6 @@ void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
 
     block.code = m_dynarec_memory->GetExecuteView() + m_dynarec_code_used;
     block.state = k_dynarec_compiled;
-    block.count = (u8)emitter.GetInstructionCount();
     block.epoch = m_dynarec_epoch;
     block.copy = m_dynarec_bytes_used;
     block.page = page;

@@ -18,8 +18,6 @@
  */
 
 #include <algorithm>
-#include <istream>
-#include <ostream>
 #include <string>
 #include <SDL3/SDL.h>
 
@@ -68,7 +66,6 @@ static bool equal_prefix(const std::string& left, const char* right)
 MemEditor::MemEditor()
 {
     InitPointer(m_provider);
-    m_id = 0;
     m_available = false;
     Reset();
 }
@@ -77,10 +74,9 @@ MemEditor::~MemEditor()
 {
 }
 
-void MemEditor::Init(DebugMemoryProvider* provider, int id)
+void MemEditor::Init(DebugMemoryProvider* provider)
 {
     m_provider = provider;
-    m_id = id;
     m_data.resize(BUFFER_SIZE);
     m_previous.resize(BUFFER_SIZE);
     m_change_age.resize(BUFFER_SIZE);
@@ -482,36 +478,6 @@ void MemEditor::SetOptions(const Options& options)
     m_options.refresh_rate = CLAMP(m_options.refresh_rate, 1, 120);
     m_options.text_encoding = CLAMP(m_options.text_encoding, 0, 1);
     m_options.preview_endian = CLAMP(m_options.preview_endian, 0, 1);
-}
-
-void MemEditor::SaveSettings(std::ostream& stream) const
-{
-    stream.write((const char*)&m_source.space, sizeof(m_source.space));
-    stream.write((const char*)&m_source.address, sizeof(m_source.address));
-    stream.write((const char*)&m_source.segment, sizeof(m_source.segment));
-    stream.write((const char*)&m_source.segment_register, sizeof(m_source.segment_register));
-    stream.write((const char*)&m_source.region, sizeof(m_source.region));
-    stream.write((const char*)&m_options, sizeof(m_options));
-}
-
-bool MemEditor::LoadSettings(std::istream& stream)
-{
-    GT_Debug_Memory_Address source;
-    Options options;
-    stream.read((char*)&source.space, sizeof(source.space));
-    stream.read((char*)&source.address, sizeof(source.address));
-    stream.read((char*)&source.segment, sizeof(source.segment));
-    stream.read((char*)&source.segment_register, sizeof(source.segment_register));
-    stream.read((char*)&source.region, sizeof(source.region));
-    stream.read((char*)&options, sizeof(options));
-
-    if (stream.fail() || source.space < 0 || source.space >= GT_DEBUG_MEMORY_SPACE_COUNT)
-        return false;
-
-    SetOptions(options);
-    SetSource(source);
-    JumpToAddress(m_source.address, false);
-    return true;
 }
 
 void MemEditor::DrawStatusBar()
@@ -1235,7 +1201,7 @@ void MemEditor::NavigateKeyboard(int bytes_per_row)
     s64 cursor = m_selection_end;
     s64 row_start = (cursor / bytes_per_row) * bytes_per_row;
     int page_rows = MAX(1, m_visible_rows - 1);
-    s64 target = cursor;
+    s64 target;
 
     if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
         target = cursor - 1;

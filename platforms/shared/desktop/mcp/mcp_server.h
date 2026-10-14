@@ -53,7 +53,6 @@ struct ResourceInfo
     std::string title;
     std::string description;
     std::string mimeType;
-    std::string category;
     std::string filePath;
 };
 

@@ -693,8 +693,6 @@ private:
         u64 key;
         u32 eip;
         u8 state;
-        u8 count;
-        u16 length;
         u16 watch_length;
         u32 watch_eip;
         u32 hits;

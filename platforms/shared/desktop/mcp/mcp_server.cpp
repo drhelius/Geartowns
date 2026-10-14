@@ -3866,7 +3866,6 @@ void McpServer::LoadResourcesFromCategory(const std::string& category, const std
         resource.title = item["title"].get<std::string>();
         resource.description = item.contains("description") ? item["description"].get<std::string>() : "";
         resource.mimeType = item.contains("mimeType") ? item["mimeType"].get<std::string>() : "text/plain";
-        resource.category = category;
         resource.filePath = tocDir + "/" + name + ".md";
 
         if (m_resourceMap.find(resource.uri) != m_resourceMap.end())

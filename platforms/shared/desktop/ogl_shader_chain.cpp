@@ -419,11 +419,6 @@ bool ogl_shader_chain_has_preset(void)
     return preset_loaded && active_preset.pass_count > 0 && preset_programs[0].program != 0;
 }
 
-uint32_t ogl_shader_chain_get_preset_program(void)
-{
-    return ogl_shader_chain_get_preset_pass_program(0);
-}
-
 uint32_t ogl_shader_chain_get_preset_pass_program(int index)
 {
     if (!preset_loaded || index < 0 || index >= active_preset.pass_count)

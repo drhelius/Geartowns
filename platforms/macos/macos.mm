@@ -229,9 +229,3 @@ extern "C" void macos_remove_dock_menu(void)
     [geartowns_application_delegate release];
     geartowns_application_delegate = nil;
 }
-
-extern "C" void macos_launch_new_instance(void)
-{
-    if (geartowns_application_delegate)
-        [geartowns_application_delegate launchNewInstance:nil];
-}

@@ -120,12 +120,9 @@ void gui_main_menu(void)
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     open_physical_cdrom = false;
 #endif
-    gui_main_menu_hovered = false;
 
     if (application_show_menu && ImGui::BeginMainMenuBar())
     {
-        gui_main_menu_hovered = ImGui::IsWindowHovered();
-
         menu_geartowns();
         menu_emulator();
         menu_video();

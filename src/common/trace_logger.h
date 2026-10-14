@@ -22,7 +22,6 @@
 
 #include "common.h"
 
-#define TRACE_BUFFER_SIZE 100000
 #define GT_TRACE_NAME_SIZE 56
 
 enum GT_Trace_Type : u8

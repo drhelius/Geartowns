@@ -910,7 +910,12 @@ void update_savestates_data(void)
                 continue;
 
             emu_savestates_screenshots[i].size = emu_savestates[i].screenshot_size;
-            geartowns->GetSaveStateScreenshot(index, dir, &emu_savestates_screenshots[i]);
+
+            if (!geartowns->GetSaveStateScreenshot(index, dir, &emu_savestates_screenshots[i]))
+            {
+                SafeDeleteArray(emu_savestates_screenshots[i].data);
+                emu_savestates_screenshots[i].size = 0;
+            }
         }
     }
 }

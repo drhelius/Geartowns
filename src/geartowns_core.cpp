@@ -1312,6 +1312,15 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
         return false;
     }
 
+    if ((header.screenshot_width == 0) || (header.screenshot_height == 0) ||
+        (header.screenshot_width > GT_MAX_FRAME_BUFFER_WIDTH) || (header.screenshot_height > GT_MAX_FRAME_BUFFER_HEIGHT) ||
+        (header.screenshot_size != (u32)header.screenshot_width * header.screenshot_height * 4))
+    {
+        Error("Invalid screenshot dimensions %ux%u for %u bytes", header.screenshot_width, header.screenshot_height, header.screenshot_size);
+        stream.close();
+        return false;
+    }
+
     if (screenshot->size < header.screenshot_size)
     {
         Error("Invalid screenshot buffer size %u < %u", screenshot->size, header.screenshot_size);

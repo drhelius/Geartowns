@@ -84,6 +84,8 @@ static const u8 k_msm58321_24_hour = 0x08;
 static const u8 k_msm58321_pm = 0x04;
 static const u64 k_msm58321_second_clocks = GT_MACHINE_CLOCK_RATE;
 static const u64 k_msm58321_busy_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 14) / 32768;
+static const u64 k_msm58321_reference_start_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 6) / 32768;
+static const u64 k_msm58321_reference_end_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 2) / 32768;
 
 #include "msm58321_inline.h"
 

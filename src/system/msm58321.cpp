@@ -174,8 +174,27 @@ u8 MSM58321::ReadRegister(u64 clocks) const
             return 0x00;
         case 0x0E:
         case 0x0F:
-            // Reference outputs, the 1024 Hz signal on D0 and the slower ones idle
-            return 0x0E | (u8)(((clocks * 2048) / GT_MACHINE_CLOCK_RATE) & 0x01);
+        {
+            // Reference outputs: 1024 Hz on D0, and 122 us low pulses on D1-D3 each second, minute and hour
+            // They start 244 us into BUSY and end 61 us before the counters update
+            u8 value = 0x0E | (u8)(((clocks * 2048) / GT_MACHINE_CLOCK_RATE) & 0x01);
+
+            if (clocks + k_msm58321_reference_start_clocks < m_state.update_clocks ||
+                clocks + k_msm58321_reference_end_clocks >= m_state.update_clocks)
+                return value;
+
+            value &= ~0x02;
+
+            if (GetValue(k_msm58321_seconds, 0x07) == 59)
+            {
+                value &= ~0x04;
+
+                if (GetValue(k_msm58321_minutes, 0x07) == 59)
+                    value &= ~0x08;
+            }
+
+            return value;
+        }
         default:
             return m_state.registers[m_state.address];
     }

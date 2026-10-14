@@ -27,6 +27,8 @@ includes the backend of the host.
 - x86 Win64: the prolog and epilog save and restore all 128 bits of XMM6-XMM15 with `movupd` in 16-byte slots.
   Upstream restores them with `movsd`, which clears bits 127:64, so every return from generated code breaks the
   caller's vector registers.
+- `jit_frame` and `jit_tramp` save only the callee-saved general registers. Generated code uses no FP registers, so
+  saving XMM6-XMM15 (Win64), v8-v15 (aarch64) or f14-f31 (ppc) on every entry was wasted time.
 - MSVC: no GNU case ranges in x86 `patch_at`, and the aarch64 `_lrotr` is `_lrotr_r`, since `_lrotr` is an intrinsic.
 - The compare and swap fallback of `jit_fallback.c` (arm, mips, ppc, riscv, loongarch) takes no mutex, so the library
   needs no pthread. Geartowns never emits `casr` or `casi`.

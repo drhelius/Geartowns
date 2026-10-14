@@ -467,6 +467,17 @@
  #endif
      /* Make sure functions called have a 16 byte aligned stack */
      _jitc->framesize = (_jitc->framesize + 15) & -16;
+--- lightning-7965700/lib/lightning.c
++++ lightning/lib/lightning.c
+@@ -2705,7 +2705,7 @@
+     else
+ 	_jitc->function->assume_frame = 1;
+     for (regno = 0; regno < _jitc->reglen; regno++)
+-	if (jit_class(_rvs[regno].spec) & jit_class_sav)
++	if ((jit_class(_rvs[regno].spec) & (jit_class_sav | jit_class_fpr)) == jit_class_sav)
+ 	    jit_regset_setbit(&_jitc->function->regset, regno);
+ }
+ 
 --- lightning-7965700/include/lightning.h.in
 +++ lightning/include/lightning.h
 @@ -20,12 +20,11 @@

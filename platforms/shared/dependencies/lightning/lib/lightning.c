@@ -2705,7 +2705,7 @@ _jit_trampoline(jit_state_t *_jit, jit_int32_t frame, jit_bool_t prolog)
     else
 	_jitc->function->assume_frame = 1;
     for (regno = 0; regno < _jitc->reglen; regno++)
-	if (jit_class(_rvs[regno].spec) & jit_class_sav)
+	if ((jit_class(_rvs[regno].spec) & (jit_class_sav | jit_class_fpr)) == jit_class_sav)
 	    jit_regset_setbit(&_jitc->function->regset, regno);
 }
 

@@ -542,7 +542,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_pit_status` - Get the timers: board register 0060 (enables, latches, SOUND, IRQ0) and the six 8253 counters with use, clock, mode, access, BCD, reload, live count, OUT and frequency or period
 - `get_dma_status` - Get the uPD71071 DMA: device control bits, mask, requests, terminal count, selected channel, and each channel's device, mode, current and base address and count
 - `get_rtc_status` - Get the MSM58321 clock: date (two-digit year), time, weekday, 12/24 hour, leap phase, the 0070/0080 interface and its 16 registers
-- `get_system_status` - Get the machine (model, CPU, clock, RAM, floppy drives), reset cause and power-off request, memory windows (0404/0480/0484), CMOS write protect, RAM wait and the serial ID ROM
+- `get_system_status` - Get the machine (model, CPU, clock, RAM, floppy drives), reset cause and power-off request, memory windows (0404/0480/0484), NMI vector write protect, expansion NMI mask, RAM wait and the serial ID ROM
 - `get_keyboard_status` - Get the keyboard interface: data, status, IRQ enable, KBINT, last command, queued bytes with key names, and held keys
 
 ### Video Hardware

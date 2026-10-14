@@ -559,7 +559,7 @@ void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(176, 112), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(236, 480), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(236, 497), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);
@@ -656,10 +656,16 @@ void gui_debug_window_system_control(void)
         ImGui::TextColored(gray, "(0484)");
 
         ImGui::TableNextRow();
-        draw_grid_label("CMOS WP");
+        draw_grid_label("NMI VEC WP");
         ImGui::TextColored(control->write_protect ? yellow : gray, "%s", control->write_protect ? "ON" : "OFF");
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(0020)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("EXP NMI");
+        ImGui::TextColored(control->expansion_nmi ? green : gray, "%s", control->expansion_nmi ? "ENABLED" : "MASKED");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(05C0)");
 
         ImGui::TableNextRow();
         draw_grid_label("UNDOC");

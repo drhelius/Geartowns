@@ -1567,7 +1567,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_system_status"},
         {"title", "Get System Status"},
-        {"description", "Read system control: machine model, CPU, clock, RAM and floppy drives, reset cause and power-off request, low memory and boot ROM windows, dictionary bank, CMOS write protect, RAM wait and the serial ID ROM."},
+        {"description", "Read system control: machine model, CPU, clock, RAM and floppy drives, reset cause and power-off request, low memory and boot ROM windows, dictionary bank, NMI vector write protect, expansion NMI mask, RAM wait and the serial ID ROM."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

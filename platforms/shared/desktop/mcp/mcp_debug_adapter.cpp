@@ -2277,7 +2277,8 @@ json DebugAdapter::GetSystemStatus()
             {"boot_window", memory->boot_ram ? "ram" : "boot_rom"},
             {"dictionary_window", memory->dictionary},
             {"dictionary_bank", memory->dictionary_bank & 0x0F},
-            {"cmos_write_protect", control->write_protect},
+            {"nmi_vector_write_protect", control->write_protect},
+            {"expansion_nmi_enabled", control->expansion_nmi},
             {"port_05e0", Hex(control->port_05e0, 2)}
         }},
         {"serial_rom", {

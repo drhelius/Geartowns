@@ -274,12 +274,15 @@ static GT_GamePad_State input_build_state(int controller)
 {
     GT_GamePad_State state = { 0 };
     SDL_Keymod mods = SDL_GetModState();
+    bool six_button = config_input.controller_type[controller] == GT_CONTROLLER_6_BUTTON_GAMEPAD;
 
     if (config_input.keyboard_mode[controller] == config_KeyboardMode_Gamepad &&
         (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
     {
         const bool* keyboard = SDL_GetKeyboardState(NULL);
         const config_Input_Keyboard& keys = config_input_keyboard[controller];
+        SDL_Scancode key_A = six_button ? keys.key_6_A : keys.key_A;
+        SDL_Scancode key_B = six_button ? keys.key_6_B : keys.key_B;
 
         if (keyboard[keys.key_left]) state.buttons |= GT_GAMEPAD_LEFT;
         if (keyboard[keys.key_right]) state.buttons |= GT_GAMEPAD_RIGHT;
@@ -287,8 +290,8 @@ static GT_GamePad_State input_build_state(int controller)
         if (keyboard[keys.key_down]) state.buttons |= GT_GAMEPAD_DOWN;
         if (keyboard[keys.key_select]) state.buttons |= GT_GAMEPAD_SELECT;
         if (keyboard[keys.key_run]) state.buttons |= GT_GAMEPAD_RUN;
-        if (keyboard[keys.key_A]) state.buttons |= GT_GAMEPAD_A;
-        if (keyboard[keys.key_B]) state.buttons |= GT_GAMEPAD_B;
+        if (keyboard[key_A]) state.buttons |= GT_GAMEPAD_A;
+        if (keyboard[key_B]) state.buttons |= GT_GAMEPAD_B;
         if (keyboard[keys.key_C]) state.buttons |= GT_GAMEPAD_C;
         if (keyboard[keys.key_X]) state.buttons |= GT_GAMEPAD_X;
         if (keyboard[keys.key_Y]) state.buttons |= GT_GAMEPAD_Y;
@@ -302,11 +305,13 @@ static GT_GamePad_State input_build_state(int controller)
         return state;
 
     const config_Input_Gamepad& mapping = config_input_gamepad[controller];
+    int button_A = six_button ? mapping.gamepad_6_A : mapping.gamepad_A;
+    int button_B = six_button ? mapping.gamepad_6_B : mapping.gamepad_B;
 
     if (gamepad_get_button(gamepad, mapping.gamepad_select)) state.buttons |= GT_GAMEPAD_SELECT;
     if (gamepad_get_button(gamepad, mapping.gamepad_run)) state.buttons |= GT_GAMEPAD_RUN;
-    if (gamepad_get_button(gamepad, mapping.gamepad_A)) state.buttons |= GT_GAMEPAD_A;
-    if (gamepad_get_button(gamepad, mapping.gamepad_B)) state.buttons |= GT_GAMEPAD_B;
+    if (gamepad_get_button(gamepad, button_A)) state.buttons |= GT_GAMEPAD_A;
+    if (gamepad_get_button(gamepad, button_B)) state.buttons |= GT_GAMEPAD_B;
     if (gamepad_get_button(gamepad, mapping.gamepad_C)) state.buttons |= GT_GAMEPAD_C;
     if (gamepad_get_button(gamepad, mapping.gamepad_X)) state.buttons |= GT_GAMEPAD_X;
     if (gamepad_get_button(gamepad, mapping.gamepad_Y)) state.buttons |= GT_GAMEPAD_Y;
@@ -487,12 +492,14 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
             continue;
 
         const config_Input_Keyboard& keys = config_input_keyboard[controller];
+        bool six_button = type == GT_CONTROLLER_6_BUTTON_GAMEPAD;
         const SDL_Scancode mapped[12] =
         {
-            keys.key_A, keys.key_B, keys.key_left, keys.key_right, keys.key_up, keys.key_down, keys.key_select,
-            keys.key_run, keys.key_C, keys.key_X, keys.key_Y, keys.key_Z
+            six_button ? keys.key_6_A : keys.key_A, six_button ? keys.key_6_B : keys.key_B, keys.key_left,
+            keys.key_right, keys.key_up, keys.key_down, keys.key_select, keys.key_run, keys.key_C, keys.key_X,
+            keys.key_Y, keys.key_Z
         };
-        int count = type == GT_CONTROLLER_6_BUTTON_GAMEPAD ? 12 : (type == GT_CONTROLLER_MOUSE ? 2 : 9);
+        int count = six_button ? 12 : (type == GT_CONTROLLER_MOUSE ? 2 : 9);
 
         for (int i = 0; i < count; i++)
         {

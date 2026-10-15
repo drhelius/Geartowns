@@ -24,7 +24,7 @@
 #include <string>
 #include "geartowns.h"
 
-static const int config_version = 2;
+static const int config_version = 3;
 static const int config_minimum_version = 1;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;
@@ -163,6 +163,8 @@ struct config_Input_Keyboard
     SDL_Scancode key_run;
     SDL_Scancode key_A;
     SDL_Scancode key_B;
+    SDL_Scancode key_6_A;
+    SDL_Scancode key_6_B;
     SDL_Scancode key_C;
     SDL_Scancode key_X;
     SDL_Scancode key_Y;
@@ -179,6 +181,8 @@ struct config_Input_Gamepad
     int gamepad_run;
     int gamepad_A;
     int gamepad_B;
+    int gamepad_6_A;
+    int gamepad_6_B;
     int gamepad_C;
     int gamepad_X;
     int gamepad_Y;

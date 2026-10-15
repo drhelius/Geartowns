@@ -1637,12 +1637,14 @@ static void menu_input(void)
                     keyboard_configuration_item("Run:", &config_input_keyboard[i].key_run, i);
                     keyboard_configuration_item("A:", &config_input_keyboard[i].key_A, i);
                     keyboard_configuration_item("B:", &config_input_keyboard[i].key_B, i);
-                    keyboard_configuration_item("C:", &config_input_keyboard[i].key_C, i);
                     ImGui::Separator();
                     ImGui::TextDisabled("Marty Gamepad:");
                     keyboard_configuration_item("Zoom:", &config_input_keyboard[i].key_zoom, i);
                     ImGui::Separator();
                     ImGui::TextDisabled("6 Button Gamepad:");
+                    keyboard_configuration_item("A:", &config_input_keyboard[i].key_6_A, i);
+                    keyboard_configuration_item("B:", &config_input_keyboard[i].key_6_B, i);
+                    keyboard_configuration_item("C:", &config_input_keyboard[i].key_C, i);
                     keyboard_configuration_item("X:", &config_input_keyboard[i].key_X, i);
                     keyboard_configuration_item("Y:", &config_input_keyboard[i].key_Y, i);
                     keyboard_configuration_item("Z:", &config_input_keyboard[i].key_Z, i);
@@ -1716,12 +1718,14 @@ static void menu_input(void)
                         gamepad_configuration_item("Run:", &config_input_gamepad[i].gamepad_run, i);
                         gamepad_configuration_item("A:", &config_input_gamepad[i].gamepad_A, i);
                         gamepad_configuration_item("B:", &config_input_gamepad[i].gamepad_B, i);
-                        gamepad_configuration_item("C:", &config_input_gamepad[i].gamepad_C, i);
                         ImGui::Separator();
                         ImGui::TextDisabled("Marty Gamepad:");
                         gamepad_configuration_item("Zoom:", &config_input_gamepad[i].gamepad_zoom, i);
                         ImGui::Separator();
                         ImGui::TextDisabled("6 Button Gamepad:");
+                        gamepad_configuration_item("A:", &config_input_gamepad[i].gamepad_6_A, i);
+                        gamepad_configuration_item("B:", &config_input_gamepad[i].gamepad_6_B, i);
+                        gamepad_configuration_item("C:", &config_input_gamepad[i].gamepad_C, i);
                         gamepad_configuration_item("X:", &config_input_gamepad[i].gamepad_X, i);
                         gamepad_configuration_item("Y:", &config_input_gamepad[i].gamepad_Y, i);
                         gamepad_configuration_item("Z:", &config_input_gamepad[i].gamepad_Z, i);
@@ -2322,7 +2326,7 @@ static void keyboard_configuration_item(const char* text, SDL_Scancode* key, int
     ImGui::SameLine(120);
 
     char button_label[256];
-    snprintf(button_label, 256, "%s##%s%d", SDL_GetKeyName(SDL_GetKeyFromScancode(*key, SDL_KMOD_NONE, false)), text, player);
+    snprintf(button_label, 256, "%s##%p%d", SDL_GetKeyName(SDL_GetKeyFromScancode(*key, SDL_KMOD_NONE, false)), (void*)key, player);
 
     if (ImGui::Button(button_label, ImVec2(90,0)))
     {
@@ -2333,7 +2337,7 @@ static void keyboard_configuration_item(const char* text, SDL_Scancode* key, int
     ImGui::SameLine();
 
     char remove_label[256];
-    snprintf(remove_label, sizeof(remove_label), "X##rk%s%d", text, player);
+    snprintf(remove_label, sizeof(remove_label), "X##rk%p%d", (void*)key, player);
 
     if (ImGui::Button(remove_label))
     {
@@ -2370,7 +2374,7 @@ static void gamepad_configuration_item(const char* text, int* button, int player
     }
 
     char button_label[256];
-    snprintf(button_label, sizeof(button_label), "%s##%s%d", button_name, text, player);
+    snprintf(button_label, sizeof(button_label), "%s##%p%d", button_name, (void*)button, player);
 
     if (ImGui::Button(button_label, ImVec2(70,0)))
     {
@@ -2381,7 +2385,7 @@ static void gamepad_configuration_item(const char* text, int* button, int player
     ImGui::SameLine();
 
     char remove_label[256];
-    snprintf(remove_label, sizeof(remove_label), "X##rg%s%d", text, player);
+    snprintf(remove_label, sizeof(remove_label), "X##rg%p%d", (void*)button, player);
 
     if (ImGui::Button(remove_label))
     {

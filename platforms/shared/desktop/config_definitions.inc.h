@@ -311,13 +311,13 @@ static inline void process(config_Operation operation)
     }
 
     // Keyboard
-    const SDL_Scancode keyboard_defaults[GT_MAX_GAMEPADS][13] = {
+    const SDL_Scancode keyboard_defaults[GT_MAX_GAMEPADS][15] = {
         { SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_UP, SDL_SCANCODE_DOWN,
-          SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_X, SDL_SCANCODE_Z,
+          SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_X, SDL_SCANCODE_Z, SDL_SCANCODE_Z, SDL_SCANCODE_X,
           SDL_SCANCODE_C, SDL_SCANCODE_V, SDL_SCANCODE_B, SDL_SCANCODE_N, SDL_SCANCODE_M },
         { SDL_SCANCODE_J, SDL_SCANCODE_L, SDL_SCANCODE_I, SDL_SCANCODE_K,
-          SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_Y, SDL_SCANCODE_T,
-          SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9 }
+          SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_Y, SDL_SCANCODE_T, SDL_SCANCODE_T, SDL_SCANCODE_Y,
+          SDL_SCANCODE_U, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9 }
     };
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
@@ -332,11 +332,13 @@ static inline void process(config_Operation operation)
         CONFIG_SCANCODE(section, "KeyRun", config_input_keyboard[i].key_run, keyboard_defaults[i][5]);
         CONFIG_SCANCODE(section, "KeyA", config_input_keyboard[i].key_A, keyboard_defaults[i][6]);
         CONFIG_SCANCODE(section, "KeyB", config_input_keyboard[i].key_B, keyboard_defaults[i][7]);
-        CONFIG_SCANCODE(section, "KeyC", config_input_keyboard[i].key_C, keyboard_defaults[i][8]);
-        CONFIG_SCANCODE(section, "KeyX", config_input_keyboard[i].key_X, keyboard_defaults[i][9]);
-        CONFIG_SCANCODE(section, "KeyY", config_input_keyboard[i].key_Y, keyboard_defaults[i][10]);
-        CONFIG_SCANCODE(section, "KeyZ", config_input_keyboard[i].key_Z, keyboard_defaults[i][11]);
-        CONFIG_SCANCODE(section, "KeyZoom", config_input_keyboard[i].key_zoom, keyboard_defaults[i][12]);
+        CONFIG_SCANCODE(section, "Key6A", config_input_keyboard[i].key_6_A, keyboard_defaults[i][8]);
+        CONFIG_SCANCODE(section, "Key6B", config_input_keyboard[i].key_6_B, keyboard_defaults[i][9]);
+        CONFIG_SCANCODE(section, "KeyC", config_input_keyboard[i].key_C, keyboard_defaults[i][10]);
+        CONFIG_SCANCODE(section, "KeyX", config_input_keyboard[i].key_X, keyboard_defaults[i][11]);
+        CONFIG_SCANCODE(section, "KeyY", config_input_keyboard[i].key_Y, keyboard_defaults[i][12]);
+        CONFIG_SCANCODE(section, "KeyZ", config_input_keyboard[i].key_Z, keyboard_defaults[i][13]);
+        CONFIG_SCANCODE(section, "KeyZoom", config_input_keyboard[i].key_zoom, keyboard_defaults[i][14]);
     }
 
     // Gamepads
@@ -351,11 +353,13 @@ static inline void process(config_Operation operation)
         CONFIG_INT(section, "GamepadRun", config_input_gamepad[i].gamepad_run, SDL_GAMEPAD_BUTTON_START);
         CONFIG_INT(section, "GamepadXAxis", config_input_gamepad[i].gamepad_x_axis, SDL_GAMEPAD_AXIS_LEFTX);
         CONFIG_INT(section, "GamepadYAxis", config_input_gamepad[i].gamepad_y_axis, SDL_GAMEPAD_AXIS_LEFTY);
-        CONFIG_INT(section, "GamepadA", config_input_gamepad[i].gamepad_A, SDL_GAMEPAD_BUTTON_SOUTH);
-        CONFIG_INT(section, "GamepadB", config_input_gamepad[i].gamepad_B, SDL_GAMEPAD_BUTTON_EAST);
-        CONFIG_INT(section, "GamepadC", config_input_gamepad[i].gamepad_C, SDL_GAMEPAD_BUTTON_WEST);
-        CONFIG_INT(section, "GamepadX", config_input_gamepad[i].gamepad_X, SDL_GAMEPAD_BUTTON_NORTH);
-        CONFIG_INT(section, "GamepadY", config_input_gamepad[i].gamepad_Y, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+        CONFIG_INT(section, "GamepadA", config_input_gamepad[i].gamepad_A, SDL_GAMEPAD_BUTTON_EAST);
+        CONFIG_INT(section, "GamepadB", config_input_gamepad[i].gamepad_B, SDL_GAMEPAD_BUTTON_SOUTH);
+        CONFIG_INT(section, "Gamepad6A", config_input_gamepad[i].gamepad_6_A, SDL_GAMEPAD_BUTTON_WEST);
+        CONFIG_INT(section, "Gamepad6B", config_input_gamepad[i].gamepad_6_B, SDL_GAMEPAD_BUTTON_SOUTH);
+        CONFIG_INT(section, "GamepadC", config_input_gamepad[i].gamepad_C, SDL_GAMEPAD_BUTTON_EAST);
+        CONFIG_INT(section, "GamepadX", config_input_gamepad[i].gamepad_X, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+        CONFIG_INT(section, "GamepadY", config_input_gamepad[i].gamepad_Y, SDL_GAMEPAD_BUTTON_NORTH);
         CONFIG_INT(section, "GamepadZ", config_input_gamepad[i].gamepad_Z, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
         CONFIG_INT(section, "GamepadZoom", config_input_gamepad[i].gamepad_zoom, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     }
@@ -462,9 +466,43 @@ static void normalize(void)
 #endif
 }
 
+static bool stored_int_equals(const char* group, const char* key, int value)
+{
+    std::string stored;
+    int parsed = 0;
+    return get_setting(group, key, &stored) && parse_int_string(stored, &parsed) && (parsed == value);
+}
+
 static void migrate(int file_version)
 {
-    UNUSED(file_version);
+    if (file_version < 3)
+    {
+        for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+        {
+            char section[32];
+            snprintf(section, sizeof(section), "InputGamepad%d", i + 1);
+
+            if (stored_int_equals(section, "GamepadA", SDL_GAMEPAD_BUTTON_SOUTH) &&
+                stored_int_equals(section, "GamepadB", SDL_GAMEPAD_BUTTON_EAST))
+            {
+                write_int(section, "GamepadA", SDL_GAMEPAD_BUTTON_EAST);
+                write_int(section, "GamepadB", SDL_GAMEPAD_BUTTON_SOUTH);
+            }
+
+            if (stored_int_equals(section, "GamepadC", SDL_GAMEPAD_BUTTON_WEST) &&
+                stored_int_equals(section, "GamepadX", SDL_GAMEPAD_BUTTON_NORTH) &&
+                stored_int_equals(section, "GamepadY", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))
+            {
+                write_int(section, "GamepadC", SDL_GAMEPAD_BUTTON_EAST);
+                write_int(section, "GamepadX", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+                write_int(section, "GamepadY", SDL_GAMEPAD_BUTTON_NORTH);
+            }
+        }
+
+        if (stored_int_equals("InputKeyboard2", "KeyC", SDL_SCANCODE_5) &&
+            stored_int_equals("InputKeyboard2", "KeyX", SDL_SCANCODE_6))
+            write_int("InputKeyboard2", "KeyC", SDL_SCANCODE_U);
+    }
 }
 
 static void sync_shader_preset_parameter_defaults(void)

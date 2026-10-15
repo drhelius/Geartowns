@@ -126,6 +126,10 @@ static const u16 k_joypad_buttons[RETRO_DEVICE_ID_JOYPAD_R + 1] = {
     GT_GAMEPAD_B, GT_GAMEPAD_C, GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT,
     GT_GAMEPAD_RIGHT, GT_GAMEPAD_A, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z
 };
+static const u16 k_6_button_joypad_buttons[RETRO_DEVICE_ID_JOYPAD_R + 1] = {
+    GT_GAMEPAD_B, GT_GAMEPAD_A, GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT,
+    GT_GAMEPAD_RIGHT, GT_GAMEPAD_C, GT_GAMEPAD_Y, GT_GAMEPAD_X, GT_GAMEPAD_Z
+};
 static const u16 k_gamepad_buttons = GT_GAMEPAD_UP | GT_GAMEPAD_DOWN | GT_GAMEPAD_LEFT | GT_GAMEPAD_RIGHT |
     GT_GAMEPAD_SELECT | GT_GAMEPAD_RUN | GT_GAMEPAD_A | GT_GAMEPAD_B;
 static const u16 k_6_button_buttons = k_gamepad_buttons | GT_GAMEPAD_C | GT_GAMEPAD_X | GT_GAMEPAD_Y | GT_GAMEPAD_Z;
@@ -174,6 +178,9 @@ static void get_system_av_info(struct retro_system_av_info* info);
 static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely);
 static void update_frameskip(void);
 static void set_controller_info(void);
+static void set_input_descriptors(void);
+static int add_input_descriptors(struct retro_input_descriptor* descriptors, int count, unsigned port,
+    const struct retro_input_descriptor* source, int source_count);
 static void clear_input_state(void);
 static void clear_keyboard_state(void);
 static void save_input_state(u8* data);
@@ -982,37 +989,95 @@ static void set_controller_info(void)
 
     environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);
 
-    struct retro_input_descriptor joypad[] = {
-        #define button_ids(INDEX) \
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,     "Up" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,   "Down" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "Left" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT,  "Right" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Run" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "A" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,      "B" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,      "C" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,      "X" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,      "Y" },\
-        { INDEX, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "Z / Zoom" },
-        #define mouse_ids(INDEX) \
-        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT,     "Mouse Left (A)" },\
-        { INDEX, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT,    "Mouse Right (B)" },
-        button_ids(0)
-        mouse_ids(0)
+    set_input_descriptors();
+}
+
+static void set_input_descriptors(void)
+{
+    static const struct retro_input_descriptor k_gamepad[] = {
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,     "Up" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,   "Down" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "Left" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT,  "Right" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Run" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "A" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,      "B" }
+    };
+
+    static const struct retro_input_descriptor k_marty[] = {
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "Zoom" }
+    };
+
+    static const struct retro_input_descriptor k_6_button[] = {
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,     "Up" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,   "Down" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "Left" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT,  "Right" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Run" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,      "A" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,      "B" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "C" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,      "X" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,      "Y" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,      "Z" }
+    };
+
+    static const struct retro_input_descriptor k_mouse[] = {
+        { 0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT,     "Mouse Left (A)" },
+        { 0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT,    "Mouse Right (B)" }
+    };
+
+    static const struct retro_input_descriptor k_analog_mouse[] = {
         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2, "Analog Mouse Left" },
         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "Analog Mouse Right" },
         { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X, "Analog Mouse X (Left)" },
         { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y, "Analog Mouse Y (Left)" },
         { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X, "Analog Mouse X (Right)" },
-        { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y, "Analog Mouse Y (Right)" },
-        button_ids(1)
-        mouse_ids(1)
-        { 0, 0, 0, 0, NULL }
+        { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y, "Analog Mouse Y (Right)" }
     };
 
-    environ_cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, joypad);
+    struct retro_input_descriptor descriptors[64];
+    int count = 0;
+
+    for (unsigned port = 0; port < MAX_PADS; port++)
+    {
+        unsigned device = input_device[port];
+
+        if (device == RETRO_DEVICE_TOWNS_6_BUTTON)
+            count = add_input_descriptors(descriptors, count, port, k_6_button,
+                (int)(sizeof(k_6_button) / sizeof(k_6_button[0])));
+        else if (IsJoypadDevice(device))
+            count = add_input_descriptors(descriptors, count, port, k_gamepad,
+                (int)(sizeof(k_gamepad) / sizeof(k_gamepad[0])));
+
+        if (device == RETRO_DEVICE_TOWNS_MARTY)
+            count = add_input_descriptors(descriptors, count, port, k_marty,
+                (int)(sizeof(k_marty) / sizeof(k_marty[0])));
+
+        count = add_input_descriptors(descriptors, count, port, k_mouse, (int)(sizeof(k_mouse) / sizeof(k_mouse[0])));
+
+        if (port == 0)
+            count = add_input_descriptors(descriptors, count, port, k_analog_mouse,
+                (int)(sizeof(k_analog_mouse) / sizeof(k_analog_mouse[0])));
+    }
+
+    memset(&descriptors[count], 0, sizeof(descriptors[count]));
+    environ_cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, descriptors);
+}
+
+static int add_input_descriptors(struct retro_input_descriptor* descriptors, int count, unsigned port,
+    const struct retro_input_descriptor* source, int source_count)
+{
+    for (int i = 0; i < source_count; i++)
+    {
+        descriptors[count] = source[i];
+        descriptors[count].port = port;
+        count++;
+    }
+
+    return count;
 }
 
 static void clear_input_state(void)
@@ -1139,6 +1204,8 @@ static void update_controller_devices(unsigned port)
         input_device[i] = device;
         apply_controller_device(i, device, true);
     }
+
+    set_input_descriptors();
 }
 
 static void apply_controller_device(unsigned port, unsigned device, bool log_device)
@@ -1243,10 +1310,13 @@ static void apply_gamepad(int port)
                 bits |= input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
         }
 
+        const u16* table = input_device[port] == RETRO_DEVICE_TOWNS_6_BUTTON ? k_6_button_joypad_buttons :
+            k_joypad_buttons;
+
         for (int i = 0; i <= RETRO_DEVICE_ID_JOYPAD_R; i++)
         {
             if (bits & (1 << i))
-                buttons |= k_joypad_buttons[i];
+                buttons |= table[i];
         }
     }
 

@@ -129,6 +129,7 @@ EXTERN u64 emu_frame_counter;
 EXTERN bool emu_video_recording_frame_pending;
 EXTERN u64 emu_debug_breakpoint_stops;
 EXTERN bool emu_audio_sync;
+EXTERN bool emu_audio_rate_control;
 
 EXTERN bool emu_init(void);
 EXTERN void emu_destroy(void);

@@ -184,6 +184,7 @@ bool emu_init(void)
 
     emu_frame_counter = 0;
     emu_audio_sync = true;
+    emu_audio_rate_control = false;
     audio_enabled = true;
     return true;
 }
@@ -367,7 +368,7 @@ void emu_update(void)
     }
 
     if (sample_count > 0 && !geartowns->IsPaused())
-        sound_queue_write(audio_buffer, sample_count, emu_audio_sync);
+        sound_queue_write(audio_buffer, sample_count, emu_audio_sync, emu_audio_rate_control);
     else if (geartowns->IsPaused())
     {
         int silence_count = GT_AUDIO_QUEUE_SIZE;

@@ -38,11 +38,12 @@ struct FloppyImage_Format
     u16 fat_sectors;
 };
 
-static const int k_floppy_raw_geometries = 4;
+static const int k_floppy_raw_geometries = 5;
 
 static const FloppyImage_Geometry k_floppy_raw_geometry[k_floppy_raw_geometries] =
 {
     { 1261568, 77, 8, 3, k_floppy_media_2hd },
+    { 1310720, 80, 8, 3, k_floppy_media_2hd },
     { 655360, 80, 8, 2, k_floppy_media_2dd },
     { 737280, 80, 9, 2, k_floppy_media_2dd },
     { 1474560, 80, 18, 2, k_floppy_media_2hd }
@@ -296,8 +297,7 @@ u8* FloppyImage::CreateBlank(FloppyImage_Blank type, bool formatted, u32* image_
     return image;
 }
 
-u8* FloppyImage::ReplaceTrack(const u8* image, u32 size, int track, const u8* sectors, u32 sectors_size,
-    u32* image_size)
+u8* FloppyImage::ReplaceTrack(const u8* image, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size)
 {
     return Build(image, image, size, track, sectors, sectors_size, image_size);
 }
@@ -313,57 +313,17 @@ u32 FloppyImage::GetRawSize(const u8* image, u32 size)
 
     int count = read_u16_le(image + first + 4);
     u8 n = image[first + 3];
-    const FloppyImage_Geometry* geometry = NULL;
 
     for (int i = 0; i < k_floppy_raw_geometries; i++)
     {
-        if (k_floppy_raw_geometry[i].sectors == count && k_floppy_raw_geometry[i].n == n)
-        {
-            geometry = &k_floppy_raw_geometry[i];
-            break;
-        }
+        const FloppyImage_Geometry& geometry = k_floppy_raw_geometry[i];
+
+        if (geometry.sectors == count && geometry.n == n &&
+            IsRawLayout(image, size, header_size, geometry.cylinders, geometry.sectors, geometry.n))
+            return geometry.size;
     }
 
-    if (!IsValidPointer(geometry))
-        return 0;
-
-    u32 sector_size = 128U << geometry->n;
-
-    for (int track = 0; track < k_floppy_tracks; track++)
-    {
-        u32 offset = GetTrackRun(image, size, header_size, track, &run_size);
-
-        if (track >= geometry->cylinders * 2)
-        {
-            if (offset != 0)
-                return 0;
-
-            continue;
-        }
-
-        if (offset == 0 || offset == 0xFFFFFFFF || read_u16_le(image + offset + 4) != geometry->sectors)
-            return 0;
-
-        u32 found = 0;
-
-        for (int i = 0; i < geometry->sectors; i++)
-        {
-            const u8* header = image + offset;
-            u8 r = header[2];
-
-            if (header[0] != track / 2 || header[1] != (track & 1) || header[3] != geometry->n || r < 1 ||
-                r > geometry->sectors || read_u16_le(header + 14) != sector_size || (header[6] & k_floppy_density_fm) != 0)
-                return 0;
-
-            found |= 1U << (r - 1);
-            offset += k_floppy_sector_header_size + sector_size;
-        }
-
-        if (found != (1U << geometry->sectors) - 1)
-            return 0;
-    }
-
-    return geometry->size;
+    return 0;
 }
 
 bool FloppyImage::ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size)
@@ -522,6 +482,48 @@ u32 FloppyImage::GetTrackRun(const u8* data, u32 size, u32 header_size, int trac
 
     *run_size = position - offset;
     return offset;
+}
+
+bool FloppyImage::IsRawLayout(const u8* image, u32 size, u32 header_size, int cylinders, int sectors, u8 n)
+{
+    u32 sector_size = 128U << n;
+    u32 run_size = 0;
+
+    for (int track = 0; track < k_floppy_tracks; track++)
+    {
+        u32 offset = GetTrackRun(image, size, header_size, track, &run_size);
+
+        if (track >= cylinders * 2)
+        {
+            if (offset != 0)
+                return false;
+
+            continue;
+        }
+
+        if (offset == 0 || offset == 0xFFFFFFFF || read_u16_le(image + offset + 4) != sectors)
+            return false;
+
+        u32 found = 0;
+
+        for (int i = 0; i < sectors; i++)
+        {
+            const u8* header = image + offset;
+            u8 r = header[2];
+
+            if (header[0] != track / 2 || header[1] != (track & 1) || header[3] != n || r < 1 || r > sectors ||
+                read_u16_le(header + 14) != sector_size || (header[6] & k_floppy_density_fm) != 0)
+                return false;
+
+            found |= 1U << (r - 1);
+            offset += k_floppy_sector_header_size + sector_size;
+        }
+
+        if (found != (1U << sectors) - 1)
+            return false;
+    }
+
+    return true;
 }
 
 u8* FloppyImage::Build(const u8* header, const u8* data, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size)

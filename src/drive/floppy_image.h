@@ -45,18 +45,16 @@ public:
     static void SetDiskName(u8* disk, u32 disk_size, const char* name);
     static u8* Load(const u8* data, u32 size, u32* image_size);
     static u8* CreateBlank(FloppyImage_Blank type, bool formatted, u32* image_size);
-    static u8* ReplaceTrack(const u8* image, u32 size, int track, const u8* sectors, u32 sectors_size,
-        u32* image_size);
+    static u8* ReplaceTrack(const u8* image, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size);
     static u32 GetRawSize(const u8* image, u32 size);
     static bool ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size);
-    static bool ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name,
-        size_t name_size);
+    static bool ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name, size_t name_size);
 
 private:
     static u32 GetHeaderSize(const u8* data, u32 size);
     static u32 GetTrackRun(const u8* data, u32 size, u32 header_size, int track, u32* run_size);
-    static u8* Build(const u8* header, const u8* data, u32 size, int track, const u8* sectors, u32 sectors_size,
-        u32* image_size);
+    static bool IsRawLayout(const u8* image, u32 size, u32 header_size, int cylinders, int sectors, u8 n);
+    static u8* Build(const u8* header, const u8* data, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size);
     static u8* CreateFromRaw(const u8* data, u32 size, u32* image_size);
 };
 

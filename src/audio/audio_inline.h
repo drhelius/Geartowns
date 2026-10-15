@@ -34,6 +34,13 @@ static const u32 k_audio_clocks_per_sound_clock = GT_MACHINE_CLOCK_RATE / GT_SOU
 static const int k_audio_buzzer_ticks = 7;
 static const s32 k_audio_buzzer_level = 4096;
 
+// The analog output is AC coupled
+// One pole at 44.1 kHz / (2 * pi * 2^10), about 6.9 Hz
+static const int k_audio_dc_shift = 10;
+static const int k_audio_dc_fraction = 12;
+static const s32 k_audio_dc_round = 1 << (k_audio_dc_fraction - 1);
+static const s32 k_audio_dc_limit = 1 << 30;
+
 INLINE void Audio::Mute(bool mute)
 {
     m_mute = mute;
@@ -250,6 +257,12 @@ INLINE s16 Audio::SampleBuzzer()
         high += m_pit->GetBuzzerOutput(tick + i) ? 1 : 0;
 
     return (s16)(k_audio_buzzer_level * (2 * high - k_audio_buzzer_ticks) / k_audio_buzzer_ticks);
+}
+
+INLINE s32 Audio::HighPass(s32& dc, s32 sample)
+{
+    dc += ((sample * (1 << k_audio_dc_fraction)) - dc) >> k_audio_dc_shift;
+    return sample - ((dc + k_audio_dc_round) >> k_audio_dc_fraction);
 }
 
 #endif /* AUDIO_INLINE_H */

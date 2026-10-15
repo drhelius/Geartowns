@@ -1131,7 +1131,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
         return false;
     }
 
-    if (header.version != GT_SAVESTATE_VERSION)
+    if ((header.version < GT_SAVESTATE_MIN_VERSION) || (header.version > GT_SAVESTATE_VERSION))
     {
         Error("Invalid save state version: %u", header.version);
         return false;
@@ -1221,7 +1221,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_scheduler->LoadState(stream);
     m_memory->LoadState(stream);
     m_i386->LoadState(stream);
-    m_audio->LoadState(stream);
+    m_audio->LoadState(stream, header.version);
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
     m_pit->LoadState(stream);

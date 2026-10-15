@@ -132,6 +132,8 @@ void Audio::Reset()
     m_state.sample_clock_counter = 0;
     m_state.pcm_lowpass_left = 0;
     m_state.pcm_lowpass_right = 0;
+    m_state.output_dc_left = 0;
+    m_state.output_dc_right = 0;
     m_state.clocks = m_scheduler->GetClocks();
 
     // Both MB87078 start with every channel enabled at 0 dB
@@ -533,41 +535,56 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     float cdda_volume = m_source_mute[AUDIO_SOURCE_CDDA] ? 0.0f : m_cdda_volume;
     float buzzer_volume = m_source_mute[AUDIO_SOURCE_BUZZER] ? 0.0f : m_buzzer_volume;
 
+    s32 dc_left = m_state.output_dc_left;
+    s32 dc_right = m_state.output_dc_right;
+
     // Relative FM/PCM/CD-DA levels are unmeasured: 
     // FM enters at its full DAC sum, PCM at half scale and CD-DA at full scale
     if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f) &&
         (buzzer_volume == 1.0f))
     {
-        for (int i = 0; i < samples; i++)
+        for (int i = 0; i < samples; i += 2)
         {
-            s32 mix = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i] + m_buzzer_buffer[i];
-            sample_buffer[i] = (s16)CLAMP(mix, -32768, 32767);
+            s32 left = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i] + m_buzzer_buffer[i];
+            s32 right = (s32)m_fm_buffer[i + 1] + (m_pcm_buffer[i + 1] >> 1) + m_cdda_buffer[i + 1] +
+                m_buzzer_buffer[i + 1];
+            left = HighPass(dc_left, left);
+            right = HighPass(dc_right, right);
+            sample_buffer[i] = (s16)CLAMP(left, -32768, 32767);
+            sample_buffer[i + 1] = (s16)CLAMP(right, -32768, 32767);
         }
     }
     else
     {
-        for (int i = 0; i < samples; i++)
+        for (int i = 0; i < samples; i += 2)
         {
-            float mix = (float)m_fm_buffer[i] * fm_volume + (float)(m_pcm_buffer[i] >> 1) * pcm_volume +
+            float left = (float)m_fm_buffer[i] * fm_volume + (float)(m_pcm_buffer[i] >> 1) * pcm_volume +
                 (float)m_cdda_buffer[i] * cdda_volume + (float)m_buzzer_buffer[i] * buzzer_volume;
-            s32 out = (s32)(mix * m_master_volume);
-            sample_buffer[i] = (s16)CLAMP(out, -32768, 32767);
+            float right = (float)m_fm_buffer[i + 1] * fm_volume + (float)(m_pcm_buffer[i + 1] >> 1) * pcm_volume +
+                (float)m_cdda_buffer[i + 1] * cdda_volume + (float)m_buzzer_buffer[i + 1] * buzzer_volume;
+            s32 out_left = (s32)((float)HighPass(dc_left, (s32)left) * m_master_volume);
+            s32 out_right = (s32)((float)HighPass(dc_right, (s32)right) * m_master_volume);
+            sample_buffer[i] = (s16)CLAMP(out_left, -32768, 32767);
+            sample_buffer[i + 1] = (s16)CLAMP(out_right, -32768, 32767);
         }
     }
+
+    m_state.output_dc_left = dc_left;
+    m_state.output_dc_right = dc_right;
 }
 
 void Audio::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
     m_ym3438->SaveState(stream);
     m_rf5c68->SaveState(stream);
 }
 
-void Audio::LoadState(std::istream& stream)
+void Audio::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     m_ym3438->LoadState(stream);
     m_rf5c68->LoadState(stream);
     SanitizeState();
@@ -665,7 +682,7 @@ bool Audio::IsVgmRecording() const
     return m_vgm_recording_enabled;
 }
 
-void Audio::Serialize(StateSerializer& serializer)
+void Audio::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE(serializer, m_state.sound_clock_remainder);
     G_SERIALIZE(serializer, m_state.sample_clock_counter);
@@ -677,6 +694,17 @@ void Audio::Serialize(StateSerializer& serializer)
     G_SERIALIZE_ARRAY(serializer, &m_state.volume_control[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
     G_SERIALIZE(serializer, m_state.mute_control);
     G_SERIALIZE(serializer, m_state.output_control);
+
+    if (version >= 2)
+    {
+        G_SERIALIZE(serializer, m_state.output_dc_left);
+        G_SERIALIZE(serializer, m_state.output_dc_right);
+    }
+    else
+    {
+        m_state.output_dc_left = 0;
+        m_state.output_dc_right = 0;
+    }
 }
 
 void Audio::SanitizeState()
@@ -685,6 +713,8 @@ void Audio::SanitizeState()
     m_state.sample_clock_counter %= GT_MACHINE_CLOCK_RATE;
     m_state.pcm_lowpass_left = CLAMP(m_state.pcm_lowpass_left, -32768, 32767);
     m_state.pcm_lowpass_right = CLAMP(m_state.pcm_lowpass_right, -32768, 32767);
+    m_state.output_dc_left = CLAMP(m_state.output_dc_left, -k_audio_dc_limit, k_audio_dc_limit);
+    m_state.output_dc_right = CLAMP(m_state.output_dc_right, -k_audio_dc_limit, k_audio_dc_limit);
 
     for (int chip = 0; chip < AUDIO_VOLUME_CHIPS; chip++)
     {

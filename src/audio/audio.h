@@ -54,6 +54,8 @@ public:
         u64 sample_clock_counter;
         s32 pcm_lowpass_left;
         s32 pcm_lowpass_right;
+        s32 output_dc_left;
+        s32 output_dc_right;
         u64 clocks;
         u8 volume_channel[AUDIO_VOLUME_CHIPS];
         u8 volume_data[AUDIO_VOLUME_CHIPS][AUDIO_VOLUME_CHANNELS];
@@ -98,7 +100,7 @@ public:
     const s16* GetPCMChannelBuffer(int channel) const;
     s32 GetVolumeGain(int chip, int channel) const;
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
     bool StartVgmRecording(const char* file_path, int clock_rate, const GT_VGM_Metadata& metadata);
     void StopVgmRecording();
     bool IsVgmRecording() const;
@@ -112,6 +114,7 @@ private:
     void ClockSources(u32 clocks);
     void SampleSources();
     s16 SampleBuzzer();
+    s32 HighPass(s32& dc, s32 sample);
     void CaptureChannels(int index);
     void UpdateCDDAGain();
     void UpdateGates();
@@ -123,7 +126,7 @@ private:
     void TraceMixer(u8 event, u16 port, u8 value);
     void TraceIRQ();
     void WriteVgmInitialState();
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

@@ -19,12 +19,14 @@
 
 #include "pit.h"
 #include "pic.h"
+#include "../audio/audio.h"
 #include "../common/state_serializer.h"
 
 PIT::PIT()
 {
     InitPointer(m_pic);
     InitPointer(m_scheduler);
+    InitPointer(m_audio);
     InitPointer(m_trace_logger);
     m_state.timer_latch = 0;
     m_state.timer_enable = 0;
@@ -37,10 +39,11 @@ PIT::~PIT()
 {
 }
 
-void PIT::Init(PIC* pic, Scheduler* scheduler)
+void PIT::Init(PIC* pic, Scheduler* scheduler, Audio* audio)
 {
     m_pic = pic;
     m_scheduler = scheduler;
+    m_audio = audio;
     m_pit[0].Init();
     m_pit[1].Init();
     Reset();
@@ -105,11 +108,16 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
 
     if (port == 0x0060)
     {
+        bool sound = (value & 0x04) != 0;
+
+        if (sound != m_state.sound)
+            m_audio->Synchronize(clocks);
+
         if ((value & 0x80) != 0)
             m_state.timer_latch &= ~0x01;
 
         m_state.timer_enable = value & 0x03;
-        m_state.sound = (value & 0x04) != 0;
+        m_state.sound = sound;
 
         if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_TIMER)))
             TraceWrite(port, value);
@@ -125,6 +133,10 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
     u64 tick = GetTick(chip * 3 + counter, clocks);
     bool timeout = chip == 0 && counter < 2;
     bool output = timeout && m_pit[0].GetOutput(counter, tick);
+
+    // The buzzer plays the previous count up to this write
+    if (chip == 0 && counter == k_pit_buzzer_channel)
+        m_audio->Synchronize(clocks);
 
     if (index == 3)
         m_pit[chip].WriteControl(value, tick);
@@ -144,6 +156,16 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
 
     UpdateIRQ();
     UpdateNextEvent();
+}
+
+// Reading CFF98h turns the buzzer on and writing it turns it off
+void PIT::SetMemoryBuzzer(bool enabled)
+{
+    if (enabled == m_state.sound_memory)
+        return;
+
+    m_audio->Synchronize(m_scheduler->GetClocks());
+    m_state.sound_memory = enabled;
 }
 
 void PIT::UpdateIRQ()

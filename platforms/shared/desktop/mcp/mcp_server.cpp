@@ -1833,7 +1833,7 @@ json McpServer::BuildToolList()
             {"properties", {
                 {"source", {
                     {"type", "string"},
-                    {"enum", json::array({"fm", "pcm", "cdda"})},
+                    {"enum", json::array({"fm", "pcm", "cdda", "buzzer"})},
                     {"description", "Audio source."}
                 }},
                 {"channel", {

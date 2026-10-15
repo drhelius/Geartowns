@@ -281,6 +281,7 @@ static inline void process(config_Operation operation)
     CONFIG_FLOAT_RANGE("Audio", "FMVolume", config_audio.fm_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_FLOAT_RANGE("Audio", "PCMVolume", config_audio.pcm_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_FLOAT_RANGE("Audio", "CDDAVolume", config_audio.cdda_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "BuzzerVolume", config_audio.buzzer_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_INT("Audio", "BufferCount", config_audio.buffer_count, 3);
 
     //**************************************

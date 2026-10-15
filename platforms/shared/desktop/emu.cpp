@@ -781,6 +781,9 @@ void emu_audio_set_source_volume(int source, float volume)
         case Audio::AUDIO_SOURCE_CDDA:
             audio->SetCDDAVolume(volume);
             break;
+        case Audio::AUDIO_SOURCE_BUZZER:
+            audio->SetBuzzerVolume(volume);
+            break;
         default:
             break;
     }

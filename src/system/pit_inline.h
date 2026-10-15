@@ -53,10 +53,15 @@ INLINE void PIT::HandleEvent(u64 clocks)
     UpdateNextEvent();
 }
 
-// The CFF98 buzzer enable, the buzzer sounds with either this or SOUND
-INLINE void PIT::SetMemoryBuzzer(bool enabled)
+// The buzzer sounds with either SOUND or the CFF98 enable
+INLINE bool PIT::IsBuzzerEnabled() const
 {
-    m_state.sound_memory = enabled;
+    return m_state.sound || m_state.sound_memory;
+}
+
+INLINE bool PIT::GetBuzzerOutput(u64 tick)
+{
+    return m_pit[0].GetOutput(k_pit_buzzer_channel, tick);
 }
 
 INLINE I8253* PIT::GetPIT(int index)

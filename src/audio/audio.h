@@ -30,6 +30,7 @@
 
 class CdRomAudio;
 class PIC;
+class PIT;
 class Scheduler;
 class StateSerializer;
 class TraceLogger;
@@ -42,6 +43,7 @@ public:
         AUDIO_SOURCE_FM = 0,
         AUDIO_SOURCE_PCM,
         AUDIO_SOURCE_CDDA,
+        AUDIO_SOURCE_BUZZER,
         AUDIO_SOURCE_COUNT
     };
 
@@ -62,7 +64,7 @@ public:
 public:
     Audio();
     ~Audio();
-    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic);
+    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void Mute(bool mute);
@@ -70,6 +72,7 @@ public:
     void SetFMVolume(float volume);
     void SetPCMVolume(float volume);
     void SetCDDAVolume(float volume);
+    void SetBuzzerVolume(float volume);
     void SetPCMLowpassCutoff(float cutoff);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
@@ -104,6 +107,7 @@ private:
     void Clock(u32 clocks);
     void ClockSources(u32 clocks);
     void SampleSources();
+    s16 SampleBuzzer();
     void CaptureChannels(int index);
     void UpdateCDDAGain();
     void UpdateGates();
@@ -123,12 +127,14 @@ private:
     CdRomAudio* m_cdrom_audio;
     Scheduler* m_scheduler;
     PIC* m_pic;
+    PIT* m_pit;
     TraceLogger* m_trace_logger;
     bool m_mute;
     float m_master_volume;
     float m_fm_volume;
     float m_pcm_volume;
     float m_cdda_volume;
+    float m_buzzer_volume;
     Audio_State m_state;
     u16 m_pcm_lowpass_alpha_q15;
     s32 m_cdda_gain_left;
@@ -140,6 +146,7 @@ private:
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];
+    s16 m_buzzer_buffer[GT_AUDIO_BUFFER_SIZE];
     int m_buffer_index;
     bool m_buffer_overflow;
     int m_frame_samples;

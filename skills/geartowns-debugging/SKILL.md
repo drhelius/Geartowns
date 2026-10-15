@@ -207,7 +207,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `get_ym3438_registers` — the register file of one part (`part` 0 or 1)
 - `get_rf5c68_status` — RF5C68 PCM: sound enable, banks, IRQ mask, and each channel's envelope, pan, step, loop and play address
 - `get_sound_status` — electronic volumes, FM and PCM mutes, output gate, sound interrupt causes and mask
-- `set_audio_mute` — mute `fm`, `pcm` or `cdda` (or one `channel`) in the debugger without changing emulated state; useful to isolate a sound source
+- `set_audio_mute` — mute `fm`, `pcm`, `cdda` or `buzzer` (or one `channel`) in the debugger without changing emulated state; useful to isolate a sound source
 
 ### CD-ROM and Floppy
 

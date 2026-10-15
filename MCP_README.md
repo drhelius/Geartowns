@@ -562,7 +562,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_ym3438_registers` - Get one part's register file as last written with register names, and the address latch; `part` (0 or 1)
 - `get_rf5c68_status` - Get the RF5C68: sound enable, channel and wave banks, IRQ mask and flags, and each channel's envelope, pan, step and playback rate, loop start, start and play address
 - `get_sound_status` - Get both electronic volumes with gain, the 04D5 FM and PCM mutes and the 04EC output gate, the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes
-- `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`) or one `channel` of it in the debugger; emulated state is unchanged
+- `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`) or one `channel` of it in the debugger; emulated state is unchanged
 
 ### CD-ROM Hardware
 - `get_cdrom_status` - Get the CD-ROM controller: 04C0 master status bits, last command with flags and parameters, status queue, transfer mode, SIRQ/DEI and IRQ9, drive state, head position and track, read range, and the disc

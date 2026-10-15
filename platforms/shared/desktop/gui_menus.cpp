@@ -1811,12 +1811,14 @@ static void menu_audio(void)
         menu_audio_source_mute("Mute FM", Audio::AUDIO_SOURCE_FM);
         menu_audio_source_mute("Mute PCM", Audio::AUDIO_SOURCE_PCM);
         menu_audio_source_mute("Mute CD-DA", Audio::AUDIO_SOURCE_CDDA);
+        menu_audio_source_mute("Mute Buzzer", Audio::AUDIO_SOURCE_BUZZER);
 
         ImGui::Separator();
 
         menu_audio_source_volume("FM Volume", "##fm_volume", Audio::AUDIO_SOURCE_FM, &config_audio.fm_volume);
         menu_audio_source_volume("PCM Volume", "##pcm_volume", Audio::AUDIO_SOURCE_PCM, &config_audio.pcm_volume);
         menu_audio_source_volume("CD-DA Volume", "##cdda_volume", Audio::AUDIO_SOURCE_CDDA, &config_audio.cdda_volume);
+        menu_audio_source_volume("Buzzer Volume", "##buzzer_volume", Audio::AUDIO_SOURCE_BUZZER, &config_audio.buzzer_volume);
 
         ImGui::Separator();
 

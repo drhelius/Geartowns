@@ -262,7 +262,7 @@ void gui_debug_window_sound_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(125, 175), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(253, 530), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(253, 557), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound Control", &config_debug.show_sound_control);
 
     ImGui::PushFont(gui_default_font);
@@ -347,17 +347,23 @@ void gui_debug_window_sound_control(void)
 
     ImGui::PopFont();
 
-    static const char* sources[Audio::AUDIO_SOURCE_COUNT] = { "FM", "PCM", "CD-DA" };
+    static const char* sources[Audio::AUDIO_SOURCE_COUNT] = { "FM", "PCM", "CD-DA", "Buzzer" };
 
-    for (int i = 0; i < Audio::AUDIO_SOURCE_COUNT; i++)
+    if (ImGui::BeginTable("##debugger_mutes", 2, flags))
     {
-        bool muted = audio->IsSourceMuted(i);
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("0").x * 11);
 
-        if (ImGui::Checkbox(sources[i], &muted))
-            audio->SetSourceMute(i, muted);
+        for (int i = 0; i < Audio::AUDIO_SOURCE_COUNT; i++)
+        {
+            bool muted = audio->IsSourceMuted(i);
 
-        if (i < Audio::AUDIO_SOURCE_COUNT - 1)
-            ImGui::SameLine(0, 20);
+            ImGui::TableNextColumn();
+
+            if (ImGui::Checkbox(sources[i], &muted))
+                audio->SetSourceMute(i, muted);
+        }
+
+        ImGui::EndTable();
     }
 
     ImGui::End();

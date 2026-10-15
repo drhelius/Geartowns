@@ -3029,7 +3029,8 @@ json DebugAdapter::GetSoundStatus()
         {"debugger_mutes", {
             {"fm", audio->IsSourceMuted(Audio::AUDIO_SOURCE_FM)},
             {"pcm", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM)},
-            {"cdda", audio->IsSourceMuted(Audio::AUDIO_SOURCE_CDDA)}
+            {"cdda", audio->IsSourceMuted(Audio::AUDIO_SOURCE_CDDA)},
+            {"buzzer", audio->IsSourceMuted(Audio::AUDIO_SOURCE_BUZZER)}
         }}
     };
 }
@@ -3063,8 +3064,15 @@ json DebugAdapter::SetAudioMute(const std::string& source, int channel, bool mut
 
         audio->SetSourceMute(Audio::AUDIO_SOURCE_CDDA, mute);
     }
+    else if (source == "buzzer")
+    {
+        if (channel != 0)
+            return {{"error", "Buzzer has no channels"}};
+
+        audio->SetSourceMute(Audio::AUDIO_SOURCE_BUZZER, mute);
+    }
     else
-        return {{"error", "source must be fm, pcm or cdda"}};
+        return {{"error", "source must be fm, pcm, cdda or buzzer"}};
 
     json result = {{"success", true}, {"source", source}, {"muted", mute}};
 

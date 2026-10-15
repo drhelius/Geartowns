@@ -24,10 +24,15 @@
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "../cdrom/cdrom_audio.h"
+#include "../system/pit.h"
 #include "../system/scheduler.h"
 
 // FM and PCM both run from the 8 MHz sound clock, half the machine clock
 static const u32 k_audio_clocks_per_sound_clock = GT_MACHINE_CLOCK_RATE / GT_SOUND_CLOCK_RATE;
+
+// 307.2 kHz PIT clocks in one 44.1 kHz output sample, rounded
+static const int k_audio_buzzer_ticks = 7;
+static const s32 k_audio_buzzer_level = 4096;
 
 INLINE void Audio::Mute(bool mute)
 {
@@ -52,6 +57,11 @@ INLINE void Audio::SetPCMVolume(float volume)
 INLINE void Audio::SetCDDAVolume(float volume)
 {
     m_cdda_volume = volume;
+}
+
+INLINE void Audio::SetBuzzerVolume(float volume)
+{
+    m_buzzer_volume = volume;
 }
 
 INLINE YM3438* Audio::GetYM3438()
@@ -92,7 +102,17 @@ INLINE int Audio::GetFrameSamples() const
 
 INLINE const s16* Audio::GetSourceBuffer(int source) const
 {
-    return source == AUDIO_SOURCE_FM ? m_fm_buffer : source == AUDIO_SOURCE_PCM ? m_pcm_buffer : m_cdda_buffer;
+    switch (source)
+    {
+        case AUDIO_SOURCE_FM:
+            return m_fm_buffer;
+        case AUDIO_SOURCE_PCM:
+            return m_pcm_buffer;
+        case AUDIO_SOURCE_CDDA:
+            return m_cdda_buffer;
+        default:
+            return m_buzzer_buffer;
+    }
 }
 
 INLINE const s16* Audio::GetFMChannelBuffer(int channel) const
@@ -107,18 +127,8 @@ INLINE const s16* Audio::GetPCMChannelBuffer(int channel) const
 
 INLINE void Audio::Synchronize(u64 clocks)
 {
-    if (clocks <= m_state.clocks)
-        return;
-
-    u64 elapsed = clocks - m_state.clocks;
-    m_state.clocks = clocks;
-
-    while (elapsed > 0)
-    {
-        u32 step = (u32)MIN(elapsed, 0x10000000ULL);
-        Clock(step);
-        elapsed -= step;
-    }
+    while (clocks > m_state.clocks)
+        Clock((u32)MIN(clocks - m_state.clocks, 0x10000000ULL));
 }
 
 INLINE void Audio::HandleEvent(u64 clocks)
@@ -138,6 +148,7 @@ INLINE void Audio::Clock(u32 clocks)
     {
         ClockSources(clocks);
         m_state.sample_clock_counter = sample_clock_counter;
+        m_state.clocks += clocks;
         return;
     }
 
@@ -153,6 +164,7 @@ INLINE void Audio::Clock(u32 clocks)
         ClockSources(step);
 
         m_state.sample_clock_counter += (u64)step * GT_AUDIO_SAMPLE_RATE;
+        m_state.clocks += step;
         clocks -= step;
 
         while (m_state.sample_clock_counter >= GT_MACHINE_CLOCK_RATE)
@@ -206,6 +218,8 @@ INLINE void Audio::SampleSources()
     if (m_channel_scopes)
         CaptureChannels(m_buffer_index >> 1);
 
+    s16 buzzer = SampleBuzzer();
+
     // Muted sources and a closed output reach the mixer as silence
     m_fm_buffer[m_buffer_index + 0] = m_fm_enabled ? fm_left : 0;
     m_fm_buffer[m_buffer_index + 1] = m_fm_enabled ? fm_right : 0;
@@ -213,7 +227,24 @@ INLINE void Audio::SampleSources()
     m_pcm_buffer[m_buffer_index + 1] = m_pcm_enabled ? (s16)m_state.pcm_lowpass_right : 0;
     m_cdda_buffer[m_buffer_index + 0] = m_cdda_enabled ? (s16)((cdda_left * m_cdda_gain_left) >> 15) : 0;
     m_cdda_buffer[m_buffer_index + 1] = m_cdda_enabled ? (s16)((cdda_right * m_cdda_gain_right) >> 15) : 0;
+    m_buzzer_buffer[m_buffer_index + 0] = buzzer;
+    m_buzzer_buffer[m_buffer_index + 1] = buzzer;
     m_buffer_index += 2;
+}
+
+// The buzzer plays channel 2's OUT, averaged over the PIT clocks before the sample so high tones don't alias
+INLINE s16 Audio::SampleBuzzer()
+{
+    if (!m_pit->IsBuzzerEnabled())
+        return 0;
+
+    u64 tick = m_pit->GetTick(k_pit_buzzer_channel, m_state.clocks) - k_audio_buzzer_ticks;
+    int high = 0;
+
+    for (int i = 1; i <= k_audio_buzzer_ticks; i++)
+        high += m_pit->GetBuzzerOutput(tick + i) ? 1 : 0;
+
+    return (s16)(k_audio_buzzer_level * (2 * high - k_audio_buzzer_ticks) / k_audio_buzzer_ticks);
 }
 
 #endif /* AUDIO_INLINE_H */

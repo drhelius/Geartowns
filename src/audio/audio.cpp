@@ -61,12 +61,14 @@ Audio::Audio()
     InitPointer(m_cdrom_audio);
     InitPointer(m_scheduler);
     InitPointer(m_pic);
+    InitPointer(m_pit);
     InitPointer(m_trace_logger);
     m_mute = false;
     m_master_volume = 1.0f;
     m_fm_volume = 1.0f;
     m_pcm_volume = 1.0f;
     m_cdda_volume = 1.0f;
+    m_buzzer_volume = 1.0f;
     m_cdda_gain_left = 0;
     m_cdda_gain_right = 0;
     m_fm_enabled = false;
@@ -84,6 +86,7 @@ Audio::Audio()
     memset(m_fm_buffer, 0, sizeof(m_fm_buffer));
     memset(m_pcm_buffer, 0, sizeof(m_pcm_buffer));
     memset(m_cdda_buffer, 0, sizeof(m_cdda_buffer));
+    memset(m_buzzer_buffer, 0, sizeof(m_buzzer_buffer));
     memset(m_fm_channel_buffer, 0, sizeof(m_fm_channel_buffer));
     memset(m_pcm_channel_buffer, 0, sizeof(m_pcm_channel_buffer));
     SetPCMLowpassCutoff(k_audio_pcm_lowpass_cutoff);
@@ -95,11 +98,12 @@ Audio::~Audio()
     SafeDelete(m_ym3438);
 }
 
-void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic)
+void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit)
 {
     m_scheduler = scheduler;
     m_cdrom_audio = cdrom_audio;
     m_pic = pic;
+    m_pit = pit;
 
     if (!IsValidPointer(m_ym3438))
         m_ym3438 = new YM3438();
@@ -510,14 +514,16 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     float fm_volume = m_source_mute[AUDIO_SOURCE_FM] ? 0.0f : m_fm_volume;
     float pcm_volume = m_source_mute[AUDIO_SOURCE_PCM] ? 0.0f : m_pcm_volume;
     float cdda_volume = m_source_mute[AUDIO_SOURCE_CDDA] ? 0.0f : m_cdda_volume;
+    float buzzer_volume = m_source_mute[AUDIO_SOURCE_BUZZER] ? 0.0f : m_buzzer_volume;
 
     // Relative FM/PCM/CD-DA levels are unmeasured: 
     // FM enters at its full DAC sum, PCM at half scale and CD-DA at full scale
-    if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f))
+    if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f) &&
+        (buzzer_volume == 1.0f))
     {
         for (int i = 0; i < samples; i++)
         {
-            s32 mix = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i];
+            s32 mix = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i] + m_buzzer_buffer[i];
             sample_buffer[i] = (s16)CLAMP(mix, -32768, 32767);
         }
     }
@@ -526,7 +532,7 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
         for (int i = 0; i < samples; i++)
         {
             float mix = (float)m_fm_buffer[i] * fm_volume + (float)(m_pcm_buffer[i] >> 1) * pcm_volume +
-                (float)m_cdda_buffer[i] * cdda_volume;
+                (float)m_cdda_buffer[i] * cdda_volume + (float)m_buzzer_buffer[i] * buzzer_volume;
             s32 out = (s32)(mix * m_master_volume);
             sample_buffer[i] = (s16)CLAMP(out, -32768, 32767);
         }

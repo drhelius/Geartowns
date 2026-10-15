@@ -24,6 +24,7 @@
 #include "../common/common.h"
 #include "i8253.h"
 
+class Audio;
 class PIC;
 class Scheduler;
 class StateSerializer;
@@ -44,7 +45,7 @@ public:
 public:
     PIT();
     ~PIT();
-    void Init(PIC* pic, Scheduler* scheduler);
+    void Init(PIC* pic, Scheduler* scheduler, Audio* audio);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port, u64 clocks);
@@ -53,6 +54,8 @@ public:
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
     void SetMemoryBuzzer(bool enabled);
+    bool IsBuzzerEnabled() const;
+    bool GetBuzzerOutput(u64 tick);
     I8253* GetPIT(int index);
     u64 GetTick(int channel, u64 clocks) const;
     PIT_State* GetState();
@@ -72,6 +75,7 @@ private:
 private:
     PIC* m_pic;
     Scheduler* m_scheduler;
+    Audio* m_audio;
     TraceLogger* m_trace_logger;
     I8253 m_pit[2];
     PIT_State m_state;
@@ -81,6 +85,7 @@ private:
 static const u64 k_pit_fast_ticks = 48;
 static const u64 k_pit_base_ticks = 12;
 static const u64 k_pit_clock_divisor = 625;
+static const int k_pit_buzzer_channel = 2;
 static const int k_pit_serial_channel = 4;
 
 #include "pit_inline.h"

@@ -160,6 +160,7 @@ void gui_apply_settings(void)
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_FM, config_audio.fm_volume);
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_PCM, config_audio.pcm_volume);
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_CDDA, config_audio.cdda_volume);
+    emu_audio_set_source_volume(Audio::AUDIO_SOURCE_BUZZER, config_audio.buzzer_volume);
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
         emu_set_pad_type((GT_Controllers)i, (GT_Controller_Type)config_input.controller_type[i]);

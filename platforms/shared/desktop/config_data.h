@@ -134,6 +134,7 @@ struct config_Audio
     float fm_volume;
     float pcm_volume;
     float cdda_volume;
+    float buzzer_volume;
     int buffer_count;
 };
 

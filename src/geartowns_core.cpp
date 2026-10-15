@@ -180,8 +180,8 @@ void GeartownsCore::Init()
     m_cdrom_media->Init();
     m_cdrom_audio->Init();
     m_pic->Init();
-    m_audio->Init(m_scheduler, m_cdrom_audio, m_pic);
-    m_pit->Init(m_pic, m_scheduler);
+    m_audio->Init(m_scheduler, m_cdrom_audio, m_pic, m_pit);
+    m_pit->Init(m_pic, m_scheduler, m_audio);
     m_system_control->Init(m_memory);
     m_video->Init(m_pic, m_pit, m_scheduler, m_memory, m_firmware->GetFontRom());
     m_dma->Init(m_memory, m_scheduler);

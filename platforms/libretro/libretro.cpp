@@ -1615,6 +1615,14 @@ static void check_variables(void)
         core->GetAudio()->SetCDDAVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
     }
 
+    var.key = "geartowns_buzzer_volume";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->GetAudio()->SetBuzzerVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
+    }
+
     var.key = "geartowns_cdrom_speed";
     var.value = NULL;
 

@@ -188,8 +188,11 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
         if (quotient > 0xFF)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
+        u32 remainder = dividend % (u8)operand;
+
         SetRegister8(0, (u8)quotient);
-        SetRegister8(4, (u8)(dividend % (u8)operand));
+        SetRegister8(4, (u8)remainder);
+        Sub(remainder + ((quotient & 1) != 0 ? operand : 0), operand, 0, width);
     }
     else if (width == 16)
     {
@@ -199,8 +202,11 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
         if (quotient > 0xFFFF)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
+        u32 remainder = dividend % (u16)operand;
+
         m_state.registers[I386_REG_EAX].low = (u16)quotient;
-        m_state.registers[I386_REG_EDX].low = (u16)(dividend % (u16)operand);
+        m_state.registers[I386_REG_EDX].low = (u16)remainder;
+        Sub(remainder + ((quotient & 1) != 0 ? operand : 0), operand, 0, width);
     }
     else
     {
@@ -210,8 +216,11 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
         if (quotient > 0xFFFFFFFFULL)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
+        u32 remainder = (u32)(dividend % operand);
+
         m_state.registers[I386_REG_EAX].value = (u32)quotient;
-        m_state.registers[I386_REG_EDX].value = (u32)(dividend % operand);
+        m_state.registers[I386_REG_EDX].value = remainder;
+        Sub(remainder + ((quotient & 1) != 0 ? operand : 0), operand, 0, width);
     }
 
     return true;
@@ -249,8 +258,11 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
         if (quotient < -128 || quotient > 127)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
+        s16 remainder = dividend % divisor;
+
         SetRegister8(0, (u8)quotient);
-        SetRegister8(4, (u8)(dividend % divisor));
+        SetRegister8(4, (u8)remainder);
+        SetSignedDivideFlags(dividend < 0, remainder, divisor, width);
     }
     else if (width == 16)
     {
@@ -265,8 +277,11 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
         if (quotient < -32768 || quotient > 32767)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
+        s32 remainder = dividend % divisor;
+
         m_state.registers[I386_REG_EAX].low = (u16)quotient;
-        m_state.registers[I386_REG_EDX].low = (u16)(dividend % divisor);
+        m_state.registers[I386_REG_EDX].low = (u16)remainder;
+        SetSignedDivideFlags(dividend < 0, remainder, divisor, width);
     }
     else
     {
@@ -282,11 +297,27 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
         if (quotient < (s64)INT_MIN || quotient > (s64)INT_MAX)
             return RaiseException(0, I386_EXCEPTION_FAULT);
 
+        s32 remainder = (s32)(dividend % divisor);
+
         m_state.registers[I386_REG_EAX].value = (u32)quotient;
-        m_state.registers[I386_REG_EDX].value = (u32)(dividend % divisor);
+        m_state.registers[I386_REG_EDX].value = (u32)remainder;
+        SetSignedDivideFlags(dividend < 0, remainder, (s32)divisor, width);
     }
 
     return true;
+}
+
+INLINE void I386::SetSignedDivideFlags(bool negative_dividend, s32 remainder, s32 divisor, int width)
+{
+    s32 value = remainder;
+
+    if (negative_dividend && remainder == 0)
+        value = divisor < 0 ? divisor : -divisor;
+
+    if (negative_dividend == (divisor < 0))
+        Sub((u32)value, (u32)divisor, 0, width);
+    else
+        Add((u32)value, (u32)divisor, 0, width);
 }
 
 INLINE bool I386::OPCodes_INC_DEC_RM(int width, bool decrement)

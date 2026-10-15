@@ -1064,6 +1064,7 @@ private:
     bool OPCodes_IMUL_RM(int width, u32 operand);
     bool OPCodes_DIV_RM(int width, u32 operand);
     bool OPCodes_IDIV_RM(int width, u32 operand);
+    void SetSignedDivideFlags(bool negative_dividend, s32 remainder, s32 divisor, int width);
     bool OPCodes_INC_DEC_RM(int width, bool decrement);
     bool OPCodes_INC_RM(int width);
     bool OPCodes_DEC_RM(int width);

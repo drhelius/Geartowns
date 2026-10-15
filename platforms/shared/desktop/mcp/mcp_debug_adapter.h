@@ -263,7 +263,6 @@ public:
     bool ApplyMouseMotion(int player, int delta_x, int delta_y);
     json KeyboardKey(const std::string& key, const std::string& action);
     bool GetKeyCode(const std::string& name, GT_Keys& key) const;
-    bool GetTypedKey(char character, GT_Keys& key, bool& shift) const;
     json GetInputState();
     void ClearControllerState();
 

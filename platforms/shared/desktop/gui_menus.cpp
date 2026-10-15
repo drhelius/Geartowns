@@ -39,6 +39,7 @@
 #include "geartowns.h"
 #include "rewind.h"
 #include "events.h"
+#include "input_macro.h"
 
 static bool open_rom = false;
 static bool open_state = false;
@@ -1616,6 +1617,27 @@ static void menu_input(void)
                 ImGui::Text("When disabled, all hotkeys work and other keys still type.");
                 ImGui::Text("Press %s to toggle it.", config_hotkeys[config_HotkeyIndex_CaptureKeyboard].str);
                 ImGui::EndTooltip();
+            }
+
+            if (input_macro_get_owner() == Input_Macro_Owner_GUI)
+            {
+                if (ImGui::MenuItem("Stop Pasting"))
+                    gui_action_stop_pasting();
+            }
+            else
+            {
+                if (ImGui::MenuItem("Paste as Keystrokes", NULL, false, !emu_is_empty() &&
+                    input_macro_get_owner() == Input_Macro_Owner_None))
+                    gui_action_paste_keystrokes();
+
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Types the clipboard text on the FM Towns keyboard,");
+                    ImGui::Text("up to %d characters. Characters the JIS keyboard", k_input_macro_max_paste);
+                    ImGui::Text("can't type, such as kana and kanji, are skipped.");
+                    ImGui::EndTooltip();
+                }
             }
 
             ImGui::Separator();

@@ -42,6 +42,8 @@ EXTERN void gui_action_stop_video_recording(void);
 EXTERN void gui_action_toggle_video_recording(void);
 EXTERN void gui_action_save_state(const char* path);
 EXTERN void gui_action_load_state(const char* path);
+EXTERN void gui_action_paste_keystrokes(void);
+EXTERN void gui_action_stop_pasting(void);
 
 #undef GUI_ACTIONS_IMPORT
 #undef EXTERN

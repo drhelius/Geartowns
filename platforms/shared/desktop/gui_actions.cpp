@@ -30,6 +30,7 @@
 #include "events.h"
 #include "gui.h"
 #include "gui_notifications.h"
+#include "input_macro.h"
 #include "debug/gui_debug.h"
 #include "debug/gui_debug_trace_logger.h"
 #include "rewind.h"
@@ -328,6 +329,55 @@ void gui_action_load_state(const char* path)
         snprintf(message, sizeof(message), "Unable to load state from slot %d", slot);
         gui_notify(gui_NotificationError, NULL, message);
     }
+}
+
+void gui_action_paste_keystrokes(void)
+{
+    if (emu_is_empty() || input_macro_get_owner() != Input_Macro_Owner_None)
+        return;
+
+    char* text = SDL_GetClipboardText();
+    int characters = IsValidPointer(text) ? input_macro_count_characters(text) : 0;
+    char message[64];
+
+    if (characters == 0)
+        gui_notify(gui_NotificationWarning, ICON_MD_CONTENT_PASTE, "The clipboard has no text");
+    else if (characters > k_input_macro_max_paste)
+    {
+        snprintf(message, sizeof(message), "%d characters, the limit is %d", characters, k_input_macro_max_paste);
+        gui_notify(gui_NotificationError, NULL, "Clipboard text too long to paste", message);
+    }
+    else
+    {
+        int skipped = 0;
+        input_macro_find_untypeable(text, &skipped);
+        int typed = input_macro_type_text(text, k_input_macro_frames_per_key, Input_Macro_Owner_GUI);
+
+        if (typed == 0)
+            gui_notify(gui_NotificationWarning, ICON_MD_CONTENT_PASTE, "Nothing to paste",
+                "The FM Towns keyboard can't type the clipboard text");
+        else
+        {
+            if (skipped > 0)
+                snprintf(message, sizeof(message), "Pasting %d characters, %d skipped", typed, skipped);
+            else
+                snprintf(message, sizeof(message), "Pasting %d characters", typed);
+
+            gui_notify(skipped > 0 ? gui_NotificationWarning : gui_NotificationInfo, ICON_MD_CONTENT_PASTE, message,
+                skipped > 0 ? "The FM Towns keyboard can't type the skipped ones" : NULL, "paste");
+        }
+    }
+
+    SDL_free(text);
+}
+
+void gui_action_stop_pasting(void)
+{
+    if (input_macro_get_owner() != Input_Macro_Owner_GUI)
+        return;
+
+    input_macro_stop();
+    gui_notify(gui_NotificationInfo, ICON_MD_CONTENT_PASTE, "Pasting stopped", NULL, "paste");
 }
 
 static std::string get_auto_file_path(int dir_option, const std::string& custom_path, const char* extension)

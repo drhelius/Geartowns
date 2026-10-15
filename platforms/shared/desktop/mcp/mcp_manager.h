@@ -20,13 +20,13 @@
 #ifndef MCP_MANAGER_H
 #define MCP_MANAGER_H
 
-#include <algorithm>
 #include <string>
 #include <vector>
 #include "mcp_server.h"
 #include "mcp_transport.h"
 #include "mcp_debug_adapter.h"
 #include "emu.h"
+#include "input_macro.h"
 #include "debug/gui_debug_constants.h"
 
 extern bool g_mcp_stdio_mode;
@@ -45,33 +45,14 @@ struct DelayedButtonRelease
     u64 release_at_frame;
 };
 
-enum McpInputMacroStepType
-{
-    MCP_INPUT_MACRO_STEP_KEY_PRESS,
-    MCP_INPUT_MACRO_STEP_KEY_RELEASE,
-    MCP_INPUT_MACRO_STEP_WAIT
-};
-
-struct McpInputMacroStep
-{
-    McpInputMacroStepType type;
-    GT_Keys key;
-    int frames;
-};
-
 struct McpInputMacroState
 {
     bool active;
     json request_id;
-    std::vector<McpInputMacroStep> steps;
-    size_t step_index;
-    bool waiting;
-    u64 wait_target_frame;
     int command_count;
     int frames_waited;
     bool restore_pause;
     u64 breakpoint_stops;
-    std::vector<GT_Keys> held_keys;
 };
 
 static const u64 k_mcp_tap_frames = 10;
@@ -201,7 +182,7 @@ public:
         return m_tcp_port;
     }
 
-    void PumpCommands(GeartownsCore* core)
+    void PumpCommands()
     {
         pump_mouse_motion();
 
@@ -223,7 +204,7 @@ public:
 
         if (m_input_macro.active)
         {
-            pump_input_macro(core);
+            pump_input_macro();
             return;
         }
 
@@ -287,7 +268,7 @@ public:
                 else
                 {
                     SafeDelete(response);
-                    pump_input_macro(core);
+                    pump_input_macro();
                 }
 
                 SafeDelete(command);
@@ -447,23 +428,16 @@ private:
     {
         m_input_macro.active = false;
         m_input_macro.request_id = json();
-        m_input_macro.steps.clear();
-        m_input_macro.step_index = 0;
-        m_input_macro.waiting = false;
-        m_input_macro.wait_target_frame = 0;
         m_input_macro.command_count = 0;
         m_input_macro.frames_waited = 0;
         m_input_macro.restore_pause = false;
         m_input_macro.breakpoint_stops = 0;
-        m_input_macro.held_keys.clear();
     }
 
     void release_input_macro_keys()
     {
-        for (size_t i = 0; i < m_input_macro.held_keys.size(); i++)
-            emu_key_released(m_input_macro.held_keys[i]);
-
-        m_input_macro.held_keys.clear();
+        if (input_macro_get_owner() == Input_Macro_Owner_MCP)
+            input_macro_stop();
     }
 
     json start_keyboard_macro(const json& arguments, const json& request_id)
@@ -477,7 +451,7 @@ private:
         }
 
         std::string text = arguments.value("text", "");
-        int frames = arguments.value("frames_per_key", 3);
+        int frames = arguments.value("frames_per_key", k_input_macro_frames_per_key);
 
         if (text.empty() || text.size() > 256)
         {
@@ -485,115 +459,47 @@ private:
             return result;
         }
 
-        reset_input_macro();
-        m_input_macro.request_id = request_id;
-        m_input_macro.command_count = (int)text.size();
-        m_input_macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
-        m_input_macro.breakpoint_stops = emu_debug_breakpoint_stops;
-
-        for (size_t i = 0; i < text.size(); i++)
+        if (input_macro_get_owner() == Input_Macro_Owner_GUI)
         {
-            GT_Keys key = GT_KEY_NONE;
-            bool shift = false;
-
-            if (!m_debug_adapter->GetTypedKey(text[i], key, shift))
-            {
-                reset_input_macro();
-                result["error"] = "Character " + std::to_string((int)i) + " cannot be typed on the JIS keyboard";
-                return result;
-            }
-
-            if (shift)
-                append_key_step(MCP_INPUT_MACRO_STEP_KEY_PRESS, GT_KEY_SHIFT);
-
-            append_key_step(MCP_INPUT_MACRO_STEP_KEY_PRESS, key);
-            append_wait_step(frames);
-            append_key_step(MCP_INPUT_MACRO_STEP_KEY_RELEASE, key);
-
-            if (shift)
-                append_key_step(MCP_INPUT_MACRO_STEP_KEY_RELEASE, GT_KEY_SHIFT);
-
-            append_wait_step(frames);
+            result["error"] = "The keyboard is typing text pasted from the GUI";
+            return result;
         }
 
+        int untypeable = input_macro_find_untypeable(text.c_str(), NULL);
+
+        if (untypeable >= 0)
+        {
+            result["error"] = "Character " + std::to_string(untypeable) + " cannot be typed on the JIS keyboard";
+            return result;
+        }
+
+        reset_input_macro();
+        m_input_macro.request_id = request_id;
+        m_input_macro.command_count = input_macro_type_text(text.c_str(), frames, Input_Macro_Owner_MCP);
+        m_input_macro.frames_waited = m_input_macro.command_count * frames * 2;
+        m_input_macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
+        m_input_macro.breakpoint_stops = emu_debug_breakpoint_stops;
         m_input_macro.active = true;
 
         result["success"] = true;
         result["pending"] = true;
-        result["characters"] = (int)text.size();
+        result["characters"] = m_input_macro.command_count;
         return result;
     }
 
-    void append_key_step(McpInputMacroStepType type, GT_Keys key)
+    void pump_input_macro()
     {
-        McpInputMacroStep step;
-        step.type = type;
-        step.key = key;
-        step.frames = 0;
-        m_input_macro.steps.push_back(step);
-    }
-
-    void append_wait_step(int frames)
-    {
-        McpInputMacroStep step;
-        step.type = MCP_INPUT_MACRO_STEP_WAIT;
-        step.key = GT_KEY_NONE;
-        step.frames = frames;
-        m_input_macro.steps.push_back(step);
-    }
-
-    void pump_input_macro(GeartownsCore* core)
-    {
-        if (m_input_macro.waiting)
-        {
-            if (emu_frame_counter < m_input_macro.wait_target_frame)
-            {
-                continue_input_macro_wait(core);
-                return;
-            }
-
-            m_input_macro.waiting = false;
-        }
-
-        while (m_input_macro.step_index < m_input_macro.steps.size())
-        {
-            const McpInputMacroStep& step = m_input_macro.steps[m_input_macro.step_index];
-
-            if (step.type == MCP_INPUT_MACRO_STEP_WAIT)
-            {
-                m_input_macro.frames_waited += step.frames;
-                m_input_macro.wait_target_frame = emu_frame_counter + (u64)step.frames;
-                m_input_macro.waiting = true;
-                m_input_macro.step_index++;
-
-                continue_input_macro_wait(core);
-                return;
-            }
-
-            std::vector<GT_Keys>& held = m_input_macro.held_keys;
-
-            if (step.type == MCP_INPUT_MACRO_STEP_KEY_PRESS)
-            {
-                emu_key_pressed(step.key);
-                held.push_back(step.key);
-            }
-            else
-            {
-                emu_key_released(step.key);
-                held.erase(std::remove(held.begin(), held.end(), step.key), held.end());
-            }
-
-            m_input_macro.step_index++;
-        }
-
-        finish_input_macro_success();
+        if (input_macro_get_owner() != Input_Macro_Owner_MCP)
+            finish_input_macro_error("Input macro stopped");
+        else if (input_macro_update(Input_Macro_Owner_MCP))
+            continue_input_macro_wait();
+        else
+            finish_input_macro_success();
     }
 
     // Only a breakpoint that stopped the frames this macro ran interrupts it, not the stop it started from
-    void continue_input_macro_wait(GeartownsCore* core)
+    void continue_input_macro_wait()
     {
-        UNUSED(core);
-
         if (emu_is_debug_idle())
         {
             if (emu_debug_breakpoint_stops != m_input_macro.breakpoint_stops)
@@ -602,7 +508,7 @@ private:
                 return;
             }
 
-            u64 frames = m_input_macro.wait_target_frame - emu_frame_counter;
+            u64 frames = input_macro_get_frames_left();
 
             if (frames > 1000)
                 frames = 1000;

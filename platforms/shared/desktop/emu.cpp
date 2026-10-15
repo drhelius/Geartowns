@@ -35,6 +35,7 @@
 #include "emu_floppy.h"
 #include "events.h"
 #include "gui_notifications.h"
+#include "input_macro.h"
 #include "mcp/mcp_manager.h"
 #include "rewind.h"
 #include "runahead.h"
@@ -225,6 +226,7 @@ void emu_update(void)
         return;
 
     emu_mcp_pump_commands();
+    input_macro_update(Input_Macro_Owner_GUI);
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     if (geartowns->GetMedia()->HasPhysicalCdRomError())
@@ -1624,7 +1626,7 @@ int emu_mcp_get_http_port(void)
 void emu_mcp_pump_commands(void)
 {
     if (IsValidPointer(mcp_manager))
-        mcp_manager->PumpCommands(geartowns);
+        mcp_manager->PumpCommands();
 }
 
 void emu_reset_rewind_timing(void)

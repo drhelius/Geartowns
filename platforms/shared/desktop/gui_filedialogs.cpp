@@ -51,6 +51,7 @@ enum FileDialogID
     FileDialog_ChooseScreenshotPath,
     FileDialog_ChooseVideoRecordingPath,
     FileDialog_SaveScreenshot,
+    FileDialog_SaveVGM,
     FileDialog_SaveVideo,
     FileDialog_LoadBIOS,
     FileDialog_SaveMemoryDump,
@@ -183,6 +184,16 @@ void gui_file_dialog_save_all_sprites(void)
 
     SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveAllSprites, application_sdl_window,
         NULL, false);
+}
+
+void gui_file_dialog_save_vgm(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = { { "VGM Files", "vgm" } };
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveVGM, application_sdl_window,
+        filters, 1, NULL);
 }
 
 void gui_file_dialog_save_video(void)
@@ -400,6 +411,8 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         append_extension_if_missing(pending_dialog_path, ".state");
     else if (id == FileDialog_SaveScreenshot)
         append_extension_if_missing(pending_dialog_path, ".png");
+    else if (id == FileDialog_SaveVGM)
+        append_extension_if_missing(pending_dialog_path, ".vgm");
     else if (id == FileDialog_SaveVideo)
         append_extension_if_missing(pending_dialog_path, ".avi");
     else if (id == FileDialog_SaveMemoryDump)
@@ -470,6 +483,12 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_SaveScreenshot:
             gui_action_save_screenshot(path);
+            break;
+        case FileDialog_SaveVGM:
+            if (emu_start_vgm_recording(path))
+                gui_notify(gui_NotificationInfo, ICON_MD_FIBER_MANUAL_RECORD, "VGM recording started", path, "vgm");
+            else
+                gui_notify(gui_NotificationError, NULL, "Unable to start VGM recording", path, "vgm");
             break;
         case FileDialog_SaveVideo:
             gui_action_start_video_recording(path);

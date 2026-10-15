@@ -38,6 +38,7 @@ EXTERN void gui_file_dialog_choose_screenshot_path(void);
 EXTERN void gui_file_dialog_choose_video_recording_path(void);
 EXTERN void gui_file_dialog_load_bios(void);
 EXTERN void gui_file_dialog_save_screenshot(void);
+EXTERN void gui_file_dialog_save_vgm(void);
 EXTERN void gui_file_dialog_save_video(void);
 EXTERN void gui_file_dialog_save_memory_dump(void);
 EXTERN void gui_file_dialog_load_memory_dump(void);

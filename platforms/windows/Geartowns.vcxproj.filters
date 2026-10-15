@@ -208,6 +208,9 @@
     <ClCompile Include="..\..\src\audio\ym3438.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\audio\vgm_recorder.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\system\io.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -456,6 +459,7 @@
     <ClInclude Include="..\..\src\audio\rf5c68_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\ym3438.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\ym3438_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\vgm_recorder.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\debug_memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\firmware_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\game_db.h"><Filter>src</Filter></ClInclude>

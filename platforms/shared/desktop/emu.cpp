@@ -197,6 +197,7 @@ void emu_destroy(void)
     }
 
     loading_state.store(Loading_State_None);
+    emu_stop_vgm_recording();
     emu_stop_video_recording();
 
     if (!emu_floppy_flush())
@@ -1455,6 +1456,43 @@ int emu_get_screenshot_png(unsigned char** out_buffer)
     *out_buffer = stbi_write_png_to_mem(rgba, runtime.screen_width * 4, runtime.screen_width,
         runtime.screen_height, 4, &size);
     return size;
+}
+
+bool emu_start_vgm_recording(const char* file_path)
+{
+    if (emu_is_empty())
+        return false;
+
+    if (geartowns->GetAudio()->IsVgmRecording())
+        emu_stop_vgm_recording();
+
+    char game_name[GT_MAX_PATH];
+    get_filename_without_extension(geartowns->GetMedia()->GetFileName(), game_name, sizeof(game_name));
+
+    GT_VGM_Metadata metadata;
+    metadata.game_name = game_name;
+    metadata.system_name = "Fujitsu FM Towns";
+    metadata.comment = "Created with " GT_TITLE " " GT_VERSION;
+
+    if (!geartowns->GetAudio()->StartVgmRecording(file_path, GT_SOUND_CLOCK_RATE, metadata))
+        return false;
+
+    Log("VGM recording started: %s", file_path);
+    return true;
+}
+
+void emu_stop_vgm_recording(void)
+{
+    if (geartowns->GetAudio()->IsVgmRecording())
+    {
+        geartowns->GetAudio()->StopVgmRecording();
+        Log("VGM recording stopped");
+    }
+}
+
+bool emu_is_vgm_recording(void)
+{
+    return geartowns->GetAudio()->IsVgmRecording();
 }
 
 bool emu_start_video_recording(const char* file_path)

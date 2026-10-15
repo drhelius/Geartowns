@@ -16,7 +16,7 @@ Features:
     - CD-ROM support for CUE/BIN, ISO, CHD, M3U and ZIP formats, plus physical discs on Windows, macOS and Linux.
     - Two floppy drives with D77, D88, HDM, XDF and IMG images, M3U playlists, write protection and optional persistence.
     - Save states with preview and rewind, and run-ahead.
-    - Video recording to AVI and screenshots.
+    - Video recording to AVI, VGM recording and screenshots.
     - Full debugger with disassembly, breakpoints, call stack, symbols, memory editor, trace logger, profiler, i386 descriptor and paging inspectors, and CRTC, sprite, YM3438, RF5C68, CD-ROM and floppy tools.
     - MCP server for AI-assisted debugging and hardware inspection.
     - Standalone builds for Windows, Linux, BSD and macOS, plus libretro support.

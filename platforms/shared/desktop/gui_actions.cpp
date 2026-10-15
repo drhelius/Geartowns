@@ -46,6 +46,7 @@ void gui_action_load_defaults(void)
     if (!gui_debug_trace_logger_stop())
         return;
 
+    emu_stop_vgm_recording();
     emu_stop_video_recording();
 
     GeartownsCore* core = emu_get_core();

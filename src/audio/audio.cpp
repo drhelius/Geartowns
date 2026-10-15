@@ -53,6 +53,7 @@ static const int k_audio_volume_cdda_right = 1;
 static const u8 k_audio_gate_pcm = 0x01;
 static const u8 k_audio_gate_fm = 0x02;
 static const u8 k_audio_gate_output = 0x40;
+static const u8 k_audio_vgm_fm_mode_registers[7] = { 0x22, 0x24, 0x25, 0x26, 0x27, 0x2A, 0x2B };
 
 Audio::Audio()
 {
@@ -79,6 +80,7 @@ Audio::Audio()
     m_buffer_overflow = false;
     m_frame_samples = 0;
     m_channel_scopes = false;
+    m_vgm_recording_enabled = false;
 
     for (int i = 0; i < AUDIO_SOURCE_COUNT; i++)
         m_source_mute[i] = false;
@@ -230,6 +232,11 @@ void Audio::WriteFM(u8 port, u8 value)
 {
     m_ym3438->Write(port, value);
 
+#ifndef GT_DISABLE_VGMRECORDER
+    if (m_vgm_recording_enabled && (port & 0x01) != 0)
+        m_vgm_recorder.WriteYM3438(m_ym3438->GetSelectedAddress(), value);
+#endif
+
     if (unlikely((port & 0x01) != 0 && IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_FM)))
         TraceFM(value);
 
@@ -241,6 +248,11 @@ void Audio::WritePCM(u16 address, u8 value)
     u8 channel = m_rf5c68->GetChannelBank();
 
     m_rf5c68->Write(address, value);
+
+#ifndef GT_DISABLE_VGMRECORDER
+    if (m_vgm_recording_enabled)
+        m_vgm_recorder.WriteRF5C68((u8)address, value);
+#endif
 
     if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_PCM)))
     {
@@ -470,6 +482,11 @@ void Audio::WriteWaveWindowCallback(void* device, u32 offset, u8 value)
     audio->Synchronize(audio->m_scheduler->GetClocks());
     rf5c68->Write((u16)(0x1000 | (offset & 0x0FFF)), value);
 
+#ifndef GT_DISABLE_VGMRECORDER
+    if (audio->m_vgm_recording_enabled)
+        audio->m_vgm_recorder.WriteRF5C68Memory((u16)(offset & 0x0FFF), &value, 1);
+#endif
+
     // Adding or removing a loop marker can change where a playing channel crosses its next block
     if (marker != (value == 0xFF))
         audio->UpdatePCMIRQ();
@@ -554,6 +571,98 @@ void Audio::LoadState(std::istream& stream)
     m_ym3438->LoadState(stream);
     m_rf5c68->LoadState(stream);
     SanitizeState();
+}
+
+bool Audio::StartVgmRecording(const char* file_path, int clock_rate, const GT_VGM_Metadata& metadata)
+{
+    if (m_vgm_recording_enabled)
+        return false;
+
+    m_vgm_recorder.Start(file_path, clock_rate, metadata);
+    m_vgm_recording_enabled = m_vgm_recorder.IsRecording();
+
+    if (m_vgm_recording_enabled)
+        WriteVgmInitialState();
+
+    return m_vgm_recording_enabled;
+}
+
+void Audio::WriteVgmInitialState()
+{
+    YM3438::YM3438_State* fm = m_ym3438->GetState();
+    RF5C68::RF5C68_State* pcm = m_rf5c68->GetState();
+
+    for (int i = 0; i < 7; i++)
+    {
+        u8 reg = k_audio_vgm_fm_mode_registers[i];
+        m_vgm_recorder.WriteYM3438(reg, fm->registers[0][reg]);
+    }
+
+    for (int bank = 0; bank < 2; bank++)
+    {
+        u16 base = (u16)(bank << 8);
+
+        for (int reg = 0x30; reg <= 0xB6; reg++)
+        {
+            int group = reg & 0xFC;
+
+            if (((reg & 0x03) == 0x03) || (group == 0xA4) || (group == 0xAC))
+                continue;
+
+            // A frequency high byte only latches until its low byte is written
+            if ((group == 0xA0) || (group == 0xA8))
+                m_vgm_recorder.WriteYM3438((u16)(base | (reg + 4)), fm->registers[bank][reg + 4]);
+
+            m_vgm_recorder.WriteYM3438((u16)(base | reg), fm->registers[bank][reg]);
+        }
+    }
+
+    for (int i = 0; i < YM3438_CHANNEL_COUNT; i++)
+    {
+        YM3438::YM3438_Channel& channel = fm->channels[i];
+        u8 slots = (u8)(channel.s1_key_written | (channel.operators[1].manual_key_on << 1) |
+            (channel.operators[2].manual_key_on << 2) | (channel.operators[3].manual_key_on << 3));
+        m_vgm_recorder.WriteYM3438(0x28, (u8)((slots << 4) | (i < 3 ? i : i + 1)));
+    }
+
+    m_vgm_recorder.WriteRF5C68Memory(0, pcm->wave_ram, RF5C68_WAVE_RAM_SIZE);
+
+    u8 enable = pcm->enabled ? 0x80 : 0x00;
+    u8 channel_mask = 0;
+
+    for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
+    {
+        RF5C68::RF5C68_Channel& channel = pcm->channels[i];
+        m_vgm_recorder.WriteRF5C68(0x07, (u8)(0x40 | i));
+        m_vgm_recorder.WriteRF5C68(0x00, channel.envelope);
+        m_vgm_recorder.WriteRF5C68(0x01, channel.pan);
+        m_vgm_recorder.WriteRF5C68(0x02, (u8)channel.step);
+        m_vgm_recorder.WriteRF5C68(0x03, (u8)(channel.step >> 8));
+        m_vgm_recorder.WriteRF5C68(0x04, (u8)channel.loop_start);
+        m_vgm_recorder.WriteRF5C68(0x05, (u8)(channel.loop_start >> 8));
+        m_vgm_recorder.WriteRF5C68(0x06, channel.start);
+
+        if (!channel.enabled)
+            channel_mask |= (u8)(1 << i);
+    }
+
+    m_vgm_recorder.WriteRF5C68(0x08, channel_mask);
+    m_vgm_recorder.WriteRF5C68(0x07, (u8)(enable | 0x40 | pcm->channel_bank));
+    m_vgm_recorder.WriteRF5C68(0x07, (u8)(enable | pcm->wave_bank));
+}
+
+void Audio::StopVgmRecording()
+{
+    if (m_vgm_recording_enabled)
+    {
+        m_vgm_recorder.Stop();
+        m_vgm_recording_enabled = false;
+    }
+}
+
+bool Audio::IsVgmRecording() const
+{
+    return m_vgm_recording_enabled;
 }
 
 void Audio::Serialize(StateSerializer& serializer)

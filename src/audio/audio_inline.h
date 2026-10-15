@@ -205,6 +205,11 @@ INLINE void Audio::SampleSources()
     m_state.pcm_lowpass_left += ((s32)m_pcm_lowpass_alpha_q15 * (pcm_left - m_state.pcm_lowpass_left)) >> 15;
     m_state.pcm_lowpass_right += ((s32)m_pcm_lowpass_alpha_q15 * (pcm_right - m_state.pcm_lowpass_right)) >> 15;
 
+#ifndef GT_DISABLE_VGMRECORDER
+    if (m_vgm_recording_enabled)
+        m_vgm_recorder.UpdateTiming();
+#endif
+
     // Keep the samples already buffered for this frame and drop the excess
     if (m_buffer_index + 1 >= GT_AUDIO_BUFFER_SIZE)
     {

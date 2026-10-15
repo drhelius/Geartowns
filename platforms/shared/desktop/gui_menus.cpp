@@ -47,6 +47,7 @@ static bool open_bios = false;
 static bool open_about = false;
 static bool open_load_defaults = false;
 static bool save_screenshot = false;
+static bool save_vgm = false;
 static bool save_video = false;
 static bool choose_savestates_path = false;
 static bool choose_savefiles_path = false;
@@ -59,6 +60,7 @@ static const GuiColor& firmware_unknown_color = cornflower;
 static const GuiColor& service_mcp_http_color = green;
 static const GuiColor& service_mcp_stdio_color = amber;
 static const GuiColor& video_recording_color = red;
+static const GuiColor& vgm_recording_color = red;
 static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
 static const int machine_ram_sizes_mb[] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128 };
@@ -88,6 +90,7 @@ static void menu_debug(void);
 static void menu_about(void);
 static void draw_background_color_menu(const char* label, int theme);
 static void draw_mcp_status(void);
+static void draw_recording_status(const char* status, ImVec4 color, float dot_radius, float dot_width);
 static void file_dialogs(void);
 static bool media_menu_actions_enabled(void);
 static const char* get_current_media_directory_text(void);
@@ -112,6 +115,7 @@ void gui_main_menu(void)
     open_about = false;
     open_load_defaults = false;
     save_screenshot = false;
+    save_vgm = false;
     save_video = false;
     choose_savestates_path = false;
     choose_savefiles_path = false;
@@ -1847,6 +1851,28 @@ static void menu_audio(void)
             ImGui::EndMenu();
         }
 
+#ifndef GT_DISABLE_VGMRECORDER
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("VGM Recorder"))
+        {
+            bool is_recording = emu_is_vgm_recording();
+
+            if (ImGui::MenuItem("Start Recording...", "", false, !is_recording && !emu_is_empty()))
+            {
+                save_vgm = true;
+            }
+
+            if (ImGui::MenuItem("Stop Recording", "", false, is_recording))
+            {
+                emu_stop_vgm_recording();
+                gui_notify(gui_NotificationInfo, ICON_MD_STOP, "VGM recording stopped", NULL, "vgm");
+            }
+
+            ImGui::EndMenu();
+        }
+#endif
+
         ImGui::EndMenu();
     }
 }
@@ -2127,12 +2153,14 @@ static void menu_about(void)
 static void draw_mcp_status(void)
 {
     bool video_recording = emu_is_video_recording();
+    bool vgm_recording = emu_is_vgm_recording();
     bool mcp_running = emu_mcp_is_running();
 
-    if (!video_recording && !mcp_running)
+    if (!video_recording && !vgm_recording && !mcp_running)
         return;
 
-    const char* video_recording_status = "RECORDING";
+    const char* video_recording_status = "REC VIDEO";
+    const char* vgm_recording_status = "REC VGM";
     char mcp_status[128];
     ImVec4 mcp_color = service_mcp_http_color;
 
@@ -2159,6 +2187,12 @@ static void draw_mcp_status(void)
 
     if (video_recording)
         text_width += dot_width + ImGui::CalcTextSize(video_recording_status).x;
+    if (vgm_recording)
+    {
+        if (text_width > 0.0f)
+            text_width += spacing;
+        text_width += dot_width + ImGui::CalcTextSize(vgm_recording_status).x;
+    }
     if (mcp_running)
     {
         if (text_width > 0.0f)
@@ -2177,23 +2211,34 @@ static void draw_mcp_status(void)
     ImGui::AlignTextToFramePadding();
 
     if (video_recording)
-    {
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + dot_width);
-        ImGui::TextColored(video_recording_color, "%s", video_recording_status);
+        draw_recording_status(video_recording_status, video_recording_color, dot_radius, dot_width);
 
-        ImVec2 text_min = ImGui::GetItemRectMin();
-        ImVec2 text_max = ImGui::GetItemRectMax();
-        ImVec2 dot_center = ImVec2(text_min.x - dot_width + dot_radius, (text_min.y + text_max.y) * 0.5f);
-        ImGui::GetWindowDrawList()->AddCircleFilled(dot_center, dot_radius, ImGui::GetColorU32(video_recording_color));
-    }
-
-    if (mcp_running)
+    if (vgm_recording)
     {
         if (video_recording)
             ImGui::SameLine(0.0f, spacing);
 
+        draw_recording_status(vgm_recording_status, vgm_recording_color, dot_radius, dot_width);
+    }
+
+    if (mcp_running)
+    {
+        if (video_recording || vgm_recording)
+            ImGui::SameLine(0.0f, spacing);
+
         ImGui::TextColored(mcp_color, "%s", mcp_status);
     }
+}
+
+static void draw_recording_status(const char* status, ImVec4 color, float dot_radius, float dot_width)
+{
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + dot_width);
+    ImGui::TextColored(color, "%s", status);
+
+    ImVec2 text_min = ImGui::GetItemRectMin();
+    ImVec2 text_max = ImGui::GetItemRectMax();
+    ImVec2 dot_center = ImVec2(text_min.x - dot_width + dot_radius, (text_min.y + text_max.y) * 0.5f);
+    ImGui::GetWindowDrawList()->AddCircleFilled(dot_center, dot_radius, ImGui::GetColorU32(color));
 }
 
 static void file_dialogs(void)
@@ -2214,6 +2259,9 @@ static void file_dialogs(void)
 
     if (save_screenshot)
         gui_file_dialog_save_screenshot();
+
+    if (save_vgm)
+        gui_file_dialog_save_vgm();
 
     if (save_video)
         gui_file_dialog_save_video();

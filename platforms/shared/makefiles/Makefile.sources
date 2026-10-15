@@ -87,6 +87,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/audio/audio.cpp \
     $(SRC_DIR)/audio/rf5c68.cpp \
     $(SRC_DIR)/audio/ym3438.cpp \
+    $(SRC_DIR)/audio/vgm_recorder.cpp \
     $(SRC_DIR)/cdrom/cdrom.cpp \
     $(SRC_DIR)/cdrom/cdrom_audio.cpp \
     $(SRC_DIR)/cdrom/cdrom_chd_file_adapter.cpp \

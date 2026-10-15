@@ -24,6 +24,7 @@
 #include "../common/common.h"
 #include "ym3438.h"
 #include "rf5c68.h"
+#include "vgm_recorder.h"
 
 #define AUDIO_VOLUME_CHIPS 2
 #define AUDIO_VOLUME_CHANNELS 4
@@ -98,6 +99,9 @@ public:
     s32 GetVolumeGain(int chip, int channel) const;
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
+    bool StartVgmRecording(const char* file_path, int clock_rate, const GT_VGM_Metadata& metadata);
+    void StopVgmRecording();
+    bool IsVgmRecording() const;
 
     static u8 ReadWaveWindowCallback(void* device, u32 offset);
     static u8 PeekWaveWindowCallback(void* device, u32 offset);
@@ -118,6 +122,7 @@ private:
     void TracePCM(u8 event, u8 reg, u8 value, u8 channel);
     void TraceMixer(u8 event, u16 port, u8 value);
     void TraceIRQ();
+    void WriteVgmInitialState();
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
 
@@ -154,6 +159,8 @@ private:
     bool m_channel_scopes;
     s16 m_fm_channel_buffer[YM3438_CHANNEL_COUNT][GT_AUDIO_BUFFER_SIZE / 2];
     s16 m_pcm_channel_buffer[RF5C68_CHANNEL_COUNT][GT_AUDIO_BUFFER_SIZE / 2];
+    VgmRecorder m_vgm_recorder;
+    bool m_vgm_recording_enabled;
 };
 
 static const int k_audio_irq = 13;

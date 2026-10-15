@@ -106,6 +106,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Save states with 5 slots and rewind support.
 - Run-ahead support to reduce input latency.
 - Video recording to AVI and screenshots.
+- VGM recorder for the YM3438 and RF5C68 sound chips.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
 - Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation 3, Nintendo GameCube, Nintendo WiiU, Nintendo Switch, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
 - Full debugger with just-in-time disassembler, execute, data, I/O and interrupt breakpoints, code navigation, call stack, debug symbols, automatic labels, memory editor, trace logger, profiler, i386 registers, descriptor tables and paging inspectors, and viewers for CRTC, palettes, framebuffers, sprites, YM3438, RF5C68, CD-ROM, floppy controller and disks, interrupts, timers, DMA, RTC, keyboard and game ports.

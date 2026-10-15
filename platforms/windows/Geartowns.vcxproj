@@ -74,6 +74,7 @@
     <ClCompile Include="..\..\src\video\sprite.cpp" />
     <ClCompile Include="..\..\src\video\video.cpp" />
     <ClCompile Include="..\..\src\audio\ym3438.cpp" />
+    <ClCompile Include="..\..\src\audio\vgm_recorder.cpp" />
     <ClCompile Include="..\shared\dependencies\libchdr\src\libchdr_bitstream.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
     </ClCompile>
@@ -295,6 +296,7 @@
     <ClInclude Include="..\..\src\audio\rf5c68_inline.h" />
     <ClInclude Include="..\..\src\audio\ym3438.h" />
     <ClInclude Include="..\..\src\audio\ym3438_inline.h" />
+    <ClInclude Include="..\..\src\audio\vgm_recorder.h" />
     <ClInclude Include="..\..\src\common\debug_memory.h" />
     <ClInclude Include="..\..\src\common\log.h" />
     <ClInclude Include="..\..\src\media\media.h" />

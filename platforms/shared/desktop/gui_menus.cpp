@@ -702,31 +702,6 @@ static void menu_emulator(void)
 
         ImGui::Separator();
 
-        ImGui::MenuItem("Show Media Info", "", &config_emulator.show_info);
-        ImGui::MenuItem("Show Notifications", "", &config_emulator.show_notifications);
-
-        ImGui::Separator();
-
-#if !defined(GT_DISABLE_DYNAREC)
-        if (ImGui::MenuItem("CPU Dynarec", "", &config_emulator.dynarec))
-            emu_set_dynarec(config_emulator.dynarec);
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("Use dynamic recompilation.");
-            ImGui::Text("Most games will run faster but some games may run slower.");
-            ImGui::Text("The debugger always runs the interpreter.");
-
-            if (config_emulator.dynarec && !emu_is_dynarec_enabled())
-                ImGui::TextColored(red, "Not available on this system, the interpreter is running.");
-
-            ImGui::EndTooltip();
-        }
-#endif
-
-        ImGui::Separator();
-
         ImGui::MenuItem("Power On at Startup", "", &config_emulator.power_on_startup);
         ImGui::MenuItem("Start Paused", "", &config_emulator.start_paused);
         ImGui::MenuItem("Pause When Inactive", "", &config_emulator.pause_when_inactive);
@@ -738,6 +713,11 @@ static void menu_emulator(void)
             else
                 SDL_DisableScreenSaver();
         }
+
+        ImGui::Separator();
+
+        //ImGui::MenuItem("Show Media Info", "", &config_emulator.show_info);
+        ImGui::MenuItem("Show Notifications", "", &config_emulator.show_notifications);
 
         ImGui::Separator();
 
@@ -827,9 +807,9 @@ static void menu_machine(void)
     }
 
     if (report.model == GT_MACHINE_SOURCE_DATABASE)
-        ImGui::TextDisabled("Auto: game database, %s", report.title);
+        ImGui::TextDisabled("Game detected: %s", report.title);
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
-        ImGui::TextDisabled("Auto: not in the game database");
+        ImGui::TextDisabled("Auto: game not detected");
 
     for (int i = 0; i < report.warning_count; i++)
         ImGui::TextColored(machine_warning_color, "%s", report.warnings[i]);
@@ -846,6 +826,27 @@ static void menu_machine(void)
         changed = true;
 
     menu_machine_hardware(core->GetPendingMachineConfig().model);
+
+#if !defined(GT_DISABLE_DYNAREC)
+
+    ImGui::Separator();
+
+    if (ImGui::MenuItem("CPU Dynarec", "", &config_emulator.dynarec))
+        emu_set_dynarec(config_emulator.dynarec);
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Use dynamic recompilation.");
+        ImGui::Text("Most games will run faster but some games may run slower.");
+        ImGui::Text("The debugger always runs the interpreter.");
+
+        if (config_emulator.dynarec && !emu_is_dynarec_enabled())
+            ImGui::TextColored(red, "Not available on this system, the interpreter is running.");
+
+        ImGui::EndTooltip();
+    }
+#endif
 
     ImGui::Separator();
 
@@ -935,8 +936,8 @@ static bool menu_machine_model(void)
     {
         ImGui::BeginTooltip();
         ImGui::Text("It is recommended to leave this option on Auto.");
-        ImGui::Text("Auto picks the machine and RAM the game database names for the game,");
-        ImGui::Text("and the FM Towns (Model 1/2) for other content.");
+        ImGui::Text("Auto picks the machine and RAM from game database");
+        ImGui::Text("or FM Towns (Model 1/2) if not detected.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }
@@ -996,8 +997,9 @@ static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
     else if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
-        ImGui::Text("Auto runs the CPU at the model's original clock.");
-        ImGui::Text("Devices keep their real timing at any speed.");
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Auto picks the CPU clock from game database");
+        ImGui::Text("or runs the CPU at the model's original clock.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }
@@ -1062,8 +1064,9 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
     else if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
-        ImGui::Text("Auto uses the model's original RAM, or the RAM the game database names when Model is on Auto.");
-        ImGui::Text("A size the model doesn't offer uses its next size up, or its largest.");
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Auto picks the RAM from game database");
+        ImGui::Text("or model's original RAM if not detected.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }

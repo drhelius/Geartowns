@@ -318,7 +318,7 @@ static void draw_component(GT_Firmware_Type type, const GT_Firmware_Info& info)
     else if (info.recognized)
         ImGui::TextColored(green, "RECOGNIZED");
     else if (info.loaded)
-        ImGui::TextColored(cornflower, "UNKNOWN");
+        ImGui::TextColored(amber, "UNKNOWN");
     else if (needed)
         ImGui::TextColored(red, "MISSING");
     else

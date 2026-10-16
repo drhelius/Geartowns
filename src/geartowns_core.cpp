@@ -739,6 +739,41 @@ bool GeartownsCore::IsMachineConfigPending()
         (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate);
 }
 
+bool GeartownsCore::GetFloppyNotice(GT_Floppy_Notice& notice)
+{
+    const GT_DB_Entry* entry = m_auto_entry;
+    notice.warning = false;
+    notice.line_count = 0;
+
+    if (!IsValidPointer(entry) || ((entry->flags & GT_GAMEDB_FLOPPY_MASK) == 0))
+        return false;
+
+    for (int i = 0; i < m_machine_config.floppy_drives; i++)
+    {
+        if (GetFloppy(i)->IsInserted())
+            return false;
+    }
+
+    notice.warning = (entry->flags & (GT_GAMEDB_FLOPPY_BOOT | GT_GAMEDB_FLOPPY_REQUIRED |
+        GT_GAMEDB_FLOPPY_PROTECTED)) != 0;
+
+    if ((entry->flags & GT_GAMEDB_FLOPPY_BOOT) != 0)
+        snprintf(notice.lines[notice.line_count++], GT_MACHINE_WARNING_SIZE,
+            "%s boots from its floppy disk, insert it in Floppy 1", entry->title);
+    else if ((entry->flags & GT_GAMEDB_FLOPPY_REQUIRED) != 0)
+        snprintf(notice.lines[notice.line_count++], GT_MACHINE_WARNING_SIZE,
+            "%s needs its floppy disk, insert it in Floppy 1", entry->title);
+    else if ((entry->flags & GT_GAMEDB_FLOPPY_OPTIONAL) != 0)
+        snprintf(notice.lines[notice.line_count++], GT_MACHINE_WARNING_SIZE,
+            "%s came with an optional floppy disk, it runs without it", entry->title);
+
+    if ((entry->flags & GT_GAMEDB_FLOPPY_PROTECTED) != 0)
+        snprintf(notice.lines[notice.line_count++], GT_MACHINE_WARNING_SIZE,
+            "Its original floppy disk is copy protected");
+
+    return true;
+}
+
 bool GeartownsCore::LoadBios(const char* directory_path)
 {
     std::string previous = m_firmware_folder;

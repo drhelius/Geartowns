@@ -874,6 +874,9 @@ static void report_machine(void)
     bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
     u32 ram_mb = config.ram_size / (1024 * 1024);
+    GT_Floppy_Notice floppy;
+    bool floppy_notice = core->GetFloppyNotice(floppy);
+    bool warning = (report.warning_count > 0) || floppy.warning;
     char source[256] = "";
 
     if (report.model == GT_MACHINE_SOURCE_DATABASE)
@@ -888,7 +891,10 @@ static void report_machine(void)
     for (int i = 0; i < report.warning_count; i++)
         log_cb(RETRO_LOG_WARN, "%s\n", report.warnings[i]);
 
-    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0)))
+    for (int i = 0; i < floppy.line_count; i++)
+        log_cb(floppy.warning ? RETRO_LOG_WARN : RETRO_LOG_INFO, "%s\n", floppy.lines[i]);
+
+    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0) && !floppy_notice))
         return;
 
     static char message[1024];
@@ -921,7 +927,13 @@ static void report_machine(void)
         strncat_fit(message, report.warnings[i], sizeof(message));
     }
 
-    show_message(message, 2, report.warning_count > 0 ? RETRO_LOG_WARN : RETRO_LOG_INFO);
+    for (int i = 0; i < floppy.line_count; i++)
+    {
+        strncat_fit(message, ". ", sizeof(message));
+        strncat_fit(message, floppy.lines[i], sizeof(message));
+    }
+
+    show_message(message, 2, warning ? RETRO_LOG_WARN : RETRO_LOG_INFO);
 }
 
 static void show_message(const char* message, unsigned priority, enum retro_log_level level)

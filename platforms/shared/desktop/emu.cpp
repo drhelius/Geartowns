@@ -1882,8 +1882,10 @@ static void notify_machine(void)
     bool model = (report.model == GT_MACHINE_SOURCE_DATABASE) && (config.model != GT_MACHINE_MODEL1_2);
     bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
+    GT_Floppy_Notice floppy;
+    bool floppy_notice = geartowns->GetFloppyNotice(floppy);
 
-    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0)))
+    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0) && !floppy_notice))
         return;
 
     char message[256];
@@ -1920,7 +1922,15 @@ static void notify_machine(void)
         detail += report.warnings[i];
     }
 
-    gui_notify(report.warning_count > 0 ? gui_NotificationWarning : gui_NotificationInfo, ICON_MD_MEMORY, message,
+    for (int i = 0; i < floppy.line_count; i++)
+    {
+        Log("%s", floppy.lines[i]);
+        detail += (detail.empty() ? "" : "\n");
+        detail += floppy.lines[i];
+    }
+
+    bool warning = (report.warning_count > 0) || floppy.warning;
+    gui_notify(warning ? gui_NotificationWarning : gui_NotificationInfo, ICON_MD_MEMORY, message,
         detail.empty() ? NULL : detail.c_str(), "machine");
 }
 

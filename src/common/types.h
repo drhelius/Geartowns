@@ -491,6 +491,13 @@ struct GT_Machine_Report
     char warnings[GT_MACHINE_WARNING_COUNT][GT_MACHINE_WARNING_SIZE];
 };
 
+struct GT_Floppy_Notice
+{
+    bool warning;
+    int line_count;
+    char lines[2][GT_MACHINE_WARNING_SIZE];
+};
+
 struct GT_SaveState_Header
 {
     u32 magic;

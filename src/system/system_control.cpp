@@ -34,6 +34,7 @@ SystemControl::SystemControl()
     InitPointer(m_memory);
     InitPointer(m_trace_logger);
     m_machine_id = 0x0101;
+    m_features = 0;
     memcpy(m_serial_rom, k_system_control_serial_rom, sizeof(m_serial_rom));
     m_state.reset_cause = 0;
     m_state.reset_pending = false;
@@ -65,6 +66,28 @@ void SystemControl::SetMachineID(u16 machine_id)
     m_machine_id = machine_id;
     m_serial_rom[23] = (u8)(machine_id >> 8);
     m_serial_rom[24] = (u8)(machine_id & 0xFF);
+}
+
+void SystemControl::SetSerialRom(const u8* serial_rom)
+{
+    memcpy(m_serial_rom, IsValidPointer(serial_rom) ? serial_rom : k_system_control_serial_rom, sizeof(m_serial_rom));
+    SetMachineID(m_machine_id);
+}
+
+void SystemControl::SetFeatures(u32 features)
+{
+    m_features = features;
+}
+
+bool SystemControl::Decodes(u16 port) const
+{
+    switch (port)
+    {
+        case 0x05E8:
+            return (m_features & GT_MACHINE_FEATURE_RAM_SIZE) != 0;
+        default:
+            return true;
+    }
 }
 
 const u8* SystemControl::GetSerialRom() const
@@ -114,6 +137,8 @@ u8 SystemControl::Read(u16 port)
             return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
+        case 0x05E8:
+            return Peek(port);
         default:
             return 0xFF;
     }
@@ -142,6 +167,8 @@ u8 SystemControl::Peek(u16 port) const
             return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
+        case 0x05E8:
+            return Decodes(port) ? (u8)((m_memory->GetMainRAMSize() >> 20) & 0x1F) : 0xFF;
         default:
             return 0xFF;
     }

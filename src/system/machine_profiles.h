@@ -61,7 +61,7 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
     { "FM Towns 1F/2F", "1f_2f", "1F, 2F, 1H, 2H", "November 1989", false, 0x0201, GT_MACHINE_CPU_80386DX, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_1f, k_machine_ram_1f_2f, 2, 2, false, "fmtownsux" },
     { "FM Towns 10F/20F", "10f_20f", "10F, 20F, 40H, 80H", "October 1990", false, 0x0401, GT_MACHINE_CPU_80386DX, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_10f, k_machine_ram_10f_20f, 2, 2, false, "fmtownsux" },
     { "FM Towns II CX", "cx", "CX10, CX20, CX40, CX100", "November 1991", false, 0x0501, GT_MACHINE_CPU_80386DX, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_cx, k_machine_ram_cx, 2, 2, false, "fmtownsux" },
-    { "FM Towns II UX", "ux", "UX10, UX20, UX40", "November 1991", false, 0x0303, GT_MACHINE_CPU_80386SX, 16000000, GT_MACHINE_MAP_24BIT, k_machine_features_ux, k_machine_ram_ux, 2, 2, false, "fmtownsux" },
+    { "FM Towns II UX", "ux", "UX10, UX20, UX40", "November 1991", true, 0x0303, GT_MACHINE_CPU_80386SX, 16000000, GT_MACHINE_MAP_24BIT, k_machine_features_ux, k_machine_ram_ux, 2, 2, false, "fmtownsux" },
     { "FM Towns II UG", "ug", "UG10, UG20, UG40, UG80", "November 1992", false, 0x0603, GT_MACHINE_CPU_80386SX, 20000000, GT_MACHINE_MAP_24BIT, k_machine_features_ug, k_machine_ram_ux, 2, 2, false, "fmtmarty" },
     { "FM Towns II HG", "hg", "HG20, HG40, HG100", "November 1992", false, 0x0801, GT_MACHINE_CPU_80386DX, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_hg, k_machine_ram_10f_20f, 2, 2, true, "fmtownsftv" },
     { "FM Towns II HR", "hr", "HR20, HR100, HR200", "November 1992", false, 0x0702, GT_MACHINE_CPU_80486SX, 20000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hr, 4, 2, true, "fmtownshr" },
@@ -86,7 +86,7 @@ const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 4, 6, 8, 1
 const GT_Machine_CPU_Info k_machine_cpus[GT_MACHINE_CPU_COUNT] =
 {
     { "80386DX", true, 0x00000300, 32 },
-    { "80386SX", false, 0x00002308, 16 },
+    { "80386SX", true, 0x00002308, 16 },
     { "80486SX", false, 0x00000420, 32 },
     { "80486DX2", false, 0x00000430, 32 },
     { "Pentium", false, 0x00000520, 64 }

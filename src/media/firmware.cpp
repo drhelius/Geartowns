@@ -27,11 +27,12 @@
 
 static const char* const k_firmware_file_names[GT_FIRMWARE_COUNT][FIRMWARE_FILE_NAMES] =
 {
-    { "FMT_SYS.ROM", "FMT_SYS_A.ROM" },
-    { "FMT_DOS.ROM", "FMT_DOS_A.ROM" },
-    { "FMT_FNT.ROM", NULL },
-    { "FMT_DIC.ROM", NULL },
-    { "FMT_F20.ROM", "FMT_F20_A.ROM" }
+    { "FMT_SYS.ROM", "FMT_SYS_A.ROM", NULL },
+    { "FMT_DOS.ROM", "FMT_DOS_A.ROM", NULL },
+    { "FMT_FNT.ROM", NULL, NULL },
+    { "FMT_DIC.ROM", NULL, NULL },
+    { "FMT_F20.ROM", "FMT_F20_A.ROM", NULL },
+    { "MYTOWNS.ROM", "MYTOWNSUX.ROM", "MYTOWNSM2.ROM" }
 };
 
 Firmware::Firmware()
@@ -58,6 +59,7 @@ void Firmware::Unload()
     memset(m_font_rom, 0xFF, sizeof(m_font_rom));
     memset(m_dictionary_rom, 0xFF, sizeof(m_dictionary_rom));
     memset(m_font20_rom, 0xFF, sizeof(m_font20_rom));
+    memset(m_serial_rom, 0xFF, sizeof(m_serial_rom));
     m_ready = false;
 }
 
@@ -137,7 +139,8 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
 
         if (m_info[i].synthetic)
         {
-            Log("Optional firmware not found: %s. Using blank ROM.", GetFileName(type));
+            Log("Optional firmware not found: %s. Using %s.", GetFileName(type),
+                (type == GT_FIRMWARE_SERIAL) ? "a generated serial ROM" : "blank ROM");
         }
         else if (m_info[i].recognized)
         {
@@ -268,6 +271,8 @@ u8* Firmware::GetWritableData(GT_Firmware_Type type)
             return m_dictionary_rom;
         case GT_FIRMWARE_FONT20:
             return m_font20_rom;
+        case GT_FIRMWARE_SERIAL:
+            return m_serial_rom;
         default:
             return NULL;
     }
@@ -287,6 +292,8 @@ const char* Firmware::GetComponentName(GT_Firmware_Type type)
             return "Dictionary ROM";
         case GT_FIRMWARE_FONT20:
             return "20-dot Font ROM";
+        case GT_FIRMWARE_SERIAL:
+            return "Serial ROM";
         default:
             return "Unknown ROM";
     }
@@ -363,6 +370,8 @@ int Firmware::GetExpectedSize(GT_Firmware_Type type)
             return GT_FIRMWARE_DICTIONARY_SIZE;
         case GT_FIRMWARE_FONT20:
             return GT_FIRMWARE_FONT20_SIZE;
+        case GT_FIRMWARE_SERIAL:
+            return GT_FIRMWARE_SERIAL_SIZE;
         default:
             return 0;
     }
@@ -370,7 +379,7 @@ int Firmware::GetExpectedSize(GT_Firmware_Type type)
 
 bool Firmware::IsRequired(GT_Firmware_Type type)
 {
-    return type != GT_FIRMWARE_FONT20;
+    return (type != GT_FIRMWARE_FONT20) && (type != GT_FIRMWARE_SERIAL);
 }
 
 u16 Firmware::GetDatabaseFlag(GT_Firmware_Type type)
@@ -387,6 +396,8 @@ u16 Firmware::GetDatabaseFlag(GT_Firmware_Type type)
             return GT_GAMEDB_FIRMWARE_DICTIONARY;
         case GT_FIRMWARE_FONT20:
             return GT_GAMEDB_FIRMWARE_FONT20;
+        case GT_FIRMWARE_SERIAL:
+            return GT_GAMEDB_FIRMWARE_SERIAL;
         default:
             return GT_GAMEDB_FLAG_NONE;
     }

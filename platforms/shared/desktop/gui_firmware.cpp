@@ -31,7 +31,8 @@
 #include "gui_menus.h"
 #include "utils.h"
 
-static const char* const k_component_labels[GT_FIRMWARE_COUNT] = { "SYSTEM", "OS", "FONT", "DICTIONARY", "FONT 20" };
+static const char* const k_component_labels[GT_FIRMWARE_COUNT] = { "SYSTEM", "OS", "FONT", "DICTIONARY", "FONT 20",
+    "SERIAL" };
 
 static GT_Machine_Model selected_model = GT_MACHINE_MODEL1_2;
 static bool focus_window = false;
@@ -309,7 +310,7 @@ static void draw_component(GT_Firmware_Type type, const GT_Firmware_Info& info)
     draw_grid_label(k_component_labels[type]);
 
     if (info.synthetic)
-        ImGui::TextColored(gray, "BLANK");
+        ImGui::TextColored(gray, "%s", (type == GT_FIRMWARE_SERIAL) ? "GENERATED" : "BLANK");
     else if (info.recognized)
         ImGui::TextColored(green, "RECOGNIZED");
     else if (info.loaded)
@@ -337,11 +338,15 @@ static void draw_component(GT_Firmware_Type type, const GT_Firmware_Info& info)
     if (!hovered)
         return;
 
+    int size = Firmware::GetExpectedSize(type);
+
     ImGui::BeginTooltip();
-    ImGui::Text("%s, %d KB", Firmware::GetComponentName(type), Firmware::GetExpectedSize(type) / 1024);
+    ImGui::Text("%s, %d %s", Firmware::GetComponentName(type), (size >= 1024) ? size / 1024 : size,
+        (size >= 1024) ? "KB" : "bytes");
 
     if (info.synthetic)
-        ImGui::Text("Not present, reads return FFh");
+        ImGui::Text("%s", (type == GT_FIRMWARE_SERIAL) ? "Not present, generated from the machine ID" :
+            "Not present, reads return FFh");
     else if (info.loaded)
     {
         ImGui::Text("%s", info.recognized ? info.database_name : "Custom or unknown ROM");
@@ -370,7 +375,8 @@ static void draw_expected_files(void)
         draw_grid_label(k_component_labels[type]);
         ImGui::TextColored(white, "%s", Firmware::GetFileName(type));
         ImGui::TableNextColumn();
-        ImGui::TextColored(gray, "%d KB%s", Firmware::GetExpectedSize(type) / 1024,
+        int size = Firmware::GetExpectedSize(type);
+        ImGui::TextColored(gray, "%d %s%s", (size >= 1024) ? size / 1024 : size, (size >= 1024) ? "KB" : "bytes",
             Firmware::IsRequired(type) ? "" : ", optional");
     }
 

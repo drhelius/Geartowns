@@ -326,6 +326,8 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x05E0:
             // Undocumented, BIOS writes 01h
+        case 0x05E8:
+            // RAM size
             return m_system_control->Read(port);
         case 0x0600:
             // Keyboard data
@@ -585,6 +587,12 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x05C0:
         case 0x05C2:
         case 0x05E0:
+            value = m_system_control->Peek(port);
+            break;
+        case 0x05E8:
+            if (!m_system_control->Decodes(port))
+                return false;
+
             value = m_system_control->Peek(port);
             break;
         case 0x0600:

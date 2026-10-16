@@ -1611,6 +1611,7 @@ void GeartownsCore::ResolveMachineConfig()
     report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
     report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    report.fallback = auto_model && (config.model != named);
     report.title = IsValidPointer(entry) ? entry->title : NULL;
     report.warning_count = 0;
 
@@ -1702,7 +1703,13 @@ void GeartownsCore::ApplyMachineConfig()
         m_memory->SetMainRAMSize(m_machine_config.ram_size);
 
     if (IsValidPointer(m_system_control))
+    {
+        bool serial_rom = IsValidPointer(m_firmware) && m_firmware->IsReady() &&
+            !m_firmware->GetInfo(GT_FIRMWARE_SERIAL).synthetic;
         m_system_control->SetMachineID(profile.machine_id);
+        m_system_control->SetSerialRom(serial_rom ? m_firmware->GetSerialRom() : NULL);
+        m_system_control->SetFeatures(profile.features);
+    }
 
     if (IsValidPointer(m_i386))
         m_i386->SetResetEDX(k_machine_cpus[m_machine_config.cpu].reset_edx);

@@ -799,8 +799,8 @@ static bool load_bios_folder(const char* folder, bool any_set)
     if (!core->LoadBios(folder))
         return false;
 
-    return any_set ||
-        (core->GetFirmwareSource(core->GetPendingMachineConfig().model).type != GT_FIRMWARE_SOURCE_OTHER_SET);
+    return any_set || (!core->GetPendingMachineReport().fallback &&
+        (core->GetFirmwareSource(core->GetPendingMachineConfig().model).type != GT_FIRMWARE_SOURCE_OTHER_SET));
 }
 
 static bool load_bios(void)

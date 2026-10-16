@@ -51,6 +51,9 @@ public:
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void SetMachineID(u16 machine_id);
+    void SetSerialRom(const u8* serial_rom);
+    void SetFeatures(u32 features);
+    bool Decodes(u16 port) const;
     u8 Read(u16 port);
     u8 Peek(u16 port) const;
     const u8* GetSerialRom() const;
@@ -73,6 +76,7 @@ private:
     Memory* m_memory;
     TraceLogger* m_trace_logger;
     u16 m_machine_id;
+    u32 m_features;
     u8 m_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE];
 };
 

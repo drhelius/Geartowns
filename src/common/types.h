@@ -139,6 +139,7 @@ enum GT_Firmware_Type
     GT_FIRMWARE_FONT,
     GT_FIRMWARE_DICTIONARY,
     GT_FIRMWARE_FONT20,
+    GT_FIRMWARE_SERIAL,
     GT_FIRMWARE_COUNT
 };
 
@@ -482,6 +483,7 @@ struct GT_Machine_Report
     GT_Machine_Source model;
     GT_Machine_Source cpu_clock;
     GT_Machine_Source ram;
+    bool fallback;
     const char* title;
     int warning_count;
     char warnings[GT_MACHINE_WARNING_COUNT][GT_MACHINE_WARNING_SIZE];

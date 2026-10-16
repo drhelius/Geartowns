@@ -62,11 +62,14 @@ static bool firmware_region_listed(GT_Firmware_Type type)
 {
     GeartownsCore* core = emu_get_core();
     Memory* memory = IsValidPointer(core) ? core->GetMemory() : NULL;
+    int id = firmware_region_id(type);
+
+    if (id == 0)
+        return false;
 
     if (!IsValidPointer(memory))
         return true;
 
-    int id = firmware_region_id(type);
     int count = memory->GetDebugRegionCount();
 
     for (int i = 0; i < count; i++)

@@ -27,7 +27,7 @@
 class MediaFile;
 
 #define FIRMWARE_SET_COUNT 5
-#define FIRMWARE_FILE_NAMES 2
+#define FIRMWARE_FILE_NAMES 3
 
 class Firmware
 {
@@ -47,6 +47,7 @@ public:
     const u8* GetFontRom() const;
     const u8* GetDictionaryRom() const;
     const u8* GetFont20Rom() const;
+    const u8* GetSerialRom() const;
 
     static void FindSources(const char* default_folder, const std::string* model_folders,
         GT_Firmware_Source* sources);
@@ -80,6 +81,7 @@ private:
     u8 m_font_rom[GT_FIRMWARE_FONT_SIZE];
     u8 m_dictionary_rom[GT_FIRMWARE_DICTIONARY_SIZE];
     u8 m_font20_rom[GT_FIRMWARE_FONT20_SIZE];
+    u8 m_serial_rom[GT_FIRMWARE_SERIAL_SIZE];
 };
 
 static const GT_Firmware_Set k_firmware_sets[FIRMWARE_SET_COUNT] =

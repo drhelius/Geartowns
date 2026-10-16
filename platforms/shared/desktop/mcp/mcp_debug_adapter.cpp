@@ -413,6 +413,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 }
 
 static const char* const k_mcp_breakpoint_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "linear", "physical", "io" };
+static const char* const k_mcp_machine_sources[] = { "user", "model", "default" };
 static const char* const k_mcp_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] =
 {
     "any", "exception", "hardware", "software"
@@ -2253,17 +2254,30 @@ json DebugAdapter::GetSystemStatus()
     char serial_rom[32];
     gui_debug_system_serial_rom_text(serial_rom, sizeof(serial_rom));
     const GT_Machine_Config& machine = m_core->GetMachineConfig();
+    const GT_Machine_Report& report = m_core->GetMachineReport();
+    const GT_Machine_Settings& settings = m_core->GetMachineSettings();
+    const GT_Machine_Profile& profile = k_machine_profiles[machine.model];
     SystemControl::SystemControl_State* control = m_core->GetSystemControl()->GetState();
     Memory::Memory_State* memory = m_core->GetMemory()->GetState();
+    json model_setting = settings.model < 0 ? json("auto") : json(k_machine_profiles[settings.model].key);
+    json cpu_setting = settings.cpu_mhz <= 0 ? json("auto") : json(settings.cpu_mhz);
+    json ram_setting = settings.ram_mb <= 0 ? json("auto") : json(settings.ram_mb);
 
     return {
         {"machine", {
-            {"model", k_machine_profiles[machine.model].name},
+            {"model", profile.name},
+            {"key", profile.key},
             {"cpu", k_machine_cpus[machine.cpu].name},
             {"cpu_clock_hz", machine.cpu_clock_rate},
             {"ram_kb", machine.ram_size / 1024},
             {"floppy_drives", machine.floppy_drives},
-            {"machine_id", Hex(gui_debug_system_machine_id(), 4)}
+            {"machine_id", Hex(gui_debug_system_machine_id(), 4)},
+            {"memory_map", k_machine_maps[profile.map].name},
+            {"firmware_set", IsValidPointer(profile.firmware_set) ? profile.firmware_set : ""},
+            {"settings", {{"model", model_setting}, {"cpu_speed_mhz", cpu_setting}, {"ram_mb", ram_setting}}},
+            {"source", {{"model", k_mcp_machine_sources[report.model]},
+                {"cpu_clock", k_mcp_machine_sources[report.cpu_clock]}, {"ram", k_mcp_machine_sources[report.ram]}}},
+            {"reset_pending", m_core->IsMachineConfigPending()}
         }},
         {"reset", {
             {"cause", Hex(control->reset_cause, 2)},

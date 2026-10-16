@@ -93,6 +93,7 @@ I386::I386()
     m_external_line = -1;
     InitPointer(m_trace_logger);
     InitPointer(m_profiler);
+    m_reset_edx = 0x00000300;
     m_trace_internal = false;
     m_trace_cpu = false;
     m_profiler_active = false;
@@ -267,7 +268,7 @@ void I386::Reset()
     m_state.cr2 = 0;
     m_state.cr3 = 0;
 
-    m_state.registers[I386_REG_EDX].value = 0x00000300;
+    m_state.registers[I386_REG_EDX].value = m_reset_edx;
     m_state.debug_registers[6] = 0xFFFF1FF0;
     m_state.debug_registers[7] = 0x00000400;
 
@@ -1156,6 +1157,11 @@ void I386::SetTraceEnabled(bool enabled)
     m_trace_internal = enabled;
     m_trace_enabled = m_trace_internal || m_trace_cpu;
     m_trace_count = 0;
+}
+
+void I386::SetResetEDX(u32 edx)
+{
+    m_reset_edx = edx;
 }
 
 void I386::SetTraceLogger(TraceLogger* trace_logger)

@@ -20,6 +20,9 @@
 #include "config_macros.h"
 #include "shader_preset.h"
 
+static void process_machine_model(config_Operation operation, int* model);
+static void process_machine_value(config_Operation operation, const char* key, int* value, const int* values, int count);
+
 static inline void process(config_Operation operation)
 {
     //**************************************
@@ -197,8 +200,10 @@ static inline void process(config_Operation operation)
     CONFIG_INT("Emulator", "VideoRecordingDirOption", config_emulator.video_recordings_dir_option, 0);
     CONFIG_STRING_NOT_EMPTY("Emulator", "VideoRecordingPath", config_emulator.video_recordings_path, config_root_path);
     CONFIG_STRING("Emulator", "LastOpenPath", config_emulator.last_open_path, "");
-    CONFIG_STRING("Emulator", "BiosPath", config_emulator.bios_path, "");
     CONFIG_STRING_ARRAY("Emulator", "RecentROM%d", config_emulator.recent_roms, config_max_recent_roms, "");
+
+    // Firmware
+    CONFIG_STRING("Firmware", "Default", config_emulator.bios_path, "");
 
     // Floppy drives
     CONFIG_BOOL("Floppy", "RememberChanges", config_emulator.floppy_persistence, true);
@@ -210,19 +215,10 @@ static inline void process(config_Operation operation)
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);
     CONFIG_STRING_NOT_EMPTY("Emulator", "MCPHTTPAddress", config_emulator.mcp_http_address, "127.0.0.1");
 
-    // Machine, each model keeps its own options
-    CONFIG_INT_RANGE("Machine", "Model", config_machine.model, GT_MACHINE_MODEL1_2, 0, GT_MACHINE_COUNT - 1);
-    CONFIG_INT_RANGE("Machine", "CustomCPU", config_machine.custom_cpu, GT_MACHINE_CPU_80386DX, 0, GT_MACHINE_CPU_COUNT - 1);
-
-    for (int i = 0; i < GT_MACHINE_COUNT; i++)
-    {
-        const GT_Machine_Profile& profile = k_machine_profiles[i];
-        char section[32];
-        snprintf(section, sizeof(section), "Machine%d", i);
-        CONFIG_INT_RANGE(section, "RAM", config_machine.ram_mb[i], profile.ram_default_mb, profile.ram_min_mb, profile.ram_max_mb);
-        CONFIG_INT_RANGE(section, "FloppyDrives", config_machine.floppy_drives[i], profile.floppy_default, profile.floppy_min, profile.floppy_max);
-        CONFIG_INT_RANGE(section, "CPUSpeed", config_machine.cpu_mhz[i], 0, 0, 1000);
-    }
+    // Machine, Auto or a value, written as the libretro option values
+    process_machine_model(operation, &config_machine.model);
+    process_machine_value(operation, "CPUSpeed", &config_machine.cpu_mhz, k_machine_cpu_speeds_mhz, GT_MACHINE_CPU_SPEED_COUNT);
+    process_machine_value(operation, "RAM", &config_machine.ram_mb, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT);
 
     //**************************************
     // Video
@@ -502,6 +498,49 @@ static void migrate(int file_version)
         if (stored_int_equals("InputKeyboard2", "KeyC", SDL_SCANCODE_5) &&
             stored_int_equals("InputKeyboard2", "KeyX", SDL_SCANCODE_6))
             write_int("InputKeyboard2", "KeyC", SDL_SCANCODE_U);
+    }
+
+    if (file_version < 4)
+    {
+        std::string bios_path;
+
+        if (get_setting("Emulator", "BiosPath", &bios_path))
+            write_string("Firmware", "Default", bios_path);
+
+        config_ini_data["Emulator"].remove("BiosPath");
+        config_ini_data["Machine"].remove("Model");
+        config_ini_data["Machine"].remove("CustomCPU");
+    }
+}
+
+static void process_machine_model(config_Operation operation, int* model)
+{
+    bool known = (*model >= 0) && (*model < GT_MACHINE_COUNT);
+    std::string text = known ? k_machine_profiles[*model].key : "auto";
+    process_string(operation, "Machine", "Model", &text, "auto", false);
+    *model = GT_MACHINE_AUTO;
+
+    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+    {
+        if (text == k_machine_profiles[k_machine_release_order[i]].key)
+            *model = k_machine_release_order[i];
+    }
+}
+
+static void process_machine_value(config_Operation operation, const char* key, int* value, const int* values, int count)
+{
+    std::string text = *value > 0 ? std::to_string(*value) : "auto";
+    int parsed = 0;
+    process_string(operation, "Machine", key, &text, "auto", false);
+    *value = GT_MACHINE_AUTO;
+
+    if (!parse_int_string(text, &parsed))
+        return;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (parsed == values[i])
+            *value = parsed;
     }
 }
 

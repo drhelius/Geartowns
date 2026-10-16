@@ -337,7 +337,6 @@ enum GT_Machine_Model
     GT_MACHINE_MF_FRESH,
     GT_MACHINE_HC,
     GT_MACHINE_MARTY,
-    GT_MACHINE_CUSTOM,
     GT_MACHINE_COUNT
 };
 
@@ -351,27 +350,78 @@ enum GT_Machine_CPU
     GT_MACHINE_CPU_COUNT
 };
 
+enum GT_Machine_Map
+{
+    GT_MACHINE_MAP_32BIT = 0,
+    GT_MACHINE_MAP_24BIT,
+    GT_MACHINE_MAP_MARTY,
+    GT_MACHINE_MAP_COUNT
+};
+
+enum GT_Machine_Feature
+{
+    GT_MACHINE_FEATURE_RAM_SIZE        = 0x0001,
+    GT_MACHINE_FEATURE_FDD_STATUS      = 0x0002,
+    GT_MACHINE_FEATURE_WAIT_1US        = 0x0004,
+    GT_MACHINE_FEATURE_INTERVAL_TIMER2 = 0x0008,
+    GT_MACHINE_FEATURE_MEMORY_WAIT     = 0x0010,
+    GT_MACHINE_FEATURE_NMI_MASK        = 0x0020,
+    GT_MACHINE_FEATURE_JEIDA4          = 0x0040,
+    GT_MACHINE_FEATURE_LSPEED          = 0x0080,
+    GT_MACHINE_FEATURE_POWER_OFF_RESET = 0x0100,
+    GT_MACHINE_FEATURE_SPEED_CONTROL   = 0x0200,
+    GT_MACHINE_FEATURE_UG_REGISTERS    = 0x0400,
+    GT_MACHINE_FEATURE_FREE_RUN_TIMER  = 0x0800,
+    GT_MACHINE_FEATURE_CRT_POWER_OFF   = 0x1000
+};
+
+enum GT_Machine_Source
+{
+    GT_MACHINE_SOURCE_USER = 0,
+    GT_MACHINE_SOURCE_MODEL,
+    GT_MACHINE_SOURCE_DEFAULT
+};
+
 struct GT_Machine_CPU_Info
 {
     const char* name;
     bool emulated;
+    u32 reset_edx;
+    int bus_width;
+};
+
+struct GT_Machine_Memory_Map
+{
+    const char* name;
+    u32 address_mask;
+    u32 vram_two_page;
+    u32 vram_single_page;
+    u32 sprite_ram;
+    u32 os_rom;
+    u32 dictionary_rom;
+    u32 font_rom;
+    u32 cmos;
+    u32 pcm_window;
+    u32 system_rom;
 };
 
 struct GT_Machine_Profile
 {
     const char* name;
-    const char* short_name;
+    const char* key;
     const char* models;
+    const char* released;
     bool emulated;
+    u16 machine_id;
     GT_Machine_CPU cpu;
     u32 cpu_clock_rate;
-    int ram_min_mb;
+    GT_Machine_Map map;
+    u32 features;
+    const u8* ram_sizes_mb;
     int ram_default_mb;
-    int ram_max_mb;
-    int floppy_min;
-    int floppy_default;
-    int floppy_max;
+    int floppy_drives;
     bool three_mode_floppy;
+    const char* firmware_set;
 };
 
 struct GT_Machine_Config
@@ -381,6 +431,20 @@ struct GT_Machine_Config
     u32 ram_size;
     int floppy_drives;
     u32 cpu_clock_rate;
+};
+
+struct GT_Machine_Settings
+{
+    int model;
+    int cpu_mhz;
+    int ram_mb;
+};
+
+struct GT_Machine_Report
+{
+    GT_Machine_Source model;
+    GT_Machine_Source cpu_clock;
+    GT_Machine_Source ram;
 };
 
 struct GT_SaveState_Header

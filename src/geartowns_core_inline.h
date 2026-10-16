@@ -32,6 +32,11 @@ INLINE bool GeartownsCore::IsPoweredOn()
     return m_powered;
 }
 
+INLINE const GT_Machine_Settings& GeartownsCore::GetMachineSettings()
+{
+    return m_machine_settings;
+}
+
 INLINE const GT_Machine_Config& GeartownsCore::GetMachineConfig()
 {
     return m_machine_config;
@@ -40,6 +45,16 @@ INLINE const GT_Machine_Config& GeartownsCore::GetMachineConfig()
 INLINE const GT_Machine_Config& GeartownsCore::GetPendingMachineConfig()
 {
     return m_pending_machine_config;
+}
+
+INLINE const GT_Machine_Report& GeartownsCore::GetMachineReport()
+{
+    return m_machine_report;
+}
+
+INLINE const GT_Machine_Report& GeartownsCore::GetPendingMachineReport()
+{
+    return m_pending_machine_report;
 }
 
 INLINE Firmware* GeartownsCore::GetFirmware()

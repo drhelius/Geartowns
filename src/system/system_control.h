@@ -27,6 +27,8 @@ class StateSerializer;
 class TraceLogger;
 class Memory;
 
+#define SYSTEM_CONTROL_SERIAL_ROM_SIZE 32
+
 class SystemControl
 {
 public:
@@ -48,6 +50,7 @@ public:
     void Init(Memory* memory);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
+    void SetMachineID(u16 machine_id);
     u8 Read(u16 port);
     u8 Peek(u16 port) const;
     const u8* GetSerialRom() const;
@@ -69,6 +72,8 @@ private:
     SystemControl_State m_state;
     Memory* m_memory;
     TraceLogger* m_trace_logger;
+    u16 m_machine_id;
+    u8 m_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE];
 };
 
 static const u8 k_system_control_reset_soft = 0x01;

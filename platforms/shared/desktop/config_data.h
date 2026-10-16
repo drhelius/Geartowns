@@ -24,7 +24,7 @@
 #include <string>
 #include "geartowns.h"
 
-static const int config_version = 3;
+static const int config_version = 4;
 static const int config_minimum_version = 1;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;
@@ -103,10 +103,8 @@ struct config_Emulator
 struct config_Machine
 {
     int model;
-    int custom_cpu;
-    int ram_mb[GT_MACHINE_COUNT];
-    int floppy_drives[GT_MACHINE_COUNT];
-    int cpu_mhz[GT_MACHINE_COUNT];
+    int cpu_mhz;
+    int ram_mb;
 };
 
 struct config_Video

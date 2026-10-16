@@ -739,16 +739,11 @@ void emu_apply_machine_settings(void)
     if (!IsValidPointer(geartowns))
         return;
 
-    GT_Machine_Model model = (GT_Machine_Model)config_machine.model;
-    int cpu_mhz = config_machine.cpu_mhz[model];
-
-    GT_Machine_Config config;
-    config.model = model;
-    config.cpu = model == GT_MACHINE_CUSTOM ? (GT_Machine_CPU)config_machine.custom_cpu : k_machine_profiles[model].cpu;
-    config.ram_size = (u32)config_machine.ram_mb[model] * 1024 * 1024;
-    config.floppy_drives = config_machine.floppy_drives[model];
-    config.cpu_clock_rate = cpu_mhz > 0 ? (u32)cpu_mhz * 1000000 : k_machine_profiles[model].cpu_clock_rate;
-    geartowns->SetMachineConfig(config);
+    GT_Machine_Settings settings;
+    settings.model = config_machine.model;
+    settings.cpu_mhz = config_machine.cpu_mhz;
+    settings.ram_mb = config_machine.ram_mb;
+    geartowns->SetMachineSettings(settings);
 }
 
 void emu_audio_mute(bool mute)
@@ -1766,7 +1761,7 @@ static bool get_cmos_path(int model, char* path, size_t path_size)
     if (!IsValidPointer(directory))
         directory = config_root_path;
 
-    snprintf(file_name, sizeof(file_name), "%s.geartowns.cmos", k_machine_profiles[model].short_name);
+    snprintf(file_name, sizeof(file_name), "%s.geartowns.cmos", k_machine_profiles[model].key);
     return join_path(directory, file_name, path, path_size);
 }
 

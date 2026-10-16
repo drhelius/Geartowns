@@ -64,16 +64,17 @@ static const GuiColor& video_recording_color = red;
 static const GuiColor& vgm_recording_color = red;
 static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
-static const int machine_ram_sizes_mb[] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128 };
-static const int machine_cpu_speeds_mhz[] = { 20, 25, 33, 40, 50, 66, 100 };
 
 static void menu_geartowns(void);
 static void menu_cdrom(void);
 static void menu_emulator(void);
 static void menu_machine(void);
+static bool menu_machine_model(void);
+static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile);
+static bool menu_machine_ram(const GT_Machine_Profile& profile);
+static void menu_machine_hardware(const GT_Machine_Profile& profile);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
-static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model model, bool show_original);
-static int get_machine_ram_options(const GT_Machine_Profile& profile, int* options, int max_options);
+static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
 static float get_combo_width(float text_width);
 static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type);
 static void menu_video(void);
@@ -860,189 +861,44 @@ static void menu_machine(void)
     if (!ImGui::BeginMenu("Machine"))
         return;
 
-    GT_Machine_Model model = (GT_Machine_Model)config_machine.model;
-    const GT_Machine_Profile& profile = k_machine_profiles[model];
-    bool custom = model == GT_MACHINE_CUSTOM;
+    GeartownsCore* core = emu_get_core();
+    bool running = !emu_is_empty();
+    const GT_Machine_Config& machine = running ? core->GetMachineConfig() : core->GetPendingMachineConfig();
+    const GT_Machine_Report& report = running ? core->GetMachineReport() : core->GetPendingMachineReport();
+    const GT_Machine_Profile& profile = k_machine_profiles[core->GetPendingMachineConfig().model];
     bool changed = false;
+    char summary[128];
 
-    if (ImGui::BeginMenu("Model"))
+    get_machine_summary(machine, summary, sizeof(summary));
+    ImGui::TextDisabled("%s", summary);
+
+    if (report.model == GT_MACHINE_SOURCE_DEFAULT)
+        ImGui::TextDisabled("Auto: not in the game database");
+
+    if (running && core->IsMachineConfigPending())
     {
-        float text_width = 0.0f;
-
-        for (int i = 0; i < GT_MACHINE_COUNT; i++)
-            text_width = MAX(text_width, ImGui::CalcTextSize(k_machine_profiles[i].name).x);
-
-        ImGui::PushItemWidth(get_combo_width(text_width));
-
-        if (ImGui::BeginCombo("##machine_model", profile.name))
-        {
-            for (int i = 0; i < GT_MACHINE_COUNT; i++)
-            {
-                if (i == GT_MACHINE_CUSTOM)
-                    ImGui::Separator();
-
-                ImGui::BeginDisabled(!k_machine_profiles[i].emulated);
-
-                if (ImGui::Selectable(k_machine_profiles[i].name, i == model))
-                {
-                    config_machine.model = i;
-                    changed = true;
-                }
-
-                ImGui::EndDisabled();
-
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                    draw_machine_profile_tooltip((GT_Machine_Model)i);
-            }
-
-            ImGui::EndCombo();
-        }
-        else if (ImGui::IsItemHovered())
-            draw_machine_profile_tooltip(model);
-
-        ImGui::PopItemWidth();
-        ImGui::EndMenu();
+        get_machine_summary(core->GetPendingMachineConfig(), summary, sizeof(summary));
+        ImGui::TextDisabled("After reset: %s", summary);
     }
 
     ImGui::Separator();
 
-    if (custom && ImGui::BeginMenu("CPU"))
-    {
-        float text_width = 0.0f;
+    if (menu_machine_model())
+        changed = true;
 
-        for (int i = 0; i < GT_MACHINE_CPU_COUNT; i++)
-            text_width = MAX(text_width, ImGui::CalcTextSize(k_machine_cpus[i].name).x);
+    if (menu_machine_cpu_speed(profile))
+        changed = true;
 
-        ImGui::PushItemWidth(get_combo_width(text_width));
+    if (menu_machine_ram(profile))
+        changed = true;
 
-        if (ImGui::BeginCombo("##machine_cpu", k_machine_cpus[config_machine.custom_cpu].name))
-        {
-            for (int i = 0; i < GT_MACHINE_CPU_COUNT; i++)
-            {
-                ImGui::BeginDisabled(!k_machine_cpus[i].emulated);
-
-                if (ImGui::Selectable(k_machine_cpus[i].name, i == config_machine.custom_cpu))
-                {
-                    config_machine.custom_cpu = i;
-                    changed = true;
-                }
-
-                ImGui::EndDisabled();
-
-                if (!k_machine_cpus[i].emulated && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                    ImGui::SetTooltip("Not emulated yet");
-            }
-
-            ImGui::EndCombo();
-        }
-
-        ImGui::PopItemWidth();
-        ImGui::EndMenu();
-    }
-
-    if (custom && ImGui::BeginMenu("CPU Clock"))
-    {
-        if (draw_machine_cpu_clock_combo("##machine_cpu_clock", model, false))
-            changed = true;
-
-        ImGui::EndMenu();
-    }
-
-    if (ImGui::BeginMenu("Main RAM"))
-    {
-        int options[IM_ARRAYSIZE(machine_ram_sizes_mb) + 2];
-        int count = get_machine_ram_options(profile, options, IM_ARRAYSIZE(options));
-        float text_width = 0.0f;
-        char label[32];
-
-        for (int i = 0; i < count; i++)
-        {
-            snprintf(label, sizeof(label), "%d MB", options[i]);
-            text_width = MAX(text_width, ImGui::CalcTextSize(label).x);
-        }
-
-        snprintf(label, sizeof(label), "%d MB", config_machine.ram_mb[model]);
-        ImGui::PushItemWidth(get_combo_width(text_width));
-
-        if (ImGui::BeginCombo("##machine_ram", label))
-        {
-            for (int i = 0; i < count; i++)
-            {
-                snprintf(label, sizeof(label), "%d MB", options[i]);
-
-                if (ImGui::Selectable(label, options[i] == config_machine.ram_mb[model]))
-                {
-                    config_machine.ram_mb[model] = options[i];
-                    changed = true;
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        ImGui::PopItemWidth();
-        ImGui::EndMenu();
-    }
-
-    if (ImGui::BeginMenu("Floppy Drives"))
-    {
-        char label[8];
-        snprintf(label, sizeof(label), "%d", profile.floppy_max);
-        ImGui::PushItemWidth(get_combo_width(ImGui::CalcTextSize(label).x));
-        snprintf(label, sizeof(label), "%d", config_machine.floppy_drives[model]);
-
-        if (ImGui::BeginCombo("##machine_floppy_drives", label))
-        {
-            for (int i = profile.floppy_min; i <= profile.floppy_max; i++)
-            {
-                snprintf(label, sizeof(label), "%d", i);
-
-                if (ImGui::Selectable(label, i == config_machine.floppy_drives[model]))
-                {
-                    config_machine.floppy_drives[model] = i;
-                    changed = true;
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        ImGui::PopItemWidth();
-        ImGui::EndMenu();
-    }
-
-    ImGui::MenuItem("80387 FPU", NULL, false, false);
-
-    if (ImGui::BeginMenu("Expansion Cards", false))
-        ImGui::EndMenu();
-
-    ImGui::Separator();
-
-    ImGui::TextDisabled("Enhancements");
-
-    if (!custom && ImGui::BeginMenu("CPU Speed"))
-    {
-        if (draw_machine_cpu_clock_combo("##machine_cpu_speed", model, true))
-            changed = true;
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("Runs the CPU faster than the real machine.");
-            ImGui::Text("Devices keep their real timing.");
-            ImGui::EndTooltip();
-        }
-
-        ImGui::EndMenu();
-    }
-
-    ImGui::MenuItem("Fast CD-ROM", NULL, false, false);
+    menu_machine_hardware(profile);
 
     ImGui::Separator();
 
     if (ImGui::BeginMenu("Firmware"))
     {
-        if (ImGui::MenuItem("Choose BIOS Directory..."))
+        if (ImGui::MenuItem("Choose Default Folder..."))
             open_bios = true;
 
         ImGui::PushItemWidth(450);
@@ -1055,7 +911,7 @@ static void menu_machine(void)
 
         ImGui::PopItemWidth();
 
-        Firmware* firmware = emu_get_core()->GetFirmware();
+        Firmware* firmware = core->GetFirmware();
         ImGui::Separator();
 
         if (firmware->IsReady())
@@ -1072,10 +928,241 @@ static void menu_machine(void)
     if (changed)
         emu_apply_machine_settings();
 
-    if (!emu_is_empty() && emu_get_core()->IsMachineConfigPending())
+    if (running && core->IsMachineConfigPending())
     {
         ImGui::Separator();
-        ImGui::TextDisabled("Reset to apply changes");
+
+        if (ImGui::MenuItem("Reset to Apply Changes"))
+            gui_action_reset();
+    }
+
+    ImGui::EndMenu();
+}
+
+static bool menu_machine_model(void)
+{
+    if (!ImGui::BeginMenu("Model"))
+        return false;
+
+    GeartownsCore* core = emu_get_core();
+    bool changed = false;
+    float name_width = 0.0f;
+    float cpu_width = 0.0f;
+    char cpu[32];
+    char preview[64];
+
+    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+    {
+        const GT_Machine_Profile& profile = k_machine_profiles[k_machine_release_order[i]];
+        snprintf(cpu, sizeof(cpu), "%s %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
+        name_width = MAX(name_width, ImGui::CalcTextSize(profile.name).x);
+        cpu_width = MAX(cpu_width, ImGui::CalcTextSize(cpu).x);
+    }
+
+    float cpu_column = name_width + ImGui::GetStyle().ItemSpacing.x * 4.0f;
+
+    if (config_machine.model == GT_MACHINE_AUTO)
+        snprintf(preview, sizeof(preview), "Auto (%s)", k_machine_profiles[core->GetPendingMachineConfig().model].name);
+    else
+        snprintf(preview, sizeof(preview), "%s", k_machine_profiles[config_machine.model].name);
+
+    ImGui::PushItemWidth(get_combo_width(MAX(cpu_column + cpu_width, ImGui::CalcTextSize(preview).x)));
+
+    if (ImGui::BeginCombo("##machine_model", preview))
+    {
+        if (ImGui::Selectable(config_machine.model == GT_MACHINE_AUTO ? preview : "Auto",
+            config_machine.model == GT_MACHINE_AUTO))
+        {
+            config_machine.model = GT_MACHINE_AUTO;
+            changed = true;
+        }
+
+        ImGui::Separator();
+
+        for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+        {
+            GT_Machine_Model model = k_machine_release_order[i];
+            const GT_Machine_Profile& profile = k_machine_profiles[model];
+            snprintf(cpu, sizeof(cpu), "%s %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
+
+            ImGui::BeginDisabled(!profile.emulated);
+
+            if (ImGui::Selectable(profile.name, config_machine.model == model))
+            {
+                config_machine.model = model;
+                changed = true;
+            }
+
+            bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+            ImGui::SameLine(cpu_column);
+            ImGui::TextDisabled("%s", cpu);
+            ImGui::EndDisabled();
+
+            if (hovered)
+                draw_machine_profile_tooltip(model);
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Reset the emulator to apply changes.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+    return changed;
+}
+
+static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
+{
+    if (!ImGui::BeginMenu("CPU Speed"))
+        return false;
+
+    bool changed = false;
+    int original = (int)(profile.cpu_clock_rate / 1000000);
+    float text_width = 0.0f;
+    char labels[GT_MACHINE_CPU_SPEED_COUNT][32];
+    char auto_label[32];
+    snprintf(auto_label, sizeof(auto_label), "Auto (%d MHz)", original);
+    const char* preview = auto_label;
+
+    for (int i = 0; i < GT_MACHINE_CPU_SPEED_COUNT; i++)
+    {
+        int speed = k_machine_cpu_speeds_mhz[i];
+        snprintf(labels[i], sizeof(labels[i]), speed == original ? "%d MHz (Original)" : "%d MHz", speed);
+        text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
+
+        if (speed == config_machine.cpu_mhz)
+            preview = labels[i];
+    }
+
+    ImGui::PushItemWidth(get_combo_width(text_width));
+
+    if (ImGui::BeginCombo("##machine_cpu_speed", preview))
+    {
+        if (ImGui::Selectable(auto_label, config_machine.cpu_mhz == GT_MACHINE_AUTO))
+        {
+            config_machine.cpu_mhz = GT_MACHINE_AUTO;
+            changed = true;
+        }
+
+        ImGui::Separator();
+
+        for (int i = 0; i < GT_MACHINE_CPU_SPEED_COUNT; i++)
+        {
+            if (ImGui::Selectable(labels[i], config_machine.cpu_mhz == k_machine_cpu_speeds_mhz[i]))
+            {
+                config_machine.cpu_mhz = k_machine_cpu_speeds_mhz[i];
+                changed = true;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Auto runs the CPU at the model's original clock.");
+        ImGui::Text("Devices keep their real timing at any speed.");
+        ImGui::Text("Reset the emulator to apply changes.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+    return changed;
+}
+
+static bool menu_machine_ram(const GT_Machine_Profile& profile)
+{
+    if (!ImGui::BeginMenu("Main RAM"))
+        return false;
+
+    GeartownsCore* core = emu_get_core();
+    bool changed = false;
+    int in_use = (int)(core->GetPendingMachineConfig().ram_size / (1024 * 1024));
+    float text_width = 0.0f;
+    char labels[GT_MACHINE_RAM_SIZE_COUNT][32];
+    char auto_label[32];
+    char preview[96];
+    snprintf(auto_label, sizeof(auto_label), "Auto (%d MB)",
+        config_machine.ram_mb == GT_MACHINE_AUTO ? in_use : profile.ram_default_mb);
+    snprintf(preview, sizeof(preview), "%s", auto_label);
+
+    for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
+    {
+        int size = k_machine_ram_sizes_mb[i];
+        snprintf(labels[i], sizeof(labels[i]), size == profile.ram_default_mb ? "%d MB (Original)" : "%d MB", size);
+        text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
+
+        if (size == config_machine.ram_mb)
+            snprintf(preview, sizeof(preview), "%s", labels[i]);
+    }
+
+    if ((config_machine.ram_mb != GT_MACHINE_AUTO) && (config_machine.ram_mb != in_use))
+        snprintf(preview, sizeof(preview), "%d MB, %d MB on the %s", config_machine.ram_mb, in_use, profile.name);
+
+    ImGui::PushItemWidth(get_combo_width(MAX(text_width, ImGui::CalcTextSize(preview).x)));
+
+    if (ImGui::BeginCombo("##machine_ram", preview))
+    {
+        if (ImGui::Selectable(auto_label, config_machine.ram_mb == GT_MACHINE_AUTO))
+        {
+            config_machine.ram_mb = GT_MACHINE_AUTO;
+            changed = true;
+        }
+
+        ImGui::Separator();
+
+        for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
+        {
+            if (ImGui::Selectable(labels[i], config_machine.ram_mb == k_machine_ram_sizes_mb[i]))
+            {
+                config_machine.ram_mb = k_machine_ram_sizes_mb[i];
+                changed = true;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Auto uses the model's original RAM.");
+        ImGui::Text("A size the model doesn't offer uses its next size up, or its largest.");
+        ImGui::Text("Reset the emulator to apply changes.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+    return changed;
+}
+
+static void menu_machine_hardware(const GT_Machine_Profile& profile)
+{
+    if (!ImGui::BeginMenu("Hardware"))
+        return;
+
+    ImGui::TextDisabled("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
+    ImGui::TextDisabled("Memory map: %s", k_machine_maps[profile.map].name);
+    ImGui::TextDisabled("Machine ID: %04Xh", profile.machine_id);
+    ImGui::TextDisabled("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
+    ImGui::TextDisabled("Firmware set: %s", IsValidPointer(profile.firmware_set) ? profile.firmware_set : "none");
+
+    if (profile.features == 0)
+        ImGui::TextDisabled("Towns II registers: none");
+    else
+        ImGui::TextDisabled("Towns II registers:");
+
+    for (int i = 0; i < GT_MACHINE_FEATURE_COUNT; i++)
+    {
+        if ((profile.features & (1 << i)) != 0)
+            ImGui::TextDisabled("  %s", k_machine_feature_names[i]);
     }
 
     ImGui::EndMenu();
@@ -1084,20 +1171,21 @@ static void menu_machine(void)
 static void draw_machine_profile_tooltip(GT_Machine_Model model)
 {
     const GT_Machine_Profile& profile = k_machine_profiles[model];
+    char ram[96] = "";
+
+    for (int i = 0; profile.ram_sizes_mb[i] != 0; i++)
+    {
+        char size[8];
+        snprintf(size, sizeof(size), i == 0 ? "%d" : ", %d", profile.ram_sizes_mb[i]);
+        strncat_fit(ram, size, sizeof(ram));
+    }
+
     ImGui::BeginTooltip();
-
-    if (model == GT_MACHINE_CUSTOM)
-        ImGui::Text("Hardware chosen manually, on the %s", profile.models);
-    else
-        ImGui::Text("Models: %s", profile.models);
-
+    ImGui::Text("Models: %s", profile.models);
+    ImGui::Text("Released: %s", profile.released);
     ImGui::Text("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
-    ImGui::Text("RAM: %d to %d MB", profile.ram_min_mb, profile.ram_max_mb);
-
-    if (profile.floppy_min == profile.floppy_max)
-        ImGui::Text("Floppy drives: %d", profile.floppy_max);
-    else
-        ImGui::Text("Floppy drives: %d to %d", profile.floppy_min, profile.floppy_max);
+    ImGui::Text("RAM: %s MB", ram);
+    ImGui::Text("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
 
     if (!profile.emulated)
     {
@@ -1108,81 +1196,15 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
     ImGui::EndTooltip();
 }
 
-static bool draw_machine_cpu_clock_combo(const char* label, GT_Machine_Model model, bool show_original)
+static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size)
 {
-    int original_mhz = (int)(k_machine_profiles[model].cpu_clock_rate / 1000000);
-    int cpu_mhz = config_machine.cpu_mhz[model] > original_mhz ? config_machine.cpu_mhz[model] : 0;
-    bool changed = false;
-    char original[32];
-    char text[32];
-
-    if (show_original)
-        snprintf(original, sizeof(original), "Original (%d MHz)", original_mhz);
-    else
-        snprintf(original, sizeof(original), "%d MHz", original_mhz);
-
-    float text_width = ImGui::CalcTextSize(original).x;
-
-    for (int i = 0; i < IM_ARRAYSIZE(machine_cpu_speeds_mhz); i++)
-    {
-        snprintf(text, sizeof(text), "%d MHz", machine_cpu_speeds_mhz[i]);
-        text_width = MAX(text_width, ImGui::CalcTextSize(text).x);
-    }
-
-    snprintf(text, sizeof(text), "%d MHz", cpu_mhz);
-    ImGui::PushItemWidth(get_combo_width(text_width));
-
-    if (ImGui::BeginCombo(label, cpu_mhz == 0 ? original : text))
-    {
-        if (ImGui::Selectable(original, cpu_mhz == 0))
-        {
-            config_machine.cpu_mhz[model] = 0;
-            changed = true;
-        }
-
-        for (int i = 0; i < IM_ARRAYSIZE(machine_cpu_speeds_mhz); i++)
-        {
-            if (machine_cpu_speeds_mhz[i] <= original_mhz)
-                continue;
-
-            snprintf(text, sizeof(text), "%d MHz", machine_cpu_speeds_mhz[i]);
-
-            if (ImGui::Selectable(text, cpu_mhz == machine_cpu_speeds_mhz[i]))
-            {
-                config_machine.cpu_mhz[model] = machine_cpu_speeds_mhz[i];
-                changed = true;
-            }
-        }
-
-        ImGui::EndCombo();
-    }
-
-    ImGui::PopItemWidth();
-    return changed;
+    snprintf(text, text_size, "%s · %s %u MHz · %u MB", k_machine_profiles[config.model].name,
+        k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, config.ram_size / (1024 * 1024));
 }
 
 static float get_combo_width(float text_width)
 {
     return text_width + (ImGui::GetStyle().FramePadding.x * 2.0f) + ImGui::GetFrameHeight();
-}
-
-static int get_machine_ram_options(const GT_Machine_Profile& profile, int* options, int max_options)
-{
-    int count = 0;
-    options[count++] = profile.ram_min_mb;
-
-    for (int i = 0; (i < IM_ARRAYSIZE(machine_ram_sizes_mb)) && (count < max_options); i++)
-    {
-        int size = machine_ram_sizes_mb[i];
-
-        if ((size > profile.ram_min_mb) && (size < profile.ram_max_mb))
-            options[count++] = size;
-    }
-
-    if ((profile.ram_max_mb > profile.ram_min_mb) && (count < max_options))
-        options[count++] = profile.ram_max_mb;
-
-    return count;
 }
 
 static void menu_video(void)

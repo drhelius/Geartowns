@@ -81,9 +81,12 @@ public:
     bool PowerOn();
     void PowerOff();
     bool IsPoweredOn();
-    void SetMachineConfig(const GT_Machine_Config& config);
+    void SetMachineSettings(const GT_Machine_Settings& settings);
+    const GT_Machine_Settings& GetMachineSettings();
     const GT_Machine_Config& GetMachineConfig();
     const GT_Machine_Config& GetPendingMachineConfig();
+    const GT_Machine_Report& GetMachineReport();
+    const GT_Machine_Report& GetPendingMachineReport();
     bool IsMachineConfigPending();
     bool LoadBios(const char* directory_path);
     void UnloadBios();
@@ -162,6 +165,7 @@ private:
     void DispatchEvents();
     void Reset();
     void ResetCPU();
+    void ResolveMachineConfig();
     void ApplyMachineConfig();
     void InitMemoryMap();
 
@@ -195,8 +199,11 @@ private:
     MSM58321* m_rtc;
     UPD71071* m_dma;
 
+    GT_Machine_Settings m_machine_settings;
     GT_Machine_Config m_machine_config;
     GT_Machine_Config m_pending_machine_config;
+    GT_Machine_Report m_machine_report;
+    GT_Machine_Report m_pending_machine_report;
     bool m_powered;
     bool m_paused;
     GT_Debug_Step m_debug_step;

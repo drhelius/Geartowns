@@ -84,9 +84,7 @@ static u8* frame_buffer;
 static s16 audio_buf[GT_AUDIO_BUFFER_SIZE];
 static int audio_sample_count = 0;
 static size_t savestate_size = 0;
-static int machine_ram_mb = 2;
-static int machine_cpu_mhz = 16;
-static int machine_floppy_drives = 2;
+static GT_Machine_Settings machine_settings = { GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
 #if !defined(GT_DISABLE_DYNAREC)
 static int dynarec_option = -1;
 #endif
@@ -412,9 +410,9 @@ void retro_deinit(void)
     libretro_supports_dupe = false;
     libretro_supports_keyboard = false;
     audio_sample_count = 0;
-    machine_ram_mb = 2;
-    machine_cpu_mhz = 16;
-    machine_floppy_drives = 2;
+    machine_settings.model = GT_MACHINE_AUTO;
+    machine_settings.cpu_mhz = GT_MACHINE_AUTO;
+    machine_settings.ram_mb = GT_MACHINE_AUTO;
 #if !defined(GT_DISABLE_DYNAREC)
     dynarec_option = -1;
 #endif
@@ -886,16 +884,12 @@ static void check_bios(void)
 
 static void set_machine_config(void)
 {
-    GT_Machine_Config config = core->GetPendingMachineConfig();
-    config.model = GT_MACHINE_MODEL1_2;
-    config.ram_size = (u32)machine_ram_mb * 1024 * 1024;
-    config.floppy_drives = machine_floppy_drives;
-    config.cpu_clock_rate = (u32)machine_cpu_mhz * 1000000;
-    core->SetMachineConfig(config);
+    core->SetMachineSettings(machine_settings);
 
     const GT_Machine_Config& pending = core->GetPendingMachineConfig();
-    log_cb(RETRO_LOG_INFO, "Machine: %s, %u MB RAM, %u MHz, %d floppy drives\n", k_machine_profiles[pending.model].name,
-        pending.ram_size / (1024 * 1024), pending.cpu_clock_rate / 1000000, pending.floppy_drives);
+    log_cb(RETRO_LOG_INFO, "Machine: %s, %u MB RAM, %u MHz, %d floppy drives%s\n", k_machine_profiles[pending.model].name,
+        pending.ram_size / (1024 * 1024), pending.cpu_clock_rate / 1000000, pending.floppy_drives,
+        machine_settings.model == GT_MACHINE_AUTO ? " (Auto)" : "");
 
     if (floppy_drive == 1 && pending.floppy_drives < 2)
         log_cb(RETRO_LOG_WARN, "The machine has one floppy drive, disk control uses Floppy 1\n");
@@ -1727,20 +1721,34 @@ static void check_variables(void)
         save_disk = (strcmp(var.value, "Enabled") == 0);
     }
 
-    var.key = "geartowns_ram_size";
+    var.key = "geartowns_model";
     var.value = NULL;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
-        machine_ram_mb = CLAMP(atoi(var.value), 1, 6);
+        machine_settings.model = GT_MACHINE_AUTO;
+
+        for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+        {
+            if (strcmp(var.value, k_machine_profiles[k_machine_release_order[i]].key) == 0)
+                machine_settings.model = k_machine_release_order[i];
+        }
     }
 
-    var.key = "geartowns_cpu_speed";
+    var.key = "geartowns_cpu_clock";
     var.value = NULL;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
-        machine_cpu_mhz = CLAMP(atoi(var.value), 16, 100);
+        machine_settings.cpu_mhz = strcmp(var.value, "auto") == 0 ? GT_MACHINE_AUTO : atoi(var.value);
+    }
+
+    var.key = "geartowns_main_ram";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        machine_settings.ram_mb = strcmp(var.value, "auto") == 0 ? GT_MACHINE_AUTO : atoi(var.value);
     }
 
     var.key = "geartowns_rtc";
@@ -1749,14 +1757,6 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetRTC()->SetStartTime(strcmp(var.value, "Fixed date") == 0 ? RTC_FIXED_DATE : 0);
-    }
-
-    var.key = "geartowns_floppy_drives";
-    var.value = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-    {
-        machine_floppy_drives = CLAMP(atoi(var.value), 1, 2);
     }
 
     var.key = "geartowns_cmos";
@@ -2701,7 +2701,7 @@ static void cmos_load(void)
 {
     Memory* memory = core->GetMemory();
     std::vector<u8> data;
-    std::string name(k_machine_profiles[core->GetPendingMachineConfig().model].short_name);
+    std::string name(k_machine_profiles[core->GetPendingMachineConfig().model].key);
 
     memory->ResetCMOS();
     cmos_shared_active = cmos_shared;

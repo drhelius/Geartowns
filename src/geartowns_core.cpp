@@ -71,12 +71,12 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_dma);
     InitPointer(m_frame_buffer);
 
-    m_machine_config.model = GT_MACHINE_MODEL1_2;
-    m_machine_config.cpu = GT_MACHINE_CPU_80386DX;
-    m_machine_config.ram_size = GT_MAIN_RAM_SIZE;
-    m_machine_config.floppy_drives = 2;
-    m_machine_config.cpu_clock_rate = k_machine_profiles[GT_MACHINE_MODEL1_2].cpu_clock_rate;
-    m_pending_machine_config = m_machine_config;
+    m_machine_settings.model = GT_MACHINE_MODEL1_2;
+    m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
+    m_machine_settings.ram_mb = GT_MACHINE_AUTO;
+    ResolveMachineConfig();
+    m_machine_config = m_pending_machine_config;
+    m_machine_report = m_pending_machine_report;
     m_powered = false;
     m_paused = false;
     m_debug_step = GT_DEBUG_STEP_NONE;
@@ -704,10 +704,10 @@ void GeartownsCore::PowerOff()
 }
 
 // The new hardware takes effect on the next reset
-void GeartownsCore::SetMachineConfig(const GT_Machine_Config& config)
+void GeartownsCore::SetMachineSettings(const GT_Machine_Settings& settings)
 {
-    m_pending_machine_config = config;
-    SanitizeMachineConfig(m_pending_machine_config);
+    m_machine_settings = settings;
+    ResolveMachineConfig();
 }
 
 bool GeartownsCore::IsMachineConfigPending()
@@ -1394,6 +1394,7 @@ void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Med
     G_SERIALIZE(serializer, media.cdrom_crc);
 }
 
+// Unknown or unemulated models run as Model 1/2, RAM goes to the model's next size up or its largest
 void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
 {
     bool known_model = ((int)config.model >= 0) && ((int)config.model < GT_MACHINE_COUNT);
@@ -1402,19 +1403,20 @@ void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
         config.model = GT_MACHINE_MODEL1_2;
 
     const GT_Machine_Profile& profile = k_machine_profiles[config.model];
-    u32 megabyte = 1024 * 1024;
+    const u8* sizes = profile.ram_sizes_mb;
+    u64 megabyte = 1024 * 1024;
+    u64 ram_mb = config.ram_size == 0 ? (u64)profile.ram_default_mb : ((u64)config.ram_size + megabyte - 1) / megabyte;
+    int size = 0;
 
-    if (config.model != GT_MACHINE_CUSTOM)
-        config.cpu = profile.cpu;
+    while ((sizes[size + 1] != 0) && (sizes[size] < ram_mb))
+        size++;
 
-    bool known_cpu = ((int)config.cpu >= 0) && ((int)config.cpu < GT_MACHINE_CPU_COUNT);
+    config.cpu = profile.cpu;
+    config.ram_size = (u32)(sizes[size] * megabyte);
+    config.floppy_drives = profile.floppy_drives;
 
-    if (!known_cpu || !k_machine_cpus[config.cpu].emulated)
-        config.cpu = GT_MACHINE_CPU_80386DX;
-
-    config.ram_size = CLAMP(config.ram_size, profile.ram_min_mb * megabyte, profile.ram_max_mb * megabyte);
-    config.floppy_drives = CLAMP(config.floppy_drives, profile.floppy_min, profile.floppy_max);
-    config.cpu_clock_rate = MAX(config.cpu_clock_rate, profile.cpu_clock_rate);
+    if (config.cpu_clock_rate == 0)
+        config.cpu_clock_rate = profile.cpu_clock_rate;
 }
 
 std::string GeartownsCore::GetSaveStatePath(const char* path, int index)
@@ -1545,9 +1547,27 @@ void GeartownsCore::ResetCPU()
     m_i386->Reset();
 }
 
+void GeartownsCore::ResolveMachineConfig()
+{
+    bool auto_model = m_machine_settings.model < 0;
+    bool auto_cpu = m_machine_settings.cpu_mhz <= 0;
+    bool auto_ram = m_machine_settings.ram_mb <= 0;
+
+    m_pending_machine_config.model = auto_model ? GT_MACHINE_MODEL1_2 : (GT_Machine_Model)m_machine_settings.model;
+    m_pending_machine_config.cpu_clock_rate = auto_cpu ? 0 : (u32)m_machine_settings.cpu_mhz * 1000000;
+    m_pending_machine_config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * 1024 * 1024;
+    SanitizeMachineConfig(m_pending_machine_config);
+
+    m_pending_machine_report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
+    m_pending_machine_report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    m_pending_machine_report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+}
+
 void GeartownsCore::ApplyMachineConfig()
 {
     m_machine_config = m_pending_machine_config;
+    m_machine_report = m_pending_machine_report;
+    const GT_Machine_Profile& profile = k_machine_profiles[m_machine_config.model];
 
     if (IsValidPointer(m_scheduler))
         m_scheduler->SetCPUClockRate(m_machine_config.cpu_clock_rate);
@@ -1558,10 +1578,16 @@ void GeartownsCore::ApplyMachineConfig()
     if (IsValidPointer(m_memory))
         m_memory->SetMainRAMSize(m_machine_config.ram_size);
 
+    if (IsValidPointer(m_system_control))
+        m_system_control->SetMachineID(profile.machine_id);
+
+    if (IsValidPointer(m_i386))
+        m_i386->SetResetEDX(k_machine_cpus[m_machine_config.cpu].reset_edx);
+
     if (IsValidPointer(m_fdc))
     {
         m_fdc->SetInternalDrives(m_machine_config.floppy_drives);
-        m_fdc->SetThreeMode(k_machine_profiles[m_machine_config.model].three_mode_floppy);
+        m_fdc->SetThreeMode(profile.three_mode_floppy);
     }
 }
 
@@ -1573,12 +1599,13 @@ void GeartownsCore::InitMemoryMap()
     u32 rom_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED;
     u32 ram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_EXECUTABLE |
         GT_DEBUG_REGION_MAPPED;
+    const GT_Machine_Memory_Map& map = k_machine_maps[k_machine_profiles[m_machine_config.model].map];
     const u8* system_rom = m_firmware->GetSystemRom();
     const u8* boot_rom = system_rom + GT_FIRMWARE_SYSTEM_SIZE - GT_FIRMWARE_SYSTEM_BOOT_SIZE;
     u8* main_ram = m_memory->GetMainRAM();
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM, "System ROM", system_rom, NULL,
-        GT_FIRMWARE_SYSTEM_SIZE, 0xFFFC0000U, rom_flags))
+        GT_FIRMWARE_SYSTEM_SIZE, map.system_rom, rom_flags))
         Error("Unable to map the system ROM");
 
     u32 boot_rom_flags = (rom_flags & ~GT_DEBUG_REGION_MAPPED) | GT_DEBUG_REGION_OVERLAY;
@@ -1601,20 +1628,20 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to register VRAM");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM Two-Page", VIDEO_VRAM_SIZE,
-        0x80000000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPageCallback,
+        map.vram_two_page, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMTwoPageCallback,
         Video::WriteVRAMTwoPageCallback, Video::PeekVRAMTwoPageCallback) ||
         !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_VRAM_TWO_PAGE, Video::WriteVRAMTwoPage16Callback,
         Video::WriteVRAMTwoPage32Callback))
         Error("Unable to map the two-page VRAM view");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, "VRAM Single-Page", VIDEO_VRAM_SIZE,
-        0x80100000U, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePageCallback,
+        map.vram_single_page, vram_flags | GT_DEBUG_REGION_MAPPED, m_video, Video::ReadVRAMSinglePageCallback,
         Video::WriteVRAMSinglePageCallback, Video::PeekVRAMSinglePageCallback) ||
         !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, Video::WriteVRAMSinglePage16Callback,
         Video::WriteVRAMSinglePage32Callback))
         Error("Unable to map the single-page VRAM view");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", VIDEO_SPRITE_RAM_SIZE, 0x81000000U,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", VIDEO_SPRITE_RAM_SIZE, map.sprite_ram,
         sprite_ram_flags, m_video, Video::ReadSpriteRAMCallback, Video::WriteSpriteRAMCallback, NULL) ||
         !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_SPRITE_RAM, Video::WriteSpriteRAM16Callback,
         Video::WriteSpriteRAM32Callback) ||
@@ -1624,24 +1651,24 @@ void GeartownsCore::InitMemoryMap()
     u32 data_rom_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED;
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_OS_ROM, "OS ROM", m_firmware->GetOsRom(), NULL,
-        GT_FIRMWARE_OS_SIZE, 0xC2000000U, rom_flags))
+        GT_FIRMWARE_OS_SIZE, map.os_rom, rom_flags))
         Error("Unable to map the OS ROM");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM, "Dictionary ROM", m_firmware->GetDictionaryRom(),
-        NULL, GT_FIRMWARE_DICTIONARY_SIZE, 0xC2080000U, data_rom_flags))
+        NULL, GT_FIRMWARE_DICTIONARY_SIZE, map.dictionary_rom, data_rom_flags))
         Error("Unable to map the dictionary ROM");
 
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_FONT_ROM, "Font ROM", m_firmware->GetFontRom(), NULL,
-        GT_FIRMWARE_FONT_SIZE, 0xC2100000U, data_rom_flags))
+        GT_FIRMWARE_FONT_SIZE, map.font_rom, data_rom_flags))
         Error("Unable to map the font ROM");
 
     u8* cmos = m_memory->GetCMOS();
 
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_CMOS, "CMOS RAM", cmos, cmos, GT_CMOS_SIZE, 0xC2140000U,
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_CMOS, "CMOS RAM", cmos, cmos, GT_CMOS_SIZE, map.cmos,
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED))
         Error("Unable to map CMOS RAM");
 
-    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM Bank Window", 0x1000, 0xC2200000U,
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_PCM_WINDOW, "PCM Bank Window", 0x1000, map.pcm_window,
         GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_MAPPED | GT_DEBUG_REGION_MMIO |
         GT_DEBUG_REGION_AUDIO, m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback,
         Audio::PeekWaveWindowCallback))

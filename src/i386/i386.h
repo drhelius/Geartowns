@@ -429,6 +429,7 @@ public:
     ~I386();
     void Init(Memory* memory, IO* io = NULL);
     void Reset();
+    void SetResetEDX(u32 edx);
     u32 RunInstruction(GT_Bus_Access_Context& context);
     I386_Run_Result GetStepInfo() const;
     I386_Run_Result RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
@@ -1336,6 +1337,7 @@ private:
     I386_Exception_Info m_last_exception;
     TraceLogger* m_trace_logger;
     Profiler* m_profiler;
+    u32 m_reset_edx;
     bool m_trace_internal;
     bool m_trace_cpu;
     bool m_profiler_active;

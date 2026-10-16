@@ -22,8 +22,8 @@
 #include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
-// 256 bits, bit 255 first: a zero nibble, "FUJITSU", reserved ones, model 0101h and a zero serial number
-static const u8 k_system_control_serial_rom[32] =
+// 256 bits, bit 255 first: a zero nibble, "FUJITSU", reserved ones, the machine ID and a zero serial number
+static const u8 k_system_control_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE] =
 {
     0x04, 0x65, 0x54, 0xA4, 0x95, 0x45, 0x35, 0x5F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
@@ -33,6 +33,8 @@ SystemControl::SystemControl()
 {
     InitPointer(m_memory);
     InitPointer(m_trace_logger);
+    m_machine_id = 0x0101;
+    memcpy(m_serial_rom, k_system_control_serial_rom, sizeof(m_serial_rom));
     m_state.reset_cause = 0;
     m_state.reset_pending = false;
     m_state.write_protect = false;
@@ -58,9 +60,16 @@ void SystemControl::SetTraceLogger(TraceLogger* trace_logger)
     m_trace_logger = trace_logger;
 }
 
+void SystemControl::SetMachineID(u16 machine_id)
+{
+    m_machine_id = machine_id;
+    m_serial_rom[23] = (u8)(machine_id >> 8);
+    m_serial_rom[24] = (u8)(machine_id & 0xFF);
+}
+
 const u8* SystemControl::GetSerialRom() const
 {
-    return k_system_control_serial_rom;
+    return m_serial_rom;
 }
 
 // Power-on state, a CPU reset keeps the reset causes for the BIOS to read
@@ -87,10 +96,14 @@ u8 SystemControl::Read(u16 port)
             m_state.reset_cause = 0;
             return cause;
         }
+        case 0x0030:
+            return (u8)(m_machine_id & 0xFF);
+        case 0x0031:
+            return (u8)(m_machine_id >> 8);
         case 0x0032:
         {
             u8 bit = m_state.serial_rom_bit;
-            u8 data = (k_system_control_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
+            u8 data = (m_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
             return (m_state.serial_rom_control & 0xC0) | data;
         }
         case 0x05C0:
@@ -113,10 +126,14 @@ u8 SystemControl::Peek(u16 port) const
     {
         case 0x0020:
             return m_state.reset_cause;
+        case 0x0030:
+            return (u8)(m_machine_id & 0xFF);
+        case 0x0031:
+            return (u8)(m_machine_id >> 8);
         case 0x0032:
         {
             u8 bit = m_state.serial_rom_bit;
-            u8 data = (k_system_control_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
+            u8 data = (m_serial_rom[31 - (bit >> 3)] >> (bit & 0x07)) & 0x01;
             return (m_state.serial_rom_control & 0xC0) | data;
         }
         case 0x05C0:

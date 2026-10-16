@@ -116,10 +116,8 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x0030:
             // Machine ID low
-            return 0x01;
         case 0x0031:
             // Machine ID high
-            return 0x01;
         case 0x0032:
             // Serial ID ROM
             return m_system_control->Read(port);
@@ -434,14 +432,12 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             value = m_pic->Peek(port);
             break;
         case 0x0020:
+        case 0x0030:
+        case 0x0031:
         case 0x0032:
             value = m_system_control->Peek(port);
             break;
         case 0x0022:
-            break;
-        case 0x0030:
-        case 0x0031:
-            value = 0x01;
             break;
         case 0x0040:
         case 0x0042:

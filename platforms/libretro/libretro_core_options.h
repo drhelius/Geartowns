@@ -341,40 +341,63 @@ struct retro_core_option_v2_definition option_defs_us[] = {
     /* System */
 
     {
-        "geartowns_ram_size",
-        "RAM Size (restart)",
+        "geartowns_model",
+        "Model (restart)",
         NULL,
-        "Main memory of the FM Towns Model 1/2. Some software needs more than the original 2 MB. Save states grow with it.",
+        "The FM Towns model to emulate. Auto runs the FM Towns (Model 1/2). It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
         NULL,
         "system",
         {
-            { "1 MB", NULL },
-            { "2 MB", "2 MB (Original)" },
-            { "4 MB", NULL },
-            { "6 MB", NULL },
+            { "auto",     "Auto" },
+            { "model1_2", "FM Towns (Model 1/2) (80386DX 16 MHz)" },
             { NULL, NULL },
         },
-        "2 MB"
+        "auto"
     },
     {
-        "geartowns_cpu_speed",
+        "geartowns_cpu_clock",
         "CPU Speed (restart)",
         NULL,
-        "Run the 80386 faster than the original 16 MHz. Some software may not expect a faster CPU.",
+        "Auto runs the CPU at the model's original clock. Devices keep their real timing at any speed. Some software may not expect a faster CPU.",
         NULL,
         "system",
         {
-            { "16 MHz",  "16 MHz (Original)" },
-            { "20 MHz",  NULL },
-            { "25 MHz",  NULL },
-            { "33 MHz",  NULL },
-            { "40 MHz",  NULL },
-            { "50 MHz",  NULL },
-            { "66 MHz",  NULL },
-            { "100 MHz", NULL },
+            { "auto", "Auto" },
+            { "16",   "16 MHz" },
+            { "20",   "20 MHz" },
+            { "25",   "25 MHz" },
+            { "33",   "33 MHz" },
+            { "40",   "40 MHz" },
+            { "50",   "50 MHz" },
+            { "66",   "66 MHz" },
+            { "100",  "100 MHz" },
             { NULL, NULL },
         },
-        "16 MHz"
+        "auto"
+    },
+    {
+        "geartowns_main_ram",
+        "Main RAM (restart)",
+        NULL,
+        "Auto uses the model's original RAM. A size the model doesn't offer uses its next size up, or its largest. Some software needs more than 2 MB. Save states grow with it.",
+        NULL,
+        "system",
+        {
+            { "auto", "Auto" },
+            { "1",    "1 MB" },
+            { "2",    "2 MB" },
+            { "4",    "4 MB" },
+            { "6",    "6 MB" },
+            { "8",    "8 MB" },
+            { "10",   "10 MB" },
+            { "12",   "12 MB" },
+            { "16",   "16 MB" },
+            { "20",   "20 MB" },
+            { "24",   "24 MB" },
+            { "26",   "26 MB" },
+            { NULL, NULL },
+        },
+        "auto"
     },
     {
         "geartowns_rtc",
@@ -389,20 +412,6 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { NULL, NULL },
         },
         "Host time"
-    },
-    {
-        "geartowns_floppy_drives",
-        "Floppy Drives (restart)",
-        NULL,
-        "Number of internal floppy drives.",
-        NULL,
-        "system",
-        {
-            { "1", NULL },
-            { "2", NULL },
-            { NULL, NULL },
-        },
-        "2"
     },
     {
         "geartowns_cmos",

@@ -1,4 +1,4 @@
-# FM Towns — I/O Port Map (Model 1/2)
+# FM Towns — I/O Port Map
 
 ## 1. Overview
 
@@ -13,6 +13,8 @@ address bit 1).
   passively.
 - The ports differ from the IBM PC: 0020h is the reset register (not a PIC), 00A0h initializes the DMA controller,
   0070h/0080h drive the MSM58321 clock, and the CMOS RAM is at 3000h–3FFEh.
+- Later models add ports, marked below with the first model that has them. On a machine without them they read FFh,
+  ignore writes and show `??` in the I/O PORTS area. Geartowns emulates them on the FM Towns II UX.
 
 Names below are the ones the debugger uses in the disassembler, the Memory Workspace and MCP tools.
 
@@ -33,7 +35,9 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 |---|---|---|
 | 0020h | SYS_RESET | Reset cause read, reset and write protect |
 | 0022h | SYS_POWER | Power off |
-| 0030h | MACHINE_ID_LO | Machine ID low |
+| 0025h | NMI_CAPABILITY | NMI mask facility (UX) |
+| 0028h | NMI_MASK | NMI mask (UX) |
+| 0030h | MACHINE_ID_LO | Machine ID low, LSPEED write (UX) |
 | 0031h | MACHINE_ID_HI | Machine ID high |
 | 0032h | SERIAL_ROM | Serial ID ROM |
 
@@ -50,6 +54,10 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 0054h | PIT1_COUNT5 | PIT counter 5 |
 | 0056h | PIT1_CONTROL | PIT counters 3-5 control |
 | 0060h | TIMER_CONTROL | Timer interrupt status and control, buzzer |
+| 0068h | TIMER2_CONTROL | Interval Timer II status and control (10F) |
+| 006Ah | TIMER2_PERIOD_LO | Interval Timer II period low (10F) |
+| 006Bh | TIMER2_PERIOD_HI | Interval Timer II period high (10F) |
+| 006Ch | WAIT_1US | 1 µs wait (10F) |
 
 ### Clock (MSM58321)
 
@@ -111,6 +119,8 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 0480h | SYS_ROM_MAP | Boot ROM and dictionary windows |
 | 0484h | DIC_ROM_BANK | Dictionary ROM bank |
 | 048Ah | MEMCARD_STATUS | Memory card status |
+| 0490h | MEMCARD_BANK | Memory card bank (UX) |
+| 0491h | MEMCARD_ATTRIBUTE | Memory card attribute space, JEIDA-4 capability (UX) |
 
 ### CD-ROM Controller
 
@@ -164,6 +174,9 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 05C8h | TVRAM_WRITTEN | Text VRAM written |
 | 05CAh | VSYNC_IRQ_CLEAR | VSYNC interrupt clear |
 | 05E0h | UNDOCUMENTED | Undocumented, the Model 1/2 BIOS writes 01h at boot |
+| 05E2h | MEMORY_WAIT | Memory wait (10F) |
+| 05E6h | MEMORY_WAIT_2 | Memory wait (10F) |
+| 05E8h | RAM_SIZE | Installed RAM in MB (1F) |
 
 ### Keyboard
 
@@ -244,7 +257,7 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 
 | IRQ | PIC input | Source |
 |---:|---|---|
-| 0 | Master IR0 | Timer (PIT counters 0 and 1, enabled through 0060h) |
+| 0 | Master IR0 | Timer (PIT counters 0 and 1, enabled through 0060h; Interval Timer II on the 10F and later) |
 | 1 | Master IR1 | Keyboard |
 | 2 | Master IR2 | RS-232C |
 | 3 | Master IR3 | Expansion RS-232C |

@@ -2143,7 +2143,15 @@ json DebugAdapter::GetPITStatus()
         counters.push_back(item);
     }
 
-    return {
+    u8 timer2 = 0;
+    u8 period_low = 0;
+    u8 period_high = 0;
+    bool has_timer2 = m_core->GetIO()->Peek(0x0068, clocks, timer2);
+    m_core->GetIO()->Peek(0x006A, clocks, period_low);
+    m_core->GetIO()->Peek(0x006B, clocks, period_high);
+    bool timer2_irq = has_timer2 && ((timer2 & (k_pit_timer2_disable | k_pit_timer2_pending)) == k_pit_timer2_pending);
+
+    json result = {
         {"board", {
             {"timer0_enable", (state->timer_enable & 0x01) != 0},
             {"timer1_enable", (state->timer_enable & 0x02) != 0},
@@ -2151,11 +2159,26 @@ json DebugAdapter::GetPITStatus()
             {"memory_buzzer", state->sound_memory},
             {"latch0", (board & 0x01) != 0},
             {"latch1", (board & 0x02) != 0},
-            {"irq0", (board & state->timer_enable & 0x03) != 0},
+            {"irq0", ((board & state->timer_enable & 0x03) != 0) || timer2_irq},
             {"value", Hex(board, 2)}
         }},
         {"counters", counters}
     };
+
+    if (has_timer2)
+    {
+        u32 period = (u32)((period_high << 8) | period_low);
+        result["interval_timer2"] = {
+            {"status", Hex(timer2, 2)},
+            {"enabled", (timer2 & k_pit_timer2_disable) == 0},
+            {"pending", (timer2 & k_pit_timer2_pending) != 0},
+            {"overrun", (timer2 & k_pit_timer2_overrun) != 0},
+            {"period", Hex(period, 4)},
+            {"interval_us", period == 0 ? 65536 : period}
+        };
+    }
+
+    return result;
 }
 
 json DebugAdapter::GetDMAStatus()
@@ -2265,9 +2288,28 @@ json DebugAdapter::GetSystemStatus()
     json cpu_setting = settings.cpu_mhz <= 0 ? json("auto") : json(settings.cpu_mhz);
     json ram_setting = settings.ram_mb <= 0 ? json("auto") : json(settings.ram_mb);
     json warnings = json::array();
+    json registers = json::object();
+    u64 clocks = m_core->GetScheduler()->GetClocks();
+    u8 value = 0;
+    u8 value_2 = 0;
 
     for (int i = 0; i < report.warning_count; i++)
         warnings.push_back(report.warnings[i]);
+
+    if (m_core->GetIO()->Peek(0x05E8, clocks, value))
+        registers["ram_size_mb"] = value;
+
+    if (m_core->GetIO()->Peek(0x0028, clocks, value))
+        registers["nmi_masked"] = (value & 0x01) != 0;
+
+    if ((profile.features & GT_MACHINE_FEATURE_LSPEED) != 0)
+        registers["low_speed"] = control->low_speed;
+
+    if (m_core->GetIO()->Peek(0x05E2, clocks, value) && m_core->GetIO()->Peek(0x05E6, clocks, value_2))
+        registers["memory_wait"] = {{"05e2", Hex(value, 2)}, {"05e6", Hex(value_2, 2)}};
+
+    if (m_core->GetIO()->Peek(0x0490, clocks, value) && m_core->GetIO()->Peek(0x0491, clocks, value_2))
+        registers["memory_card"] = {{"bank", value}, {"attribute_space", (value_2 & 0x01) != 0}};
 
     return {
         {"machine", {
@@ -2303,6 +2345,7 @@ json DebugAdapter::GetSystemStatus()
             {"expansion_nmi_enabled", control->expansion_nmi},
             {"port_05e0", Hex(control->port_05e0, 2)}
         }},
+        {"model_registers", registers},
         {"serial_rom", {
             {"control", Hex(control->serial_rom_control, 2)},
             {"reset", (control->serial_rom_control & 0x80) != 0},

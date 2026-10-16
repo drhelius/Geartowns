@@ -1,8 +1,10 @@
-# FM Towns — Memory Map (Model 1/2)
+# FM Towns — Memory Map
 
 ## 1. Overview
 
-The FM Towns Model 1/2 is built around an Intel 80386DX with a 32-bit physical address bus.
+The FM Towns Model 1/2 is built around an Intel 80386DX with a 32-bit physical address bus. The FM Towns II UX has
+an 80386SX with a 24-bit bus and moves the high regions below 16 MB (§2.1). The low 1 MB and the banking of §4 are
+the same on both.
 
 General characteristics:
 
@@ -53,6 +55,28 @@ Address spaces:
 | FFFC0000–FFFFFFFF | 256 KB | System ROM |
 
 Only one 512 KB VRAM exists; both VRAM ranges are views of it.
+
+### 2.1 FM Towns II UX
+
+The UX bus has 24 address lines: the CPU and DMA see every address modulo 16 MB, so FFFFFFF0h reaches FFFFF0h in
+the System ROM and 01000010h reaches RAM at 10h. Main RAM is 2, 4, 6 or 10 MB from address 0.
+
+| Region | Model 1/2 | UX |
+|---|---|---|
+| VRAM, two-page view | 80000000 | A00000 |
+| VRAM, single-page view | 80100000 | B00000 |
+| Sprite RAM | 81000000 | C00000 |
+| OS ROM | C2000000 | E00000 |
+| Dictionary ROM | C2080000 | E80000 |
+| Font ROM | C2100000 | F00000 |
+| CMOS RAM | C2140000 | F40000 |
+| RF5C68 wave RAM window | C2200000 | F80000 |
+| System ROM | FFFC0000 | FC0000 |
+
+DMA keeps the Model 1/2 addresses: the UX translates them in 1 MB steps, 800xxxxxh to A00000h, 801xxxxxh to B00000h,
+810xxxxxh to C00000h, C20xxxxxh to E00000h, C21xxxxxh to F00000h, C22xxxxxh to F80000h, FFFxxxxxh to F00000h,
+400xxxxxh to C80000h and C00xxxxxh-C0Fxxxxxh to the memory card window at D00000h. Other addresses lose their top
+8 bits.
 
 ---
 
@@ -158,7 +182,7 @@ sound is on (04F7h bit 7). See the sound resource.
 ## 7. Reset
 
 The 80386 starts at CS=F000h (base FFFF0000h), EIP=FFF0h, so the first instruction is fetched at FFFFFFF0h in the
-System ROM. The boot ROM at F8000h–FFFFFh is the same last 32 KB of the System ROM, reachable from real mode.
+System ROM (FFFFF0h on the UX). The boot ROM at F8000h–FFFFFh is the same last 32 KB of the System ROM, reachable from real mode.
 
 ---
 

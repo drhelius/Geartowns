@@ -5,7 +5,7 @@
 The FM Towns board surrounds the 80386 with standard parts at FM Towns specific ports:
 
 - Two 8259A interrupt controllers (master and slave)
-- Two 8253 timers (six counters) and a timer control register
+- Two 8253 timers (six counters) and a timer control register, plus Interval Timer II on the 10F and later (the UX)
 - A uPD71071 DMA controller with four channels
 - An MSM58321 real time clock
 - System control registers (reset, power, machine ID, serial ID ROM, memory windows)
@@ -90,6 +90,18 @@ IRQ0 is active while a latched timeout is enabled. Counter 0 is periodic and its
 loading counter 1 clears its latch. The Model 1/2 BIOS writes 81h. Reading CFF98h also turns the buzzer on and
 writing it turns the buzzer off.
 
+### Interval Timer II (10F and later, the UX)
+
+| Port | Read | Write |
+|---|---|---|
+| 0068h | Bit 7 interrupt disable, bit 6 timeout pending, bit 5 overrun; the read clears bits 6 and 5 | Bit 7 interrupt disable |
+| 006Ah | Period low | Period low |
+| 006Bh | Period high | Period high; starts an interval |
+
+The period counts microseconds, 0 meaning 65536. Each expiry reloads it. The first timeout sets bit 6 and a later
+one before the read sets bit 5. IRQ0 is also active while bit 6 is set and bit 7 clear, until 0068h is read; bit 7
+masks the interrupt without stopping the count. The UX BIOS writes 80h to 0068h at reset.
+
 ---
 
 ## 4. DMA Controller (uPD71071)
@@ -161,7 +173,10 @@ there is no century rule. A write to register 13 resets the divider and READY st
 |---|---|---|
 | 0020h | Reset cause: bit 0 software reset, bit 1 CPU shutdown; the read clears them | Bit 0 reset the CPU, bit 6 power off, bit 7 write-protect the memory holding the NMI vector |
 | 0022h | | Bit 6 power off |
-| 0030h-0031h | Bits 15-3 machine ID, bits 2-0 CPU ID (001b = 80386); 0101h on Model 1/2 | |
+| 0025h | UX: 7Fh, bit 7 = 0 means the NMI mask exists | |
+| 0028h | UX: bit 0 NMI masked | UX: bit 0 masks NMI; power-on reset clears it, a software reset keeps it |
+| 0030h-0031h | Bits 15-3 machine ID, bits 2-0 CPU ID (001b = 80386DX, 011b = 80386SX); 0101h on Model 1/2, 0303h on the UX | UX: 0030h bit 0 LSPEED, two-wait RAM |
+| 006Ch | 10F and later: 00h, and a 1 µs wait | 10F and later: a 1 µs wait |
 | 0032h | Bit 0 serial ID ROM data | Bit 7 ID RESET, bit 6 ID CLK, bit 5 /CS |
 | 0400h | Bit 0 resolution: 0 on Model 1/2 | |
 | 0404h | Bit 7 low window: 0 FM-R devices, 1 RAM | Same |
@@ -173,12 +188,19 @@ there is no century rule. A write to register 13 resets the divider and READY st
 | 05C8h | Bit 7 text VRAM written (cleared by the read) | |
 | 05CAh | | Any write clears the VSYNC interrupt |
 | 05E0h | | The Model 1/2 BIOS writes 01h at boot |
+| 05E2h, 05E6h | 10F and later: the value written | Memory wait settings |
+| 05E8h | 1F and later: installed RAM in MB, bits 4-0 | |
+| 0490h | UX: memory card bank | Bits 5-0: the 1 MB bank of the card at D00000h |
+| 0491h | UX: bit 0 attribute space, bit 7 = 0 means JEIDA-4 capable | Bit 0: 0 card memory, 1 attribute space |
 
 Both reset cause bits read 0 after power-on. Software masks the PICs before a software reset, never resets during
-a DMA transfer, and executes HLT right after the reset write.
+a DMA transfer, and executes HLT right after the reset write. The ports marked with a model read FFh and ignore
+writes on machines without them; 006Ch delays reads and writes by 1 µs of CPU time at any CPU speed.
 
 The serial ID ROM holds 256 bits, read one bit per ID CLK pulse after an ID RESET: a 0 nibble, `FUJITSU` in ASCII,
-reserved ones, the model number (0101h on Model 1/2), nine serial number digits and a final 00000h.
+reserved ones, the model number (0101h on Model 1/2, 0303h on the UX), nine serial number digits and a final
+00000h. The UX set's `mytownsux.rom` supplies it; without a serial ROM file the emulator builds one with the model
+number and a zero serial number.
 
 ---
 

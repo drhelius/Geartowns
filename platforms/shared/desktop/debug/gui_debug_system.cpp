@@ -46,6 +46,7 @@ static const char* const k_pit_mode_short_names[6] =
 static void setup_fixed_columns(const int* widths, int count);
 static void draw_grid_label(const char* label);
 static void draw_flag(const char* label, bool on);
+static void draw_model_flag(const char* label, bool present, bool on, const char* on_text, const char* off_text);
 static void draw_bits4(u8 value);
 static void draw_vector_tooltip(u8 vector);
 static void draw_pic_column(const I8259::I8259_State* chip, bool master, int row);
@@ -144,7 +145,7 @@ void gui_debug_window_pit(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(253, 111), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(616, 261), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(616, 331), ImGuiCond_FirstUseEver);
     ImGui::Begin("Timers", &config_debug.show_pit);
 
     ImGui::PushFont(gui_default_font);
@@ -155,13 +156,20 @@ void gui_debug_window_pit(void)
     u64 clocks = core->GetScheduler()->GetClocks();
     u8 board = pit->Peek(0x0060, clocks);
     float character = ImGui::CalcTextSize("0").x;
+    u8 timer2 = 0;
+    u8 period_low = 0;
+    u8 period_high = 0;
+    bool has_timer2 = core->GetIO()->Peek(0x0068, clocks, timer2);
+    core->GetIO()->Peek(0x006A, clocks, period_low);
+    core->GetIO()->Peek(0x006B, clocks, period_high);
+    bool timer2_irq = has_timer2 && ((timer2 & (k_pit_timer2_disable | k_pit_timer2_pending)) == k_pit_timer2_pending);
 
     ImGui::TextColored(cyan, "BOARD (0060)"); ImGui::Separator();
 
     if (ImGui::BeginTable("##pit_board", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
     {
         static const int widths[6] = { 10, 4, 10, 4, 5, 4 };
-        bool irq0 = (board & state->timer_enable & 0x03) != 0;
+        bool irq0 = ((board & state->timer_enable & 0x03) != 0) || timer2_irq;
 
         setup_fixed_columns(widths, 6);
 
@@ -175,6 +183,45 @@ void gui_debug_window_pit(void)
         draw_flag("LATCH 1", (board & 0x02) != 0);
         draw_grid_label("IRQ0");
         ImGui::TextColored(irq0 ? yellow : gray, "%s", irq0 ? "HIGH" : "LOW");
+
+        ImGui::EndTable();
+    }
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "INTERVAL TIMER II (0068-006B)"); ImGui::Separator();
+
+    if (ImGui::BeginTable("##pit_timer2", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+    {
+        static const int widths[6] = { 10, 5, 10, 9, 8, 4 };
+        u32 period = (u32)((period_high << 8) | period_low);
+
+        setup_fixed_columns(widths, 6);
+
+        ImGui::TableNextRow();
+        draw_model_flag("TM2 ENABLE", has_timer2, (timer2 & k_pit_timer2_disable) == 0, "ON", "OFF");
+        draw_model_flag("PENDING", has_timer2, (timer2 & k_pit_timer2_pending) != 0, "ON", "OFF");
+        draw_model_flag("OVERRUN", has_timer2, (timer2 & k_pit_timer2_overrun) != 0, "ON", "OFF");
+
+        ImGui::TableNextRow();
+        draw_grid_label("PERIOD");
+
+        if (has_timer2)
+            ImGui::TextColored(white, "$%04X", period);
+        else
+            ImGui::TextColored(gray, "--");
+
+        draw_grid_label("INTERVAL");
+
+        if (has_timer2)
+            ImGui::TextColored(white, "%.3f ms", (period == 0 ? 65536 : period) / 1000.0);
+        else
+            ImGui::TextColored(gray, "--");
+
+        draw_grid_label("STATUS");
+
+        if (has_timer2)
+            ImGui::TextColored(white, "$%02X", timer2);
+        else
+            ImGui::TextColored(gray, "--");
 
         ImGui::EndTable();
     }
@@ -559,7 +606,7 @@ void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(176, 112), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(236, 497), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(236, 597), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);
@@ -676,6 +723,65 @@ void gui_debug_window_system_control(void)
         ImGui::EndTable();
     }
 
+    u64 clocks = core->GetScheduler()->GetClocks();
+    u8 nmi_mask = 0;
+    u8 wait = 0;
+    u8 wait_2 = 0;
+    u8 card_bank = 0;
+    u8 card_attribute = 0;
+    bool has_nmi_mask = core->GetIO()->Peek(0x0028, clocks, nmi_mask);
+    bool has_wait = core->GetIO()->Peek(0x05E2, clocks, wait) && core->GetIO()->Peek(0x05E6, clocks, wait_2);
+    bool has_card = core->GetIO()->Peek(0x0490, clocks, card_bank) && core->GetIO()->Peek(0x0491, clocks, card_attribute);
+    bool has_low_speed = (k_machine_profiles[machine.model].features & GT_MACHINE_FEATURE_LSPEED) != 0;
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "MODEL REGISTERS"); ImGui::Separator();
+
+    if (ImGui::BeginTable("##system_model", 3, flags))
+    {
+        static const int model_widths[3] = { 10, 12, 8 };
+        setup_fixed_columns(model_widths, 3);
+
+        ImGui::TableNextRow();
+        draw_model_flag("NMI MASK", has_nmi_mask, (nmi_mask & 0x01) == 0, "ENABLED", "MASKED");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0028)");
+
+        ImGui::TableNextRow();
+        draw_model_flag("LSPEED", has_low_speed, control->low_speed, "ON", "OFF");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0030)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("MEM WAIT");
+
+        if (has_wait)
+        {
+            ImGui::TextColored(white, "$%02X", wait); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(white, "$%02X", wait_2);
+        }
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(05E2/6)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("CARD BANK");
+
+        if (has_card)
+        {
+            ImGui::TextColored(orange, "%d", card_bank); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored(blue, "%s", (card_attribute & 0x01) ? "ATTRIBUTE" : "MEMORY");
+        }
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0490/1)");
+
+        ImGui::EndTable();
+    }
+
     ImGui::NewLine(); ImGui::TextColored(cyan, "SERIAL ROM (0032)"); ImGui::Separator();
 
     if (ImGui::BeginTable("##system_serial_rom", 2, flags))
@@ -732,6 +838,16 @@ static void draw_flag(const char* label, bool on)
 {
     draw_grid_label(label);
     ImGui::TextColored(on ? green : gray, "%s", on ? "ON" : "OFF");
+}
+
+static void draw_model_flag(const char* label, bool present, bool on, const char* on_text, const char* off_text)
+{
+    draw_grid_label(label);
+
+    if (present)
+        ImGui::TextColored(on ? green : gray, "%s", on ? on_text : off_text);
+    else
+        ImGui::TextColored(gray, "--");
 }
 
 static void draw_bits4(u8 value)

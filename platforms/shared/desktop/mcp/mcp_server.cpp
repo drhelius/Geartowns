@@ -1567,7 +1567,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_system_status"},
         {"title", "Get System Status"},
-        {"description", "Read system control: machine model, CPU, clock, RAM, floppy drives, memory map and firmware set, the Model/CPU Speed/Main RAM settings and where each value came from (user, model original or Auto default), reset cause and power-off request, low memory and boot ROM windows, dictionary bank, NMI vector write protect, expansion NMI mask, RAM wait and the serial ID ROM."},
+        {"description", "Read system control: machine model, CPU, clock, RAM, floppy drives, memory map and firmware set, the Model/CPU Speed/Main RAM settings, where each value came from (user, model original, Auto default or game database), the game database title and its warnings, reset cause and power-off request, low memory and boot ROM windows, dictionary bank, NMI vector write protect, expansion NMI mask, RAM wait and the serial ID ROM."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2040,6 +2040,49 @@ json McpServer::BuildToolList()
                 {"file_path", {{"type", "string"}, {"description", "Absolute media file path."}}}
             }},
             {"required", json::array({"file_path"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "eject_cdrom"},
+        {"title", "Eject CD-ROM"},
+        {"description", "Eject the CD, as the CD-ROM menu does. The machine keeps running with an empty drive, and load_media inserts another image."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "list_cdrom_playlist"},
+        {"title", "List CD-ROM Playlist"},
+        {"description", "List the discs of the .m3u loaded with load_media, the current one, and whether the drive is empty."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "insert_playlist_disc"},
+        {"title", "Insert Playlist Disc"},
+        {"description", "Insert a disc of the playlist into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine, so eject_cdrom first."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"index", {
+                    {"type", "integer"},
+                    {"description", "Zero-based disc index from list_cdrom_playlist."},
+                    {"minimum", 0}
+                }}
+            }},
+            {"required", json::array({"index"})},
             {"additionalProperties", false}
         }}
     });
@@ -3583,6 +3626,18 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "load_media")
     {
         return {{"error", "load_media must be handled by the MCP manager"}};
+    }
+    else if (normalizedTool == "eject_cdrom")
+    {
+        return m_debugAdapter.EjectCdrom();
+    }
+    else if (normalizedTool == "list_cdrom_playlist")
+    {
+        return m_debugAdapter.ListCdromPlaylist();
+    }
+    else if (normalizedTool == "insert_playlist_disc")
+    {
+        return {{"error", "insert_playlist_disc must be handled by the MCP manager"}};
     }
     else if (normalizedTool == "load_bios")
     {

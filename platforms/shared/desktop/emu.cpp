@@ -102,6 +102,7 @@ static bool get_cmos_path(int model, char* path, size_t path_size);
 static void load_cmos(int model);
 static void save_cmos(void);
 static void sync_cmos(void);
+static void notify_machine(void);
 static bool init_debug(void);
 static void destroy_debug(void);
 static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride, Emu_Debug_Buffer_Info& info);
@@ -557,6 +558,7 @@ bool emu_power_on(void)
     if (!geartowns->PowerOn())
         return false;
 
+    notify_machine();
     emu_floppy_check_drives();
     reset_run_state();
     update_savestates_data();
@@ -583,6 +585,7 @@ void emu_reset(void)
     gui_debug_trace_logger_reset();
     sync_cmos();
     geartowns->ResetMedia();
+    notify_machine();
     emu_floppy_check_drives();
     reset_run_state();
 }
@@ -744,6 +747,23 @@ void emu_apply_machine_settings(void)
     settings.cpu_mhz = config_machine.cpu_mhz;
     settings.ram_mb = config_machine.ram_mb;
     geartowns->SetMachineSettings(settings);
+}
+
+bool emu_latch_auto_media(void)
+{
+    if (!IsValidPointer(geartowns))
+        return false;
+
+    geartowns->LatchAutoMedia();
+
+    if (!geartowns->IsPoweredOn())
+        return false;
+
+    if (geartowns->IsMachineConfigPending())
+        return true;
+
+    notify_machine();
+    return false;
 }
 
 void emu_audio_mute(bool mute)
@@ -1822,6 +1842,42 @@ static void save_cmos(void)
 
     memcpy(cmos_saved, cmos, GT_CMOS_SIZE);
     Log("CMOS saved to %s", path);
+}
+
+static void notify_machine(void)
+{
+    const GT_Machine_Config& config = geartowns->GetMachineConfig();
+    const GT_Machine_Report& report = geartowns->GetMachineReport();
+    bool model = (report.model == GT_MACHINE_SOURCE_DATABASE) && (config.model != GT_MACHINE_MODEL1_2);
+    bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
+
+    if (!IsValidPointer(report.title) || (!model && !ram && (report.warning_count == 0)))
+        return;
+
+    char message[256];
+    std::string detail;
+
+    if (model && ram)
+        snprintf(message, sizeof(message), "%s: %s, %u MB (game database)", report.title,
+            k_machine_profiles[config.model].name, config.ram_size / (1024 * 1024));
+    else if (model)
+        snprintf(message, sizeof(message), "%s: %s (game database)", report.title, k_machine_profiles[config.model].name);
+    else if (ram)
+        snprintf(message, sizeof(message), "%s: %u MB (game database)", report.title, config.ram_size / (1024 * 1024));
+    else
+        snprintf(message, sizeof(message), "%s (game database)", report.title);
+
+    Log("%s", message);
+
+    for (int i = 0; i < report.warning_count; i++)
+    {
+        Log("%s", report.warnings[i]);
+        detail += (i > 0 ? "\n" : "");
+        detail += report.warnings[i];
+    }
+
+    gui_notify(report.warning_count > 0 ? gui_NotificationWarning : gui_NotificationInfo, ICON_MD_MEMORY, message,
+        detail.empty() ? NULL : detail.c_str(), "machine");
 }
 
 static void sync_cmos(void)

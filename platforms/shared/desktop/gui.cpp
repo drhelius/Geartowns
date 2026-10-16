@@ -51,6 +51,7 @@ static char loading_rom_path[4096] = "";
 static char loading_symbol_path[4096] = "";
 static bool loading_physical_cdrom = false;
 static bool loading_reset = false;
+static bool loading_auto = false;
 static bool loading_keep_debug = false;
 static void main_window(void);
 static void show_error_window(void);
@@ -463,6 +464,7 @@ bool gui_load_playlist_disc(int index)
 
     emu_cdrom_playlist_select(path);
     start_loading_rom(path, NULL);
+    loading_auto = false;
     loading_keep_debug = true;
     return true;
 }
@@ -471,6 +473,7 @@ static void start_loading_rom(const char* path, const char* symbol_path)
 {
     loading_physical_cdrom = false;
     loading_reset = false;
+    loading_auto = true;
     loading_keep_debug = false;
     gui_debug_auto_save_settings();
     emu_resume();
@@ -504,6 +507,7 @@ void gui_load_physical_cdrom(const char* device_id)
     emu_cdrom_playlist_clear();
     loading_physical_cdrom = true;
     loading_reset = false;
+    loading_auto = true;
     loading_keep_debug = false;
     gui_debug_auto_save_settings();
     emu_resume();
@@ -927,7 +931,9 @@ static bool finish_loading_rom(void)
     if (!loading_keep_debug)
         gui_debug_auto_load_settings();
 
-    if (loading_reset)
+    bool machine_changed = loading_auto && emu_latch_auto_media();
+
+    if (loading_reset || machine_changed)
     {
         emu_reset();
 

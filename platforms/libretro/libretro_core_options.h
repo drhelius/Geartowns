@@ -344,7 +344,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_model",
         "Model (restart)",
         NULL,
-        "The FM Towns model to emulate. Auto runs the FM Towns (Model 1/2). It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
+        "The FM Towns model to emulate. Auto picks the machine and RAM the game database names for the game, and the FM Towns (Model 1/2) for other content. It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
         NULL,
         "system",
         {
@@ -379,7 +379,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_main_ram",
         "Main RAM (restart)",
         NULL,
-        "Auto uses the model's original RAM. A size the model doesn't offer uses its next size up, or its largest. Some software needs more than 2 MB. Save states grow with it.",
+        "Auto uses the model's original RAM, or the RAM the game database names when Model is on Auto. A size the model doesn't offer uses its next size up, or its largest. Some software needs more than 2 MB. Save states grow with it.",
         NULL,
         "system",
         {

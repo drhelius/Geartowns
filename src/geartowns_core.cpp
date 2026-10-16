@@ -34,6 +34,7 @@
 #include "common/trace_logger.h"
 #include "common/state_serializer.h"
 #include "media/media.h"
+#include "media/game_db.h"
 #include "system/memory.h"
 #include "i386/i386.h"
 #include "system/io.h"
@@ -74,6 +75,7 @@ GeartownsCore::GeartownsCore()
     m_machine_settings.model = GT_MACHINE_MODEL1_2;
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     m_machine_settings.ram_mb = GT_MACHINE_AUTO;
+    InitPointer(m_auto_entry);
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
@@ -704,10 +706,24 @@ void GeartownsCore::PowerOff()
 }
 
 // The new hardware takes effect on the next reset
+// A running machine that stays the same takes the new report at once
 void GeartownsCore::SetMachineSettings(const GT_Machine_Settings& settings)
 {
     m_machine_settings = settings;
     ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
+}
+
+// Auto follows the content the user opened, so disc swaps and resets keep the machine
+void GeartownsCore::LatchAutoMedia()
+{
+    m_auto_entry = IsValidPointer(m_media) ? m_media->GetGameDBEntry() : NULL;
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
 }
 
 bool GeartownsCore::IsMachineConfigPending()
@@ -1547,20 +1563,53 @@ void GeartownsCore::ResetCPU()
     m_i386->Reset();
 }
 
+// A model Auto can't run yet becomes Model 1/2, with the database RAM it can hold
 void GeartownsCore::ResolveMachineConfig()
 {
+    GT_Machine_Config& config = m_pending_machine_config;
+    GT_Machine_Report& report = m_pending_machine_report;
+    const GT_DB_Entry* entry = m_auto_entry;
     bool auto_model = m_machine_settings.model < 0;
     bool auto_cpu = m_machine_settings.cpu_mhz <= 0;
     bool auto_ram = m_machine_settings.ram_mb <= 0;
+    bool database = auto_model && IsValidPointer(entry);
+    GT_Machine_Model named = database ? (GT_Machine_Model)entry->model : GT_MACHINE_MODEL1_2;
+    u32 megabyte = 1024 * 1024;
 
-    m_pending_machine_config.model = auto_model ? GT_MACHINE_MODEL1_2 : (GT_Machine_Model)m_machine_settings.model;
-    m_pending_machine_config.cpu_clock_rate = auto_cpu ? 0 : (u32)m_machine_settings.cpu_mhz * 1000000;
-    m_pending_machine_config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * 1024 * 1024;
-    SanitizeMachineConfig(m_pending_machine_config);
+    config.model = auto_model ? named : (GT_Machine_Model)m_machine_settings.model;
+    config.cpu_clock_rate = auto_cpu ? 0 : (u32)m_machine_settings.cpu_mhz * 1000000;
+    config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * megabyte;
+    report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
+    report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    report.title = IsValidPointer(entry) ? entry->title : NULL;
+    report.warning_count = 0;
 
-    m_pending_machine_report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
-    m_pending_machine_report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
-    m_pending_machine_report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    if (database)
+        report.model = GT_MACHINE_SOURCE_DATABASE;
+
+    if (database && auto_ram && (entry->ram_mb > 0))
+    {
+        config.ram_size = entry->ram_mb * megabyte;
+        report.ram = GT_MACHINE_SOURCE_DATABASE;
+    }
+
+    SanitizeMachineConfig(config);
+
+    if (!IsValidPointer(entry))
+        return;
+
+    if (database && !k_machine_profiles[named].emulated)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "Needs an %s, not emulated yet", k_machine_profiles[named].name);
+
+    if (config.ram_size < entry->ram_mb * megabyte)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "%s needs %d MB, this machine has %u MB", entry->title, entry->ram_mb, config.ram_size / megabyte);
+
+    if ((entry->flags & GT_GAMEDB_HDD) != 0)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "%s installs to a hard disk, not emulated yet", entry->title);
 }
 
 void GeartownsCore::ApplyMachineConfig()

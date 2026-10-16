@@ -413,7 +413,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 }
 
 static const char* const k_mcp_breakpoint_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "linear", "physical", "io" };
-static const char* const k_mcp_machine_sources[] = { "user", "model", "default" };
+static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database" };
 static const char* const k_mcp_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] =
 {
     "any", "exception", "hardware", "software"
@@ -2262,6 +2262,10 @@ json DebugAdapter::GetSystemStatus()
     json model_setting = settings.model < 0 ? json("auto") : json(k_machine_profiles[settings.model].key);
     json cpu_setting = settings.cpu_mhz <= 0 ? json("auto") : json(settings.cpu_mhz);
     json ram_setting = settings.ram_mb <= 0 ? json("auto") : json(settings.ram_mb);
+    json warnings = json::array();
+
+    for (int i = 0; i < report.warning_count; i++)
+        warnings.push_back(report.warnings[i]);
 
     return {
         {"machine", {
@@ -2277,6 +2281,8 @@ json DebugAdapter::GetSystemStatus()
             {"settings", {{"model", model_setting}, {"cpu_speed_mhz", cpu_setting}, {"ram_mb", ram_setting}}},
             {"source", {{"model", k_mcp_machine_sources[report.model]},
                 {"cpu_clock", k_mcp_machine_sources[report.cpu_clock]}, {"ram", k_mcp_machine_sources[report.ram]}}},
+            {"game_database", IsValidPointer(report.title) ? json(report.title) : json()},
+            {"warnings", warnings},
             {"reset_pending", m_core->IsMachineConfigPending()}
         }},
         {"reset", {
@@ -4338,6 +4344,58 @@ json DebugAdapter::LoadBios(const std::string& directory_path)
         {"directory_path", directory_path},
         {"firmware_ready", m_core->GetFirmware()->IsReady()}
     };
+}
+
+json DebugAdapter::EjectCdrom()
+{
+    if (gui_is_rom_loading() || emu_is_media_loading())
+        return {{"error", "Another media load is in progress"}};
+
+    if (!m_core->GetMedia()->IsReady())
+        return {{"error", "No CD in the drive"}};
+
+    gui_action_eject_media();
+
+    if (m_core->GetMedia()->IsReady())
+        return {{"error", "Unable to eject the CD"}};
+
+    return {{"success", true}};
+}
+
+json DebugAdapter::ListCdromPlaylist()
+{
+    json discs = json::array();
+    int count = emu_cdrom_playlist_get_count();
+    int current = emu_cdrom_playlist_get_index();
+
+    for (int i = 0; i < count; i++)
+    {
+        discs.push_back({
+            {"index", i},
+            {"name", emu_cdrom_playlist_get_name(i)},
+            {"file_path", emu_cdrom_playlist_get_path(i)},
+            {"current", i == current}
+        });
+    }
+
+    return {{"discs", discs}, {"drive_empty", !m_core->GetMedia()->IsReady()}};
+}
+
+json DebugAdapter::StartInsertPlaylistDisc(int index)
+{
+    if ((index < 0) || (index >= emu_cdrom_playlist_get_count()))
+        return {{"error", "No disc " + std::to_string(index) + " in the playlist"}};
+
+    if (gui_is_rom_loading() || emu_is_media_loading())
+        return {{"error", "Another media load is already in progress"}};
+
+    if (m_core->GetMedia()->IsReady())
+        return {{"error", "Eject the CD first, as the CD-ROM menu does"}};
+
+    if (!gui_load_playlist_disc(index))
+        return {{"error", "Failed to load the playlist disc"}};
+
+    return {{"file_path", emu_cdrom_playlist_get_path(index)}};
 }
 
 json DebugAdapter::StartLoadMedia(const std::string& file_path)

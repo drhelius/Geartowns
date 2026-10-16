@@ -244,6 +244,9 @@ public:
     // Media and state management
     json GetMediaInfo();
     json ListRecentMedia();
+    json EjectCdrom();
+    json ListCdromPlaylist();
+    json StartInsertPlaylistDisc(int index);
     json LoadBios(const std::string& directory_path);
     json StartLoadMedia(const std::string& file_path);
     bool IsMediaLoading() const;

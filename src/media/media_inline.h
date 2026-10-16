@@ -87,6 +87,11 @@ INLINE u32 Media::GetCRC() const
     return m_media_info.crc;
 }
 
+INLINE const GT_DB_Entry* Media::GetGameDBEntry() const
+{
+    return m_db_entry;
+}
+
 INLINE const Media::MediaFileInfo& Media::GetMediaInfo() const
 {
     return m_media_info;

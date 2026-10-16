@@ -47,6 +47,7 @@ class StateSerializer;
 class TraceLogger;
 class Profiler;
 struct I386_Run_Result;
+struct GT_DB_Entry;
 
 enum GT_Debug_Step
 {
@@ -82,6 +83,7 @@ public:
     void PowerOff();
     bool IsPoweredOn();
     void SetMachineSettings(const GT_Machine_Settings& settings);
+    void LatchAutoMedia();
     const GT_Machine_Settings& GetMachineSettings();
     const GT_Machine_Config& GetMachineConfig();
     const GT_Machine_Config& GetPendingMachineConfig();
@@ -200,6 +202,7 @@ private:
     UPD71071* m_dma;
 
     GT_Machine_Settings m_machine_settings;
+    const GT_DB_Entry* m_auto_entry;
     GT_Machine_Config m_machine_config;
     GT_Machine_Config m_pending_machine_config;
     GT_Machine_Report m_machine_report;

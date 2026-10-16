@@ -24,6 +24,7 @@
 #include "../common/common.h"
 
 class CdRomMedia;
+struct GT_DB_Entry;
 
 class Media
 {
@@ -77,6 +78,7 @@ public:
     const u8* GetData() const;
     int GetSize() const;
     u32 GetCRC() const;
+    const GT_DB_Entry* GetGameDBEntry() const;
     const MediaFileInfo& GetMediaInfo() const;
 
 private:
@@ -84,10 +86,12 @@ private:
     bool LoadCdRomFromZipFile(const char* file_path);
     void ResetMediaInfo();
     void GatherDataFromPath(const char* path);
+    void GatherDataFromDB();
 
 private:
     CdRomMedia* m_cdrom_media;
     MediaFileInfo m_media_info;
+    const GT_DB_Entry* m_db_entry;
     char m_temp_path[GT_MAX_PATH];
     u8* m_media_data;
     bool m_preload_cdrom;

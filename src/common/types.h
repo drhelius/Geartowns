@@ -379,7 +379,8 @@ enum GT_Machine_Source
 {
     GT_MACHINE_SOURCE_USER = 0,
     GT_MACHINE_SOURCE_MODEL,
-    GT_MACHINE_SOURCE_DEFAULT
+    GT_MACHINE_SOURCE_DEFAULT,
+    GT_MACHINE_SOURCE_DATABASE
 };
 
 struct GT_Machine_CPU_Info
@@ -445,6 +446,9 @@ struct GT_Machine_Report
     GT_Machine_Source model;
     GT_Machine_Source cpu_clock;
     GT_Machine_Source ram;
+    const char* title;
+    int warning_count;
+    char warnings[GT_MACHINE_WARNING_COUNT][GT_MACHINE_WARNING_SIZE];
 };
 
 struct GT_SaveState_Header

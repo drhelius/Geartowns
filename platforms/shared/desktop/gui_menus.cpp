@@ -58,6 +58,7 @@ static bool choose_video_recordings_path = false;
 static bool open_physical_cdrom = false;
 #endif
 static const GuiColor& firmware_unknown_color = cornflower;
+static const GuiColor& machine_warning_color = amber;
 static const GuiColor& service_mcp_http_color = green;
 static const GuiColor& service_mcp_stdio_color = amber;
 static const GuiColor& video_recording_color = red;
@@ -864,7 +865,7 @@ static void menu_machine(void)
     GeartownsCore* core = emu_get_core();
     bool running = !emu_is_empty();
     const GT_Machine_Config& machine = running ? core->GetMachineConfig() : core->GetPendingMachineConfig();
-    const GT_Machine_Report& report = running ? core->GetMachineReport() : core->GetPendingMachineReport();
+    const GT_Machine_Report& report = core->GetPendingMachineReport();
     const GT_Machine_Profile& profile = k_machine_profiles[core->GetPendingMachineConfig().model];
     bool changed = false;
     char summary[128];
@@ -872,14 +873,19 @@ static void menu_machine(void)
     get_machine_summary(machine, summary, sizeof(summary));
     ImGui::TextDisabled("%s", summary);
 
-    if (report.model == GT_MACHINE_SOURCE_DEFAULT)
-        ImGui::TextDisabled("Auto: not in the game database");
-
     if (running && core->IsMachineConfigPending())
     {
         get_machine_summary(core->GetPendingMachineConfig(), summary, sizeof(summary));
         ImGui::TextDisabled("After reset: %s", summary);
     }
+
+    if (report.model == GT_MACHINE_SOURCE_DATABASE)
+        ImGui::TextDisabled("Auto: game database, %s", report.title);
+    else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
+        ImGui::TextDisabled("Auto: not in the game database");
+
+    for (int i = 0; i < report.warning_count; i++)
+        ImGui::TextColored(machine_warning_color, "%s", report.warnings[i]);
 
     ImGui::Separator();
 
@@ -1008,6 +1014,8 @@ static bool menu_machine_model(void)
     {
         ImGui::BeginTooltip();
         ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Auto picks the machine and RAM the game database names for the game,");
+        ImGui::Text("and the FM Towns (Model 1/2) for other content.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }
@@ -1132,7 +1140,7 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
     else if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
-        ImGui::Text("Auto uses the model's original RAM.");
+        ImGui::Text("Auto uses the model's original RAM, or the RAM the game database names when Model is on Auto.");
         ImGui::Text("A size the model doesn't offer uses its next size up, or its largest.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();

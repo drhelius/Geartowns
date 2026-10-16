@@ -171,14 +171,14 @@ static bool load_bios(void);
 static s64 get_firmware_size(const char* directory, GT_Firmware_Type type);
 static void check_bios(void);
 static void set_machine_config(void);
+static void report_machine(void);
 static void show_message(const char* message, unsigned priority, enum retro_log_level level);
 static void get_system_av_info(struct retro_system_av_info* info);
 static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely);
 static void update_frameskip(void);
 static void set_controller_info(void);
 static void set_input_descriptors(void);
-static int add_input_descriptors(struct retro_input_descriptor* descriptors, int count, unsigned port,
-    const struct retro_input_descriptor* source, int source_count);
+static int add_input_descriptors(struct retro_input_descriptor* descriptors, int count, unsigned port, const struct retro_input_descriptor* source, int source_count);
 static void clear_input_state(void);
 static void clear_keyboard_state(void);
 static void save_input_state(u8* data);
@@ -209,8 +209,7 @@ static bool disk_load(const char* path);
 static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images);
 static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& images);
 static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images);
-static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume,
-    std::vector<DiskSetImage>& images);
+static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume, std::vector<DiskSetImage>& images);
 static int get_entry_drive(unsigned index);
 static bool disk_insert(unsigned index, int drive);
 static bool disk_eject(int drive);
@@ -450,6 +449,7 @@ void retro_reset(void)
     check_variables();
     cmos_save();
     core->ResetMedia();
+    report_machine();
     clear_input_state();
 }
 
@@ -709,7 +709,6 @@ static bool load_content(const char* path)
 
     check_bios();
     set_machine_config();
-    cmos_load();
     disk_clear();
     clear_input_state();
 
@@ -719,6 +718,9 @@ static bool load_content(const char* path)
         return false;
     }
 
+    core->LatchAutoMedia();
+    cmos_load();
+
     if (!core->PowerOn())
     {
         log_cb(RETRO_LOG_ERROR, "Unable to power on the machine\n");
@@ -726,6 +728,7 @@ static bool load_content(const char* path)
         return false;
     }
 
+    report_machine();
     content_loaded = true;
 
     if (!core->GetMaxSaveStateSize(savestate_size))
@@ -886,13 +889,53 @@ static void set_machine_config(void)
 {
     core->SetMachineSettings(machine_settings);
 
-    const GT_Machine_Config& pending = core->GetPendingMachineConfig();
-    log_cb(RETRO_LOG_INFO, "Machine: %s, %u MB RAM, %u MHz, %d floppy drives%s\n", k_machine_profiles[pending.model].name,
-        pending.ram_size / (1024 * 1024), pending.cpu_clock_rate / 1000000, pending.floppy_drives,
-        machine_settings.model == GT_MACHINE_AUTO ? " (Auto)" : "");
-
-    if (floppy_drive == 1 && pending.floppy_drives < 2)
+    if (floppy_drive == 1 && core->GetPendingMachineConfig().floppy_drives < 2)
         log_cb(RETRO_LOG_WARN, "The machine has one floppy drive, disk control uses Floppy 1\n");
+}
+
+static void report_machine(void)
+{
+    const GT_Machine_Config& config = core->GetMachineConfig();
+    const GT_Machine_Report& report = core->GetMachineReport();
+    bool model = (report.model == GT_MACHINE_SOURCE_DATABASE) && (config.model != GT_MACHINE_MODEL1_2);
+    bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
+    u32 ram_mb = config.ram_size / (1024 * 1024);
+    char source[256] = "";
+
+    if (report.model == GT_MACHINE_SOURCE_DATABASE)
+        snprintf(source, sizeof(source), " (Auto: game database, %s)", report.title);
+    else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
+        snprintf(source, sizeof(source), " (Auto: not in the game database)");
+
+    log_cb(RETRO_LOG_INFO, "Machine: %s, %s %u MHz, %u MB RAM, %d floppy drives%s\n",
+        k_machine_profiles[config.model].name, k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, ram_mb,
+        config.floppy_drives, source);
+
+    for (int i = 0; i < report.warning_count; i++)
+        log_cb(RETRO_LOG_WARN, "%s\n", report.warnings[i]);
+
+    if (!IsValidPointer(report.title) || (!model && !ram && (report.warning_count == 0)))
+        return;
+
+    static char message[1024];
+
+    if (model && ram)
+        snprintf(message, sizeof(message), "%s: %s, %u MB (game database)", report.title,
+            k_machine_profiles[config.model].name, ram_mb);
+    else if (model)
+        snprintf(message, sizeof(message), "%s: %s (game database)", report.title, k_machine_profiles[config.model].name);
+    else if (ram)
+        snprintf(message, sizeof(message), "%s: %u MB (game database)", report.title, ram_mb);
+    else
+        snprintf(message, sizeof(message), "%s (game database)", report.title);
+
+    for (int i = 0; i < report.warning_count; i++)
+    {
+        strncat_fit(message, ". ", sizeof(message));
+        strncat_fit(message, report.warnings[i], sizeof(message));
+    }
+
+    show_message(message, 2, report.warning_count > 0 ? RETRO_LOG_WARN : RETRO_LOG_INFO);
 }
 
 static void show_message(const char* message, unsigned priority, enum retro_log_level level)

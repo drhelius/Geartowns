@@ -229,13 +229,15 @@ public:
         {
             std::string tool = NormalizeToolName(command->toolName);
 
-            if (tool == "load_media")
+            if ((tool == "load_media") || (tool == "insert_playlist_disc"))
             {
                 DebugResponse* response = new DebugResponse();
                 response->requestId = command->requestId;
 
-                std::string file_path = command->arguments.value("file_path", "");
-                response->result = m_debug_adapter->StartLoadMedia(file_path);
+                if (tool == "load_media")
+                    response->result = m_debug_adapter->StartLoadMedia(command->arguments.value("file_path", ""));
+                else
+                    response->result = m_debug_adapter->StartInsertPlaylistDisc(command->arguments.value("index", -1));
 
                 if (response->result.contains("error"))
                 {
@@ -246,7 +248,7 @@ public:
                 {
                     m_pending_media_load = true;
                     m_pending_media_load_request_id = response->requestId;
-                    m_pending_media_load_file_path = file_path;
+                    m_pending_media_load_file_path = response->result.value("file_path", "");
                     SafeDelete(response);
                 }
 

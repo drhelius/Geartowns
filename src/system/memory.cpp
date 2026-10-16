@@ -62,6 +62,7 @@ Memory::Memory()
     m_cpu_map_generation = 0;
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
+    SetDMAWindows(NULL);
     m_nmi_vector_protect = false;
     m_map_generation = 1;
     m_region_generation = 1;
@@ -116,7 +117,6 @@ void Memory::SetTraceLogger(TraceLogger* trace_logger)
 void Memory::Reset()
 {
     ClearDebugRegions();
-    m_physical_address_mask = 0xFFFFFFFF;
     m_nmi_vector_protect = false;
 
     if (IsValidPointer(m_state.main_ram))
@@ -131,6 +131,11 @@ void Memory::ResetCMOS()
     memcpy(m_state.cmos + 0x0800, k_memory_oak2_index, sizeof(k_memory_oak2_index));
     memcpy(m_state.cmos + 0x0D60, k_memory_oak2_words_0, sizeof(k_memory_oak2_words_0));
     memcpy(m_state.cmos + 0x1086, k_memory_oak2_words_1, sizeof(k_memory_oak2_words_1));
+}
+
+INLINE bool Memory::IsCanonicalPage(u32 page) const
+{
+    return (m_physical_address_mask & 0xFFF) == 0xFFF && ((page << 12) & ~m_physical_address_mask) == 0;
 }
 
 INLINE const Memory::DebugRegion* Memory::FindMappedSpan(u32 physical, u32 size) const
@@ -829,6 +834,18 @@ void Memory::SetPhysicalAddressMask(u32 mask)
     }
 }
 
+void Memory::SetDMAWindows(const GT_Machine_DMA_Window* windows)
+{
+    for (u32 slot = 0; slot < k_memory_dma_slots; slot++)
+        m_dma_map[slot] = slot << 20;
+
+    for (int i = 0; IsValidPointer(windows) && (windows[i].count != 0); i++)
+    {
+        for (u32 slot = 0; slot < windows[i].count; slot++)
+            m_dma_map[(windows[i].slot + slot) & (k_memory_dma_slots - 1)] = windows[i].base;
+    }
+}
+
 void Memory::SetNMIVectorProtect(bool protect)
 {
     if (m_nmi_vector_protect == protect)
@@ -851,8 +868,7 @@ void Memory::SetCodeWriteCallback(void* context, GT_Memory_Code_Write_Fn callbac
 }
 
 // A RAM page with translated code keeps no CPU write pointer, so every CPU write to it reaches NotifyCodeWrite
-// Up to date host pages are patched in place for each alias of the page, the new generation makes the CPU drop its
-// cached pointers
+// An up to date host page is patched in place, the new generation makes the CPU drop its cached pointers
 void Memory::SetCodePage(u32 page, bool code)
 {
     if (!IsValidPointer(m_code_pages) || page >= m_code_page_count || (m_code_pages[page] != 0) == code)
@@ -861,22 +877,17 @@ void Memory::SetCodePage(u32 page, bool code)
     m_code_pages[page] = code ? 1 : 0;
 
     const DebugRegion* ram = FindRegion(GT_DEBUG_REGION_MAIN_RAM);
-    u32 period = (m_physical_address_mask + 1) >> 12;
-    bool patch = m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages) &&
-        IsValidPointer(ram) && (m_physical_address_mask & (m_physical_address_mask + 1)) == 0;
+    bool patch = m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages) && IsValidPointer(ram);
 
     m_map_generation++;
 
     if (!patch)
         return;
 
-    for (u32 alias = (ram->info.physical_base >> 12) + page; alias < (1U << 20); alias += period)
-    {
-        UpdateCPUPage(alias);
+    u32 cpu_page = (ram->info.physical_base >> 12) + page;
 
-        if (period == 0)
-            break;
-    }
+    if (IsCanonicalPage(cpu_page))
+        UpdateCPUPage(cpu_page);
 
     m_cpu_map_generation = m_map_generation;
 }
@@ -1168,10 +1179,9 @@ void Memory::PrepareCPUMap()
     memset(m_cpu_write_pages, 0, page_count * sizeof(m_cpu_write_pages[0]));
     memset(m_cpu_page_regions, 0, page_count);
 
-    // A mask inside a page cannot be represented by a contiguous host pointer
-    if ((m_physical_address_mask & 0xFFF) == 0xFFF)
+    for (u32 page = 0; page <= (m_physical_address_mask >> 12); page++)
     {
-        for (u32 page = 0; page < page_count; page++)
+        if (IsCanonicalPage(page))
             UpdateCPUPage(page);
     }
 
@@ -1216,8 +1226,7 @@ void Memory::UpdateCPUPage(u32 page, const DebugRegion* region)
 // Up to date host pages are patched in place, the new generation makes the CPU drop its cached pointers
 void Memory::RemapRange(u32 base, u32 size)
 {
-    bool patch = m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages) &&
-        m_physical_address_mask == 0xFFFFFFFF && size != 0;
+    bool patch = m_cpu_map_generation == m_map_generation && IsValidPointer(m_cpu_read_pages) && size != 0;
 
     m_map_generation++;
     m_debug_snapshot_id++;
@@ -1230,6 +1239,9 @@ void Memory::RemapRange(u32 base, u32 size)
 
     for (u32 page = base >> 12; page <= last; page++)
     {
+        if (!IsCanonicalPage(page))
+            continue;
+
         if (IsValidPointer(region))
             UpdateCPUPage(page, region);
         else

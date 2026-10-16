@@ -1727,6 +1727,9 @@ void GeartownsCore::InitMemoryMap()
     const u8* boot_rom = system_rom + GT_FIRMWARE_SYSTEM_SIZE - GT_FIRMWARE_SYSTEM_BOOT_SIZE;
     u8* main_ram = m_memory->GetMainRAM();
 
+    m_memory->SetPhysicalAddressMask(map.address_mask);
+    m_memory->SetDMAWindows(map.dma_windows);
+
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_SYSTEM_ROM, "System ROM", system_rom, NULL,
         GT_FIRMWARE_SYSTEM_SIZE, map.system_rom, rom_flags))
         Error("Unable to map the system ROM");

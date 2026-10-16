@@ -37,6 +37,11 @@ INLINE u32 Memory::GetMapGeneration() const
     return m_map_generation;
 }
 
+INLINE u32 Memory::TranslateDMAAddress(u32 address) const
+{
+    return m_dma_map[address >> 20] + (address & 0xFFFFF);
+}
+
 INLINE void Memory::InvalidateDebugSnapshot()
 {
     m_debug_snapshot_id++;

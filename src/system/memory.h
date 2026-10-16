@@ -35,6 +35,8 @@ typedef void (*GT_Memory_Write16_Fn)(void* device, u32 offset, u16 value);
 typedef void (*GT_Memory_Write32_Fn)(void* device, u32 offset, u32 value);
 typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size);
 
+static const u32 k_memory_dma_slots = 4096;
+
 class Memory
 {
 public:
@@ -94,6 +96,8 @@ public:
     u8* const* GetCPUWritePages() const;
 
     void SetPhysicalAddressMask(u32 mask);
+    void SetDMAWindows(const GT_Machine_DMA_Window* windows);
+    u32 TranslateDMAAddress(u32 address) const;
     void SetNMIVectorProtect(bool protect);
     u32 GetMapGeneration() const;
     u32 GetRegionGeneration() const;
@@ -152,6 +156,7 @@ private:
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
     void SynchronizeRegister(GT_Bus_Access_Context& context);
     u32 NormalizePhysicalAddress(u32 physical) const;
+    bool IsCanonicalPage(u32 page) const;
     void UpdateRAMRegions();
     void UpdateCPUPage(u32 page);
     void UpdateCPUPage(u32 page, const DebugRegion* region);
@@ -172,6 +177,7 @@ private:
     DebugRegion m_debug_regions[GT_DEBUG_MEMORY_MAX_REGIONS];
     int m_debug_region_count;
     u32 m_physical_address_mask;
+    u32 m_dma_map[k_memory_dma_slots];
     bool m_nmi_vector_protect;
     u32 m_map_generation;
     u32 m_region_generation;

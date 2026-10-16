@@ -419,6 +419,13 @@ struct GT_Machine_CPU_Info
     int bus_width;
 };
 
+struct GT_Machine_DMA_Window
+{
+    u16 slot;
+    u16 count;
+    u32 base;
+};
+
 struct GT_Machine_Memory_Map
 {
     const char* name;
@@ -432,6 +439,7 @@ struct GT_Machine_Memory_Map
     u32 cmos;
     u32 pcm_window;
     u32 system_rom;
+    const GT_Machine_DMA_Window* dma_windows;
 };
 
 struct GT_Machine_Profile

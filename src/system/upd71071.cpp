@@ -334,7 +334,7 @@ bool UPD71071::TransferUnit(int channel, u64 clocks, bool& terminal)
     if (word && (state.current_address & 0x01) != 0)
         state.current_address = (state.current_address - 1) & 0x00FFFFFF;
 
-    u32 address = ((u32)m_state.high_address << 24) | state.current_address;
+    u32 address = m_memory->TranslateDMAAddress(((u32)m_state.high_address << 24) | state.current_address);
     GT_Bus_Access_Context context = { };
     context.clocks = clocks;
     context.origin = GT_BUS_ORIGIN_DMA;

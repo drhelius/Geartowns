@@ -46,6 +46,7 @@ public:
         u8 port_05e6;
         bool nmi_mask;
         bool low_speed;
+        bool high_speed;
     };
 
 public:

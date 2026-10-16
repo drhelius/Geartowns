@@ -49,6 +49,7 @@ SystemControl::SystemControl()
     m_state.port_05e6 = 0;
     m_state.nmi_mask = false;
     m_state.low_speed = false;
+    m_state.high_speed = false;
 }
 
 SystemControl::~SystemControl()
@@ -101,6 +102,8 @@ bool SystemControl::Decodes(u16 port) const
         case 0x05E2:
         case 0x05E6:
             return (m_features & GT_MACHINE_FEATURE_MEMORY_WAIT) != 0;
+        case 0x05EC:
+            return (m_features & GT_MACHINE_FEATURE_SPEED_CONTROL) != 0;
         case 0x05E8:
             return (m_features & GT_MACHINE_FEATURE_RAM_SIZE) != 0;
         default:
@@ -128,6 +131,7 @@ void SystemControl::Reset()
     m_state.port_05e6 = 0;
     m_state.nmi_mask = false;
     m_state.low_speed = false;
+    m_state.high_speed = false;
     m_memory->SetNMIVectorProtect(false);
 }
 
@@ -165,6 +169,7 @@ u8 SystemControl::Read(u16 port)
         case 0x05E2:
         case 0x05E6:
         case 0x05E8:
+        case 0x05EC:
             return Peek(port);
         default:
             return 0xFF;
@@ -206,6 +211,8 @@ u8 SystemControl::Peek(u16 port) const
             return Decodes(port) ? m_state.port_05e6 : 0xFF;
         case 0x05E8:
             return Decodes(port) ? (u8)((m_memory->GetMainRAMSize() >> 20) & 0x1F) : 0xFF;
+        case 0x05EC:
+            return Decodes(port) ? (m_state.high_speed ? 0x01 : 0x00) : 0xFF;
         default:
             return 0xFF;
     }
@@ -259,6 +266,10 @@ void SystemControl::Write(u16 port, u8 value)
         case 0x05E6:
             if (Decodes(port))
                 m_state.port_05e6 = value;
+            break;
+        case 0x05EC:
+            if (Decodes(port))
+                m_state.high_speed = (value & 0x01) != 0;
             break;
     }
 
@@ -331,6 +342,11 @@ void SystemControl::Serialize(StateSerializer& serializer, int version)
         m_state.nmi_mask = false;
         m_state.low_speed = false;
     }
+
+    if (version >= 4)
+        G_SERIALIZE(serializer, m_state.high_speed);
+    else
+        m_state.high_speed = false;
 }
 
 void SystemControl::SanitizeState()

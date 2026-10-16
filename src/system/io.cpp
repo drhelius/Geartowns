@@ -356,6 +356,8 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // Memory wait
         case 0x05E8:
             // RAM size
+        case 0x05EC:
+            // Speed control
             return m_system_control->Read(port);
         case 0x0600:
             // Keyboard data
@@ -623,6 +625,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x05E2:
         case 0x05E6:
         case 0x05E8:
+        case 0x05EC:
             if (!m_system_control->Decodes(port))
                 return false;
 
@@ -969,6 +972,8 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Memory wait
         case 0x05E6:
             // Memory wait
+        case 0x05EC:
+            // Speed control
             m_system_control->Write(port, value);
             break;
         case 0x0600:

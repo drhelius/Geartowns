@@ -1567,7 +1567,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_system_status"},
         {"title", "Get System Status"},
-        {"description", "Read system control: machine model, CPU, clock, RAM, floppy drives, memory map and firmware set, the Model/CPU Speed/Main RAM settings, where each value came from (user, model original, Auto default or game database), the game database title and its warnings, reset cause and power-off request, low memory and boot ROM windows, dictionary bank, NMI vector write protect, expansion NMI mask, RAM wait, the registers of later models present on this one (RAM size 05E8, NMI mask 0028, LSPEED, memory wait 05E2/05E6, memory card bank 0490/0491) and the serial ID ROM."},
+        {"description", "Read system control: machine model, CPU, clock, RAM, floppy drives, memory map and firmware set, the Model/CPU Speed/Main RAM settings, where each value came from (user, model original, Auto default or game database), the game database title and its warnings, reset cause and power-off request, low memory and boot ROM windows, dictionary bank, NMI vector write protect, expansion NMI mask, RAM wait, the registers of later models present on this one (RAM size 05E8, NMI mask 0028, LSPEED, memory wait 05E2/05E6, speed control 05EC, memory card bank 0490/0491) and the serial ID ROM."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

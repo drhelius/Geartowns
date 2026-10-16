@@ -2312,6 +2312,9 @@ json DebugAdapter::GetSystemStatus()
     if ((profile.features & GT_MACHINE_FEATURE_LSPEED) != 0)
         registers["low_speed"] = control->low_speed;
 
+    if (m_core->GetIO()->Peek(0x05EC, clocks, value))
+        registers["high_speed"] = (value & 0x01) != 0;
+
     if (m_core->GetIO()->Peek(0x05E2, clocks, value) && m_core->GetIO()->Peek(0x05E6, clocks, value_2))
         registers["memory_wait"] = {{"05e2", Hex(value, 2)}, {"05e6", Hex(value_2, 2)}};
 

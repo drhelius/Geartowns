@@ -14,8 +14,8 @@ address bit 1).
 - The ports differ from the IBM PC: 0020h is the reset register (not a PIC), 00A0h initializes the DMA controller,
   0070h/0080h drive the MSM58321 clock, and the CMOS RAM is at 3000h–3FFEh.
 - Later models add ports, marked below with the first model that has them. On a machine without them they read FFh,
-  ignore writes and show `??` in the I/O PORTS area. Geartowns emulates them on the FM Towns II UX and the FM Towns
-  Marty, which also has the UG's free-running timer.
+  ignore writes and show `??` in the I/O PORTS area. Geartowns emulates them on the 1F/2F, 10F/20F, FM Towns II CX
+  and UX, and the FM Towns Marty, which also has the UG's free-running timer.
 
 Names below are the ones the debugger uses in the disassembler, the Memory Workspace and MCP tools.
 
@@ -180,6 +180,7 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 05E2h | MEMORY_WAIT | Memory wait (10F) |
 | 05E6h | MEMORY_WAIT_2 | Memory wait (10F) |
 | 05E8h | RAM_SIZE | Installed RAM in MB (1F) |
+| 05ECh | SPEED_CONTROL | Speed control (CX) |
 
 ### Keyboard
 

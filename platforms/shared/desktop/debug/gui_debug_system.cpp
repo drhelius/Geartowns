@@ -617,7 +617,7 @@ void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(176, 112), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(236, 597), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(236, 614), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);
@@ -740,7 +740,9 @@ void gui_debug_window_system_control(void)
     u8 wait_2 = 0;
     u8 card_bank = 0;
     u8 card_attribute = 0;
+    u8 speed = 0;
     bool has_nmi_mask = core->GetIO()->Peek(0x0028, clocks, nmi_mask);
+    bool has_speed = core->GetIO()->Peek(0x05EC, clocks, speed);
     bool has_wait = core->GetIO()->Peek(0x05E2, clocks, wait) && core->GetIO()->Peek(0x05E6, clocks, wait_2);
     bool has_card = core->GetIO()->Peek(0x0490, clocks, card_bank) && core->GetIO()->Peek(0x0491, clocks, card_attribute);
     bool has_low_speed = (k_machine_profiles[machine.model].features & GT_MACHINE_FEATURE_LSPEED) != 0;
@@ -761,6 +763,11 @@ void gui_debug_window_system_control(void)
         draw_model_flag("LSPEED", has_low_speed, control->low_speed, "ON", "OFF");
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(0030)");
+
+        ImGui::TableNextRow();
+        draw_model_flag("SPEED", has_speed, (speed & 0x01) != 0, "HIGH", "COMPATIBLE");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(05EC)");
 
         ImGui::TableNextRow();
         draw_grid_label("MEM WAIT");

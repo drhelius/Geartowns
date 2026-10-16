@@ -141,6 +141,7 @@ static const stDebugPortLabel k_debug_port_labels[] =
     { 0x05E2, "MEMORY_WAIT", "Memory wait, 10F and later" },
     { 0x05E6, "MEMORY_WAIT_2", "Memory wait, 10F and later" },
     { 0x05E8, "RAM_SIZE", "Installed RAM in MB, 1F and later" },
+    { 0x05EC, "SPEED_CONTROL", "Speed control, CX and UG" },
     { 0x0600, "KB_DATA", "Keyboard data" },
     { 0x0602, "KB_STATUS", "Keyboard status read, command write" },
     { 0x0604, "KB_IRQ", "Keyboard interrupt" },

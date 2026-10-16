@@ -26,6 +26,9 @@
 
 INLINE void PIT::Synchronize(u64 clocks)
 {
+    if (unlikely(clocks >= m_state.timer2_expiry))
+        SettleTimer2(clocks);
+
     u64 tick = GetTick(0, clocks);
 
     if (tick <= m_state.settled_tick)

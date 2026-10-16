@@ -40,6 +40,9 @@ public:
         bool sound;
         bool sound_memory;
         u64 settled_tick;
+        u8 timer2_control;
+        u16 timer2_period;
+        u64 timer2_expiry;
     };
 
 public:
@@ -47,6 +50,8 @@ public:
     ~PIT();
     void Init(PIC* pic, Scheduler* scheduler, Audio* audio);
     void SetTraceLogger(TraceLogger* trace_logger);
+    void SetFeatures(u32 features);
+    bool Decodes(u16 port) const;
     void Reset();
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
@@ -60,10 +65,15 @@ public:
     u64 GetTick(int channel, u64 clocks) const;
     PIT_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     u8 GetTimerLatch(u64 tick) const;
+    u8 ReadTimer2(u16 port);
+    void WriteTimer2(u16 port, u8 value, u64 clocks);
+    u8 GetTimer2Status(u64 clocks, u64* expiry) const;
+    u64 GetTimer2Clocks() const;
+    void SettleTimer2(u64 clocks);
     u64 GetTickClocks(u64 tick) const;
     void UpdateIRQ();
     void UpdateNextEvent();
@@ -79,6 +89,7 @@ private:
     TraceLogger* m_trace_logger;
     I8253 m_pit[2];
     PIT_State m_state;
+    u32 m_features;
 };
 
 // 1,228,800 Hz and 307,200 Hz are 48 and 12 ticks every 625 machine clocks
@@ -87,6 +98,10 @@ static const u64 k_pit_base_ticks = 12;
 static const u64 k_pit_clock_divisor = 625;
 static const int k_pit_buzzer_channel = 2;
 static const int k_pit_serial_channel = 4;
+static const u64 k_pit_timer2_tick_clocks = GT_MACHINE_CLOCK_RATE / 1000000;
+static const u8 k_pit_timer2_disable = 0x80;
+static const u8 k_pit_timer2_pending = 0x40;
+static const u8 k_pit_timer2_overrun = 0x20;
 
 #include "pit_inline.h"
 

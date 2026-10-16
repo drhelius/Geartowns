@@ -58,6 +58,7 @@ public:
     void Reset();
     void SetInternalDrives(int drives);
     void SetThreeMode(bool three_mode);
+    void SetFeatures(u32 features);
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
     void Write(u16 port, u8 value, u64 clocks);
@@ -114,6 +115,7 @@ private:
     FDC_State m_state;
     int m_internal_drives;
     bool m_three_mode;
+    u32 m_features;
 };
 
 static const int k_fdc_irq = 6;

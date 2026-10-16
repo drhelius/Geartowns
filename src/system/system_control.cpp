@@ -35,6 +35,7 @@ SystemControl::SystemControl()
     InitPointer(m_trace_logger);
     m_machine_id = 0x0101;
     m_features = 0;
+    m_wait_cycles = 16;
     memcpy(m_serial_rom, k_system_control_serial_rom, sizeof(m_serial_rom));
     m_state.reset_cause = 0;
     m_state.reset_pending = false;
@@ -44,6 +45,10 @@ SystemControl::SystemControl()
     m_state.serial_rom_bit = 0;
     m_state.expansion_nmi = false;
     m_state.port_05e0 = 0;
+    m_state.port_05e2 = 0;
+    m_state.port_05e6 = 0;
+    m_state.nmi_mask = false;
+    m_state.low_speed = false;
 }
 
 SystemControl::~SystemControl()
@@ -79,10 +84,23 @@ void SystemControl::SetFeatures(u32 features)
     m_features = features;
 }
 
+void SystemControl::SetCPUClockRate(u32 cpu_clock_rate)
+{
+    m_wait_cycles = cpu_clock_rate / 1000000;
+}
+
 bool SystemControl::Decodes(u16 port) const
 {
     switch (port)
     {
+        case 0x0025:
+        case 0x0028:
+            return (m_features & GT_MACHINE_FEATURE_NMI_MASK) != 0;
+        case 0x006C:
+            return (m_features & GT_MACHINE_FEATURE_WAIT_1US) != 0;
+        case 0x05E2:
+        case 0x05E6:
+            return (m_features & GT_MACHINE_FEATURE_MEMORY_WAIT) != 0;
         case 0x05E8:
             return (m_features & GT_MACHINE_FEATURE_RAM_SIZE) != 0;
         default:
@@ -106,6 +124,10 @@ void SystemControl::Reset()
     m_state.serial_rom_bit = 0;
     m_state.expansion_nmi = false;
     m_state.port_05e0 = 0;
+    m_state.port_05e2 = 0;
+    m_state.port_05e6 = 0;
+    m_state.nmi_mask = false;
+    m_state.low_speed = false;
     m_memory->SetNMIVectorProtect(false);
 }
 
@@ -137,6 +159,11 @@ u8 SystemControl::Read(u16 port)
             return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
+        case 0x0025:
+        case 0x0028:
+        case 0x006C:
+        case 0x05E2:
+        case 0x05E6:
         case 0x05E8:
             return Peek(port);
         default:
@@ -167,6 +194,16 @@ u8 SystemControl::Peek(u16 port) const
             return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
+        case 0x0025:
+            return Decodes(port) ? 0x7F : 0xFF;
+        case 0x0028:
+            return Decodes(port) ? (m_state.nmi_mask ? 0x01 : 0x00) : 0xFF;
+        case 0x006C:
+            return Decodes(port) ? 0x00 : 0xFF;
+        case 0x05E2:
+            return Decodes(port) ? m_state.port_05e2 : 0xFF;
+        case 0x05E6:
+            return Decodes(port) ? m_state.port_05e6 : 0xFF;
         case 0x05E8:
             return Decodes(port) ? (u8)((m_memory->GetMainRAMSize() >> 20) & 0x1F) : 0xFF;
         default:
@@ -198,6 +235,14 @@ void SystemControl::Write(u16 port, u8 value)
                 Debug("System: power off requested");
             }
             break;
+        case 0x0028:
+            if (Decodes(port))
+                m_state.nmi_mask = (value & 0x01) != 0;
+            break;
+        case 0x0030:
+            if ((m_features & GT_MACHINE_FEATURE_LSPEED) != 0)
+                m_state.low_speed = (value & 0x01) != 0;
+            break;
         case 0x0032:
             WriteSerialROM(value);
             break;
@@ -206,6 +251,14 @@ void SystemControl::Write(u16 port, u8 value)
             break;
         case 0x05E0:
             m_state.port_05e0 = value;
+            break;
+        case 0x05E2:
+            if (Decodes(port))
+                m_state.port_05e2 = value;
+            break;
+        case 0x05E6:
+            if (Decodes(port))
+                m_state.port_05e6 = value;
             break;
     }
 
@@ -243,17 +296,17 @@ void SystemControl::WriteSerialROM(u8 value)
 void SystemControl::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void SystemControl::LoadState(std::istream& stream)
+void SystemControl::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void SystemControl::Serialize(StateSerializer& serializer)
+void SystemControl::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE(serializer, m_state.reset_cause);
     G_SERIALIZE(serializer, m_state.reset_pending);
@@ -263,6 +316,21 @@ void SystemControl::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.serial_rom_bit);
     G_SERIALIZE(serializer, m_state.expansion_nmi);
     G_SERIALIZE(serializer, m_state.port_05e0);
+
+    if (version >= 3)
+    {
+        G_SERIALIZE(serializer, m_state.port_05e2);
+        G_SERIALIZE(serializer, m_state.port_05e6);
+        G_SERIALIZE(serializer, m_state.nmi_mask);
+        G_SERIALIZE(serializer, m_state.low_speed);
+    }
+    else
+    {
+        m_state.port_05e2 = 0;
+        m_state.port_05e6 = 0;
+        m_state.nmi_mask = false;
+        m_state.low_speed = false;
+    }
 }
 
 void SystemControl::SanitizeState()

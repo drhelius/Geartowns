@@ -1258,13 +1258,13 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     }
 
     m_scheduler->LoadState(stream);
-    m_memory->LoadState(stream);
+    m_memory->LoadState(stream, header.version);
     m_i386->LoadState(stream);
     m_audio->LoadState(stream, header.version);
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
-    m_pit->LoadState(stream);
-    m_system_control->LoadState(stream);
+    m_pit->LoadState(stream, header.version);
+    m_system_control->LoadState(stream, header.version);
     m_video->LoadState(stream);
     m_cdrom->LoadState(stream);
     m_cdrom_audio->LoadState(stream);
@@ -1700,7 +1700,13 @@ void GeartownsCore::ApplyMachineConfig()
         m_profiler->SetCPUClockRate(m_machine_config.cpu_clock_rate);
 
     if (IsValidPointer(m_memory))
+    {
         m_memory->SetMainRAMSize(m_machine_config.ram_size);
+        m_memory->SetFeatures(profile.features);
+    }
+
+    if (IsValidPointer(m_pit))
+        m_pit->SetFeatures(profile.features);
 
     if (IsValidPointer(m_system_control))
     {
@@ -1709,6 +1715,7 @@ void GeartownsCore::ApplyMachineConfig()
         m_system_control->SetMachineID(profile.machine_id);
         m_system_control->SetSerialRom(serial_rom ? m_firmware->GetSerialRom() : NULL);
         m_system_control->SetFeatures(profile.features);
+        m_system_control->SetCPUClockRate(m_machine_config.cpu_clock_rate);
     }
 
     if (IsValidPointer(m_i386))
@@ -1718,6 +1725,7 @@ void GeartownsCore::ApplyMachineConfig()
     {
         m_fdc->SetInternalDrives(m_machine_config.floppy_drives);
         m_fdc->SetThreeMode(profile.three_mode_floppy);
+        m_fdc->SetFeatures(profile.features);
     }
 }
 

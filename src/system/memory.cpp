@@ -62,6 +62,7 @@ Memory::Memory()
     m_cpu_map_generation = 0;
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
+    m_features = 0;
     SetDMAWindows(NULL);
     m_nmi_vector_protect = false;
     m_map_generation = 1;
@@ -76,6 +77,8 @@ Memory::Memory()
     m_state.boot_ram = false;
     m_state.dictionary = false;
     m_state.dictionary_bank = 0;
+    m_state.card_bank = 0;
+    m_state.card_attribute = false;
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     InitPointer(m_trace_logger);
@@ -118,6 +121,8 @@ void Memory::Reset()
 {
     ClearDebugRegions();
     m_nmi_vector_protect = false;
+    m_state.card_bank = 0;
+    m_state.card_attribute = false;
 
     if (IsValidPointer(m_state.main_ram))
         memset(m_state.main_ram, 0, m_main_ram_size);
@@ -1261,10 +1266,31 @@ void Memory::ResetMapping()
     ApplyMapping();
 }
 
+void Memory::SetFeatures(u32 features)
+{
+    m_features = features;
+}
+
+bool Memory::Decodes(u16 port) const
+{
+    switch (port)
+    {
+        case 0x0490:
+        case 0x0491:
+            return (m_features & GT_MACHINE_FEATURE_JEIDA4) != 0;
+        default:
+            return true;
+    }
+}
+
 u8 Memory::ReadMappingControl(u16 port) const
 {
     switch (port)
     {
+        case 0x0490:
+            return Decodes(port) ? m_state.card_bank : 0xFF;
+        case 0x0491:
+            return Decodes(port) ? (m_state.card_attribute ? 0x01 : 0x00) : 0xFF;
         case 0x0404:
             return m_state.main_memory ? 0x80 : 0x00;
         case 0x0480:
@@ -1290,6 +1316,14 @@ void Memory::WriteMappingControl(u16 port, u8 value)
         case 0x0484:
             m_state.dictionary_bank = value & 0x0F;
             break;
+        case 0x0490:
+            if (Decodes(port))
+                m_state.card_bank = value & 0x3F;
+            return;
+        case 0x0491:
+            if (Decodes(port))
+                m_state.card_attribute = (value & 0x01) != 0;
+            return;
         default:
             return;
     }
@@ -1334,17 +1368,17 @@ void Memory::ApplyMapping()
 void Memory::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void Memory::LoadState(std::istream& stream)
+void Memory::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void Memory::Serialize(StateSerializer& serializer)
+void Memory::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE_ARRAY(serializer, m_state.main_ram, m_main_ram_size);
     G_SERIALIZE_ARRAY(serializer, m_state.cmos, GT_CMOS_SIZE);
@@ -1352,11 +1386,23 @@ void Memory::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.boot_ram);
     G_SERIALIZE(serializer, m_state.dictionary);
     G_SERIALIZE(serializer, m_state.dictionary_bank);
+
+    if (version >= 3)
+    {
+        G_SERIALIZE(serializer, m_state.card_bank);
+        G_SERIALIZE(serializer, m_state.card_attribute);
+    }
+    else
+    {
+        m_state.card_bank = 0;
+        m_state.card_attribute = false;
+    }
 }
 
 void Memory::SanitizeState()
 {
     m_state.dictionary_bank &= 0x0F;
+    m_state.card_bank &= 0x3F;
     ApplyMapping();
     m_debug_snapshot_id++;
 }

@@ -33,6 +33,7 @@ FDC::FDC()
     memset(&m_state, 0, sizeof(m_state));
     m_internal_drives = FDC_DRIVES;
     m_three_mode = false;
+    m_features = 0;
 }
 
 FDC::~FDC()
@@ -74,6 +75,11 @@ void FDC::SetInternalDrives(int drives)
 }
 
 // Three-mode internal drives add MODE-B and identify themselves
+void FDC::SetFeatures(u32 features)
+{
+    m_features = features;
+}
+
 void FDC::SetThreeMode(bool three_mode)
 {
     m_three_mode = three_mode;
@@ -133,7 +139,8 @@ u8 FDC::Peek(u16 port, u64 clocks) const
 u8 FDC::ReadDriveStatus(u64 clocks) const
 {
     u8 type = m_three_mode ? 0x0C : 0x04;
-    return (IsReady(clocks) ? 0x03 : 0x01) | type;
+    u8 drives = ((m_features & GT_MACHINE_FEATURE_FDD_STATUS) != 0) && (m_internal_drives >= 2) ? 0x80 : 0x00;
+    return (IsReady(clocks) ? 0x03 : 0x01) | type | drives;
 }
 
 void FDC::Write(u16 port, u8 value, u64 clocks)

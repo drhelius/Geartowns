@@ -33,6 +33,10 @@ PIT::PIT()
     m_state.sound = false;
     m_state.sound_memory = false;
     m_state.settled_tick = 0;
+    m_state.timer2_control = 0;
+    m_state.timer2_period = 0;
+    m_state.timer2_expiry = GT_NO_EVENT;
+    m_features = 0;
 }
 
 PIT::~PIT()
@@ -54,6 +58,24 @@ void PIT::SetTraceLogger(TraceLogger* trace_logger)
     m_trace_logger = trace_logger;
 }
 
+void PIT::SetFeatures(u32 features)
+{
+    m_features = features;
+}
+
+bool PIT::Decodes(u16 port) const
+{
+    switch (port)
+    {
+        case 0x0068:
+        case 0x006A:
+        case 0x006B:
+            return (m_features & GT_MACHINE_FEATURE_INTERVAL_TIMER2) != 0;
+        default:
+            return true;
+    }
+}
+
 void PIT::Reset()
 {
     m_pit[0].Reset();
@@ -63,6 +85,9 @@ void PIT::Reset()
     m_state.sound = false;
     m_state.sound_memory = false;
     m_state.settled_tick = 0;
+    m_state.timer2_control = 0;
+    m_state.timer2_period = 0;
+    m_state.timer2_expiry = GT_NO_EVENT;
     UpdateIRQ();
     UpdateNextEvent();
 }
@@ -73,6 +98,9 @@ u8 PIT::Read(u16 port, u64 clocks)
 
     if (port == 0x0060)
         return m_state.timer_latch | (m_state.timer_enable << 2) | (m_state.sound ? 0x10 : 0x00);
+
+    if (port >= 0x0068)
+        return ReadTimer2(port);
 
     int chip = (port >> 4) & 0x01;
     int index = (port >> 1) & 0x03;
@@ -91,6 +119,17 @@ u8 PIT::Peek(u16 port, u64 clocks) const
         u64 tick = GetTick(0, clocks);
         u8 latch = tick > m_state.settled_tick ? GetTimerLatch(tick) : m_state.timer_latch;
         return latch | (m_state.timer_enable << 2) | (m_state.sound ? 0x10 : 0x00);
+    }
+
+    if (port >= 0x0068)
+    {
+        if (!Decodes(port))
+            return 0xFF;
+
+        if (port == 0x0068)
+            return GetTimer2Status(clocks, NULL);
+
+        return port == 0x006A ? (u8)m_state.timer2_period : (u8)(m_state.timer2_period >> 8);
     }
 
     int chip = (port >> 4) & 0x01;
@@ -127,6 +166,12 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
         return;
     }
 
+    if (port >= 0x0068)
+    {
+        WriteTimer2(port, value, clocks);
+        return;
+    }
+
     int chip = (port >> 4) & 0x01;
     int index = (port >> 1) & 0x03;
     int counter = index == 3 ? value >> 6 : index;
@@ -158,6 +203,79 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
     UpdateNextEvent();
 }
 
+u8 PIT::ReadTimer2(u16 port)
+{
+    if (!Decodes(port))
+        return 0xFF;
+
+    if (port != 0x0068)
+        return port == 0x006A ? (u8)m_state.timer2_period : (u8)(m_state.timer2_period >> 8);
+
+    u8 status = m_state.timer2_control;
+    m_state.timer2_control &= ~(k_pit_timer2_pending | k_pit_timer2_overrun);
+    UpdateIRQ();
+    UpdateNextEvent();
+    return status;
+}
+
+void PIT::WriteTimer2(u16 port, u8 value, u64 clocks)
+{
+    if (!Decodes(port))
+        return;
+
+    switch (port)
+    {
+        case 0x0068:
+            m_state.timer2_control = (value & k_pit_timer2_disable) |
+                (m_state.timer2_control & (k_pit_timer2_pending | k_pit_timer2_overrun));
+            break;
+        case 0x006A:
+            m_state.timer2_period = (m_state.timer2_period & 0xFF00) | value;
+            break;
+        case 0x006B:
+            m_state.timer2_period = (u16)((m_state.timer2_period & 0x00FF) | (value << 8));
+            m_state.timer2_expiry = clocks + GetTimer2Clocks();
+            break;
+    }
+
+    UpdateIRQ();
+    UpdateNextEvent();
+}
+
+u64 PIT::GetTimer2Clocks() const
+{
+    return (m_state.timer2_period == 0 ? 0x10000ULL : (u64)m_state.timer2_period) * k_pit_timer2_tick_clocks;
+}
+
+u8 PIT::GetTimer2Status(u64 clocks, u64* expiry) const
+{
+    u8 status = m_state.timer2_control;
+    u64 next = m_state.timer2_expiry;
+
+    if (clocks >= next)
+    {
+        u64 timeouts = (clocks - next) / GetTimer2Clocks() + 1;
+        next += timeouts * GetTimer2Clocks();
+
+        if ((status & k_pit_timer2_pending) != 0 || timeouts > 1)
+            status |= k_pit_timer2_overrun;
+
+        status |= k_pit_timer2_pending;
+    }
+
+    if (IsValidPointer(expiry))
+        *expiry = next;
+
+    return status;
+}
+
+void PIT::SettleTimer2(u64 clocks)
+{
+    m_state.timer2_control = GetTimer2Status(clocks, &m_state.timer2_expiry);
+    UpdateIRQ();
+    UpdateNextEvent();
+}
+
 // Reading CFF98h turns the buzzer on and writing it turns it off
 void PIT::SetMemoryBuzzer(bool enabled)
 {
@@ -170,7 +288,8 @@ void PIT::SetMemoryBuzzer(bool enabled)
 
 void PIT::UpdateIRQ()
 {
-    m_pic->SetIRQLine(0, (m_state.timer_latch & m_state.timer_enable) != 0);
+    bool timer2 = (m_state.timer2_control & (k_pit_timer2_disable | k_pit_timer2_pending)) == k_pit_timer2_pending;
+    m_pic->SetIRQLine(0, ((m_state.timer_latch & m_state.timer_enable) != 0) || timer2);
 }
 
 void PIT::UpdateNextEvent()
@@ -190,6 +309,9 @@ void PIT::UpdateNextEvent()
         if (edge != k_i8253_no_edge)
             next_event = MIN(next_event, GetTickClocks(edge));
     }
+
+    if ((m_state.timer2_control & (k_pit_timer2_disable | k_pit_timer2_pending)) == 0)
+        next_event = MIN(next_event, m_state.timer2_expiry);
 
     m_scheduler->Schedule(SCHEDULER_EVENT_PIT, next_event);
 }
@@ -246,14 +368,31 @@ void PIT::SaveState(std::ostream& stream)
     Serialize(serializer);
     m_pit[0].SaveState(stream);
     m_pit[1].SaveState(stream);
+    G_SERIALIZE(serializer, m_state.timer2_control);
+    G_SERIALIZE(serializer, m_state.timer2_period);
+    G_SERIALIZE(serializer, m_state.timer2_expiry);
 }
 
-void PIT::LoadState(std::istream& stream)
+void PIT::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
     m_pit[0].LoadState(stream);
     m_pit[1].LoadState(stream);
+
+    if (version >= 3)
+    {
+        G_SERIALIZE(serializer, m_state.timer2_control);
+        G_SERIALIZE(serializer, m_state.timer2_period);
+        G_SERIALIZE(serializer, m_state.timer2_expiry);
+    }
+    else
+    {
+        m_state.timer2_control = 0;
+        m_state.timer2_period = 0;
+        m_state.timer2_expiry = GT_NO_EVENT;
+    }
+
     SanitizeState();
 }
 
@@ -270,6 +409,7 @@ void PIT::SanitizeState()
 {
     m_state.timer_latch &= 0x03;
     m_state.timer_enable &= 0x03;
+    m_state.timer2_control &= k_pit_timer2_disable | k_pit_timer2_pending | k_pit_timer2_overrun;
     UpdateIRQ();
     UpdateNextEvent();
 }

@@ -42,6 +42,10 @@ public:
         u8 serial_rom_bit;
         bool expansion_nmi;
         u8 port_05e0;
+        u8 port_05e2;
+        u8 port_05e6;
+        bool nmi_mask;
+        bool low_speed;
     };
 
 public:
@@ -53,7 +57,9 @@ public:
     void SetMachineID(u16 machine_id);
     void SetSerialRom(const u8* serial_rom);
     void SetFeatures(u32 features);
+    void SetCPUClockRate(u32 cpu_clock_rate);
     bool Decodes(u16 port) const;
+    void Wait(GT_Bus_Access_Context& context) const;
     u8 Read(u16 port);
     u8 Peek(u16 port) const;
     const u8* GetSerialRom() const;
@@ -64,11 +70,11 @@ public:
     bool IsPowerOffPending() const;
     SystemControl_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void WriteSerialROM(u8 value);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:
@@ -77,6 +83,7 @@ private:
     TraceLogger* m_trace_logger;
     u16 m_machine_id;
     u32 m_features;
+    u32 m_wait_cycles;
     u8 m_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE];
 };
 

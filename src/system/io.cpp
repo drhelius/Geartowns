@@ -114,6 +114,11 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0022:
             // Power control
             break;
+        case 0x0025:
+            // NMI mask capability
+        case 0x0028:
+            // NMI mask
+            return m_system_control->Read(port);
         case 0x0030:
             // Machine ID low
         case 0x0031:
@@ -139,7 +144,17 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // PIT 3-5 control
         case 0x0060:
             // Timer interrupt status
+        case 0x0068:
+            // Interval Timer II status
+        case 0x006A:
+            // Interval Timer II period low
+        case 0x006B:
+            // Interval Timer II period high
             return m_pit->Read(port, context.clocks);
+        case 0x006C:
+            // 1 us wait
+            m_system_control->Wait(context);
+            return m_system_control->Read(port);
         case 0x0070:
             // RTC data
         case 0x0080:
@@ -228,6 +243,10 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // System ROM mapping
         case 0x0484:
             // Dictionary ROM bank
+        case 0x0490:
+            // Memory card bank
+        case 0x0491:
+            // Memory card attribute
             return m_memory->ReadMappingControl(port);
         case 0x048A:
             // Memory card status
@@ -326,6 +345,10 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             break;
         case 0x05E0:
             // Undocumented, BIOS writes 01h
+        case 0x05E2:
+            // Memory wait
+        case 0x05E6:
+            // Memory wait
         case 0x05E8:
             // RAM size
             return m_system_control->Read(port);
@@ -589,11 +612,31 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x05E0:
             value = m_system_control->Peek(port);
             break;
+        case 0x0025:
+        case 0x0028:
+        case 0x006C:
+        case 0x05E2:
+        case 0x05E6:
         case 0x05E8:
             if (!m_system_control->Decodes(port))
                 return false;
 
             value = m_system_control->Peek(port);
+            break;
+        case 0x0068:
+        case 0x006A:
+        case 0x006B:
+            if (!m_pit->Decodes(port))
+                return false;
+
+            value = m_pit->Peek(port, clocks);
+            break;
+        case 0x0490:
+        case 0x0491:
+            if (!m_memory->Decodes(port))
+                return false;
+
+            value = m_memory->ReadMappingControl(port);
             break;
         case 0x0600:
         case 0x0602:
@@ -664,8 +707,12 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Power off
             m_system_control->Write(port, value);
             break;
+        case 0x0028:
+            // NMI mask
         case 0x0030:
-            // Machine ID low
+            // LSPEED
+            m_system_control->Write(port, value);
+            break;
         case 0x0031:
             // Machine ID high
             break;
@@ -691,7 +738,17 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // PIT 3-5 control
         case 0x0060:
             // Timer interrupt control
+        case 0x0068:
+            // Interval Timer II control
+        case 0x006A:
+            // Interval Timer II period low
+        case 0x006B:
+            // Interval Timer II period high
             m_pit->Write(port, value, context.clocks);
+            break;
+        case 0x006C:
+            // 1 us wait
+            m_system_control->Wait(context);
             break;
         case 0x0070:
             // RTC data
@@ -784,6 +841,10 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // System ROM mapping
         case 0x0484:
             // Dictionary ROM bank
+        case 0x0490:
+            // Memory card bank
+        case 0x0491:
+            // Memory card attribute
             m_memory->WriteMappingControl(port, value);
             break;
         case 0x048A:
@@ -897,6 +958,10 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x05E0:
             // Undocumented, BIOS writes 01h
+        case 0x05E2:
+            // Memory wait
+        case 0x05E6:
+            // Memory wait
             m_system_control->Write(port, value);
             break;
         case 0x0600:

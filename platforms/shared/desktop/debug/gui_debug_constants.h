@@ -38,6 +38,8 @@ static const stDebugPortLabel k_debug_port_labels[] =
     { 0x0020, "SYS_RESET", "Reset cause read, reset and write protect" },
     { 0x0022, "SYS_POWER", "Power off" },
     { 0x0025, "NMI_CAPABILITY", "NMI mask facility, UX and later" },
+    { 0x0026, "FREE_RUN_LO", "Free-running microsecond timer low, UG and the Marty" },
+    { 0x0027, "FREE_RUN_HI", "Free-running microsecond timer high, UG and the Marty" },
     { 0x0028, "NMI_MASK", "NMI mask, UX and later" },
     { 0x0030, "MACHINE_ID_LO", "Machine ID low, LSPEED write on the UX" },
     { 0x0031, "MACHINE_ID_HI", "Machine ID high" },

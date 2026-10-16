@@ -52,6 +52,7 @@ const u32 k_machine_features_ux = k_machine_features_10f | GT_MACHINE_FEATURE_NM
     GT_MACHINE_FEATURE_LSPEED | GT_MACHINE_FEATURE_POWER_OFF_RESET;
 const u32 k_machine_features_ug = k_machine_features_10f | GT_MACHINE_FEATURE_SPEED_CONTROL |
     GT_MACHINE_FEATURE_UG_REGISTERS | GT_MACHINE_FEATURE_FREE_RUN_TIMER;
+const u32 k_machine_features_marty = k_machine_features_ux | GT_MACHINE_FEATURE_FREE_RUN_TIMER;
 const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_REGISTERS |
     GT_MACHINE_FEATURE_FREE_RUN_TIMER | GT_MACHINE_FEATURE_CRT_POWER_OFF;
 
@@ -71,7 +72,7 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
     { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", false, 0x0C02, GT_MACHINE_CPU_80486DX2, 66000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mx, 4, 2, true, "fmtownsmx" },
     { "FM Towns II MF / Fresh", "mf_fresh", "MF20, MF170W, Fresh", "February 1994", false, 0x0F02, GT_MACHINE_CPU_80486SX, 33000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv" },
     { "FM Towns II HC", "hc", "HC53, HC53M", "February 1995", false, 0x1102, GT_MACHINE_CPU_PENTIUM, 90000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hc, 8, 1, true, NULL },
-    { "FM Towns Marty", "marty", "Marty, Marty 2, TC Marty", "February 1993", false, 0x4A03, GT_MACHINE_CPU_80386SX, 16000000, GT_MACHINE_MAP_MARTY, k_machine_features_ux, k_machine_ram_marty, 2, 1, false, "fmtmarty" }
+    { "FM Towns Marty", "marty", "Marty, Marty 2, TC Marty", "February 1993", true, 0x4A03, GT_MACHINE_CPU_80386SX, 16000000, GT_MACHINE_MAP_MARTY, k_machine_features_marty, k_machine_ram_marty, 2, 1, false, "fmtmarty" }
 };
 
 const GT_Machine_Model k_machine_release_order[GT_MACHINE_RELEASE_ORDER_COUNT] =
@@ -108,9 +109,9 @@ const GT_Machine_DMA_Window k_machine_dma_windows_24bit[] =
 
 const GT_Machine_Memory_Map k_machine_maps[GT_MACHINE_MAP_COUNT] =
 {
-    { "32-bit", 0xFFFFFFFFU, 0x80000000U, 0x80100000U, 0x81000000U, 0xC2000000U, 0xC2080000U, 0xC2100000U, 0xC2140000U, 0xC2200000U, 0xFFFC0000U, NULL },
-    { "24-bit", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0x00C00000U, 0x00E00000U, 0x00E80000U, 0x00F00000U, 0x00F40000U, 0x00F80000U, 0x00FC0000U, k_machine_dma_windows_24bit },
-    { "Marty", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0x00C00000U, 0x00600000U, 0x00E80000U, 0x00F00000U, 0x00F40000U, 0x00F80000U, 0x00FC0000U, k_machine_dma_windows_24bit }
+    { "32-bit", 0xFFFFFFFFU, 0x80000000U, 0x80100000U, 0x81000000U, 0xC2000000U, 0xC2080000U, 0xC2100000U, 0xC2140000U, 0xC2200000U, 0xFFFC0000U, 0, NULL },
+    { "24-bit", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0x00C00000U, 0x00E00000U, 0x00E80000U, 0x00F00000U, 0x00F40000U, 0x00F80000U, 0x00FC0000U, 0, k_machine_dma_windows_24bit },
+    { "Marty", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0x00C00000U, 0x00600000U, 0x00E80000U, 0x00F00000U, 0x00F40000U, 0x00F80000U, 0x00FC0000U, 0x00680000U, k_machine_dma_windows_24bit }
 };
 
 const char* const k_machine_feature_names[GT_MACHINE_FEATURE_COUNT] =

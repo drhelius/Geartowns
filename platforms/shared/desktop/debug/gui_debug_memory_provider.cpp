@@ -38,6 +38,7 @@ static int firmware_region_id(GT_Firmware_Type type)
         case GT_FIRMWARE_FONT: return GT_DEBUG_REGION_FONT_ROM;
         case GT_FIRMWARE_DICTIONARY: return GT_DEBUG_REGION_DICTIONARY_ROM;
         case GT_FIRMWARE_FONT20: return GT_DEBUG_REGION_FONT20_ROM;
+        case GT_FIRMWARE_EXTENSION: return GT_DEBUG_REGION_EXTENSION_ROM;
         default: return 0;
     }
 }
@@ -54,6 +55,7 @@ static const u8* firmware_region_data(Firmware* firmware, GT_Firmware_Type type)
         case GT_FIRMWARE_FONT: return firmware->GetFontRom();
         case GT_FIRMWARE_DICTIONARY: return firmware->GetDictionaryRom();
         case GT_FIRMWARE_FONT20: return firmware->GetFont20Rom();
+        case GT_FIRMWARE_EXTENSION: return firmware->GetExtensionRom();
         default: return NULL;
     }
 }
@@ -64,7 +66,7 @@ static bool firmware_region_listed(GT_Firmware_Type type)
     Memory* memory = IsValidPointer(core) ? core->GetMemory() : NULL;
     int id = firmware_region_id(type);
 
-    if (id == 0)
+    if ((id == 0) || !IsValidPointer(core) || !core->GetFirmware()->GetInfo(type).loaded)
         return false;
 
     if (!IsValidPointer(memory))

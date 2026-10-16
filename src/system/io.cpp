@@ -119,6 +119,11 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0028:
             // NMI mask
             return m_system_control->Read(port);
+        case 0x0026:
+            // Free-running timer low
+        case 0x0027:
+            // Free-running timer high
+            return m_pit->Read(port, context.clocks);
         case 0x0030:
             // Machine ID low
         case 0x0031:
@@ -623,6 +628,8 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
 
             value = m_system_control->Peek(port);
             break;
+        case 0x0026:
+        case 0x0027:
         case 0x0068:
         case 0x006A:
         case 0x006B:

@@ -2146,7 +2146,11 @@ json DebugAdapter::GetPITStatus()
     u8 timer2 = 0;
     u8 period_low = 0;
     u8 period_high = 0;
+    u8 free_low = 0;
+    u8 free_high = 0;
     bool has_timer2 = m_core->GetIO()->Peek(0x0068, clocks, timer2);
+    bool has_free_run = m_core->GetIO()->Peek(0x0026, clocks, free_low) &&
+        m_core->GetIO()->Peek(0x0027, clocks, free_high);
     m_core->GetIO()->Peek(0x006A, clocks, period_low);
     m_core->GetIO()->Peek(0x006B, clocks, period_high);
     bool timer2_irq = has_timer2 && ((timer2 & (k_pit_timer2_disable | k_pit_timer2_pending)) == k_pit_timer2_pending);
@@ -2177,6 +2181,9 @@ json DebugAdapter::GetPITStatus()
             {"interval_us", period == 0 ? 65536 : period}
         };
     }
+
+    if (has_free_run)
+        result["free_running_timer"] = {{"count", Hex((free_high << 8) | free_low, 4)}};
 
     return result;
 }

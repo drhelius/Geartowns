@@ -539,7 +539,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 
 ### System Hardware
 - `get_pic_status` - Get both 8259A PICs: per-IRQ source, input level, request, in-service, mask and vector; ICW1-ICW4 decoded, init state, read register, special mask, poll and priority
-- `get_pit_status` - Get the timers: board register 0060 (enables, latches, SOUND, IRQ0), the six 8253 counters with use, clock, mode, access, BCD, reload, live count, OUT and frequency or period, and Interval Timer II on models that have it
+- `get_pit_status` - Get the timers: board register 0060 (enables, latches, SOUND, IRQ0), the six 8253 counters with use, clock, mode, access, BCD, reload, live count, OUT and frequency or period, Interval Timer II and the free-running microsecond timer on models that have them
 - `get_dma_status` - Get the uPD71071 DMA: device control bits, mask, requests, terminal count, selected channel, and each channel's device, mode, current and base address and count
 - `get_rtc_status` - Get the MSM58321 clock: date (two-digit year), time, weekday, 12/24 hour, leap phase, the 0070/0080 interface and its 16 registers
 - `get_system_status` - Get the machine (model, CPU, clock, RAM, floppy drives), reset cause and power-off request, memory windows (0404/0480/0484), NMI vector write protect, expansion NMI mask, RAM wait, the later-model registers this model has (RAM size, NMI mask, LSPEED, memory wait, memory card bank) and the serial ID ROM

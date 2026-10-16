@@ -140,6 +140,7 @@ enum GT_Firmware_Type
     GT_FIRMWARE_DICTIONARY,
     GT_FIRMWARE_FONT20,
     GT_FIRMWARE_SERIAL,
+    GT_FIRMWARE_EXTENSION,
     GT_FIRMWARE_COUNT
 };
 
@@ -440,6 +441,7 @@ struct GT_Machine_Memory_Map
     u32 cmos;
     u32 pcm_window;
     u32 system_rom;
+    u32 extension_rom;
     const GT_Machine_DMA_Window* dma_windows;
 };
 

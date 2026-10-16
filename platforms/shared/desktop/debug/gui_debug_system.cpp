@@ -145,7 +145,7 @@ void gui_debug_window_pit(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(253, 111), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(616, 331), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(616, 348), ImGuiCond_FirstUseEver);
     ImGui::Begin("Timers", &config_debug.show_pit);
 
     ImGui::PushFont(gui_default_font);
@@ -159,7 +159,10 @@ void gui_debug_window_pit(void)
     u8 timer2 = 0;
     u8 period_low = 0;
     u8 period_high = 0;
+    u8 free_low = 0;
+    u8 free_high = 0;
     bool has_timer2 = core->GetIO()->Peek(0x0068, clocks, timer2);
+    bool has_free_run = core->GetIO()->Peek(0x0026, clocks, free_low) && core->GetIO()->Peek(0x0027, clocks, free_high);
     core->GetIO()->Peek(0x006A, clocks, period_low);
     core->GetIO()->Peek(0x006B, clocks, period_high);
     bool timer2_irq = has_timer2 && ((timer2 & (k_pit_timer2_disable | k_pit_timer2_pending)) == k_pit_timer2_pending);
@@ -187,7 +190,7 @@ void gui_debug_window_pit(void)
         ImGui::EndTable();
     }
 
-    ImGui::NewLine(); ImGui::TextColored(cyan, "INTERVAL TIMER II (0068-006B)"); ImGui::Separator();
+    ImGui::NewLine(); ImGui::TextColored(cyan, "LATER TIMERS (0026, 0068-006B)"); ImGui::Separator();
 
     if (ImGui::BeginTable("##pit_timer2", 6, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
     {
@@ -220,6 +223,14 @@ void gui_debug_window_pit(void)
 
         if (has_timer2)
             ImGui::TextColored(white, "$%02X", timer2);
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextRow();
+        draw_grid_label("FREE RUN");
+
+        if (has_free_run)
+            ImGui::TextColored(white, "$%04X", (free_high << 8) | free_low);
         else
             ImGui::TextColored(gray, "--");
 

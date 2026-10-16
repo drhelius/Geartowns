@@ -37,13 +37,14 @@ struct GT_DB_Entry
 #define GT_GAMEDB_FLOPPY_REQUIRED          0x0020
 #define GT_GAMEDB_FLOPPY_OPTIONAL          0x0040
 #define GT_GAMEDB_FLOPPY_PROTECTED         0x0080
+#define GT_GAMEDB_FIRMWARE_EXTENSION       0x0200
 #define GT_GAMEDB_FIRMWARE_SERIAL          0x0400
 #define GT_GAMEDB_FIRMWARE_SYSTEM          0x0800
 #define GT_GAMEDB_FIRMWARE_OS              0x1000
 #define GT_GAMEDB_FIRMWARE_FONT            0x2000
 #define GT_GAMEDB_FIRMWARE_DICTIONARY      0x4000
 #define GT_GAMEDB_FIRMWARE_FONT20          0x8000
-#define GT_GAMEDB_FIRMWARE_MASK            0xFC00
+#define GT_GAMEDB_FIRMWARE_MASK            0xFE00
 
 const GT_DB_Entry k_game_database[] =
 {
@@ -304,6 +305,12 @@ const GT_DB_Entry k_game_database[] =
     { 0xDD6FD544, "FM Towns II Font ROM", GT_GAMEDB_FIRMWARE_FONT, 0, 0 },
     { 0x82D1DAA2, "FM Towns II Dictionary ROM", GT_GAMEDB_FIRMWARE_DICTIONARY, 0, 0 },
     { 0x5CC7E6BC, "FM Towns II UX Serial ROM", GT_GAMEDB_FIRMWARE_SERIAL, 0, 0 },
+
+    // FM Towns Marty firmware (V09)
+    { 0x937311F6, "FM Towns Marty System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0 },
+    { 0x2BC2AF96, "FM Towns Marty OS ROM", GT_GAMEDB_FIRMWARE_OS, 0, 0 },
+    { 0xE1A9FA72, "FM Towns Marty Extension ROM", GT_GAMEDB_FIRMWARE_EXTENSION, 0, 0 },
+    { 0x75660AAC, "FM Towns II 20-dot Font ROM", GT_GAMEDB_FIRMWARE_FONT20, 0, 0 },
 
     // Free FM Towns Project firmware
     { 0x65DC3B1F, "Free FM Towns System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0 },

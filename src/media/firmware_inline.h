@@ -68,6 +68,11 @@ INLINE const u8* Firmware::GetDictionaryRom() const
     return m_dictionary_rom;
 }
 
+INLINE const u8* Firmware::GetExtensionRom() const
+{
+    return m_extension_rom;
+}
+
 INLINE const u8* Firmware::GetSerialRom() const
 {
     return m_serial_rom;

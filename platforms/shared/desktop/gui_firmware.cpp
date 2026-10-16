@@ -31,8 +31,7 @@
 #include "gui_menus.h"
 #include "utils.h"
 
-static const char* const k_component_labels[GT_FIRMWARE_COUNT] = { "SYSTEM", "OS", "FONT", "DICTIONARY", "FONT 20",
-    "SERIAL" };
+static const char* const k_component_labels[GT_FIRMWARE_COUNT] = { "SYSTEM", "OS", "FONT", "DICTIONARY", "FONT 20", "SERIAL", "EXTENSION" };
 
 static GT_Machine_Model selected_model = GT_MACHINE_MODEL1_2;
 static bool focus_window = false;
@@ -307,15 +306,20 @@ static void draw_components(void)
 
 static void draw_component(GT_Firmware_Type type, const GT_Firmware_Info& info)
 {
+    bool needed = Firmware::IsRequired(type) ||
+        ((type == GT_FIRMWARE_EXTENSION) && (k_machine_maps[k_machine_profiles[selected_model].map].extension_rom != 0));
+
     draw_grid_label(k_component_labels[type]);
 
-    if (info.synthetic)
+    if (info.synthetic && needed)
+        ImGui::TextColored(red, "MISSING");
+    else if (info.synthetic)
         ImGui::TextColored(gray, "%s", (type == GT_FIRMWARE_SERIAL) ? "GENERATED" : "BLANK");
     else if (info.recognized)
         ImGui::TextColored(green, "RECOGNIZED");
     else if (info.loaded)
         ImGui::TextColored(cornflower, "UNKNOWN");
-    else if (Firmware::IsRequired(type))
+    else if (needed)
         ImGui::TextColored(red, "MISSING");
     else
         ImGui::TextColored(gray, "OPTIONAL");

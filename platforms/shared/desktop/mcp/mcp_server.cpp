@@ -1531,7 +1531,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_pit_status"},
         {"title", "Get PIT Status"},
-        {"description", "Read the timers: board register 0060 (timer enables, latches, SOUND, IRQ0), the six 8253 counters with use, clock, mode, access, BCD, reload, live count, OUT and period, and Interval Timer II (0068-006B: enable, pending, overrun, period) on models that have it."},
+        {"description", "Read the timers: board register 0060 (timer enables, latches, SOUND, IRQ0), the six 8253 counters with use, clock, mode, access, BCD, reload, live count, OUT and period, Interval Timer II (0068-006B: enable, pending, overrun, period) and the free-running microsecond timer (0026) on models that have them."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

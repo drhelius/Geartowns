@@ -1795,6 +1795,10 @@ void GeartownsCore::InitMemoryMap()
         GT_FIRMWARE_OS_SIZE, map.os_rom, rom_flags))
         Error("Unable to map the OS ROM");
 
+    if ((map.extension_rom != 0) && !m_memory->RegisterDebugRegion(GT_DEBUG_REGION_EXTENSION_ROM, "Extension ROM",
+        m_firmware->GetExtensionRom(), NULL, GT_FIRMWARE_EXTENSION_SIZE, map.extension_rom, rom_flags))
+        Error("Unable to map the extension ROM");
+
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM, "Dictionary ROM", m_firmware->GetDictionaryRom(),
         NULL, GT_FIRMWARE_DICTIONARY_SIZE, map.dictionary_rom, data_rom_flags))
         Error("Unable to map the dictionary ROM");

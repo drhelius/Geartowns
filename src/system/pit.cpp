@@ -67,6 +67,9 @@ bool PIT::Decodes(u16 port) const
 {
     switch (port)
     {
+        case 0x0026:
+        case 0x0027:
+            return (m_features & GT_MACHINE_FEATURE_FREE_RUN_TIMER) != 0;
         case 0x0068:
         case 0x006A:
         case 0x006B:
@@ -94,6 +97,9 @@ void PIT::Reset()
 
 u8 PIT::Read(u16 port, u64 clocks)
 {
+    if (port < 0x0040)
+        return Peek(port, clocks);
+
     Synchronize(clocks);
 
     if (port == 0x0060)
@@ -114,6 +120,9 @@ u8 PIT::Read(u16 port, u64 clocks)
 
 u8 PIT::Peek(u16 port, u64 clocks) const
 {
+    if (port < 0x0040)
+        return Decodes(port) ? (u8)((clocks / k_pit_microsecond_clocks) >> ((port & 0x01) * 8)) : 0xFF;
+
     if (port == 0x0060)
     {
         u64 tick = GetTick(0, clocks);
@@ -244,7 +253,7 @@ void PIT::WriteTimer2(u16 port, u8 value, u64 clocks)
 
 u64 PIT::GetTimer2Clocks() const
 {
-    return (m_state.timer2_period == 0 ? 0x10000ULL : (u64)m_state.timer2_period) * k_pit_timer2_tick_clocks;
+    return (m_state.timer2_period == 0 ? 0x10000ULL : (u64)m_state.timer2_period) * k_pit_microsecond_clocks;
 }
 
 u8 PIT::GetTimer2Status(u64 clocks, u64* expiry) const

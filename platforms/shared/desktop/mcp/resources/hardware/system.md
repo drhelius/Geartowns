@@ -5,7 +5,8 @@
 The FM Towns board surrounds the 80386 with standard parts at FM Towns specific ports:
 
 - Two 8259A interrupt controllers (master and slave)
-- Two 8253 timers (six counters) and a timer control register, plus Interval Timer II on the 10F and later (the UX)
+- Two 8253 timers (six counters) and a timer control register, plus Interval Timer II on the 10F and later (the UX,
+  the Marty) and a free-running microsecond timer on the UG and the Marty
 - A uPD71071 DMA controller with four channels
 - An MSM58321 real time clock
 - System control registers (reset, power, machine ID, serial ID ROM, memory windows)
@@ -102,6 +103,11 @@ The period counts microseconds, 0 meaning 65536. Each expiry reloads it. The fir
 one before the read sets bit 5. IRQ0 is also active while bit 6 is set and bit 7 clear, until 0068h is read; bit 7
 masks the interrupt without stopping the count. The UX BIOS writes 80h to 0068h at reset.
 
+### Free-running timer (UG, the Marty)
+
+0026h reads a 16-bit counter of microseconds, 0027h its high byte; read it as one word, so a carry between two byte
+reads can't tear it. The Marty BIOS times its delays with it and doesn't start without it.
+
 ---
 
 ## 4. DMA Controller (uPD71071)
@@ -175,7 +181,7 @@ there is no century rule. A write to register 13 resets the divider and READY st
 | 0022h | | Bit 6 power off |
 | 0025h | UX: 7Fh, bit 7 = 0 means the NMI mask exists | |
 | 0028h | UX: bit 0 NMI masked | UX: bit 0 masks NMI; power-on reset clears it, a software reset keeps it |
-| 0030h-0031h | Bits 15-3 machine ID, bits 2-0 CPU ID (001b = 80386DX, 011b = 80386SX); 0101h on Model 1/2, 0303h on the UX | UX: 0030h bit 0 LSPEED, two-wait RAM |
+| 0030h-0031h | Bits 15-3 machine ID, bits 2-0 CPU ID (001b = 80386DX, 011b = 80386SX); 0101h on Model 1/2, 0303h on the UX, 4A03h on the Marty | UX: 0030h bit 0 LSPEED, two-wait RAM |
 | 006Ch | 10F and later: 00h, and a 1 µs wait | 10F and later: a 1 µs wait |
 | 0032h | Bit 0 serial ID ROM data | Bit 7 ID RESET, bit 6 ID CLK, bit 5 /CS |
 | 0400h | Bit 0 resolution: 0 on Model 1/2 | |
@@ -198,9 +204,9 @@ a DMA transfer, and executes HLT right after the reset write. The ports marked w
 writes on machines without them; 006Ch delays reads and writes by 1 µs of CPU time at any CPU speed.
 
 The serial ID ROM holds 256 bits, read one bit per ID CLK pulse after an ID RESET: a 0 nibble, `FUJITSU` in ASCII,
-reserved ones, the model number (0101h on Model 1/2, 0303h on the UX), nine serial number digits and a final
-00000h. The UX set's `mytownsux.rom` supplies it; without a serial ROM file the emulator builds one with the model
-number and a zero serial number.
+reserved ones, the model number (0101h on Model 1/2, 0303h on the UX, 4A03h on the Marty), nine serial number digits
+and a final 00000h. The UX set's `mytownsux.rom` supplies it; without a serial ROM file the emulator builds one with
+the model number and a zero serial number. The ports marked UX exist on the Marty too.
 
 ---
 

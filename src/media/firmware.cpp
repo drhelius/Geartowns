@@ -32,7 +32,13 @@ static const char* const k_firmware_file_names[GT_FIRMWARE_COUNT][FIRMWARE_FILE_
     { "FMT_FNT.ROM", NULL, NULL },
     { "FMT_DIC.ROM", NULL, NULL },
     { "FMT_F20.ROM", "FMT_F20_A.ROM", NULL },
-    { "MYTOWNS.ROM", "MYTOWNSUX.ROM", "MYTOWNSM2.ROM" }
+    { "MYTOWNS.ROM", "MYTOWNSUX.ROM", "MYTOWNSM2.ROM" },
+    { "MAR_EX0-3.ROM", NULL, NULL }
+};
+
+static const char* const k_firmware_extension_names[FIRMWARE_EXTENSION_PARTS] =
+{
+    "MAR_EX0.ROM", "MAR_EX1.ROM", "MAR_EX2.ROM", "MAR_EX3.ROM"
 };
 
 Firmware::Firmware()
@@ -60,6 +66,7 @@ void Firmware::Unload()
     memset(m_dictionary_rom, 0xFF, sizeof(m_dictionary_rom));
     memset(m_font20_rom, 0xFF, sizeof(m_font20_rom));
     memset(m_serial_rom, 0xFF, sizeof(m_serial_rom));
+    memset(m_extension_rom, 0xFF, sizeof(m_extension_rom));
     m_ready = false;
 }
 
@@ -74,9 +81,8 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
     u8* pending_data[GT_FIRMWARE_COUNT] = {};
     GT_Firmware_Info pending_info[GT_FIRMWARE_COUNT];
     memset(pending_info, 0, sizeof(pending_info));
-    MediaFile* zip_file = NULL;
-    mz_zip_archive zip;
-    bool success = !source.zip || OpenZip(source.path, &zip_file, zip);
+    Container container;
+    bool success = OpenContainer(source.path, source.zip, container);
 
     if (!success)
         Error("Unable to open firmware zip %s", source.path);
@@ -84,11 +90,14 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
     for (int i = 0; success && (i < GT_FIRMWARE_COUNT); i++)
     {
         GT_Firmware_Type type = (GT_Firmware_Type)i;
-        bool ok = source.zip ? LoadZipComponent(zip, source.path, type, &pending_data[i], pending_info[i]) :
-            LoadComponent(GetFilePath(source.path, type).c_str(), type, &pending_data[i], pending_info[i]);
+        pending_data[i] = new (std::nothrow) u8[GetExpectedSize(type)];
+        bool ok = IsValidPointer(pending_data[i]) &&
+            ReadComponent(container, type, pending_data[i], pending_info[i], true);
 
         if (!ok)
         {
+            SafeDeleteArray(pending_data[i]);
+
             if (IsRequired(type))
             {
                 Error("Required firmware is missing or invalid: %s in %s", GetFileName(type), source.path);
@@ -101,11 +110,7 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
         }
     }
 
-    if (IsValidPointer(zip_file))
-    {
-        mz_zip_reader_end(&zip);
-        SafeDelete(zip_file);
-    }
+    CloseContainer(container);
 
     if (!success)
     {
@@ -157,87 +162,6 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
     return true;
 }
 
-bool Firmware::LoadComponent(const char* file_path, GT_Firmware_Type type, u8** data, GT_Firmware_Info& info)
-{
-    MediaFile* file = MediaFile::OpenFile(file_path);
-
-    if (!IsValidPointer(file))
-        return false;
-
-    int expected_size = GetExpectedSize(type);
-    s64 file_size = file->GetSize();
-
-    if (file_size != expected_size)
-    {
-        Error("Incorrect firmware size for %s: %lld bytes, expected %d", file_path, (long long)file_size, expected_size);
-        SafeDelete(file);
-        return false;
-    }
-
-    u8* buffer = new (std::nothrow) u8[expected_size];
-
-    if (!IsValidPointer(buffer))
-    {
-        Error("Unable to allocate %d bytes for %s", expected_size, file_path);
-        SafeDelete(file);
-        return false;
-    }
-
-    bool ok = file->ReadExact(buffer, (u64)expected_size);
-    SafeDelete(file);
-
-    if (!ok)
-    {
-        Error("Unable to read firmware file %s", file_path);
-        SafeDeleteArray(buffer);
-        return false;
-    }
-
-    *data = buffer;
-    strncpy_fit(info.path, file_path, sizeof(info.path));
-    info.size = expected_size;
-    info.crc = CalculateCRC32(0, buffer, expected_size);
-    info.loaded = true;
-    return true;
-}
-
-bool Firmware::LoadZipComponent(mz_zip_archive& zip, const char* zip_path, GT_Firmware_Type type, u8** data,
-    GT_Firmware_Info& info)
-{
-    int index = FindZipComponent(zip, type);
-    mz_zip_archive_file_stat stat;
-
-    if ((index < 0) || !mz_zip_reader_file_stat(&zip, (mz_uint)index, &stat))
-        return false;
-
-    int expected_size = GetExpectedSize(type);
-
-    if (stat.m_uncomp_size != (mz_uint64)expected_size)
-    {
-        Error("Incorrect firmware size for %s in %s: %llu bytes, expected %d", stat.m_filename, zip_path,
-            (unsigned long long)stat.m_uncomp_size, expected_size);
-        return false;
-    }
-
-    u8* buffer = new (std::nothrow) u8[expected_size];
-
-    if (!IsValidPointer(buffer) || !mz_zip_reader_extract_to_mem(&zip, (mz_uint)index, buffer, expected_size, 0))
-    {
-        Error("Unable to read firmware %s in %s", stat.m_filename, zip_path);
-        SafeDeleteArray(buffer);
-        return false;
-    }
-
-    std::string path(zip_path);
-    append_path_component(path, stat.m_filename);
-    *data = buffer;
-    strncpy_fit(info.path, path.c_str(), sizeof(info.path));
-    info.size = expected_size;
-    info.crc = CalculateCRC32(0, buffer, expected_size);
-    info.loaded = true;
-    return true;
-}
-
 void Firmware::GatherDatabaseInfo(GT_Firmware_Type type, GT_Firmware_Info& info)
 {
     info.recognized = false;
@@ -273,6 +197,8 @@ u8* Firmware::GetWritableData(GT_Firmware_Type type)
             return m_font20_rom;
         case GT_FIRMWARE_SERIAL:
             return m_serial_rom;
+        case GT_FIRMWARE_EXTENSION:
+            return m_extension_rom;
         default:
             return NULL;
     }
@@ -294,6 +220,8 @@ const char* Firmware::GetComponentName(GT_Firmware_Type type)
             return "20-dot Font ROM";
         case GT_FIRMWARE_SERIAL:
             return "Serial ROM";
+        case GT_FIRMWARE_EXTENSION:
+            return "Extension ROM";
         default:
             return "Unknown ROM";
     }
@@ -302,58 +230,6 @@ const char* Firmware::GetComponentName(GT_Firmware_Type type)
 const char* Firmware::GetFileName(GT_Firmware_Type type)
 {
     return ((int)type >= 0) && ((int)type < GT_FIRMWARE_COUNT) ? k_firmware_file_names[type][0] : "";
-}
-
-std::string Firmware::GetFilePath(const char* directory_path, GT_Firmware_Type type)
-{
-    std::vector<std::string> folders;
-    std::vector<std::string> files;
-    bool listed = MediaFile::ListDirectory(directory_path, folders, files);
-    std::sort(files.begin(), files.end());
-
-    for (int i = 0; i < FIRMWARE_FILE_NAMES; i++)
-    {
-        const char* name = k_firmware_file_names[type][i];
-
-        if (!IsValidPointer(name))
-            continue;
-
-        std::string upper(name);
-        std::string lower(name);
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-
-        if (listed)
-        {
-            for (size_t j = 0; j < files.size(); j++)
-            {
-                if (strings_equal_ignore_case(files[j], upper))
-                {
-                    std::string path(directory_path);
-                    append_path_component(path, files[j].c_str());
-                    return path;
-                }
-            }
-
-            continue;
-        }
-
-        for (int j = 0; j < 2; j++)
-        {
-            std::string path(directory_path);
-            append_path_component(path, (j == 0) ? upper.c_str() : lower.c_str());
-            MediaFile* file = MediaFile::OpenFile(path.c_str());
-
-            if (IsValidPointer(file))
-            {
-                SafeDelete(file);
-                return path;
-            }
-        }
-    }
-
-    std::string path(directory_path);
-    append_path_component(path, GetFileName(type));
-    return path;
 }
 
 int Firmware::GetExpectedSize(GT_Firmware_Type type)
@@ -372,6 +248,8 @@ int Firmware::GetExpectedSize(GT_Firmware_Type type)
             return GT_FIRMWARE_FONT20_SIZE;
         case GT_FIRMWARE_SERIAL:
             return GT_FIRMWARE_SERIAL_SIZE;
+        case GT_FIRMWARE_EXTENSION:
+            return GT_FIRMWARE_EXTENSION_SIZE;
         default:
             return 0;
     }
@@ -379,7 +257,7 @@ int Firmware::GetExpectedSize(GT_Firmware_Type type)
 
 bool Firmware::IsRequired(GT_Firmware_Type type)
 {
-    return (type != GT_FIRMWARE_FONT20) && (type != GT_FIRMWARE_SERIAL);
+    return (type != GT_FIRMWARE_FONT20) && (type != GT_FIRMWARE_SERIAL) && (type != GT_FIRMWARE_EXTENSION);
 }
 
 u16 Firmware::GetDatabaseFlag(GT_Firmware_Type type)
@@ -398,6 +276,8 @@ u16 Firmware::GetDatabaseFlag(GT_Firmware_Type type)
             return GT_GAMEDB_FIRMWARE_FONT20;
         case GT_FIRMWARE_SERIAL:
             return GT_GAMEDB_FIRMWARE_SERIAL;
+        case GT_FIRMWARE_EXTENSION:
+            return GT_GAMEDB_FIRMWARE_EXTENSION;
         default:
             return GT_GAMEDB_FLAG_NONE;
     }
@@ -493,57 +373,36 @@ bool Firmware::IdentifySource(GT_Firmware_Source& source)
 {
     source.crc = 0;
     source.set = -1;
+    Container container;
+
+    if (!OpenContainer(source.path, source.zip, container))
+        return false;
+
     bool complete = true;
 
-    if (source.zip)
+    for (int i = 0; complete && (i < GT_FIRMWARE_COUNT); i++)
     {
-        MediaFile* file = NULL;
-        mz_zip_archive zip;
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
 
-        if (!OpenZip(source.path, &file, zip))
-            return false;
+        if (!IsRequired(type))
+            continue;
 
-        for (int i = 0; complete && (i < GT_FIRMWARE_COUNT); i++)
-        {
-            GT_Firmware_Type type = (GT_Firmware_Type)i;
-            int index = FindZipComponent(zip, type);
-            mz_zip_archive_file_stat stat;
-            bool found = (index >= 0) && mz_zip_reader_file_stat(&zip, (mz_uint)index, &stat) &&
-                (stat.m_uncomp_size == (mz_uint64)GetExpectedSize(type));
-
-            if (found && (type == GT_FIRMWARE_SYSTEM))
-                source.crc = stat.m_crc32;
-
-            complete = found || !IsRequired(type);
-        }
-
-        mz_zip_reader_end(&zip);
-        SafeDelete(file);
+        for (int part = 0; complete && (part < GetPartCount(type)); part++)
+            complete = ReadPart(container, type, part, NULL, NULL, false);
     }
-    else
+
+    if (complete)
     {
-        for (int i = 0; complete && (i < GT_FIRMWARE_COUNT); i++)
-        {
-            GT_Firmware_Type type = (GT_Firmware_Type)i;
-            int size = GetExpectedSize(type);
-            MediaFile* file = MediaFile::OpenFile(GetFilePath(source.path, type).c_str());
-            bool found = IsValidPointer(file) && (file->GetSize() == size);
+        u8* system_rom = new (std::nothrow) u8[GT_FIRMWARE_SYSTEM_SIZE];
+        complete = IsValidPointer(system_rom) && ReadPart(container, GT_FIRMWARE_SYSTEM, 0, system_rom, NULL, false);
 
-            if (found && (type == GT_FIRMWARE_SYSTEM))
-            {
-                u8* buffer = new (std::nothrow) u8[size];
-                found = IsValidPointer(buffer) && file->ReadExact(buffer, (u64)size);
+        if (complete)
+            source.crc = CalculateCRC32(0, system_rom, GT_FIRMWARE_SYSTEM_SIZE);
 
-                if (found)
-                    source.crc = CalculateCRC32(0, buffer, size);
-
-                SafeDeleteArray(buffer);
-            }
-
-            SafeDelete(file);
-            complete = found || !IsRequired(type);
-        }
+        SafeDeleteArray(system_rom);
     }
+
+    CloseContainer(container);
 
     if (complete)
         source.set = FindSet(source.crc);
@@ -585,26 +444,232 @@ bool Firmware::OpenZip(const char* path, MediaFile** file, mz_zip_archive& zip)
     return true;
 }
 
-int Firmware::FindZipComponent(mz_zip_archive& zip, GT_Firmware_Type type)
+bool Firmware::OpenContainer(const char* path, bool zip, Container& container)
 {
-    for (int i = 0; i < FIRMWARE_FILE_NAMES; i++)
+    container.zip = zip;
+    container.path = path;
+    InitPointer(container.zip_file);
+    container.listed = false;
+    container.packed_entry = -1;
+
+    if (zip)
+        return OpenZip(path, &container.zip_file, container.archive);
+
+    std::vector<std::string> folders;
+    container.listed = MediaFile::ListDirectory(path, folders, container.files);
+    std::sort(container.files.begin(), container.files.end());
+    return true;
+}
+
+void Firmware::CloseContainer(Container& container)
+{
+    if (!IsValidPointer(container.zip_file))
+        return;
+
+    mz_zip_reader_end(&container.archive);
+    SafeDelete(container.zip_file);
+}
+
+bool Firmware::ReadComponent(Container& container, GT_Firmware_Type type, u8* destination, GT_Firmware_Info& info, bool report)
+{
+    int parts = GetPartCount(type);
+    u32 part_size = (u32)(GetExpectedSize(type) / parts);
+    std::string path;
+
+    for (int part = 0; part < parts; part++)
     {
-        const char* name = k_firmware_file_names[type][i];
+        if (!ReadPart(container, type, part, destination + part * part_size, part == 0 ? &path : NULL, report))
+            return false;
+    }
 
-        if (!IsValidPointer(name))
-            continue;
+    strncpy_fit(info.path, path.c_str(), sizeof(info.path));
+    info.size = GetExpectedSize(type);
+    info.crc = CalculateCRC32(0, destination, info.size);
+    info.loaded = true;
+    return true;
+}
 
-        for (mz_uint file = 0; file < mz_zip_reader_get_num_files(&zip); file++)
+bool Firmware::ReadPart(Container& container, GT_Firmware_Type type, int part, u8* destination, std::string* path, bool report)
+{
+    static const Slice k_packed[] =
+    {
+        { GT_FIRMWARE_OS, 0, "MROM.M36", 0x000000 },
+        { GT_FIRMWARE_EXTENSION, 0, "MROM.M36", 0x080000 },
+        { GT_FIRMWARE_EXTENSION, 1, "MROM.M36", 0x100000 },
+        { GT_FIRMWARE_EXTENSION, 2, "MROM.M36", 0x180000 },
+        { GT_FIRMWARE_EXTENSION, 3, "MROM.M37", 0x000000 },
+        { GT_FIRMWARE_FONT20, 0, "MROM.M37", 0x080000 },
+        { GT_FIRMWARE_DICTIONARY, 0, "MROM.M37", 0x100000 },
+        { GT_FIRMWARE_FONT, 0, "MROM.M37", 0x180000 },
+        { GT_FIRMWARE_SYSTEM, 0, "MROM.M37", 0x1C0000 }
+    };
+
+    u32 size = (u32)(GetExpectedSize(type) / GetPartCount(type));
+
+    for (int i = 0; IsValidPointer(GetPartName(type, part, i)); i++)
+    {
+        if (ReadNamed(container, GetPartName(type, part, i), 0, size, size, destination, path, report))
+            return true;
+    }
+
+    for (size_t i = 0; i < sizeof(k_packed) / sizeof(k_packed[0]); i++)
+    {
+        const Slice& slice = k_packed[i];
+
+        if ((slice.type == type) && (slice.part == part) &&
+            ReadNamed(container, slice.file, slice.offset, size, FIRMWARE_PACKED_SIZE, destination, path, report))
+            return true;
+    }
+
+    return false;
+}
+
+bool Firmware::ReadNamed(Container& container, const char* name, u32 offset, u32 size, u32 file_size, u8* destination, std::string* path, bool report)
+{
+    if (container.zip)
+    {
+        int index = FindZipEntry(container.archive, name);
+        mz_zip_archive_file_stat stat;
+
+        if ((index < 0) || !mz_zip_reader_file_stat(&container.archive, (mz_uint)index, &stat))
+            return false;
+
+        if (stat.m_uncomp_size != (mz_uint64)file_size)
         {
-            char file_name[GT_MAX_PATH];
-            mz_zip_reader_get_filename(&zip, file, file_name, sizeof(file_name));
+            if (report)
+                Error("Incorrect firmware size for %s in %s: %llu bytes, expected %u", stat.m_filename, container.path,
+                    (unsigned long long)stat.m_uncomp_size, file_size);
+            return false;
+        }
 
-            if ((strlen(file_name) == strlen(name)) && ends_with_no_case(file_name, name))
-                return (int)file;
+        if (IsValidPointer(destination) && (size == file_size))
+        {
+            if (!mz_zip_reader_extract_to_mem(&container.archive, (mz_uint)index, destination, size, 0))
+            {
+                Error("Unable to read firmware %s in %s", stat.m_filename, container.path);
+                return false;
+            }
+        }
+        else if (IsValidPointer(destination))
+        {
+            if (container.packed_entry != index)
+            {
+                container.packed.resize(file_size);
+
+                if (!mz_zip_reader_extract_to_mem(&container.archive, (mz_uint)index, &container.packed[0], file_size,
+                    0))
+                {
+                    Error("Unable to read firmware %s in %s", stat.m_filename, container.path);
+                    container.packed_entry = -1;
+                    return false;
+                }
+
+                container.packed_entry = index;
+            }
+
+            memcpy(destination, &container.packed[offset], size);
+        }
+
+        if (IsValidPointer(path))
+        {
+            *path = container.path;
+            append_path_component(*path, stat.m_filename);
+        }
+
+        return true;
+    }
+
+    std::string file_path = FindFile(container, name);
+    MediaFile* file = file_path.empty() ? NULL : MediaFile::OpenFile(file_path.c_str());
+
+    if (!IsValidPointer(file))
+        return false;
+
+    s64 actual_size = file->GetSize();
+    bool ok = actual_size == (s64)file_size;
+
+    if (!ok && report)
+        Error("Incorrect firmware size for %s: %lld bytes, expected %u", file_path.c_str(), (long long)actual_size,
+            file_size);
+
+    if (ok && IsValidPointer(destination))
+    {
+        ok = file->ReadAt(offset, destination, size);
+
+        if (!ok)
+            Error("Unable to read firmware file %s", file_path.c_str());
+    }
+
+    SafeDelete(file);
+
+    if (ok && IsValidPointer(path))
+        *path = file_path;
+
+    return ok;
+}
+
+std::string Firmware::FindFile(const Container& container, const char* name)
+{
+    std::string upper(name);
+    std::string lower(name);
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    if (container.listed)
+    {
+        for (size_t i = 0; i < container.files.size(); i++)
+        {
+            if (strings_equal_ignore_case(container.files[i], upper))
+            {
+                std::string path(container.path);
+                append_path_component(path, container.files[i].c_str());
+                return path;
+            }
+        }
+
+        return "";
+    }
+
+    for (int i = 0; i < 2; i++)
+    {
+        std::string path(container.path);
+        append_path_component(path, (i == 0) ? upper.c_str() : lower.c_str());
+        MediaFile* file = MediaFile::OpenFile(path.c_str());
+
+        if (IsValidPointer(file))
+        {
+            SafeDelete(file);
+            return path;
         }
     }
 
+    return "";
+}
+
+int Firmware::FindZipEntry(mz_zip_archive& zip, const char* name)
+{
+    for (mz_uint file = 0; file < mz_zip_reader_get_num_files(&zip); file++)
+    {
+        char file_name[GT_MAX_PATH];
+        mz_zip_reader_get_filename(&zip, file, file_name, sizeof(file_name));
+
+        if ((strlen(file_name) == strlen(name)) && ends_with_no_case(file_name, name))
+            return (int)file;
+    }
+
     return -1;
+}
+
+int Firmware::GetPartCount(GT_Firmware_Type type)
+{
+    return type == GT_FIRMWARE_EXTENSION ? FIRMWARE_EXTENSION_PARTS : 1;
+}
+
+const char* Firmware::GetPartName(GT_Firmware_Type type, int part, int index)
+{
+    if (type == GT_FIRMWARE_EXTENSION)
+        return index == 0 ? k_firmware_extension_names[part] : NULL;
+
+    return index < FIRMWARE_FILE_NAMES ? k_firmware_file_names[type][index] : NULL;
 }
 
 size_t Firmware::ReadZipCallback(void* opaque, mz_uint64 offset, void* buffer, size_t size)

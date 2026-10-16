@@ -143,6 +143,19 @@ void sound_queue_stop(void)
     }
 }
 
+void sound_queue_flush(void)
+{
+    if (!sound_queue_sound_open || !sound_queue_stream)
+        return;
+
+    SDL_PauseAudioStreamDevice(sound_queue_stream);
+    SDL_ClearAudioStream(sound_queue_stream);
+    sound_queue_playing = false;
+
+    if ((sound_queue_ratio != 1.0f) && SDL_SetAudioStreamFrequencyRatio(sound_queue_stream, 1.0f))
+        sound_queue_ratio = 1.0f;
+}
+
 int sound_queue_get_sample_count(void)
 {
     if (!sound_queue_stream)

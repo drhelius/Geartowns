@@ -821,6 +821,14 @@ bool emu_audio_is_source_muted(int source)
 
 void emu_audio_reset(void)
 {
+    if (audio_enabled && sound_queue_is_open())
+        sound_queue_flush();
+    else
+        emu_audio_restart();
+}
+
+void emu_audio_restart(void)
+{
     sound_queue_stop();
 
     if (audio_enabled)

@@ -177,6 +177,7 @@ EXTERN void emu_audio_set_source_volume(int source, float volume);
 EXTERN void emu_audio_set_source_mute(int source, bool mute);
 EXTERN bool emu_audio_is_source_muted(int source);
 EXTERN void emu_audio_reset(void);
+EXTERN void emu_audio_restart(void);
 EXTERN bool emu_is_audio_enabled(void);
 EXTERN bool emu_is_audio_open(void);
 

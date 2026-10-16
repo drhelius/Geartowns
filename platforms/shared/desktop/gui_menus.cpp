@@ -1823,7 +1823,7 @@ static void menu_audio(void)
 
             if (ImGui::SliderInt("##buffer_count", &config_audio.buffer_count, 2, 5, "Buffers = %d"))
             {
-                emu_audio_reset();
+                emu_audio_restart();
             }
 
             ImGui::PopItemWidth();

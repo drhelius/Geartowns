@@ -1600,6 +1600,29 @@ bool emu_load_bios(const char* path)
     return geartowns->LoadBios(path);
 }
 
+void emu_apply_firmware_folders(void)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+    {
+        GT_Machine_Model model = k_machine_release_order[i];
+        geartowns->SetModelFirmwareFolder(model, config_machine.firmware_paths[model].c_str());
+    }
+
+    geartowns->SearchFirmware();
+}
+
+bool emu_reload_firmware(void)
+{
+    if (!IsValidPointer(geartowns))
+        return false;
+
+    sync_cmos();
+    return geartowns->ReloadFirmware();
+}
+
 void emu_mcp_set_transport(int mode, int tcp_port, const char* tcp_address)
 {
     if (IsValidPointer(mcp_manager))

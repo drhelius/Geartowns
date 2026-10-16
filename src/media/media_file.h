@@ -20,6 +20,8 @@
 #ifndef MEDIA_FILE_H
 #define MEDIA_FILE_H
 
+#include <string>
+#include <vector>
 #include "../common/types.h"
 
 struct retro_vfs_interface;
@@ -30,7 +32,8 @@ public:
     virtual ~MediaFile();
 
     static MediaFile* OpenFile(const char* path);
-    static void SetVfsInterface(const retro_vfs_interface* iface);
+    static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
+    static void SetVfsInterface(const retro_vfs_interface* iface, unsigned version = 1);
     static bool HasVfsInterface();
 
     virtual bool Open(const char* path) = 0;

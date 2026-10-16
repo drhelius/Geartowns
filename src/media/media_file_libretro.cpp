@@ -24,6 +24,7 @@
 #include "../common/common.h"
 
 const retro_vfs_interface* MediaFileLibretro::s_vfs_interface = NULL;
+unsigned MediaFileLibretro::s_vfs_version = 0;
 
 MediaFileLibretro::MediaFileLibretro()
 {
@@ -36,14 +37,45 @@ MediaFileLibretro::~MediaFileLibretro()
     Close();
 }
 
-void MediaFileLibretro::SetVfsInterface(const retro_vfs_interface* iface)
+void MediaFileLibretro::SetVfsInterface(const retro_vfs_interface* iface, unsigned version)
 {
     s_vfs_interface = iface;
+    s_vfs_version = IsValidPointer(iface) ? version : 0;
 }
 
 bool MediaFileLibretro::HasVfsInterface()
 {
     return s_vfs_interface && s_vfs_interface->open;
+}
+
+bool MediaFileLibretro::HasVfsDirectories()
+{
+    return HasVfsInterface() && (s_vfs_version >= 3) && s_vfs_interface->opendir && s_vfs_interface->readdir &&
+        s_vfs_interface->dirent_get_name && s_vfs_interface->dirent_is_dir && s_vfs_interface->closedir;
+}
+
+bool MediaFileLibretro::ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files)
+{
+    retro_vfs_dir_handle* dir = s_vfs_interface->opendir(path, false);
+
+    if (!IsValidPointer(dir))
+        return false;
+
+    while (s_vfs_interface->readdir(dir))
+    {
+        const char* name = s_vfs_interface->dirent_get_name(dir);
+
+        if (!IsValidPointer(name) || !strcmp(name, ".") || !strcmp(name, ".."))
+            continue;
+
+        if (s_vfs_interface->dirent_is_dir(dir))
+            folders.push_back(name);
+        else
+            files.push_back(name);
+    }
+
+    s_vfs_interface->closedir(dir);
+    return true;
 }
 
 bool MediaFileLibretro::IsCdRomUriPath(const char* path)

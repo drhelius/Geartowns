@@ -35,7 +35,12 @@ INLINE bool Firmware::IsComplete() const
 
 INLINE const char* Firmware::GetDirectory() const
 {
-    return m_directory;
+    return m_source.path;
+}
+
+INLINE const GT_Firmware_Source& Firmware::GetSource() const
+{
+    return m_source;
 }
 
 INLINE const GT_Firmware_Info& Firmware::GetInfo(GT_Firmware_Type type) const

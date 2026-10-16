@@ -92,6 +92,11 @@ public:
     bool IsMachineConfigPending();
     bool LoadBios(const char* directory_path);
     void UnloadBios();
+    void SetModelFirmwareFolder(GT_Machine_Model model, const char* directory_path);
+    void SearchFirmware();
+    bool ReloadFirmware();
+    const GT_Firmware_Source& GetFirmwareSource(GT_Machine_Model model);
+    bool HasFirmware(GT_Machine_Model model);
     bool LoadMedia(const char* file_path);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     bool LoadPhysicalCdRom(const char* device_id);
@@ -168,6 +173,8 @@ private:
     void Reset();
     void ResetCPU();
     void ResolveMachineConfig();
+    bool CanAutoSelect(GT_Machine_Model model);
+    bool LoadMachineFirmware(bool force);
     void ApplyMachineConfig();
     void InitMemoryMap();
 
@@ -203,6 +210,9 @@ private:
 
     GT_Machine_Settings m_machine_settings;
     const GT_DB_Entry* m_auto_entry;
+    std::string m_firmware_folder;
+    std::string m_model_firmware_folders[GT_MACHINE_COUNT];
+    GT_Firmware_Source m_firmware_sources[GT_MACHINE_COUNT];
     GT_Machine_Config m_machine_config;
     GT_Machine_Config m_pending_machine_config;
     GT_Machine_Report m_machine_report;

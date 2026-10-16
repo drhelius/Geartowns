@@ -31,6 +31,66 @@ MediaFileNative::~MediaFileNative()
     Close();
 }
 
+bool MediaFileNative::ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files)
+{
+#if defined(_WIN32)
+    std::wstring search = utf8_to_wstring((std::string(path) + "\\*").c_str());
+    WIN32_FIND_DATAW fd;
+    HANDLE find = FindFirstFileW(search.c_str(), &fd);
+
+    if (find == INVALID_HANDLE_VALUE)
+        return false;
+
+    do
+    {
+        if (wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L".."))
+        {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                folders.push_back(wstring_to_utf8(fd.cFileName));
+            else
+                files.push_back(wstring_to_utf8(fd.cFileName));
+        }
+    }
+    while (FindNextFileW(find, &fd));
+
+    FindClose(find);
+    return true;
+#elif !defined(__LIBRETRO__)
+    DIR* dir = opendir(path);
+
+    if (!IsValidPointer(dir))
+        return false;
+
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+            continue;
+
+        std::string item(path);
+        append_path_component(item, entry->d_name);
+        struct stat info;
+
+        if (stat(item.c_str(), &info) != 0)
+            continue;
+
+        if (S_ISDIR(info.st_mode))
+            folders.push_back(entry->d_name);
+        else if (S_ISREG(info.st_mode))
+            files.push_back(entry->d_name);
+    }
+
+    closedir(dir);
+    return true;
+#else
+    UNUSED(path);
+    UNUSED(folders);
+    UNUSED(files);
+    return false;
+#endif
+}
+
 bool MediaFileNative::Open(const char* path)
 {
     Close();

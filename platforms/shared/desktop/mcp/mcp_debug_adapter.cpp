@@ -414,6 +414,8 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 
 static const char* const k_mcp_breakpoint_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "linear", "physical", "io" };
 static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database" };
+static const char* const k_mcp_firmware_sources[] = { "none", "model_folder", "own_set", "compatible_set", "unknown",
+    "other_set" };
 static const char* const k_mcp_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] =
 {
     "any", "exception", "hardware", "software"
@@ -4251,6 +4253,25 @@ json DebugAdapter::GetMediaInfo()
             {"database_name", info.database_name}
         });
     }
+
+    json sources = json::array();
+
+    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+    {
+        GT_Machine_Model model = k_machine_release_order[i];
+        const GT_Firmware_Source& source = m_core->GetFirmwareSource(model);
+        sources.push_back({
+            {"model", k_machine_profiles[model].key},
+            {"source", k_mcp_firmware_sources[source.type]},
+            {"path", source.path},
+            {"zip", source.zip},
+            {"set", source.set >= 0 ? k_firmware_sets[source.set].name : ""},
+            {"system_crc", Hex(source.crc, 8)}
+        });
+    }
+
+    result["firmware_folder"] = config_emulator.bios_path;
+    result["firmware_sources"] = sources;
 
     static const char* media_names[] = { "2D", "2DD", "2HD" };
     json drives = json::array();

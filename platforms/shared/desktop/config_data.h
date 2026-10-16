@@ -75,6 +75,7 @@ struct config_Emulator
     int ffwd_speed;
     int runahead;
     bool show_info;
+    bool show_firmware;
     std::string recent_roms[config_max_recent_roms];
     int savestates_dir_option;
     std::string savestates_path;
@@ -105,6 +106,7 @@ struct config_Machine
     int model;
     int cpu_mhz;
     int ram_mb;
+    std::string firmware_paths[GT_MACHINE_COUNT];
 };
 
 struct config_Video

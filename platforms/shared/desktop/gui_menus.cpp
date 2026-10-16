@@ -25,6 +25,7 @@
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "gui_floppy.h"
+#include "gui_firmware.h"
 #include "gui_notifications.h"
 #include "config.h"
 #include "application.h"
@@ -44,7 +45,6 @@
 static bool open_rom = false;
 static bool open_state = false;
 static bool save_state = false;
-static bool open_bios = false;
 static bool open_about = false;
 static bool open_load_defaults = false;
 static bool save_screenshot = false;
@@ -57,7 +57,6 @@ static bool choose_video_recordings_path = false;
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 static bool open_physical_cdrom = false;
 #endif
-static const GuiColor& firmware_unknown_color = cornflower;
 static const GuiColor& machine_warning_color = amber;
 static const GuiColor& service_mcp_http_color = green;
 static const GuiColor& service_mcp_stdio_color = amber;
@@ -73,11 +72,10 @@ static void menu_machine(void);
 static bool menu_machine_model(void);
 static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile);
 static bool menu_machine_ram(const GT_Machine_Profile& profile);
-static void menu_machine_hardware(const GT_Machine_Profile& profile);
+static void menu_machine_hardware(GT_Machine_Model model);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
 static float get_combo_width(float text_width);
-static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type);
 static void menu_video(void);
 static void menu_shader(void);
 static void draw_shader_parameters(void);
@@ -114,7 +112,6 @@ void gui_main_menu(void)
     open_rom = false;
     open_state = false;
     save_state = false;
-    open_bios = false;
     open_about = false;
     open_load_defaults = false;
     save_screenshot = false;
@@ -513,56 +510,6 @@ static bool media_menu_actions_enabled(void)
     return true;
 }
 
-static void draw_firmware_component_status(Firmware* firmware, GT_Firmware_Type type)
-{
-    const GT_Firmware_Info& info = firmware->GetInfo(type);
-
-    ImGui::Text("%s", Firmware::GetComponentName(type));
-    ImGui::SameLine(175.0f);
-
-    if (info.synthetic)
-        ImGui::TextDisabled("Optional (blank)");
-    else if (info.recognized)
-        ImGui::TextColored(service_mcp_http_color, "Recognized");
-    else if (info.loaded)
-        ImGui::TextColored(firmware_unknown_color, "Loaded");
-    else if (Firmware::IsRequired(type))
-        ImGui::TextDisabled("Missing");
-    else
-        ImGui::TextDisabled("Optional");
-
-    bool hovered = ImGui::IsItemHovered();
-
-    if (info.loaded || info.synthetic)
-    {
-        ImGui::SameLine();
-        ImGui::TextDisabled("%08X", info.crc);
-        hovered = hovered || ImGui::IsItemHovered();
-    }
-
-    if (hovered)
-    {
-        ImGui::BeginTooltip();
-        ImGui::Text("%s", Firmware::GetFileName(type));
-        ImGui::Text("Expected size: %d KiB", Firmware::GetExpectedSize(type) / 1024);
-
-        if (info.synthetic)
-            ImGui::Text("File not present. Reads return 0xFF.");
-        else if (info.loaded)
-        {
-            if (info.recognized)
-                ImGui::Text("%s", info.database_name);
-            else
-                ImGui::Text("Custom or unknown firmware");
-
-            ImGui::Text("%s", info.path);
-            ImGui::Text("CRC: %08X", info.crc);
-        }
-
-        ImGui::EndTooltip();
-    }
-}
-
 static void menu_emulator(void)
 {
     if (ImGui::BeginMenu("Emulator"))
@@ -898,38 +845,12 @@ static void menu_machine(void)
     if (menu_machine_ram(profile))
         changed = true;
 
-    menu_machine_hardware(profile);
+    menu_machine_hardware(core->GetPendingMachineConfig().model);
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Firmware"))
-    {
-        if (ImGui::MenuItem("Choose Default Folder..."))
-            open_bios = true;
-
-        ImGui::PushItemWidth(450);
-
-        if (ImGui::InputText("##bios_path", gui_bios_path, IM_ARRAYSIZE(gui_bios_path),
-            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue))
-        {
-            gui_load_bios(gui_bios_path);
-        }
-
-        ImGui::PopItemWidth();
-
-        Firmware* firmware = core->GetFirmware();
-        ImGui::Separator();
-
-        if (firmware->IsReady())
-            ImGui::TextColored(service_mcp_http_color, "Firmware ready");
-        else
-            ImGui::TextDisabled("Firmware not loaded");
-
-        for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
-            draw_firmware_component_status(firmware, (GT_Firmware_Type)i);
-
-        ImGui::EndMenu();
-    }
+    if (ImGui::MenuItem("Firmware..."))
+        gui_firmware_open();
 
     if (changed)
         emu_apply_machine_settings();
@@ -991,7 +912,7 @@ static bool menu_machine_model(void)
             const GT_Machine_Profile& profile = k_machine_profiles[model];
             snprintf(cpu, sizeof(cpu), "%s %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
 
-            ImGui::BeginDisabled(!profile.emulated);
+            ImGui::BeginDisabled(!profile.emulated || !core->HasFirmware(model));
 
             if (ImGui::Selectable(profile.name, config_machine.model == model))
             {
@@ -1151,16 +1072,20 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
     return changed;
 }
 
-static void menu_machine_hardware(const GT_Machine_Profile& profile)
+static void menu_machine_hardware(GT_Machine_Model model)
 {
     if (!ImGui::BeginMenu("Hardware"))
         return;
+
+    const GT_Machine_Profile& profile = k_machine_profiles[model];
+    char firmware[GT_MAX_PATH];
+    gui_get_firmware_status(model, firmware, sizeof(firmware));
 
     ImGui::TextDisabled("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
     ImGui::TextDisabled("Memory map: %s", k_machine_maps[profile.map].name);
     ImGui::TextDisabled("Machine ID: %04Xh", profile.machine_id);
     ImGui::TextDisabled("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
-    ImGui::TextDisabled("Firmware set: %s", IsValidPointer(profile.firmware_set) ? profile.firmware_set : "none");
+    ImGui::TextDisabled("Firmware: %s", firmware);
 
     if (profile.features == 0)
         ImGui::TextDisabled("Towns II registers: none");
@@ -1179,6 +1104,8 @@ static void menu_machine_hardware(const GT_Machine_Profile& profile)
 static void draw_machine_profile_tooltip(GT_Machine_Model model)
 {
     const GT_Machine_Profile& profile = k_machine_profiles[model];
+    char firmware[GT_MAX_PATH];
+    gui_get_firmware_status(model, firmware, sizeof(firmware));
     char ram[96] = "";
 
     for (int i = 0; profile.ram_sizes_mb[i] != 0; i++)
@@ -1194,11 +1121,19 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
     ImGui::Text("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
     ImGui::Text("RAM: %s MB", ram);
     ImGui::Text("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
+    ImGui::Text("Firmware:");
+    ImGui::SameLine();
+    ImGui::TextColored(gui_get_firmware_status_color(model), "%s", firmware);
 
     if (!profile.emulated)
     {
         ImGui::Separator();
         ImGui::TextDisabled("Not emulated yet");
+    }
+    else if (!emu_get_core()->HasFirmware(model))
+    {
+        ImGui::Separator();
+        ImGui::TextDisabled("No firmware found, see Machine > Firmware...");
     }
 
     ImGui::EndTooltip();
@@ -2327,9 +2262,6 @@ static void file_dialogs(void)
 
     if (choose_savefiles_path)
         gui_file_dialog_choose_savefiles_path();
-
-    if (open_bios)
-        gui_file_dialog_load_bios();
 
     if (choose_screenshots_path)
         gui_file_dialog_choose_screenshot_path();

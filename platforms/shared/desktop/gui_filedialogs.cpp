@@ -54,6 +54,7 @@ enum FileDialogID
     FileDialog_SaveVGM,
     FileDialog_SaveVideo,
     FileDialog_LoadBIOS,
+    FileDialog_LoadModelFirmware,
     FileDialog_SaveMemoryDump,
     FileDialog_LoadMemoryDump,
     FileDialog_SaveDebugSettings,
@@ -71,6 +72,7 @@ static FileDialogID pending_dialog_id = FileDialog_None;
 static std::string pending_dialog_path;
 static bool dialog_active = false;
 static int dialog_floppy_drive = 0;
+static GT_Machine_Model dialog_firmware_model = GT_MACHINE_MODEL1_2;
 static int dialog_sprite_index = 0;
 static bool pending_refocus_window = false;
 #if !defined(__APPLE__)
@@ -304,6 +306,19 @@ void gui_file_dialog_load_bios(void)
         default_path, false);
 }
 
+void gui_file_dialog_load_model_firmware(int model)
+{
+    if (!begin_dialog())
+        return;
+
+    const std::string& folder = config_machine.firmware_paths[model];
+    const char* default_path = !folder.empty() ? folder.c_str() :
+        config_emulator.bios_path.empty() ? NULL : config_emulator.bios_path.c_str();
+    dialog_firmware_model = (GT_Machine_Model)model;
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadModelFirmware,
+        application_sdl_window, default_path, false);
+}
+
 void gui_file_dialog_save_memory_dump(void)
 {
     if (!begin_dialog())
@@ -495,6 +510,9 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_LoadBIOS:
             gui_load_bios(path);
+            break;
+        case FileDialog_LoadModelFirmware:
+            gui_load_model_firmware(dialog_firmware_model, path);
             break;
         case FileDialog_SaveMemoryDump:
             if (gui_debug_memory_save_dump(path))

@@ -37,6 +37,7 @@ EXTERN void gui_file_dialog_new_floppy(int drive);
 EXTERN void gui_file_dialog_choose_screenshot_path(void);
 EXTERN void gui_file_dialog_choose_video_recording_path(void);
 EXTERN void gui_file_dialog_load_bios(void);
+EXTERN void gui_file_dialog_load_model_firmware(int model);
 EXTERN void gui_file_dialog_save_screenshot(void);
 EXTERN void gui_file_dialog_save_vgm(void);
 EXTERN void gui_file_dialog_save_video(void);

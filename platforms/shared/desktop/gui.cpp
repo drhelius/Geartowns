@@ -36,6 +36,7 @@
 #include "gui_menus.h"
 #include "gui_popups.h"
 #include "gui_floppy.h"
+#include "gui_firmware.h"
 #include "gui_notifications.h"
 #include "emu_floppy.h"
 #include "gui_actions.h"
@@ -59,6 +60,7 @@ static void show_loading_popup(void);
 static void select_save_slot(int slot);
 static bool finish_loading_rom(void);
 static void start_loading_rom(const char* path, const char* symbol_path);
+static void notify_firmware(void);
 static void update_window_visibility_padding(void);
 static ImVec2 snap_to_physical_pixel(const ImVec2& pos);
 static void set_style(void);
@@ -178,6 +180,7 @@ void gui_apply_settings(void)
     emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
     emu_set_dynarec(config_emulator.dynarec);
     emu_set_native_resolution(config_video.native_resolution);
+    emu_apply_firmware_folders();
     emu_apply_machine_settings();
 }
 
@@ -214,6 +217,9 @@ void gui_render(void)
 
     if (config_emulator.show_info)
         gui_show_info();
+
+    if (config_emulator.show_firmware)
+        gui_firmware_window();
 
     show_loading_popup();
     gui_notifications_render();
@@ -363,49 +369,79 @@ void gui_load_bios(const char* path)
 {
     if (!emu_load_bios(path))
     {
-        std::string message("Required firmware files were not found in:\n");
+        GT_Machine_Model model = emu_get_core()->GetPendingMachineConfig().model;
+        std::string message("No firmware for the ");
+        message += k_machine_profiles[model].name;
+        message += " was found in:\n";
         message += path;
         gui_set_error_message(message.c_str());
-
-        const char* active_directory = emu_get_core()->GetFirmware()->GetDirectory();
-
-        if (active_directory[0] != '\0')
-        {
-            strncpy_fit(gui_bios_path, active_directory, sizeof(gui_bios_path));
-        }
-        else
-        {
-            strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
-        }
-
+        strncpy_fit(gui_bios_path, config_emulator.bios_path.c_str(), sizeof(gui_bios_path));
         return;
     }
 
     config_emulator.bios_path = path;
     strncpy_fit(gui_bios_path, path, sizeof(gui_bios_path));
+    notify_firmware();
+}
 
-    std::string unknown;
-    Firmware* firmware = emu_get_core()->GetFirmware();
+void gui_load_model_firmware(GT_Machine_Model model, const char* path)
+{
+    config_machine.firmware_paths[model] = path;
+    emu_apply_firmware_folders();
 
-    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
-    {
-        GT_Firmware_Type type = (GT_Firmware_Type)i;
-        const GT_Firmware_Info& info = firmware->GetInfo(type);
+    if (model != emu_get_core()->GetPendingMachineConfig().model)
+        return;
 
-        if (!info.loaded || info.recognized)
-            continue;
-
-        char entry[64];
-        snprintf(entry, sizeof(entry), "%s%s (CRC %08X)", unknown.empty() ? "" : ", ", Firmware::GetFileName(type),
-            info.crc);
-        unknown += entry;
-    }
-
-    if (unknown.empty())
-        gui_notify(gui_NotificationSuccess, ICON_MD_MEMORY, "Firmware loaded", path);
+    if (emu_reload_firmware())
+        notify_firmware();
     else
-        gui_notify(gui_NotificationWarning, ICON_MD_MEMORY, "Unknown firmware, the Model 1/2 set is recommended",
-            unknown.c_str());
+        gui_notify(gui_NotificationError, ICON_MD_MEMORY, "No firmware found", path[0] != '\0' ? path : NULL);
+}
+
+void gui_get_firmware_status(GT_Machine_Model model, char* text, size_t text_size)
+{
+    const GT_Firmware_Source& source = emu_get_core()->GetFirmwareSource(model);
+    const char* name = get_filename(source.path);
+
+    if (name[0] == '\0')
+        name = source.path;
+
+    switch (source.type)
+    {
+        case GT_FIRMWARE_SOURCE_MODEL_FOLDER:
+            snprintf(text, text_size, "Own folder");
+            break;
+        case GT_FIRMWARE_SOURCE_OWN_SET:
+            snprintf(text, text_size, "Ready, %s%s", name, source.zip ? "" : "/");
+            break;
+        case GT_FIRMWARE_SOURCE_COMPATIBLE_SET:
+            snprintf(text, text_size, "Ready, %s (compatible)", k_firmware_sets[source.set].description);
+            break;
+        case GT_FIRMWARE_SOURCE_UNKNOWN:
+            snprintf(text, text_size, "Ready, unknown ROMs in %s%s", name, source.zip ? "" : "/");
+            break;
+        case GT_FIRMWARE_SOURCE_OTHER_SET:
+            snprintf(text, text_size, "Ready, %s (for another model)", k_firmware_sets[source.set].description);
+            break;
+        default:
+            snprintf(text, text_size, "Not found");
+            break;
+    }
+}
+
+ImVec4 gui_get_firmware_status_color(GT_Machine_Model model)
+{
+    switch (emu_get_core()->GetFirmwareSource(model).type)
+    {
+        case GT_FIRMWARE_SOURCE_NONE:
+            return red;
+        case GT_FIRMWARE_SOURCE_COMPATIBLE_SET:
+        case GT_FIRMWARE_SOURCE_UNKNOWN:
+        case GT_FIRMWARE_SOURCE_OTHER_SET:
+            return amber;
+        default:
+            return green;
+    }
 }
 
 bool gui_load_rom(const char* path, const char* symbol_path)
@@ -604,6 +640,46 @@ void gui_center_next_window(void)
 void gui_set_style(void)
 {
     set_style();
+}
+
+static void notify_firmware(void)
+{
+    GeartownsCore* core = emu_get_core();
+    GT_Machine_Model model = core->GetPendingMachineConfig().model;
+    Firmware* firmware = core->GetFirmware();
+    std::string unknown;
+    char status[256];
+
+    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+    {
+        GT_Firmware_Type type = (GT_Firmware_Type)i;
+        const GT_Firmware_Info& info = firmware->GetInfo(type);
+
+        if (!info.loaded || info.recognized)
+            continue;
+
+        char entry[64];
+        snprintf(entry, sizeof(entry), "%s%s (CRC %08X)", unknown.empty() ? "" : ", ", Firmware::GetFileName(type),
+            info.crc);
+        unknown += entry;
+    }
+
+    if (!unknown.empty())
+    {
+        snprintf(status, sizeof(status), "Unknown firmware for the %s", k_machine_profiles[model].name);
+        gui_notify(gui_NotificationWarning, ICON_MD_MEMORY, status, unknown.c_str());
+    }
+    else if (firmware->GetSource().type == GT_FIRMWARE_SOURCE_OTHER_SET)
+    {
+        snprintf(status, sizeof(status), "%s on the %s", k_firmware_sets[firmware->GetSource().set].description,
+            k_machine_profiles[model].name);
+        gui_notify(gui_NotificationWarning, ICON_MD_MEMORY, "Firmware made for another model", status);
+    }
+    else
+    {
+        gui_get_firmware_status(model, status, sizeof(status));
+        gui_notify(gui_NotificationSuccess, ICON_MD_MEMORY, "Firmware loaded", status);
+    }
 }
 
 static void update_window_visibility_padding(void)

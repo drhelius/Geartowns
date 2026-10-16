@@ -76,6 +76,11 @@ GeartownsCore::GeartownsCore()
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     m_machine_settings.ram_mb = GT_MACHINE_AUTO;
     InitPointer(m_auto_entry);
+    memset(m_firmware_sources, 0, sizeof(m_firmware_sources));
+
+    for (int i = 0; i < GT_MACHINE_COUNT; i++)
+        m_firmware_sources[i].set = -1;
+
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
@@ -689,7 +694,9 @@ INLINE void GeartownsCore::DispatchEvents()
 
 bool GeartownsCore::PowerOn()
 {
-    if (!IsValidPointer(m_firmware) || !m_firmware->IsReady())
+    SearchFirmware();
+
+    if (!LoadMachineFirmware(true))
         return false;
 
     Reset();
@@ -705,8 +712,6 @@ void GeartownsCore::PowerOff()
         m_i386->ResetDisassembler();
 }
 
-// The new hardware takes effect on the next reset
-// A running machine that stays the same takes the new report at once
 void GeartownsCore::SetMachineSettings(const GT_Machine_Settings& settings)
 {
     m_machine_settings = settings;
@@ -716,7 +721,6 @@ void GeartownsCore::SetMachineSettings(const GT_Machine_Settings& settings)
         m_machine_report = m_pending_machine_report;
 }
 
-// Auto follows the content the user opened, so disc swaps and resets keep the machine
 void GeartownsCore::LatchAutoMedia()
 {
     m_auto_entry = IsValidPointer(m_media) ? m_media->GetGameDBEntry() : NULL;
@@ -735,24 +739,28 @@ bool GeartownsCore::IsMachineConfigPending()
         (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate);
 }
 
-// New firmware restarts a running machine, a powered off one waits for PowerOn
 bool GeartownsCore::LoadBios(const char* directory_path)
 {
-    if (!IsValidPointer(m_firmware) || !m_firmware->LoadDirectory(directory_path))
-        return false;
+    std::string previous = m_firmware_folder;
+    m_firmware_folder = IsValidPointer(directory_path) ? directory_path : "";
 
-    if (IsValidPointer(m_i386))
-        m_i386->ResetDisassembler();
+    if (ReloadFirmware())
+        return true;
 
-    if (m_powered)
-        Reset();
-
-    return true;
+    m_firmware_folder = previous;
+    SearchFirmware();
+    return false;
 }
 
 void GeartownsCore::UnloadBios()
 {
     m_powered = false;
+    m_firmware_folder.clear();
+
+    for (int i = 0; i < GT_MACHINE_COUNT; i++)
+        m_model_firmware_folders[i].clear();
+
+    SearchFirmware();
 
     if (IsValidPointer(m_firmware))
         m_firmware->Unload();
@@ -761,8 +769,24 @@ void GeartownsCore::UnloadBios()
         m_i386->ResetDisassembler();
 }
 
-// Loading media is a disc swap on a running machine
-// Even when it fails the old disc is gone
+void GeartownsCore::SetModelFirmwareFolder(GT_Machine_Model model, const char* directory_path)
+{
+    m_model_firmware_folders[model] = IsValidPointer(directory_path) ? directory_path : "";
+}
+
+bool GeartownsCore::ReloadFirmware()
+{
+    SearchFirmware();
+
+    if (!LoadMachineFirmware(true))
+        return false;
+
+    if (m_powered)
+        Reset();
+
+    return true;
+}
+
 bool GeartownsCore::LoadMedia(const char* file_path)
 {
     if (!IsValidPointer(m_media))
@@ -785,7 +809,6 @@ bool GeartownsCore::LoadPhysicalCdRom(const char* device_id)
 }
 #endif
 
-// The machine keeps running with an empty drive
 void GeartownsCore::EjectMedia()
 {
     if (!IsValidPointer(m_media))
@@ -1410,7 +1433,6 @@ void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Med
     G_SERIALIZE(serializer, media.cdrom_crc);
 }
 
-// Unknown or unemulated models run as Model 1/2, RAM goes to the model's next size up or its largest
 void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
 {
     bool known_model = ((int)config.model >= 0) && ((int)config.model < GT_MACHINE_COUNT);
@@ -1498,6 +1520,7 @@ void GeartownsCore::Reset()
     m_debug_step = GT_DEBUG_STEP_NONE;
     m_debug_step_resume = false;
     m_debug_interrupt_deferred = false;
+    LoadMachineFirmware(false);
     ApplyMachineConfig();
 
     if (IsValidPointer(m_scheduler))
@@ -1563,7 +1586,6 @@ void GeartownsCore::ResetCPU()
     m_i386->Reset();
 }
 
-// A model Auto can't run yet becomes Model 1/2, with the database RAM it can hold
 void GeartownsCore::ResolveMachineConfig()
 {
     GT_Machine_Config& config = m_pending_machine_config;
@@ -1574,9 +1596,16 @@ void GeartownsCore::ResolveMachineConfig()
     bool auto_ram = m_machine_settings.ram_mb <= 0;
     bool database = auto_model && IsValidPointer(entry);
     GT_Machine_Model named = database ? (GT_Machine_Model)entry->model : GT_MACHINE_MODEL1_2;
+    GT_Machine_Model fallback = GT_MACHINE_MODEL1_2;
     u32 megabyte = 1024 * 1024;
 
-    config.model = auto_model ? named : (GT_Machine_Model)m_machine_settings.model;
+    for (int i = 0; (i < GT_MACHINE_RELEASE_ORDER_COUNT) && !CanAutoSelect(fallback); i++)
+    {
+        if (CanAutoSelect(k_machine_release_order[i]))
+            fallback = k_machine_release_order[i];
+    }
+
+    config.model = !auto_model ? (GT_Machine_Model)m_machine_settings.model : CanAutoSelect(named) ? named : fallback;
     config.cpu_clock_rate = auto_cpu ? 0 : (u32)m_machine_settings.cpu_mhz * 1000000;
     config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * megabyte;
     report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
@@ -1599,9 +1628,9 @@ void GeartownsCore::ResolveMachineConfig()
     if (!IsValidPointer(entry))
         return;
 
-    if (database && !k_machine_profiles[named].emulated)
-        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "Needs an %s, not emulated yet", k_machine_profiles[named].name);
+    if (database && (config.model != named))
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE, k_machine_profiles[named].emulated ?
+            "Needs an %s, no firmware found for it" : "Needs an %s, not emulated yet", k_machine_profiles[named].name);
 
     if (config.ram_size < entry->ram_mb * megabyte)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
@@ -1610,6 +1639,51 @@ void GeartownsCore::ResolveMachineConfig()
     if ((entry->flags & GT_GAMEDB_HDD) != 0)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "%s installs to a hard disk, not emulated yet", entry->title);
+}
+
+bool GeartownsCore::CanAutoSelect(GT_Machine_Model model)
+{
+    GT_Firmware_Source_Type type = m_firmware_sources[model].type;
+    return k_machine_profiles[model].emulated && (type != GT_FIRMWARE_SOURCE_NONE) &&
+        (type != GT_FIRMWARE_SOURCE_OTHER_SET);
+}
+
+void GeartownsCore::SearchFirmware()
+{
+    Firmware::FindSources(m_firmware_folder.c_str(), m_model_firmware_folders, m_firmware_sources);
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
+}
+
+bool GeartownsCore::LoadMachineFirmware(bool force)
+{
+    if (!IsValidPointer(m_firmware))
+        return false;
+
+    GT_Machine_Model model = m_pending_machine_config.model;
+    const GT_Firmware_Source& source = m_firmware_sources[model];
+    const GT_Firmware_Source& loaded = m_firmware->GetSource();
+
+    if (source.type == GT_FIRMWARE_SOURCE_NONE)
+    {
+        if (force)
+            Error("No firmware found for %s", k_machine_profiles[model].name);
+
+        return false;
+    }
+
+    if (!force && m_firmware->IsReady() && (loaded.zip == source.zip) && (strcmp(loaded.path, source.path) == 0))
+        return true;
+
+    if (!m_firmware->LoadSource(source))
+        return false;
+
+    if (IsValidPointer(m_i386))
+        m_i386->ResetDisassembler();
+
+    return true;
 }
 
 void GeartownsCore::ApplyMachineConfig()

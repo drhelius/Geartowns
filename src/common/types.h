@@ -153,6 +153,34 @@ struct GT_Firmware_Info
     bool synthetic;
 };
 
+enum GT_Firmware_Source_Type
+{
+    GT_FIRMWARE_SOURCE_NONE = 0,
+    GT_FIRMWARE_SOURCE_MODEL_FOLDER,
+    GT_FIRMWARE_SOURCE_OWN_SET,
+    GT_FIRMWARE_SOURCE_COMPATIBLE_SET,
+    GT_FIRMWARE_SOURCE_UNKNOWN,
+    GT_FIRMWARE_SOURCE_OTHER_SET
+};
+
+struct GT_Firmware_Source
+{
+    GT_Firmware_Source_Type type;
+    int set;
+    bool zip;
+    u32 crc;
+    char path[GT_MAX_PATH];
+};
+
+struct GT_Firmware_Set
+{
+    const char* name;
+    const char* description;
+    u32 system_crc;
+    u32 models;
+    u32 compatible_models;
+};
+
 struct GT_Color
 {
     u8 red;

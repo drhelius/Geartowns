@@ -55,12 +55,29 @@ MediaFile* MediaFile::OpenFile(const char* path)
     return NULL;
 }
 
-void MediaFile::SetVfsInterface(const retro_vfs_interface* iface)
+bool MediaFile::ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files)
+{
+    folders.clear();
+    files.clear();
+
+    if (!IsValidPointer(path) || (path[0] == '\0'))
+        return false;
+
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsDirectories())
+        return MediaFileLibretro::ListDirectory(path, folders, files);
+#endif
+
+    return MediaFileNative::ListDirectory(path, folders, files);
+}
+
+void MediaFile::SetVfsInterface(const retro_vfs_interface* iface, unsigned version)
 {
 #if defined(__LIBRETRO__)
-    MediaFileLibretro::SetVfsInterface(iface);
+    MediaFileLibretro::SetVfsInterface(iface, version);
 #else
     (void)iface;
+    (void)version;
 #endif
 }
 

@@ -168,7 +168,6 @@ static bool cmos_save_failed = false;
 static bool load_content(const char* path);
 static void unload_content(void);
 static bool load_bios(void);
-static s64 get_firmware_size(const char* directory, GT_Firmware_Type type);
 static void check_bios(void);
 static void set_machine_config(void);
 static void report_machine(void);
@@ -348,7 +347,7 @@ void retro_init(void)
     else
         vfs_interface = NULL;
 
-    MediaFile::SetVfsInterface(vfs_interface);
+    MediaFile::SetVfsInterface(vfs_interface, vfs_interface_info.required_interface_version);
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &logging))
         log_cb = logging.log;
@@ -795,65 +794,33 @@ static void unload_content(void)
     memset(frame_buffer, 0, GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * sizeof(u32));
 }
 
+static bool load_bios_folder(const char* folder, bool any_set)
+{
+    if (!core->LoadBios(folder))
+        return false;
+
+    return any_set ||
+        (core->GetFirmwareSource(core->GetPendingMachineConfig().model).type != GT_FIRMWARE_SOURCE_OTHER_SET);
+}
+
 static bool load_bios(void)
 {
     std::string directory(retro_system_directory);
     append_path_component(directory, "geartowns");
 
-    if (core->LoadBios(directory.c_str()) || core->LoadBios(retro_system_directory))
+    if (load_bios_folder(directory.c_str(), false) || load_bios_folder(retro_system_directory, false) ||
+        load_bios_folder(directory.c_str(), true) || load_bios_folder(retro_system_directory, true))
         return true;
 
-    std::string reported(directory);
-
-    if (get_firmware_size(directory.c_str(), GT_FIRMWARE_SYSTEM) < 0 &&
-        get_firmware_size(retro_system_directory, GT_FIRMWARE_SYSTEM) >= 0)
-        reported = retro_system_directory;
-
-    std::string missing;
-
-    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
-    {
-        GT_Firmware_Type type = (GT_Firmware_Type)i;
-        int expected = Firmware::GetExpectedSize(type);
-        s64 size = get_firmware_size(reported.c_str(), type);
-
-        if (!Firmware::IsRequired(type) || size == expected)
-            continue;
-
-        if (size < 0)
-            log_cb(RETRO_LOG_ERROR, "Missing %s: %s or %s (%d bytes)\n", Firmware::GetComponentName(type),
-                Firmware::GetFileName(type), Firmware::GetAlternativeFileName(type), expected);
-        else
-            log_cb(RETRO_LOG_ERROR, "Invalid %s: %s is %lld bytes, expected %d\n", Firmware::GetComponentName(type),
-                Firmware::GetFilePath(reported.c_str(), type).c_str(), (long long)size, expected);
-
-        if (!missing.empty())
-            missing += ", ";
-
-        missing += Firmware::GetFileName(type);
-    }
-
-    log_cb(RETRO_LOG_INFO, "FM Towns firmware is read from %s, or from %s when that folder has no complete set\n",
+    log_cb(RETRO_LOG_INFO, "FM Towns firmware is searched in %s and %s, their subfolders and the MAME zips there\n",
         directory.c_str(), retro_system_directory);
 
     static char message[256];
-
-    if (missing.empty())
-        snprintf(message, sizeof(message), "FM Towns firmware could not be loaded");
-    else
-        snprintf(message, sizeof(message), "Missing FM Towns firmware: %s", missing.c_str());
-
+    snprintf(message, sizeof(message), "No FM Towns firmware found for the %s",
+        k_machine_profiles[core->GetPendingMachineConfig().model].name);
     show_message(message, 3, RETRO_LOG_ERROR);
     log_cb(RETRO_LOG_ERROR, "%s\n", message);
     return false;
-}
-
-static s64 get_firmware_size(const char* directory, GT_Firmware_Type type)
-{
-    MediaFile* file = MediaFile::OpenFile(Firmware::GetFilePath(directory, type).c_str());
-    s64 size = IsValidPointer(file) ? file->GetSize() : -1;
-    SafeDelete(file);
-    return size;
 }
 
 static void check_bios(void)
@@ -875,12 +842,18 @@ static void check_bios(void)
         unknown += entry;
     }
 
-    if (unknown.empty())
+    const GT_Firmware_Source& source = firmware->GetSource();
+    const char* model = k_machine_profiles[core->GetPendingMachineConfig().model].name;
+    static char message[256];
+
+    if (!unknown.empty())
+        snprintf(message, sizeof(message), "Unknown firmware for the %s: %s", model, unknown.c_str());
+    else if (source.type == GT_FIRMWARE_SOURCE_OTHER_SET)
+        snprintf(message, sizeof(message), "Firmware made for another model: %s on the %s",
+            k_firmware_sets[source.set].description, model);
+    else
         return;
 
-    static char message[256];
-    snprintf(message, sizeof(message), "Unknown FM Towns firmware: %s, the Model 1/2 set is recommended",
-        unknown.c_str());
     show_message(message, 2, RETRO_LOG_WARN);
     log_cb(RETRO_LOG_WARN, "%s\n", message);
 }

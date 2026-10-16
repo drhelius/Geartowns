@@ -2008,7 +2008,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_media_info"},
         {"title", "Get Media Info"},
-        {"description", "Read loaded media metadata, firmware status and the floppy drives."},
+        {"description", "Read loaded media metadata, the loaded firmware, where each model takes its firmware from (own folder, own set, compatible set, unknown ROMs or another model's set) and the floppy drives."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2171,7 +2171,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "load_bios"},
         {"title", "Load BIOS"},
-        {"description", "Load the FM Towns firmware set from a local directory, reset, and stop at the reset vector."},
+        {"description", "Set the default firmware folder and load the firmware of the next machine, reset, and stop at the reset vector. The folder, its subfolders and MAME zips there are searched, and each model takes a set made for it, a compatible one, unknown ROMs or, last, another model's set."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},

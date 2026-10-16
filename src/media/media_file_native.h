@@ -29,6 +29,8 @@ public:
     MediaFileNative();
     virtual ~MediaFileNative();
 
+    static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
+
     virtual bool Open(const char* path) override;
     virtual void Close() override;
     virtual bool IsOpen() const override;

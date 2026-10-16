@@ -17,12 +17,22 @@
  *
  */
 
+#include <algorithm>
 #include <new>
 #include <string>
 #include "firmware.h"
 #include "media_file.h"
 #include "game_db.h"
 #include "crc.h"
+
+static const char* const k_firmware_file_names[GT_FIRMWARE_COUNT][FIRMWARE_FILE_NAMES] =
+{
+    { "FMT_SYS.ROM", "FMT_SYS_A.ROM" },
+    { "FMT_DOS.ROM", "FMT_DOS_A.ROM" },
+    { "FMT_FNT.ROM", NULL },
+    { "FMT_DIC.ROM", NULL },
+    { "FMT_F20.ROM", "FMT_F20_A.ROM" }
+};
 
 Firmware::Firmware()
 {
@@ -40,7 +50,8 @@ void Firmware::Init()
 
 void Firmware::Unload()
 {
-    m_directory[0] = '\0';
+    memset(&m_source, 0, sizeof(m_source));
+    m_source.set = -1;
     memset(m_info, 0, sizeof(m_info));
     memset(m_system_rom, 0xFF, sizeof(m_system_rom));
     memset(m_os_rom, 0xFF, sizeof(m_os_rom));
@@ -50,29 +61,35 @@ void Firmware::Unload()
     m_ready = false;
 }
 
-bool Firmware::LoadDirectory(const char* directory_path)
+bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
 {
-    if (!IsValidPointer(directory_path) || directory_path[0] == '\0')
+    if (source.path[0] == '\0')
     {
-        Error("Invalid firmware directory");
+        Error("Invalid firmware folder");
         return false;
     }
 
     u8* pending_data[GT_FIRMWARE_COUNT] = {};
     GT_Firmware_Info pending_info[GT_FIRMWARE_COUNT];
     memset(pending_info, 0, sizeof(pending_info));
-    bool success = true;
+    MediaFile* zip_file = NULL;
+    mz_zip_archive zip;
+    bool success = !source.zip || OpenZip(source.path, &zip_file, zip);
 
-    for (int i = 0; i < GT_FIRMWARE_COUNT; i++)
+    if (!success)
+        Error("Unable to open firmware zip %s", source.path);
+
+    for (int i = 0; success && (i < GT_FIRMWARE_COUNT); i++)
     {
         GT_Firmware_Type type = (GT_Firmware_Type)i;
-        std::string file_path = GetFilePath(directory_path, type);
+        bool ok = source.zip ? LoadZipComponent(zip, source.path, type, &pending_data[i], pending_info[i]) :
+            LoadComponent(GetFilePath(source.path, type).c_str(), type, &pending_data[i], pending_info[i]);
 
-        if (!LoadComponent(file_path.c_str(), type, &pending_data[i], pending_info[i]))
+        if (!ok)
         {
             if (IsRequired(type))
             {
-                Error("Required firmware is missing or invalid: %s", file_path.c_str());
+                Error("Required firmware is missing or invalid: %s in %s", GetFileName(type), source.path);
                 success = false;
                 break;
             }
@@ -80,6 +97,12 @@ bool Firmware::LoadDirectory(const char* directory_path)
             pending_info[i].size = GetExpectedSize(type);
             pending_info[i].synthetic = true;
         }
+    }
+
+    if (IsValidPointer(zip_file))
+    {
+        mz_zip_reader_end(&zip);
+        SafeDelete(zip_file);
     }
 
     if (!success)
@@ -109,6 +132,9 @@ bool Firmware::LoadDirectory(const char* directory_path)
         GatherDatabaseInfo(type, m_info[i]);
         SafeDeleteArray(pending_data[i]);
 
+        if (quiet)
+            continue;
+
         if (m_info[i].synthetic)
         {
             Log("Optional firmware not found: %s. Using blank ROM.", GetFileName(type));
@@ -123,7 +149,7 @@ bool Firmware::LoadDirectory(const char* directory_path)
         }
     }
 
-    strncpy_fit(m_directory, directory_path, sizeof(m_directory));
+    m_source = source;
     m_ready = true;
     return true;
 }
@@ -166,6 +192,43 @@ bool Firmware::LoadComponent(const char* file_path, GT_Firmware_Type type, u8** 
 
     *data = buffer;
     strncpy_fit(info.path, file_path, sizeof(info.path));
+    info.size = expected_size;
+    info.crc = CalculateCRC32(0, buffer, expected_size);
+    info.loaded = true;
+    return true;
+}
+
+bool Firmware::LoadZipComponent(mz_zip_archive& zip, const char* zip_path, GT_Firmware_Type type, u8** data,
+    GT_Firmware_Info& info)
+{
+    int index = FindZipComponent(zip, type);
+    mz_zip_archive_file_stat stat;
+
+    if ((index < 0) || !mz_zip_reader_file_stat(&zip, (mz_uint)index, &stat))
+        return false;
+
+    int expected_size = GetExpectedSize(type);
+
+    if (stat.m_uncomp_size != (mz_uint64)expected_size)
+    {
+        Error("Incorrect firmware size for %s in %s: %llu bytes, expected %d", stat.m_filename, zip_path,
+            (unsigned long long)stat.m_uncomp_size, expected_size);
+        return false;
+    }
+
+    u8* buffer = new (std::nothrow) u8[expected_size];
+
+    if (!IsValidPointer(buffer) || !mz_zip_reader_extract_to_mem(&zip, (mz_uint)index, buffer, expected_size, 0))
+    {
+        Error("Unable to read firmware %s in %s", stat.m_filename, zip_path);
+        SafeDeleteArray(buffer);
+        return false;
+    }
+
+    std::string path(zip_path);
+    append_path_component(path, stat.m_filename);
+    *data = buffer;
+    strncpy_fit(info.path, path.c_str(), sizeof(info.path));
     info.size = expected_size;
     info.crc = CalculateCRC32(0, buffer, expected_size);
     info.loaded = true;
@@ -231,63 +294,59 @@ const char* Firmware::GetComponentName(GT_Firmware_Type type)
 
 const char* Firmware::GetFileName(GT_Firmware_Type type)
 {
-    switch (type)
-    {
-        case GT_FIRMWARE_SYSTEM:
-            return "FMT_SYS.ROM";
-        case GT_FIRMWARE_OS:
-            return "FMT_DOS.ROM";
-        case GT_FIRMWARE_FONT:
-            return "FMT_FNT.ROM";
-        case GT_FIRMWARE_DICTIONARY:
-            return "FMT_DIC.ROM";
-        case GT_FIRMWARE_FONT20:
-            return "FMT_F20.ROM";
-        default:
-            return "";
-    }
-}
-
-const char* Firmware::GetAlternativeFileName(GT_Firmware_Type type)
-{
-    switch (type)
-    {
-        case GT_FIRMWARE_SYSTEM:
-            return "fmt_sys.rom";
-        case GT_FIRMWARE_OS:
-            return "fmt_dos.rom";
-        case GT_FIRMWARE_FONT:
-            return "fmt_fnt.rom";
-        case GT_FIRMWARE_DICTIONARY:
-            return "fmt_dic.rom";
-        case GT_FIRMWARE_FONT20:
-            return "fmt_f20.rom";
-        default:
-            return "";
-    }
+    return ((int)type >= 0) && ((int)type < GT_FIRMWARE_COUNT) ? k_firmware_file_names[type][0] : "";
 }
 
 std::string Firmware::GetFilePath(const char* directory_path, GT_Firmware_Type type)
 {
-    std::string path(directory_path);
-    append_path_component(path, GetFileName(type));
-    MediaFile* file = MediaFile::OpenFile(path.c_str());
+    std::vector<std::string> folders;
+    std::vector<std::string> files;
+    bool listed = MediaFile::ListDirectory(directory_path, folders, files);
+    std::sort(files.begin(), files.end());
 
-    if (IsValidPointer(file))
+    for (int i = 0; i < FIRMWARE_FILE_NAMES; i++)
     {
-        SafeDelete(file);
-        return path;
+        const char* name = k_firmware_file_names[type][i];
+
+        if (!IsValidPointer(name))
+            continue;
+
+        std::string upper(name);
+        std::string lower(name);
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+        if (listed)
+        {
+            for (size_t j = 0; j < files.size(); j++)
+            {
+                if (strings_equal_ignore_case(files[j], upper))
+                {
+                    std::string path(directory_path);
+                    append_path_component(path, files[j].c_str());
+                    return path;
+                }
+            }
+
+            continue;
+        }
+
+        for (int j = 0; j < 2; j++)
+        {
+            std::string path(directory_path);
+            append_path_component(path, (j == 0) ? upper.c_str() : lower.c_str());
+            MediaFile* file = MediaFile::OpenFile(path.c_str());
+
+            if (IsValidPointer(file))
+            {
+                SafeDelete(file);
+                return path;
+            }
+        }
     }
 
-    std::string alternative(directory_path);
-    append_path_component(alternative, GetAlternativeFileName(type));
-    file = MediaFile::OpenFile(alternative.c_str());
-
-    if (!IsValidPointer(file))
-        return path;
-
-    SafeDelete(file);
-    return alternative;
+    std::string path(directory_path);
+    append_path_component(path, GetFileName(type));
+    return path;
 }
 
 int Firmware::GetExpectedSize(GT_Firmware_Type type)
@@ -331,4 +390,214 @@ u16 Firmware::GetDatabaseFlag(GT_Firmware_Type type)
         default:
             return GT_GAMEDB_FLAG_NONE;
     }
+}
+
+void Firmware::FindSources(const char* default_folder, const std::string* model_folders, GT_Firmware_Source* sources)
+{
+    std::vector<GT_Firmware_Source> candidates;
+
+    if (IsValidPointer(default_folder) && (default_folder[0] != '\0'))
+    {
+        std::vector<std::string> folders;
+        std::vector<std::string> files;
+        MediaFile::ListDirectory(default_folder, folders, files);
+        std::sort(folders.begin(), folders.end());
+        std::sort(files.begin(), files.end());
+
+        AddCandidate(candidates, default_folder, false);
+
+        for (size_t i = 0; i < folders.size(); i++)
+        {
+            std::string path(default_folder);
+            append_path_component(path, folders[i].c_str());
+            AddCandidate(candidates, path.c_str(), false);
+        }
+
+        for (size_t i = 0; i < files.size(); i++)
+        {
+            if (!ends_with_no_case(files[i].c_str(), ".zip"))
+                continue;
+
+            std::string path(default_folder);
+            append_path_component(path, files[i].c_str());
+            AddCandidate(candidates, path.c_str(), true);
+        }
+    }
+
+    for (int model = 0; model < GT_MACHINE_COUNT; model++)
+    {
+        GT_Firmware_Source& source = sources[model];
+        memset(&source, 0, sizeof(source));
+        source.set = -1;
+
+        if (!model_folders[model].empty())
+        {
+            strncpy_fit(source.path, model_folders[model].c_str(), sizeof(source.path));
+            IdentifySource(source);
+            source.type = GT_FIRMWARE_SOURCE_MODEL_FOLDER;
+            continue;
+        }
+
+        for (size_t i = 0; i < candidates.size(); i++)
+        {
+            GT_Firmware_Source_Type type = GetSourceType(candidates[i].set, (GT_Machine_Model)model);
+
+            if ((source.type == GT_FIRMWARE_SOURCE_NONE) || (type < source.type))
+            {
+                source = candidates[i];
+                source.type = type;
+            }
+        }
+    }
+}
+
+GT_Firmware_Source_Type Firmware::GetSourceType(int set, GT_Machine_Model model)
+{
+    u32 bit = 1 << model;
+
+    if (set < 0)
+        return GT_FIRMWARE_SOURCE_UNKNOWN;
+
+    if ((k_firmware_sets[set].models & bit) != 0)
+        return GT_FIRMWARE_SOURCE_OWN_SET;
+
+    if ((k_firmware_sets[set].compatible_models & bit) != 0)
+        return GT_FIRMWARE_SOURCE_COMPATIBLE_SET;
+
+    return GT_FIRMWARE_SOURCE_OTHER_SET;
+}
+
+int Firmware::FindSet(u32 system_crc)
+{
+    for (int i = 0; i < FIRMWARE_SET_COUNT; i++)
+    {
+        if (k_firmware_sets[i].system_crc == system_crc)
+            return i;
+    }
+
+    return -1;
+}
+
+bool Firmware::IdentifySource(GT_Firmware_Source& source)
+{
+    source.crc = 0;
+    source.set = -1;
+    bool complete = true;
+
+    if (source.zip)
+    {
+        MediaFile* file = NULL;
+        mz_zip_archive zip;
+
+        if (!OpenZip(source.path, &file, zip))
+            return false;
+
+        for (int i = 0; complete && (i < GT_FIRMWARE_COUNT); i++)
+        {
+            GT_Firmware_Type type = (GT_Firmware_Type)i;
+            int index = FindZipComponent(zip, type);
+            mz_zip_archive_file_stat stat;
+            bool found = (index >= 0) && mz_zip_reader_file_stat(&zip, (mz_uint)index, &stat) &&
+                (stat.m_uncomp_size == (mz_uint64)GetExpectedSize(type));
+
+            if (found && (type == GT_FIRMWARE_SYSTEM))
+                source.crc = stat.m_crc32;
+
+            complete = found || !IsRequired(type);
+        }
+
+        mz_zip_reader_end(&zip);
+        SafeDelete(file);
+    }
+    else
+    {
+        for (int i = 0; complete && (i < GT_FIRMWARE_COUNT); i++)
+        {
+            GT_Firmware_Type type = (GT_Firmware_Type)i;
+            int size = GetExpectedSize(type);
+            MediaFile* file = MediaFile::OpenFile(GetFilePath(source.path, type).c_str());
+            bool found = IsValidPointer(file) && (file->GetSize() == size);
+
+            if (found && (type == GT_FIRMWARE_SYSTEM))
+            {
+                u8* buffer = new (std::nothrow) u8[size];
+                found = IsValidPointer(buffer) && file->ReadExact(buffer, (u64)size);
+
+                if (found)
+                    source.crc = CalculateCRC32(0, buffer, size);
+
+                SafeDeleteArray(buffer);
+            }
+
+            SafeDelete(file);
+            complete = found || !IsRequired(type);
+        }
+    }
+
+    if (complete)
+        source.set = FindSet(source.crc);
+
+    return complete;
+}
+
+void Firmware::AddCandidate(std::vector<GT_Firmware_Source>& candidates, const char* path, bool zip)
+{
+    GT_Firmware_Source source;
+    memset(&source, 0, sizeof(source));
+    strncpy_fit(source.path, path, sizeof(source.path));
+    source.zip = zip;
+
+    if (IdentifySource(source))
+        candidates.push_back(source);
+}
+
+bool Firmware::OpenZip(const char* path, MediaFile** file, mz_zip_archive& zip)
+{
+    memset(&zip, 0, sizeof(zip));
+    *file = MediaFile::OpenFile(path);
+
+    if (!IsValidPointer(*file) || !(*file)->CanSeek() || ((*file)->GetSize() <= 0))
+    {
+        SafeDelete(*file);
+        return false;
+    }
+
+    zip.m_pRead = ReadZipCallback;
+    zip.m_pIO_opaque = *file;
+
+    if (!mz_zip_reader_init(&zip, (mz_uint64)(*file)->GetSize(), 0))
+    {
+        SafeDelete(*file);
+        return false;
+    }
+
+    return true;
+}
+
+int Firmware::FindZipComponent(mz_zip_archive& zip, GT_Firmware_Type type)
+{
+    for (int i = 0; i < FIRMWARE_FILE_NAMES; i++)
+    {
+        const char* name = k_firmware_file_names[type][i];
+
+        if (!IsValidPointer(name))
+            continue;
+
+        for (mz_uint file = 0; file < mz_zip_reader_get_num_files(&zip); file++)
+        {
+            char file_name[GT_MAX_PATH];
+            mz_zip_reader_get_filename(&zip, file, file_name, sizeof(file_name));
+
+            if ((strlen(file_name) == strlen(name)) && ends_with_no_case(file_name, name))
+                return (int)file;
+        }
+    }
+
+    return -1;
+}
+
+size_t Firmware::ReadZipCallback(void* opaque, mz_uint64 offset, void* buffer, size_t size)
+{
+    MediaFile* file = (MediaFile*)opaque;
+    return file->ReadAt(offset, buffer, size) ? size : 0;
 }

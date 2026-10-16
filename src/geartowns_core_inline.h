@@ -57,6 +57,16 @@ INLINE const GT_Machine_Report& GeartownsCore::GetPendingMachineReport()
     return m_pending_machine_report;
 }
 
+INLINE bool GeartownsCore::HasFirmware(GT_Machine_Model model)
+{
+    return m_firmware_sources[model].type != GT_FIRMWARE_SOURCE_NONE;
+}
+
+INLINE const GT_Firmware_Source& GeartownsCore::GetFirmwareSource(GT_Machine_Model model)
+{
+    return m_firmware_sources[model];
+}
+
 INLINE Firmware* GeartownsCore::GetFirmware()
 {
     return m_firmware;

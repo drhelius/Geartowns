@@ -110,15 +110,17 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             return m_pic->Read(port);
         case 0x0020:
             // Reset reason
-            return m_system_control->Read(port);
+            return m_system_control->Read(port, context.clocks);
         case 0x0022:
             // Power control
             break;
+        case 0x0024:
+            // CPU misc 3
         case 0x0025:
             // NMI mask capability
         case 0x0028:
             // NMI mask
-            return m_system_control->Read(port);
+            return m_system_control->Read(port, context.clocks);
         case 0x0026:
             // Free-running timer low
         case 0x0027:
@@ -130,7 +132,7 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // Machine ID high
         case 0x0032:
             // Serial ID ROM
-            return m_system_control->Read(port);
+            return m_system_control->Read(port, context.clocks);
         case 0x0040:
             // PIT counter 0
         case 0x0042:
@@ -159,7 +161,7 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x006C:
             // 1 us wait
             m_system_control->Wait(context);
-            return m_system_control->Read(port);
+            return m_system_control->Read(port, context.clocks);
         case 0x0070:
             // RTC data
         case 0x0080:
@@ -341,7 +343,7 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // Expansion NMI mask
         case 0x05C2:
             // Expansion NMI status
-            return m_system_control->Read(port);
+            return m_system_control->Read(port, context.clocks);
         case 0x05C8:
             // Text VRAM written
             return m_video->Read(port, context.clocks);
@@ -358,7 +360,9 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // RAM size
         case 0x05EC:
             // Speed control
-            return m_system_control->Read(port);
+        case 0x05ED:
+            // Maximum clock
+            return m_system_control->Read(port, context.clocks);
         case 0x0600:
             // Keyboard data
         case 0x0602:
@@ -417,6 +421,10 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // FM-R digital palette 7
         case 0xFDA0:
             // Sync status
+        case 0xFDA2:
+            // CRT output control readback
+        case 0xFDA4:
+            // CRT readback enable
             return m_video->Read(port, context.clocks);
         case 0xFF81:
             // FM-R plane mask
@@ -467,7 +475,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x0030:
         case 0x0031:
         case 0x0032:
-            value = m_system_control->Peek(port);
+            value = m_system_control->Peek(port, clocks);
             break;
         case 0x0022:
             break;
@@ -549,6 +557,13 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0xFDA0:
             value = m_video->Peek(port, clocks);
             break;
+        case 0xFDA2:
+        case 0xFDA4:
+            if (!m_video->Decodes(port))
+                return false;
+
+            value = m_video->Peek(port, clocks);
+            break;
         case 0x048A:
             value = 0x06;
             break;
@@ -617,8 +632,9 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x05C0:
         case 0x05C2:
         case 0x05E0:
-            value = m_system_control->Peek(port);
+            value = m_system_control->Peek(port, clocks);
             break;
+        case 0x0024:
         case 0x0025:
         case 0x0028:
         case 0x006C:
@@ -626,10 +642,11 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x05E6:
         case 0x05E8:
         case 0x05EC:
+        case 0x05ED:
             if (!m_system_control->Decodes(port))
                 return false;
 
-            value = m_system_control->Peek(port);
+            value = m_system_control->Peek(port, clocks);
             break;
         case 0x0026:
         case 0x0027:
@@ -713,9 +730,12 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x0020:
             // Reset and power control
-        case 0x0022:
-            // Power off
             m_system_control->Write(port, value);
+            break;
+        case 0x0022:
+            // Power off and CRT power
+            m_system_control->Write(port, value);
+            m_video->Write(port, value, context.clocks);
             break;
         case 0x0028:
             // NMI mask
@@ -1035,6 +1055,8 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // FM-R digital palette 7
         case 0xFDA0:
             // CRT output control
+        case 0xFDA4:
+            // CRT readback enable
             m_video->Write(port, value, context.clocks);
             break;
         case 0xFF81:

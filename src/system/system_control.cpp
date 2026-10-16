@@ -94,6 +94,9 @@ bool SystemControl::Decodes(u16 port) const
 {
     switch (port)
     {
+        case 0x0024:
+        case 0x05ED:
+            return (m_features & GT_MACHINE_FEATURE_UG_REGISTERS) != 0;
         case 0x0025:
         case 0x0028:
             return (m_features & GT_MACHINE_FEATURE_NMI_MASK) != 0;
@@ -135,7 +138,7 @@ void SystemControl::Reset()
     m_memory->SetNMIVectorProtect(false);
 }
 
-u8 SystemControl::Read(u16 port)
+u8 SystemControl::Read(u16 port, u64 clocks)
 {
     switch (port)
     {
@@ -146,9 +149,8 @@ u8 SystemControl::Read(u16 port)
             return cause;
         }
         case 0x0030:
-            return (u8)(m_machine_id & 0xFF);
         case 0x0031:
-            return (u8)(m_machine_id >> 8);
+            return Peek(port, clocks);
         case 0x0032:
         {
             u8 bit = m_state.serial_rom_bit;
@@ -163,6 +165,7 @@ u8 SystemControl::Read(u16 port)
             return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
+        case 0x0024:
         case 0x0025:
         case 0x0028:
         case 0x006C:
@@ -170,14 +173,15 @@ u8 SystemControl::Read(u16 port)
         case 0x05E6:
         case 0x05E8:
         case 0x05EC:
-            return Peek(port);
+        case 0x05ED:
+            return Peek(port, clocks);
         default:
             return 0xFF;
     }
 }
 
 // The reset cause stays latched
-u8 SystemControl::Peek(u16 port) const
+u8 SystemControl::Peek(u16 port, u64 clocks) const
 {
     switch (port)
     {
@@ -186,7 +190,11 @@ u8 SystemControl::Peek(u16 port) const
         case 0x0030:
             return (u8)(m_machine_id & 0xFF);
         case 0x0031:
-            return (u8)(m_machine_id >> 8);
+        {
+            bool settling = (m_features & GT_MACHINE_FEATURE_UG_REGISTERS) != 0 &&
+                clocks < k_system_control_id_settle_clocks;
+            return (u8)(m_machine_id >> 8) | (settling ? 0x80 : 0x00);
+        }
         case 0x0032:
         {
             u8 bit = m_state.serial_rom_bit;
@@ -199,6 +207,8 @@ u8 SystemControl::Peek(u16 port) const
             return 0xF7;
         case 0x05E0:
             return m_state.port_05e0;
+        case 0x0024:
+            return Decodes(port) ? GetCPUMisc3() : 0xFF;
         case 0x0025:
             return Decodes(port) ? 0x7F : 0xFF;
         case 0x0028:
@@ -213,9 +223,25 @@ u8 SystemControl::Peek(u16 port) const
             return Decodes(port) ? (u8)((m_memory->GetMainRAMSize() >> 20) & 0x1F) : 0xFF;
         case 0x05EC:
             return Decodes(port) ? (m_state.high_speed ? 0x01 : 0x00) : 0xFF;
+        case 0x05ED:
+            return Decodes(port) ? (u8)(m_wait_cycles & 0x7F) : 0xFF;
         default:
             return 0xFF;
     }
+}
+
+// Active-low capabilities: the HG chassis can power off its CRT and itself, the UG neither
+u8 SystemControl::GetCPUMisc3() const
+{
+    u8 value = 0x07;
+
+    if ((m_features & GT_MACHINE_FEATURE_FREE_RUN_TIMER) == 0)
+        value |= 0x10;
+
+    if ((m_features & GT_MACHINE_FEATURE_CRT_POWER_OFF) == 0)
+        value |= 0x28;
+
+    return value;
 }
 
 void SystemControl::Write(u16 port, u8 value)

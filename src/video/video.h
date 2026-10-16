@@ -80,6 +80,8 @@ public:
         u8 kanji_high;
         u8 kanji_low;
         u8 kanji_row;
+        bool crt_readback;
+        bool crt_power_off;
     };
 
 public:
@@ -88,6 +90,8 @@ public:
     void Init(PIC* pic, PIT* pit, Scheduler* scheduler, Memory* memory, const u8* font_rom);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
+    void SetFeatures(u32 features);
+    bool Decodes(u16 port) const;
     void ResetFMRView();
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
@@ -112,7 +116,7 @@ public:
     Sprite* GetSprite();
     Video_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
     u8 ReadFMRRegister(u32 offset, bool peek);
     void WriteFMRRegister(u32 offset, u8 value);
@@ -207,7 +211,7 @@ private:
     void UpdateColorCaches();
     void TraceWrite(u16 port, u8 value, u64 clocks);
     void TraceEvent(u8 event, u8 reg, u16 value, u8 raw, u8 bank, u32 param, u64 clocks);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:
@@ -219,6 +223,7 @@ private:
     Scheduler* m_scheduler;
     Memory* m_memory;
     const u8* m_font_rom;
+    u32 m_features;
     u8* m_frame_buffer;
     bool m_render;
     bool m_frame_ready;

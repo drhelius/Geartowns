@@ -61,8 +61,8 @@ public:
     void SetCPUClockRate(u32 cpu_clock_rate);
     bool Decodes(u16 port) const;
     void Wait(GT_Bus_Access_Context& context) const;
-    u8 Read(u16 port);
-    u8 Peek(u16 port) const;
+    u8 Read(u16 port, u64 clocks);
+    u8 Peek(u16 port, u64 clocks) const;
     const u8* GetSerialRom() const;
     void Write(u16 port, u8 value);
     void RequestCPUReset(u8 cause);
@@ -74,6 +74,7 @@ public:
     void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
+    u8 GetCPUMisc3() const;
     void WriteSerialROM(u8 value);
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
@@ -88,6 +89,7 @@ private:
     u8 m_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE];
 };
 
+static const u64 k_system_control_id_settle_clocks = (GT_MACHINE_CLOCK_RATE / 1000000) * 300;
 static const u8 k_system_control_reset_soft = 0x01;
 static const u8 k_system_control_reset_shutdown = 0x02;
 

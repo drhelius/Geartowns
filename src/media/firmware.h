@@ -26,8 +26,8 @@
 
 class MediaFile;
 
-#define FIRMWARE_SET_COUNT 5
-#define FIRMWARE_FILE_NAMES 3
+#define FIRMWARE_SET_COUNT 6
+#define FIRMWARE_FILE_NAMES 5
 #define FIRMWARE_EXTENSION_PARTS 4
 #define FIRMWARE_PACKED_SIZE (2 * 1024 * 1024)
 
@@ -116,9 +116,10 @@ static const GT_Firmware_Set k_firmware_sets[FIRMWARE_SET_COUNT] =
     { "fmtowns", "Model 1/2 set", 0x53319E23, 1 << GT_MACHINE_MODEL1_2, 0 },
     { "freetowns", "Free FM Towns set", 0x65DC3B1F, 0, 1 << GT_MACHINE_MODEL1_2 },
     { "fmtownsux", "UX set", 0x92F3FA67, 1 << GT_MACHINE_UX,
-        (1 << GT_MACHINE_1F_2F) | (1 << GT_MACHINE_10F_20F) | (1 << GT_MACHINE_CX) },
-    { "fmtmarty", "Marty set", 0x937311F6, 1 << GT_MACHINE_MARTY, (1 << GT_MACHINE_UG) | (1 << GT_MACHINE_HG) },
-    { "fmtownsftv", "V10 set", 0xAFE4EBCF, 1 << GT_MACHINE_MF_FRESH, (1 << GT_MACHINE_UG) | (1 << GT_MACHINE_HG) }
+        (1 << GT_MACHINE_1F_2F) | (1 << GT_MACHINE_10F_20F) | (1 << GT_MACHINE_CX) | (1 << GT_MACHINE_UG) },
+    { "fmtmarty", "Marty set", 0x937311F6, 1 << GT_MACHINE_MARTY, 0 },
+    { "fmtownshr", "HR set", 0x8AEFF982, 1 << GT_MACHINE_HR, 1 << GT_MACHINE_HG },
+    { "fmtownsftv", "V10 set", 0xAFE4EBCF, 1 << GT_MACHINE_MF_FRESH, 1 << GT_MACHINE_HG }
 };
 
 #include "firmware_inline.h"

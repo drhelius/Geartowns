@@ -35,6 +35,7 @@ Video::Video()
     InitPointer(m_memory);
     InitPointer(m_font_rom);
     InitPointer(m_frame_buffer);
+    m_features = 0;
     m_render = false;
     m_frame_ready = false;
     m_next_event_clocks = GT_NO_EVENT;
@@ -118,6 +119,25 @@ void Video::Reset()
     UpdateIRQ();
 }
 
+void Video::SetFeatures(u32 features)
+{
+    m_features = features;
+}
+
+bool Video::Decodes(u16 port) const
+{
+    switch (port)
+    {
+        case 0x0022:
+            return (m_features & GT_MACHINE_FEATURE_CRT_POWER_OFF) != 0;
+        case 0xFDA2:
+        case 0xFDA4:
+            return (m_features & GT_MACHINE_FEATURE_UG_REGISTERS) != 0;
+        default:
+            return true;
+    }
+}
+
 // The latches that shape what the CPU sees at C0000-CFFFF
 // restored with the memory map on a CPU reset
 void Video::ResetFMRView()
@@ -185,6 +205,9 @@ u8 Video::Read(u16 port, u64 clocks)
             u8 status = GetSyncStatus(clocks);
             return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x02 : 0x00);
         }
+        case 0xFDA2:
+        case 0xFDA4:
+            return Peek(port, clocks);
         default:
             return 0xFF;
     }
@@ -239,6 +262,10 @@ u8 Video::Peek(u16 port, u64 clocks) const
             u8 status = GetSyncStatus(clocks);
             return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x02 : 0x00);
         }
+        case 0xFDA2:
+            return (Decodes(port) && m_state.crt_readback) ? (m_state.display_enable & 0x0F) : 0xFF;
+        case 0xFDA4:
+            return Decodes(port) ? (m_state.crt_readback ? 0x01 : 0x00) : 0xFF;
         default:
             return 0xFF;
     }
@@ -360,6 +387,17 @@ void Video::Write(u16 port, u8 value, u64 clocks)
                 m_line_changed = true;
 
             m_state.display_enable = value;
+            break;
+        case 0xFDA4:
+            if (Decodes(port))
+                m_state.crt_readback = (value & 0x01) != 0;
+            break;
+        case 0x0022:
+            if (Decodes(port) && m_state.crt_power_off != ((value & 0x80) != 0))
+            {
+                m_state.crt_power_off = (value & 0x80) != 0;
+                m_line_changed = true;
+            }
             break;
         default:
             break;
@@ -764,6 +802,10 @@ void Video::WriteFMRRegister(u32 offset, u8 value)
         case 0x0F99:
             m_state.fmr_ank = (value & 0x01) != 0;
             break;
+        case 0x0F9E:
+            if (m_state.crt_readback)
+                m_state.kanji_row = value & 0x0F;
+            break;
         default:
             break;
     }
@@ -791,6 +833,12 @@ u8 Video::ReadFMRRegister(u32 offset, bool peek)
             u8 status = GetSyncStatus(m_scheduler->GetClocks());
             return 0x10 | ((status & 0x04) != 0 ? 0x04 : 0x00) | ((status & 0x02) != 0 ? 0x80 : 0x00);
         }
+        case 0x0F88:
+            if (!m_state.crt_readback)
+                return 0xFF;
+
+            return 0x40 | (m_state.fmr_display_planes & 0x07) | ((m_state.fmr_display_planes & 0x08) << 2) |
+                (m_state.fmr_display_page ? 0x10 : 0x00);
         case 0x0F94:
             // Level 2 kanji are present
             return 0x80;
@@ -810,6 +858,14 @@ u8 Video::ReadFMRRegister(u32 offset, bool peek)
                 m_pit->SetMemoryBuzzer(true);
 
             return 0xFF;
+        case 0x0F99:
+            return m_state.crt_readback ? (m_state.fmr_ank ? 0x01 : 0x00) : 0xFF;
+        case 0x0F9C:
+            return m_state.crt_readback ? m_state.kanji_high : 0xFF;
+        case 0x0F9D:
+            return m_state.crt_readback ? m_state.kanji_low : 0xFF;
+        case 0x0F9E:
+            return m_state.crt_readback ? m_state.kanji_row : 0xFF;
         case 0x0FA0:
             // No logical operation unit, so ESTART stays clear
             return 0x00;
@@ -1392,6 +1448,9 @@ void Video::RenderRow(int row)
     for (int x = 0; x < width; x++)
         destination[x] = black;
 
+    if (unlikely(m_state.crt_power_off))
+        return;
+
     if (IsTwoPage())
     {
         // The back layer is drawn opaque and the front one lets transparent pixels through
@@ -1697,19 +1756,19 @@ void Video::UpdateColorCaches()
 void Video::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
     m_sprite->SaveState(stream);
 }
 
-void Video::LoadState(std::istream& stream)
+void Video::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     m_sprite->LoadState(stream);
     SanitizeState();
 }
 
-void Video::Serialize(StateSerializer& serializer)
+void Video::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE_ARRAY(serializer, m_state.vram, VIDEO_VRAM_SIZE);
     G_SERIALIZE_ARRAY(serializer, m_state.sprite_ram, VIDEO_SPRITE_RAM_SIZE);
@@ -1747,6 +1806,17 @@ void Video::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_canvas_zoom_y);
     G_SERIALIZE(serializer, m_canvas_offset);
     G_SERIALIZE(serializer, m_canvas_offset_key);
+
+    if (version >= 5)
+    {
+        G_SERIALIZE(serializer, m_state.crt_readback);
+        G_SERIALIZE(serializer, m_state.crt_power_off);
+    }
+    else
+    {
+        m_state.crt_readback = false;
+        m_state.crt_power_off = false;
+    }
 }
 
 void Video::SanitizeState()

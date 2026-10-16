@@ -2315,6 +2315,18 @@ json DebugAdapter::GetSystemStatus()
     if (m_core->GetIO()->Peek(0x05EC, clocks, value))
         registers["high_speed"] = (value & 0x01) != 0;
 
+    if (m_core->GetIO()->Peek(0x0024, clocks, value))
+        registers["cpu_misc3"] = Hex(value, 2);
+
+    if (m_core->GetIO()->Peek(0x05ED, clocks, value))
+        registers["maximum_clock_mhz"] = value & 0x7F;
+
+    if ((profile.features & GT_MACHINE_FEATURE_CRT_POWER_OFF) != 0)
+        registers["crt_power_off"] = m_core->GetVideo()->GetState()->crt_power_off;
+
+    if (m_core->GetIO()->Peek(0xFDA4, clocks, value))
+        registers["crt_readback"] = (value & 0x01) != 0;
+
     if (m_core->GetIO()->Peek(0x05E2, clocks, value) && m_core->GetIO()->Peek(0x05E6, clocks, value_2))
         registers["memory_wait"] = {{"05e2", Hex(value, 2)}, {"05e6", Hex(value_2, 2)}};
 
@@ -2362,7 +2374,7 @@ json DebugAdapter::GetSystemStatus()
             {"clock", (control->serial_rom_control & 0x40) != 0},
             {"chip_select", (control->serial_rom_control & 0x20) == 0},
             {"bit", control->serial_rom_bit},
-            {"data", m_core->GetSystemControl()->Peek(0x0032) & 0x01},
+            {"data", m_core->GetSystemControl()->Peek(0x0032, m_core->GetScheduler()->GetClocks()) & 0x01},
             {"contents", serial_rom}
         }}
     };

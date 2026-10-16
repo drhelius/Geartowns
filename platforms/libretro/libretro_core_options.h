@@ -354,6 +354,8 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "10f_20f",  "FM Towns 10F/20F (80386DX 16 MHz)" },
             { "cx",       "FM Towns II CX (80386DX 16 MHz)" },
             { "ux",       "FM Towns II UX (80386SX 16 MHz)" },
+            { "ug",       "FM Towns II UG (80386SX 20 MHz)" },
+            { "hg",       "FM Towns II HG (80386DX 20 MHz)" },
             { "marty",    "FM Towns Marty (80386SX 16 MHz)" },
             { NULL, NULL },
         },

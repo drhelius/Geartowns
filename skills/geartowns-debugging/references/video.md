@@ -47,6 +47,8 @@ Standard formats and the line pitch the BIOS modes use:
 | FD92h/FD94h/FD96h | Palette blue, red, green |
 | FD98h-FD9Fh | FM-R digital palette (low 4 bits each); a write sets DPMD and does not change the displayed colors |
 | FDA0h | Read: bit 0 VSYNC, bit 1 HSYNC. Write: bits 3-2 layer 0 enable, bits 1-0 layer 1 enable |
+| FDA2h | UG and HG, with readback on: the last FDA0h write, bits 3-0 |
+| FDA4h | UG and HG: bit 0 turns readback on for FDA2h, CFF88h, CFF99h, CFF9Ch-CFF9Eh; off at power-on |
 | FF81h-FF83h, FF94h-FF99h | FM-R plane mask, display page, access page, kanji ROM, ANK (aliases of CFF8xh/CFF9xh) |
 
 ---
@@ -157,6 +159,10 @@ At C0000h-C7FFFh, layer 0 VRAM appears as four 1-bit planes for FM-R software: o
 | CFF86h | Sync status |
 | CFF94h-CFF97h | Kanji ROM: JIS code high and low, then two bytes per glyph row |
 | CFF99h | Bit 0 ANK font window select |
+
+With readback on (FDA4h bit 0, UG and HG), CFF88h reads the CFF82h display mode (bit 6 set), CFF99h the ANK
+select, CFF9Ch/CFF9Dh the JIS code written to CFF94h/CFF95h, and CFF9Eh reads and sets the glyph row of
+CFF96h/CFF97h. With it off they read FFh, as on earlier models.
 
 The Model 1/2 BIOS also reaches CFF81h through the I/O alias FF81h. FM-R text output is software drawn into the
 layers; the text RAM at C8000h is held in Sprite RAM. See the memory_map resource.

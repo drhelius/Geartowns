@@ -312,6 +312,15 @@ const GT_DB_Entry k_game_database[] =
     { 0xE1A9FA72, "FM Towns Marty Extension ROM", GT_GAMEDB_FIRMWARE_EXTENSION, 0, 0 },
     { 0x75660AAC, "FM Towns II 20-dot Font ROM", GT_GAMEDB_FIRMWARE_FONT20, 0, 0 },
 
+    // FM Towns II HR firmware (V06)
+    { 0x8AEFF982, "FM Towns II HR System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0 },
+    { 0xC52F0E89, "FM Towns II HR Serial ROM", GT_GAMEDB_FIRMWARE_SERIAL, 0, 0 },
+
+    // FM Towns II Fresh TV firmware (V10)
+    { 0xAFE4EBCF, "FM Towns II Fresh TV System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0 },
+    { 0x9F55A20C, "FM Towns II Fresh TV 20-dot Font ROM", GT_GAMEDB_FIRMWARE_FONT20, 0, 0 },
+    { 0xA961AAE7, "FM Towns II Fresh TV Serial ROM", GT_GAMEDB_FIRMWARE_SERIAL, 0, 0 },
+
     // Free FM Towns Project firmware
     { 0x65DC3B1F, "Free FM Towns System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0 },
     { 0x43C18E92, "Free FM Towns OS ROM", GT_GAMEDB_FIRMWARE_OS, 0, 0 },

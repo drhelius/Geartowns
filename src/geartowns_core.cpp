@@ -1265,7 +1265,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_pic->LoadState(stream);
     m_pit->LoadState(stream, header.version);
     m_system_control->LoadState(stream, header.version);
-    m_video->LoadState(stream);
+    m_video->LoadState(stream, header.version);
     m_cdrom->LoadState(stream);
     m_cdrom_audio->LoadState(stream);
     m_fdc->LoadState(stream);
@@ -1708,6 +1708,9 @@ void GeartownsCore::ApplyMachineConfig()
 
     if (IsValidPointer(m_pit))
         m_pit->SetFeatures(profile.features);
+
+    if (IsValidPointer(m_video))
+        m_video->SetFeatures(profile.features);
 
     if (IsValidPointer(m_system_control))
     {

@@ -27,13 +27,13 @@
 
 static const char* const k_firmware_file_names[GT_FIRMWARE_COUNT][FIRMWARE_FILE_NAMES] =
 {
-    { "FMT_SYS.ROM", "FMT_SYS_A.ROM", NULL },
-    { "FMT_DOS.ROM", "FMT_DOS_A.ROM", NULL },
-    { "FMT_FNT.ROM", NULL, NULL },
-    { "FMT_DIC.ROM", NULL, NULL },
-    { "FMT_F20.ROM", "FMT_F20_A.ROM", NULL },
-    { "MYTOWNS.ROM", "MYTOWNSUX.ROM", "MYTOWNSM2.ROM" },
-    { "MAR_EX0-3.ROM", NULL, NULL }
+    { "FMT_SYS.ROM", "FMT_SYS_A.ROM", "FMTHR_SYS.ROM", NULL, NULL },
+    { "FMT_DOS.ROM", "FMT_DOS_A.ROM", NULL, NULL, NULL },
+    { "FMT_FNT.ROM", NULL, NULL, NULL, NULL },
+    { "FMT_DIC.ROM", NULL, NULL, NULL, NULL },
+    { "FMT_F20.ROM", "FMT_F20_A.ROM", NULL, NULL, NULL },
+    { "MYTOWNS.ROM", "MYTOWNSUX.ROM", "MYTOWNSM2.ROM", "MYTOWNSFTV.ROM", "MYTOWNSHR.ROM" },
+    { "MAR_EX0-3.ROM", NULL, NULL, NULL, NULL }
 };
 
 static const char* const k_firmware_extension_names[FIRMWARE_EXTENSION_PARTS] =
@@ -333,7 +333,10 @@ void Firmware::FindSources(const char* default_folder, const std::string* model_
         {
             GT_Firmware_Source_Type type = GetSourceType(candidates[i].set, (GT_Machine_Model)model);
 
-            if ((source.type == GT_FIRMWARE_SOURCE_NONE) || (type < source.type))
+            bool preferred = (type == source.type) && (type == GT_FIRMWARE_SOURCE_COMPATIBLE_SET) &&
+                (candidates[i].set < source.set);
+
+            if ((source.type == GT_FIRMWARE_SOURCE_NONE) || (type < source.type) || preferred)
             {
                 source = candidates[i];
                 source.type = type;

@@ -14,8 +14,8 @@ address bit 1).
 - The ports differ from the IBM PC: 0020h is the reset register (not a PIC), 00A0h initializes the DMA controller,
   0070h/0080h drive the MSM58321 clock, and the CMOS RAM is at 3000h–3FFEh.
 - Later models add ports, marked below with the first model that has them. On a machine without them they read FFh,
-  ignore writes and show `??` in the I/O PORTS area. Geartowns emulates them on the 1F/2F, 10F/20F, FM Towns II CX
-  and UX, and the FM Towns Marty, which also has the UG's free-running timer.
+  ignore writes and show `??` in the I/O PORTS area. Geartowns emulates them on the 1F/2F, 10F/20F, FM Towns II CX,
+  UX, UG and HG, and the FM Towns Marty, which also has the UG's free-running timer.
 
 Names below are the ones the debugger uses in the disassembler, the Memory Workspace and MCP tools.
 
@@ -35,10 +35,11 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | Port | Name | Function |
 |---|---|---|
 | 0020h | SYS_RESET | Reset cause read, reset and write protect |
-| 0022h | SYS_POWER | Power off |
+| 0022h | SYS_POWER | Power off, CRT power off (HG) |
+| 0024h | CPU_MISC3 | Capability flags (UG) |
 | 0025h | NMI_CAPABILITY | NMI mask facility (UX) |
-| 0026h | FREE_RUN_LO | Free-running microsecond timer low (UG, Marty) |
-| 0027h | FREE_RUN_HI | Free-running microsecond timer high (UG, Marty) |
+| 0026h | FREE_RUN_LO | Free-running microsecond timer low (UG, HG, Marty) |
+| 0027h | FREE_RUN_HI | Free-running microsecond timer high (UG, HG, Marty) |
 | 0028h | NMI_MASK | NMI mask (UX) |
 | 0030h | MACHINE_ID_LO | Machine ID low, LSPEED write (UX) |
 | 0031h | MACHINE_ID_HI | Machine ID high |
@@ -181,6 +182,7 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 05E6h | MEMORY_WAIT_2 | Memory wait (10F) |
 | 05E8h | RAM_SIZE | Installed RAM in MB (1F) |
 | 05ECh | SPEED_CONTROL | Speed control (CX) |
+| 05EDh | MAXIMUM_CLOCK | Maximum CPU clock in MHz (UG) |
 
 ### Keyboard
 
@@ -233,6 +235,8 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | FD9Eh | DPAL_6 | FM-R digital palette 6 |
 | FD9Fh | DPAL_7 | FM-R digital palette 7 |
 | FDA0h | CRT_OUTPUT | Sync status read, CRT output control write |
+| FDA2h | CRT_OUTPUT_READ | CRT output control readback (UG) |
+| FDA4h | CRT_READBACK | CRT register readback enable (UG) |
 
 ### FM-R Compatible Registers
 

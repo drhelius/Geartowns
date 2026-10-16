@@ -29,6 +29,7 @@
 #include "system/scheduler.h"
 #include "system/system_control.h"
 #include "system/upd71071.h"
+#include "video/video.h"
 #include "../config.h"
 #include "../emu.h"
 #include "../gui.h"
@@ -617,7 +618,7 @@ void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(176, 112), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(236, 614), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(236, 682), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);
@@ -741,8 +742,15 @@ void gui_debug_window_system_control(void)
     u8 card_bank = 0;
     u8 card_attribute = 0;
     u8 speed = 0;
+    u8 misc3 = 0;
+    u8 maximum_clock = 0;
+    u8 readback = 0;
     bool has_nmi_mask = core->GetIO()->Peek(0x0028, clocks, nmi_mask);
     bool has_speed = core->GetIO()->Peek(0x05EC, clocks, speed);
+    bool has_misc3 = core->GetIO()->Peek(0x0024, clocks, misc3);
+    bool has_maximum_clock = core->GetIO()->Peek(0x05ED, clocks, maximum_clock);
+    bool has_readback = core->GetIO()->Peek(0xFDA4, clocks, readback);
+    bool has_crt_power = (k_machine_profiles[machine.model].features & GT_MACHINE_FEATURE_CRT_POWER_OFF) != 0;
     bool has_wait = core->GetIO()->Peek(0x05E2, clocks, wait) && core->GetIO()->Peek(0x05E6, clocks, wait_2);
     bool has_card = core->GetIO()->Peek(0x0490, clocks, card_bank) && core->GetIO()->Peek(0x0491, clocks, card_attribute);
     bool has_low_speed = (k_machine_profiles[machine.model].features & GT_MACHINE_FEATURE_LSPEED) != 0;
@@ -768,6 +776,38 @@ void gui_debug_window_system_control(void)
         draw_model_flag("SPEED", has_speed, (speed & 0x01) != 0, "HIGH", "COMPATIBLE");
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(05EC)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("MISC3");
+
+        if (has_misc3)
+            ImGui::TextColored(white, "$%02X", misc3);
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0024)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("MAX CLOCK");
+
+        if (has_maximum_clock)
+            ImGui::TextColored(white, "%d MHz", maximum_clock & 0x7F);
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(05ED)");
+
+        ImGui::TableNextRow();
+        draw_model_flag("CRT POWER", has_crt_power, !core->GetVideo()->GetState()->crt_power_off, "ON", "OFF");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0022)");
+
+        ImGui::TableNextRow();
+        draw_model_flag("READBACK", has_readback, (readback & 0x01) != 0, "ON", "OFF");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(FDA4)");
 
         ImGui::TableNextRow();
         draw_grid_label("MEM WAIT");
@@ -819,7 +859,7 @@ void gui_debug_window_system_control(void)
 
         ImGui::TableNextRow();
         draw_grid_label("DATA");
-        ImGui::TextColored(white, "%d", core->GetSystemControl()->Peek(0x0032) & 0x01);
+        ImGui::TextColored(white, "%d", core->GetSystemControl()->Peek(0x0032, clocks) & 0x01);
 
         char contents[32];
         gui_debug_system_serial_rom_text(contents, sizeof(contents));

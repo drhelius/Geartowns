@@ -344,7 +344,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_model",
         "Model (restart)",
         NULL,
-        "The FM Towns model to emulate. Auto picks the machine and RAM the game database names for the game, and the FM Towns (Model 1/2) for other content. It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
+        "The FM Towns model to emulate. Auto picks the machine, CPU speed and RAM the game database names for the game, and the FM Towns (Model 1/2) for other content. It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
         NULL,
         "system",
         {
@@ -365,7 +365,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_cpu_clock",
         "CPU Speed (restart)",
         NULL,
-        "Auto runs the CPU at the model's original clock. Devices keep their real timing at any speed. Some software may not expect a faster CPU.",
+        "Auto runs the CPU at the model's original clock, or at the speed the game database names when Model is on Auto. Devices keep their real timing at any speed. Some software may not expect a faster CPU.",
         NULL,
         "system",
         {

@@ -1618,6 +1618,12 @@ void GeartownsCore::ResolveMachineConfig()
     if (database)
         report.model = GT_MACHINE_SOURCE_DATABASE;
 
+    if (database && auto_cpu && (entry->cpu_mhz > 0))
+    {
+        config.cpu_clock_rate = entry->cpu_mhz * 1000000;
+        report.cpu_clock = GT_MACHINE_SOURCE_DATABASE;
+    }
+
     if (database && auto_ram && (entry->ram_mb > 0))
     {
         config.ram_size = entry->ram_mb * megabyte;
@@ -1636,6 +1642,11 @@ void GeartownsCore::ResolveMachineConfig()
     if (config.ram_size < entry->ram_mb * megabyte)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "%s needs %d MB, this machine has %u MB", entry->title, entry->ram_mb, config.ram_size / megabyte);
+
+    if (config.cpu_clock_rate < entry->cpu_mhz * 1000000u)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "%s needs %d MHz, this machine runs at %u MHz", entry->title, entry->cpu_mhz,
+            config.cpu_clock_rate / 1000000);
 
     if ((entry->flags & GT_GAMEDB_HDD) != 0)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,

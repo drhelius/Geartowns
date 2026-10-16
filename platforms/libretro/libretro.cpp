@@ -871,6 +871,7 @@ static void report_machine(void)
     const GT_Machine_Config& config = core->GetMachineConfig();
     const GT_Machine_Report& report = core->GetMachineReport();
     bool model = (report.model == GT_MACHINE_SOURCE_DATABASE) && (config.model != GT_MACHINE_MODEL1_2);
+    bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
     u32 ram_mb = config.ram_size / (1024 * 1024);
     char source[256] = "";
@@ -887,18 +888,30 @@ static void report_machine(void)
     for (int i = 0; i < report.warning_count; i++)
         log_cb(RETRO_LOG_WARN, "%s\n", report.warnings[i]);
 
-    if (!IsValidPointer(report.title) || (!model && !ram && (report.warning_count == 0)))
+    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0)))
         return;
 
     static char message[1024];
+    char choices[256] = "";
+    char value[32];
 
-    if (model && ram)
-        snprintf(message, sizeof(message), "%s: %s, %u MB (game database)", report.title,
-            k_machine_profiles[config.model].name, ram_mb);
-    else if (model)
-        snprintf(message, sizeof(message), "%s: %s (game database)", report.title, k_machine_profiles[config.model].name);
-    else if (ram)
-        snprintf(message, sizeof(message), "%s: %u MB (game database)", report.title, ram_mb);
+    if (model)
+        strncpy_fit(choices, k_machine_profiles[config.model].name, sizeof(choices));
+
+    if (cpu)
+    {
+        snprintf(value, sizeof(value), "%s%u MHz", choices[0] ? ", " : "", config.cpu_clock_rate / 1000000);
+        strncat_fit(choices, value, sizeof(choices));
+    }
+
+    if (ram)
+    {
+        snprintf(value, sizeof(value), "%s%u MB", choices[0] ? ", " : "", ram_mb);
+        strncat_fit(choices, value, sizeof(choices));
+    }
+
+    if (choices[0])
+        snprintf(message, sizeof(message), "%s: %s (game database)", report.title, choices);
     else
         snprintf(message, sizeof(message), "%s (game database)", report.title);
 

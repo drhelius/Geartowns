@@ -953,10 +953,11 @@ static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
 
     bool changed = false;
     int original = (int)(profile.cpu_clock_rate / 1000000);
+    int in_use = (int)(emu_get_core()->GetPendingMachineConfig().cpu_clock_rate / 1000000);
     float text_width = 0.0f;
     char labels[GT_MACHINE_CPU_SPEED_COUNT][32];
     char auto_label[32];
-    snprintf(auto_label, sizeof(auto_label), "Auto (%d MHz)", original);
+    snprintf(auto_label, sizeof(auto_label), "Auto (%d MHz)", config_machine.cpu_mhz == GT_MACHINE_AUTO ? in_use : original);
     const char* preview = auto_label;
 
     for (int i = 0; i < GT_MACHINE_CPU_SPEED_COUNT; i++)

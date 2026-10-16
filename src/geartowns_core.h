@@ -174,7 +174,7 @@ private:
     void ResetCPU();
     void ResolveMachineConfig();
     bool CanAutoSelect(GT_Machine_Model model);
-    bool LoadMachineFirmware(bool force);
+    bool LoadMachineFirmware(bool force, bool report);
     void ApplyMachineConfig();
     void InitMemoryMap();
 

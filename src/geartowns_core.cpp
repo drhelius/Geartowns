@@ -696,7 +696,7 @@ bool GeartownsCore::PowerOn()
 {
     SearchFirmware();
 
-    if (!LoadMachineFirmware(true))
+    if (!LoadMachineFirmware(false, true))
         return false;
 
     Reset();
@@ -778,7 +778,7 @@ bool GeartownsCore::ReloadFirmware()
 {
     SearchFirmware();
 
-    if (!LoadMachineFirmware(true))
+    if (!LoadMachineFirmware(true, true))
         return false;
 
     if (m_powered)
@@ -1520,7 +1520,7 @@ void GeartownsCore::Reset()
     m_debug_step = GT_DEBUG_STEP_NONE;
     m_debug_step_resume = false;
     m_debug_interrupt_deferred = false;
-    LoadMachineFirmware(false);
+    LoadMachineFirmware(false, false);
     ApplyMachineConfig();
 
     if (IsValidPointer(m_scheduler))
@@ -1658,7 +1658,7 @@ void GeartownsCore::SearchFirmware()
         m_machine_report = m_pending_machine_report;
 }
 
-bool GeartownsCore::LoadMachineFirmware(bool force)
+bool GeartownsCore::LoadMachineFirmware(bool force, bool report)
 {
     if (!IsValidPointer(m_firmware))
         return false;
@@ -1669,13 +1669,14 @@ bool GeartownsCore::LoadMachineFirmware(bool force)
 
     if (source.type == GT_FIRMWARE_SOURCE_NONE)
     {
-        if (force)
+        if (report)
             Error("No firmware found for %s", k_machine_profiles[model].name);
 
         return false;
     }
 
-    if (!force && m_firmware->IsReady() && (loaded.zip == source.zip) && (strcmp(loaded.path, source.path) == 0))
+    if (!force && m_firmware->IsReady() && (loaded.zip == source.zip) && (loaded.crc == source.crc) &&
+        (strcmp(loaded.path, source.path) == 0))
         return true;
 
     if (!m_firmware->LoadSource(source))

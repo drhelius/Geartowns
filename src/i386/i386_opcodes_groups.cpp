@@ -177,17 +177,14 @@ INLINE bool I386::OPCodes_IMUL_RM(int width, u32 operand)
 
 INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
 {
-    if (operand == 0)
-        return RaiseException(0, I386_EXCEPTION_FAULT);
-
     if (width == 8)
     {
         u16 dividend = m_state.registers[I386_REG_EAX].low;
+
+        if ((u32)(dividend >> 8) >= operand)
+            return RaiseUnsignedDivideError(width, dividend >> 8, dividend & 0xFF, operand);
+
         u32 quotient = dividend / (u8)operand;
-
-        if (quotient > 0xFF)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
-
         u32 remainder = dividend % (u8)operand;
 
         SetRegister8(0, (u8)quotient);
@@ -197,11 +194,11 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
     else if (width == 16)
     {
         u32 dividend = ((u32)m_state.registers[I386_REG_EDX].low << 16) | m_state.registers[I386_REG_EAX].low;
+
+        if ((dividend >> 16) >= operand)
+            return RaiseUnsignedDivideError(width, dividend >> 16, dividend & 0xFFFF, operand);
+
         u32 quotient = dividend / (u16)operand;
-
-        if (quotient > 0xFFFF)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
-
         u32 remainder = dividend % (u16)operand;
 
         m_state.registers[I386_REG_EAX].low = (u16)quotient;
@@ -210,12 +207,14 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
     }
     else
     {
-        u64 dividend = ((u64)m_state.registers[I386_REG_EDX].value << 32) | m_state.registers[I386_REG_EAX].value;
+        u32 high = m_state.registers[I386_REG_EDX].value;
+        u32 low = m_state.registers[I386_REG_EAX].value;
+
+        if (high >= operand)
+            return RaiseUnsignedDivideError(width, high, low, operand);
+
+        u64 dividend = ((u64)high << 32) | low;
         u64 quotient = dividend / operand;
-
-        if (quotient > 0xFFFFFFFFULL)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
-
         u32 remainder = (u32)(dividend % operand);
 
         m_state.registers[I386_REG_EAX].value = (u32)quotient;
@@ -226,37 +225,33 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
     return true;
 }
 
+// The fault comes after the second to last step of the restoring division, which starts from high - divisor
+INLINE bool I386::RaiseUnsignedDivideError(int width, u32 high, u32 low, u32 divisor)
+{
+    u32 mask = GetMask(width);
+    u32 remainder = high - divisor;
+    u64 shifted = 0;
+
+    for (int i = 1; i < width; i++)
+    {
+        shifted = ((u64)remainder << 1) | ((low >> (width - i)) & 1);
+        remainder = (u32)(shifted >= divisor ? shifted - divisor : shifted) & mask;
+    }
+
+    Sub((u32)shifted, divisor, 0, width);
+    return RaiseException(0, I386_EXCEPTION_FAULT);
+}
+
 INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
 {
-    if (operand == 0)
-        return RaiseException(0, I386_EXCEPTION_FAULT);
-
     if (width == 8)
     {
         s16 dividend = (s16)m_state.registers[I386_REG_EAX].low;
         s16 divisor = (s8)(u8)operand;
-        s16 quotient = dividend / divisor;
+        s32 quotient = divisor != 0 ? dividend / divisor : 0;
 
-        if (quotient < -128)
-        {
-            u16 adjusted_bits = (u16)dividend;
-            adjusted_bits &= ~0x4000U;
-
-            if ((adjusted_bits & 0x8000U) != 0)
-                adjusted_bits |= 0x4000U;
-
-            s16 adjusted_dividend = (s16)adjusted_bits;
-            s16 adjusted_quotient = adjusted_dividend / divisor;
-
-            if (adjusted_quotient == -128)
-            {
-                dividend = adjusted_dividend;
-                quotient = adjusted_quotient;
-            }
-        }
-
-        if (quotient < -128 || quotient > 127)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
+        if (divisor == 0 || quotient < -128 || quotient > 127)
+            return SignedDivideLoop(width, (u16)dividend, operand);
 
         s16 remainder = dividend % divisor;
 
@@ -268,14 +263,11 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
     {
         s32 dividend = (s32)(((u32)m_state.registers[I386_REG_EDX].low << 16) | m_state.registers[I386_REG_EAX].low);
         s32 divisor = (s16)(u16)operand;
+        bool overflow = divisor == 0 || (dividend == INT_MIN && divisor == -1);
+        s32 quotient = overflow ? 0 : dividend / divisor;
 
-        if (dividend == INT_MIN && divisor == -1)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
-
-        s32 quotient = dividend / divisor;
-
-        if (quotient < -32768 || quotient > 32767)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
+        if (overflow || quotient < -32768 || quotient > 32767)
+            return SignedDivideLoop(width, (u32)dividend, operand);
 
         s32 remainder = dividend % divisor;
 
@@ -288,20 +280,87 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
         s64 dividend = (s64)(((u64)m_state.registers[I386_REG_EDX].value << 32) |
             m_state.registers[I386_REG_EAX].value);
         s64 divisor = (s32)operand;
+        bool overflow = divisor == 0 || (dividend == (s64)0x8000000000000000ULL && divisor == -1);
+        s64 quotient = overflow ? 0 : dividend / divisor;
 
-        if (dividend == (s64)0x8000000000000000ULL && divisor == -1)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
-
-        s64 quotient = dividend / divisor;
-
-        if (quotient < (s64)INT_MIN || quotient > (s64)INT_MAX)
-            return RaiseException(0, I386_EXCEPTION_FAULT);
+        if (overflow || quotient < (s64)INT_MIN || quotient > (s64)INT_MAX)
+            return SignedDivideLoop(width, (u64)dividend, operand);
 
         s32 remainder = (s32)(dividend % divisor);
 
         m_state.registers[I386_REG_EAX].value = (u32)quotient;
         m_state.registers[I386_REG_EDX].value = (u32)remainder;
         SetSignedDivideFlags(dividend < 0, remainder, (s32)divisor, width);
+    }
+
+    return true;
+}
+
+// The 386 divides N, or ~N when negative, by |divisor| keeping only width bits of the partial remainder, and checks
+// the quotient only at the end. Exact arithmetic gives the same result whenever the quotient fits
+INLINE bool I386::SignedDivideLoop(int width, u64 dividend, u32 divisor)
+{
+    u32 mask = GetMask(width);
+    bool negative_dividend = ((dividend >> (2 * width - 1)) & 1) != 0;
+    bool negative_divisor = ((divisor >> (width - 1)) & 1) != 0;
+    u32 magnitude = (negative_divisor ? 0 - divisor : divisor) & mask;
+    u64 bits = negative_dividend ? ~dividend : dividend;
+    u32 remainder = (u32)(bits >> width) & mask;
+    u32 quotient = (u32)bits & mask;
+
+    for (int i = 0; i < width; i++)
+    {
+        u32 shifted = ((remainder << 1) | (quotient >> (width - 1))) & mask;
+
+        quotient = (quotient << 1) & mask;
+
+        if (shifted >= magnitude)
+        {
+            remainder = shifted - magnitude;
+            quotient |= 1;
+        }
+        else
+            remainder = shifted;
+    }
+
+    if (negative_dividend)
+        remainder = ~remainder & mask;
+
+    if (negative_dividend == negative_divisor)
+        Sub(remainder, divisor, 0, width);
+    else
+        Add(remainder, divisor, 0, width);
+
+    u64 count = quotient;
+
+    if (negative_dividend && remainder == ((0 - magnitude) & mask))
+    {
+        remainder = 0;
+        count++;
+    }
+
+    bool negative_quotient = negative_dividend != negative_divisor;
+    u64 limit = (u64)1 << (width - 1);
+
+    if (magnitude == 0 || count > (negative_quotient ? limit : limit - 1))
+        return RaiseException(0, I386_EXCEPTION_FAULT);
+
+    u32 result = (u32)(negative_quotient ? 0 - count : count) & mask;
+
+    if (width == 8)
+    {
+        SetRegister8(0, (u8)result);
+        SetRegister8(4, (u8)remainder);
+    }
+    else if (width == 16)
+    {
+        m_state.registers[I386_REG_EAX].low = (u16)result;
+        m_state.registers[I386_REG_EDX].low = (u16)remainder;
+    }
+    else
+    {
+        m_state.registers[I386_REG_EAX].value = result;
+        m_state.registers[I386_REG_EDX].value = remainder;
     }
 
     return true;

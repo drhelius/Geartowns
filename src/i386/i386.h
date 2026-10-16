@@ -1063,7 +1063,9 @@ private:
     bool OPCodes_MUL_RM(int width, u32 operand);
     bool OPCodes_IMUL_RM(int width, u32 operand);
     bool OPCodes_DIV_RM(int width, u32 operand);
+    bool RaiseUnsignedDivideError(int width, u32 high, u32 low, u32 divisor);
     bool OPCodes_IDIV_RM(int width, u32 operand);
+    bool SignedDivideLoop(int width, u64 dividend, u32 divisor);
     void SetSignedDivideFlags(bool negative_dividend, s32 remainder, s32 divisor, int width);
     bool OPCodes_INC_DEC_RM(int width, bool decrement);
     bool OPCodes_INC_RM(int width);

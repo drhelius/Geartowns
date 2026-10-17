@@ -150,7 +150,7 @@ bool I386::LogicalToLinearProtected(int segment, u32 offset, u32 size, bool writ
         bool valid_type = write ? !executable && (state.attributes & I386_SEGMENT_WRITABLE) != 0 :
             !executable || (state.attributes & I386_SEGMENT_READABLE) != 0;
 
-        if ((state.attributes & I386_SEGMENT_SYSTEM) != 0 || !valid_type)
+        if (!valid_type)
             return RaiseException(fault, I386_EXCEPTION_FAULT, true, 0);
     }
 

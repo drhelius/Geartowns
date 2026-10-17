@@ -1216,6 +1216,7 @@ void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
 
 // A real mode CS load only sets the selector and base, so the cached limit, access rights and D/B stay
 // A direct far JMP also rewrites the access rights to present, DPL 0, system type 2, keeping G and D/B
+// Accesses read type 2 as writable data, so code that sets PE without a far jump can still write through CS
 void I386::LoadRealCodeSegment(u16 selector, bool direct_jump)
 {
     I386_Segment& state = m_state.segments[I386_SEGMENT_CS];
@@ -1225,7 +1226,8 @@ void I386::LoadRealCodeSegment(u16 selector, bool direct_jump)
     if (direct_jump)
     {
         state.attributes = (state.attributes & (I386_SEGMENT_GRANULAR | I386_SEGMENT_DEFAULT_32)) |
-            I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
+            I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | I386_SEGMENT_READABLE | I386_SEGMENT_WRITABLE |
+            (2U << I386_SEGMENT_TYPE_SHIFT);
         state.dpl = 0;
     }
 

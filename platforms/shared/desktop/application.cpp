@@ -51,6 +51,7 @@ static bool window_resizable = true;
 static Uint64 mouse_last_motion_time = 0;
 static const Uint64 mouse_hide_timeout_ms = 1500;
 static SDL_DisplayID current_display_id = 0;
+static char title_name[GT_MAX_PATH] = "";
 
 bool g_mcp_stdio_mode = false;
 
@@ -63,6 +64,7 @@ static void sdl_events_app(const SDL_Event* event);
 static void handle_mouse_cursor(void);
 static void handle_menu(void);
 static void handle_window_resizable(void);
+static void handle_title(void);
 static void handle_single_instance(void);
 static void run_emulator(void);
 static void apply_window_settings(void);
@@ -219,6 +221,7 @@ void application_mainloop(void)
         handle_mouse_cursor();
         handle_menu();
         handle_window_resizable();
+        handle_title();
         handle_single_instance();
         run_emulator();
         display_render();
@@ -502,6 +505,21 @@ static void handle_window_resizable(void)
 
     window_resizable = resizable;
     SDL_SetWindowResizable(application_sdl_window, resizable);
+}
+
+static void handle_title(void)
+{
+    if (gui_is_rom_loading() || emu_is_media_loading())
+        return;
+
+    Media* media = emu_get_core()->GetMedia();
+    const char* name = media->IsReady() ? media->GetFileName() : get_filename(emu_floppy_get_content_path());
+
+    if (strcmp(name, title_name) == 0)
+        return;
+
+    strncpy_fit(title_name, name, sizeof(title_name));
+    application_update_title_with_rom(name);
 }
 
 static void handle_single_instance(void)

@@ -1019,7 +1019,6 @@ static bool finish_loading_rom(void)
 
     if (emu_get_core()->GetMedia()->IsReady())
     {
-        application_update_title_with_rom(emu_get_core()->GetMedia()->GetFileName());
         gui_notify(gui_NotificationSuccess, ICON_MD_ALBUM, loading_reset ? "CD-ROM reloaded" : "CD-ROM loaded",
             emu_get_core()->GetMedia()->GetFileName());
     }

@@ -53,7 +53,6 @@ void gui_action_load_defaults(void)
     GeartownsCore* core = emu_get_core();
     gui_debug_auto_save_settings();
     core->EjectMedia();
-    application_update_title_with_rom(NULL);
     core->UnloadBios();
 
     config_load_defaults();
@@ -132,9 +131,6 @@ void gui_action_eject_media(void)
         return;
 
     bool ejected = emu_eject_media();
-
-    if (!media->IsReady())
-        application_update_title_with_rom(NULL);
 
     if (ejected)
         gui_notify(gui_NotificationInfo, ICON_MD_EJECT, "CD-ROM ejected");

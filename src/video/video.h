@@ -172,6 +172,7 @@ private:
     static u32 Gcd(u32 a, u32 b);
     void UpdateNextEvent();
     void UpdateIRQ();
+    bool HasVSync() const;
     u64 GetHalfLineClocks(u32 half_line) const;
     u64 GetElapsedCRTCClocks(u64 clocks) const;
     void RenderRows(u32 half_line);

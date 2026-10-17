@@ -970,7 +970,7 @@ void Video::RunNextEvent()
 
     m_state.event_half_line = half_line;
 
-    if (half_line == m_state.frame_vsync_half_lines && m_sprite->IsEnabled())
+    if (half_line == m_state.frame_vsync_half_lines && m_sprite->IsEnabled() && HasVSync())
     {
         if (!m_sprite->IsBusy())
             m_sprite->StartTransfer(clocks);
@@ -1022,10 +1022,15 @@ void Video::CompleteFrame(u64 clocks)
     m_display_height = m_canvas_height;
     m_frame_ready = true;
     m_state.frame_count++;
-    m_state.vsync_irq = true;
 
-    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_VSYNC)))
-        TraceEvent(TRACE_VIDEO_VSYNC, 0, 0, 0, 0, m_state.frame_count, clocks);
+    // The vertical counter wraps at VST, so a VSYNC that starts past it never comes
+    if (HasVSync())
+    {
+        m_state.vsync_irq = true;
+
+        if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_VSYNC)))
+            TraceEvent(TRACE_VIDEO_VSYNC, 0, 0, 0, 0, m_state.frame_count, clocks);
+    }
 
     UpdateIRQ();
     StartFrame(clocks);
@@ -1355,6 +1360,11 @@ void Video::UpdateIRQ()
     m_pic->SetIRQLine(11, m_state.vsync_irq);
 }
 
+bool Video::HasVSync() const
+{
+    return m_state.crtc[k_video_crtc_vst1] <= m_state.crtc[k_video_crtc_vst];
+}
+
 // Same bit layout as the FR status byte
 u8 Video::GetSyncStatus(u64 clocks) const
 {
@@ -1385,7 +1395,7 @@ u8 Video::GetSyncStatus(u64 clocks) const
     if (clock < crtc[k_video_crtc_hsw1])
         status |= 0x02;
 
-    if (half_line >= crtc[k_video_crtc_vst1] && half_line < crtc[k_video_crtc_vst2])
+    if (half_line >= crtc[k_video_crtc_vst1] && half_line < crtc[k_video_crtc_vst2] && HasVSync())
         status |= 0x04;
 
     if (m_canvas_interlaced && (m_state.frame_count & 0x01) != 0)

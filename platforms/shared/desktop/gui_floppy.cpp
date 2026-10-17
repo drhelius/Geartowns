@@ -48,6 +48,7 @@ static Floppy_Action pending_action = Floppy_Action_None;
 static int pending_drive = -1;
 static int pending_index = 0;
 static std::string pending_path;
+static bool pending_open = false;
 static bool pending_symbols = false;
 static std::string pending_symbol_path;
 static int dialog_drive = 0;
@@ -242,13 +243,15 @@ void gui_floppy_popups(void)
     draw_quit_popup();
 }
 
-void gui_floppy_insert(int drive, const char* path)
+void gui_floppy_open_disks(const char* path)
 {
-    request(drive, Floppy_Action_Insert, path, 0);
+    pending_open = true;
+    request(0, Floppy_Action_Insert, path, 0);
 }
 
 bool gui_floppy_open(const char* path, const char* symbol_path)
 {
+    pending_open = true;
     pending_symbols = true;
     pending_symbol_path = IsValidPointer(symbol_path) ? symbol_path : "";
     return request(0, Floppy_Action_Insert, path, 0);
@@ -308,6 +311,7 @@ static bool request(int drive, Floppy_Action action, const char* path, int index
 static bool perform(bool discard_changes)
 {
     bool done = false;
+    bool second = false;
     const char* error = "Unable to load the floppy image.";
     bool floppy_session = !emu_get_core()->GetMedia()->IsReady();
     std::string previous_content = emu_floppy_get_content_path();
@@ -318,7 +322,8 @@ static bool perform(bool discard_changes)
     switch (pending_action)
     {
         case Floppy_Action_Insert:
-            done = emu_floppy_insert(pending_drive, pending_path.c_str(), discard_changes);
+            done = pending_open ? emu_floppy_open(pending_path.c_str(), discard_changes, &second) :
+                emu_floppy_insert(pending_drive, pending_path.c_str(), discard_changes);
             break;
         case Floppy_Action_Select:
             done = emu_floppy_select_disk(pending_drive, pending_index, discard_changes);
@@ -377,6 +382,8 @@ static bool perform(bool discard_changes)
             snprintf(message, sizeof(message), "Disk ejected from floppy drive %d", pending_drive + 1);
         else if (pending_action == Floppy_Action_Blank)
             snprintf(message, sizeof(message), "Blank disk created in floppy drive %d", pending_drive + 1);
+        else if (second)
+            snprintf(message, sizeof(message), "Disks inserted in floppy drives 1 and 2");
         else
             snprintf(message, sizeof(message), "Disk inserted in floppy drive %d", pending_drive + 1);
 
@@ -384,6 +391,7 @@ static bool perform(bool discard_changes)
     }
 
     pending_action = Floppy_Action_None;
+    pending_open = false;
     pending_symbols = false;
     return done;
 }
@@ -421,6 +429,7 @@ static void draw_dirty_popup(void)
         ImGui::CloseCurrentPopup();
         gui_dialog_in_use = false;
         pending_action = Floppy_Action_None;
+        pending_open = false;
         pending_symbols = false;
     }
 

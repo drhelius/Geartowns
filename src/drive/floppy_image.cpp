@@ -276,6 +276,34 @@ bool FloppyImage::HasEarlierCopy(const u8* data, u32 size, int index)
     return false;
 }
 
+bool FloppyImage::IsBootDisk(const u8* data, u32 size, int index)
+{
+    u32 offset = 0;
+    u32 disk_size = 0;
+    u32 image_size = 0;
+
+    if (!GetDisk(data, size, index, &offset, &disk_size))
+        return false;
+
+    u8* image = Load(data + offset, disk_size, &image_size);
+    bool boot = false;
+
+    for (int i = 0; IsValidPointer(image) && !boot; i++)
+    {
+        u32 header = GetSectorHeader(image, image_size, 0, i);
+
+        if (header == 0)
+            break;
+
+        boot = (image[header + 2] == 1) && ((image[header + 6] & k_floppy_density_fm) == 0) &&
+            (read_u16_le(image + header + 14) >= 4) &&
+            (memcmp(image + header + k_floppy_sector_header_size, "IPL4", 4) == 0);
+    }
+
+    SafeDeleteArray(image);
+    return boot;
+}
+
 void FloppyImage::GetDiskName(const u8* disk, u32 disk_size, char* name, size_t name_size)
 {
     if (name_size == 0)

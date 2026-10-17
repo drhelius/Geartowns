@@ -211,6 +211,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
 static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& images);
 static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images);
 static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume, std::vector<DiskSetImage>& images);
+static unsigned disk_find_boot_floppy(void);
 static int get_entry_drive(unsigned index);
 static bool disk_insert(unsigned index, int drive);
 static bool disk_eject(int drive);
@@ -1897,6 +1898,9 @@ static bool disk_load(const char* path)
     if (disk_images.empty() || disk_images[boot].save_disk)
         return true;
 
+    if (!disk_images[boot].cdrom && ends_with_no_case(path, ".zip"))
+        boot = disk_find_boot_floppy();
+
     if (!disk_insert(boot, disk_images[boot].cdrom ? DISK_DRIVE_CDROM : DISK_DRIVE_FLOPPY_1))
         return false;
 
@@ -1914,8 +1918,10 @@ static bool disk_load(const char* path)
     int boot_floppy = drive_entry[DISK_DRIVE_FLOPPY_1];
     bool multidrive = floppy_multidrive && boot_floppy >= 0 && core->GetPendingMachineConfig().floppy_drives > 1;
 
-    for (size_t i = (size_t)(boot_floppy + 1); multidrive && i < disk_images.size(); i++)
+    for (size_t k = 1; multidrive && k < disk_images.size(); k++)
     {
+        size_t i = ((size_t)boot_floppy + k) % disk_images.size();
+
         if (!disk_images[i].cdrom && !disk_images[i].save_disk)
         {
             if (!disk_insert((unsigned)i, DISK_DRIVE_FLOPPY_2))
@@ -2122,6 +2128,21 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
     image.save_disk = true;
     images.push_back(image);
     return true;
+}
+
+static unsigned disk_find_boot_floppy(void)
+{
+    for (size_t i = 0; i < disk_images.size(); i++)
+    {
+        const DiskSetImage& image = disk_images[i];
+        std::vector<u8> data;
+
+        if (!image.cdrom && !image.save_disk && load_source(image.path.c_str(), image.image, data) &&
+            FloppyImage::IsBootDisk(data.data(), (u32)data.size(), image.disk))
+            return (unsigned)i;
+    }
+
+    return 0;
 }
 
 static int get_entry_drive(unsigned index)

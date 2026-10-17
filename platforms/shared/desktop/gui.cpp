@@ -479,7 +479,7 @@ bool gui_load_rom(const char* path, const char* symbol_path)
         }
 
         if (floppies && (drives > 0))
-            gui_floppy_insert(0, path);
+            gui_floppy_open_disks(path);
 
         media_path = emu_cdrom_playlist_get_path(0);
         emu_cdrom_playlist_select(media_path);

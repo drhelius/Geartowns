@@ -28,7 +28,7 @@
 
 EXTERN void gui_floppy_menu(int drive, const char* label, int drives);
 EXTERN void gui_floppy_popups(void);
-EXTERN void gui_floppy_insert(int drive, const char* path);
+EXTERN void gui_floppy_open_disks(const char* path);
 EXTERN bool gui_floppy_open(const char* path, const char* symbol_path);
 EXTERN bool gui_floppy_is_pending(void);
 EXTERN void gui_floppy_dialog_insert(int drive, const char* path);

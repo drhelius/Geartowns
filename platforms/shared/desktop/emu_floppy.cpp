@@ -67,6 +67,8 @@ static bool read_playlist(const char* path, std::vector<std::string>& entries);
 static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
 static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries);
 static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entries);
+static int find_boot_entry(const std::vector<Floppy_Entry>& entries);
+static bool insert_entries(int drive, const std::vector<Floppy_Entry>& entries, int index, bool discard_changes);
 static std::string make_working_path(const char* source_path, u32 base_crc, int copy);
 static bool is_raw_name(const char* path);
 static bool write_disk(FloppyDisk* disk, const char* path, bool report_errors = true);
@@ -135,19 +137,64 @@ bool emu_floppy_insert(int drive, const char* path, bool discard_changes)
         (find_disk(drive, entries[index].path, entries[index].image, entries[index].disk) >= 0))
         index++;
 
-    std::vector<Floppy_Entry> previous_entries = hosts[drive].entries;
-    int previous_entry = hosts[drive].entry;
-    hosts[drive].entries = entries;
-
-    if (!mount(drive, index, discard_changes))
-    {
-        hosts[drive].entries = previous_entries;
-        hosts[drive].entry = previous_entry;
+    if (!insert_entries(drive, entries, index, discard_changes))
         return false;
-    }
 
     config_push_recent_floppy(path);
     Log("Floppy %d: %s", drive + 1, path);
+    return true;
+}
+
+bool emu_floppy_open(const char* path, bool discard_changes, bool* second)
+{
+    if (IsValidPointer(second))
+        *second = false;
+
+    if (!valid_drive(0) || !IsValidPointer(path))
+        return false;
+
+    std::vector<Floppy_Entry> entries;
+
+    if (!build_entries(path, entries))
+    {
+        Error("Not a floppy disk image: %s", path);
+        return false;
+    }
+
+    GeartownsCore* core = emu_get_core();
+    int drives = emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives : core->GetMachineConfig().floppy_drives;
+
+    int boot = ends_with_no_case(path, ".zip") ? find_boot_entry(entries) : 0;
+    const Floppy_Entry& entry = entries[boot];
+
+    if ((find_disk(0, entry.path, entry.image, entry.disk) == 1) && !emu_floppy_eject(1, false))
+        return false;
+
+    if (!insert_entries(0, entries, boot, discard_changes))
+        return false;
+
+    config_push_recent_floppy(path);
+    Log("Floppy 1: %s", path);
+
+    if ((drives < 2) || !valid_drive(1))
+        return true;
+
+    if (entries.size() < 2)
+    {
+        if (core->GetFloppy(1)->IsInserted() && !emu_floppy_eject(1, false))
+            Error("Unable to save the disk in floppy drive 2");
+
+        return true;
+    }
+
+    if (insert_entries(1, entries, (boot + 1) % (int)entries.size(), false))
+    {
+        Log("Floppy 2: %s", path);
+
+        if (IsValidPointer(second))
+            *second = true;
+    }
+
     return true;
 }
 
@@ -636,6 +683,36 @@ static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entrie
     }
 
     return entries.size() > first;
+}
+
+static int find_boot_entry(const std::vector<Floppy_Entry>& entries)
+{
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        std::vector<u8> data;
+
+        if (load_source(entries[i].path.c_str(), entries[i].image, data) &&
+            FloppyImage::IsBootDisk(data.data(), (u32)data.size(), entries[i].disk))
+            return (int)i;
+    }
+
+    return 0;
+}
+
+static bool insert_entries(int drive, const std::vector<Floppy_Entry>& entries, int index, bool discard_changes)
+{
+    std::vector<Floppy_Entry> previous_entries = hosts[drive].entries;
+    int previous_entry = hosts[drive].entry;
+    hosts[drive].entries = entries;
+
+    if (!mount(drive, index, discard_changes))
+    {
+        hosts[drive].entries = previous_entries;
+        hosts[drive].entry = previous_entry;
+        return false;
+    }
+
+    return true;
 }
 
 static std::string make_working_path(const char* source_path, u32 base_crc, int copy)

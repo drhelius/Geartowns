@@ -48,6 +48,7 @@ public:
     static int GetDiskCount(const u8* data, u32 size);
     static bool GetDisk(const u8* data, u32 size, int index, u32* offset, u32* disk_size);
     static bool HasEarlierCopy(const u8* data, u32 size, int index);
+    static bool IsBootDisk(const u8* data, u32 size, int index);
     static void GetDiskName(const u8* disk, u32 disk_size, char* name, size_t name_size);
     static void SetDiskName(u8* disk, u32 disk_size, const char* name);
     static u8* Load(const u8* data, u32 size, u32* image_size);

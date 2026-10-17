@@ -137,7 +137,8 @@ bool FloppyDisk::ReplaceTrack(int track, const u8* sectors, u32 size, u32 rpm)
 void FloppyDisk::Identify()
 {
     u32 largest = 0;
-    u32 longest = 0;
+    int formatted = 0;
+    int overflowing = 0;
     int last_track = -1;
     FloppyDisk_Sector sectors[k_floppy_max_sectors];
 
@@ -154,10 +155,15 @@ void FloppyDisk::Identify()
         }
 
         if (count > 0)
+        {
             last_track = track;
+            formatted++;
+
+            if (cells > 10416)
+                overflowing++;
+        }
 
         largest = MAX(largest, bytes);
-        longest = MAX(longest, cells);
     }
 
     u8 media = m_image[0x1B];
@@ -165,7 +171,7 @@ void FloppyDisk::Identify()
     if (largest > 4608 || media == k_floppy_media_2hd)
     {
         m_state.media = FLOPPY_MEDIA_2HD;
-        m_state.rpm = longest > 10416 ? 300 : 360;
+        m_state.rpm = overflowing * 2 > formatted ? 300 : 360;
     }
     else
     {

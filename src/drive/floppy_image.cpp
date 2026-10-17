@@ -66,7 +66,10 @@ static const u16 k_floppy_mfm_sync = 0x4489;
 static const u16 k_floppy_mfm_weak_cells = 0x8888;
 static const u32 k_floppy_mfm_no_flux_cells = 5;
 static const int k_floppy_max_zip_images = 64;
-static const u32 k_floppy_mfm_data_window = 80 * 16;
+static const u32 k_floppy_mfm_data_window = 80;
+static const u16 k_floppy_fm_gap_cells = 0x8888;
+static const u16 k_floppy_fm_mark_cells = 0xAA22;
+static const u16 k_floppy_fm_mark_tails[5] = { 0x2AA8, 0x28AA, 0x28A8, 0x288A, 0x2888 };
 
 static u16 mfm_word(const u8* cells, u32 position)
 {
@@ -86,6 +89,43 @@ static u8 mfm_byte(const u8* cells, u32 position, u32 phase = 1)
         value = (u8)((value << 1) | cells[position + bit * 2 + phase]);
 
     return value;
+}
+
+static u8 fm_byte(const u8* cells, u32 position)
+{
+    u8 value = 0;
+
+    for (int bit = 0; bit < 8; bit++)
+        value = (u8)((value << 1) | cells[position + bit * 4 + 2]);
+
+    return value;
+}
+
+static u8 field_byte(const u8* cells, u32 position, bool fm)
+{
+    return fm ? fm_byte(cells, position) : mfm_byte(cells, position);
+}
+
+static bool fm_mark(const u8* cells, u32 last_cell, u32 shift)
+{
+    // FM runs at half the MFM rate, so each FM cell takes two cells: the marks (clock C7 over FE, FB, FA, F9 or F8)
+    // must follow at least two gap bytes of 00 with FF clocks
+    if ((shift >> 16) != k_floppy_fm_mark_cells || last_cell < 95)
+        return false;
+
+    for (u32 k = 0; k < 4; k++)
+    {
+        if (mfm_word(cells, last_cell - 95 + k * 16) != k_floppy_fm_gap_cells)
+            return false;
+    }
+
+    for (int t = 0; t < 5; t++)
+    {
+        if ((u16)shift == k_floppy_fm_mark_tails[t])
+            return true;
+    }
+
+    return false;
 }
 
 static int compare_names(const char* a, const char* b)
@@ -1067,33 +1107,42 @@ u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_cap
     u8* last = NULL;
     u32 last_start = 0;
     int sectors = 0;
-    u16 shift = 0;
+    u32 shift = 0;
 
     for (u32 i = 0; i < limit; i++)
     {
-        shift = (u16)((shift << 1) | cells[i]);
+        shift = (shift << 1) | cells[i];
+        bool fm = fm_mark(cells, i, shift) && i + 1 + 32 * 6 <= limit;
+        u32 step = fm ? 32 : 16;
+        u32 p = fm ? i - 31 : i + 1;
+        u32 start = p;
 
-        if (shift != k_floppy_mfm_sync)
-            continue;
-
-        u32 p = i + 1;
-        int syncs = 1;
-        shift = 0;
-
-        while (p + 16 <= limit && mfm_word(cells, p) == k_floppy_mfm_sync)
+        if (!fm)
         {
-            syncs++;
-            p += 16;
+            if ((u16)shift != k_floppy_mfm_sync)
+                continue;
+
+            int syncs = 1;
+            shift = 0;
+
+            while (p + 16 <= limit && mfm_word(cells, p) == k_floppy_mfm_sync)
+            {
+                syncs++;
+                p += 16;
+            }
+
+            if (syncs < 3 || p + 16 * 7 > limit)
+            {
+                i = p - 1;
+                continue;
+            }
+
+            start = p - 48;
         }
 
-        if (syncs < 3 || p + 16 * 7 > limit)
-        {
-            i = p - 1;
-            continue;
-        }
-
-        u8 mark = mfm_byte(cells, p);
-        u32 start = p - 48;
+        // The FM CRC starts at the mark, the MFM one at the three A1 syncs before it
+        u8 mark = field_byte(cells, p, fm);
+        u32 crc_start = fm ? 3 : 0;
 
         if (mark == 0xFE && start < count && sectors < k_floppy_max_sectors &&
             position + k_floppy_sector_header_size <= run_capacity)
@@ -1101,36 +1150,47 @@ u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_cap
             u8 field[8] = { 0xA1, 0xA1, 0xA1, 0xFE };
 
             for (int k = 0; k < 4; k++)
-                field[4 + k] = mfm_byte(cells, p + 16 + k * 16);
+                field[4 + k] = field_byte(cells, p + step + k * step, fm);
 
-            u16 crc = (u16)((mfm_byte(cells, p + 80) << 8) | mfm_byte(cells, p + 96));
+            u16 crc = (u16)((field_byte(cells, p + step * 5, fm) << 8) | field_byte(cells, p + step * 6, fm));
+            bool crc_ok = CRC16(0xFFFF, field + crc_start, 8 - crc_start) == crc;
+
+            // An FM ID with a bad CRC can't be told apart from MFM data that happens to look like one
+            if (fm && !crc_ok)
+                continue;
+
             last = run + position;
             last_start = start;
             memset(last, 0, k_floppy_sector_header_size);
             memcpy(last, field + 4, 4);
-            last[8] = CRC16(0xFFFF, field, 8) == crc ? k_floppy_status_no_data : k_floppy_status_id_crc;
+            last[6] = fm ? k_floppy_density_fm : 0x00;
+            last[8] = crc_ok ? k_floppy_status_no_data : k_floppy_status_id_crc;
             position += k_floppy_sector_header_size;
             sectors++;
         }
-        else if ((mark == 0xFB || mark == 0xF8) && IsValidPointer(last) && read_u16_le(last + 14) == 0 &&
-            p - last_start < k_floppy_mfm_data_window)
+        else if ((mark == 0xFB || mark == 0xF8 || (fm && (mark == 0xFA || mark == 0xF9))) && IsValidPointer(last) &&
+            read_u16_le(last + 14) == 0 && (last[6] == k_floppy_density_fm) == fm &&
+            p - last_start < k_floppy_mfm_data_window * step)
         {
             // The data is kept as the FDC reads it, sized by the low two bits of N, also when it runs over the next IDs
             u32 data_size = 128U << (last[3] & 0x03);
 
-            if (p + 16 * (data_size + 3) <= limit && position + data_size <= run_capacity)
+            if (p + step * (data_size + 3) <= limit && position + data_size <= run_capacity)
             {
                 u8 field[4 + 1024 + 2] = { 0xA1, 0xA1, 0xA1, mark };
 
                 for (u32 k = 0; k < data_size + 2; k++)
-                    field[4 + k] = mfm_byte(cells, p + 16 + k * 16);
+                    field[4 + k] = field_byte(cells, p + step + k * step, fm);
 
                 memcpy(last + k_floppy_sector_header_size, field + 4, data_size);
                 write_u16_le(last + 14, (u16)data_size);
-                last[7] = mark == 0xF8 ? k_floppy_deleted : 0x00;
+                last[7] = mark != 0xFB ? k_floppy_deleted : 0x00;
 
                 if (last[8] == k_floppy_status_no_data)
-                    last[8] = CRC16(0xFFFF, field, data_size + 6) == 0 ? 0x00 : k_floppy_status_data_crc;
+                {
+                    last[8] = CRC16(0xFFFF, field + crc_start, data_size + 6 - crc_start) == 0 ? 0x00 :
+                        k_floppy_status_data_crc;
+                }
 
                 // Weak bytes read differently from turn to turn: runs of AA written one cell late read as 00 or AA,
                 // depending on where the data separator locks, and stretches without flux transitions read as noise
@@ -1139,7 +1199,7 @@ u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_cap
                 u32 zero_run = 0;
                 memset(weak_bytes, 0, sizeof(weak_bytes));
 
-                for (u32 k = 0; IsValidPointer(weak) && k < data_size; k++)
+                for (u32 k = 0; IsValidPointer(weak) && !fm && k < data_size; k++)
                 {
                     u32 byte_cells = p + 16 + k * 16;
                     weak_run = mfm_word(cells, byte_cells) == k_floppy_mfm_weak_cells ? weak_run + 1 : 0;
@@ -1173,7 +1233,7 @@ u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_cap
             }
         }
 
-        i = p + 15;
+        i = p + step - 1;
     }
 
     for (u32 p = 0; p < position; p += k_floppy_sector_header_size + read_u16_le(run + p + 14))

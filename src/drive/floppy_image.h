@@ -55,7 +55,9 @@ public:
     static u8* ReplaceTrack(const u8* image, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size);
     static u32 GetRawSize(const u8* image, u32 size);
     static bool ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size);
-    static bool ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name, size_t name_size);
+    static int GetZipImageCount(const u8* archive, size_t archive_size);
+    static bool ExtractFromZip(const u8* archive, size_t archive_size, int image, u8** data, u32* size, char* name,
+        size_t name_size);
     static u16 CRC16(u16 crc, const u8* data, u32 size);
     static u32 GetDataCRC(const u8* image, u32 size);
     static u32 CalculateDataCRC(const u8* data, u32 size);
@@ -72,6 +74,8 @@ private:
     static u32 DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_capacity, FloppyImage_Weak* weak, u32* weak_count);
     static u32 FindSector(const u8* image, u32 size, u32 offset, int* track, int* index);
     static u32 GetSectorHeader(const u8* image, u32 size, int track, int index);
+    static int ListZipImages(mz_zip_archive* zip, mz_uint* members);
+    static bool ExtractZipMember(mz_zip_archive* zip, mz_uint member, u8** data, u32* size);
 };
 
 static const u32 k_floppy_header_size = 0x2B0;

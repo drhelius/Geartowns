@@ -65,6 +65,7 @@ static const u16 k_floppy_mfm_bit_rate_2hd = 400;
 static const u16 k_floppy_mfm_sync = 0x4489;
 static const u16 k_floppy_mfm_weak_cells = 0x8888;
 static const u32 k_floppy_mfm_no_flux_cells = 5;
+static const int k_floppy_max_zip_images = 64;
 static const u32 k_floppy_mfm_data_window = 80 * 16;
 
 static u16 mfm_word(const u8* cells, u32 position)
@@ -85,6 +86,18 @@ static u8 mfm_byte(const u8* cells, u32 position, u32 phase = 1)
         value = (u8)((value << 1) | cells[position + bit * 2 + phase]);
 
     return value;
+}
+
+static int compare_names(const char* a, const char* b)
+{
+    for (;; a++, b++)
+    {
+        int x = std::tolower((unsigned char)*a);
+        int y = std::tolower((unsigned char)*b);
+
+        if (x != y || x == 0)
+            return x - y;
+    }
 }
 
 bool FloppyImage::IsD77(const u8* data, u32 size)
@@ -397,7 +410,22 @@ bool FloppyImage::ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size)
     return true;
 }
 
-bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name, size_t name_size)
+int FloppyImage::GetZipImageCount(const u8* archive, size_t archive_size)
+{
+    mz_zip_archive zip;
+    memset(&zip, 0, sizeof(zip));
+
+    if (!IsValidPointer(archive) || archive_size == 0 || !mz_zip_reader_init_mem(&zip, archive, archive_size, 0))
+        return 0;
+
+    mz_uint members[k_floppy_max_zip_images];
+    int count = ListZipImages(&zip, members);
+    mz_zip_reader_end(&zip);
+    return count;
+}
+
+bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, int image, u8** data, u32* size, char* name,
+    size_t name_size)
 {
     *data = NULL;
     *size = 0;
@@ -405,68 +433,21 @@ bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** da
     if (IsValidPointer(name) && name_size > 0)
         name[0] = '\0';
 
-    if (!IsValidPointer(archive) || archive_size == 0)
-        return false;
-
     mz_zip_archive zip;
     memset(&zip, 0, sizeof(zip));
 
-    if (!mz_zip_reader_init_mem(&zip, archive, archive_size, 0))
+    if (!IsValidPointer(archive) || archive_size == 0 || !mz_zip_reader_init_mem(&zip, archive, archive_size, 0))
         return false;
 
-    int candidate = -1;
-    u32 candidate_size = 0;
-    bool candidate_bin = false;
-    mz_uint files = mz_zip_reader_get_num_files(&zip);
+    mz_uint members[k_floppy_max_zip_images];
+    int count = ListZipImages(&zip, members);
+    bool ok = image >= 0 && image < count && ExtractZipMember(&zip, members[image], data, size);
 
-    for (mz_uint i = 0; i < files; i++)
-    {
-        mz_zip_archive_file_stat stat;
+    if (ok && IsValidPointer(name) && name_size > 0)
+        mz_zip_reader_get_filename(&zip, members[image], name, (mz_uint)name_size);
 
-        if (!mz_zip_reader_file_stat(&zip, i, &stat) || stat.m_is_directory || !stat.m_is_supported ||
-            stat.m_uncomp_size == 0 || stat.m_uncomp_size > k_floppy_max_image_size)
-            continue;
-
-        bool bin = ends_with_no_case(stat.m_filename, ".bin");
-        bool image = IsImageName(stat.m_filename) || bin;
-
-        if (!image)
-            continue;
-
-        if (candidate >= 0)
-        {
-            mz_zip_reader_end(&zip);
-            return false;
-        }
-
-        candidate = (int)i;
-        candidate_size = (u32)stat.m_uncomp_size;
-        candidate_bin = bin;
-
-        if (IsValidPointer(name) && name_size > 0)
-            strncpy_fit(name, stat.m_filename, name_size);
-    }
-
-    if (candidate < 0)
-    {
-        mz_zip_reader_end(&zip);
-        return false;
-    }
-
-    u8* extracted = new (std::nothrow) u8[candidate_size];
-    bool ok = IsValidPointer(extracted) &&
-        mz_zip_reader_extract_to_mem(&zip, (mz_uint)candidate, extracted, candidate_size, 0);
     mz_zip_reader_end(&zip);
-
-    if (!ok || (candidate_bin && !IsRaw(extracted, candidate_size)))
-    {
-        SafeDeleteArray(extracted);
-        return false;
-    }
-
-    *data = extracted;
-    *size = candidate_size;
-    return true;
+    return ok;
 }
 
 u16 FloppyImage::CRC16(u16 crc, const u8* data, u32 size)
@@ -633,6 +614,80 @@ u32 FloppyImage::FindSector(const u8* image, u32 size, u32 offset, int* track, i
     }
 
     return 0;
+}
+
+int FloppyImage::ListZipImages(mz_zip_archive* zip, mz_uint* members)
+{
+    int count = 0;
+    mz_uint files = mz_zip_reader_get_num_files(zip);
+
+    for (mz_uint i = 0; i < files; i++)
+    {
+        mz_zip_archive_file_stat stat;
+
+        if (!mz_zip_reader_file_stat(zip, i, &stat) || stat.m_is_directory)
+            continue;
+
+        // The BIN tracks of a zipped CD-ROM image are not floppies
+        if (ends_with_no_case(stat.m_filename, ".cue"))
+            return 0;
+
+        bool bin = ends_with_no_case(stat.m_filename, ".bin");
+
+        if (!stat.m_is_supported || stat.m_uncomp_size == 0 || stat.m_uncomp_size > k_floppy_max_image_size ||
+            (!bin && !IsImageName(stat.m_filename)) || count == k_floppy_max_zip_images)
+            continue;
+
+        if (bin)
+        {
+            u8* data = NULL;
+            u32 size = 0;
+            bool raw = ExtractZipMember(zip, i, &data, &size) && IsRaw(data, size);
+            SafeDeleteArray(data);
+
+            if (!raw)
+                continue;
+        }
+
+        int at = count++;
+
+        while (at > 0)
+        {
+            mz_zip_archive_file_stat previous;
+
+            if (!mz_zip_reader_file_stat(zip, members[at - 1], &previous) ||
+                compare_names(previous.m_filename, stat.m_filename) <= 0)
+                break;
+
+            members[at] = members[at - 1];
+            at--;
+        }
+
+        members[at] = i;
+    }
+
+    return count;
+}
+
+bool FloppyImage::ExtractZipMember(mz_zip_archive* zip, mz_uint member, u8** data, u32* size)
+{
+    mz_zip_archive_file_stat stat;
+
+    if (!mz_zip_reader_file_stat(zip, member, &stat) || stat.m_uncomp_size > k_floppy_max_image_size)
+        return false;
+
+    u32 length = (u32)stat.m_uncomp_size;
+    u8* extracted = new (std::nothrow) u8[length > 0 ? length : 1];
+
+    if (!IsValidPointer(extracted) || !mz_zip_reader_extract_to_mem(zip, member, extracted, length, 0))
+    {
+        SafeDeleteArray(extracted);
+        return false;
+    }
+
+    *data = extracted;
+    *size = length;
+    return true;
 }
 
 u32 FloppyImage::GetSectorHeader(const u8* image, u32 size, int track, int index)

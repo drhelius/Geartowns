@@ -136,6 +136,7 @@ struct DiskSetImage
 {
     std::string path;
     std::string label;
+    int image;
     int disk;
     u32 crc;
     bool crc_known;
@@ -233,7 +234,7 @@ static bool disk_set_initial_image(unsigned index, const char* path);
 static bool disk_get_image_path(unsigned index, char* path, size_t len);
 static bool disk_get_image_label(unsigned index, char* label, size_t len);
 static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_size);
-static bool load_source(const char* path, std::vector<u8>& data);
+static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
 static bool write_content_file(const char* path, const u8* data, u32 size);
 static bool rename_file(const char* from, const char* to, bool vfs);
 static void remove_file(const char* path, bool vfs);
@@ -1941,7 +1942,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
             return true;
 
         if (ends_with_no_case(path, ".zip"))
-            show_message("This ZIP file has no single floppy disk image, zipped CD-ROM images are not supported, "
+            show_message("This ZIP file has no floppy disk image, zipped CD-ROM images are not supported, "
                 "use CHD instead", 3, RETRO_LOG_ERROR);
 
         log_cb(RETRO_LOG_ERROR, "Unable to read the floppy disk image %s\n", path);
@@ -1967,6 +1968,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
     DiskSetImage image;
     image.path = path;
     image.label = get_file_name(path, false);
+    image.image = 0;
     image.disk = 0;
     image.crc = 0;
     image.crc_known = false;
@@ -2025,44 +2027,59 @@ static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& image
 
 static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images)
 {
-    std::vector<u8> data;
+    size_t first = images.size();
+    int members = 1;
 
-    if (!load_source(path, data))
-        return false;
-
-    int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
-    std::string file_name = get_file_name(path, false);
-
-    for (int i = 0; i < count; i++)
+    if (ends_with_no_case(path, ".zip"))
     {
-        u32 offset = 0;
-        u32 size = 0;
-
-        if (!FloppyImage::GetDisk(data.data(), (u32)data.size(), i, &offset, &size))
-            return false;
-
-        DiskSetImage image;
-        image.path = path;
-        image.label = file_name;
-        image.disk = i;
-        image.crc = CalculateCRC32(0, data.data() + offset, (int)size);
-        image.crc_known = true;
-        image.cdrom = false;
-        image.save_disk = false;
-
-        if (count > 1)
-        {
-            char name[32];
-            char suffix[64];
-            FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
-            snprintf(suffix, sizeof(suffix), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
-            image.label += suffix;
-        }
-
-        images.push_back(image);
+        std::vector<u8> archive;
+        members = read_content_file(path, archive, CONTENT_MAX_SIZE) ?
+            FloppyImage::GetZipImageCount(archive.data(), archive.size()) : 0;
     }
 
-    return count > 0;
+    for (int member = 0; member < members; member++)
+    {
+        std::vector<u8> data;
+        char member_name[1024];
+
+        if (!load_source(path, member, data, member_name, sizeof(member_name)))
+            return false;
+
+        int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
+        std::string file_name = get_file_name(members > 1 ? member_name : path, false);
+
+        for (int i = 0; i < count; i++)
+        {
+            u32 offset = 0;
+            u32 size = 0;
+
+            if (!FloppyImage::GetDisk(data.data(), (u32)data.size(), i, &offset, &size))
+                return false;
+
+            DiskSetImage image;
+            image.path = path;
+            image.label = file_name;
+            image.image = member;
+            image.disk = i;
+            image.crc = CalculateCRC32(0, data.data() + offset, (int)size);
+            image.crc_known = true;
+            image.cdrom = false;
+            image.save_disk = false;
+
+            if (count > 1)
+            {
+                char name[32];
+                char suffix[64];
+                FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
+                snprintf(suffix, sizeof(suffix), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
+                image.label += suffix;
+            }
+
+            images.push_back(image);
+        }
+    }
+
+    return images.size() > first;
 }
 
 static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume,
@@ -2097,6 +2114,7 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
     DiskSetImage image;
     image.path = path;
     image.label = label;
+    image.image = 0;
     image.disk = 0;
     image.crc = CalculateCRC32(0, reinterpret_cast<const u8*>(name.c_str()), (int)name.size());
     image.crc_known = true;
@@ -2138,7 +2156,7 @@ static bool disk_insert(unsigned index, int drive)
     for (int i = DISK_DRIVE_FLOPPY_1; i < DISK_DRIVE_COUNT; i++)
     {
         if (i != drive && drive_entry[i] >= 0 && disk_images[drive_entry[i]].path == image.path &&
-            disk_images[drive_entry[i]].disk == image.disk)
+            disk_images[drive_entry[i]].image == image.image && disk_images[drive_entry[i]].disk == image.disk)
         {
             static char message[64];
             snprintf(message, sizeof(message), "This floppy disk is already in Floppy %d", i);
@@ -2506,6 +2524,7 @@ static bool disk_add_image_index(void)
         return false;
 
     DiskSetImage image;
+    image.image = 0;
     image.disk = 0;
     image.crc = 0;
     image.crc_known = false;
@@ -2563,7 +2582,7 @@ static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_s
     return ok;
 }
 
-static bool load_source(const char* path, std::vector<u8>& data)
+static bool load_source(const char* path, int image, std::vector<u8>& data, char* name, size_t name_size)
 {
     if (!read_content_file(path, data, CONTENT_MAX_SIZE))
         return false;
@@ -2574,7 +2593,7 @@ static bool load_source(const char* path, std::vector<u8>& data)
     u8* extracted = NULL;
     u32 size = 0;
 
-    if (!FloppyImage::ExtractFromZip(data.data(), data.size(), &extracted, &size, NULL, 0))
+    if (!FloppyImage::ExtractFromZip(data.data(), data.size(), image, &extracted, &size, name, name_size))
         return false;
 
     data.assign(extracted, extracted + size);
@@ -2670,7 +2689,7 @@ static bool floppy_load_image(unsigned index, int floppy)
     {
         u32 offset = 0;
 
-        if (!load_source(image.path.c_str(), file) ||
+        if (!load_source(image.path.c_str(), image.image, file) ||
             !FloppyImage::GetDisk(file.data(), (u32)file.size(), image.disk, &offset, &size))
             return false;
 

@@ -35,6 +35,7 @@
 struct Floppy_Entry
 {
     std::string path;
+    int image;
     int disk;
     std::string name;
 };
@@ -59,11 +60,11 @@ static Floppy_Host hosts[config_floppy_drives];
 
 static bool valid_drive(int drive);
 static void clear_host(int drive);
-static int find_disk(int drive, const std::string& path, int disk);
+static int find_disk(int drive, const std::string& path, int image, int disk);
 static int find_file(int drive, const std::string& path);
 static bool read_file(const char* path, std::vector<u8>& data);
 static bool read_playlist(const char* path, std::vector<std::string>& entries);
-static bool load_source(const char* path, std::vector<u8>& data);
+static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
 static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries);
 static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entries);
 static std::string make_working_path(const char* source_path, u32 base_crc, int copy);
@@ -112,14 +113,7 @@ bool emu_floppy_is_image(const char* path)
         return false;
 
     std::vector<u8> archive;
-    u8* data = NULL;
-    u32 size = 0;
-
-    if (!read_file(path, archive) || !FloppyImage::ExtractFromZip(archive.data(), archive.size(), &data, &size, NULL, 0))
-        return false;
-
-    SafeDeleteArray(data);
-    return true;
+    return read_file(path, archive) && FloppyImage::GetZipImageCount(archive.data(), archive.size()) > 0;
 }
 
 bool emu_floppy_insert(int drive, const char* path, bool discard_changes)
@@ -137,7 +131,8 @@ bool emu_floppy_insert(int drive, const char* path, bool discard_changes)
 
     int index = 0;
 
-    while ((index + 1 < (int)entries.size()) && (find_disk(drive, entries[index].path, entries[index].disk) >= 0))
+    while ((index + 1 < (int)entries.size()) &&
+        (find_disk(drive, entries[index].path, entries[index].image, entries[index].disk) >= 0))
         index++;
 
     std::vector<Floppy_Entry> previous_entries = hosts[drive].entries;
@@ -264,6 +259,7 @@ bool emu_floppy_save_as(int drive, const char* path)
     Floppy_Host& host = hosts[drive];
     Floppy_Entry entry;
     entry.path = path;
+    entry.image = 0;
     entry.disk = 0;
     entry.name = get_filename(path);
     host.entries.clear();
@@ -405,7 +401,8 @@ int emu_floppy_get_disk_drive(int drive, int index)
     if (!valid_drive(drive) || index < 0 || index >= (int)hosts[drive].entries.size())
         return -1;
 
-    return find_disk(drive, hosts[drive].entries[index].path, hosts[drive].entries[index].disk);
+    const Floppy_Entry& entry = hosts[drive].entries[index];
+    return find_disk(drive, entry.path, entry.image, entry.disk);
 }
 
 // Names save states when no CD-ROM is in the drive
@@ -475,14 +472,14 @@ static void clear_host(int drive)
     host.flush_failed = false;
 }
 
-static int find_disk(int drive, const std::string& path, int disk)
+static int find_disk(int drive, const std::string& path, int image, int disk)
 {
     for (int i = 0; i < config_floppy_drives; i++)
     {
         const Floppy_Host& host = hosts[i];
 
         if ((i != drive) && (host.entry < (int)host.entries.size()) && (host.source_path == path) &&
-            (host.entries[host.entry].disk == disk))
+            (host.entries[host.entry].image == image) && (host.entries[host.entry].disk == disk))
             return i;
     }
 
@@ -537,7 +534,7 @@ static bool read_file(const char* path, std::vector<u8>& data)
     return file.gcount() == size;
 }
 
-static bool load_source(const char* path, std::vector<u8>& data)
+static bool load_source(const char* path, int image, std::vector<u8>& data, char* name, size_t name_size)
 {
     if (!read_file(path, data))
     {
@@ -551,9 +548,9 @@ static bool load_source(const char* path, std::vector<u8>& data)
     u8* extracted = NULL;
     u32 size = 0;
 
-    if (!FloppyImage::ExtractFromZip(data.data(), data.size(), &extracted, &size, NULL, 0))
+    if (!FloppyImage::ExtractFromZip(data.data(), data.size(), image, &extracted, &size, name, name_size))
     {
-        Error("ZIP holds no single floppy image: %s", path);
+        Error("ZIP holds no floppy image: %s", path);
         return false;
     }
 
@@ -594,37 +591,51 @@ static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries)
 
 static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entries)
 {
-    std::vector<u8> data;
+    size_t first = entries.size();
+    int images = 1;
 
-    if (!load_source(path, data))
-        return false;
-
-    int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
-
-    for (int i = 0; i < count; i++)
+    if (ends_with_no_case(path, ".zip"))
     {
-        u32 offset = 0;
-        u32 size = 0;
-        char name[64];
-        FloppyImage::GetDisk(data.data(), (u32)data.size(), i, &offset, &size);
-        FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
-
-        Floppy_Entry entry;
-        entry.path = path;
-        entry.disk = i;
-        entry.name = get_filename(path);
-
-        if (count > 1)
-        {
-            char label[96];
-            snprintf(label, sizeof(label), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
-            entry.name += label;
-        }
-
-        entries.push_back(entry);
+        std::vector<u8> archive;
+        images = read_file(path, archive) ? FloppyImage::GetZipImageCount(archive.data(), archive.size()) : 0;
     }
 
-    return count > 0;
+    for (int image = 0; image < images; image++)
+    {
+        std::vector<u8> data;
+        char member[GT_MAX_PATH];
+
+        if (!load_source(path, image, data, member, sizeof(member)))
+            return false;
+
+        int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
+
+        for (int i = 0; i < count; i++)
+        {
+            u32 offset = 0;
+            u32 size = 0;
+            char name[64];
+            FloppyImage::GetDisk(data.data(), (u32)data.size(), i, &offset, &size);
+            FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
+
+            Floppy_Entry entry;
+            entry.path = path;
+            entry.image = image;
+            entry.disk = i;
+            entry.name = get_filename(images > 1 ? member : path);
+
+            if (count > 1)
+            {
+                char label[96];
+                snprintf(label, sizeof(label), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
+                entry.name += label;
+            }
+
+            entries.push_back(entry);
+        }
+    }
+
+    return entries.size() > first;
 }
 
 static std::string make_working_path(const char* source_path, u32 base_crc, int copy)
@@ -741,7 +752,7 @@ static bool mount(int drive, int index, bool discard_changes)
     Floppy_Host& host = hosts[drive];
     FloppyDisk* current = emu_get_core()->GetFloppy(drive);
     const Floppy_Entry& entry = host.entries[index];
-    int other = find_disk(drive, entry.path, entry.disk);
+    int other = find_disk(drive, entry.path, entry.image, entry.disk);
 
     if (other >= 0)
     {
@@ -756,7 +767,7 @@ static bool mount(int drive, int index, bool discard_changes)
     u32 offset = 0;
     u32 size = 0;
 
-    if (!load_source(entry.path.c_str(), file) ||
+    if (!load_source(entry.path.c_str(), entry.image, file) ||
         !FloppyImage::GetDisk(file.data(), (u32)file.size(), entry.disk, &offset, &size))
     {
         Error("Not a floppy disk image: %s", entry.path.c_str());

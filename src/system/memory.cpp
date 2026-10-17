@@ -54,6 +54,45 @@ static const u8 k_memory_oak2_words_1[43] =
 /* 0x10A6 */ 0x82, 0x8F, 0x82, 0xCA, 0x04, 0x4A, 0x3F, 0x40, 0x2E, 0xD4, 0x40
 };
 
+static const u8 k_memory_cmos_directory[60] =
+{
+/* 0x0000 */ 0x01, 0xFF, 0x42, 0x4F, 0x4F, 0x54, 0xA8, 0x00, 0x40, 0x00, 0x01, 0xFE, 0x53, 0x45, 0x54, 0x55,
+/* 0x0010 */ 0xE8, 0x00, 0x00, 0x01, 0x01, 0xFD, 0x4C, 0x4F, 0x47, 0x20, 0xE8, 0x01, 0x10, 0x03, 0x01, 0xFC,
+/* 0x0020 */ 0x4F, 0x41, 0x53, 0x59, 0xF8, 0x04, 0x20, 0x00, 0x01, 0xFB, 0x58, 0x45, 0x4E, 0x49, 0x18, 0x05,
+/* 0x0030 */ 0x10, 0x00, 0x01, 0xFA, 0x54, 0x4F, 0x57, 0x4E, 0x28, 0x05, 0x00, 0x01
+};
+
+static const u8 k_memory_cmos_header[10] =
+{
+/* 0x00A0 */ 0x28, 0x06, 0x99, 0x01, 0xB5, 0x7F, 0x79, 0x41, 0xFF, 0xFF
+};
+
+static const u8 k_memory_cmos_setup[113] =
+{
+/* 0x00E8 */ 0x95, 0x78, 0x8E, 0x6D, 0x92, 0xCA, 0x00, 0x00, 0x00, 0x01, 0x05, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+/* 0x00F8 */ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+/* 0x0108 */ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x02, 0x19, 0xF4, 0x01, 0xF4, 0x01, 0x02, 0x19,
+/* 0x0118 */ 0xF4, 0x01, 0xF4, 0x01, 0x02, 0x19, 0xF4, 0x01, 0xF4, 0x01, 0x02, 0x19, 0xF4, 0x01, 0xF4, 0x01,
+/* 0x0128 */ 0x02, 0x19, 0xF4, 0x01, 0xF4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x10, 0x00,
+/* 0x0138 */ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+/* 0x0148 */ 0x01, 0x01, 0x00, 0x01, 0x01, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+/* 0x0158 */ 0x02
+};
+
+static const u8 k_memory_cmos_towns[21] =
+{
+/* 0x05A8 */ 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+/* 0x05B8 */ 0x00, 0x09, 0x00, 0x00, 0x09
+};
+
+static const u8 k_memory_cmos_tail[15] =
+{
+/* 0x07D2 */ 0x01, 0x02, 0x03, 0x04, 0x05, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+
+static const u32 k_memory_cmos_setup_offset = 0x00E8;
+static const u32 k_memory_cmos_setup_size = 0x100;
+
 Memory::Memory()
 {
     InitPointer(m_cpu_read_pages);
@@ -72,7 +111,7 @@ Memory::Memory()
     m_working_ram_size = 0;
     m_main_ram_size = GT_MAIN_RAM_SIZE;
     InitPointer(m_state.main_ram);
-    ResetCMOS();
+    ResetCMOS(GT_MAX_FLOPPY_DRIVES);
     m_state.main_memory = false;
     m_state.boot_ram = false;
     m_state.dictionary = false;
@@ -130,12 +169,79 @@ void Memory::Reset()
 
 // Blank CMOS with the stock OAK/2 user dictionary that Towns OS boot disks write with DICUTY
 // Some titles load OAK/2 without that fallback and stop at a hidden DOS prompt when it is missing
-void Memory::ResetCMOS()
+// Two-drive machines also get the records the BIOS writes to a blank CMOS and a Towns OS SETUP record with
+// single-drive mode off, IO.SYS replaces a missing one with single-drive mode on
+void Memory::ResetCMOS(int floppy_drives)
 {
     memset(m_state.cmos, 0, sizeof(m_state.cmos));
     memcpy(m_state.cmos + 0x0800, k_memory_oak2_index, sizeof(k_memory_oak2_index));
     memcpy(m_state.cmos + 0x0D60, k_memory_oak2_words_0, sizeof(k_memory_oak2_words_0));
     memcpy(m_state.cmos + 0x1086, k_memory_oak2_words_1, sizeof(k_memory_oak2_words_1));
+
+    if (floppy_drives > 1)
+        ResetCMOSSetup();
+}
+
+bool Memory::LoadCMOSFile(const u8* data, size_t size, int floppy_drives)
+{
+    int version = 0;
+
+    if (size == GT_CMOS_FILE_SIZE)
+    {
+        if ((data[0] | (data[1] << 8)) != GT_CMOS_FILE_MAGIC)
+            return false;
+
+        version = data[2] | (data[3] << 8);
+        data += GT_CMOS_FILE_HEADER_SIZE;
+    }
+    else if (size != GT_CMOS_SIZE)
+        return false;
+
+    memcpy(m_state.cmos, data, GT_CMOS_SIZE);
+
+    if ((version < 1) && (floppy_drives > 1))
+        ResetCMOSSetup();
+
+    return true;
+}
+
+void Memory::SaveCMOSFile(u8* data) const
+{
+    data[0] = GT_CMOS_FILE_MAGIC & 0xFF;
+    data[1] = GT_CMOS_FILE_MAGIC >> 8;
+    data[2] = GT_CMOS_FILE_VERSION & 0xFF;
+    data[3] = GT_CMOS_FILE_VERSION >> 8;
+    memcpy(data + GT_CMOS_FILE_HEADER_SIZE, m_state.cmos, GT_CMOS_SIZE);
+}
+
+void Memory::ResetCMOSSetup()
+{
+    u8* setup = m_state.cmos + k_memory_cmos_setup_offset;
+    u32 header_sum = 0;
+    u8 sum = 0;
+
+    for (u32 i = 0; i < 0xA4; i += 2)
+        header_sum += m_state.cmos[i] | (m_state.cmos[i + 1] << 8);
+
+    // The BIOS clears every record unless the word at A4h is the sum of the words below it and A6h holds 4179h
+    if ((m_state.cmos[0xA4] | (m_state.cmos[0xA5] << 8)) != (header_sum & 0xFFFF) ||
+        m_state.cmos[0xA6] != 0x79 || m_state.cmos[0xA7] != 0x41)
+    {
+        memset(m_state.cmos, 0, 0x0800);
+        memcpy(m_state.cmos, k_memory_cmos_directory, sizeof(k_memory_cmos_directory));
+        memcpy(m_state.cmos + 0x00A0, k_memory_cmos_header, sizeof(k_memory_cmos_header));
+        m_state.cmos[0x052E] = 0x02;
+        memcpy(m_state.cmos + 0x05A8, k_memory_cmos_towns, sizeof(k_memory_cmos_towns));
+        memcpy(m_state.cmos + 0x07D2, k_memory_cmos_tail, sizeof(k_memory_cmos_tail));
+    }
+
+    memset(setup, 0, k_memory_cmos_setup_size);
+    memcpy(setup, k_memory_cmos_setup, sizeof(k_memory_cmos_setup));
+
+    for (u32 i = 0; i < k_memory_cmos_setup_size - 1; i++)
+        sum += setup[i];
+
+    setup[k_memory_cmos_setup_size - 1] = (u8)(0 - sum);
 }
 
 INLINE bool Memory::IsCanonicalPage(u32 page) const

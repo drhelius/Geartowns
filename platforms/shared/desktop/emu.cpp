@@ -1819,10 +1819,11 @@ static bool get_cmos_path(int model, char* path, size_t path_size)
 static void load_cmos(int model)
 {
     Memory* memory = geartowns->GetMemory();
+    int floppy_drives = k_machine_profiles[model].floppy_drives;
     char path[GT_MAX_PATH];
     std::ifstream file;
 
-    memory->ResetCMOS();
+    memory->ResetCMOS(floppy_drives);
     cmos_model = model;
 
     if (get_cmos_path(model, path, sizeof(path)))
@@ -1830,17 +1831,13 @@ static void load_cmos(int model)
 
     if (file.is_open())
     {
-        file.read(reinterpret_cast<char*>(memory->GetCMOS()), GT_CMOS_SIZE);
+        u8 data[GT_CMOS_FILE_SIZE + 1];
+        file.read(reinterpret_cast<char*>(data), sizeof(data));
 
-        if (file.gcount() != GT_CMOS_SIZE)
-        {
+        if (!memory->LoadCMOSFile(data, (size_t)file.gcount(), floppy_drives))
             Error("Invalid CMOS file: %s", path);
-            memory->ResetCMOS();
-        }
         else
-        {
             Log("CMOS loaded from %s", path);
-        }
     }
 
     memcpy(cmos_saved, memory->GetCMOS(), GT_CMOS_SIZE);
@@ -1857,11 +1854,13 @@ static void save_cmos(void)
     if (memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0 || !get_cmos_path(cmos_model, path, sizeof(path)))
         return;
 
+    u8 data[GT_CMOS_FILE_SIZE];
+    geartowns->GetMemory()->SaveCMOSFile(data);
     std::string temporary(path);
     temporary += ".tmp";
     std::ofstream file;
     open_ofstream_utf8(file, temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-    file.write(reinterpret_cast<const char*>(cmos), GT_CMOS_SIZE);
+    file.write(reinterpret_cast<const char*>(data), GT_CMOS_FILE_SIZE);
     file.close();
 
     if (!file.good() || !SDL_RenamePath(temporary.c_str(), path))

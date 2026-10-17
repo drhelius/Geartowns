@@ -2742,9 +2742,10 @@ static void cmos_load(void)
 {
     Memory* memory = core->GetMemory();
     std::vector<u8> data;
-    std::string name(k_machine_profiles[core->GetPendingMachineConfig().model].key);
+    const GT_Machine_Profile& profile = k_machine_profiles[core->GetPendingMachineConfig().model];
+    std::string name(profile.key);
 
-    memory->ResetCMOS();
+    memory->ResetCMOS(profile.floppy_drives);
     cmos_shared_active = cmos_shared;
     cmos_frames = 0;
     cmos_save_failed = false;
@@ -2753,9 +2754,8 @@ static void cmos_load(void)
 
     if (cmos_shared_active && read_content_file(cmos_path.c_str(), data, CONTENT_MAX_SIZE))
     {
-        if (data.size() == GT_CMOS_SIZE)
+        if (memory->LoadCMOSFile(data.data(), data.size(), profile.floppy_drives))
         {
-            memcpy(memory->GetCMOS(), data.data(), GT_CMOS_SIZE);
             log_cb(RETRO_LOG_INFO, "CMOS loaded from %s\n", cmos_path.c_str());
         }
         else
@@ -2774,7 +2774,9 @@ static void cmos_save(void)
     if (!cmos_shared_active || memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0)
         return;
 
-    bool saved = write_content_file(cmos_path.c_str(), cmos, GT_CMOS_SIZE);
+    u8 data[GT_CMOS_FILE_SIZE];
+    core->GetMemory()->SaveCMOSFile(data);
+    bool saved = write_content_file(cmos_path.c_str(), data, GT_CMOS_FILE_SIZE);
 
     if (saved)
     {

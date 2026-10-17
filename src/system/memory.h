@@ -119,7 +119,9 @@ public:
     u32 GetMainRAMSize() const;
     void SetMainRAMSize(u32 size);
     u8* GetCMOS();
-    void ResetCMOS();
+    void ResetCMOS(int floppy_drives);
+    bool LoadCMOSFile(const u8* data, size_t size, int floppy_drives);
+    void SaveCMOSFile(u8* data) const;
     u8 ReadCMOS(u32 index) const;
     void WriteCMOS(u32 index, u8 value);
     u8* GetVideoRAM();
@@ -169,6 +171,7 @@ private:
     void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size);
 #endif
     void ApplyMapping();
+    void ResetCMOSSetup();
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 

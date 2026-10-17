@@ -711,6 +711,7 @@ void MB8877::FinishSearch(u64 clocks)
     u8 operation = m_state.command >> 4;
     const MB8877_Format& format = k_mb8877_formats[m_fdc->IsDoubleDensity() ? 1 : 0];
     u32 byte_clocks = m_fdc->GetByteClocks();
+    FloppyDisk* disk = m_state.media_valid ? m_fdc->GetSelectedDisk() : NULL;
     m_fdc->Access(operation == 0xA || operation == 0xB);
     m_state.byte_index = 0;
     m_state.byte_count = 128U << (m_state.id[3] & 0x03);
@@ -728,6 +729,11 @@ void MB8877::FinishSearch(u64 clocks)
 
             if (m_state.sector_deleted)
                 m_state.status |= k_mb8877_record_type;
+
+            // Weak bytes read their other value on every other read, as the data separator locks one way or the other
+            m_state.sector_weak = IsValidPointer(disk) &&
+                disk->HasWeakBytes(m_state.sector_header + k_floppy_sector_header_size, m_state.sector_size) &&
+                (m_state.weak_reads++ & 0x01) != 0;
 
             m_state.phase = MB8877_PHASE_READ_DATA;
             m_state.event_clocks = clocks + byte_clocks * format.data;
@@ -756,8 +762,12 @@ void MB8877::ReadByte()
 
     if (IsValidPointer(disk))
     {
-        value = m_state.byte_index < m_state.sector_size ?
-            disk->ReadByte(m_state.sector_header + k_floppy_sector_header_size + m_state.byte_index, gap) : gap;
+        u32 offset = m_state.sector_header + k_floppy_sector_header_size + m_state.byte_index;
+
+        if (m_state.byte_index >= m_state.sector_size)
+            value = gap;
+        else
+            value = m_state.sector_weak ? disk->ReadWeakByte(offset, gap) : disk->ReadByte(offset, gap);
     }
 
     m_state.data = value;
@@ -1202,17 +1212,17 @@ u64 MB8877::GetCycles(u32 cycles) const
 void MB8877::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void MB8877::LoadState(std::istream& stream)
+void MB8877::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void MB8877::Serialize(StateSerializer& serializer)
+void MB8877::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.track);
@@ -1245,6 +1255,17 @@ void MB8877::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.track_size);
 
     G_SERIALIZE_ARRAY(serializer, m_state.track_buffer, MB8877_TRACK_BUFFER_SIZE);
+
+    if (version >= 7)
+    {
+        G_SERIALIZE(serializer, m_state.sector_weak);
+        G_SERIALIZE(serializer, m_state.weak_reads);
+    }
+    else if (serializer.IsLoading())
+    {
+        m_state.sector_weak = false;
+        m_state.weak_reads = 0;
+    }
 
     if (serializer.IsLoading())
         m_state.track_size = MIN(m_state.track_size, (u32)MB8877_TRACK_BUFFER_SIZE);

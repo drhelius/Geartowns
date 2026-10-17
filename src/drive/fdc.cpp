@@ -209,9 +209,10 @@ void FDC::HandleEvent(u64 clocks)
     UpdateNextEvent(clocks);
 }
 
-bool FDC::InsertDisk(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc)
+bool FDC::InsertDisk(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc, const u8* source, u32 source_size)
 {
-    if (drive < 0 || drive >= FDC_DRIVES || !m_disks[drive].Insert(data, size, write_protected, base_crc, data_crc))
+    if (drive < 0 || drive >= FDC_DRIVES ||
+        !m_disks[drive].Insert(data, size, write_protected, base_crc, data_crc, source, source_size))
         return false;
 
     ChangeDisk(drive);
@@ -355,14 +356,14 @@ void FDC::SaveState(std::ostream& stream, bool media)
         m_disks[i].SaveState(stream, media);
 }
 
-void FDC::LoadState(std::istream& stream)
+void FDC::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
-    m_mb8877.LoadState(stream);
+    m_mb8877.LoadState(stream, version);
 
     for (int i = 0; i < FDC_DRIVES; i++)
-        m_disks[i].LoadState(stream);
+        m_disks[i].LoadState(stream, version);
 
     SanitizeState();
 }

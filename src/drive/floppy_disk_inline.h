@@ -87,10 +87,18 @@ INLINE u8 FloppyDisk::ReadByte(u32 offset, u8 fill) const
     return offset < m_state.size ? m_image[offset] : fill;
 }
 
+INLINE u32 FloppyDisk::GetWeakByteCount() const
+{
+    return m_weak_count;
+}
+
 INLINE void FloppyDisk::WriteByte(u32 offset, u8 value)
 {
     if (offset >= m_state.size)
         return;
+
+    if (m_weak_count > 0)
+        RemoveWeakByte(offset);
 
     m_image[offset] = value;
     m_state.dirty = true;

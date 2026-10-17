@@ -31,6 +31,12 @@ enum FloppyImage_Blank
     FLOPPY_BLANK_COUNT
 };
 
+struct FloppyImage_Weak
+{
+    u32 offset;
+    u8 value;
+};
+
 class FloppyImage
 {
 public:
@@ -53,6 +59,7 @@ public:
     static u16 CRC16(u16 crc, const u8* data, u32 size);
     static u32 GetDataCRC(const u8* image, u32 size);
     static u32 CalculateDataCRC(const u8* data, u32 size);
+    static FloppyImage_Weak* GetWeakBytes(const u8* source, u32 source_size, const u8* image, u32 image_size, u32* count);
 
 private:
     static int GetRawGeometry(const u8* data, u32 size);
@@ -61,8 +68,10 @@ private:
     static bool IsRawLayout(const u8* image, u32 size, u32 header_size, int cylinders, int sectors, u8 n);
     static u8* Build(const u8* header, const u8* data, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size);
     static u8* CreateFromRaw(const u8* data, u32 size, u32* image_size);
-    static u8* CreateFromMFM(const u8* data, u32 size, u32* image_size);
-    static u32 DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_capacity);
+    static u8* CreateFromMFM(const u8* data, u32 size, u32* image_size, FloppyImage_Weak* weak = NULL, u32* weak_count = NULL);
+    static u32 DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_capacity, FloppyImage_Weak* weak, u32* weak_count);
+    static u32 FindSector(const u8* image, u32 size, u32 offset, int* track, int* index);
+    static u32 GetSectorHeader(const u8* image, u32 size, int track, int index);
 };
 
 static const u32 k_floppy_header_size = 0x2B0;
@@ -70,6 +79,7 @@ static const u32 k_floppy_sector_header_size = 16;
 static const int k_floppy_tracks = 164;
 static const int k_floppy_max_sectors = 64;
 static const u32 k_floppy_max_image_size = 8 * 1024 * 1024;
+static const u32 k_floppy_max_weak_bytes = 4096;
 
 static const u8 k_floppy_media_2d = 0x00;
 static const u8 k_floppy_media_2dd = 0x10;

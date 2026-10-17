@@ -84,6 +84,8 @@ public:
         u16 sector_size;
         u8 sector_status;
         bool sector_deleted;
+        bool sector_weak;
+        u32 weak_reads;
         u8 id[6];
         u32 byte_index;
         u32 byte_count;
@@ -116,7 +118,7 @@ public:
     void RelocateSector(u64 clocks);
     MB8877_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void RunPhase(u64 clocks);
@@ -148,7 +150,7 @@ private:
     u32 ParseTrack(u8* run) const;
     u64 GetNextIndex(u64 clocks) const;
     u64 GetCycles(u32 cycles) const;
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

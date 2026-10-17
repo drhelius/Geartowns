@@ -104,7 +104,7 @@ public:
 #endif
     void EjectMedia();
     void ResetMedia();
-    bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0, u32 data_crc = 0);
+    bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0, u32 data_crc = 0, const u8* source = NULL, u32 source_size = 0);
     void EjectFloppy(int drive);
     void SwapFloppies();
 

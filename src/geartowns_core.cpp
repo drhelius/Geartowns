@@ -878,9 +878,10 @@ void GeartownsCore::ResetMedia()
     Reset();
 }
 
-bool GeartownsCore::InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc)
+bool GeartownsCore::InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc, const u8* source, u32 source_size)
 {
-    return IsValidPointer(m_fdc) && m_fdc->InsertDisk(drive, data, size, write_protected, base_crc, data_crc);
+    return IsValidPointer(m_fdc) &&
+        m_fdc->InsertDisk(drive, data, size, write_protected, base_crc, data_crc, source, source_size);
 }
 
 void GeartownsCore::EjectFloppy(int drive)
@@ -1323,7 +1324,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_video->LoadState(stream, header.version);
     m_cdrom->LoadState(stream, header.version);
     m_cdrom_audio->LoadState(stream);
-    m_fdc->LoadState(stream);
+    m_fdc->LoadState(stream, header.version);
     m_keyboard->LoadState(stream);
     m_rtc->LoadState(stream);
     m_dma->LoadState(stream);

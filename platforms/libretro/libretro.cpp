@@ -2653,7 +2653,9 @@ static bool floppy_load_image(unsigned index, int floppy)
     std::vector<u8> copy;
     std::string working(image.path);
     const u8* data = NULL;
+    const u8* source = NULL;
     u32 size = 0;
+    u32 source_size = 0;
     u32 data_crc = 0;
 
     if (image.save_disk)
@@ -2682,6 +2684,8 @@ static bool floppy_load_image(unsigned index, int floppy)
         working = retro_save_directory;
         append_path_component(working, (get_file_name(image.path.c_str(), true) + suffix).c_str());
         data = file.data() + offset;
+        source = data;
+        source_size = size;
 
         if (read_content_file(working.c_str(), copy, CONTENT_MAX_SIZE) &&
             FloppyImage::IsD77(copy.data(), (u32)copy.size()))
@@ -2693,7 +2697,7 @@ static bool floppy_load_image(unsigned index, int floppy)
         }
     }
 
-    if (!core->InsertFloppy(floppy, data, size, false, image.crc, data_crc))
+    if (!core->InsertFloppy(floppy, data, size, false, image.crc, data_crc, source, source_size))
         return false;
 
     floppy_working_path[floppy] = working;

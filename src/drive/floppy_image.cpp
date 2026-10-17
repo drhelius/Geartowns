@@ -63,6 +63,8 @@ static const u32 k_floppy_mfm_header_size = 19;
 static const u32 k_floppy_mfm_entry_size = 11;
 static const u16 k_floppy_mfm_bit_rate_2hd = 400;
 static const u16 k_floppy_mfm_sync = 0x4489;
+static const u16 k_floppy_mfm_weak_cells = 0x8888;
+static const u32 k_floppy_mfm_no_flux_cells = 5;
 static const u32 k_floppy_mfm_data_window = 80 * 16;
 
 static u16 mfm_word(const u8* cells, u32 position)
@@ -75,12 +77,12 @@ static u16 mfm_word(const u8* cells, u32 position)
     return value;
 }
 
-static u8 mfm_byte(const u8* cells, u32 position)
+static u8 mfm_byte(const u8* cells, u32 position, u32 phase = 1)
 {
     u8 value = 0;
 
     for (int bit = 0; bit < 8; bit++)
-        value = (u8)((value << 1) | cells[position + bit * 2 + 1]);
+        value = (u8)((value << 1) | cells[position + bit * 2 + phase]);
 
     return value;
 }
@@ -544,6 +546,109 @@ u32 FloppyImage::CalculateDataCRC(const u8* data, u32 size)
     return crc;
 }
 
+FloppyImage_Weak* FloppyImage::GetWeakBytes(const u8* source, u32 source_size, const u8* image, u32 image_size, u32* count)
+{
+    *count = 0;
+
+    if (!IsMFM(source, source_size) || !IsCanonical(image, image_size))
+        return NULL;
+
+    FloppyImage_Weak* found = new (std::nothrow) FloppyImage_Weak[k_floppy_max_weak_bytes];
+    u32 found_count = 0;
+    u32 decoded_size = 0;
+    u8* decoded = IsValidPointer(found) ? CreateFromMFM(source, source_size, &decoded_size, found, &found_count) : NULL;
+    FloppyImage_Weak* weak = NULL;
+
+    if (IsValidPointer(decoded) && found_count > 0)
+        weak = new (std::nothrow) FloppyImage_Weak[found_count];
+
+    // A weak byte stays only while its sector still holds the data of the source
+    for (u32 i = 0; IsValidPointer(weak) && i < found_count; i++)
+    {
+        int track = 0;
+        int index = 0;
+        u32 from = FindSector(decoded, decoded_size, found[i].offset, &track, &index);
+        u32 to = from != 0 ? GetSectorHeader(image, image_size, track, index) : 0;
+        u32 sector_size = to != 0 ? read_u16_le(image + to + 14) : 0;
+
+        const u8* source_data = decoded + from + k_floppy_sector_header_size;
+        bool same = to != 0 && memcmp(decoded + from, image + to, 4) == 0 &&
+            read_u16_le(decoded + from + 14) == sector_size &&
+            memcmp(source_data, image + to + k_floppy_sector_header_size, sector_size) == 0;
+
+        if (!same)
+            continue;
+
+        u32 offset = to + (found[i].offset - from);
+        u32 at = *count;
+
+        while (at > 0 && weak[at - 1].offset > offset)
+        {
+            weak[at] = weak[at - 1];
+            at--;
+        }
+
+        weak[at].offset = offset;
+        weak[at].value = found[i].value;
+        (*count)++;
+    }
+
+    SafeDeleteArray(decoded);
+    SafeDeleteArray(found);
+
+    if (*count == 0)
+        SafeDeleteArray(weak);
+
+    return weak;
+}
+
+u32 FloppyImage::FindSector(const u8* image, u32 size, u32 offset, int* track, int* index)
+{
+    u32 header_size = GetHeaderSize(image, size);
+
+    for (int t = 0; t < k_floppy_tracks; t++)
+    {
+        u32 run_size = 0;
+        u32 header = GetTrackRun(image, size, header_size, t, &run_size);
+
+        if (header == 0 || header == 0xFFFFFFFF || offset < header || offset >= header + run_size)
+            continue;
+
+        int count = MIN((int)read_u16_le(image + header + 4), k_floppy_max_sectors);
+
+        for (int i = 0; i < count; i++)
+        {
+            u32 data = header + k_floppy_sector_header_size;
+            u32 data_size = read_u16_le(image + header + 14);
+
+            if (offset >= data && offset < data + data_size)
+            {
+                *track = t;
+                *index = i;
+                return header;
+            }
+
+            header = data + data_size;
+        }
+    }
+
+    return 0;
+}
+
+u32 FloppyImage::GetSectorHeader(const u8* image, u32 size, int track, int index)
+{
+    u32 run_size = 0;
+    u32 header = GetTrackRun(image, size, GetHeaderSize(image, size), track, &run_size);
+
+    if (header == 0 || header == 0xFFFFFFFF || index >= MIN((int)read_u16_le(image + header + 4), k_floppy_max_sectors))
+        return 0;
+
+    for (int i = 0; i < index; i++)
+        header += k_floppy_sector_header_size + read_u16_le(image + header + 14);
+
+    return header;
+}
+
 int FloppyImage::GetRawGeometry(const u8* data, u32 size)
 {
     if (!IsValidPointer(data))
@@ -804,13 +909,18 @@ u8* FloppyImage::CreateFromRaw(const u8* data, u32 size, u32* image_size)
     return image;
 }
 
-u8* FloppyImage::CreateFromMFM(const u8* data, u32 size, u32* image_size)
+u8* FloppyImage::CreateFromMFM(const u8* data, u32 size, u32* image_size, FloppyImage_Weak* weak, u32* weak_count)
 {
     u32 entries = (u32)read_u16_le(data + 7) * data[9];
     u32 list = read_u32_le(data + 15);
     u8* image = new (std::nothrow) u8[k_floppy_max_image_size];
     u8* cells = NULL;
     u32 cells_size = 0;
+    u32 runs[k_floppy_tracks];
+    memset(runs, 0, sizeof(runs));
+
+    if (IsValidPointer(weak_count))
+        *weak_count = 0;
 
     if (!IsValidPointer(image))
         return NULL;
@@ -850,23 +960,52 @@ u8* FloppyImage::CreateFromMFM(const u8* data, u32 size, u32* image_size)
             cells[cell] = (data[offset + (bit >> 3)] >> (7 - (bit & 7))) & 0x01;
         }
 
-        u32 run = DecodeMFMTrack(cells, count, image + position, k_floppy_max_image_size - position);
+        u32 first_weak = IsValidPointer(weak_count) ? *weak_count : 0;
+        u32 run = DecodeMFMTrack(cells, count, image + position, k_floppy_max_image_size - position, weak, weak_count);
 
         if (run == 0)
             continue;
 
+        for (u32 w = first_weak; IsValidPointer(weak_count) && w < *weak_count; w++)
+            weak[w].offset += position;
+
         write_u32_le(image + 0x20 + track * 4, position);
+        runs[track] = run;
         position += run;
     }
 
     write_u32_le(image + 0x1C, position);
     u8* result = Build(image, image, position, -1, NULL, 0, image_size);
+
+    // Build packs the runs in track order, so each weak byte moves with its track
+    u32 kept = 0;
+
+    for (u32 w = 0; IsValidPointer(result) && IsValidPointer(weak_count) && w < *weak_count; w++)
+    {
+        for (int track = 0; track < k_floppy_tracks; track++)
+        {
+            u32 start = read_u32_le(image + 0x20 + track * 4);
+
+            if (runs[track] == 0 || weak[w].offset < start || weak[w].offset >= start + runs[track])
+                continue;
+
+            weak[kept].offset = weak[w].offset - start + read_u32_le(result + 0x20 + track * 4);
+            weak[kept].value = weak[w].value;
+            kept++;
+            break;
+        }
+    }
+
+    if (IsValidPointer(weak_count))
+        *weak_count = kept;
+
     SafeDeleteArray(cells);
     SafeDeleteArray(image);
     return result;
 }
 
-u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_capacity)
+u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_capacity, FloppyImage_Weak* weak,
+    u32* weak_count)
 {
     u32 limit = count + count / 10;
     u32 position = 0;
@@ -937,6 +1076,43 @@ u32 FloppyImage::DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_cap
 
                 if (last[8] == k_floppy_status_no_data)
                     last[8] = CRC16(0xFFFF, field, data_size + 6) == 0 ? 0x00 : k_floppy_status_data_crc;
+
+                // Weak bytes read differently from turn to turn: runs of AA written one cell late read as 00 or AA,
+                // depending on where the data separator locks, and stretches without flux transitions read as noise
+                bool weak_bytes[1024];
+                u32 weak_run = 0;
+                u32 zero_run = 0;
+                memset(weak_bytes, 0, sizeof(weak_bytes));
+
+                for (u32 k = 0; IsValidPointer(weak) && k < data_size; k++)
+                {
+                    u32 byte_cells = p + 16 + k * 16;
+                    weak_run = mfm_word(cells, byte_cells) == k_floppy_mfm_weak_cells ? weak_run + 1 : 0;
+
+                    if (weak_run >= 2)
+                        weak_bytes[k] = weak_bytes[k - 1] = true;
+
+                    for (u32 c = 0; c < 16; c++)
+                    {
+                        zero_run = cells[byte_cells + c] == 0 ? zero_run + 1 : 0;
+
+                        if (zero_run < k_floppy_mfm_no_flux_cells)
+                            continue;
+
+                        for (u32 w = (k * 16 + c + 1 - zero_run) / 16; w <= k; w++)
+                            weak_bytes[w] = true;
+                    }
+                }
+
+                for (u32 k = 0; IsValidPointer(weak) && k < data_size && *weak_count < k_floppy_max_weak_bytes; k++)
+                {
+                    if (!weak_bytes[k])
+                        continue;
+
+                    weak[*weak_count].offset = (u32)(last - run) + k_floppy_sector_header_size + k;
+                    weak[*weak_count].value = mfm_byte(cells, p + 16 + k * 16, 0);
+                    (*weak_count)++;
+                }
 
                 position += data_size;
             }

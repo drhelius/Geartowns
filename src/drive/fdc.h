@@ -64,14 +64,14 @@ public:
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
-    bool InsertDisk(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc = 0);
+    bool InsertDisk(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc = 0, const u8* source = NULL, u32 source_size = 0);
     void EjectDisk(int drive);
     void SwapDisks();
     FloppyDisk* GetDisk(int drive);
     MB8877* GetMB8877();
     FDC_State* GetState();
     void SaveState(std::ostream& stream, bool media = true);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
     FloppyDisk* GetSelectedDisk();
     int GetSelectedTrack() const;

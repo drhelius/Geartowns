@@ -102,7 +102,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Very accurate 80386 core that passes [test386](https://github.com/barotto/test386.asm) and [SingleStepTests/80386](https://github.com/singlesteptests/80386).
 - CD-ROM drive emulation with `cue/bin`, `iso` and `chd` images, `m3u` disc playlists and disc swapping, with optional compressed images (`zip`).
 - Physical CD-ROM discs on Windows, macOS and Linux.
-- Floppy disk emulation with two drives supporting `d77`, `d88`, `hdm`, `xdf` and `img` images, `m3u` playlists, write protection and optional persistence of disk changes.
+- Floppy disk emulation with two drives supporting `d77`, `d88`, `hdm`, `xdf`, `img` and HxC `mfm` images, `m3u` playlists, write protection and optional persistence of disk changes.
 - Save states with 5 slots and rewind support.
 - Run-ahead support to reduce input latency.
 - Video recording to AVI and screenshots.
@@ -122,7 +122,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 ### Basic Usage
 - **Firmware**: Geartowns requires the FM Towns system ROM files to run. Use **Machine → Firmware...** to choose a default folder containing `FMT_SYS.ROM`, `FMT_DOS.ROM`, `FMT_FNT.ROM` and `FMT_DIC.ROM`, in any case, or folders and MAME zips with one set each (`fmtowns` for the Model 1/2, `fmtownsux` for the FM Towns II UX, which also runs the 1F/2F, 10F/20F, CX and UG, `fmtownshr` for the FM Towns II HR and `fmtownsftv` for the Fresh TV, which run the HG, `fmtmarty` for the FM Towns Marty, also as MAME's `mrom.m36` and `mrom.m37`). A folder of its own can be set per model. `FMT_F20.ROM` is optional and a blank ROM is used if it is not found. In libretro the files must be placed in the RetroArch system directory.
 - **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from the `CD-ROM` menu.
-- **Floppy Images**: Insert floppy disks from the `Floppy 1` and `Floppy 2` menus, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf` and `img`, also inside `zip` files, and `m3u` playlists.
+- **Floppy Images**: Insert floppy disks from the `Floppy 1` and `Floppy 2` menus, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
 - **Machine**: The FM Towns (Model 1/2), 1F/2F, 10F/20F, FM Towns II CX, UX, UG and HG, and the FM Towns Marty are emulated. `Machine → Model`, `CPU Speed` and `Main RAM` default to Auto, which picks the machine, CPU speed and RAM the game database names for the game, or the FM Towns (Model 1/2) for other content.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
 
@@ -137,21 +137,21 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 geartowns [options] [media_file] [symbol_file]
 
 Arguments:
-  [media_file]                CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .m3u), also in .zip
-  [symbol_file]               Optional symbol file for debugging
+  [media_file]              CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .mfm, .m3u), also in .zip
+  [symbol_file]             Optional symbol file for debugging
 
 Options:
-    -f, --fullscreen          Start in fullscreen mode
-    -w, --windowed            Start in windowed mode with menu visible
-      --mcp-stdio             Auto-start MCP server with stdio transport
-      --mcp-http              Auto-start MCP server with HTTP transport
-      --mcp-router            Enable compact MCP tool routing
-      --mcp-http-address A    HTTP bind address (default: 127.0.0.1)
-      --mcp-http-port N       HTTP port for MCP server (default: 7777)
-      --headless              Run without GUI (requires MCP)
-      --portable              Store configuration and user data beside the application
-    -v, --version             Display version information
-    -h, --help                Display this help message
+    -f, --fullscreen        Start in fullscreen mode
+    -w, --windowed          Start in windowed mode with menu visible
+      --mcp-stdio           Auto-start MCP server with stdio transport
+      --mcp-http            Auto-start MCP server with HTTP transport
+      --mcp-router          Enable compact MCP tool routing
+      --mcp-http-address A  HTTP bind address (default: 127.0.0.1)
+      --mcp-http-port N     HTTP port for MCP server (default: 7777)
+      --headless            Run without GUI (requires MCP)
+      --portable            Store configuration and user data beside the application
+    -v, --version           Display version information
+    -h, --help              Display this help message
 ```
 
 ### MCP Server

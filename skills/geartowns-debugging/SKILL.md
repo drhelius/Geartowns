@@ -92,7 +92,7 @@ FM Towns hardware documentation is available in the [references/](references/) d
 load_bios → load_media → get_media_info → get_i386_status → get_screenshot
 ```
 
-Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.m3u` or `.zip` image in drive 0 or 1. `list_recent_media` shows recently opened images.
+Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. `list_recent_media` shows recently opened images.
 
 Load symbols with `load_symbols` (a text file with `ADDRESS NAME` or `NAME = ADDRESS` per line) or add individual labels with `add_symbol`.
 

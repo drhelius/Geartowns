@@ -46,19 +46,6 @@ static const MB8877_Format k_mb8877_formats[2] =
     { 146, 12, 62, 5, 10, 39, 43, 38, 0x4E, { 27, 54, 84, 116 } }
 };
 
-static u16 crc16(u16 crc, const u8* data, u32 size)
-{
-    for (u32 i = 0; i < size; i++)
-    {
-        crc ^= (u16)(data[i] << 8);
-
-        for (int bit = 0; bit < 8; bit++)
-            crc = (crc & 0x8000) != 0 ? (u16)((crc << 1) ^ 0x1021) : (u16)(crc << 1);
-    }
-
-    return crc;
-}
-
 MB8877::MB8877()
 {
     InitPointer(m_fdc);
@@ -692,7 +679,8 @@ void MB8877::Search(u64 clocks, bool restart)
 
     const FloppyDisk_Sector& sector = sectors[best];
     u8 mark[8] = { 0xA1, 0xA1, 0xA1, 0xFE, sector.id[0], sector.id[1], sector.id[2], sector.id[3] };
-    u16 crc = m_fdc->IsDoubleDensity() ? crc16(0xFFFF, mark, 8) : crc16(0xFFFF, mark + 3, 5);
+    u16 crc = m_fdc->IsDoubleDensity() ? FloppyImage::CRC16(0xFFFF, mark, 8) :
+        FloppyImage::CRC16(0xFFFF, mark + 3, 5);
 
     if (sector.status == k_floppy_status_id_crc)
         crc = (u16)~crc;
@@ -1060,7 +1048,7 @@ void MB8877::BuildTrack()
 
         if (sector.status != k_floppy_status_no_id)
         {
-            u16 crc = crc16(0xFFFF, field + start, length);
+            u16 crc = FloppyImage::CRC16(0xFFFF, field + start, length);
 
             if (sector.status == k_floppy_status_id_crc)
                 crc = (u16)~crc;
@@ -1087,7 +1075,7 @@ void MB8877::BuildTrack()
                 disk->ReadByte(sector.header + k_floppy_sector_header_size + j, format.gap) : format.gap;
         }
 
-        u16 crc = crc16(0xFFFF, data_mark, length - 4 + data_size);
+        u16 crc = FloppyImage::CRC16(0xFFFF, data_mark, length - 4 + data_size);
 
         if (sector.status == k_floppy_status_data_crc || sector.size != data_size)
             crc = (u16)~crc;

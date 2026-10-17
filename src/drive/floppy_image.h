@@ -37,6 +37,7 @@ public:
     static bool IsD77(const u8* data, u32 size);
     static bool IsCanonical(const u8* data, u32 size);
     static bool IsRaw(const u8* data, u32 size);
+    static bool IsMFM(const u8* data, u32 size);
     static bool IsImageName(const char* name);
     static int GetDiskCount(const u8* data, u32 size);
     static bool GetDisk(const u8* data, u32 size, int index, u32* offset, u32* disk_size);
@@ -49,6 +50,7 @@ public:
     static u32 GetRawSize(const u8* image, u32 size);
     static bool ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size);
     static bool ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name, size_t name_size);
+    static u16 CRC16(u16 crc, const u8* data, u32 size);
 
 private:
     static int GetRawGeometry(const u8* data, u32 size);
@@ -57,6 +59,8 @@ private:
     static bool IsRawLayout(const u8* image, u32 size, u32 header_size, int cylinders, int sectors, u8 n);
     static u8* Build(const u8* header, const u8* data, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size);
     static u8* CreateFromRaw(const u8* data, u32 size, u32* image_size);
+    static u8* CreateFromMFM(const u8* data, u32 size, u32* image_size);
+    static u32 DecodeMFMTrack(const u8* cells, u32 count, u8* run, u32 run_capacity);
 };
 
 static const u32 k_floppy_header_size = 0x2B0;

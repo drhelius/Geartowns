@@ -487,7 +487,7 @@ void retro_get_system_info(struct retro_system_info *info)
     info->library_version  = GT_VERSION;
     info->need_fullpath    = true;
     info->block_extract    = true;
-    info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|bin|m3u";
+    info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|mfm|bin|m3u";
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)

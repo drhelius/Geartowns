@@ -259,7 +259,7 @@ void gui_file_dialog_open_floppy(int drive)
 
     dialog_floppy_drive = drive;
     SDL_DialogFileFilter filters[] = {
-        { "Floppy Images", "d77;d88;hdm;xdf;img;bin;zip;m3u" }
+        { "Floppy Images", "d77;d88;hdm;xdf;img;mfm;bin;zip;m3u" }
     };
     const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
     SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_OpenFloppy, application_sdl_window,

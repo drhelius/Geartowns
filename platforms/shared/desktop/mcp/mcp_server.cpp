@@ -2090,7 +2090,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "insert_floppy"},
         {"title", "Insert Floppy"},
-        {"description", "Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, an .m3u list or a .zip) into a drive. Changes to the previous disk are kept in its working copy."},
+        {"description", "Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, .mfm, an .m3u list or a .zip) into a drive. Changes to the previous disk are kept in its working copy."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},

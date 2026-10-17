@@ -14,7 +14,7 @@ Created by Nacho Sánchez. Follow me on X: https://x.com/drhelius
 Features:
     - Very accurate 80386 core that passes test386 and SingleStepTests/80386.
     - CD-ROM support for CUE/BIN, ISO, CHD, M3U and ZIP formats, plus physical discs on Windows, macOS and Linux.
-    - Two floppy drives with D77, D88, HDM, XDF and IMG images, M3U playlists, write protection and optional persistence.
+    - Two floppy drives with D77, D88, HDM, XDF, IMG and MFM images, M3U playlists, write protection and optional persistence.
     - Save states with preview and rewind, and run-ahead.
     - Video recording to AVI, VGM recording and screenshots.
     - Full debugger with disassembly, breakpoints, call stack, symbols, memory editor, trace logger, profiler, i386 descriptor and paging inspectors, and CRTC, sprite, YM3438, RF5C68, CD-ROM and floppy tools.

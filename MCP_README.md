@@ -584,12 +584,12 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Media & State Management
 - `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, and the floppy drives (image, disk name, media, write protect, modified)
 - `list_recent_media` - List the most recent CD images and floppies opened by Geartowns
-- `load_media` - Load a CD image or a floppy image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .m3u; also inside .zip)
+- `load_media` - Load a CD image or a floppy image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip)
 - `eject_cdrom` - Eject the CD as the CD-ROM menu does; the machine keeps running with an empty drive
 - `list_cdrom_playlist` - List the discs of the loaded `.m3u` with `index`, the current disc and whether the drive is empty
 - `insert_playlist_disc` - Insert playlist disc `index` into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector
-- `insert_floppy` - Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, an .m3u list or a .zip) in `drive`; optional `write_protected`
+- `insert_floppy` - Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, .mfm, an .m3u list or a .zip) in `drive`; optional `write_protected`
 - `eject_floppy` - Eject the disk in `drive`, keeping its changes in the working copy
 - `swap_floppies` - Swap the disks in drives 0 and 1
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`

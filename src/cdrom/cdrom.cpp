@@ -184,6 +184,7 @@ void CdRom::ResetController()
     m_state.sirq_irq = false;
     m_state.dei = false;
     m_state.dry = true;
+    m_state.cdda_stopped = false;
     m_state.event = CDROM_EVENT_NONE;
     m_state.event_clocks = 0;
     m_state.read_lba = 0;
@@ -400,6 +401,8 @@ void CdRom::ExecuteCommand(u64 clocks)
     // A new command takes over from a read that was still running
     AbortTransfer();
     m_state.dry = true;
+    bool cdda_stopped = m_state.cdda_stopped;
+    m_state.cdda_stopped = false;
 
     switch (m_state.active_command & k_cdrom_command_mask)
     {
@@ -424,7 +427,7 @@ void CdRom::ExecuteCommand(u64 clocks)
             CommandUnknown1F();
             break;
         case CDROM_COMMAND_GET_STATE:
-            CommandGetState();
+            CommandGetState(cdda_stopped);
             break;
         case CDROM_COMMAND_CDDA_SET:
             CommandCDDASet();
@@ -657,7 +660,7 @@ void CdRom::CommandUnknown1F()
         RaiseSIRQ(true);
 }
 
-void CdRom::CommandGetState()
+void CdRom::CommandGetState(bool cdda_stopped)
 {
     if ((m_state.active_command & k_cdrom_flag_status) == 0)
         return;
@@ -674,7 +677,7 @@ void CdRom::CommandGetState()
             PushStatus(0x00, 0x00);
     }
     else
-        PushStatus(0x00, GetStatusSecondByte());
+        PushStatus(0x00, cdda_stopped ? 0x0D : GetStatusSecondByte());
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
         RaiseSIRQ(true);
@@ -836,6 +839,7 @@ void CdRom::ReadDone()
 }
 
 // The stop answers without looking at STATUS
+// The BIOS then polls the state until one answer carries 0Dh, the next state command gives it once
 void CdRom::StopCDDA()
 {
     ClearStatus();
@@ -845,7 +849,7 @@ void CdRom::StopCDDA()
     {
         PushStatus(0x00, GetStatusSecondByte());
         PushStatus(0x11, 0x00);
-        PushStatus(0x00, 0x0D);
+        m_state.cdda_stopped = true;
     }
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
@@ -1168,18 +1172,18 @@ void CdRom::SaveState(std::ostream& stream)
 {
     m_state.head_lba = m_cdrom_media->GetCurrentSector();
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void CdRom::LoadState(std::istream& stream)
+void CdRom::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
     m_cdrom_media->SetCurrentSector(m_state.head_lba);
 }
 
-void CdRom::Serialize(StateSerializer& serializer)
+void CdRom::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.command_received);
@@ -1211,6 +1215,11 @@ void CdRom::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.sector_position);
     G_SERIALIZE(serializer, m_state.sector_end);
     G_SERIALIZE_ARRAY(serializer, m_state.sector, CDROM_SECTOR_SIZE);
+
+    if (version >= 6)
+        G_SERIALIZE(serializer, m_state.cdda_stopped);
+    else
+        m_state.cdda_stopped = false;
 }
 
 void CdRom::SanitizeState()

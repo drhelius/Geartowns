@@ -94,6 +94,7 @@ public:
         bool enable_dei;
         bool dry;
         bool disc_changed;
+        bool cdda_stopped;
         CdRom_Event event;
         u64 event_clocks;
         CdRom_Transfer transfer;
@@ -126,7 +127,7 @@ public:
     int GetReadSpeed() const;
     CdRom_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
     static bool DMAReadCallback(void* device, u16& value, bool word);
     static void DMAEndCallback(void* device, bool terminal_count);
@@ -150,7 +151,7 @@ private:
     void CommandTOCRead();
     void CommandSubQRead();
     void CommandUnknown1F();
-    void CommandGetState();
+    void CommandGetState(bool cdda_stopped);
     void CommandCDDASet();
     void CommandCDDAStop(u64 clocks);
     void CommandCDDAPause();
@@ -179,7 +180,7 @@ private:
     void ScheduleEvent(CdRom_Event event, u64 clocks);
     void UpdateNextEvent();
     void TraceEvent(u8 event, u8 value);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

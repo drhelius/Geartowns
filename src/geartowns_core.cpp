@@ -1301,7 +1301,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_pit->LoadState(stream, header.version);
     m_system_control->LoadState(stream, header.version);
     m_video->LoadState(stream, header.version);
-    m_cdrom->LoadState(stream);
+    m_cdrom->LoadState(stream, header.version);
     m_cdrom_audio->LoadState(stream);
     m_fdc->LoadState(stream);
     m_keyboard->LoadState(stream);

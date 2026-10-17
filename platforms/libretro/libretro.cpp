@@ -942,7 +942,7 @@ static void show_message(const char* message, unsigned priority, enum retro_log_
     {
         struct retro_message_ext msg = {};
         msg.msg = message;
-        msg.duration = 6000;
+        msg.duration = level == RETRO_LOG_INFO ? 4000 : 7000;
         msg.priority = priority;
         msg.level = level;
         msg.target = RETRO_MESSAGE_TARGET_OSD;

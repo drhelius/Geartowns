@@ -1683,6 +1683,10 @@ void GeartownsCore::ResolveMachineConfig()
             "%s needs %d MHz, this machine runs at %u MHz", entry->title, entry->cpu_mhz,
             config.cpu_clock_rate / 1000000);
 
+    if ((entry->flags & GT_GAMEDB_CPU_486) != 0)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "%s needs a 486 CPU, not emulated yet", entry->title);
+
     if ((entry->flags & GT_GAMEDB_HDD) != 0)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "%s installs to a hard disk, not emulated yet", entry->title);

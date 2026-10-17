@@ -34,6 +34,7 @@ struct GT_DB_Entry
 
 #define GT_GAMEDB_FLAG_NONE                0x0000
 #define GT_GAMEDB_HDD                      0x0001
+#define GT_GAMEDB_CPU_486                  0x0002
 #define GT_GAMEDB_FLOPPY_BOOT              0x0010
 #define GT_GAMEDB_FLOPPY_REQUIRED          0x0020
 #define GT_GAMEDB_FLOPPY_OPTIONAL          0x0040
@@ -123,19 +124,29 @@ const GT_DB_Entry k_game_database[] =
     { 0xF77D4A4F, "FM Towns Marty Tentou Auto Demo '93 Natsu", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MARTY, 0, 0 },
     { 0xC19736AC, "Ms. Detective File 1 - Iwami Ginzan Satsujin Jiken (FM Towns Marty)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MARTY, 0, 0 },
 
-    // FM Towns II HR, a 486
-    { 0xF6B8469F, "ElFish", GT_GAMEDB_HDD, GT_MACHINE_HR, 4, 0 },
-    { 0xC2A397F7, "Horde, The", GT_GAMEDB_HDD, GT_MACHINE_HR, 4, 0 },
-    { 0x75236D99, "Ravenloft - Aku no Keshin", GT_GAMEDB_FLAG_NONE, GT_MACHINE_HR, 4, 0 },
-    { 0x6BEA56A2, "Teo - Mou Hitotsu no Chikyuu (Version 1.0)", GT_GAMEDB_HDD, GT_MACHINE_HR, 8, 0 },
-    { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_HR, 8, 0 },
-    { 0xADC925E6, "Theme Park", GT_GAMEDB_HDD, GT_MACHINE_HR, 4, 0 },
+    // 486 titles. The 486 models (HR, MA, MX) are not emulated yet, so these name the HG, the closest emulated model
+    { 0xF6B8469F, "ElFish", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20 }, // HR
+    { 0x71570BC6, "Gadget - Invention, Travel, & Adventure", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 20 }, // HR, MA recommended
+    { 0xC2A397F7, "Horde, The", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20 }, // HR
+    { 0xB63BB04F, "Para Para Paradise (Disc A) (Akane Kouda)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 33 }, // MA
+    { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 33 }, // MA
+    { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 33 }, // MA
+    { 0x75236D99, "Ravenloft - Aku no Keshin", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20 }, // HR
+    { 0x6BEA56A2, "Teo - Mou Hitotsu no Chikyuu (Version 1.0)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 66 }, // MX, 2x CD-ROM
+    { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 66 }, // MX, 2x CD-ROM
+    { 0xADC925E6, "Theme Park", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20 }, // HR
 
-    // FM Towns II MA or later
-    { 0x71570BC6, "Gadget - Invention, Travel, & Adventure", GT_GAMEDB_HDD, GT_MACHINE_MA, 8, 0 },
-    { 0xB63BB04F, "Para Para Paradise (Disc A) (Akane Kouda)", GT_GAMEDB_HDD, GT_MACHINE_MA, 8, 0 },
-    { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD, GT_MACHINE_MA, 8, 0 },
-    { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD, GT_MACHINE_MA, 8, 0 },
+    // Hard disk installs
+    { 0x09706738, "Gakuen King - Hidehiko Gakkou o Tsukuru", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x89A5A3E0, "Mugen Houyou", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0xF7DEA1BC, "Only You - Seikimatsu no Juliet-tachi", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x38E9D30F, "Pro Student G (Rerelease)", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x9B45195C, "Rance 4.1 - Okusuri Koujou o Sukue!", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x0EF5C8F2, "Rance 4.2 - Angel-gumi", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0xAE23D90C, "Running Girls - Hashiri Onna II", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0xDC97C63A, "Toushin Toshi II - Soshite, Sorekara...", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x63E9C5F3, "Ultima Underworld II - Labyrinth of Worlds", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x3BDD294D, "Wing Commander - The Secret Missions & The Secret Missions 2 - Crusade", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0 },
 
     // Floppy disks
     { 0x0FD1A285, "4th Unit Series, The - Wyatt", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -157,10 +168,11 @@ const GT_DB_Entry k_game_database[] =
     { 0xA35641AD, "Bible Master 2 - The Chaos of Aglia", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xCF8EFBBA, "California X Party - Joshi Daisei Himitsu Club", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x41571BEB, "Chiemi + Naomi", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x71FDC282, "CRI StacCard", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x22B1265E, "Crystal Rinal - Ouma no Meikyuu", GT_GAMEDB_FLOPPY_OPTIONAL, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xB7E5A175, "Custom Mate + Denwa no Bell ga...", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x26029AE5, "Custom Mate 2 + Itsuka Dokoka de", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
-    { 0x77A6C316, "Cyber Motion", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x77A6C316, "Cyber Motion", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x1C0B3EA0, "CyberCity - The Golden Age of Cybernetics", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x9FD16507, "Daikoukai Jidai", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x0668CE1A, "Daikoukai Jidai II", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -169,6 +181,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x4364FF85, "Dengeki Nurse 2 - More Sexy", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x699325A4, "Diamond Players", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xDDAD6C39, "Doki Doki Vacation - Kirameku Kisetsu no Naka de", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x39884F28, "Dynamic English 2 - Basic (Disc 1)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xB749F946, "Dynamic English 3 - Upper Basic (Disc 1) (Version 1.0)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x3777354A, "Eight Lakes G.C. (Course Disc)", GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_FLOPPY_PROTECTED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xF7768015, "Emerald Dragon", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -285,6 +298,7 @@ const GT_DB_Entry k_game_database[] =
     { 0xAACBCB13, "Vain Dream", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xF729FEBC, "Vain Dream II", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xF16C3E19, "Video Koubou V1.3 L10", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x8B73B12F, "Video Koubou V1.4 L10", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x32790894, "Viper GTS", GT_GAMEDB_FLOPPY_OPTIONAL, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xEEDF85C0, "Virtuacall", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xEFEC4CE6, "Virtuacall 2", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },

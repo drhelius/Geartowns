@@ -96,6 +96,7 @@ private:
     u8 ReadDriveStatus(u64 clocks) const;
     void ChangeDisk(int drive);
     void ChangeSelection(int previous, u64 clocks);
+    void SeeDiskChange(u64 clocks);
     void UpdateIRQ();
     void UpdateReady(u64 clocks);
     void UpdateNextEvent(u64 clocks);
@@ -127,7 +128,9 @@ static const u8 k_fdc_side = 0x04;
 static const u8 k_fdc_motor = 0x10;
 static const u8 k_fdc_slow_clock = 0x20;
 
-// The drive stays not ready for a moment after a disk change, so the BIOS sees the change
+// A swapped disk leaves the drive not ready until a status read sees it, or for as long as a manual swap takes
+// The Model 1/2 has no disk change line, Towns OS spots a swap by polling the ready bit about every 2 s
+static const u64 k_fdc_disk_swap_clocks = GT_MACHINE_CLOCK_RATE * 3;
 static const u64 k_fdc_disk_change_clocks = GT_MACHINE_CLOCK_RATE / 20;
 
 #include "fdc_inline.h"

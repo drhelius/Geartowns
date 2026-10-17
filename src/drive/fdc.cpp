@@ -100,7 +100,11 @@ u8 FDC::Read(u16 port, u64 clocks)
         case 0x0206:
             return m_mb8877.ReadData();
         case 0x0208:
-            return ReadDriveStatus(clocks);
+        {
+            u8 status = ReadDriveStatus(clocks);
+            SeeDiskChange(clocks);
+            return status;
+        }
         case 0x020D:
             // FDDVEXT low tells that 0208h identifies the internal drives
             return m_three_mode ? 0x7F : 0xFF;
@@ -239,11 +243,11 @@ void FDC::SetDRQ(bool active)
     m_dma->SetRequest(k_fdc_dma_channel, active);
 }
 
-// A disk change aborts a transfer on that drive and keeps it not ready for a moment
+// A disk change aborts a transfer on that drive and keeps it not ready until a status read sees it
 void FDC::ChangeDisk(int drive)
 {
     u64 clocks = m_scheduler->GetClocks();
-    m_state.ready_clocks[drive] = clocks + k_fdc_disk_change_clocks;
+    m_state.ready_clocks[drive] = clocks + k_fdc_disk_swap_clocks;
 
     if (drive == GetSelectedDrive())
         m_mb8877.MediaChanged(clocks);
@@ -258,6 +262,17 @@ void FDC::ChangeSelection(int previous, u64 clocks)
         m_mb8877.MediaChanged(clocks);
 
     UpdateReady(clocks);
+}
+
+void FDC::SeeDiskChange(u64 clocks)
+{
+    int drive = GetSelectedDrive();
+
+    if (drive < 0 || m_state.ready_clocks[drive] <= clocks + k_fdc_disk_change_clocks)
+        return;
+
+    m_state.ready_clocks[drive] = clocks + k_fdc_disk_change_clocks;
+    UpdateNextEvent(clocks);
 }
 
 void FDC::UpdateIRQ()

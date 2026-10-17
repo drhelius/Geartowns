@@ -44,9 +44,8 @@ struct Notification
     char fit_detail[512];
 };
 
-static const Uint64 k_notification_durations[4] = { 3000, 3000, 4000, 6000 };
-static const char* const k_notification_icons[4] = { ICON_MD_INFO, ICON_MD_CHECK_CIRCLE, ICON_MD_WARNING,
-    ICON_MD_ERROR };
+static const Uint64 k_notification_durations[4] = { 4000, 4000, 7000, 7000 };
+static const char* const k_notification_icons[4] = { ICON_MD_INFO, ICON_MD_CHECK_CIRCLE, ICON_MD_WARNING, ICON_MD_ERROR };
 static const float k_notification_fade_in = 150.0f;
 static const float k_notification_fade_out = 300.0f;
 static const Uint64 k_notification_collapse = 150;

@@ -125,6 +125,8 @@ public:
     void HandleEvent(u64 clocks);
     void SetReadSpeed(int speed);
     int GetReadSpeed() const;
+    u32 GetAccessCount() const;
+    bool IsBusy() const;
     CdRom_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
@@ -192,6 +194,7 @@ private:
     CdRomAudio* m_cdrom_audio;
     TraceLogger* m_trace_logger;
     CdRom_State m_state;
+    u32 m_access_count;
     int m_read_speed;
     u64 m_sector_clocks;
     double m_seek_scale;

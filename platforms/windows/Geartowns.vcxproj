@@ -185,6 +185,7 @@
     <ClCompile Include="..\shared\desktop\gui_floppy.cpp" />
     <ClCompile Include="..\shared\desktop\gui_firmware.cpp" />
     <ClCompile Include="..\shared\desktop\gui_notifications.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_drive_activity.cpp" />
     <ClCompile Include="..\shared\desktop\gui.cpp" />
     <ClCompile Include="..\shared\dependencies\imgui\imgui.cpp">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
@@ -378,6 +379,7 @@
     <ClInclude Include="..\shared\desktop\gui_floppy.h" />
     <ClInclude Include="..\shared\desktop\gui_firmware.h" />
     <ClInclude Include="..\shared\desktop\gui_notifications.h" />
+    <ClInclude Include="..\shared\desktop\gui_drive_activity.h" />
     <ClInclude Include="..\shared\desktop\gui.h" />
     <ClInclude Include="..\shared\dependencies\imgui\fonts\BIZUDGothic.h" />
     <ClInclude Include="..\shared\dependencies\imgui\fonts\IconsMaterialDesign.h" />

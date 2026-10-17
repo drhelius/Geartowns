@@ -31,6 +31,8 @@ FDC::FDC()
     InitPointer(m_dma);
     InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
+    memset(m_access_count, 0, sizeof(m_access_count));
+    memset(m_write_count, 0, sizeof(m_write_count));
     m_internal_drives = FDC_DRIVES;
     m_three_mode = false;
     m_features = 0;

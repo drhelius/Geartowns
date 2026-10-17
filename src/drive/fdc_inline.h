@@ -189,4 +189,27 @@ INLINE void FDC::Step(bool in)
     m_state.cylinders[drive] = (u8)CLAMP(cylinder, 0, (int)k_fdc_last_cylinder);
 }
 
+INLINE void FDC::Access(bool write)
+{
+    int drive = GetSelectedDrive();
+
+    if (drive < 0 || !m_disks[drive].IsInserted())
+        return;
+
+    m_access_count[drive]++;
+
+    if (write)
+        m_write_count[drive]++;
+}
+
+INLINE u32 FDC::GetAccessCount(int drive) const
+{
+    return (drive >= 0 && drive < FDC_DRIVES) ? m_access_count[drive] : 0;
+}
+
+INLINE u32 FDC::GetWriteCount(int drive) const
+{
+    return (drive >= 0 && drive < FDC_DRIVES) ? m_write_count[drive] : 0;
+}
+
 #endif /* FDC_INLINE_H */

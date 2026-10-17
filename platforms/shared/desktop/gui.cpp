@@ -38,6 +38,7 @@
 #include "gui_floppy.h"
 #include "gui_firmware.h"
 #include "gui_notifications.h"
+#include "gui_drive_activity.h"
 #include "emu_floppy.h"
 #include "gui_actions.h"
 #include "gui_colors.h"
@@ -912,6 +913,7 @@ static void main_window(void)
         draw_list->AddImage((ImTextureID)(intptr_t)ogl_renderer_get_screen_texture(), image_min, image_max, ImVec2(0, 0), ImVec2(tex_h, tex_v));
         draw_list->PopClipRect();
         gui_notifications_render_output(image_min, image_max);
+        gui_drive_activity_render_output(image_min, image_max);
     }
 
     if (config_video.fps)

@@ -718,6 +718,7 @@ static void menu_emulator(void)
 
         //ImGui::MenuItem("Show Media Info", "", &config_emulator.show_info);
         ImGui::MenuItem("Show Notifications", "", &config_emulator.show_notifications);
+        ImGui::MenuItem("Show Drive Activity", "", &config_emulator.show_drive_activity);
 
         ImGui::Separator();
 

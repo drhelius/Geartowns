@@ -503,6 +503,7 @@ void MB8877::Pulse(u64 clocks)
 {
     u8 operation = m_state.command >> 4;
     m_fdc->Step(m_state.step_in);
+    m_fdc->Access(false);
 
     if (operation >= 0x2 && (m_state.command & 0x10) != 0)
         m_state.track = (u8)(m_state.track + (m_state.step_in ? 1 : -1));
@@ -722,6 +723,7 @@ void MB8877::FinishSearch(u64 clocks)
     u8 operation = m_state.command >> 4;
     const MB8877_Format& format = k_mb8877_formats[m_fdc->IsDoubleDensity() ? 1 : 0];
     u32 byte_clocks = m_fdc->GetByteClocks();
+    m_fdc->Access(operation == 0xA || operation == 0xB);
     m_state.byte_index = 0;
     m_state.byte_count = 128U << (m_state.id[3] & 0x03);
 
@@ -824,6 +826,7 @@ void MB8877::StartTrack(u64 clocks)
     m_state.track_size = 0;
     m_state.byte_index = 0;
     m_state.byte_count = MIN(cells, (u32)MB8877_TRACK_BUFFER_SIZE);
+    m_fdc->Access((m_state.command & 0xF0) == 0xF0);
 
     if ((m_state.command & 0xF0) == 0xE0)
     {

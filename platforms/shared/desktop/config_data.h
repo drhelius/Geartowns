@@ -90,6 +90,7 @@ struct config_Emulator
     int window_width;
     int window_height;
     bool show_notifications;
+    bool show_drive_activity;
     bool allow_screensaver;
     int mcp_tcp_port;
     std::string mcp_http_address;

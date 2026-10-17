@@ -38,6 +38,7 @@ CdRom::CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio)
     m_cdrom_media = cdrom_media;
     m_cdrom_audio = cdrom_audio;
     memset(&m_state, 0, sizeof(m_state));
+    m_access_count = 0;
     m_read_speed = 1;
     m_sector_clocks = k_cdrom_sector_clocks;
     m_seek_scale = 1.0;
@@ -456,6 +457,7 @@ void CdRom::CommandSeek(u64 clocks)
 {
     ClearStatus();
     InvalidateBuffer();
+    m_access_count++;
 
     if (((m_state.active_command & k_cdrom_flag_status) != 0) && !PushErrorStatus())
     {
@@ -862,6 +864,7 @@ bool CdRom::LoadSector()
     u8 command = m_state.active_command & k_cdrom_command_mask;
     u32 lba = m_state.read_lba;
     u8 error = 0x00;
+    m_access_count++;
 
     if (m_cdrom_media->IsAudioSector(lba))
         error = 0x05;

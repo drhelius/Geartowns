@@ -34,6 +34,16 @@ INLINE void CdRom::HandleEvent(u64 clocks)
     UpdateNextEvent();
 }
 
+INLINE u32 CdRom::GetAccessCount() const
+{
+    return m_access_count;
+}
+
+INLINE bool CdRom::IsBusy() const
+{
+    return (m_state.event == CDROM_EVENT_SEEK_DONE) || (m_state.event == CDROM_EVENT_SECTOR);
+}
+
 INLINE CdRom::CdRom_State* CdRom::GetState()
 {
     return &m_state;

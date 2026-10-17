@@ -91,6 +91,9 @@ public:
     void SetDRQ(bool active);
 
     int GetSelectedDrive() const;
+    void Access(bool write);
+    u32 GetAccessCount(int drive) const;
+    u32 GetWriteCount(int drive) const;
 
 private:
     u8 ReadDriveStatus(u64 clocks) const;
@@ -114,6 +117,8 @@ private:
     MB8877 m_mb8877;
     FloppyDisk m_disks[FDC_DRIVES];
     FDC_State m_state;
+    u32 m_access_count[FDC_DRIVES];
+    u32 m_write_count[FDC_DRIVES];
     int m_internal_drives;
     bool m_three_mode;
     u32 m_features;

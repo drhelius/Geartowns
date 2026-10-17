@@ -2398,7 +2398,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "controller_set_type"},
         {"title", "Set Controller Type"},
-        {"description", "Set the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse."},
+        {"description", "Set the device on a game port: auto, none, original_gamepad, marty_gamepad, six_button_gamepad or mouse. Auto takes the device the game database names for the loaded game, or the default (original_gamepad on port 1, mouse on port 2)."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2412,7 +2412,7 @@ json McpServer::BuildToolList()
                 {"type", {
                     {"type", "string"},
                     {"description", "Device type."},
-                    {"enum", json::array({"none", "original_gamepad", "marty_gamepad", "six_button_gamepad", "mouse"})}
+                    {"enum", json::array({"auto", "none", "original_gamepad", "marty_gamepad", "six_button_gamepad", "mouse"})}
                 }}
             }},
             {"required", json::array({"player", "type"})}
@@ -2422,7 +2422,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "controller_get_type"},
         {"title", "Get Controller Type"},
-        {"description", "Read the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse."},
+        {"description", "Read the device on a game port (none, original_gamepad, marty_gamepad, six_button_gamepad or mouse), its setting (auto or a device) and where the device came from (explicit, database, default or fallback)."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

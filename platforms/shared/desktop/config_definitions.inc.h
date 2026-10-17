@@ -309,7 +309,7 @@ static inline void process(config_Operation operation)
     {
         char section[32];
         snprintf(section, sizeof(section), "Input%d", i + 1);
-        CONFIG_INT_RANGE(section, "ControllerType", config_input.controller_type[i], i == 1 ? GT_CONTROLLER_MOUSE : GT_CONTROLLER_ORIGINAL_GAMEPAD, GT_CONTROLLER_NONE, GT_CONTROLLER_MOUSE);
+        CONFIG_INT_RANGE(section, "ControllerType", config_input.controller_type[i], config_ControllerType_Auto, config_ControllerType_Auto, GT_CONTROLLER_MOUSE);
         CONFIG_INT_RANGE(section, "KeyboardMode", config_input.keyboard_mode[i], i == 0 ? config_KeyboardMode_Gamepad : config_KeyboardMode_Towns, config_KeyboardMode_Gamepad, config_KeyboardMode_Towns);
     }
 
@@ -518,6 +518,18 @@ static void migrate(int file_version)
         config_ini_data["Emulator"].remove("BiosPath");
         config_ini_data["Machine"].remove("Model");
         config_ini_data["Machine"].remove("CustomCPU");
+    }
+
+    if (file_version < 5)
+    {
+        for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+        {
+            char section[32];
+            snprintf(section, sizeof(section), "Input%d", i + 1);
+
+            if (stored_int_equals(section, "ControllerType", i == 1 ? GT_CONTROLLER_MOUSE : GT_CONTROLLER_ORIGINAL_GAMEPAD))
+                write_int(section, "ControllerType", config_ControllerType_Auto);
+        }
     }
 }
 

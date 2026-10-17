@@ -319,7 +319,7 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 
 - `keyboard_key` presses, releases or taps a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, HIRAGANA...)
 - `keyboard_type` types ASCII text, useful at Towns OS and DOS prompts
-- `controller_set_type` selects the device on a game port (`none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`) and `controller_get_type` reads it
+- `controller_set_type` selects the device on a game port (`auto`, `none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`); `auto` takes the device the game database names for the loaded game, or the default. `controller_get_type` reads the device, its setting and where it came from
 - `controller_button` presses, releases or taps pad buttons; on a mouse port the directions move the mouse and A/B are the left/right buttons
 - `get_input_state` shows each port's device and the pressed buttons and keys
 

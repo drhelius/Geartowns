@@ -248,7 +248,7 @@ static void input_update(bool check_shortcuts)
     for (int controller = 0; controller < GT_MAX_GAMEPADS; controller++)
     {
         GT_GamePad_State state = { 0 };
-        int type = config_input.controller_type[controller];
+        int type = emu_get_pad_type((GT_Controllers)controller);
 
         if (type != GT_CONTROLLER_NONE)
             state = input_build_state(controller);
@@ -274,7 +274,7 @@ static GT_GamePad_State input_build_state(int controller)
 {
     GT_GamePad_State state = { 0 };
     SDL_Keymod mods = SDL_GetModState();
-    bool six_button = config_input.controller_type[controller] == GT_CONTROLLER_6_BUTTON_GAMEPAD;
+    bool six_button = emu_get_pad_type((GT_Controllers)controller) == GT_CONTROLLER_6_BUTTON_GAMEPAD;
 
     if (config_input.keyboard_mode[controller] == config_KeyboardMode_Gamepad &&
         (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
@@ -486,7 +486,7 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
 {
     for (int controller = 0; controller < GT_MAX_GAMEPADS; controller++)
     {
-        int type = config_input.controller_type[controller];
+        int type = emu_get_pad_type((GT_Controllers)controller);
 
         if (config_input.keyboard_mode[controller] != config_KeyboardMode_Gamepad || type == GT_CONTROLLER_NONE)
             continue;
@@ -518,7 +518,7 @@ static int mouse_get_controller(void)
 {
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
     {
-        if (config_input.controller_type[i] == GT_CONTROLLER_MOUSE)
+        if (emu_get_pad_type((GT_Controllers)i) == GT_CONTROLLER_MOUSE)
             return i;
     }
 

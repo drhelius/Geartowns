@@ -24,11 +24,12 @@
 #include <string>
 #include "geartowns.h"
 
-static const int config_version = 4;
+static const int config_version = 5;
 static const int config_minimum_version = 1;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;
 static const int config_floppy_drives = 2;
+static const int config_ControllerType_Auto = -1;
 
 enum config_ShaderMode
 {

@@ -84,6 +84,7 @@ static bool shader_parameter_is_toggle(const ShaderPresetParameter* parameter);
 static bool shader_parameter_is_integer(const ShaderPresetParameter* parameter);
 static int shader_parameter_round_to_int(float value);
 static void menu_input(void);
+static void menu_input_controller(int port);
 static void menu_audio(void);
 static void menu_audio_source_mute(const char* label, int source);
 static void menu_audio_source_volume(const char* label, const char* id, int source, float* volume);
@@ -1522,6 +1523,52 @@ static int shader_parameter_round_to_int(float value)
     return value >= 0.0f ? (int)(value + 0.5f) : (int)(value - 0.5f);
 }
 
+static void menu_input_controller(int port)
+{
+    int* setting = &config_input.controller_type[port];
+    bool automatic = *setting == config_ControllerType_Auto;
+    bool changed = false;
+    char preview[64];
+
+    if (automatic)
+        snprintf(preview, sizeof(preview), "Auto (%s)", emu_get_pad_type_name(emu_get_pad_type((GT_Controllers)port)));
+    else
+        snprintf(preview, sizeof(preview), "%s", emu_get_pad_type_name(*setting));
+
+    if (ImGui::BeginCombo("##controller", preview))
+    {
+        if (ImGui::Selectable(automatic ? preview : "Auto", automatic))
+        {
+            *setting = config_ControllerType_Auto;
+            changed = true;
+        }
+
+        ImGui::Separator();
+
+        for (int type = GT_CONTROLLER_NONE; type <= GT_CONTROLLER_MOUSE; type++)
+        {
+            if (ImGui::Selectable(emu_get_pad_type_name(type), *setting == type))
+            {
+                *setting = type;
+                changed = true;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Auto picks the controller from game database or");
+        ImGui::Text("Original Gamepad (port 1) and Mouse (port 2) if not detected.");
+        ImGui::EndTooltip();
+    }
+
+    if (changed)
+        emu_update_pad_types();
+}
+
 static void menu_input(void)
 {
     if (ImGui::BeginMenu("Input"))
@@ -1538,13 +1585,7 @@ static void menu_input(void)
                 if (ImGui::BeginMenu(player_name))
                 {
                     ImGui::PushItemWidth(200.0f);
-
-                    if (ImGui::Combo("##controller", &config_input.controller_type[i],
-                        "None\0Original Gamepad\0Marty Gamepad\0" "6 Button Gamepad\0Mouse\0\0"))
-                    {
-                        emu_set_pad_type((GT_Controllers)i, (GT_Controller_Type)config_input.controller_type[i]);
-                    }
-
+                    menu_input_controller(i);
                     ImGui::PopItemWidth();
 
                     if (ImGui::BeginMenu("Keyboard Mode"))

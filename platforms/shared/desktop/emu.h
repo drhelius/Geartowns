@@ -113,6 +113,14 @@ enum Directory_Location
     Directory_Location_Custom = 2
 };
 
+enum Emu_Pad_Source
+{
+    Emu_Pad_Source_Explicit = 0,
+    Emu_Pad_Source_Database = 1,
+    Emu_Pad_Source_Default = 2,
+    Emu_Pad_Source_Fallback = 3
+};
+
 EXTERN u8* emu_frame_buffer;
 EXTERN u8* emu_debug_framebuffer;
 EXTERN u8* emu_debug_sprite_atlas;
@@ -213,6 +221,10 @@ EXTERN int emu_get_sprite_png(int index, int scale, unsigned char** out_buffer);
 
 EXTERN void emu_set_pad_type(GT_Controllers controller, GT_Controller_Type type);
 EXTERN GT_Controller_Type emu_get_pad_type(GT_Controllers controller);
+EXTERN void emu_update_pad_types(void);
+EXTERN Emu_Pad_Source emu_get_pad_source(GT_Controllers controller);
+EXTERN bool emu_get_pad_mismatch(GT_Controllers controller, GT_Controller_Type* wanted);
+EXTERN const char* emu_get_pad_type_name(int type);
 EXTERN bool emu_save_screenshot(const char* file_path);
 EXTERN int emu_get_screenshot_png(unsigned char** out_buffer);
 EXTERN bool emu_start_vgm_recording(const char* file_path);

@@ -77,6 +77,7 @@ static char retro_system_directory[4096];
 static char retro_save_directory[4096];
 static char retro_game_path[4096];
 static bool content_loaded = false;
+static bool controller_notice_pending = false;
 
 static GeartownsCore* core;
 static GT_Runtime_Info runtime_info;
@@ -172,6 +173,8 @@ static bool load_bios(void);
 static void check_bios(void);
 static void set_machine_config(void);
 static void report_machine(void);
+static void report_controllers(void);
+static const char* get_controller_type_name(GT_Controller_Type type);
 static void show_message(const char* message, unsigned priority, enum retro_log_level level);
 static void get_system_av_info(struct retro_system_av_info* info);
 static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely);
@@ -510,6 +513,12 @@ void retro_run(void)
 
     poll_input();
     apply_input();
+
+    if (controller_notice_pending)
+    {
+        controller_notice_pending = false;
+        report_controllers();
+    }
 
     bool render = true;
     int av_enable = 0;
@@ -871,6 +880,8 @@ static void set_machine_config(void)
 
 static void report_machine(void)
 {
+    controller_notice_pending = true;
+
     const GT_Machine_Config& config = core->GetMachineConfig();
     const GT_Machine_Report& report = core->GetMachineReport();
     bool disk = report.model == GT_MACHINE_SOURCE_FLOPPY;
@@ -943,6 +954,53 @@ static void report_machine(void)
     }
 
     show_message(message, 2, warning ? RETRO_LOG_WARN : RETRO_LOG_INFO);
+}
+
+// Runs on the first frame after load or reset, once the frontend has set the port devices
+static void report_controllers(void)
+{
+    const GT_Machine_Report& report = core->GetMachineReport();
+    char ports[256] = "";
+    char value[64];
+
+    for (int i = 0; i < MAX_PADS; i++)
+    {
+        GT_Controller_Type wanted = GT_CONTROLLER_NONE;
+        GT_Controller_Type type = core->GetInput()->GetControllerType(i);
+
+        if (!core->GetDatabaseController(i, wanted) || (type == wanted) ||
+            ((wanted == GT_CONTROLLER_ORIGINAL_GAMEPAD) && (type == GT_CONTROLLER_MARTY_GAMEPAD)))
+            continue;
+
+        snprintf(value, sizeof(value), "%sset port %d to %s", ports[0] ? ", " : "", i + 1,
+            get_controller_type_name(wanted));
+        strncat_fit(ports, value, sizeof(ports));
+    }
+
+    if (!ports[0])
+        return;
+
+    static char message[512];
+    snprintf(message, sizeof(message), "%s: %s", IsValidPointer(report.title) ? report.title : "Game database", ports);
+    log_cb(RETRO_LOG_INFO, "%s\n", message);
+    show_message(message, 1, RETRO_LOG_INFO);
+}
+
+static const char* get_controller_type_name(GT_Controller_Type type)
+{
+    switch (type)
+    {
+        case GT_CONTROLLER_ORIGINAL_GAMEPAD:
+            return "Original gamepad";
+        case GT_CONTROLLER_MARTY_GAMEPAD:
+            return "Marty gamepad";
+        case GT_CONTROLLER_6_BUTTON_GAMEPAD:
+            return "6 button gamepad";
+        case GT_CONTROLLER_MOUSE:
+            return "Mouse";
+        default:
+            return "Unplugged";
+    }
 }
 
 static void show_message(const char* message, unsigned priority, enum retro_log_level level)

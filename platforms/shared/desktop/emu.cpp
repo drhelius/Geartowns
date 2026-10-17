@@ -103,6 +103,7 @@ static void load_cmos(int model);
 static void save_cmos(void);
 static void sync_cmos(void);
 static void notify_machine(void);
+static Emu_Pad_Source pad_sources[GT_MAX_GAMEPADS];
 static bool init_debug(void);
 static void destroy_debug(void);
 static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride, Emu_Debug_Buffer_Info& info);
@@ -558,6 +559,7 @@ bool emu_power_on(void)
     if (!geartowns->PowerOn())
         return false;
 
+    emu_update_pad_types();
     notify_machine();
     emu_floppy_check_drives();
     reset_run_state();
@@ -585,6 +587,7 @@ void emu_reset(void)
     gui_debug_trace_logger_reset();
     sync_cmos();
     geartowns->ResetMedia();
+    emu_update_pad_types();
     notify_machine();
     emu_floppy_check_drives();
     reset_run_state();
@@ -755,6 +758,7 @@ bool emu_latch_auto_media(void)
         return false;
 
     geartowns->LatchAutoMedia();
+    emu_update_pad_types();
 
     if (!geartowns->IsPoweredOn())
         return false;
@@ -1442,6 +1446,82 @@ GT_Controller_Type emu_get_pad_type(GT_Controllers controller)
     return geartowns->GetInput()->GetControllerType((int)controller);
 }
 
+void emu_update_pad_types(void)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    GT_Controller_Type types[GT_MAX_GAMEPADS];
+    bool decided[GT_MAX_GAMEPADS];
+    bool mouse = false;
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        decided[i] = config_input.controller_type[i] != config_ControllerType_Auto;
+        types[i] = decided[i] ? (GT_Controller_Type)config_input.controller_type[i] : GT_CONTROLLER_NONE;
+        pad_sources[i] = Emu_Pad_Source_Explicit;
+        mouse = mouse || (types[i] == GT_CONTROLLER_MOUSE);
+    }
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        GT_Controller_Type type = GT_CONTROLLER_NONE;
+
+        if (decided[i] || !geartowns->GetDatabaseController(i, type) || (mouse && (type == GT_CONTROLLER_MOUSE)))
+            continue;
+
+        types[i] = type;
+        decided[i] = true;
+        pad_sources[i] = Emu_Pad_Source_Database;
+        mouse = mouse || (type == GT_CONTROLLER_MOUSE);
+    }
+
+    bool marty = geartowns->GetMachineConfig().model == GT_MACHINE_MARTY;
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        if (!decided[i])
+        {
+            bool default_mouse = i == GT_CONTROLLER_2;
+            types[i] = (default_mouse && !mouse) ? GT_CONTROLLER_MOUSE : GT_CONTROLLER_ORIGINAL_GAMEPAD;
+            pad_sources[i] = (default_mouse && mouse) ? Emu_Pad_Source_Fallback : Emu_Pad_Source_Default;
+            mouse = mouse || (types[i] == GT_CONTROLLER_MOUSE);
+        }
+
+        if (marty && (pad_sources[i] != Emu_Pad_Source_Explicit) && (types[i] == GT_CONTROLLER_ORIGINAL_GAMEPAD))
+            types[i] = GT_CONTROLLER_MARTY_GAMEPAD;
+
+        emu_set_pad_type((GT_Controllers)i, types[i]);
+    }
+}
+
+Emu_Pad_Source emu_get_pad_source(GT_Controllers controller)
+{
+    return pad_sources[controller];
+}
+
+bool emu_get_pad_mismatch(GT_Controllers controller, GT_Controller_Type* wanted)
+{
+    GT_Controller_Type type = GT_CONTROLLER_NONE;
+
+    if (!IsValidPointer(geartowns) || !geartowns->GetDatabaseController((int)controller, type))
+        return false;
+
+    GT_Controller_Type in_use = emu_get_pad_type(controller);
+
+    if ((in_use == type) || ((type == GT_CONTROLLER_ORIGINAL_GAMEPAD) && (in_use == GT_CONTROLLER_MARTY_GAMEPAD)))
+        return false;
+
+    *wanted = type;
+    return true;
+}
+
+const char* emu_get_pad_type_name(int type)
+{
+    static const char* const names[] = { "None", "Original Gamepad", "Marty Gamepad", "6 Button Gamepad", "Mouse" };
+    return ((type >= GT_CONTROLLER_NONE) && (type <= GT_CONTROLLER_MOUSE)) ? names[type] : "Unknown";
+}
+
 bool emu_save_screenshot(const char* file_path)
 {
     if (!IsValidPointer(file_path) || file_path[0] == '\0' || !IsValidPointer(emu_frame_buffer))
@@ -1886,13 +1966,35 @@ static void notify_machine(void)
     bool floppy_notice = geartowns->GetFloppyNotice(floppy);
     const char* title = IsValidPointer(report.title) ? report.title : "1.44 MB floppy disk";
     const char* origin = IsValidPointer(report.title) ? "game database" : "Auto";
+    char value[48];
+    std::string ports;
+    std::string port_warnings;
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        GT_Controller_Type type = emu_get_pad_type((GT_Controllers)i);
+        GT_Controller_Type wanted = GT_CONTROLLER_NONE;
+        GT_Controller_Type plain = (i == GT_CONTROLLER_2) ? GT_CONTROLLER_MOUSE : GT_CONTROLLER_ORIGINAL_GAMEPAD;
+
+        if ((pad_sources[i] == Emu_Pad_Source_Database) && (type != plain))
+        {
+            snprintf(value, sizeof(value), "%sPort %d %s", ports.empty() ? "" : ", ", i + 1, emu_get_pad_type_name(type));
+            ports += value;
+        }
+
+        if (emu_get_pad_mismatch((GT_Controllers)i, &wanted))
+        {
+            snprintf(value, sizeof(value), "%sPort %d should be %s", port_warnings.empty() ? "" : "\n", i + 1,
+                emu_get_pad_type_name(wanted));
+            port_warnings += value;
+        }
+    }
 
     if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && (report.warning_count == 0) &&
-        !floppy_notice))
+        !floppy_notice && ports.empty() && port_warnings.empty()))
         return;
 
     char message[256];
-    char value[32];
     std::string choices;
     std::string detail;
 
@@ -1910,6 +2012,9 @@ static void notify_machine(void)
         snprintf(value, sizeof(value), "%s%u MB", choices.empty() ? "" : ", ", config.ram_size / (1024 * 1024));
         choices += value;
     }
+
+    if (!ports.empty())
+        choices += (choices.empty() ? "" : ", ") + ports;
 
     if (choices.empty())
         snprintf(message, sizeof(message), "%s (%s)", title, origin);
@@ -1932,7 +2037,14 @@ static void notify_machine(void)
         detail += floppy.lines[i];
     }
 
-    bool warning = (report.warning_count > 0) || floppy.warning;
+    if (!port_warnings.empty())
+    {
+        Log("%s", port_warnings.c_str());
+        detail += (detail.empty() ? "" : "\n");
+        detail += port_warnings;
+    }
+
+    bool warning = (report.warning_count > 0) || floppy.warning || !port_warnings.empty();
     gui_notify(warning ? gui_NotificationWarning : gui_NotificationInfo, ICON_MD_MEMORY, message,
         detail.empty() ? NULL : detail.c_str(), "machine");
 }

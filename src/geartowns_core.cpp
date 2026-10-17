@@ -794,6 +794,33 @@ bool GeartownsCore::GetFloppyNotice(GT_Floppy_Notice& notice)
     return true;
 }
 
+bool GeartownsCore::GetDatabaseController(int port, GT_Controller_Type& type) const
+{
+    if (!IsValidPointer(m_auto_entry) || (port < 0) || (port >= GT_MAX_GAMEPADS))
+        return false;
+
+    switch ((port == GT_CONTROLLER_1) ? m_auto_entry->port_1 : m_auto_entry->port_2)
+    {
+        case GT_GAMEDB_PORT_NONE:
+            type = GT_CONTROLLER_NONE;
+            return true;
+        case GT_GAMEDB_PORT_PAD:
+            type = GT_CONTROLLER_ORIGINAL_GAMEPAD;
+            return true;
+        case GT_GAMEDB_PORT_MARTY_PAD:
+            type = GT_CONTROLLER_MARTY_GAMEPAD;
+            return true;
+        case GT_GAMEDB_PORT_6_BUTTON_PAD:
+            type = GT_CONTROLLER_6_BUTTON_GAMEPAD;
+            return true;
+        case GT_GAMEDB_PORT_MOUSE:
+            type = GT_CONTROLLER_MOUSE;
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool GeartownsCore::LoadBios(const char* directory_path)
 {
     std::string previous = m_firmware_folder;

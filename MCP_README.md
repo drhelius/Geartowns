@@ -604,8 +604,8 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 
 ### Controller Input
 - `controller_button` - Control a button on a game port (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, select, run, A, B, C, X, Y, Z. On a mouse port the directions move the mouse (4 counts per frame while held, 4 counts per tap) and A/B are the left/right buttons
-- `controller_set_type` - Set the device on a game port: none, original_gamepad, marty_gamepad, six_button_gamepad or mouse
-- `controller_get_type` - Read the device on a game port
+- `controller_set_type` - Set the device on a game port: auto, none, original_gamepad, marty_gamepad, six_button_gamepad or mouse. Auto takes the device the game database names for the loaded game, or the default (original_gamepad on port 1, mouse on port 2)
+- `controller_get_type` - Read the device on a game port, its setting (auto or a device) and where the device came from (explicit, database, default or fallback)
 - `get_input_state` - Get each port's device type, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
 - `keyboard_type` - Type ASCII text (up to 256 characters) through a frame macro on the JIS layout; optional `frames_per_key`

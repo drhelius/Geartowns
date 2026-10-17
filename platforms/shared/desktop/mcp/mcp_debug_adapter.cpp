@@ -4802,18 +4802,25 @@ json DebugAdapter::ControllerSetType(int player, const std::string& type)
         return {{"error", "Invalid player number (must be 1-2)"}};
 
     std::string name = to_lower(type);
+    int setting = -2;
 
-    for (int i = 0; i < k_controller_type_count; i++)
+    if (name == "auto")
+        setting = config_ControllerType_Auto;
+
+    for (int i = 0; (setting == -2) && (i < k_controller_type_count); i++)
     {
-        if (name != k_controller_type_names[i])
-            continue;
-
-        config_input.controller_type[player - 1] = i;
-        emu_set_pad_type((GT_Controllers)(player - 1), (GT_Controller_Type)i);
-        return {{"success", true}, {"player", player}, {"type", name}};
+        if (name == k_controller_type_names[i])
+            setting = i;
     }
 
-    return {{"error", "Invalid controller type (must be: none, original_gamepad, marty_gamepad, six_button_gamepad, mouse)"}};
+    if (setting == -2)
+        return {{"error", "Invalid controller type (must be: auto, none, original_gamepad, marty_gamepad, six_button_gamepad, mouse)"}};
+
+    config_input.controller_type[player - 1] = setting;
+    emu_update_pad_types();
+    json result = ControllerGetType(player);
+    result["setting"] = name;
+    return result;
 }
 
 json DebugAdapter::ControllerGetType(int player)
@@ -4821,9 +4828,20 @@ json DebugAdapter::ControllerGetType(int player)
     if (player < 1 || player > GT_MAX_GAMEPADS)
         return {{"error", "Invalid player number (must be 1-2)"}};
 
+    static const char* const k_sources[] = { "explicit", "database", "default", "fallback" };
+    int setting = config_input.controller_type[player - 1];
     int type = (int)emu_get_pad_type((GT_Controllers)(player - 1));
     const char* name = type >= 0 && type < k_controller_type_count ? k_controller_type_names[type] : "unknown";
-    return {{"success", true}, {"player", player}, {"type", name}};
+    const char* setting_name = setting == config_ControllerType_Auto ? "auto" : (setting >= 0 &&
+        setting < k_controller_type_count ? k_controller_type_names[setting] : "unknown");
+    json result = {{"success", true}, {"player", player}, {"type", name}, {"setting", setting_name},
+        {"source", k_sources[emu_get_pad_source((GT_Controllers)(player - 1))]}};
+    GT_Controller_Type wanted = GT_CONTROLLER_NONE;
+
+    if (emu_get_pad_mismatch((GT_Controllers)(player - 1), &wanted))
+        result["database_type"] = k_controller_type_names[wanted];
+
+    return result;
 }
 
 bool DebugAdapter::IsMouseController(int player) const

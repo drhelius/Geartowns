@@ -86,6 +86,12 @@ bool emu_floppy_is_image(const char* path)
     if (FloppyImage::IsImageName(path))
         return true;
 
+    if (ends_with_no_case(path, ".bin"))
+    {
+        std::vector<u8> data;
+        return read_file(path, data) && FloppyImage::IsRaw(data.data(), (u32)data.size());
+    }
+
     if (ends_with_no_case(path, ".m3u"))
     {
         std::vector<std::string> entries;

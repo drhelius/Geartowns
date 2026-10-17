@@ -204,6 +204,7 @@ static void check_variables(void);
 static void update_floppy_drive(void);
 static bool path_is_cdrom_uri(const char* path);
 static bool path_is_cd_content(const char* path);
+static bool path_is_raw_floppy(const char* path);
 static bool disk_load(const char* path);
 static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images);
 static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& images);
@@ -486,7 +487,7 @@ void retro_get_system_info(struct retro_system_info *info)
     info->library_version  = GT_VERSION;
     info->need_fullpath    = true;
     info->block_extract    = true;
-    info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|m3u";
+    info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|bin|m3u";
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
@@ -1857,6 +1858,13 @@ static bool path_is_cd_content(const char* path)
         ends_with_no_case(path, ".iso");
 }
 
+static bool path_is_raw_floppy(const char* path)
+{
+    std::vector<u8> data;
+    return ends_with_no_case(path, ".bin") && read_content_file(path, data, k_floppy_max_image_size) &&
+        FloppyImage::IsRaw(data.data(), (u32)data.size());
+}
+
 static bool disk_load(const char* path)
 {
     if (path[0] != 0 && !disk_add_images(path, disk_images))
@@ -1921,7 +1929,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
     if (ends_with_no_case(path, ".m3u"))
         return disk_add_playlist(path, images);
 
-    if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".zip"))
+    if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".zip") || path_is_raw_floppy(path))
     {
         if (disk_add_floppy_images(path, images))
             return true;

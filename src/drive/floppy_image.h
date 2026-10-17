@@ -36,7 +36,7 @@ class FloppyImage
 public:
     static bool IsD77(const u8* data, u32 size);
     static bool IsCanonical(const u8* data, u32 size);
-    static bool IsRawSize(u32 size);
+    static bool IsRaw(const u8* data, u32 size);
     static bool IsImageName(const char* name);
     static int GetDiskCount(const u8* data, u32 size);
     static bool GetDisk(const u8* data, u32 size, int index, u32* offset, u32* disk_size);
@@ -51,6 +51,7 @@ public:
     static bool ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name, size_t name_size);
 
 private:
+    static int GetRawGeometry(const u8* data, u32 size);
     static u32 GetHeaderSize(const u8* data, u32 size);
     static u32 GetTrackRun(const u8* data, u32 size, u32 header_size, int track, u32* run_size);
     static bool IsRawLayout(const u8* image, u32 size, u32 header_size, int cylinders, int sectors, u8 n);

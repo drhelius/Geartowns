@@ -39,6 +39,7 @@ struct FloppyImage_Format
 };
 
 static const int k_floppy_raw_geometries = 5;
+static const u32 k_floppy_raw_2dd_max_size = 737280;
 
 static const FloppyImage_Geometry k_floppy_raw_geometry[k_floppy_raw_geometries] =
 {
@@ -94,15 +95,9 @@ bool FloppyImage::IsCanonical(const u8* data, u32 size)
     return IsD77(data, size) && read_u32_le(data + 0x1C) == size && GetHeaderSize(data, size) == k_floppy_header_size;
 }
 
-bool FloppyImage::IsRawSize(u32 size)
+bool FloppyImage::IsRaw(const u8* data, u32 size)
 {
-    for (int i = 0; i < k_floppy_raw_geometries; i++)
-    {
-        if (k_floppy_raw_geometry[i].size == size)
-            return true;
-    }
-
-    return false;
+    return GetRawGeometry(data, size) >= 0;
 }
 
 bool FloppyImage::IsImageName(const char* name)
@@ -117,7 +112,7 @@ bool FloppyImage::IsImageName(const char* name)
 int FloppyImage::GetDiskCount(const u8* data, u32 size)
 {
     if (!IsD77(data, size))
-        return IsRawSize(size) ? 1 : 0;
+        return IsRaw(data, size) ? 1 : 0;
 
     int count = 0;
     u32 offset = 0;
@@ -135,7 +130,7 @@ bool FloppyImage::GetDisk(const u8* data, u32 size, int index, u32* offset, u32*
 {
     if (!IsD77(data, size))
     {
-        if (index != 0 || !IsRawSize(size))
+        if (index != 0 || !IsRaw(data, size))
             return false;
 
         *offset = 0;
@@ -234,7 +229,7 @@ u8* FloppyImage::Load(const u8* data, u32 size, u32* image_size)
         return Build(data, data, disk_size, -1, NULL, 0, image_size);
     }
 
-    if (IsRawSize(size))
+    if (IsRaw(data, size))
         return CreateFromRaw(data, size, image_size);
 
     return NULL;
@@ -373,6 +368,7 @@ bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** da
 
     int candidate = -1;
     u32 candidate_size = 0;
+    bool candidate_bin = false;
     mz_uint files = mz_zip_reader_get_num_files(&zip);
 
     for (mz_uint i = 0; i < files; i++)
@@ -383,8 +379,8 @@ bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** da
             stat.m_uncomp_size == 0 || stat.m_uncomp_size > k_floppy_max_image_size)
             continue;
 
-        bool image = IsImageName(stat.m_filename) ||
-            (ends_with_no_case(stat.m_filename, ".bin") && IsRawSize((u32)stat.m_uncomp_size));
+        bool bin = ends_with_no_case(stat.m_filename, ".bin");
+        bool image = IsImageName(stat.m_filename) || bin;
 
         if (!image)
             continue;
@@ -397,6 +393,7 @@ bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** da
 
         candidate = (int)i;
         candidate_size = (u32)stat.m_uncomp_size;
+        candidate_bin = bin;
 
         if (IsValidPointer(name) && name_size > 0)
             strncpy_fit(name, stat.m_filename, name_size);
@@ -413,7 +410,7 @@ bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** da
         mz_zip_reader_extract_to_mem(&zip, (mz_uint)candidate, extracted, candidate_size, 0);
     mz_zip_reader_end(&zip);
 
-    if (!ok)
+    if (!ok || (candidate_bin && !IsRaw(extracted, candidate_size)))
     {
         SafeDeleteArray(extracted);
         return false;
@@ -422,6 +419,45 @@ bool FloppyImage::ExtractFromZip(const u8* archive, size_t archive_size, u8** da
     *data = extracted;
     *size = candidate_size;
     return true;
+}
+
+int FloppyImage::GetRawGeometry(const u8* data, u32 size)
+{
+    if (!IsValidPointer(data))
+        return -1;
+
+    int padded = -1;
+
+    for (int i = 0; i < k_floppy_raw_geometries; i++)
+    {
+        u32 raw_size = k_floppy_raw_geometry[i].size;
+
+        if (raw_size == size)
+            return i;
+
+        if (raw_size > size || (padded >= 0 && k_floppy_raw_geometry[padded].size > raw_size))
+            continue;
+
+        u32 filler = raw_size;
+
+        while (filler < size && data[filler] == 0xE5)
+            filler++;
+
+        if (filler == size)
+            padded = i;
+    }
+
+    if (padded >= 0)
+        return padded;
+
+    const FloppyImage_Geometry& hd = k_floppy_raw_geometry[0];
+    u32 sector_size = 128U << hd.n;
+
+    if (size > k_floppy_raw_2dd_max_size && size < hd.size && (size % (hd.sectors * sector_size)) == 0 &&
+        read_u16_le(data + 11) == sector_size)
+        return 0;
+
+    return -1;
 }
 
 u32 FloppyImage::GetHeaderSize(const u8* data, u32 size)
@@ -597,16 +633,12 @@ u8* FloppyImage::Build(const u8* header, const u8* data, u32 size, int track, co
 
 u8* FloppyImage::CreateFromRaw(const u8* data, u32 size, u32* image_size)
 {
-    const FloppyImage_Geometry* geometry = NULL;
+    int index = GetRawGeometry(data, size);
 
-    for (int i = 0; i < k_floppy_raw_geometries; i++)
-    {
-        if (k_floppy_raw_geometry[i].size == size)
-            geometry = &k_floppy_raw_geometry[i];
-    }
-
-    if (!IsValidPointer(geometry))
+    if (index < 0)
         return NULL;
+
+    const FloppyImage_Geometry* geometry = &k_floppy_raw_geometry[index];
 
     u32 sector_size = 128U << geometry->n;
     u32 tracks = geometry->cylinders * 2;
@@ -635,8 +667,12 @@ u8* FloppyImage::CreateFromRaw(const u8* data, u32 size, u32* image_size)
             header[3] = geometry->n;
             write_u16_le(header + 4, geometry->sectors);
             write_u16_le(header + 14, (u16)sector_size);
-            memcpy(header + k_floppy_sector_header_size, data + (track * geometry->sectors + r - 1) * sector_size,
-                sector_size);
+            u32 source = (track * geometry->sectors + r - 1) * sector_size;
+
+            if (source + sector_size <= size)
+                memcpy(header + k_floppy_sector_header_size, data + source, sector_size);
+            else
+                memset(header + k_floppy_sector_header_size, 0xE5, sector_size);
             position += k_floppy_sector_header_size + sector_size;
         }
     }

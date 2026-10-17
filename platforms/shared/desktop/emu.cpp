@@ -1878,13 +1878,17 @@ static void notify_machine(void)
 {
     const GT_Machine_Config& config = geartowns->GetMachineConfig();
     const GT_Machine_Report& report = geartowns->GetMachineReport();
-    bool model = (report.model == GT_MACHINE_SOURCE_DATABASE) && (config.model != GT_MACHINE_MODEL1_2);
+    bool disk = report.model == GT_MACHINE_SOURCE_FLOPPY;
+    bool model = ((report.model == GT_MACHINE_SOURCE_DATABASE) || disk) && (config.model != GT_MACHINE_MODEL1_2);
     bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
     GT_Floppy_Notice floppy;
     bool floppy_notice = geartowns->GetFloppyNotice(floppy);
+    const char* title = IsValidPointer(report.title) ? report.title : "1.44 MB floppy disk";
+    const char* origin = IsValidPointer(report.title) ? "game database" : "Auto";
 
-    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0) && !floppy_notice))
+    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && (report.warning_count == 0) &&
+        !floppy_notice))
         return;
 
     char message[256];
@@ -1908,9 +1912,9 @@ static void notify_machine(void)
     }
 
     if (choices.empty())
-        snprintf(message, sizeof(message), "%s (game database)", report.title);
+        snprintf(message, sizeof(message), "%s (%s)", title, origin);
     else
-        snprintf(message, sizeof(message), "%s: %s (game database)", report.title, choices.c_str());
+        snprintf(message, sizeof(message), "%s: %s (%s)", title, choices.c_str(), origin);
 
     Log("%s", message);
 

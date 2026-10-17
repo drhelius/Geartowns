@@ -413,7 +413,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 }
 
 static const char* const k_mcp_breakpoint_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "linear", "physical", "io" };
-static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database" };
+static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database", "floppy" };
 static const char* const k_mcp_firmware_sources[] = { "none", "model_folder", "own_set", "compatible_set", "unknown",
     "other_set" };
 static const char* const k_mcp_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] =

@@ -344,7 +344,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_model",
         "Model (restart)",
         NULL,
-        "The FM Towns model to emulate. Auto picks the machine, CPU speed and RAM the game database names for the game, and the FM Towns (Model 1/2) for other content. It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
+        "The FM Towns model to emulate. Auto picks the machine, CPU speed and RAM the game database names for the game, the FM Towns II HG for 1.44 MB floppy disks, and the FM Towns (Model 1/2) for other content. It is recommended to leave this option on Auto. RetroArch's 'Save Game Options' keeps a choice for one game.",
         NULL,
         "system",
         {

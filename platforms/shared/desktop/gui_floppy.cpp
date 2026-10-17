@@ -356,6 +356,14 @@ static bool perform(bool discard_changes)
         if (floppy_session && (pending_symbols || previous_content != emu_floppy_get_content_path()))
             gui_debug_auto_load_settings();
 
+        if (pending_symbols && floppy_session && (pending_action == Floppy_Action_Insert) && emu_latch_auto_media())
+        {
+            emu_reset();
+
+            if (config_emulator.start_paused)
+                emu_pause();
+        }
+
         Emu_FloppyInfo info;
         emu_floppy_get_info(pending_drive, &info);
         bool eject = pending_action == Floppy_Action_Eject;

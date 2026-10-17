@@ -51,6 +51,8 @@ public:
     static bool ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size);
     static bool ExtractFromZip(const u8* archive, size_t archive_size, u8** data, u32* size, char* name, size_t name_size);
     static u16 CRC16(u16 crc, const u8* data, u32 size);
+    static u32 GetDataCRC(const u8* image, u32 size);
+    static u32 CalculateDataCRC(const u8* data, u32 size);
 
 private:
     static int GetRawGeometry(const u8* data, u32 size);

@@ -809,6 +809,8 @@ static void menu_machine(void)
 
     if (report.model == GT_MACHINE_SOURCE_DATABASE)
         ImGui::TextDisabled("Game detected: %s", report.title);
+    else if (report.model == GT_MACHINE_SOURCE_FLOPPY)
+        ImGui::TextDisabled("Auto: 1.44 MB floppy disk");
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         ImGui::TextDisabled("Auto: game not detected");
 

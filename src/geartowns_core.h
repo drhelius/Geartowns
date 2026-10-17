@@ -104,7 +104,7 @@ public:
 #endif
     void EjectMedia();
     void ResetMedia();
-    bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0);
+    bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0, u32 data_crc = 0);
     void EjectFloppy(int drive);
     void SwapFloppies();
 
@@ -211,6 +211,7 @@ private:
 
     GT_Machine_Settings m_machine_settings;
     const GT_DB_Entry* m_auto_entry;
+    bool m_auto_three_mode;
     std::string m_firmware_folder;
     std::string m_model_firmware_folders[GT_MACHINE_COUNT];
     GT_Firmware_Source m_firmware_sources[GT_MACHINE_COUNT];

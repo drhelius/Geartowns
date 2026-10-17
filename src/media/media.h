@@ -58,6 +58,7 @@ public:
     void Reset();
     static bool ParsePlaylist(const char* playlist_path, const char* text, size_t size,
         std::vector<PlaylistEntry>& entries);
+    static const GT_DB_Entry* FindFloppyEntry(u32 crc);
     bool LoadMedia(const char* file_path);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     bool LoadPhysicalCdRom(const char* device_id);

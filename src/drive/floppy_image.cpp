@@ -19,6 +19,7 @@
 
 #include <new>
 #include "floppy_image.h"
+#include "../media/crc.h"
 
 struct FloppyImage_Geometry
 {
@@ -476,6 +477,70 @@ u16 FloppyImage::CRC16(u16 crc, const u8* data, u32 size)
             crc = (crc & 0x8000) != 0 ? (u16)((crc << 1) ^ 0x1021) : (u16)(crc << 1);
     }
 
+    return crc;
+}
+
+u32 FloppyImage::GetDataCRC(const u8* image, u32 size)
+{
+    u32 crc = 0;
+
+    for (int track = 0; IsValidPointer(image) && (size >= k_floppy_header_size) && (track < k_floppy_tracks); track++)
+    {
+        u32 offset = read_u32_le(image + 0x20 + track * 4);
+
+        if ((offset == 0) || (offset + k_floppy_sector_header_size > size))
+            continue;
+
+        int count = MIN((int)read_u16_le(image + offset + 4), k_floppy_max_sectors);
+        u32 headers[k_floppy_max_sectors];
+        int used = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (offset + k_floppy_sector_header_size > size)
+                break;
+
+            u32 data_size = read_u16_le(image + offset + 14);
+            const u8* sector = image + offset + k_floppy_sector_header_size;
+
+            if (offset + k_floppy_sector_header_size + data_size > size)
+                break;
+
+            bool uniform = true;
+
+            for (u32 b = 1; uniform && (b < data_size); b++)
+                uniform = sector[b] == sector[0];
+
+            if (!uniform)
+            {
+                int j = used++;
+
+                while ((j > 0) && (memcmp(image + headers[j - 1], image + offset, 4) > 0))
+                {
+                    headers[j] = headers[j - 1];
+                    j--;
+                }
+
+                headers[j] = offset;
+            }
+
+            offset += k_floppy_sector_header_size + data_size;
+        }
+
+        for (int i = 0; i < used; i++)
+            crc = CalculateCRC32(crc, image + headers[i] + k_floppy_sector_header_size,
+                (int)read_u16_le(image + headers[i] + 14));
+    }
+
+    return crc;
+}
+
+u32 FloppyImage::CalculateDataCRC(const u8* data, u32 size)
+{
+    u32 image_size = 0;
+    u8* image = Load(data, size, &image_size);
+    u32 crc = GetDataCRC(image, image_size);
+    SafeDeleteArray(image);
     return crc;
 }
 

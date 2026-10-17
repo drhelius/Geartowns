@@ -431,3 +431,19 @@ void Media::GatherDataFromDB()
 
     Debug("Media not found in database. CRC: %08X", m_media_info.crc);
 }
+
+const GT_DB_Entry* Media::FindFloppyEntry(u32 crc)
+{
+    for (int i = 0; k_floppy_database[i].title != 0; i++)
+    {
+        const GT_DB_Entry& entry = k_floppy_database[i];
+
+        if (entry.crc == crc)
+        {
+            Log("Floppy disk found in database: %s. CRC: %08X", entry.title, crc);
+            return &entry;
+        }
+    }
+
+    return NULL;
+}

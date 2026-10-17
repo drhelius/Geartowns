@@ -54,12 +54,13 @@ public:
         u16 rpm;
         u32 base_crc;
         u32 size;
+        u32 data_crc;
     };
 
 public:
     FloppyDisk();
     ~FloppyDisk();
-    bool Insert(const u8* data, u32 size, bool write_protected, u32 base_crc);
+    bool Insert(const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc = 0);
     void Eject();
     void Swap(FloppyDisk& other);
     bool IsInserted() const;
@@ -69,6 +70,7 @@ public:
     void ClearDirty();
     u32 GetWriteCount() const;
     u32 GetBaseCRC() const;
+    u32 GetDataCRC() const;
     FloppyDisk_Media GetMedia() const;
     u32 GetRPM() const;
     const u8* GetImage() const;

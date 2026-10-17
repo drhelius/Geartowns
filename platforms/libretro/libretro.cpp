@@ -871,17 +871,22 @@ static void report_machine(void)
 {
     const GT_Machine_Config& config = core->GetMachineConfig();
     const GT_Machine_Report& report = core->GetMachineReport();
-    bool model = (report.model == GT_MACHINE_SOURCE_DATABASE) && (config.model != GT_MACHINE_MODEL1_2);
+    bool disk = report.model == GT_MACHINE_SOURCE_FLOPPY;
+    bool model = ((report.model == GT_MACHINE_SOURCE_DATABASE) || disk) && (config.model != GT_MACHINE_MODEL1_2);
     bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
     u32 ram_mb = config.ram_size / (1024 * 1024);
     GT_Floppy_Notice floppy;
     bool floppy_notice = core->GetFloppyNotice(floppy);
     bool warning = (report.warning_count > 0) || floppy.warning;
+    const char* title = IsValidPointer(report.title) ? report.title : "1.44 MB floppy disk";
+    const char* origin = IsValidPointer(report.title) ? "game database" : "Auto";
     char source[256] = "";
 
     if (report.model == GT_MACHINE_SOURCE_DATABASE)
         snprintf(source, sizeof(source), " (Auto: game database, %s)", report.title);
+    else if (disk)
+        snprintf(source, sizeof(source), " (Auto: 1.44 MB floppy disk)");
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         snprintf(source, sizeof(source), " (Auto: not in the game database)");
 
@@ -895,7 +900,8 @@ static void report_machine(void)
     for (int i = 0; i < floppy.line_count; i++)
         log_cb(floppy.warning ? RETRO_LOG_WARN : RETRO_LOG_INFO, "%s\n", floppy.lines[i]);
 
-    if (!IsValidPointer(report.title) || (!model && !cpu && !ram && (report.warning_count == 0) && !floppy_notice))
+    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && (report.warning_count == 0) &&
+        !floppy_notice))
         return;
 
     static char message[1024];
@@ -918,9 +924,9 @@ static void report_machine(void)
     }
 
     if (choices[0])
-        snprintf(message, sizeof(message), "%s: %s (game database)", report.title, choices);
+        snprintf(message, sizeof(message), "%s: %s (%s)", title, choices, origin);
     else
-        snprintf(message, sizeof(message), "%s (game database)", report.title);
+        snprintf(message, sizeof(message), "%s (%s)", title, origin);
 
     for (int i = 0; i < report.warning_count; i++)
     {
@@ -2648,6 +2654,7 @@ static bool floppy_load_image(unsigned index, int floppy)
     std::string working(image.path);
     const u8* data = NULL;
     u32 size = 0;
+    u32 data_crc = 0;
 
     if (image.save_disk)
     {
@@ -2680,12 +2687,13 @@ static bool floppy_load_image(unsigned index, int floppy)
             FloppyImage::IsD77(copy.data(), (u32)copy.size()))
         {
             log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working.c_str());
+            data_crc = FloppyImage::CalculateDataCRC(data, size);
             data = copy.data();
             size = (u32)copy.size();
         }
     }
 
-    if (!core->InsertFloppy(floppy, data, size, false, image.crc))
+    if (!core->InsertFloppy(floppy, data, size, false, image.crc, data_crc))
         return false;
 
     floppy_working_path[floppy] = working;

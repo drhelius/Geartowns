@@ -78,6 +78,7 @@ const GT_DB_Entry k_game_database[] =
     { 0xC86AA9E3, "Microsoft Windows Version 3.1 L12 Operating System (Setup CD-ROM)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x21C79FBD, "Might and Magic - Dark Side of Xeen", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0xC37E1530, "Mujintou Monogatari", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x43CE5719, "OASYS-Win V2.0", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0xF707A789, "Pegasus V1.1 L10 (Rev A)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x127A04E1, "Pegasus V1.1 L10 (Rev C)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x97697D9D, "Princess Danger", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
@@ -91,6 +92,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x8F3A1365, "Strike Commander Plus", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 6, 0 },
     { 0x519B3DBB, "Super Street Fighter II - The New Challengers", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x86A50F19, "Super Street Fighter II - The New Challengers (Demo)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x9D19776D, "TEATA - Vision", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x11BC5F23, "To Your Health! Vol. 1 - Tsubo Relaxation", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x954EACD5, "To Your Health! Vol. 2 - Wellness Yoga", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
     { 0x39CC9818, "Toshiyuki Yoshino - Lullaby of BirdLand", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
@@ -172,7 +174,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x22B1265E, "Crystal Rinal - Ouma no Meikyuu", GT_GAMEDB_FLOPPY_OPTIONAL, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xB7E5A175, "Custom Mate + Denwa no Bell ga...", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x26029AE5, "Custom Mate 2 + Itsuka Dokoka de", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
-    { 0x77A6C316, "Cyber Motion", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0x77A6C316, "Cyber Motion", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x1C0B3EA0, "CyberCity - The Golden Age of Cybernetics", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x9FD16507, "Daikoukai Jidai", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x0668CE1A, "Daikoukai Jidai II", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -246,7 +248,6 @@ const GT_DB_Entry k_game_database[] =
     { 0x698C98C6, "Nobunaga no Yabou - Sengoku Gunyuuden", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x34F3286E, "Nobunaga no Yabou - Tenshouki", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x3A89130D, "Noushuku Angel 120%", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
-    { 0x43CE5719, "OASYS-Win V2.0", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x10C94488, "Planet Harmony", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x6D4F9A0C, "Power DoLLS", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xF14ED32F, "Pro Student G", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -276,7 +277,7 @@ const GT_DB_Entry k_game_database[] =
     { 0xCFA11167, "Soft de Hard na Monogatari", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xF2C65091, "Soft de Hard na Monogatari 2", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xBD0D3113, "Sotsugyou - Graduation '93", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
-    { 0xF1BAEB66, "Speech Trainer V1.0 L10", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
+    { 0xF1BAEB66, "Speech Trainer V1.0 L10", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x769A4475, "StarCruiser II for CD-ROM", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x97E9A343, "Suikoden - Tenmei no Chikai", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x417347FD, "Suzaku", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -284,7 +285,6 @@ const GT_DB_Entry k_game_database[] =
     { 0x46765E77, "Taikou Risshiden", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x98EBCB1E, "Tamashii no Mon - Dante Shinkyoku yori", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x6FD4735C, "Tanjou - Debut", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
-    { 0x9D19776D, "TEATA - Vision", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x6FA4785E, "Teitoku no Ketsudan", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0xB358974D, "Teitoku no Ketsudan II", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
     { 0x4E35791F, "Tenka Gomen", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0 },
@@ -347,6 +347,28 @@ const GT_DB_Entry k_game_database[] =
     { 0x43C18E92, "Free FM Towns OS ROM", GT_GAMEDB_FIRMWARE_OS, 0, 0, 0 },
     { 0x736D9CB1, "Free FM Towns Font ROM", GT_GAMEDB_FIRMWARE_FONT, 0, 0, 0 },
     { 0x504BF849, "Blank ROM", GT_GAMEDB_FIRMWARE_DICTIONARY | GT_GAMEDB_FIRMWARE_FONT20, 0, 0, 0 },
+
+    { 0, 0, GT_GAMEDB_FLAG_NONE, 0, 0, 0 }
+};
+
+const GT_DB_Entry k_floppy_database[] =
+{
+    { 0xB38D9C01, "Battle Fighters 2 - Yume o Kaketa Tatakai", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x59C6C98D, "Half Moon ni Kawaru made - Ramiyaryou no Nijiiro Tamatebako (Disk A)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x7449A724, "Haou Soudatsu Battle Fighters", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x3495B01A, "Microsoft Windows Version 3.1 L10 Operating System (Setup Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0xB468312B, "Microsoft Windows Version 3.1 L10 Operating System (Setup Disk) (Model MX-MA)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x2E59D71C, "Microsoft Windows Version 3.1 L11 Operating System (Setup Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x0A212AE7, "Microsoft Windows Version 3.1 L12 Operating System (Setup Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0xC72AC1E2, "Might and Magic - World of Xeen (Install Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x37F2BAE8, "Ms. Detective File 1 - Iwami Ginzan Satsujin Jiken (FM Towns Marty) (Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MARTY, 0, 0 },
+    { 0x80519723, "Psychic Detective Series Vol. 3 - Aya (DCCS) (Key-Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x26F0B12B, "Psychic Detective Series Vol. 4 - Orgel (DCCS) (Key-Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x9767DD06, "Psychic Detective Series Vol. 5 - Nightmare (DCCS) (Key-Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x38A2C229, "Rumstorm", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 0, 33 }, // MA, a 486 at 33 MHz or faster
+    { 0x7208C490, "Samurai Spirits (Boot Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
+    { 0x3C43B7DA, "Shamhat - The Holy Circlet (User Disk) (FM Towns Marty)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MARTY, 0, 0 },
+    { 0xD58C19E0, "Uwaki na Anata - Switch o Irete (Boot Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0 },
 
     { 0, 0, GT_GAMEDB_FLAG_NONE, 0, 0, 0 }
 };

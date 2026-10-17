@@ -36,7 +36,7 @@ FloppyDisk::~FloppyDisk()
     SafeDeleteArray(m_image);
 }
 
-bool FloppyDisk::Insert(const u8* data, u32 size, bool write_protected, u32 base_crc)
+bool FloppyDisk::Insert(const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc)
 {
     u32 image_size = 0;
     u8* image = FloppyImage::Load(data, size, &image_size);
@@ -51,6 +51,7 @@ bool FloppyDisk::Insert(const u8* data, u32 size, bool write_protected, u32 base
     m_state.dirty = false;
     m_state.base_crc = base_crc != 0 ? base_crc : CalculateCRC32(0, data, (int)size);
     m_state.size = image_size;
+    m_state.data_crc = data_crc != 0 ? data_crc : FloppyImage::GetDataCRC(image, image_size);
     Identify();
     return true;
 }

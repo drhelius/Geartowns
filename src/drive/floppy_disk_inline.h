@@ -57,6 +57,11 @@ INLINE u32 FloppyDisk::GetBaseCRC() const
     return m_state.base_crc;
 }
 
+INLINE u32 FloppyDisk::GetDataCRC() const
+{
+    return m_state.data_crc;
+}
+
 INLINE FloppyDisk_Media FloppyDisk::GetMedia() const
 {
     return (FloppyDisk_Media)m_state.media;

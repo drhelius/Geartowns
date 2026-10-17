@@ -209,9 +209,9 @@ void FDC::HandleEvent(u64 clocks)
     UpdateNextEvent(clocks);
 }
 
-bool FDC::InsertDisk(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc)
+bool FDC::InsertDisk(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc)
 {
-    if (drive < 0 || drive >= FDC_DRIVES || !m_disks[drive].Insert(data, size, write_protected, base_crc))
+    if (drive < 0 || drive >= FDC_DRIVES || !m_disks[drive].Insert(data, size, write_protected, base_crc, data_crc))
         return false;
 
     ChangeDisk(drive);

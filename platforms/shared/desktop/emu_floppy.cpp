@@ -778,17 +778,19 @@ static bool mount(int drive, int index, bool discard_changes)
 
     std::vector<u8> copy;
     const u8* data = file.data() + offset;
+    u32 data_crc = 0;
 
     if (persistence && read_file(working.c_str(), copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
     {
         Log("Loading floppy working copy: %s", working.c_str());
+        data_crc = FloppyImage::CalculateDataCRC(data, size);
         data = copy.data();
         size = (u32)copy.size();
     }
 
     bool write_protected = !persistence || config_emulator.floppy_write_protected[drive];
 
-    if (!emu_get_core()->InsertFloppy(drive, data, size, write_protected, base_crc))
+    if (!emu_get_core()->InsertFloppy(drive, data, size, write_protected, base_crc, data_crc))
     {
         Error("Unable to insert floppy image: %s", entry.path.c_str());
         return false;

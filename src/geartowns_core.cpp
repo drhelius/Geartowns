@@ -76,6 +76,7 @@ GeartownsCore::GeartownsCore()
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     m_machine_settings.ram_mb = GT_MACHINE_AUTO;
     InitPointer(m_auto_entry);
+    m_auto_three_mode = false;
     memset(m_firmware_sources, 0, sizeof(m_firmware_sources));
 
     for (int i = 0; i < GT_MACHINE_COUNT; i++)
@@ -723,7 +724,26 @@ void GeartownsCore::SetMachineSettings(const GT_Machine_Settings& settings)
 
 void GeartownsCore::LatchAutoMedia()
 {
-    m_auto_entry = IsValidPointer(m_media) ? m_media->GetGameDBEntry() : NULL;
+    const GT_DB_Entry* cdrom = IsValidPointer(m_media) ? m_media->GetGameDBEntry() : NULL;
+    const GT_DB_Entry* floppy = NULL;
+    m_auto_three_mode = false;
+
+    for (int i = 0; IsValidPointer(m_fdc) && (i < FDC_DRIVES); i++)
+    {
+        FloppyDisk* disk = GetFloppy(i);
+
+        if (!disk->IsInserted())
+            continue;
+
+        if (!IsValidPointer(floppy) && (disk->GetDataCRC() != 0))
+            floppy = Media::FindFloppyEntry(disk->GetDataCRC());
+
+        if ((disk->GetMedia() == FLOPPY_MEDIA_2HD) && (disk->GetRPM() == 300))
+            m_auto_three_mode = true;
+    }
+
+    bool uses_floppy = !IsValidPointer(cdrom) || ((cdrom->flags & GT_GAMEDB_FLOPPY_MASK) != 0);
+    m_auto_entry = (IsValidPointer(floppy) && uses_floppy) ? floppy : cdrom;
     ResolveMachineConfig();
 
     if (!IsMachineConfigPending())
@@ -858,9 +878,9 @@ void GeartownsCore::ResetMedia()
     Reset();
 }
 
-bool GeartownsCore::InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc)
+bool GeartownsCore::InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc, u32 data_crc)
 {
-    return IsValidPointer(m_fdc) && m_fdc->InsertDisk(drive, data, size, write_protected, base_crc);
+    return IsValidPointer(m_fdc) && m_fdc->InsertDisk(drive, data, size, write_protected, base_crc, data_crc);
 }
 
 void GeartownsCore::EjectFloppy(int drive)
@@ -1631,8 +1651,15 @@ void GeartownsCore::ResolveMachineConfig()
     bool auto_ram = m_machine_settings.ram_mb <= 0;
     bool database = auto_model && IsValidPointer(entry);
     GT_Machine_Model named = database ? (GT_Machine_Model)entry->model : GT_MACHINE_MODEL1_2;
+    bool three_mode = auto_model && m_auto_three_mode && !k_machine_profiles[named].three_mode_floppy;
     GT_Machine_Model fallback = GT_MACHINE_MODEL1_2;
     u32 megabyte = 1024 * 1024;
+
+    for (int i = 0; three_mode && (i < GT_MACHINE_RELEASE_ORDER_COUNT); i++)
+    {
+        if (!k_machine_profiles[named].three_mode_floppy)
+            named = k_machine_release_order[i];
+    }
 
     for (int i = 0; (i < GT_MACHINE_RELEASE_ORDER_COUNT) && !CanAutoSelect(fallback); i++)
     {
@@ -1653,6 +1680,9 @@ void GeartownsCore::ResolveMachineConfig()
     if (database)
         report.model = GT_MACHINE_SOURCE_DATABASE;
 
+    if (three_mode)
+        report.model = GT_MACHINE_SOURCE_FLOPPY;
+
     if (database && auto_cpu && (entry->cpu_mhz > 0))
     {
         config.cpu_clock_rate = entry->cpu_mhz * 1000000;
@@ -1667,12 +1697,15 @@ void GeartownsCore::ResolveMachineConfig()
 
     SanitizeMachineConfig(config);
 
-    if (!IsValidPointer(entry))
-        return;
-
-    if (database && (config.model != named))
+    if ((database || three_mode) && (config.model != named))
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE, k_machine_profiles[named].emulated ?
             "Needs an %s, no firmware found for it" : "Needs an %s, not emulated yet", k_machine_profiles[named].name);
+    else if (m_auto_three_mode && !k_machine_profiles[config.model].three_mode_floppy)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "This machine has no drive for 1.44 MB floppy disks");
+
+    if (!IsValidPointer(entry))
+        return;
 
     if (config.ram_size < entry->ram_mb * megabyte)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,

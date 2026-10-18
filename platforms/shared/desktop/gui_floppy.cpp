@@ -58,6 +58,10 @@ static bool open_dirty = false;
 static bool open_discard = false;
 static bool open_blank = false;
 static bool open_quit = false;
+static bool open_second = false;
+static std::string second_path;
+static std::string second_name;
+static int second_count = 0;
 
 static bool request(int drive, Floppy_Action action, const char* path, int index);
 static bool perform(bool discard_changes);
@@ -65,6 +69,8 @@ static void draw_dirty_popup(void);
 static void draw_discard_popup(void);
 static void draw_blank_popup(void);
 static void draw_quit_popup(void);
+static void draw_second_popup(void);
+static int machine_drives(void);
 
 void gui_floppy_menu(int drive, const char* label, int drives)
 {
@@ -237,10 +243,18 @@ void gui_floppy_popups(void)
         ImGui::OpenPopup("Unsaved Floppy Changes on Quit");
     }
 
+    if (open_second)
+    {
+        open_second = false;
+        gui_dialog_in_use = true;
+        ImGui::OpenPopup("Multi-Disk Image");
+    }
+
     draw_dirty_popup();
     draw_discard_popup();
     draw_blank_popup();
     draw_quit_popup();
+    draw_second_popup();
 }
 
 void gui_floppy_open_disks(const char* path)
@@ -388,6 +402,18 @@ static bool perform(bool discard_changes)
             snprintf(message, sizeof(message), "Disk inserted in floppy drive %d", pending_drive + 1);
 
         gui_notify(gui_NotificationInfo, eject ? ICON_MD_EJECT : ICON_MD_SAVE, message, detail);
+
+        Emu_FloppyInfo second;
+
+        if ((pending_action == Floppy_Action_Insert) && !pending_open && (pending_drive == 0) &&
+            (info.disk_count > 1) && (machine_drives() > 1) && emu_floppy_get_info(1, &second) && !second.inserted)
+        {
+            const char* name = emu_floppy_get_disk_name(0, info.disk_index == 0 ? 1 : 0);
+            second_path = pending_path;
+            second_name = IsValidPointer(name) ? name : "";
+            second_count = info.disk_count;
+            open_second = true;
+        }
     }
 
     pending_action = Floppy_Action_None;
@@ -514,6 +540,36 @@ static void draw_blank_popup(void)
     ImGui::EndPopup();
 }
 
+static void draw_second_popup(void)
+{
+    gui_center_next_window();
+
+    if (!ImGui::BeginPopupModal("Multi-Disk Image", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    ImGui::Text("This image has %d disks.\n\n", second_count);
+    ImGui::Text("Insert %s in floppy drive 2 too?\n\n", second_name.c_str());
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)))
+    {
+        ImGui::CloseCurrentPopup();
+        gui_dialog_in_use = false;
+        request(1, Floppy_Action_Insert, second_path.c_str(), 0);
+    }
+
+    ImGui::SetItemDefaultFocus();
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)))
+    {
+        ImGui::CloseCurrentPopup();
+        gui_dialog_in_use = false;
+    }
+
+    ImGui::EndPopup();
+}
+
 static void draw_quit_popup(void)
 {
     gui_center_next_window();
@@ -575,4 +631,10 @@ static void draw_quit_popup(void)
     }
 
     ImGui::EndPopup();
+}
+
+static int machine_drives(void)
+{
+    GeartownsCore* core = emu_get_core();
+    return emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives : core->GetMachineConfig().floppy_drives;
 }

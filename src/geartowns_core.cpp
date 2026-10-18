@@ -1821,7 +1821,10 @@ void GeartownsCore::ApplyMachineConfig()
         m_pit->SetFeatures(profile.features);
 
     if (IsValidPointer(m_video))
+    {
         m_video->SetFeatures(profile.features);
+        m_video->SetTiming(*profile.video_timing);
+    }
 
     if (IsValidPointer(m_system_control))
     {

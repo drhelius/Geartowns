@@ -41,8 +41,9 @@ INLINE bool Sprite::IsBusy() const
 // The first clock at which Run clears busy
 INLINE u64 Sprite::GetFinishClocks() const
 {
-    return m_state.start_clocks + k_sprite_clear_clocks +
-        (u64)(k_sprite_entries - m_state.first_index) * k_sprite_entry_clocks;
+    u64 half_clocks = m_state.clear_half_clocks +
+        (u64)(k_sprite_entries - m_state.first_index) * m_state.entry_half_clocks;
+    return m_state.start_clocks + (half_clocks + 1) / 2;
 }
 
 INLINE bool Sprite::GetPage() const

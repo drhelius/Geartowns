@@ -25,7 +25,9 @@ Sprite::Sprite()
 {
     InitPointer(m_vram);
     InitPointer(m_sprite_ram);
+    InitPointer(m_timing);
     InitPointer(m_trace_logger);
+    m_entry_reciprocal = 0;
     memset(&m_state, 0, sizeof(m_state));
 }
 
@@ -33,10 +35,11 @@ Sprite::~Sprite()
 {
 }
 
-void Sprite::Init(u8* vram, const u8* sprite_ram)
+void Sprite::Init(u8* vram, const u8* sprite_ram, const GT_Machine_Video_Timing* timing)
 {
     m_vram = vram;
     m_sprite_ram = sprite_ram;
+    m_timing = timing;
     Reset();
 }
 
@@ -49,6 +52,9 @@ void Sprite::Reset()
 {
     memset(&m_state, 0, sizeof(m_state));
     m_state.clear_row = k_sprite_clear_rows;
+    m_state.clear_half_clocks = m_timing->sprite_clear;
+    m_state.entry_half_clocks = m_timing->sprite_entry_15khz;
+    UpdateEntryReciprocal();
 }
 
 // DP1 is written in bit 7 and read back in bit 4
@@ -77,16 +83,19 @@ void Sprite::Write(u16 port, u8 value)
 }
 
 // Each transfer swaps the halves, clears the new work half and walks the index from the first entry to 1023
-// The first index is latched here, later writes only affect the next transfer
-void Sprite::StartTransfer(u64 clocks)
+// The first index and the time per entry are latched here, later changes only affect the next transfer
+void Sprite::StartTransfer(u64 clocks, bool high_line_rate)
 {
     m_state.page = !m_state.page;
     m_state.busy = true;
     m_state.start_clocks = clocks;
+    m_state.clear_half_clocks = m_timing->sprite_clear;
+    m_state.entry_half_clocks = high_line_rate ? m_timing->sprite_entry_31khz : m_timing->sprite_entry_15khz;
     m_state.first_index = GetFirstIndex();
     m_state.clear_row = 1;
     m_state.entry = 0;
     m_state.pixel = 0;
+    UpdateEntryReciprocal();
 
     if (unlikely(IsValidPointer(m_trace_logger) &&
         m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_TRANSFER_START)))
@@ -100,32 +109,34 @@ void Sprite::TraceBusyAtVSync()
         TraceEvent(TRACE_SPRITE_BUSY_AT_VSYNC, 0);
 }
 
-// The clear takes 32 us and every index entry 75 us, drawn or not, with its 256 pixels spread over that time
+// The clear and every index entry, drawn or not, take the model's time in half clocks
+// with the entry's 256 pixels spread over its time
 void Sprite::Run(u64 clocks)
 {
-    u64 elapsed = clocks - m_state.start_clocks;
+    u64 elapsed = (clocks - m_state.start_clocks) * 2;
+    u32 clear_time = m_state.clear_half_clocks;
+    u32 entry_time = m_state.entry_half_clocks;
 
     // The first two lines of the work half hold the clear pattern, copied over the rest one VRAM row at a time
     if (m_state.clear_row < k_sprite_clear_rows)
     {
-        u32 rows = (u32)MIN(elapsed / k_sprite_clear_row_clocks + 1, (u64)k_sprite_clear_rows);
+        u32 rows = MIN((u32)MIN(elapsed, (u64)clear_time) * k_sprite_clear_rows / clear_time + 1, k_sprite_clear_rows);
         u8* work = GetWorkHalf();
 
         for (; m_state.clear_row < rows; m_state.clear_row++)
             memcpy(work + m_state.clear_row * k_sprite_clear_row_size, work, k_sprite_clear_row_size);
     }
 
-    if (elapsed < k_sprite_clear_clocks)
+    if (elapsed < clear_time)
         return;
 
-    u64 transfer = elapsed - k_sprite_clear_clocks;
-    u64 entries = transfer / k_sprite_entry_clocks;
-    u32 pixels = (u32)(((transfer % k_sprite_entry_clocks) * k_sprite_pixels) / k_sprite_entry_clocks);
+    u64 transfer = elapsed - clear_time;
     u32 count = k_sprite_entries - m_state.first_index;
 
     while (m_state.entry < count)
     {
-        u32 end = m_state.entry < entries ? k_sprite_pixels : pixels;
+        u64 offset = transfer - (u64)m_state.entry * entry_time;
+        u32 end = offset >= entry_time ? k_sprite_pixels : (u32)(((offset << 8) * m_entry_reciprocal) >> 32);
 
         if (end <= m_state.pixel)
             return;
@@ -147,6 +158,12 @@ void Sprite::Run(u64 clocks)
     if (unlikely(IsValidPointer(m_trace_logger) &&
         m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_TRANSFER_END)))
         TraceEvent(TRACE_SPRITE_TRANSFER_END, 0);
+}
+
+// Pixels due within an entry without dividing, exact while entries take at most 4096 half clocks
+void Sprite::UpdateEntryReciprocal()
+{
+    m_entry_reciprocal = ((1ULL << 32) + m_state.entry_half_clocks - 1) / m_state.entry_half_clocks;
 }
 
 // The entry is read when its first pixel is due, later CPU writes to it wait for the next transfer
@@ -246,7 +263,7 @@ void Sprite::TraceEvent(u8 event, u8 value)
     GT_Trace_Entry entry = {};
     entry.type = TRACE_SPRITE;
     entry.event = event;
-    entry.sprite.clocks = k_sprite_clear_clocks + count * k_sprite_entry_clocks;
+    entry.sprite.clocks = (m_state.clear_half_clocks + count * m_state.entry_half_clocks + 1) / 2;
     entry.sprite.first = event == TRACE_SPRITE_REGISTER ? GetFirstIndex() : m_state.first_index;
     entry.sprite.count = (u16)count;
     entry.sprite.entry = m_state.entry;
@@ -260,17 +277,17 @@ void Sprite::TraceEvent(u8 event, u8 value)
 void Sprite::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void Sprite::LoadState(std::istream& stream)
+void Sprite::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void Sprite::Serialize(StateSerializer& serializer)
+void Sprite::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE_ARRAY(serializer, m_state.registers, SPRITE_REGISTERS);
     G_SERIALIZE(serializer, m_state.address);
@@ -285,6 +302,18 @@ void Sprite::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.entry_y);
     G_SERIALIZE(serializer, m_state.entry_attributes);
     G_SERIALIZE(serializer, m_state.entry_color);
+
+    // Older states ran every model at the Data Book's 32 + 75 us
+    if (version >= 8)
+    {
+        G_SERIALIZE(serializer, m_state.clear_half_clocks);
+        G_SERIALIZE(serializer, m_state.entry_half_clocks);
+    }
+    else
+    {
+        m_state.clear_half_clocks = k_sprite_book_clear_half_clocks;
+        m_state.entry_half_clocks = k_sprite_book_entry_half_clocks;
+    }
 }
 
 void Sprite::SanitizeState()
@@ -299,4 +328,7 @@ void Sprite::SanitizeState()
     m_state.pixel = (u16)MIN((u32)m_state.pixel, k_sprite_pixels - 1);
     m_state.entry_x &= 0x1FF;
     m_state.entry_y &= 0x1FF;
+    m_state.clear_half_clocks = (u16)MAX((u32)m_state.clear_half_clocks, 1U);
+    m_state.entry_half_clocks = (u16)CLAMP((u32)m_state.entry_half_clocks, 1U, k_sprite_max_entry_half_clocks);
+    UpdateEntryReciprocal();
 }

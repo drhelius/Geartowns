@@ -446,6 +446,14 @@ struct GT_Machine_Memory_Map
     const GT_Machine_DMA_Window* dma_windows;
 };
 
+struct GT_Machine_Video_Timing
+{
+    u16 sprite_clear;
+    u16 sprite_entry_15khz;
+    u16 sprite_entry_31khz;
+    bool ntsc_field;
+};
+
 struct GT_Machine_Profile
 {
     const char* name;
@@ -463,6 +471,7 @@ struct GT_Machine_Profile
     int floppy_drives;
     bool three_mode_floppy;
     const char* firmware_set;
+    const GT_Machine_Video_Timing* video_timing;
 };
 
 struct GT_Machine_Config

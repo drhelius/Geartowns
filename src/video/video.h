@@ -67,7 +67,6 @@ public:
         u64 frame_start_clocks;
         u32 frame_line_clocks;
         u32 frame_half_lines;
-        u32 frame_vsync_half_lines;
         u32 frame_clock_rate;
         u32 frame_count;
         u32 event_half_line;
@@ -91,6 +90,7 @@ public:
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void SetFeatures(u32 features);
+    void SetTiming(const GT_Machine_Video_Timing& timing);
     bool Decodes(u16 port) const;
     void ResetFMRView();
     u8 Read(u16 port, u64 clocks);
@@ -173,6 +173,7 @@ private:
     void UpdateNextEvent();
     void UpdateIRQ();
     bool HasVSync() const;
+    bool IsHighLineRate() const;
     u64 GetHalfLineClocks(u32 half_line) const;
     u64 GetElapsedCRTCClocks(u64 clocks) const;
     void RenderRows(u32 half_line);
@@ -225,6 +226,7 @@ private:
     Memory* m_memory;
     const u8* m_font_rom;
     u32 m_features;
+    GT_Machine_Video_Timing m_timing;
     u8* m_frame_buffer;
     bool m_render;
     bool m_frame_ready;
@@ -267,6 +269,8 @@ private:
 static const u32 k_video_clock_rates[4] = { 28636364, 24545455, 25175000, 21052500 };
 static const u32 k_video_min_line_clocks = 64;
 static const u32 k_video_min_half_lines = 16;
+static const u32 k_video_min_high_line_rate = 23600;
+static const u32 k_video_ntsc_field_half_lines = 525;
 static const u32 k_video_transparent = 0x00010000;
 static const u32 k_video_no_wrap = 0x7FFFFFFF;
 

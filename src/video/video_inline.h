@@ -237,6 +237,12 @@ INLINE u32 Video::GetKanjiOffset() const
     return (glyph & 0x1FFF) * 32 + m_state.kanji_row * 2;
 }
 
+// 24 and 31 kHz modes, split from the 15 kHz ones at the midpoint between the 15.73 and 31.47 kHz presets
+INLINE bool Video::IsHighLineRate() const
+{
+    return m_state.frame_clock_rate >= (u64)m_state.frame_line_clocks * k_video_min_high_line_rate;
+}
+
 // Half-lines count from the VSYNC that started the frame
 // rounded up to the machine clock that reaches them
 INLINE u64 Video::GetHalfLineClocks(u32 half_line) const

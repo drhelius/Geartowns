@@ -38,6 +38,8 @@ public:
         bool page;
         bool busy;
         u64 start_clocks;
+        u16 clear_half_clocks;
+        u16 entry_half_clocks;
         u16 first_index;
         u16 clear_row;
         u16 entry;
@@ -51,13 +53,13 @@ public:
 public:
     Sprite();
     ~Sprite();
-    void Init(u8* vram, const u8* sprite_ram);
+    void Init(u8* vram, const u8* sprite_ram, const GT_Machine_Video_Timing* timing);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     u8 Read(u16 port) const;
     void Write(u16 port, u8 value);
     void Synchronize(u64 clocks);
-    void StartTransfer(u64 clocks);
+    void StartTransfer(u64 clocks, bool high_line_rate);
     void TraceBusyAtVSync();
     bool IsEnabled() const;
     bool IsBusy() const;
@@ -67,10 +69,11 @@ public:
     u32 GetWorkOffset() const;
     Sprite_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void Run(u64 clocks);
+    void UpdateEntryReciprocal();
     void LoadEntry();
     void DrawPixels(u32 end);
     template<bool indexed>
@@ -78,14 +81,16 @@ private:
     u16 GetFirstIndex() const;
     u8* GetWorkHalf() const;
     void TraceEvent(u8 event, u8 value);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:
     Sprite_State m_state;
     u8* m_vram;
     const u8* m_sprite_ram;
+    const GT_Machine_Video_Timing* m_timing;
     TraceLogger* m_trace_logger;
+    u64 m_entry_reciprocal;
 };
 
 static const u8 k_sprite_register_masks[SPRITE_REGISTERS] = { 0xFF, 0x83, 0xFF, 0x01, 0xFF, 0x01, 0x88, 0x00 };
@@ -109,9 +114,9 @@ static const u32 k_sprite_work_base = 0x40000;
 static const u32 k_sprite_half_size = 0x20000;
 static const u32 k_sprite_clear_rows = 128;
 static const u32 k_sprite_clear_row_size = k_sprite_half_size / k_sprite_clear_rows;
-static const u32 k_sprite_clear_clocks = (GT_MACHINE_CLOCK_RATE / 1000000) * 32;
-static const u32 k_sprite_clear_row_clocks = k_sprite_clear_clocks / k_sprite_clear_rows;
-static const u32 k_sprite_entry_clocks = (GT_MACHINE_CLOCK_RATE / 1000000) * 75;
+static const u32 k_sprite_max_entry_half_clocks = 4096;
+static const u16 k_sprite_book_clear_half_clocks = (GT_MACHINE_CLOCK_RATE / 500000) * 32;
+static const u16 k_sprite_book_entry_half_clocks = (GT_MACHINE_CLOCK_RATE / 500000) * 75;
 
 #include "sprite_inline.h"
 

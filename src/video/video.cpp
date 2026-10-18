@@ -23,6 +23,7 @@
 #include "../system/pit.h"
 #include "../system/scheduler.h"
 #include "../system/memory.h"
+#include "../system/machine_profiles.h"
 #include "../common/state_serializer.h"
 
 Video::Video()
@@ -36,6 +37,7 @@ Video::Video()
     InitPointer(m_font_rom);
     InitPointer(m_frame_buffer);
     m_features = 0;
+    m_timing = k_machine_video_dx;
     m_render = false;
     m_frame_ready = false;
     m_next_event_clocks = GT_NO_EVENT;
@@ -95,7 +97,7 @@ void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, Memory* memory, const
     if (!IsValidPointer(m_sprite))
         m_sprite = new Sprite();
 
-    m_sprite->Init(m_state.vram, m_state.sprite_ram);
+    m_sprite->Init(m_state.vram, m_state.sprite_ram, &m_timing);
 
     Reset();
 }
@@ -122,6 +124,11 @@ void Video::Reset()
 void Video::SetFeatures(u32 features)
 {
     m_features = features;
+}
+
+void Video::SetTiming(const GT_Machine_Video_Timing& timing)
+{
+    m_timing = timing;
 }
 
 bool Video::Decodes(u16 port) const
@@ -963,44 +970,36 @@ void Video::RunNextEvent()
     m_sprite->Synchronize(clocks);
 
     if (half_line >= m_state.frame_half_lines)
-    {
         CompleteFrame(clocks);
-        return;
-    }
-
-    m_state.event_half_line = half_line;
-
-    if (half_line == m_state.frame_vsync_half_lines && m_sprite->IsEnabled() && HasVSync())
+    else
     {
-        if (!m_sprite->IsBusy())
-            m_sprite->StartTransfer(clocks);
-        else
-            m_sprite->TraceBusyAtVSync();
+        m_state.event_half_line = half_line;
+
+        if ((half_line & 0x01) == 0)
+            RenderRows(half_line);
+
+        UpdateNextEvent();
     }
 
     if (GetSpriteHandlerOffset() != m_sprite_handler_offset)
         UpdateSpriteMapping();
-
-    if ((half_line & 0x01) == 0)
-        RenderRows(half_line);
-
-    UpdateNextEvent();
 }
 
 // Timing registers are latched at each frame start
 // The vertical period counts VST + 1 half-lines
 // 525 lines on the VGA preset and 262.5 on 15 kHz ones
+// The Marty's 15 kHz frames are always an NTSC field, whatever VST says
 void Video::StartFrame(u64 clocks)
 {
-    u32 vst1 = m_state.crtc[k_video_crtc_vst1];
-    u32 vst2 = m_state.crtc[k_video_crtc_vst2];
-
     m_state.running = true;
     m_state.frame_start_clocks = clocks;
     m_state.frame_line_clocks = MAX((u32)m_state.crtc[k_video_crtc_hst] + 1, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX((u32)m_state.crtc[k_video_crtc_vst] + 1, k_video_min_half_lines);
-    m_state.frame_vsync_half_lines = CLAMP(vst2 > vst1 ? vst2 - vst1 : 1, 1U, m_state.frame_half_lines - 1);
     m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
+
+    if (m_timing.ntsc_field && !IsHighLineRate())
+        m_state.frame_half_lines = k_video_ntsc_field_half_lines;
+
     m_state.event_half_line = 0;
     m_rendered_rows = 0;
     m_line_changed = false;
@@ -1034,6 +1033,15 @@ void Video::CompleteFrame(u64 clocks)
 
     UpdateIRQ();
     StartFrame(clocks);
+
+    // Real machines raise BUSY at the start of VSYNC, not at its end as the Data Book draws it
+    if (m_sprite->IsEnabled() && HasVSync())
+    {
+        if (!m_sprite->IsBusy())
+            m_sprite->StartTransfer(clocks, IsHighLineRate());
+        else
+            m_sprite->TraceBusyAtVSync();
+    }
 }
 
 // Index writes only select, so the events are the data writes with what the register holds afterwards
@@ -1337,13 +1345,9 @@ void Video::UpdateNextEvent()
         return;
     }
 
-    // Every line end, the end of VSYNC and the end of the frame
+    // Every line end and the end of the frame
     u32 half_line = m_state.event_half_line;
     u32 next = (half_line + 2) & ~0x01U;
-
-    if (half_line < m_state.frame_vsync_half_lines)
-        next = MIN(next, m_state.frame_vsync_half_lines);
-
     m_next_event_half_line = MIN(next, m_state.frame_half_lines);
     m_next_event_clocks = GetHalfLineClocks(m_next_event_half_line);
     m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
@@ -1774,7 +1778,7 @@ void Video::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
     Serialize(serializer, version);
-    m_sprite->LoadState(stream);
+    m_sprite->LoadState(stream, version);
     SanitizeState();
 }
 
@@ -1799,7 +1803,14 @@ void Video::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.frame_start_clocks);
     G_SERIALIZE(serializer, m_state.frame_line_clocks);
     G_SERIALIZE(serializer, m_state.frame_half_lines);
-    G_SERIALIZE(serializer, m_state.frame_vsync_half_lines);
+
+    // Older states kept the VSYNC length for the sprite transfer, which now starts with the frame
+    if (version < 8)
+    {
+        u32 vsync_half_lines = 0;
+        G_SERIALIZE(serializer, vsync_half_lines);
+    }
+
     G_SERIALIZE(serializer, m_state.frame_clock_rate);
     G_SERIALIZE(serializer, m_state.frame_count);
     G_SERIALIZE(serializer, m_state.event_half_line);
@@ -1839,7 +1850,6 @@ void Video::SanitizeState()
     m_state.kanji_row &= 0x0F;
     m_state.frame_line_clocks = MAX(m_state.frame_line_clocks, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX(m_state.frame_half_lines, k_video_min_half_lines);
-    m_state.frame_vsync_half_lines = CLAMP(m_state.frame_vsync_half_lines, 1U, m_state.frame_half_lines - 1);
     m_state.event_half_line = MIN(m_state.event_half_line, m_state.frame_half_lines - 1);
 
     if (m_state.frame_clock_rate == 0)

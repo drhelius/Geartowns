@@ -795,10 +795,8 @@ bool I386::OPCodes0F_BitOperation(int operation, u32 bit_index)
     if (!ReadRM(operand, width, *m_bus_context, value))
         return false;
 
-    if ((value & (1U << bit)) != 0)
-        m_state.eflags |= I386_FLAG_CF;
-    else
-        m_state.eflags &= ~I386_FLAG_CF;
+    u32 overflow = ((value >> ((bit - 1) & (width - 1))) ^ (value >> ((bit - 2) & (width - 1)))) & 1;
+    m_state.eflags = (m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF)) | ((value >> bit) & 1) | (overflow << 11);
 
     if (operation != 0)
     {
@@ -1253,18 +1251,14 @@ bool I386::OPCodes0F_DoubleShift()
     }
 
     SetSZP(value, width);
+    m_state.eflags = (m_state.eflags | I386_FLAG_AF) & ~I386_FLAG_OF;
 
-    if (count == 1)
-    {
-        m_state.eflags &= ~I386_FLAG_OF;
+    bool sign = (value & GetSignBit(width)) != 0;
+    bool carry = (m_state.eflags & I386_FLAG_CF) != 0;
+    bool next_sign = (value & (GetSignBit(width) >> 1)) != 0;
 
-        bool sign = (value & GetSignBit(width)) != 0;
-        bool carry = (m_state.eflags & I386_FLAG_CF) != 0;
-        bool next_sign = (value & (GetSignBit(width) >> 1)) != 0;
-
-        if ((!right && sign != carry) || (right && sign != next_sign))
-            m_state.eflags |= I386_FLAG_OF;
-    }
+    if ((!right && sign != carry) || (right && sign != next_sign))
+        m_state.eflags |= I386_FLAG_OF;
 
     if (!WriteRM(m_instruction, width, value, *m_bus_context))
         return false;
@@ -1284,7 +1278,10 @@ bool I386::OPCodes0F_IMUL()
     if (!ReadRM(m_instruction, width, *m_bus_context, source))
         return false;
 
-    m_step.clocks = GetMultiplyClocks(source, width, true, m_instruction.memory_operand) + m_address_clocks;
+    u32 steps = GetMultiplySteps(source, width, true);
+
+    m_step.clocks = GetMultiplyClocks(steps, m_instruction.memory_operand) + m_address_clocks;
+    SetMultiplyFlags(GetRegister(m_instruction.reg, width), source, steps, width, true);
 
     s64 product = (s64)SignExtend(GetRegister(m_instruction.reg, width), width) * SignExtend(source, width);
     u32 value = Truncate((u64)product, width);
@@ -1390,12 +1387,11 @@ bool I386::OPCodes0F_BitScan()
 
     m_step.clocks = GetBitScanClocks(source, width, opcode == 0xBD) + m_address_clocks;
 
+    // Flags come from the microcode's CMP 0,source, then from the index or the scan loop's last shift
     if (source == 0)
-        m_state.eflags |= I386_FLAG_ZF;
+        Sub(0, 0, 0, width);
     else
     {
-        m_state.eflags &= ~I386_FLAG_ZF;
-
         int bit = opcode == 0xBC ? 0 : width - 1;
 
         if (opcode == 0xBC)
@@ -1410,6 +1406,26 @@ bool I386::OPCodes0F_BitScan()
         }
 
         SetRegister(m_instruction.reg, width, (u32)bit);
+
+        u32 flags = 0;
+
+        if (opcode == 0xBC && bit != 0)
+            flags = GetSZP((u32)bit, width);
+        else
+        {
+            u32 sign = GetSignBit(width);
+            u32 shifted = opcode == 0xBC ? 0 : bit == 0 ? sign >> 1 : (source << (width - bit)) & GetMask(width);
+
+            flags = GetSZP(-source, width) & ~I386_FLAG_ZF;
+            flags |= (source & 0x0F) != 0 ? I386_FLAG_AF : 0;
+            flags |= opcode == 0xBC ? (source >> 1) & 1 : (shifted & sign) != 0 ? I386_FLAG_CF : 0;
+
+            if (opcode == 0xBC ? (source & sign) != 0 : ((shifted & sign) != 0) != ((shifted & (sign >> 1)) != 0))
+                flags |= I386_FLAG_OF;
+        }
+
+        m_state.eflags = (m_state.eflags &
+            ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) | flags;
     }
 
     CommitEIP(m_instruction);

@@ -840,7 +840,8 @@ private:
     void FillDecodeState(const InstructionContext& instruction, const u8* bytes, u32 length,
         I386_Decode_State& state) const;
 
-    u32 GetMultiplyClocks(u32 multiplier, int width, bool signed_multiplier, bool memory_operand) const;
+    u32 GetMultiplySteps(u32 multiplier, int width, bool signed_multiplier) const;
+    u32 GetMultiplyClocks(u32 steps, bool memory_operand) const;
     u32 GetBitScanClocks(u32 value, int width, bool reverse) const;
     u32 GetStringClocks(bool continuation) const;
     u32 GetTaskSwitchClocks(const Descriptor& descriptor, const TaskState& state, int switch_type, bool via_gate) const;
@@ -856,6 +857,7 @@ private:
     u32 ALU(int operation, u32 left, u32 right, int width);
     void SetSZP(u32 value, int width);
     u32 GetSZP(u32 value, int width) const;
+    void SetMultiplyFlags(u32 multiplicand, u32 multiplier, u32 steps, int width, bool signed_multiplier);
     bool CheckCondition(int condition) const;
     static bool EvaluateCondition(u32 eflags, int condition);
     template<int width> u32 RotateShift(u32 value, int shift_operation, u32 count);

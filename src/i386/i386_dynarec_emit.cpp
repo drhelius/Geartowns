@@ -52,9 +52,7 @@ static const bool k_dynarec_near_fallbacks = false;
 static const u32 k_dynarec_compiled = 1;
 
 static const u16 k_flags_all = I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF;
-static const u16 k_flags_logic = I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF;
 static const u16 k_flags_inc_dec = I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF;
-static const u16 k_flags_shift = I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF;
 
 static const u8 k_alu_memory_clocks[8][4] =
 {
@@ -334,7 +332,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
         }
 
         SetNative(instruction, form <= 3 && memory ? k_alu_memory_clocks[operation][form] : 2, form <= 3 && memory);
-        instruction.defs = operation == 1 || operation == 4 || operation == 6 ? k_flags_logic : k_flags_all;
+        instruction.defs = k_flags_all;
         instruction.uses = operation == 2 || operation == 3 ? I386_FLAG_CF : 0;
         return;
     }
@@ -421,7 +419,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
             else
             {
                 SetNative(instruction, memory ? (c.reg == 7 ? 5 : 7) : 2, memory);
-                instruction.defs = c.reg == 1 || c.reg == 4 || c.reg == 6 ? k_flags_logic : k_flags_all;
+                instruction.defs = k_flags_all;
                 instruction.uses = c.reg == 2 || c.reg == 3 ? I386_FLAG_CF : 0;
             }
 
@@ -429,7 +427,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
         case 0x84: case 0x85:
             // TEST r/m,r
             SetNative(instruction, memory ? 5 : 2, memory);
-            instruction.defs = k_flags_logic;
+            instruction.defs = k_flags_all;
             break;
         case 0x86: case 0x87:
             // XCHG r/m,r
@@ -478,7 +476,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
         case 0xA8: case 0xA9:
             // TEST accumulator,imm
             SetNative(instruction, 2, false);
-            instruction.defs = k_flags_logic;
+            instruction.defs = k_flags_all;
             break;
         case 0xB0: case 0xB1: case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB7:
         case 0xB8: case 0xB9: case 0xBA: case 0xBB: case 0xBC: case 0xBD: case 0xBE: case 0xBF:
@@ -494,7 +492,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
             if (count != 0 && (c.reg <= 1 || (c.reg >= 4 && count <= (u32)shift_width)))
             {
                 SetNative(instruction, memory ? 7 : 3, memory);
-                instruction.defs = c.reg <= 1 ? (u16)(I386_FLAG_CF | I386_FLAG_OF) : k_flags_shift;
+                instruction.defs = c.reg <= 1 ? (u16)(I386_FLAG_CF | I386_FLAG_OF) : k_flags_all;
             }
             else
                 instruction.kind = DYNAREC_HELPER;
@@ -536,7 +534,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
             {
                 static const u8 k_memory_extra[4] = { 3, 3, 4, 4 };
                 SetNative(instruction, 2 + (memory ? k_memory_extra[c.reg] : 0), memory);
-                instruction.defs = c.reg <= 1 ? k_flags_logic : c.reg == 3 ? k_flags_all : 0;
+                instruction.defs = c.reg <= 1 || c.reg == 3 ? k_flags_all : 0;
             }
             else
                 instruction.kind = DYNAREC_HELPER;
@@ -1656,10 +1654,10 @@ void DynarecEmitter::EmitALU(Instruction& instruction, int operation, int form, 
     }
 }
 
-// Logic flags of a masked result: CF and OF clear, AF kept
+// Logic flags of a masked result: CF, AF and OF clear
 void DynarecEmitter::EmitLogicFlags(Instruction& instruction, int result, int width)
 {
-    u16 needed = instruction.live & k_flags_logic;
+    u16 needed = instruction.live & k_flags_all;
 
     if (needed == 0)
         return;
@@ -1998,11 +1996,14 @@ void DynarecEmitter::EmitShift(Instruction& instruction, int width, u32 count)
         return;
 
     // T0 flags, T1 and T4 scratch. SAR clears OF, ROR and SHR take it from the two top bits of the result, ROL,
-    // SHL and SAL from the top bit and the carry
+    // SHL and SAL from the top bit and the carry. Shifts set AF
     if ((needed & I386_FLAG_CF) != 0)
         jit_movr(DR_T0, DR_T2);
     else
         jit_movi(DR_T0, 0);
+
+    if ((needed & I386_FLAG_AF) != 0)
+        jit_ori(DR_T0, DR_T0, I386_FLAG_AF);
 
     if ((needed & I386_FLAG_OF) != 0 && operation != 7)
     {

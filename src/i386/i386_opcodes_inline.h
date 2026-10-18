@@ -73,8 +73,8 @@ INLINE u32 I386::Sub(u32 left, u32 right, u32 borrow, int width)
 INLINE u32 I386::Logic(u32 value, int width)
 {
     value &= GetMask(width);
-    m_state.eflags = (m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) |
-        GetSZP(value, width);
+    m_state.eflags = (m_state.eflags &
+        ~(I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF)) | GetSZP(value, width);
     return value;
 }
 

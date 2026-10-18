@@ -1702,6 +1702,12 @@ bool I386::OPCodes_DAA()
     else
         m_state.eflags &= ~I386_FLAG_CF;
 
+    u8 adjustment = (u8)(value - old_al);
+    m_state.eflags &= ~I386_FLAG_OF;
+
+    if (((old_al ^ value) & (adjustment ^ value) & 0x80) != 0)
+        m_state.eflags |= I386_FLAG_OF;
+
     SetRegister8(0, value);
     SetSZP(value, 8);
     CommitEIP(m_instruction);
@@ -1740,6 +1746,12 @@ bool I386::OPCodes_DAS()
     else
         m_state.eflags &= ~I386_FLAG_CF;
 
+    u8 adjustment = (u8)(old_al - value);
+    m_state.eflags &= ~I386_FLAG_OF;
+
+    if (((old_al ^ adjustment) & (old_al ^ value) & 0x80) != 0)
+        m_state.eflags |= I386_FLAG_OF;
+
     SetRegister8(0, value);
     SetSZP(value, 8);
     CommitEIP(m_instruction);
@@ -1752,8 +1764,11 @@ bool I386::OPCodes_AAA()
         return false;
 
     u16 ax = m_state.registers[I386_REG_EAX].low;
+    bool adjust = (ax & 0x0F) > 9 || (m_state.eflags & I386_FLAG_AF) != 0;
 
-    if ((ax & 0x0F) > 9 || (m_state.eflags & I386_FLAG_AF) != 0)
+    Add(ax & 0xFF, adjust ? 6 : 0, 0, 8);
+
+    if (adjust)
     {
         ax = (u16)(ax + 0x0106);
         m_state.eflags |= I386_FLAG_AF | I386_FLAG_CF;
@@ -1772,8 +1787,11 @@ bool I386::OPCodes_AAS()
         return false;
 
     u16 ax = m_state.registers[I386_REG_EAX].low;
+    bool adjust = (ax & 0x0F) > 9 || (m_state.eflags & I386_FLAG_AF) != 0;
 
-    if ((ax & 0x0F) > 9 || (m_state.eflags & I386_FLAG_AF) != 0)
+    Sub(ax & 0xFF, adjust ? 6 : 0, 0, 8);
+
+    if (adjust)
     {
         ax = (u16)(ax - 0x0106);
         m_state.eflags |= I386_FLAG_AF | I386_FLAG_CF;
@@ -1829,7 +1847,8 @@ bool I386::OPCodes_IMUL_Immediate()
     int multiplier_width = m_instruction.operand_size * 8;
     u32 multiplier = m_instruction.opcode == 0x6B ? (u32)SignExtend(m_instruction.immediate, 8) :
         m_instruction.immediate;
-    u32 clocks = GetMultiplyClocks(multiplier, multiplier_width, true, m_instruction.memory_operand);
+    u32 steps = GetMultiplySteps(multiplier, multiplier_width, true);
+    u32 clocks = GetMultiplyClocks(steps, m_instruction.memory_operand);
 
     if (!StartExecution(clocks))
         return false;
@@ -1840,6 +1859,8 @@ bool I386::OPCodes_IMUL_Immediate()
 
     if (!ReadRM(m_instruction, operand_width, *m_bus_context, source))
         return false;
+
+    SetMultiplyFlags(source, multiplier, steps, operand_width, true);
 
     s64 left = SignExtend(source, operand_width);
     s64 right = SignExtend(m_instruction.immediate, opcode == 0x6B ? 8 : operand_width);
@@ -2158,7 +2179,7 @@ bool I386::OPCodes_AAM()
     {
         // The divider faults after its first internal shift. AX is not committed, but 286/386 hardware exposes SZP
         // from this value
-        SetSZP(GetRegister8(0) >> 1, 8);
+        Add(GetRegister8(0) >> 1, 0, 0, 8);
         return RaiseException(0, I386_EXCEPTION_FAULT);
     }
 
@@ -2166,7 +2187,7 @@ bool I386::OPCodes_AAM()
 
     SetRegister8(4, value / base);
     SetRegister8(0, value % base);
-    SetSZP(GetRegister8(0), 8);
+    Add(GetRegister8(0), 0, 0, 8);
     CommitEIP(m_instruction);
     return true;
 }
@@ -2176,14 +2197,13 @@ bool I386::OPCodes_AAD()
     if (!DecodeOperands(false, 1))
         return false;
 
-    if (!StartExecution(GetMultiplyClocks(m_instruction.immediate, 8, false, false) + 9))
+    if (!StartExecution(GetMultiplyClocks(GetMultiplySteps(m_instruction.immediate, 8, false), false) + 9))
         return false;
 
-    u8 value = (u8)(GetRegister8(4) * (u8)m_instruction.immediate + GetRegister8(0));
+    u8 value = (u8)Add((u8)(GetRegister8(4) * (u8)m_instruction.immediate), GetRegister8(0), 0, 8);
 
     SetRegister8(0, value);
     SetRegister8(4, 0);
-    SetSZP(value, 8);
     CommitEIP(m_instruction);
     return true;
 }

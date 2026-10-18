@@ -21,7 +21,7 @@
 #include "i386.h"
 #include "i386_opcodes_inline.h"
 
-u32 I386::GetMultiplyClocks(u32 multiplier, int width, bool signed_multiplier, bool memory_operand) const
+u32 I386::GetMultiplySteps(u32 multiplier, int width, bool signed_multiplier) const
 {
     u32 value = multiplier & GetMask(width);
     bool negative = signed_multiplier && (value & GetSignBit(width)) != 0;
@@ -44,8 +44,26 @@ u32 I386::GetMultiplyClocks(u32 multiplier, int width, bool signed_multiplier, b
         steps = MAX(steps, trailing_zeroes + 4);
     }
 
-    steps = MIN(MAX(steps, 3U), (u32)width);
+    return MIN(MAX(steps, 3U), (u32)width);
+}
+
+u32 I386::GetMultiplyClocks(u32 steps, bool memory_operand) const
+{
     return steps + 6 + (memory_operand ? 3 : 0);
+}
+
+void I386::SetMultiplyFlags(u32 multiplicand, u32 multiplier, u32 steps, int width, bool signed_multiplier)
+{
+    // Flags of the early-out loop's last step, which a negative multiplier runs negated
+    bool negative = signed_multiplier && (multiplier & GetSignBit(width)) != 0;
+    s64 left = signed_multiplier ? (s64)SignExtend(multiplicand, width) : (s64)(multiplicand & GetMask(width));
+    u64 bits = negative ? (u64)(-(s64)SignExtend(multiplier, width)) : (u64)(multiplier & GetMask(width));
+    s64 partial = ((negative ? -left : left) * (s64)(bits & ((1ULL << (steps - 1)) - 1))) >> (steps - 1);
+
+    if (negative)
+        Sub((u32)partial, (u32)left, 0, width);
+    else
+        Add((u32)partial, (u32)left, 0, width);
 }
 
 u32 I386::GetBitScanClocks(u32 value, int width, bool reverse) const
@@ -100,7 +118,10 @@ INLINE bool I386::OPCodes_NEG_RM(int width, u32 operand)
 
 INLINE bool I386::OPCodes_MUL_RM(int width, u32 operand)
 {
-    m_step.clocks = GetMultiplyClocks(operand, width, false, m_instruction.memory_operand) + m_address_clocks;
+    u32 steps = GetMultiplySteps(operand, width, false);
+
+    m_step.clocks = GetMultiplyClocks(steps, m_instruction.memory_operand) + m_address_clocks;
+    SetMultiplyFlags(GetRegister(0, width), operand, steps, width, false);
 
     if (width == 8)
     {
@@ -140,7 +161,10 @@ INLINE bool I386::OPCodes_MUL_RM(int width, u32 operand)
 
 INLINE bool I386::OPCodes_IMUL_RM(int width, u32 operand)
 {
-    m_step.clocks = GetMultiplyClocks(operand, width, true, m_instruction.memory_operand) + m_address_clocks;
+    u32 steps = GetMultiplySteps(operand, width, true);
+
+    m_step.clocks = GetMultiplyClocks(steps, m_instruction.memory_operand) + m_address_clocks;
+    SetMultiplyFlags(GetRegister(0, width), operand, steps, width, true);
 
     if (width == 8)
     {
@@ -619,7 +643,7 @@ INLINE u32 I386::RotateShift(u32 value, int shift_operation, u32 count)
     flags |= overflow ? I386_FLAG_OF : 0;
 
     if (shift_operation >= I386_SHIFT_SHL)
-        flags = (flags & ~(I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF)) | GetSZP(value, width);
+        flags = (flags & ~(I386_FLAG_PF | I386_FLAG_ZF | I386_FLAG_SF)) | GetSZP(value, width) | I386_FLAG_AF;
 
     m_state.eflags = flags;
     return value;

@@ -58,6 +58,7 @@ const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_
 
 // Sprite times in half machine clocks
 const GT_Machine_Video_Timing k_machine_video_dx = { 570, 2322, 2381, false };
+const GT_Machine_Video_Timing k_machine_video_mx = { 960, 1824, 1824, false };
 const GT_Machine_Video_Timing k_machine_video_sx = { 1888, 2197, 2224, false };
 const GT_Machine_Video_Timing k_machine_video_marty = { 1888, 2197, 2224, true };
 
@@ -69,14 +70,14 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
     { "FM Towns II CX", "cx", "CX10, CX20, CX40, CX100", "November 1991", true, 0x0501, GT_MACHINE_CPU_80386DX, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_cx, k_machine_ram_cx, 2, 2, false, "fmtownsux", &k_machine_video_dx },
     { "FM Towns II UX", "ux", "UX10, UX20, UX40", "November 1991", true, 0x0303, GT_MACHINE_CPU_80386SX, 16000000, GT_MACHINE_MAP_24BIT, k_machine_features_ux, k_machine_ram_ux, 2, 2, false, "fmtownsux", &k_machine_video_sx },
     { "FM Towns II UG", "ug", "UG10, UG20, UG40, UG80", "November 1992", true, 0x0603, GT_MACHINE_CPU_80386SX, 20000000, GT_MACHINE_MAP_24BIT, k_machine_features_ug, k_machine_ram_ux, 2, 2, false, "fmtownsux", &k_machine_video_sx },
-    { "FM Towns II HG", "hg", "HG20, HG40, HG100", "November 1992", true, 0x0801, GT_MACHINE_CPU_80386DX, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_hg, k_machine_ram_10f_20f, 2, 2, true, "fmtownshr", &k_machine_video_dx },
-    { "FM Towns II HR", "hr", "HR20, HR100, HR200", "November 1992", false, 0x0702, GT_MACHINE_CPU_80486SX, 20000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hr, 4, 2, true, "fmtownshr", &k_machine_video_dx },
-    { "FM Towns II UR", "ur", "UR20, UR40, UR80", "February 1993", false, 0x0902, GT_MACHINE_CPU_80486SX, 20000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_ur, 2, 2, false, NULL, &k_machine_video_dx },
-    { "FM Towns II ME", "me", "ME20, ME170", "November 1993", false, 0x0D02, GT_MACHINE_CPU_80486SX, 25000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_me, 2, 2, true, NULL, &k_machine_video_dx },
-    { "FM Towns II MA", "ma", "MA170, MA340, MA170W, MA340W", "November 1993", false, 0x0B02, GT_MACHINE_CPU_80486SX, 33000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_ma, 4, 2, true, NULL, &k_machine_video_dx },
-    { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", false, 0x0C02, GT_MACHINE_CPU_80486DX2, 66000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mx, 4, 2, true, "fmtownsmx", &k_machine_video_dx },
-    { "FM Towns II MF / Fresh", "mf_fresh", "MF20, MF170W, Fresh", "February 1994", false, 0x0F02, GT_MACHINE_CPU_80486SX, 33000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv", &k_machine_video_dx },
-    { "FM Towns II HC", "hc", "HC53, HC53M", "February 1995", false, 0x1102, GT_MACHINE_CPU_PENTIUM, 90000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hc, 8, 1, true, NULL, &k_machine_video_dx },
+    { "FM Towns II HG", "hg", "HG20, HG40, HG100", "November 1992", true, 0x0801, GT_MACHINE_CPU_80386DX, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_hg, k_machine_ram_10f_20f, 2, 2, true, "fmtownshr", &k_machine_video_mx },
+    { "FM Towns II HR", "hr", "HR20, HR100, HR200", "November 1992", false, 0x0702, GT_MACHINE_CPU_80486SX, 20000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hr, 4, 2, true, "fmtownshr", &k_machine_video_mx },
+    { "FM Towns II UR", "ur", "UR20, UR40, UR80", "February 1993", false, 0x0902, GT_MACHINE_CPU_80486SX, 20000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_ur, 2, 2, false, NULL, &k_machine_video_mx },
+    { "FM Towns II ME", "me", "ME20, ME170", "November 1993", false, 0x0D02, GT_MACHINE_CPU_80486SX, 25000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_me, 2, 2, true, NULL, &k_machine_video_mx },
+    { "FM Towns II MA", "ma", "MA170, MA340, MA170W, MA340W", "November 1993", false, 0x0B02, GT_MACHINE_CPU_80486SX, 33000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_ma, 4, 2, true, NULL, &k_machine_video_mx },
+    { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", false, 0x0C02, GT_MACHINE_CPU_80486DX2, 66000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mx, 4, 2, true, "fmtownsmx", &k_machine_video_mx },
+    { "FM Towns II MF / Fresh", "mf_fresh", "MF20, MF170W, Fresh", "February 1994", false, 0x0F02, GT_MACHINE_CPU_80486SX, 33000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv", &k_machine_video_mx },
+    { "FM Towns II HC", "hc", "HC53, HC53M", "February 1995", false, 0x1102, GT_MACHINE_CPU_PENTIUM, 90000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hc, 8, 1, true, NULL, &k_machine_video_mx },
     { "FM Towns Marty", "marty", "Marty, Marty 2, TC Marty", "February 1993", true, 0x4A03, GT_MACHINE_CPU_80386SX, 16000000, GT_MACHINE_MAP_MARTY, k_machine_features_marty, k_machine_ram_marty, 2, 1, false, "fmtmarty", &k_machine_video_marty }
 };
 

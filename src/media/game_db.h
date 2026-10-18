@@ -121,8 +121,6 @@ const GT_DB_Entry k_game_database[] =
     { 0x9C9981D6, "Wing Commander II - Vengeance of the Kilrathi - Special Operations 1 & Special Operations 2", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 6, 0, 0, 0 },
 
     // FM Towns (Model 1/2) with a faster CPU
-    { 0xA3A41A2E, "Alltynex", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 66, 0, 0 },
-    { 0xC21B99C5, "Alltynex (T-En v1.1)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 66, 0, 0 },
     { 0x88216CFA, "RAC Rally", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 33, GT_GAMEDB_PORT_MOUSE, 0 },
 
     // FM Towns 1F/2F
@@ -147,6 +145,8 @@ const GT_DB_Entry k_game_database[] =
     { 0xC19736AC, "Ms. Detective File 1 - Iwami Ginzan Satsujin Jiken (FM Towns Marty)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MARTY, 0, 0, 0, 0 },
 
     // 486 titles. The 486 models (HR, MA, MX) are not emulated yet, so these name the HG, the closest emulated model
+    { 0xA3A41A2E, "Alltynex", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 66, 0, 0 }, // MX
+    { 0xC21B99C5, "Alltynex (T-En v1.1)", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 0, 66, 0, 0 }, // MX
     { 0xF6B8469F, "ElFish", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0 }, // HR
     { 0x71570BC6, "Gadget - Invention, Travel, & Adventure", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 20, 0, 0 }, // HR, MA recommended
     { 0xC2A397F7, "Horde, The", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0 }, // HR

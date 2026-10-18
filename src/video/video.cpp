@@ -891,6 +891,23 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
     else
         m_state.crtc[index] = (u16)((previous & 0xFF00) | value);
 
+    // The display takes FA and HAJ when the layer's window opens
+    // so a write after that waits for the next frame
+    if (index == k_video_crtc_fa0 || index == k_video_crtc_haj0 || index == k_video_crtc_fa1 || index == k_video_crtc_haj1)
+    {
+        int layer = index < k_video_crtc_fa1 ? 0 : 1;
+
+        if (!m_state.running || GetBeamHalfLine(clocks) < m_state.crtc[k_video_crtc_vds0 + layer * 2])
+        {
+            if (m_state.crtc[index] != previous)
+                m_line_changed = true;
+
+            LatchLayerStart(layer);
+        }
+
+        return;
+    }
+
     if (m_state.crtc[index] != previous && index >= k_video_crtc_hds0 && index <= k_video_crtc_cr0)
         m_line_changed = true;
 
@@ -906,6 +923,12 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
         m_state.running = false;
         UpdateNextEvent();
     }
+}
+
+void Video::LatchLayerStart(int layer)
+{
+    m_state.latched_fa[layer] = m_state.crtc[k_video_crtc_fa0 + layer * 4];
+    m_state.latched_haj[layer] = m_state.crtc[k_video_crtc_haj0 + layer * 4];
 }
 
 u8 Video::ReadCRTC(bool high, u64 clocks) const
@@ -1000,6 +1023,8 @@ void Video::StartFrame(u64 clocks)
     if (m_timing.ntsc_field && !IsHighLineRate())
         m_state.frame_half_lines = k_video_ntsc_field_half_lines;
 
+    LatchLayerStart(0);
+    LatchLayerStart(1);
     m_state.event_half_line = 0;
     m_rendered_rows = 0;
     m_line_changed = false;
@@ -1306,7 +1331,7 @@ u32 Video::GetLayerOffset() const
         if (GetLayerFormat(layer) == VIDEO_LAYER_OFF)
             continue;
 
-        u32 haj = m_state.crtc[k_video_crtc_haj0 + layer * 4];
+        u32 haj = m_state.latched_haj[layer];
         offset = Gcd(offset, haj > m_canvas_h_start ? haj - m_canvas_h_start : m_canvas_h_start - haj);
     }
 
@@ -1493,7 +1518,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     // Fetching starts at HAJ, so data before HDS has already been consumed when the window opens
     u32 hds = crtc[k_video_crtc_hds0 + layer * 2];
     u32 hde = crtc[k_video_crtc_hde0 + layer * 2];
-    u32 haj = crtc[k_video_crtc_haj0 + layer * 4];
+    u32 haj = m_state.latched_haj[layer];
     u32 first = MAX(hds, haj);
     u32 h_start = m_canvas_h_start;
     u32 divider = m_canvas_h_divider;
@@ -1508,7 +1533,7 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     u32 zoom_y = ((zoom >> 4) & 0x0F) + 1;
     u32 unit = IsTwoPage() ? 4 : 8;
     u32 line = ((half_line - vds) / 2) / zoom_y;
-    u32 start = ((u32)crtc[k_video_crtc_fa0 + layer * 4] + line * crtc[k_video_crtc_lo0 + layer * 4]) * unit;
+    u32 start = ((u32)m_state.latched_fa[layer] + line * crtc[k_video_crtc_lo0 + layer * 4]) * unit;
 
     // The second field of an interlaced frame starts FO further on
     if (m_canvas_interlaced && (row & 0x01) != 0)
@@ -1837,6 +1862,17 @@ void Video::Serialize(StateSerializer& serializer, int version)
     {
         m_state.crt_readback = false;
         m_state.crt_power_off = false;
+    }
+
+    if (version >= 9)
+    {
+        G_SERIALIZE_ARRAY(serializer, m_state.latched_fa, 2);
+        G_SERIALIZE_ARRAY(serializer, m_state.latched_haj, 2);
+    }
+    else
+    {
+        LatchLayerStart(0);
+        LatchLayerStart(1);
     }
 }
 

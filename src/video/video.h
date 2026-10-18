@@ -81,6 +81,8 @@ public:
         u8 kanji_row;
         bool crt_readback;
         bool crt_power_off;
+        u16 latched_fa[2];
+        u16 latched_haj[2];
     };
 
 public:
@@ -154,6 +156,7 @@ public:
 
 private:
     void WriteCRTC(u8 value, bool high, u64 clocks);
+    void LatchLayerStart(int layer);
     u8 ReadCRTC(bool high, u64 clocks) const;
     void WritePalette(int component, u8 value);
     u8 ReadPalette(int component) const;
@@ -287,6 +290,8 @@ static const int k_video_crtc_fa0 = 0x11;
 static const int k_video_crtc_haj0 = 0x12;
 static const int k_video_crtc_fo0 = 0x13;
 static const int k_video_crtc_lo0 = 0x14;
+static const int k_video_crtc_fa1 = 0x15;
+static const int k_video_crtc_haj1 = 0x16;
 static const int k_video_crtc_zoom = 0x1B;
 static const int k_video_crtc_cr0 = 0x1C;
 static const int k_video_crtc_cr1 = 0x1D;

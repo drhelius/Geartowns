@@ -706,6 +706,9 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
         if (special_index == 0 && (value & 0x80000000U) != 0 && (value & 1) == 0)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
+        if (special_index == 0)
+            value = (value & 0x8000001FU) | m_cr0_fixed;
+
         *control_register = value;
 
         if (special_index == 0)
@@ -1031,7 +1034,7 @@ bool I386::OPCodes0F_LOADALL()
     m_state.idtr.limit = (u16)caches[1][2];
     m_state.gdtr.base = caches[2][1];
     m_state.gdtr.limit = (u16)caches[2][2];
-    m_state.cr0 = dwords[0];
+    m_state.cr0 = (dwords[0] & 0x8000001FU) | m_cr0_fixed;
     UpdateExecutionMode();
 
     if (m_state.execution_mode == I386_MODE_PROTECTED)

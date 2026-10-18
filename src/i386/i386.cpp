@@ -94,6 +94,7 @@ I386::I386()
     InitPointer(m_trace_logger);
     InitPointer(m_profiler);
     m_reset_edx = 0x00000300;
+    m_cr0_fixed = 0x7FFFFFE0;
     m_trace_internal = false;
     m_trace_cpu = false;
     m_profiler_active = false;
@@ -264,7 +265,7 @@ void I386::Reset()
     m_state.eflags = I386_FLAG_FIXED;
     m_state.idtr.limit = 0x03FF;
 
-    m_state.cr0 = 0;
+    m_state.cr0 = m_cr0_fixed;
     m_state.cr2 = 0;
     m_state.cr3 = 0;
 
@@ -909,6 +910,7 @@ void I386::LoadState(std::istream& stream)
 {
     StateSerializer serializer(stream);
     Serialize(serializer);
+    m_state.cr0 = (m_state.cr0 & 0x8000001FU) | m_cr0_fixed;
     SanitizeState();
 }
 
@@ -1162,6 +1164,11 @@ void I386::SetTraceEnabled(bool enabled)
 void I386::SetResetEDX(u32 edx)
 {
     m_reset_edx = edx;
+}
+
+void I386::SetCR0FixedBits(u32 bits)
+{
+    m_cr0_fixed = bits;
 }
 
 void I386::SetTraceLogger(TraceLogger* trace_logger)

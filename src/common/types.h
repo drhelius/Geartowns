@@ -419,6 +419,7 @@ struct GT_Machine_CPU_Info
     const char* name;
     bool emulated;
     u32 reset_edx;
+    u32 cr0_fixed;
     int bus_width;
 };
 

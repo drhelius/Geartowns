@@ -92,11 +92,11 @@ const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 4, 6, 8, 1
 
 const GT_Machine_CPU_Info k_machine_cpus[GT_MACHINE_CPU_COUNT] =
 {
-    { "80386DX", true, 0x00000300, 32 },
-    { "80386SX", true, 0x00002308, 16 },
-    { "80486SX", false, 0x00000420, 32 },
-    { "80486DX2", false, 0x00000430, 32 },
-    { "Pentium", false, 0x00000520, 64 }
+    { "80386DX", true, 0x00000300, 0x7FFFFFE0, 32 },
+    { "80386SX", true, 0x00002308, 0x7FFFFFF0, 16 },
+    { "80486SX", false, 0x00000420, 0x00000010, 32 },
+    { "80486DX2", false, 0x00000430, 0x00000010, 32 },
+    { "Pentium", false, 0x00000520, 0x00000010, 64 }
 };
 
 const GT_Machine_DMA_Window k_machine_dma_windows_24bit[] =

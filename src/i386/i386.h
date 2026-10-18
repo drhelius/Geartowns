@@ -430,6 +430,7 @@ public:
     void Init(Memory* memory, IO* io = NULL);
     void Reset();
     void SetResetEDX(u32 edx);
+    void SetCR0FixedBits(u32 bits);
     u32 RunInstruction(GT_Bus_Access_Context& context);
     I386_Run_Result GetStepInfo() const;
     I386_Run_Result RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
@@ -1366,6 +1367,7 @@ private:
     u32 m_poll_steps;
     bool m_poll_active;
     bool m_poll_enabled;
+    u32 m_cr0_fixed;
 };
 
 static const u32 k_i386_poll_max_instructions = 16;

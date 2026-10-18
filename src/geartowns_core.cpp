@@ -1837,7 +1837,10 @@ void GeartownsCore::ApplyMachineConfig()
     }
 
     if (IsValidPointer(m_i386))
+    {
         m_i386->SetResetEDX(k_machine_cpus[m_machine_config.cpu].reset_edx);
+        m_i386->SetCR0FixedBits(k_machine_cpus[m_machine_config.cpu].cr0_fixed);
+    }
 
     if (IsValidPointer(m_fdc))
     {

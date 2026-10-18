@@ -171,7 +171,6 @@ public:
     json WriteMemory(int area, const std::string& offset, const std::vector<u8>& data);
     json TranslateAddress(const std::string& address);
     json SelectMemoryRange(int area, u32 start_address, u32 end_address);
-    json SetMemorySelectionValue(int area, u8 value);
     json GetMemorySelection(int area);
     json AddMemoryBookmark(int area, u32 address, const std::string& name);
     json RemoveMemoryBookmark(int area, u32 address);

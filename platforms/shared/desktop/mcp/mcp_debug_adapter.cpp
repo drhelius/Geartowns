@@ -981,25 +981,6 @@ json DebugAdapter::SelectMemoryRange(int area, u32 start_address, u32 end_addres
     };
 }
 
-json DebugAdapter::SetMemorySelectionValue(int area, u8 value)
-{
-    GuiDebugMemoryArea info;
-    std::string error;
-
-    if (!GetMemoryArea(area, info, error))
-        return {{"error", error}};
-
-    if (info.source.space == GT_DEBUG_MEMORY_IO)
-        return {{"error", "The I/O PORTS area is read-only"}};
-
-    int values_written = gui_debug_memory_set_selection_value(info.source, value);
-
-    if (values_written <= 0)
-        return {{"error", "No writable selection in this area, use select_memory_range first"}};
-
-    return {{"success", true}, {"area", area}, {"value", Hex(value, 2)}, {"values_written", values_written}};
-}
-
 json DebugAdapter::GetMemorySelection(int area)
 {
     GuiDebugMemoryArea info;
@@ -5204,9 +5185,14 @@ json DebugAdapter::GetInputState()
                 pressed.push_back(names[i]);
         }
 
-        int type = (int)emu_get_pad_type((GT_Controllers)player);
-        const char* name = type >= 0 && type < k_controller_type_count ? k_controller_type_names[type] : "unknown";
-        players.push_back({{"player", player + 1}, {"type", name}, {"pressed", pressed}});
+        json port = ControllerGetType(player + 1);
+        json entry = {{"player", player + 1}, {"type", port["type"]}, {"setting", port["setting"]},
+            {"source", port["source"]}, {"pressed", pressed}};
+
+        if (port.contains("database_type"))
+            entry["database_type"] = port["database_type"];
+
+        players.push_back(entry);
     }
 
     json keys = json::array();

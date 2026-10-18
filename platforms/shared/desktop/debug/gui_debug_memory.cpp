@@ -2508,29 +2508,6 @@ bool gui_debug_memory_get_selection(const GT_Debug_Memory_Address& source, u32& 
     return true;
 }
 
-int gui_debug_memory_set_selection_value(const GT_Debug_Memory_Address& source, u8 value)
-{
-    u32 start = 0;
-    u32 end = 0;
-
-    if (!gui_debug_memory_get_selection(source, start, end))
-        return 0;
-
-    u64 size = (u64)end - start + 1;
-
-    if (size > MEMORY_SEARCH_MAX_SIZE)
-        return 0;
-
-    std::vector<u8> data((size_t)size, value);
-    GT_Debug_Memory_Address address = source;
-    address.address = start;
-
-    if (!gui_debug_memory_write(address, &data[0], (u32)size))
-        return 0;
-
-    return (int)size;
-}
-
 void gui_debug_memory_add_bookmark(const GT_Debug_Memory_Address& address, u32 end, const char* name)
 {
     add_bookmark(address, end);

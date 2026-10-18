@@ -88,7 +88,6 @@ bool gui_debug_memory_write(const GT_Debug_Memory_Address& address, const u8* da
 bool gui_debug_memory_translate(const GT_Debug_Memory_Address& address, GT_Debug_Memory_Translation& translation);
 bool gui_debug_memory_select_range(const GT_Debug_Memory_Address& source, u32 start, u32 end);
 bool gui_debug_memory_get_selection(const GT_Debug_Memory_Address& source, u32& start, u32& end);
-int gui_debug_memory_set_selection_value(const GT_Debug_Memory_Address& source, u8 value);
 void gui_debug_memory_add_bookmark(const GT_Debug_Memory_Address& address, u32 end, const char* name);
 bool gui_debug_memory_remove_bookmark(const GT_Debug_Memory_Address& address);
 void gui_debug_memory_get_bookmarks(const GT_Debug_Memory_Address& source, std::vector<GuiDebugMemoryBookmark>& bookmarks);

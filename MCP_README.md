@@ -375,8 +375,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `debug_run_to_cursor` - Continue execution until reaching specified address
 - `debug_reset` - Reset emulation
 - `debug_get_status` - Get debug status: `paused`, `at_breakpoint`, `pc` (linear), `logical_pc`, `mode`, `halted`, `breakpoint`, `media_loading`, `media_ready`, `powered_on`, `frame`
-- `set_fast_forward_speed` - Set fast forward speed multiplier (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
-- `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`
+- `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`; optional `speed` (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
 
 ### CPU & Registers
 - `get_i386_status` - Get the complete Intel 80386 status: general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode, CPL, IOPL, code and stack size, the last exception the CPU raised with its error code and return address (interrupts and `INT n` don't replace it), segment descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers
@@ -387,11 +386,10 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 ### Memory Operations
 - `list_memory_areas` - List memory areas: LINEAR, PHYSICAL, I/O PORTS, and every memory region, with `id`, `name`, `size`, `unit_size`, `flags`, `physical_base`, `group` (`address_space`, `memory`, `rom`, `media`, `cpu_window`) and `description`. An area keeps its `id` when disks are inserted or ejected
 - `read_memory` - Read from a memory area; unmapped or unreadable bytes read as `??`. The LINEAR area takes logical addresses too
-- `write_memory` - Write to a memory area. ROMs and I/O PORTS are read-only
+- `write_memory` - Write hex `bytes` to a memory area; optional `repeat` writes them back to back that many times to fill a range, up to 1 MB in total. ROMs and I/O PORTS are read-only
 - `translate_address` - Translate a logical or linear address: logical, linear, PDE and PTE with their indexes, page flags, physical, bus, region and offset, or the reason it fails
 - `get_memory_selection` - Get current memory selection range
 - `select_memory_range` - Select a range of memory addresses
-- `set_memory_selection_value` - Set all bytes in selection to specified value
 - `add_memory_bookmark` - Add bookmark in memory area
 - `remove_memory_bookmark` - Remove memory bookmark
 - `list_memory_bookmarks` - List all bookmarks in memory area
@@ -407,9 +405,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `add_symbol` - Add or rename a user symbol at an address; user symbols take precedence over automatic labels
 - `remove_symbol` - Remove the user symbol at an address
 - `load_symbols` - Load user symbols from a file: `ADDRESS NAME`, `NAME = ADDRESS` (or `EQU`) or GNU `nm` output (`ADDRESS TYPE NAME`) per line, `;` or `#` comments, linear hex or `SSSS:OOOOOOOO` addresses; GNU ld and NASM map files load too. `SSSS:OOOOOOOO` symbols resolve through the current mode each time execution stops; `skipped` counts the lines that didn't parse
-- `list_symbols` - List user symbols and automatic labels a page at a time: optional `filter`, `start` and `count` (default 200, max 1000), with `total` and `has_more`
-- `lookup_symbol_by_name` - Find all symbols with an exact name, or with `partial` a case-insensitive part of it
-- `lookup_symbol_at_address` - Find the symbol at an address
+- `list_symbols` - List user symbols and automatic labels a page at a time: optional `filter` (case-insensitive part of the name), `start` and `count` (default 200, max 1000), with `total` and `has_more`. With `name` it returns every symbol with that exact name instead, and with `address` the symbol at that address
 - `add_disassembler_bookmark` - Add bookmark in disassembler
 - `remove_disassembler_bookmark` - Remove disassembler bookmark
 - `list_disassembler_bookmarks` - List all disassembler bookmarks
@@ -436,7 +432,7 @@ Memory-mode counters shown in the GUI and written by manual export use the same 
 
 #### Trace filters
 
-Omitting `filters` enables the default of CPU instructions, IRQs and exceptions. When supplied, `filters` must be non-empty, unique, and contain only these exact values:
+Omitting `filters` enables the default of CPU instructions, IRQs and exceptions. When supplied, `filters` must be non-empty and unique. Each entry is one of these streams, or a group name, the part before the dot (`cpu`, `io`, `fdc`...), which enables all of its streams:
 
 ```text
 cpu.instructions
@@ -520,20 +516,12 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_profiler_data` - Read profiler results: `collecting`, `window_open`, `total_cycles`, `frames`, `function_count`, and per-function `name`, `symbol`, `address`, `vector`, `vector_name` and `vector_description` (interrupt handlers), `type` (`call`, `interrupt`, or `root` for code running outside any call), `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Cycles are CPU cycles at the configured CPU speed, including time spent halted or stalled by DMA. Average, min and max count completed outermost calls, so a recursive function's inner returns don't skew them. Calls are listed per linear target and interrupt handlers per vector. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
 
 ### Breakpoints
-- `set_breakpoint` - Set a breakpoint at an address. `type`: `execute` (stops before the instruction; default for linear), `read` (default for physical and io), `write` or `access` (stop after the instruction that made the access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear or physical, a physical one follows the code through the current page mapping. Physical read and write breakpoints also see DMA transfers, and linear ones while paging is off. CPU accesses to descriptor tables, the TSS and page tables don't trigger breakpoints
-- `set_breakpoint_range` - Set a breakpoint over an inclusive address range, same `type` and `space`
+- `set_breakpoint` - Add or update a breakpoint at an address, or over an inclusive range up to `end_address`; `enabled` false keeps it in the list disabled. `type`: `execute` (stops before the instruction; default for linear), `read` (default for physical and io), `write` or `access` (stop after the instruction that made the access); `space`: `linear` (default), `physical` or `io` (IN/OUT/INS/OUTS ports). Execute breakpoints are linear or physical, a physical one follows the code through the current page mapping. Physical read and write breakpoints also see DMA transfers, and linear ones while paging is off. CPU accesses to descriptor tables, the TSS and page tables don't trigger breakpoints
 - `remove_breakpoint` - Remove a breakpoint matching address (and `end_address` for ranges), `type` and `space`
-- `enable_breakpoint` - Enable or disable a breakpoint matching address (and `end_address` for ranges), `type` and `space`, with `enabled`
 - `set_breakpoints_active` - Turn every breakpoint on or off at once with `active`, like Disable All in the debugger; each keeps its own enabled state
-- `list_breakpoints` - List all breakpoints with type, space, range and enabled state, and `all_disabled`
-- `set_breakpoint_on_interrupt` - Break on entry to an interrupt `vector` (0-255), before the handler's first instruction; `source`: `any` (default), `exception`, `hardware` or `software`
-- `clear_breakpoint_on_interrupt` - Remove an interrupt breakpoint by `vector` and `source`
-- `enable_breakpoint_on_interrupt` - Enable or disable an interrupt breakpoint by `vector` and `source`, with `enabled`
-- `list_breakpoints_on_interrupt` - List interrupt breakpoints with `vector_name`, `vector_description`, sources and enabled state
-- `set_breakpoint_on_irq` - Break when the PIC delivers IRQ line `irq` (0-15), before the handler's first instruction. It follows the line, not the vector, so it keeps working if the program moves the PIC vector bases
-- `clear_breakpoint_on_irq` - Remove the breakpoint on an IRQ line
-- `enable_breakpoint_on_irq` - Enable or disable the breakpoint on an IRQ line, with `enabled`
-- `list_breakpoints_on_irq` - List the IRQ lines with a breakpoint, their sources and enabled state
+- `list_breakpoints` - List all breakpoints with type, space, range and enabled state, and `all_disabled`, plus `interrupt_breakpoints` (with `vector_name`, `vector_description`, source and enabled state) and `irq_breakpoints`
+- `set_breakpoint_on_interrupt` - Add or update a break on entry to an interrupt `vector` (0-255), with `source` `any` (default), `exception`, `hardware` or `software`, or on IRQ line `irq` (0-15) when the PIC delivers it, before the handler's first instruction. An IRQ breakpoint follows the line, not the vector, so it keeps working if the program moves the PIC vector bases. `enabled` false keeps it disabled
+- `clear_breakpoint_on_interrupt` - Remove an interrupt breakpoint by `vector` and `source`, or an IRQ breakpoint by `irq`
 
 `debug_get_status` reports what stopped execution in `breakpoint`: `kind` (`execute`, `read`, `write`, `access`, `interrupt`, `run_to`), with the space, address and size of the access (`dma` when a DMA transfer made it), or the vector and source of the interrupt, plus `irq` and `irq_name` for a hardware interrupt and `function` when a software interrupt calls a known BIOS or DOS service.
 
@@ -565,16 +553,14 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`) or one `channel` of it in the debugger; emulated state is unchanged
 
 ### CD-ROM Hardware
-- `get_cdrom_status` - Get the CD-ROM controller: 04C0 master status bits, last command with flags and parameters, status queue, transfer mode, SIRQ/DEI and IRQ9, drive state, head position and track, read range, and the disc
+- `get_cdrom_status` - Get the CD-ROM controller: 04C0 master status bits, last command with flags and parameters, status queue, transfer mode, SIRQ/DEI and IRQ9, drive state, head position and track, read range, and the disc; `audio` with CD audio playback (state, end action, track, start, stop and current position, track position and CD-DA volume); and `playlist` with the discs of the loaded `.m3u` (`index`, current disc) and whether the drive is empty
 - `list_cdrom_tracks` - Get the disc TOC: type, absolute start and end MSF, LBA, length, sectors, pregap, and the track under the head
-- `get_cdrom_audio_status` - Get CD audio playback: state, end action, track, start, stop and current position, track position and CD-DA volume
 - `read_cdrom_sector` - Read one sector of a CD image as hex by `lba`; `mode` `user` (2048 bytes) or `raw` (2352). Does not move the drive head. Not available for physical CD drives
 
 ### Floppy Hardware
 - `get_fdc_status` - Get the MB8877: status with bit names for the last command type, decoded command, track, sector and data registers, BUSY/DRQ/INTRQ and IRQ6, drive control, status, select and switch
 - `list_floppy_drives` - Get both drives: image, D77 disk name (Shift-JIS converted to UTF-8), media, geometry (with `total_size` and `mixed` when tracks differ from track 0), RPM, write protect, modified, head cylinder, motor, ready and selected
-- `list_floppy_sectors` - List a track's sectors by `drive`, `cylinder`, `head`: C, H, R, N, size, density, deleted mark, status and image offset
-- `read_floppy_sector` - Read the sector with ID R (`sector`) on a track: IDs, status and data as hex
+- `read_floppy_sector` - Read the sector with ID R (`sector`) on a track by `drive`, `cylinder`, `head`: IDs, status and data as hex. Without `sector` it lists the track's sectors: C, H, R, N, size, density, deleted mark, status and image offset
 
 ### Screen Capture
 - `get_screenshot` - Capture current screen frame as base64 PNG
@@ -586,27 +572,22 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `list_recent_media` - List the most recent CD images and floppies opened by Geartowns
 - `load_media` - Load a CD image or a floppy image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip)
 - `eject_cdrom` - Eject the CD as the CD-ROM menu does; the machine keeps running with an empty drive
-- `list_cdrom_playlist` - List the discs of the loaded `.m3u` with `index`, the current disc and whether the drive is empty
-- `insert_playlist_disc` - Insert playlist disc `index` into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
+- `insert_playlist_disc` - Insert playlist disc `index` (from the `get_cdrom_status` playlist) into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector
 - `insert_floppy` - Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, .mfm, an .m3u list or a .zip) in `drive`; optional `write_protected`
 - `eject_floppy` - Eject the disk in `drive`, keeping its changes in the working copy
 - `swap_floppies` - Swap the disks in drives 0 and 1
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`
 - `list_save_state_slots` - List all 5 save state slots with information (media name, timestamp, validity)
-- `select_save_state_slot` - Select active save state slot (1-5) for save/load operations
-- `save_state` - Save emulator state to currently selected slot
-- `load_state` - Load emulator state from currently selected slot
-- `save_state_file` - Save emulator state to an explicit file path
-- `load_state_file` - Load emulator state from an explicit file path
+- `save_state` - Save emulator state to the selected slot, to `slot` (1-5, which becomes the selected one) or to an absolute `file_path`
+- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`
 - `get_rewind_status` - Get rewind buffer status (enabled, snapshots, capacity, buffered seconds)
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 
 ### Controller Input
 - `controller_button` - Control a button on a game port (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, select, run, A, B, C, X, Y, Z. On a mouse port the directions move the mouse (4 counts per frame while held, 4 counts per tap) and A/B are the left/right buttons
 - `controller_set_type` - Set the device on a game port: auto, none, original_gamepad, marty_gamepad, six_button_gamepad or mouse. Auto takes the device the game database names for the loaded game, or the default (original_gamepad on port 1, mouse on port 2)
-- `controller_get_type` - Read the device on a game port, its setting (auto or a device) and where the device came from (explicit, database, default or fallback)
-- `get_input_state` - Get each port's device type, effective pressed buttons, held keyboard keys and pending tap releases
+- `get_input_state` - Get each port's device `type`, its `setting` (auto or a device), its `source` (explicit, database, default or fallback), `database_type` when an explicit choice contradicts the game database, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
 - `keyboard_type` - Type ASCII text (up to 256 characters) through a frame macro on the JIS layout; optional `frames_per_key`
 - `mouse_move` - Move the mouse pointer to screen pixel `x`, `y` (the coordinates of `get_screenshot`; the top-left of the pointer image lands there), or by `dx`, `dy` mouse counts. A screen move finds the pointer by moving it 32 counts out and back and comparing frames, moves 4 counts per frame (Towns OS moves bigger steps faster) and checks again until it is there. It runs emulated frames, kept in rewind like any input, and a breakpoint stops it. Optional `player` picks the port, default the first one set to mouse

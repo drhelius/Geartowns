@@ -152,8 +152,7 @@ Games running in protected mode use linear addresses, which paging may map to di
 Use fast forward to speed through gameplay when you need to trigger in-game changes:
 
 ```
-set_fast_forward_speed (4 = unlimited)
-toggle_fast_forward (enabled: true)
+toggle_fast_forward (enabled: true, speed: 4 = unlimited)
 (play through the game section)
 toggle_fast_forward (enabled: false)
 ```
@@ -167,15 +166,14 @@ This is essential when you need to reach specific game states without waiting in
 Save states are critical for game hacking — they let you save your position and retry modifications:
 
 ```
-select_save_state_slot (1-5)     → pick a slot
-save_state                       → save current state
+save_state (slot: 1-5)           → save current state in a slot
 (try modifications)
-load_state                       → revert if something breaks
+load_state (slot: 1-5)           → revert if something breaks
 ```
 
 Use different slots for different game states (e.g., slot 1 = start, slot 2 = boss fight, slot 3 = specific level).
 
-`list_save_state_slots` shows all slots with media name, timestamp, and validity. `save_state_file` and `load_state_file` save and load states to explicit file paths, handy for keeping many checkpoints.
+`list_save_state_slots` shows all slots with media name, timestamp, and validity. `save_state` and `load_state` with `file_path` instead of `slot` use explicit files, handy for keeping many checkpoints.
 
 ### Rewind as an Alternative
 
@@ -195,7 +193,7 @@ Most Japanese FM Towns software stores text as Shift-JIS: two bytes per kanji or
 4. Set read breakpoints on suspected text addresses with `set_breakpoint` (type: read) to confirm they're used for rendering
 5. `read_memory` around a hit to see the surrounding strings, and `get_screenshot` to correlate displayed text with memory contents
 
-To look at files on the media itself, `read_cdrom_sector` (by `lba`, `user` mode for the 2048-byte payload) and `read_floppy_sector` return raw sector data as hex; `list_cdrom_tracks` and `list_floppy_sectors` describe the layout.
+To look at files on the media itself, `read_cdrom_sector` (by `lba`, `user` mode for the 2048-byte payload) and `read_floppy_sector` return raw sector data as hex; `list_cdrom_tracks` and `read_floppy_sector` without `sector` describe the layout.
 
 ### Sprite and Graphics Data
 
@@ -322,4 +320,4 @@ Use `list_memory_bookmarks`, `list_memory_watches`, `list_symbols`, `list_disass
 
 ## Persisting Changes
 
-Changes made via `write_memory` are applied to the emulator's live memory only — they are **not** persisted to the CD image or floppy image on disk, and ROM and media image areas cannot be written. To create a permanent patch, locate the data inside the disc or disk files (`read_cdrom_sector`, `read_floppy_sector`, `list_cdrom_tracks`, `list_floppy_sectors` help map RAM contents back to sectors) and use command-line tools (e.g., a binary patch script) to apply the discovered modifications to a copy of the actual image file.
+Changes made via `write_memory` are applied to the emulator's live memory only — they are **not** persisted to the CD image or floppy image on disk, and ROM and media image areas cannot be written. To create a permanent patch, locate the data inside the disc or disk files (`read_cdrom_sector`, `read_floppy_sector` and `list_cdrom_tracks` help map RAM contents back to sectors) and use command-line tools (e.g., a binary patch script) to apply the discovered modifications to a copy of the actual image file.

@@ -196,8 +196,8 @@ struct McpToolCategoryTools
 static const McpToolCategory kMcpToolCategories[] =
 {
     {"execution", "Execution Control", "Pause, resume, step, frame-step, reset, run-to-address, and fast-forward emulator execution."},
-    {"breakpoints", "Breakpoints", "Set, clear, enable, disable and list Intel 80386 execute, read, write and I/O breakpoints by address or range, and interrupt breakpoints by vector."},
-    {"memory", "Memory", "List memory areas, read/write bytes, translate addresses, select ranges, fill selections, search memory, and manage watches/bookmarks."},
+    {"breakpoints", "Breakpoints", "Set, clear, enable, disable and list Intel 80386 execute, read, write and I/O breakpoints by address or range, and interrupt breakpoints by vector or IRQ line."},
+    {"memory", "Memory", "List memory areas, read/write bytes, translate addresses, fill ranges, select ranges, search memory, and manage watches/bookmarks."},
     {"cpu", "CPU", "Inspect Intel 80386 registers, flags, mode, segments, descriptor tables, control and debug registers, and write register values."},
     {"disassembly", "Disassembly", "Decode Intel 80386 code, inspect the call stack, and manage disassembly bookmarks."},
     {"symbols", "Symbols", "Add, remove, load, list and look up user symbols and automatic labels."},
@@ -208,7 +208,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"hardware_floppy", "Floppy Hardware", "Inspect the MB8877 floppy controller and drives, list a track's sectors, and read sector data."},
     {"media", "Media", "Load firmware or CD images, insert, eject and swap floppies, list recent media, and inspect loaded media, firmware and floppy drives."},
     {"capture", "Capture", "Capture current screenshots and record AVI video."},
-    {"state", "Save States", "List save slots, select a slot, save emulator state, and load emulator state."},
+    {"state", "Save States", "List save slots, and save or load emulator state in a slot or a file."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
     {"input", "Input", "Press pad buttons, move and click the mouse, set each game port's device, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
     {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, PIC, timers, DMA, video, sprites, sound, CD-ROM, FDC, keyboard, game ports, system) and read the trace."},
@@ -219,23 +219,19 @@ static const McpToolCategory kMcpToolCategories[] =
 static const char* const kMcpExecutionTools[] =
 {
     "debug_pause", "debug_continue", "debug_step_into", "debug_step_over", "debug_step_out",
-    "debug_step_frame", "debug_run_to_cursor", "debug_reset", "debug_get_status",
-    "set_fast_forward_speed", "toggle_fast_forward"
+    "debug_step_frame", "debug_run_to_cursor", "debug_reset", "debug_get_status", "toggle_fast_forward"
 };
 
 static const char* const kMcpBreakpointTools[] =
 {
-    "set_breakpoint", "set_breakpoint_range", "remove_breakpoint", "enable_breakpoint", "set_breakpoints_active",
-    "list_breakpoints", "set_breakpoint_on_interrupt", "clear_breakpoint_on_interrupt", "enable_breakpoint_on_interrupt",
-    "list_breakpoints_on_interrupt", "set_breakpoint_on_irq", "clear_breakpoint_on_irq", "enable_breakpoint_on_irq",
-    "list_breakpoints_on_irq"
+    "set_breakpoint", "remove_breakpoint", "set_breakpoints_active", "list_breakpoints", "set_breakpoint_on_interrupt",
+    "clear_breakpoint_on_interrupt"
 };
 
 static const char* const kMcpMemoryTools[] =
 {
     "list_memory_areas", "read_memory", "write_memory", "translate_address", "select_memory_range",
-    "set_memory_selection_value", "get_memory_selection", "add_memory_bookmark",
-    "remove_memory_bookmark", "list_memory_bookmarks", "add_memory_watch", "remove_memory_watch",
+    "get_memory_selection", "add_memory_bookmark", "remove_memory_bookmark", "list_memory_bookmarks", "add_memory_watch", "remove_memory_watch",
     "list_memory_watches", "memory_search_capture", "memory_search", "memory_find"
 };
 
@@ -252,7 +248,7 @@ static const char* const kMcpDisassemblyTools[] =
 
 static const char* const kMcpSymbolTools[] =
 {
-    "add_symbol", "remove_symbol", "load_symbols", "list_symbols", "lookup_symbol_by_name", "lookup_symbol_at_address"
+    "add_symbol", "remove_symbol", "load_symbols", "list_symbols"
 };
 
 static const char* const kMcpSystemTools[] =
@@ -274,17 +270,17 @@ static const char* const kMcpAudioTools[] =
 
 static const char* const kMcpCdromTools[] =
 {
-    "get_cdrom_status", "list_cdrom_tracks", "get_cdrom_audio_status", "read_cdrom_sector"
+    "get_cdrom_status", "list_cdrom_tracks", "read_cdrom_sector"
 };
 
 static const char* const kMcpFloppyTools[] =
 {
-    "get_fdc_status", "list_floppy_drives", "list_floppy_sectors", "read_floppy_sector"
+    "get_fdc_status", "list_floppy_drives", "read_floppy_sector"
 };
 
 static const char* const kMcpMediaTools[] =
 {
-    "load_media", "eject_cdrom", "list_cdrom_playlist", "insert_playlist_disc", "get_media_info", "list_recent_media",
+    "load_media", "eject_cdrom", "insert_playlist_disc", "get_media_info", "list_recent_media",
     "load_bios", "insert_floppy", "create_blank_floppy", "eject_floppy", "swap_floppies", "set_floppy_write_protect"
 };
 
@@ -295,8 +291,7 @@ static const char* const kMcpCaptureTools[] =
 
 static const char* const kMcpStateTools[] =
 {
-    "list_save_state_slots", "select_save_state_slot", "save_state", "load_state",
-    "save_state_file", "load_state_file"
+    "list_save_state_slots", "save_state", "load_state"
 };
 
 static const char* const kMcpRewindTools[] =
@@ -306,7 +301,7 @@ static const char* const kMcpRewindTools[] =
 
 static const char* const kMcpInputTools[] =
 {
-    "controller_button", "controller_set_type", "controller_get_type", "get_input_state",
+    "controller_button", "controller_set_type", "get_input_state",
     "keyboard_key", "keyboard_type", "mouse_get_cursor", "mouse_move", "mouse_click"
 };
 

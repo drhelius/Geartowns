@@ -127,15 +127,15 @@ Use breakpoints to stop execution at points of interest:
 | Write | `set_breakpoint` (type: write) | Stop when memory is written |
 | Access | `set_breakpoint` (type: access) | Stop on any read or write |
 | I/O port | `set_breakpoint` (space: io) | Stop on IN/OUT/INS/OUTS to a port |
-| Range | `set_breakpoint_range` | Cover an address range (same type and space) |
-| Interrupt | `set_breakpoint_on_interrupt` | Stop on entry to an interrupt vector (0-255) |
-| IRQ | `set_breakpoint_on_irq` | Stop when the PIC delivers an IRQ line (0-15), whatever its vector |
+| Range | `set_breakpoint` (end_address) | Cover an address range (same type and space) |
+| Interrupt | `set_breakpoint_on_interrupt` (vector) | Stop on entry to an interrupt vector (0-255) |
+| IRQ | `set_breakpoint_on_interrupt` (irq) | Stop when the PIC delivers an IRQ line (0-15), whatever its vector |
 
-Breakpoints support three address spaces (`space`): `linear` (default), `physical` and `io`. Execute breakpoints are linear only. Interrupt breakpoints take a `source` (`any`, `exception`, `hardware`, `software`) and stop before the handler's first instruction.
+Breakpoints support three address spaces (`space`): `linear` (default), `physical` and `io`. Execute breakpoints are linear or physical. `enabled: false` adds or keeps a breakpoint disabled. Interrupt breakpoints by `vector` take a `source` (`any`, `exception`, `hardware`, `software`) and stop before the handler's first instruction.
 
 **Important**: Read, write and access breakpoints stop *after* the instruction that made the memory access, so the PC is at the following instruction. Execute breakpoints stop before the instruction runs. `debug_get_status` reports in `breakpoint` what stopped execution (kind, space, address, size, or the vector and source of an interrupt).
 
-Manage breakpoints with `list_breakpoints`, `remove_breakpoint`, `list_breakpoints_on_interrupt`, `clear_breakpoint_on_interrupt`, `list_breakpoints_on_irq`, `clear_breakpoint_on_irq`.
+Manage breakpoints with `list_breakpoints` (address, interrupt and IRQ breakpoints), `remove_breakpoint` and `clear_breakpoint_on_interrupt` (by `vector` and `source`, or by `irq`).
 
 ### 4. Step Through Code
 
@@ -157,12 +157,12 @@ After each step, call `get_i386_status` and `get_disassembly` to see where you a
 
 The trace logger records executed instructions (CS:EIP, linear address, mode, bytes, Intel syntax) interleaved with hardware events (IRQ requests, interrupt entries, I/O port accesses, DMA, CD-ROM and floppy controller commands, VSYNC).
 
-1. `set_trace_log` with `enabled: true` to start recording (optionally set `filters`, `registers` and `output`)
+1. `set_trace_log` with `enabled: true` to start recording (optionally set `filters` and `output`)
 2. Let the game run or step through code (the trace records while the debugger runs the machine)
 3. `set_trace_log` with `enabled: false` to stop (entries are preserved)
 4. `get_trace_log` to read recorded entries (`start` negative reads the last N lines, `count` up to 1000)
 
-Available trace event filters: `cpu`, `interrupt`, `io`, `dma`, `cdrom`, `fdc`, `vsync`. Set `registers: true` to add the general registers and EFLAGS to instruction lines. `output: "disk"` also streams the trace to a text file (`output_path`, `disk_size`) for long captures; `memory_size` sets how many entries are kept in memory.
+Trace filters are event streams such as `cpu.instructions`, `cpu.irqs`, `io.writes`, `video.vsync` or `cdrom.commands`, or a whole group: `cpu`, `io`, `pic`, `timer`, `dma`, `video`, `sprite`, `fm`, `pcm`, `mixer`, `cdrom`, `fdc`, `keyboard`, `input`, `system` (the tool schema lists every stream). Instruction lines carry the general and segment registers and EFLAGS. `output: "disk"` also streams the trace to a text file (`output_path`, `disk_size`) for long captures; `memory_size` sets how many entries are kept in memory.
 
 Tracing is essential for understanding timing-sensitive code, interrupt handlers, and hardware interaction sequences.
 
@@ -211,14 +211,12 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 
 ### CD-ROM and Floppy
 
-- `get_cdrom_status` — CD-ROM controller: master status, last command and parameters, status queue, transfer mode, drive state, head position
+- `get_cdrom_status` — CD-ROM controller: master status, last command and parameters, status queue, transfer mode, drive state, head position, plus CD-DA playback (`audio`) and the `.m3u` `playlist`
 - `list_cdrom_tracks` — the disc TOC: track types, start and end MSF, LBA, length
-- `get_cdrom_audio_status` — CD-DA playback state, position and volume
 - `read_cdrom_sector` — read one sector of the image by `lba` (`mode`: `user` 2048 bytes or `raw` 2352 bytes). Does not move the drive head
 - `get_fdc_status` — MB8877 floppy controller: decoded command, registers, BUSY/DRQ/INTRQ, drive control
 - `list_floppy_drives` — both drives: image, disk name, media, geometry, write protect, head position, motor
-- `list_floppy_sectors` — sector IDs of a track (`drive`, `cylinder`, `head`)
-- `read_floppy_sector` — read a sector by ID (`drive`, `cylinder`, `head`, `sector`)
+- `read_floppy_sector` — read a sector by ID (`drive`, `cylinder`, `head`, `sector`); without `sector` it lists the track's sector IDs
 
 ### Screenshots
 
@@ -240,7 +238,7 @@ Use screenshots after stepping or continuing to see the visual impact of changes
 ### Finding an Interrupt Handler
 
 1. `get_pic_status` to read the vectors programmed into the master and slave PICs (the FM Towns BIOS uses 40h-47h and 48h-4Fh; IRQ11 is VSYNC, IRQ9 is the CD-ROM, IRQ6 is the floppy)
-2. `set_breakpoint_on_irq` with the IRQ line (it follows the line whatever vector the PIC uses), or `set_breakpoint_on_interrupt` with that `vector` (`source`: `hardware`), or read the handler address with `get_i386_descriptors` (`table: idt`) and set an execution breakpoint there
+2. `set_breakpoint_on_interrupt` with the `irq` line (it follows the line whatever vector the PIC uses), or with that `vector` (`source`: `hardware`), or read the handler address with `get_i386_descriptors` (`table: idt`) and set an execution breakpoint there
 3. `debug_continue` to run until the IRQ fires
 4. `get_i386_status` + `get_disassembly` to see the handler code
 5. `get_call_stack` to see how deep you are
@@ -283,7 +281,7 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 
 ### Timing Analysis
 
-1. `set_trace_log` with `enabled: true` and `filters` such as `interrupt`, `vsync`, `io` to start recording
+1. `set_trace_log` with `enabled: true` and `filters` such as `cpu`, `video.vsync`, `io` to start recording
 2. Let the game run through the section of interest
 3. `get_trace_log` to see the interleaved CPU + hardware events
 4. Check `get_pit_status` and `get_crtc_status` for timer and VSYNC timing
@@ -295,22 +293,22 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 2. `get_ym3438_status` / `get_rf5c68_status` — see which FM and PCM channels are active and their notes, envelopes and addresses
 3. `set_audio_mute` — mute individual sources or channels to find which one produces a sound
 4. Set an I/O breakpoint (`space: io`) on the sound ports (see [references/sound.md](references/sound.md)) to find the code that programs them
-5. `get_cdrom_audio_status` for CD-DA music
+5. `get_cdrom_status` (`audio`) for CD-DA music
 
 ### CD-ROM Game Debugging
 
 1. `load_media` with a `.cue`, `.chd`, `.iso` or `.zip` file to load a CD image
 2. `list_cdrom_tracks` to see the TOC and `get_cdrom_status` to verify drive state
-3. `set_trace_log` with `filters: ["cpu", "cdrom", "dma", "interrupt"]` to trace CD commands, DMA transfers and the CD-ROM IRQ
+3. `set_trace_log` with `filters: ["cpu", "cdrom", "dma"]` to trace CD commands, DMA transfers and the CD-ROM IRQ
 4. `get_dma_status` to inspect the DMA channel used for the transfer (channel 3 for CD-ROM data)
 5. Set breakpoints on the destination RAM (write type) to catch data loading, and `read_cdrom_sector` to compare against the disc contents
-6. `get_cdrom_audio_status` to inspect CD-DA playback
+6. `get_cdrom_status` (`audio`) to inspect CD-DA playback
 
 ### Floppy Boot Debugging
 
 1. `insert_floppy` with the disk image in `drive` 0 (use `set_floppy_write_protect` to keep the image untouched)
-2. `list_floppy_drives` and `list_floppy_sectors` to confirm the image geometry and sector IDs
-3. `set_trace_log` with `filters: ["cpu", "fdc", "dma", "interrupt"]` to trace controller commands and IRQ6
+2. `list_floppy_drives` and `read_floppy_sector` without `sector` to confirm the image geometry and sector IDs
+3. `set_trace_log` with `filters: ["cpu", "fdc", "dma"]` to trace controller commands and IRQ6
 4. `get_fdc_status` to inspect the MB8877 command and registers while paused
 5. `read_floppy_sector` to compare what the game read with the image contents
 6. `eject_floppy` or `swap_floppies` to change disks, as the game would ask for
@@ -319,10 +317,10 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 
 - `keyboard_key` presses, releases or taps a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, HIRAGANA...)
 - `keyboard_type` types ASCII text, useful at Towns OS and DOS prompts
-- `controller_set_type` selects the device on a game port (`auto`, `none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`); `auto` takes the device the game database names for the loaded game, or the default. `controller_get_type` reads the device, its setting and where it came from
+- `controller_set_type` selects the device on a game port (`auto`, `none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`); `auto` takes the device the game database names for the loaded game, or the default
 - `controller_button` presses, releases or taps pad buttons; on a mouse port the directions move the mouse and A/B are the left/right buttons
 - `mouse_click` with `x`, `y` clicks at a screen pixel from `get_screenshot` (`double_click`, `right` button, or `press`/`release` around a `mouse_move` for drags); `mouse_move` places the pointer, and `mouse_get_cursor` reads where it was last measured without running frames
-- `get_input_state` shows each port's device and the pressed buttons and keys
+- `get_input_state` shows each port's device, its setting and where it came from, and the pressed buttons and keys
 
 ---
 
@@ -352,7 +350,7 @@ Offsets in region areas are 0-based. ROMs, media images and I/O PORTS cannot be 
 
 ## Organizing Your Debug Session
 
-- **Symbols**: Use `add_symbol` liberally to label addresses you've identified — makes disassembly readable. Use `list_symbols`, `lookup_symbol_by_name` and `lookup_symbol_at_address` to review
+- **Symbols**: Use `add_symbol` liberally to label addresses you've identified — makes disassembly readable. Use `list_symbols` (with `filter`, an exact `name` or an `address`) to review
 - **Bookmarks**: Use `add_disassembler_bookmark` for code locations and `add_memory_bookmark` for data regions
 - **Watches**: Use `add_memory_watch` for variables you're tracking across steps (8, 16, 32 or 64 bits)
 - **Save states**: Use `save_state` / `load_state` to snapshot and restore emulator state at interesting points

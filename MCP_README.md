@@ -609,6 +609,9 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_input_state` - Get each port's device type, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
 - `keyboard_type` - Type ASCII text (up to 256 characters) through a frame macro on the JIS layout; optional `frames_per_key`
+- `mouse_move` - Move the mouse pointer to screen pixel `x`, `y` (the coordinates of `get_screenshot`; the top-left of the pointer image lands there), or by `dx`, `dy` mouse counts. A screen move finds the pointer by moving it 32 counts out and back and comparing frames, moves 4 counts per frame (Towns OS moves bigger steps faster) and checks again until it is there. It runs emulated frames, kept in rewind like any input, and a breakpoint stops it. Optional `player` picks the port, default the first one set to mouse
+- `mouse_click` - Click the `left` or `right` button (`click`, `double_click`, `press` or `release`), at screen pixel `x`, `y` when given. Press and release last 4 frames each; `press`, `mouse_move` and `release` make a drag. A pointer that snaps to a grid and can't land on the exact pixel still clicks when it covers the target
+- `mouse_get_cursor` - Read where the last `mouse_move` or `mouse_click` measured the pointer: position, box, pixels per mouse count, and whether the current frame still draws it there. Read-only, it never runs frames
 
 ## Available MCP Resources
 

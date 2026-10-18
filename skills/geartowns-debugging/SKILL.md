@@ -321,6 +321,7 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 - `keyboard_type` types ASCII text, useful at Towns OS and DOS prompts
 - `controller_set_type` selects the device on a game port (`auto`, `none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`); `auto` takes the device the game database names for the loaded game, or the default. `controller_get_type` reads the device, its setting and where it came from
 - `controller_button` presses, releases or taps pad buttons; on a mouse port the directions move the mouse and A/B are the left/right buttons
+- `mouse_click` with `x`, `y` clicks at a screen pixel from `get_screenshot` (`double_click`, `right` button, or `press`/`release` around a `mouse_move` for drags); `mouse_move` places the pointer, and `mouse_get_cursor` reads where it was last measured without running frames
 - `get_input_state` shows each port's device and the pressed buttons and keys
 
 ---

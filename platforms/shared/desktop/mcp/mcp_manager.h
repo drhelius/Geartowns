@@ -66,6 +66,63 @@ enum McpMouseMotion
     MCP_MOUSE_MOTION_COUNT
 };
 
+static const int k_mcp_mouse_wiggle_counts = 32;
+static const int k_mcp_mouse_wiggle_max_counts = 128;
+static const int k_mcp_mouse_wiggle_tries = 3;
+static const int k_mcp_mouse_settle_frames = 3;
+static const int k_mcp_mouse_stall_frames = 60;
+static const int k_mcp_mouse_max_moves = 6;
+static const int k_mcp_mouse_button_frames = 4;
+
+enum McpMousePhase
+{
+    MCP_MOUSE_PHASE_START = 0,
+    MCP_MOUSE_PHASE_WIGGLE_OUT,
+    MCP_MOUSE_PHASE_WIGGLE_BACK,
+    MCP_MOUSE_PHASE_MOVE,
+    MCP_MOUSE_PHASE_BUTTONS
+};
+
+struct McpMouseMacroState
+{
+    bool active;
+    json request_id;
+    McpMousePhase phase;
+    int player;
+    bool click;
+    bool absolute;
+    int target_x;
+    int target_y;
+    int delta_x;
+    int delta_y;
+    int send_x;
+    int send_y;
+    int settle;
+    int stall;
+    int wiggle_counts;
+    int wiggle_x;
+    int wiggle_y;
+    int wiggle_tries;
+    bool wiggle_flip;
+    int moves;
+    int last_distance;
+    int screen_width;
+    int screen_height;
+    std::vector<u32> frame_before;
+    std::vector<u32> frame_out;
+    std::string button;
+    std::string action;
+    u16 button_mask;
+    int button_steps;
+    bool button_press_first;
+    int button_step;
+    int button_wait;
+    u64 frame;
+    u64 start_frame;
+    bool restore_pause;
+    u64 breakpoint_stops;
+};
+
 class McpManager
 {
 public:
@@ -79,6 +136,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_request_id = json();
         reset_input_macro();
+        reset_mouse_macro();
         reset_mouse_motion();
     }
 
@@ -116,6 +174,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
         reset_input_macro();
+        reset_mouse_macro();
         reset_mouse_motion();
         m_debug_adapter->ClearControllerState();
 
@@ -156,6 +215,7 @@ public:
         m_pending_media_load_file_path.clear();
         release_input_macro_keys();
         reset_input_macro();
+        reset_mouse_macro();
         reset_mouse_motion();
 
         if (IsValidPointer(m_debug_adapter))
@@ -205,6 +265,12 @@ public:
         if (m_input_macro.active)
         {
             pump_input_macro();
+            return;
+        }
+
+        if (m_mouse_macro.active)
+        {
+            pump_mouse_macro();
             return;
         }
 
@@ -271,6 +337,27 @@ public:
                 {
                     SafeDelete(response);
                     pump_input_macro();
+                }
+
+                SafeDelete(command);
+                break;
+            }
+
+            if ((tool == "mouse_move") || (tool == "mouse_click"))
+            {
+                DebugResponse* response = new DebugResponse();
+                response->requestId = command->requestId;
+                response->result = start_mouse_macro(tool, command->arguments, command->requestId);
+
+                if (response->result.contains("error"))
+                {
+                    UpdateResponseError(response);
+                    m_response_queue.Push(response);
+                }
+                else
+                {
+                    SafeDelete(response);
+                    pump_mouse_macro();
                 }
 
                 SafeDelete(command);
@@ -562,6 +649,439 @@ private:
         m_response_queue.Push(response);
     }
 
+    void reset_mouse_macro()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+        macro.active = false;
+        macro.request_id = json();
+        macro.phase = MCP_MOUSE_PHASE_START;
+        macro.player = 0;
+        macro.click = false;
+        macro.absolute = false;
+        macro.target_x = 0;
+        macro.target_y = 0;
+        macro.delta_x = 0;
+        macro.delta_y = 0;
+        macro.send_x = 0;
+        macro.send_y = 0;
+        macro.settle = 0;
+        macro.stall = 0;
+        macro.wiggle_counts = k_mcp_mouse_wiggle_counts;
+        macro.wiggle_x = 0;
+        macro.wiggle_y = 0;
+        macro.wiggle_tries = 0;
+        macro.wiggle_flip = false;
+        macro.moves = 0;
+        macro.last_distance = 0;
+        macro.screen_width = 0;
+        macro.screen_height = 0;
+        macro.frame_before.clear();
+        macro.frame_out.clear();
+        macro.button.clear();
+        macro.action.clear();
+        macro.button_mask = 0;
+        macro.button_steps = 0;
+        macro.button_press_first = false;
+        macro.button_step = 0;
+        macro.button_wait = 0;
+        macro.frame = 0;
+        macro.start_frame = 0;
+        macro.restore_pause = false;
+        macro.breakpoint_stops = 0;
+    }
+
+    json start_mouse_macro(const std::string& tool, const json& arguments, const json& request_id)
+    {
+        json result;
+
+        if (emu_is_empty())
+        {
+            result["error"] = "Emulator is powered off";
+            return result;
+        }
+
+        int player = arguments.value("player", 0);
+
+        if (player == 0)
+            player = m_debug_adapter->FindMousePlayer();
+
+        if (player == 0)
+        {
+            result["error"] = "No game port is set to mouse, use controller_set_type";
+            return result;
+        }
+
+        if (!m_debug_adapter->IsMouseController(player))
+        {
+            result["error"] = "Port " + std::to_string(player) + " is not a mouse";
+            return result;
+        }
+
+        bool click = tool == "mouse_click";
+        bool absolute = arguments.contains("x") || arguments.contains("y");
+        bool relative = arguments.contains("dx") || arguments.contains("dy");
+
+        if (absolute && (!arguments.contains("x") || !arguments.contains("y")))
+        {
+            result["error"] = "x and y go together";
+            return result;
+        }
+
+        if (!click && (absolute == relative))
+        {
+            result["error"] = "Give x and y to move to a screen pixel, or dx and dy to move by mouse counts";
+            return result;
+        }
+
+        GT_Runtime_Info runtime;
+        emu_get_runtime(runtime);
+        int x = arguments.value("x", 0);
+        int y = arguments.value("y", 0);
+
+        if (absolute && ((x < 0) || (y < 0) || (x >= runtime.screen_width) || (y >= runtime.screen_height)))
+        {
+            result["error"] = "x and y must be inside the " + std::to_string(runtime.screen_width) + "x" +
+                std::to_string(runtime.screen_height) + " screen";
+            return result;
+        }
+
+        std::string button = arguments.value("button", "left");
+        std::string action = arguments.value("action", "click");
+
+        reset_mouse_macro();
+        McpMouseMacroState& macro = m_mouse_macro;
+        macro.request_id = request_id;
+        macro.player = player;
+        macro.click = click;
+        macro.absolute = absolute;
+        macro.target_x = x;
+        macro.target_y = y;
+        macro.delta_x = arguments.value("dx", 0);
+        macro.delta_y = arguments.value("dy", 0);
+        macro.button = button;
+        macro.action = action;
+        macro.button_mask = button == "right" ? GT_GAMEPAD_B : GT_GAMEPAD_A;
+        macro.button_steps = action == "double_click" ? 4 : (action == "click" ? 2 : 1);
+        macro.button_press_first = action != "release";
+        macro.frame = emu_frame_counter;
+        macro.start_frame = emu_frame_counter;
+        macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
+        macro.breakpoint_stops = emu_debug_breakpoint_stops;
+        macro.active = true;
+
+        result["success"] = true;
+        result["pending"] = true;
+        return result;
+    }
+
+    void pump_mouse_macro()
+    {
+        if (emu_is_empty())
+        {
+            finish_mouse_macro_error("Emulator is powered off");
+            return;
+        }
+
+        if (emu_frame_counter != m_mouse_macro.frame)
+        {
+            m_mouse_macro.frame = emu_frame_counter;
+            step_mouse_macro();
+
+            if (!m_mouse_macro.active)
+                return;
+        }
+
+        if (emu_is_debug_idle())
+        {
+            if (emu_debug_breakpoint_stops != m_mouse_macro.breakpoint_stops)
+            {
+                finish_mouse_macro_error("Mouse interrupted by breakpoint");
+                return;
+            }
+
+            emu_debug_step_frames(1);
+        }
+        else if (m_mouse_macro.restore_pause && emu_is_paused())
+            emu_resume();
+    }
+
+    void step_mouse_macro()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+
+        if (!m_debug_adapter->IsMouseController(macro.player))
+        {
+            finish_mouse_macro_error("Port " + std::to_string(macro.player) + " is no longer a mouse");
+            return;
+        }
+
+        switch (macro.phase)
+        {
+            case MCP_MOUSE_PHASE_START:
+                if (macro.absolute)
+                    begin_mouse_wiggle();
+                else if (!macro.click)
+                    begin_mouse_move(macro.delta_x, macro.delta_y);
+                else
+                {
+                    macro.phase = MCP_MOUSE_PHASE_BUTTONS;
+                    step_mouse_buttons();
+                }
+                break;
+            case MCP_MOUSE_PHASE_WIGGLE_OUT:
+                if (!feed_mouse_motion())
+                    break;
+
+                capture_mouse_frame(macro.frame_out);
+                macro.send_x = -macro.wiggle_x;
+                macro.send_y = -macro.wiggle_y;
+                macro.phase = MCP_MOUSE_PHASE_WIGGLE_BACK;
+                feed_mouse_motion();
+                break;
+            case MCP_MOUSE_PHASE_WIGGLE_BACK:
+                if (feed_mouse_motion())
+                    finish_mouse_wiggle();
+                break;
+            case MCP_MOUSE_PHASE_MOVE:
+                if (!feed_mouse_motion())
+                    break;
+
+                if (macro.absolute)
+                    begin_mouse_wiggle();
+                else
+                    finish_mouse_macro_success();
+                break;
+            case MCP_MOUSE_PHASE_BUTTONS:
+                step_mouse_buttons();
+                break;
+        }
+    }
+
+    bool feed_mouse_motion()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+
+        if (m_debug_adapter->IsMouseMotionPending(macro.player))
+        {
+            macro.stall++;
+
+            if (macro.stall >= k_mcp_mouse_stall_frames)
+                finish_mouse_macro_error("The software isn't reading the mouse on port " +
+                    std::to_string(macro.player));
+
+            return false;
+        }
+
+        macro.stall = 0;
+
+        if ((macro.send_x != 0) || (macro.send_y != 0))
+        {
+            int step_x = CLAMP(macro.send_x, -k_mcp_mouse_motion_step, k_mcp_mouse_motion_step);
+            int step_y = CLAMP(macro.send_y, -k_mcp_mouse_motion_step, k_mcp_mouse_motion_step);
+            m_debug_adapter->ApplyMouseMotion(macro.player, step_x, step_y);
+            macro.send_x -= step_x;
+            macro.send_y -= step_y;
+            macro.settle = k_mcp_mouse_settle_frames;
+            return false;
+        }
+
+        if (macro.settle > 0)
+        {
+            macro.settle--;
+            return false;
+        }
+
+        return true;
+    }
+
+    void capture_mouse_frame(std::vector<u32>& frame)
+    {
+        GT_Runtime_Info runtime;
+        emu_get_runtime(runtime);
+        const u32* source = (const u32*)emu_frame_buffer;
+        frame.assign(source, source + (runtime.screen_width * runtime.screen_height));
+    }
+
+    void begin_mouse_wiggle()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+        const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+        GT_Runtime_Info runtime;
+        emu_get_runtime(runtime);
+        bool known = pointer.valid && (pointer.frame <= emu_frame_counter) &&
+            (pointer.screen_width == runtime.screen_width) && (pointer.screen_height == runtime.screen_height);
+        int x = macro.moves > 0 ? macro.target_x : (known ? pointer.x : 0);
+        int y = macro.moves > 0 ? macro.target_y : (known ? pointer.y : 0);
+        int reach = (macro.wiggle_counts * 2) + 32;
+        int sign = macro.wiggle_flip ? -1 : 1;
+
+        macro.wiggle_x = ((x + reach) < runtime.screen_width ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
+        macro.wiggle_y = ((y + reach) < runtime.screen_height ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
+        macro.screen_width = runtime.screen_width;
+        macro.screen_height = runtime.screen_height;
+        capture_mouse_frame(macro.frame_before);
+        macro.send_x = macro.wiggle_x;
+        macro.send_y = macro.wiggle_y;
+        macro.phase = MCP_MOUSE_PHASE_WIGGLE_OUT;
+        feed_mouse_motion();
+    }
+
+    void finish_mouse_wiggle()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+        GT_Runtime_Info runtime;
+        emu_get_runtime(runtime);
+        bool overlap = false;
+        bool same_screen = (runtime.screen_width == macro.screen_width) &&
+            (runtime.screen_height == macro.screen_height) && (macro.frame_out.size() == macro.frame_before.size());
+        bool found = same_screen && m_debug_adapter->FindMousePointer(macro.player, macro.frame_before.data(),
+            macro.frame_out.data(), (const u32*)emu_frame_buffer, macro.screen_width, macro.screen_height,
+            macro.wiggle_x, macro.wiggle_y, overlap);
+
+        if (!found)
+        {
+            macro.wiggle_tries++;
+
+            if (!overlap)
+                macro.wiggle_flip = !macro.wiggle_flip;
+            else if (macro.wiggle_counts < k_mcp_mouse_wiggle_max_counts)
+                macro.wiggle_counts *= 2;
+
+            if (macro.wiggle_tries < k_mcp_mouse_wiggle_tries)
+                begin_mouse_wiggle();
+            else
+                finish_mouse_macro_error("No mouse pointer moved on screen when the mouse moved: the software hides "
+                    "it, draws none or doesn't read this port");
+
+            return;
+        }
+
+        macro.wiggle_tries = 0;
+        const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+        int error_x = macro.target_x - pointer.x;
+        int error_y = macro.target_y - pointer.y;
+        double steps_x = error_x / pointer.pixels_per_count_x;
+        double steps_y = error_y / pointer.pixels_per_count_y;
+        int counts_x = (int)(steps_x + (steps_x < 0.0 ? -0.5 : 0.5));
+        int counts_y = (int)(steps_y + (steps_y < 0.0 ? -0.5 : 0.5));
+        int distance = abs(error_x) + abs(error_y);
+        bool closest = (counts_x == 0) && (counts_y == 0);
+        bool stuck = (macro.moves >= k_mcp_mouse_max_moves) || ((macro.moves > 0) && (distance >= macro.last_distance));
+
+        if (closest || stuck)
+        {
+            bool covered = (abs(error_x) <= (pointer.width / 2)) && (abs(error_y) <= (pointer.height / 2));
+
+            if (!macro.click)
+                finish_mouse_macro_success();
+            else if (closest || covered)
+            {
+                macro.phase = MCP_MOUSE_PHASE_BUTTONS;
+                step_mouse_buttons();
+            }
+            else
+                finish_mouse_macro_error("The pointer stopped at " + std::to_string(pointer.x) + "," +
+                    std::to_string(pointer.y) + " and can't reach " + std::to_string(macro.target_x) + "," +
+                    std::to_string(macro.target_y));
+
+            return;
+        }
+
+        macro.last_distance = distance;
+        macro.moves++;
+        begin_mouse_move(counts_x, counts_y);
+    }
+
+    void begin_mouse_move(int counts_x, int counts_y)
+    {
+        m_mouse_macro.send_x = counts_x;
+        m_mouse_macro.send_y = counts_y;
+        m_mouse_macro.phase = MCP_MOUSE_PHASE_MOVE;
+        feed_mouse_motion();
+    }
+
+    void step_mouse_buttons()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+
+        if (macro.button_wait > 0)
+        {
+            macro.button_wait--;
+            return;
+        }
+
+        if (macro.button_step >= macro.button_steps)
+        {
+            finish_mouse_macro_success();
+            return;
+        }
+
+        bool pressed = macro.button_press_first && ((macro.button_step % 2) == 0);
+        m_debug_adapter->SetMouseButton(macro.player, macro.button_mask, pressed);
+        macro.button_step++;
+        macro.button_wait = k_mcp_mouse_button_frames - 1;
+    }
+
+    void finish_mouse_macro_success()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+        bool restore_pause = macro.restore_pause;
+        json result = {{"success", true}, {"player", macro.player}, {"frames", emu_frame_counter - macro.start_frame}};
+
+        if (macro.absolute)
+        {
+            const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+            result["x"] = pointer.x;
+            result["y"] = pointer.y;
+            result["reached"] = (pointer.x == macro.target_x) && (pointer.y == macro.target_y);
+            result["box"] = {{"x", pointer.x}, {"y", pointer.y}, {"width", pointer.width}, {"height", pointer.height}};
+        }
+        else if (!macro.click)
+        {
+            result["dx"] = macro.delta_x;
+            result["dy"] = macro.delta_y;
+        }
+
+        if (macro.click)
+        {
+            result["button"] = macro.button;
+            result["action"] = macro.action;
+        }
+
+        DebugResponse* response = new DebugResponse();
+        response->requestId = macro.request_id;
+        response->result = result;
+
+        reset_mouse_macro();
+
+        if (restore_pause)
+            emu_pause();
+
+        m_response_queue.Push(response);
+    }
+
+    void finish_mouse_macro_error(const std::string& error)
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+        bool restore_pause = macro.restore_pause;
+
+        if (macro.click && (macro.button_steps > 1) && (macro.button_step > 0))
+            m_debug_adapter->SetMouseButton(macro.player, macro.button_mask, false);
+
+        DebugResponse* response = new DebugResponse();
+        response->requestId = macro.request_id;
+        response->isToolError = true;
+        response->errorMessage = error;
+        response->result = {{"error", error}};
+
+        reset_mouse_macro();
+
+        if (restore_pause)
+            emu_pause();
+
+        m_response_queue.Push(response);
+    }
+
 private:
     DebugAdapter* m_debug_adapter;
     McpServer* m_server;
@@ -575,6 +1095,7 @@ private:
     std::string m_pending_media_load_file_path;
     std::vector<DelayedButtonRelease> m_delayed_releases;
     McpInputMacroState m_input_macro;
+    McpMouseMacroState m_mouse_macro;
     bool m_mouse_motion_held[GT_MAX_GAMEPADS][MCP_MOUSE_MOTION_COUNT];
     u64 m_mouse_motion_frame;
 };

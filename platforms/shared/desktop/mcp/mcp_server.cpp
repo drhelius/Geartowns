@@ -2531,6 +2531,114 @@ json McpServer::BuildToolList()
         }}
     });
 
+    tools.push_back({
+        {"name", "mouse_get_cursor"},
+        {"title", "Get Mouse Cursor"},
+        {"description", "Read where mouse_move or mouse_click last measured the mouse pointer, in screen pixels like "
+            "get_screenshot (x, y = the top-left of the pointer image), its box, how many pixels a mouse count "
+            "moves it, and whether the current frame still draws it there. Read-only: it never runs frames, so "
+            "the position is unknown until a mouse_move or mouse_click with x and y found the pointer."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"player", {
+                    {"type", "integer"},
+                    {"description", "Mouse port 1-2. Default: the first port set to mouse."},
+                    {"minimum", 1},
+                    {"maximum", 2}
+                }}
+            }},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "mouse_move"},
+        {"title", "Mouse Move"},
+        {"description", "Move the mouse pointer to screen pixel x, y (the coordinates of get_screenshot; the "
+            "top-left of the pointer image lands there), or by dx, dy mouse counts. A screen move finds the "
+            "pointer by moving it 32 counts out and back, moves 4 counts per frame (Towns OS moves bigger steps "
+            "faster) and checks again until it is there. It runs emulated frames, kept in rewind like any input; "
+            "a breakpoint stops it."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"player", {
+                    {"type", "integer"},
+                    {"description", "Mouse port 1-2. Default: the first port set to mouse."},
+                    {"minimum", 1},
+                    {"maximum", 2}
+                }},
+                {"x", {
+                    {"type", "integer"},
+                    {"description", "Target screen pixel column, with y."},
+                    {"minimum", 0}
+                }},
+                {"y", {
+                    {"type", "integer"},
+                    {"description", "Target screen pixel row, with x."},
+                    {"minimum", 0}
+                }},
+                {"dx", {
+                    {"type", "integer"},
+                    {"description", "Horizontal motion in mouse counts, instead of x and y."},
+                    {"minimum", -4096},
+                    {"maximum", 4096}
+                }},
+                {"dy", {
+                    {"type", "integer"},
+                    {"description", "Vertical motion in mouse counts, instead of x and y."},
+                    {"minimum", -4096},
+                    {"maximum", 4096}
+                }}
+            }},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "mouse_click"},
+        {"title", "Mouse Click"},
+        {"description", "Click a mouse button, at screen pixel x, y when given (moved there first like mouse_move). "
+            "Press and release last 4 frames each and double_click clicks twice. press keeps the button held "
+            "for a drag with mouse_move, release lets it go. It runs emulated frames, kept in rewind."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"player", {
+                    {"type", "integer"},
+                    {"description", "Mouse port 1-2. Default: the first port set to mouse."},
+                    {"minimum", 1},
+                    {"maximum", 2}
+                }},
+                {"button", {
+                    {"type", "string"},
+                    {"description", "Button. Default left."},
+                    {"enum", json::array({"left", "right"})}
+                }},
+                {"action", {
+                    {"type", "string"},
+                    {"description", "Action. Default click."},
+                    {"enum", json::array({"click", "double_click", "press", "release"})}
+                }},
+                {"x", {
+                    {"type", "integer"},
+                    {"description", "Screen pixel column to click at, with y."},
+                    {"minimum", 0}
+                }},
+                {"y", {
+                    {"type", "integer"},
+                    {"description", "Screen pixel row to click at, with x."},
+                    {"minimum", 0}
+                }}
+            }},
+            {"additionalProperties", false}
+        }}
+    });
+
     // Trace and profiler tools
     json trace_filter_names = json::array();
 
@@ -3811,9 +3919,14 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         return m_debugAdapter.ControllerGetType(arguments["player"]);
     }
-    else if (normalizedTool == "keyboard_type")
+    else if ((normalizedTool == "keyboard_type") || (normalizedTool == "mouse_move") ||
+        (normalizedTool == "mouse_click"))
     {
         return {{"error", normalizedTool + " must be handled by the MCP manager"}};
+    }
+    else if (normalizedTool == "mouse_get_cursor")
+    {
+        return m_debugAdapter.MouseGetCursor(arguments.value("player", 0));
     }
     else if (normalizedTool == "get_input_state")
     {

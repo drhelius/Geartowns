@@ -209,6 +209,9 @@ DebugAdapter::DebugAdapter(GeartownsCore* core)
 {
     m_core = core;
     memset(m_buttons, 0, sizeof(m_buttons));
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+        m_mouse_pointers[i].valid = false;
 }
 
 void DebugAdapter::Pause()
@@ -4901,6 +4904,229 @@ bool DebugAdapter::ApplyMouseMotion(int player, int delta_x, int delta_y)
         emu_set_mouse_delta((GT_Controllers)(player - 1), delta_x, delta_y);
 
     return true;
+}
+
+int DebugAdapter::FindMousePlayer() const
+{
+    for (int player = 1; player <= GT_MAX_GAMEPADS; player++)
+    {
+        if (IsMouseController(player))
+            return player;
+    }
+
+    return 0;
+}
+
+bool DebugAdapter::IsMouseMotionPending(int player) const
+{
+    Input::Input_State* state = m_core->GetInput()->GetState();
+    return (state->mouse_x[player - 1] != 0) || (state->mouse_y[player - 1] != 0);
+}
+
+void DebugAdapter::SetMouseButton(int player, u16 mask, bool pressed)
+{
+    if (pressed)
+        m_buttons[player - 1] |= mask;
+    else
+        m_buttons[player - 1] &= (u16)~mask;
+
+    ApplyControllerState(player);
+}
+
+static const int k_mcp_mouse_max_changed = 16384;
+static const size_t k_mcp_mouse_max_search = 40000000;
+static const int k_mcp_mouse_min_pixels = 4;
+
+static bool IsMovedPointerPixel(const u32* before, const u32* out, int width, int height, int index, int shift_x,
+    int shift_y)
+{
+    int x = (index % width) + shift_x;
+    int y = (index / width) + shift_y;
+
+    if ((x < 0) || (y < 0) || (x >= width) || (y >= height))
+        return false;
+
+    int moved = (y * width) + x;
+    return (out[moved] == before[index]) && (out[moved] != before[moved]);
+}
+
+static void FindPointerShift(const u32* before, const u32* out, int width, int height, const std::vector<int>& changed,
+    int counts_x, int counts_y, int& shift_x, int& shift_y)
+{
+    int range_x = (abs(counts_x) * 2) + 8;
+    int range_y = (abs(counts_y) * 2) + 8;
+    int sign_x = counts_x < 0 ? -1 : 1;
+    int sign_y = counts_y < 0 ? -1 : 1;
+    size_t stride = 1 + ((changed.size() * (size_t)(range_x + 1) * (size_t)(range_y + 1)) / k_mcp_mouse_max_search);
+    int best = 0;
+    shift_x = 0;
+    shift_y = 0;
+
+    for (int y = 0; y <= range_y; y++)
+    {
+        for (int x = 0; x <= range_x; x++)
+        {
+            if ((x == 0) && (y == 0))
+                continue;
+
+            int score = 0;
+
+            for (size_t i = 0; i < changed.size(); i += stride)
+            {
+                if (IsMovedPointerPixel(before, out, width, height, changed[i], x * sign_x, y * sign_y))
+                    score++;
+            }
+
+            if (score > best)
+            {
+                best = score;
+                shift_x = x * sign_x;
+                shift_y = y * sign_y;
+            }
+        }
+    }
+}
+
+bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* out, const u32* back, int width,
+    int height, int counts_x, int counts_y, bool& overlap)
+{
+    overlap = false;
+    std::vector<int> changed;
+
+    for (int i = 0; i < width * height; i++)
+    {
+        if ((before[i] != out[i]) && (before[i] == back[i]))
+            changed.push_back(i);
+    }
+
+    if (changed.empty() || ((int)changed.size() > k_mcp_mouse_max_changed))
+        return false;
+
+    int shift_x = 0;
+    int shift_y = 0;
+    FindPointerShift(before, out, width, height, changed, counts_x, counts_y, shift_x, shift_y);
+
+    std::vector<int> pointer;
+    int left = width;
+    int top = height;
+    int right = -1;
+    int bottom = -1;
+
+    for (size_t i = 0; i < changed.size(); i++)
+    {
+        if (!IsMovedPointerPixel(before, out, width, height, changed[i], shift_x, shift_y))
+            continue;
+
+        int x = changed[i] % width;
+        int y = changed[i] / width;
+        pointer.push_back(changed[i]);
+        left = MIN(left, x);
+        top = MIN(top, y);
+        right = MAX(right, x);
+        bottom = MAX(bottom, y);
+    }
+
+    if ((int)pointer.size() < k_mcp_mouse_min_pixels)
+        return false;
+
+    int pointer_width = right - left + 1;
+    int pointer_height = bottom - top + 1;
+
+    if ((abs(shift_x) < pointer_width) && (abs(shift_y) < pointer_height))
+    {
+        overlap = true;
+        return false;
+    }
+
+    McpMousePointer& result = m_mouse_pointers[player - 1];
+    double gain_x = (double)shift_x / counts_x;
+    double gain_y = (double)shift_y / counts_y;
+
+    result.valid = true;
+    result.x = left;
+    result.y = top;
+    result.width = pointer_width;
+    result.height = pointer_height;
+    result.screen_width = width;
+    result.screen_height = height;
+    result.pixels_per_count_x = gain_x > 0.0 ? gain_x : (gain_y > 0.0 ? gain_y : 1.0);
+    result.pixels_per_count_y = gain_y > 0.0 ? gain_y : (gain_x > 0.0 ? gain_x : 1.0);
+    result.frame = emu_frame_counter;
+    result.pixels.assign(pointer_width * pointer_height, 0);
+    result.mask.assign(pointer_width * pointer_height, 0);
+
+    for (size_t i = 0; i < pointer.size(); i++)
+    {
+        int offset = (((pointer[i] / width) - top) * pointer_width) + (pointer[i] % width) - left;
+        result.mask[offset] = 1;
+        result.pixels[offset] = before[pointer[i]];
+    }
+
+    return true;
+}
+
+const McpMousePointer& DebugAdapter::GetMousePointer(int player) const
+{
+    return m_mouse_pointers[player - 1];
+}
+
+json DebugAdapter::MouseGetCursor(int player)
+{
+    if (!m_core || emu_is_empty())
+        return {{"error", "Emulator is powered off"}};
+
+    if (player == 0)
+        player = FindMousePlayer();
+
+    if (player == 0)
+        return {{"error", "No game port is set to mouse, use controller_set_type"}};
+
+    if (!IsMouseController(player))
+        return {{"error", "Port " + std::to_string(player) + " is not a mouse"}};
+
+    const McpMousePointer& pointer = m_mouse_pointers[player - 1];
+    json result = {{"success", true}, {"player", player}};
+
+    if (!pointer.valid || (pointer.frame > emu_frame_counter))
+    {
+        result["known"] = false;
+        return result;
+    }
+
+    GT_Runtime_Info runtime;
+    emu_get_runtime(runtime);
+    const u32* frame = (const u32*)emu_frame_buffer;
+    int total = 0;
+    int matched = 0;
+
+    if (IsValidPointer(frame) && (runtime.screen_width == pointer.screen_width) &&
+        (runtime.screen_height == pointer.screen_height))
+    {
+        for (int y = 0; y < pointer.height; y++)
+        {
+            for (int x = 0; x < pointer.width; x++)
+            {
+                int offset = (y * pointer.width) + x;
+
+                if (!pointer.mask[offset])
+                    continue;
+
+                total++;
+
+                if (frame[((pointer.y + y) * runtime.screen_width) + pointer.x + x] == pointer.pixels[offset])
+                    matched++;
+            }
+        }
+    }
+
+    result["known"] = true;
+    result["x"] = pointer.x;
+    result["y"] = pointer.y;
+    result["box"] = {{"x", pointer.x}, {"y", pointer.y}, {"width", pointer.width}, {"height", pointer.height}};
+    result["pixels_per_count"] = {{"x", pointer.pixels_per_count_x}, {"y", pointer.pixels_per_count_y}};
+    result["measured_frames_ago"] = emu_frame_counter - pointer.frame;
+    result["visible"] = (total > 0) && ((matched * 10) >= (total * 9));
+    return result;
 }
 
 bool DebugAdapter::GetKeyCode(const std::string& name, GT_Keys& key) const

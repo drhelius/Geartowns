@@ -111,6 +111,22 @@ struct McpAddress
     int segment_register;
 };
 
+struct McpMousePointer
+{
+    bool valid;
+    int x;
+    int y;
+    int width;
+    int height;
+    int screen_width;
+    int screen_height;
+    double pixels_per_count_x;
+    double pixels_per_count_y;
+    u64 frame;
+    std::vector<u32> pixels;
+    std::vector<u8> mask;
+};
+
 class DebugAdapter
 {
 public:
@@ -265,6 +281,13 @@ public:
     json ControllerGetType(int player);
     bool IsMouseController(int player) const;
     bool ApplyMouseMotion(int player, int delta_x, int delta_y);
+    int FindMousePlayer() const;
+    bool IsMouseMotionPending(int player) const;
+    void SetMouseButton(int player, u16 mask, bool pressed);
+    bool FindMousePointer(int player, const u32* before, const u32* out, const u32* back, int width, int height,
+        int counts_x, int counts_y, bool& overlap);
+    const McpMousePointer& GetMousePointer(int player) const;
+    json MouseGetCursor(int player);
     json KeyboardKey(const std::string& key, const std::string& action);
     bool GetKeyCode(const std::string& name, GT_Keys& key) const;
     json GetInputState();
@@ -289,6 +312,7 @@ private:
 private:
     GeartownsCore* m_core;
     u16 m_buttons[GT_MAX_GAMEPADS];
+    McpMousePointer m_mouse_pointers[GT_MAX_GAMEPADS];
 };
 
 #endif /* MCP_DEBUG_ADAPTER_H */

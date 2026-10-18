@@ -121,7 +121,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x9C9981D6, "Wing Commander II - Vengeance of the Kilrathi - Special Operations 1 & Special Operations 2", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 6, 0, 0, 0 },
 
     // FM Towns (Model 1/2) with a faster CPU
-    { 0xA3A41A2E, "Alltynex", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 66, 0, 0 },
+    { 0xA3A41A2E, "Alltynex", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 66, 0, 0 },
     { 0xC21B99C5, "Alltynex (T-En v1.1)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 66, 0, 0 },
     { 0x88216CFA, "RAC Rally", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 33, GT_GAMEDB_PORT_MOUSE, 0 },
 

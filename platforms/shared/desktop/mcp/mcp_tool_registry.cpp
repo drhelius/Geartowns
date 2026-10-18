@@ -285,7 +285,7 @@ static const char* const kMcpFloppyTools[] =
 static const char* const kMcpMediaTools[] =
 {
     "load_media", "eject_cdrom", "list_cdrom_playlist", "insert_playlist_disc", "get_media_info", "list_recent_media",
-    "load_bios", "insert_floppy", "eject_floppy", "swap_floppies", "set_floppy_write_protect"
+    "load_bios", "insert_floppy", "create_blank_floppy", "eject_floppy", "swap_floppies", "set_floppy_write_protect"
 };
 
 static const char* const kMcpCaptureTools[] =

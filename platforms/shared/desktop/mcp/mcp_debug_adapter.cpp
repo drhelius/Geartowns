@@ -3642,6 +3642,46 @@ json DebugAdapter::InsertFloppy(int drive, const std::string& file_path, const j
         {"write_protected", m_core->GetFDC()->GetDisk(drive)->IsWriteProtected()}};
 }
 
+static const char* const k_blank_floppy_types[FLOPPY_BLANK_COUNT] = { "2hd_1232kb", "2dd_640kb", "2dd_720kb", "2hd_1440kb" };
+
+json DebugAdapter::CreateBlankFloppy(int drive, const std::string& file_path, const std::string& type, bool formatted)
+{
+    if (drive < 0 || drive >= MIN(FDC_DRIVES, m_core->GetMachineConfig().floppy_drives))
+        return {{"error", "This machine has no drive " + std::to_string(drive)}};
+
+    const char* path = file_path.c_str();
+    bool d77 = ends_with_no_case(path, ".d77");
+
+    if (!is_absolute_path(path))
+        return {{"error", "file_path must be an absolute path"}};
+
+    if (!d77 && !ends_with_no_case(path, ".hdm") && !ends_with_no_case(path, ".img") && !ends_with_no_case(path, ".xdf"))
+        return {{"error", "file_path must end in .d77, .hdm, .img or .xdf"}};
+
+    if (!formatted && !d77)
+        return {{"error", "An unformatted disk can only be saved as .d77"}};
+
+    if (path_exists(path))
+        return {{"error", "A file already exists at " + file_path}};
+
+    int blank = -1;
+
+    for (int i = 0; i < FLOPPY_BLANK_COUNT; i++)
+    {
+        if (type == k_blank_floppy_types[i])
+            blank = i;
+    }
+
+    if (blank < 0)
+        return {{"error", "Unknown disk type: " + type}};
+
+    if (!emu_floppy_create_blank(drive, path, blank, formatted, false))
+        return {{"error", "Failed to create the blank disk"}};
+
+    return {{"success", true}, {"drive", drive}, {"file_path", file_path}, {"type", type}, {"formatted", formatted},
+        {"write_protected", m_core->GetFDC()->GetDisk(drive)->IsWriteProtected()}};
+}
+
 json DebugAdapter::EjectFloppy(int drive)
 {
     if (drive < 0 || drive >= MIN(FDC_DRIVES, m_core->GetMachineConfig().floppy_drives))

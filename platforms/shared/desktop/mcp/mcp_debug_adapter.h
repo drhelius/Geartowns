@@ -223,6 +223,7 @@ public:
     json ListFloppySectors(int drive, int cylinder, int head);
     json ReadFloppySector(int drive, int cylinder, int head, int sector);
     json InsertFloppy(int drive, const std::string& file_path, const json& write_protected);
+    json CreateBlankFloppy(int drive, const std::string& file_path, const std::string& type, bool formatted);
     json EjectFloppy(int drive);
     json SwapFloppies();
     json SetFloppyWriteProtect(int drive, bool write_protected);

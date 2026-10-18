@@ -2115,6 +2115,39 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "create_blank_floppy"},
+        {"title", "Create Blank Floppy"},
+        {"description", "Create a blank floppy image file and insert it into a drive, like New Blank Disk in the GUI. An existing file is never replaced. Changes to the previous disk are kept in its working copy."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"drive", {
+                    {"type", "integer"},
+                    {"description", "Drive 0 or 1."},
+                    {"minimum", 0},
+                    {"maximum", 1}
+                }},
+                {"file_path", {
+                    {"type", "string"},
+                    {"description", "Absolute path of the new image: .d77, or .hdm, .img or .xdf for a raw image."}
+                }},
+                {"type", {
+                    {"type", "string"},
+                    {"enum", json::array({"2hd_1232kb", "2dd_640kb", "2dd_720kb", "2hd_1440kb"})},
+                    {"description", "Disk type. Default 2hd_1232kb, the FM Towns 1.23 MB disk."}
+                }},
+                {"formatted", {
+                    {"type", "boolean"},
+                    {"description", "true (default) for an empty FAT12 data disk, false for an unformatted disk that Towns OS or the game formats (.d77 only)."}
+                }}
+            }},
+            {"required", json::array({"drive", "file_path"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "eject_floppy"},
         {"title", "Eject Floppy"},
         {"description", "Eject the disk in a drive; its changes are kept in the working copy."},
@@ -3598,6 +3631,11 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         json write_protected = arguments.contains("write_protected") ? arguments["write_protected"] : json();
         return m_debugAdapter.InsertFloppy(arguments.value("drive", -1), arguments.value("file_path", ""), write_protected);
+    }
+    else if (normalizedTool == "create_blank_floppy")
+    {
+        return m_debugAdapter.CreateBlankFloppy(arguments.value("drive", -1), arguments.value("file_path", ""),
+            arguments.value("type", "2hd_1232kb"), arguments.value("formatted", true));
     }
     else if (normalizedTool == "eject_floppy")
     {

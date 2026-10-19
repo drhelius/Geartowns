@@ -133,9 +133,10 @@ bool SystemControl::Decodes(u16 port) const
         case 0x0494:
         case 0x0496:
             return (m_features & GT_MACHINE_FEATURE_MARTY_PORTS) != 0;
-        // The Marty's board decodes none of 05E0h-05E8h, its RAM card answers 05E8h
+        // The first-generation wait register, gone since the 10F brought 006Ch and 05E2h/05E6h
         case 0x05E0:
-            return (m_features & GT_MACHINE_FEATURE_RAM_CARD) == 0;
+            return (m_features & GT_MACHINE_FEATURE_WAIT_1US) == 0;
+        // Not on the Marty's board, its RAM card answers it
         case 0x05E8:
             if ((m_features & GT_MACHINE_FEATURE_RAM_CARD) != 0)
                 return m_memory->GetMainRAMSize() > k_system_control_board_ram;

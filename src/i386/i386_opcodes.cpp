@@ -22,6 +22,8 @@
 #include "i386_opcodes_inline.h"
 #include "../system/io.h"
 
+static const u32 k_i386_escape_clocks = 20;
+
 bool I386::OPCode0x00()
 {
     // ADD r/m8,r8
@@ -2453,20 +2455,36 @@ bool I386::OPCodes_STD()
 
 bool I386::OPCodes_Escape()
 {
-    if (!DecodeAndStart(true, 0, 2, 6))
+    // No coprocessor answers: its bus cycle still costs clocks and reads back all ones
+    if (!DecodeAndStart(true, 0, 2 + k_i386_escape_clocks, 6 + k_i386_escape_clocks))
         return false;
 
     if ((m_state.cr0 & 0x0C) != 0)
         return RaiseException(7, I386_EXCEPTION_FAULT);
 
+    u8 opcode = m_instruction.opcode;
+    u8 operation = m_instruction.reg;
+
     if (!m_instruction.memory_operand)
     {
+        // FNSTSW AX
+        if (opcode == 0xDF && operation == 4 && m_instruction.rm == 0)
+            SetRegister(I386_REG_EAX, 16, 0xFFFF);
+
         CommitEIP(m_instruction);
         return true;
     }
 
-    u8 opcode = m_instruction.opcode;
-    u8 operation = m_instruction.reg;
+    // FNSTCW and FNSTSW
+    if ((opcode == 0xD9 || opcode == 0xDD) && operation == 7)
+    {
+        if (!WriteRM(m_instruction, 16, 0xFFFF, *m_bus_context))
+            return false;
+
+        CommitEIP(m_instruction);
+        return true;
+    }
+
     u32 size = 0;
     bool write = false;
 

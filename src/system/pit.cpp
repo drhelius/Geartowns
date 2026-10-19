@@ -83,8 +83,8 @@ void PIT::Reset()
 {
     m_pit[0].Reset();
     m_pit[1].Reset();
-    // Channel 1's timeout powers on latched
-    m_state.timer_latch = 0x02;
+    // Channel 1's timeout powers on latched on the Marty, F29 needs it clear on the others
+    m_state.timer_latch = (m_features & GT_MACHINE_FEATURE_TIMER1_LATCHED) != 0 ? 0x02 : 0x00;
     m_state.timer_enable = 0;
     m_state.sound = false;
     m_state.sound_memory = false;

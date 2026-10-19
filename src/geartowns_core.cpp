@@ -191,6 +191,7 @@ void GeartownsCore::Init()
     m_audio->Init(m_scheduler, m_cdrom_audio, m_pic, m_pit);
     m_pit->Init(m_pic, m_scheduler, m_audio);
     m_system_control->Init(m_memory);
+    m_system_control->SetBusModeCallback(this, BusModeCallback);
     m_video->Init(m_pic, m_pit, m_scheduler, m_memory, m_firmware->GetFontRom());
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
@@ -292,6 +293,7 @@ void GeartownsCore::RunFrame(u64 frame_start)
         u32 slice = m_scheduler->GetSliceClocks(GetFrameLimit(frame_start));
         u32 cycles = m_scheduler->GetSliceCycles(slice);
         GT_Bus_Access_Context context = BeginSlice();
+
         I386_Run_Result result = m_i386->RunFor(cycles, context, false, m_pic->IsInterruptPending());
         CompleteSlice(result, context, slice, false);
     }
@@ -1342,7 +1344,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
     m_scheduler->LoadState(stream);
     m_memory->LoadState(stream, header.version);
-    m_i386->LoadState(stream);
+    m_i386->LoadState(stream, header.version);
     m_audio->LoadState(stream, header.version);
     m_input->LoadState(stream);
     m_pic->LoadState(stream);
@@ -1362,6 +1364,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
         return false;
     }
 
+    ApplyBusTiming();
     return true;
 }
 
@@ -1658,6 +1661,8 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_input))
         m_input->Reset();
+
+    ApplyBusTiming();
 }
 
 // Only the CPU restarts and the low memory view returns to its boot setup, memory and devices keep their state
@@ -1848,6 +1853,42 @@ void GeartownsCore::ApplyMachineConfig()
         m_fdc->SetThreeMode(profile.three_mode_floppy);
         m_fdc->SetFeatures(profile.features);
     }
+}
+
+void GeartownsCore::ApplyBusTiming()
+{
+    if (!IsValidPointer(m_i386) || !IsValidPointer(m_system_control))
+        return;
+
+    const GT_Machine_Profile& profile = k_machine_profiles[m_machine_config.model];
+    const GT_Machine_Bus_Timing* timing = profile.bus_timing;
+    const SystemControl::SystemControl_State* state = m_system_control->GetState();
+    const GT_Machine_Bus_Waits* waits = IsValidPointer(timing) ? timing->compatible : NULL;
+    GT_Machine_Bus_Waits ports;
+    u32 cpu_clock_rate = m_machine_config.cpu_clock_rate;
+
+    if (IsValidPointer(timing) && timing->mode == GT_MACHINE_BUS_SPEED_PORT && state->high_speed)
+        waits = timing->fast;
+    else if (IsValidPointer(timing) && timing->mode == GT_MACHINE_BUS_WAIT_PORTS)
+    {
+        ports = *timing->compatible;
+        ports.dram_cycle[0] = ports.dram_cycle[1] = (u16)((state->port_05e2 & 0x0F) << 8);
+        ports.vram_cycle[0] = ports.vram_cycle[1] = (u16)((state->port_05e6 & 0x0F) << 8);
+        ports.sprite_cycle[0] = ports.sprite_cycle[1] = ports.vram_cycle[0];
+        waits = &ports;
+    }
+
+    m_i386->SetBusTiming(timing, waits, k_machine_cpus[m_machine_config.cpu].bus_width, cpu_clock_rate,
+        profile.cpu_clock_rate);
+
+    u32 microsecond = cpu_clock_rate / 1000000;
+    u32 cycle = 2 + m_i386->GetBusPortWait(true);
+    m_system_control->SetWriteWait(!m_i386->IsBusTimed() ? microsecond : microsecond > cycle ? microsecond - cycle : 0);
+}
+
+void GeartownsCore::BusModeCallback(void* context)
+{
+    static_cast<GeartownsCore*>(context)->ApplyBusTiming();
 }
 
 void GeartownsCore::InitMemoryMap()

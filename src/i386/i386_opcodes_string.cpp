@@ -182,6 +182,8 @@ bool I386::ExecuteStringElement(bool& repeat)
     bool prefixed = m_string.repeated;
     u32 count = GetRegister(I386_REG_ECX, address_width);
 
+    m_string.executed = false;
+
     if (prefixed && count == 0)
     {
         repeat = false;
@@ -202,6 +204,8 @@ bool I386::ExecuteStringElement(bool& repeat)
 
         if (!allowed)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+
+        m_step.clocks += m_bus.io[opcode >= 0x6E ? 1 : 0];
 
         if (!SynchronizeIOAccess())
             return true;
@@ -250,6 +254,10 @@ bool I386::ExecuteStringElement(bool& repeat)
 
     if (!ok)
         return false;
+
+    m_string.executed = true;
+    m_string.source_offset = source_offset;
+    m_string.destination_offset = destination_offset;
 
     u32 delta = (u32)width >> 3;
 
@@ -360,7 +368,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
         return 0;
 
     u32 iteration_clocks = move ? 4 : 5;
-    u32 elements = (u32)MIN((u64)count, ((u64)budget + iteration_clocks - 1) / iteration_clocks);
+    u32 elements = m_bus_timed ? count : (u32)MIN((u64)count, ((u64)budget + iteration_clocks - 1) / iteration_clocks);
     u32 address_mask = address_width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
     bool reverse = (m_state.eflags & I386_FLAG_DF) != 0;
 
@@ -391,6 +399,14 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 
     if (elements == 0)
         return 0;
+
+    BusRepeat repeat = {};
+
+    if (m_bus_timed)
+    {
+        PrepareBusRepeat(repeat, source_linear, destination_linear, size, move, reverse);
+        elements = LimitBusRepeat(repeat, elements, size, move, reverse, budget);
+    }
 
     u32 bytes = elements * size;
 
@@ -464,6 +480,10 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     m_step.exception = false;
 
     clocks = elements * iteration_clocks;
+
+    if (m_bus_timed)
+        clocks += AddBusRepeat(repeat, elements, size, move, reverse);
+
     return elements;
 }
 

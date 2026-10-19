@@ -98,6 +98,7 @@ Memory::Memory()
     InitPointer(m_cpu_read_pages);
     InitPointer(m_cpu_write_pages);
     InitPointer(m_cpu_page_regions);
+    InitPointer(m_cpu_page_bus);
     m_cpu_map_generation = 0;
     m_debug_region_count = 0;
     m_physical_address_mask = 0xFFFFFFFF;
@@ -136,6 +137,7 @@ Memory::~Memory()
     SafeDeleteArray(m_cpu_read_pages);
     SafeDeleteArray(m_cpu_write_pages);
     SafeDeleteArray(m_cpu_page_regions);
+    SafeDeleteArray(m_cpu_page_bus);
     SafeDeleteArray(m_state.main_ram);
 #if !defined(GT_DISABLE_DYNAREC)
     SafeDeleteArray(m_code_pages);
@@ -1284,11 +1286,13 @@ void Memory::PrepareCPUMap()
         m_cpu_read_pages = new const u8*[page_count];
         m_cpu_write_pages = new u8*[page_count];
         m_cpu_page_regions = new u8[page_count];
+        m_cpu_page_bus = new u8[page_count];
     }
 
     memset(m_cpu_read_pages, 0, page_count * sizeof(m_cpu_read_pages[0]));
     memset(m_cpu_write_pages, 0, page_count * sizeof(m_cpu_write_pages[0]));
     memset(m_cpu_page_regions, 0, page_count);
+    memset(m_cpu_page_bus, 0, page_count);
 
     for (u32 page = 0; page <= (m_physical_address_mask >> 12); page++)
     {
@@ -1309,6 +1313,7 @@ void Memory::UpdateCPUPage(u32 page, const DebugRegion* region)
     u32 physical = page << 12;
 
     m_cpu_page_regions[page] = IsValidPointer(region) ? (u8)(region - m_debug_regions + 1) : 0;
+    m_cpu_page_bus[page] = IsValidPointer(region) ? GetBusClass(region->info) : (u8)GT_BUS_NONE;
     InitPointer(m_cpu_read_pages[page]);
     InitPointer(m_cpu_write_pages[page]);
 
@@ -1331,6 +1336,40 @@ void Memory::UpdateCPUPage(u32 page, const DebugRegion* region)
             return;
 #endif
         m_cpu_write_pages[page] = region->write_data + offset;
+    }
+}
+
+u8 Memory::GetBusClass(const GT_Debug_Memory_Region& info)
+{
+    switch (info.id)
+    {
+        case GT_DEBUG_REGION_MAIN_RAM:
+            return GT_BUS_DRAM;
+        case GT_DEBUG_REGION_VRAM:
+        case GT_DEBUG_REGION_VRAM_TWO_PAGE:
+        case GT_DEBUG_REGION_VRAM_SINGLE_PAGE:
+            return GT_BUS_VRAM;
+        case GT_DEBUG_REGION_SPRITE_RAM:
+            return GT_BUS_SPRITE;
+        case GT_DEBUG_REGION_SYSTEM_ROM:
+        case GT_DEBUG_REGION_SYSTEM_ROM_LOW_ALIAS:
+        case GT_DEBUG_REGION_OS_ROM:
+        case GT_DEBUG_REGION_FONT_ROM:
+        case GT_DEBUG_REGION_FONT20_ROM:
+        case GT_DEBUG_REGION_DICTIONARY_ROM:
+        case GT_DEBUG_REGION_DICTIONARY_ROM_LOW_WINDOW:
+        case GT_DEBUG_REGION_EXTENSION_ROM:
+            return GT_BUS_ROM;
+        case GT_DEBUG_REGION_CMOS:
+        case GT_DEBUG_REGION_CMOS_LOW_WINDOW:
+            return GT_BUS_CMOS;
+        case GT_DEBUG_REGION_FMR_PLANES:
+        case GT_DEBUG_REGION_FMR_TEXT:
+            return GT_BUS_FMR;
+        case GT_DEBUG_REGION_PCM_WINDOW:
+            return GT_BUS_PCM;
+        default:
+            return (info.flags & GT_DEBUG_REGION_MMIO) != 0 ? (u8)GT_BUS_MMIO : (u8)GT_BUS_NONE;
     }
 }
 

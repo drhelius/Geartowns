@@ -95,6 +95,9 @@ I386::I386()
     InitPointer(m_profiler);
     m_reset_edx = 0x00000300;
     m_cr0_fixed = 0x7FFFFFE0;
+    memset(&m_bus, 0, sizeof(m_bus));
+    m_bus_timed = false;
+    InitPointer(m_bus_page_class);
     m_trace_internal = false;
     m_trace_cpu = false;
     m_profiler_active = false;
@@ -119,6 +122,8 @@ I386::I386()
     InitPointer(m_dynarec_hash);
     InitPointer(m_dynarec_bytes);
     m_dynarec_bytes_used = 0;
+    InitPointer(m_dynarec_bus_runs);
+    m_dynarec_bus_runs_used = 0;
     InitPointer(m_dynarec_page_blocks);
     InitPointer(m_dynarec_page_granules);
     InitPointer(m_dynarec_page_heat);
@@ -145,6 +150,7 @@ I386::I386()
     m_dynarec_remaining = 0;
     m_dynarec_wait = 0;
     m_dynarec_start = 0;
+    m_dynarec_spill = 0;
 #endif
 
     SetDynarecTuning(0, 0);
@@ -161,6 +167,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_blocks);
     SafeDeleteArray(m_dynarec_hash);
     SafeDeleteArray(m_dynarec_bytes);
+    SafeDeleteArray(m_dynarec_bus_runs);
     SafeDeleteArray(m_dynarec_page_blocks);
     SafeDeleteArray(m_dynarec_page_granules);
     SafeDeleteArray(m_dynarec_page_heat);
@@ -231,6 +238,10 @@ void I386::Reset()
     m_code_window_size = 0;
     InitPointer(m_fetch_pointer);
     m_fetch_remaining = 0;
+    m_bus_queue = 0;
+    m_bus_row = k_i386_bus_no_row;
+    m_bus_fraction = 0;
+    UpdateBusCode(GT_BUS_NONE, 0);
 
     m_checked_eip = 0;
     m_checked_count = 0;
@@ -359,6 +370,7 @@ void I386::CompleteFault(u16 old_task)
         m_exception.exception_class == I386_EXCEPTION_TRAP || m_state.task_register.selector != old_task;
 
     ResolveException(*m_bus_context, m_step_exception);
+    AddBusInterrupt(m_step_exception.cycles, false);
 
     result.clocks = m_step_exception.cycles;
     result.exception = m_step_exception.exception;
@@ -394,9 +406,18 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     m_poll_budget = cycle_budget;
     m_poll_active = m_poll_enabled;
 
+    if (m_bus_timed)
+        return RunTimed<true>(cycle_budget, context, nmi_pending, intr_pending);
+
+    return RunTimed<false>(cycle_budget, context, nmi_pending, intr_pending);
+}
+
+template<bool timed>
+I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending)
+{
 #if !defined(GT_DISABLE_DYNAREC)
     if (m_dynarec_enabled)
-        return RunDynarec(cycle_budget, context, nmi_pending, intr_pending);
+        return RunDynarec<timed>(cycle_budget, context, nmi_pending, intr_pending);
 #endif
 
     I386_Run_Result total = {};
@@ -418,7 +439,8 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
-            if (!RunFastStep(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
+            if (!RunFastStep<timed>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
+                intr_pending))
                 break;
         }
         else
@@ -438,7 +460,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
         }
     }
 
-    total.cycles = clocks;
+    total.cycles = clocks + (timed ? CarryBusTime() : 0);
     total.steps = steps + m_poll_steps;
     total.instruction_completed = completed;
     m_poll_steps = 0;
@@ -451,7 +473,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending)
 {
     GT_Bus_Access_Context& context = *m_bus_context;
-    m_io_start_cycles = (u32)total.cycles + context.wait_cycles;
+    m_io_start_cycles = (u32)total.cycles + context.wait_cycles + (m_bus_timed ? GetBusPending() : 0);
 
     if (m_state.repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_state.halted && !m_state.shutdown)
     {
@@ -534,20 +556,23 @@ static void SetPollRegister(u32* registers, int index, int width, u32 value)
 }
 
 // Polling iterations that can't see a new value, an event or the batch end are counted instead of run
+// Reads the loop's code passively when no code window is open, so skipping doesn't depend on host caches
 void I386::SkipPolling(u16 port, int width)
 {
     GT_Bus_Access_Context& context = *m_bus_context;
     PollState& poll = m_poll;
     u32 eip = m_instruction.start_eip;
-    u32 offset = eip - m_code_window_eip;
 
-    if (offset >= m_code_window_size)
+    if ((s64)eip > m_code_limit)
     {
         poll.batch = 0;
         return;
     }
 
     u32 linear = m_state.segments[I386_SEGMENT_CS].base + eip;
+    u32 page_offset = linear & 0xFFF;
+    u32 before = MIN(eip, page_offset);
+    u32 after = (u32)MIN((u64)m_code_limit - eip + 1, (u64)(0x1000 - page_offset));
     u32 start = m_io_start_cycles;
     bool repeated = poll.batch == m_poll_batch && poll.linear == linear && poll.port == port && poll.width == width &&
         poll.eflags == m_state.eflags && start > poll.start_cycles;
@@ -585,10 +610,28 @@ void I386::SkipPolling(u16 port, int width)
         return;
 
     // The previous read must have run this same code
-    u32 back = MIN(offset, (u32)(I386_POLL_CODE_SIZE / 3));
+    u32 back = MIN(before, (u32)(I386_POLL_CODE_SIZE / 3));
     u32 code_eip = eip - back;
-    u32 code_size = MIN(m_code_window_size - (offset - back), (u32)I386_POLL_CODE_SIZE);
-    const u8* code = m_code_window + (offset - back);
+    u32 code_size = MIN(back + after, (u32)I386_POLL_CODE_SIZE);
+    u8 buffer[I386_POLL_CODE_SIZE];
+    const u8* code = buffer;
+
+    if (eip - m_code_window_eip < m_code_window_size)
+        code = m_code_window + (eip - m_code_window_eip) - back;
+    else
+    {
+        u32 physical = 0;
+
+        if (!TranslateCurrentPassive(linear - back, physical))
+            return;
+
+        for (u32 i = 0; i < code_size; i++)
+        {
+            if (!m_memory->TryPeekPhysical(physical + i, buffer[i]))
+                return;
+        }
+    }
+
     bool same_code = poll.code_eip == code_eip && poll.code_size == code_size && memcmp(poll.code, code, code_size) == 0;
 
     if (!same_code)
@@ -847,7 +890,10 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
     m_external_line = -1;
 
     if (entered)
+    {
+        AddBusInterrupt(clocks, false);
         return (u32)clocks;
+    }
 
     if (m_exception.pending)
     {
@@ -903,13 +949,16 @@ bool I386::SetState(const I386_State& state)
 void I386::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void I386::LoadState(std::istream& stream)
+void I386::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    m_bus_queue = 0;
+    m_bus_row = k_i386_bus_no_row;
+    m_bus_fraction = 0;
+    Serialize(serializer, version);
     m_state.cr0 = (m_state.cr0 & 0x8000001FU) | m_cr0_fixed;
     SanitizeState();
 }
@@ -929,7 +978,7 @@ void I386::SerializeDescriptorTable(StateSerializer& serializer, I386_Descriptor
     G_SERIALIZE(serializer, table.limit);
 }
 
-void I386::Serialize(StateSerializer& serializer)
+void I386::Serialize(StateSerializer& serializer, int version)
 {
     for (int i = 0; i < I386_REG_COUNT; i++)
         G_SERIALIZE(serializer, m_state.registers[i].value);
@@ -973,10 +1022,19 @@ void I386::Serialize(StateSerializer& serializer)
     }
 
     G_SERIALIZE_ARRAY(serializer, m_tlb_plru, I386_TLB_SETS);
+
+    if (version >= 10)
+    {
+        G_SERIALIZE(serializer, m_bus_queue);
+        G_SERIALIZE(serializer, m_bus_row);
+        G_SERIALIZE(serializer, m_bus_fraction);
+    }
 }
 
 void I386::SanitizeState()
 {
+    m_bus_queue = MIN(m_bus_queue, k_i386_bus_queue);
+    m_bus_fraction &= 0xFFFF;
     m_state.eflags |= I386_FLAG_FIXED;
     m_state.current_privilege_level &= 3;
 

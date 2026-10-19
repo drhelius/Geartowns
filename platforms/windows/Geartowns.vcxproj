@@ -23,6 +23,7 @@
     <ClCompile Include="..\..\src\media\firmware.cpp" />
     <ClCompile Include="..\..\src\i386\i386.cpp" />
     <ClCompile Include="..\..\src\i386\i386_disassembler.cpp" />
+    <ClCompile Include="..\..\src\i386\i386_bus.cpp" />
     <ClCompile Include="..\..\src\i386\i386_dynarec.cpp" />
     <ClCompile Include="..\..\src\i386\i386_dynarec_emit.cpp" />
     <ClCompile Include="..\..\src\i386\i386_encoding.cpp" />
@@ -239,6 +240,7 @@
     <ClInclude Include="..\..\src\i386\i386_decode_inline.h" />
     <ClInclude Include="..\..\src\i386\i386_memory_inline.h" />
     <ClInclude Include="..\..\src\i386\i386_run_inline.h" />
+    <ClInclude Include="..\..\src\i386\i386_bus_inline.h" />
     <ClInclude Include="..\..\src\i386\i386_names.h" />
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h" />
     <ClInclude Include="..\..\src\system\io.h" />

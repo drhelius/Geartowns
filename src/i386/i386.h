@@ -431,6 +431,10 @@ public:
     void Reset();
     void SetResetEDX(u32 edx);
     void SetCR0FixedBits(u32 bits);
+    void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
+        u32 cpu_clock_rate, u32 model_clock_rate);
+    bool IsBusTimed() const;
+    u32 GetBusPortWait(bool write) const;
     u32 RunInstruction(GT_Bus_Access_Context& context);
     I386_Run_Result GetStepInfo() const;
     I386_Run_Result RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
@@ -449,7 +453,7 @@ public:
     bool SetState(const I386_State& state);
 
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
     u8 GetLastExceptionVector() const;
     const I386_Exception_Info& GetLastException() const;
@@ -603,6 +607,39 @@ private:
         u8 index_mask;
         u8 iteration_clocks;
         bool repeated;
+        bool executed;
+        u32 source_offset;
+        u32 destination_offset;
+    };
+
+    // A batch never leaves a page on either side
+    struct BusRepeat
+    {
+        u32 source;
+        u32 destination;
+        u8 source_class;
+        u8 destination_class;
+        u64 element[2];
+    };
+
+    // Bus timing in 1/65536 clocks, queue levels in 1/256 bytes
+    struct BusTiming
+    {
+        u32 width;
+        u32 cycle_refresh;
+        u32 refill;
+        u32 misalign;
+        u32 dram_far[2];
+        u32 dram_near[2];
+        u32 dram_change[2];
+        u32 cycle[GT_BUS_CLASS_COUNT][2];
+        u32 slow[GT_BUS_CLASS_COUNT][2];
+        u32 fmr_word[2];
+        u32 code_cost[GT_BUS_CLASS_COUNT];
+        u32 code_rate[GT_BUS_CLASS_COUNT];
+        u32 string_row;
+        u32 string_read;
+        u32 io[2];
     };
 
     struct TimingCursor
@@ -710,6 +747,17 @@ private:
         u32 link[2];
         const u8* code;
     };
+
+    // A helper step's run: stall max(0, knee - s) * cost + add clocks, level clamp(s + offset, low, high)
+    struct DynarecBusRun
+    {
+        s32 knee;
+        u32 cost;
+        s32 offset;
+        u32 low;
+        u32 high;
+        u32 add;
+    };
 #endif
 
     typedef bool (I386::*opcode_member_ptr)();
@@ -724,16 +772,19 @@ private:
     static const opcodeptr k_opcodes[256];
     static const opcodeptr k_opcodes_0f[256];
     static const u8 k_opcode_encoding[512];
+    static const u8 k_bus_patterns[512];
+    static const u8 k_bus_groups[9][8];
     static const u8 k_szp_flags[256];
 
 private:
     static void SerializeSegment(StateSerializer& serializer, I386_Segment& segment);
     static void SerializeDescriptorTable(StateSerializer& serializer, I386_Descriptor_Table& table);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
     u32 RunCheckedStep();
     bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
+    template<bool timed>
     bool RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
         bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending);
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
@@ -753,6 +804,7 @@ private:
         u32 iteration_clocks, bool move, bool reverse);
     void CompleteFault(u16 old_task);
 #if !defined(GT_DISABLE_DYNAREC)
+    template<bool timed>
     I386_Run_Result RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
     void FlushDynarec();
     DynarecBlock* FindDynarecBlock(u8 entry);
@@ -768,11 +820,16 @@ private:
     void CoolDynarecPages();
     void CheckDynarecMemory();
     static void DynarecCodeWrite(void* context, u32 offset, u32 size);
-    static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before);
+    static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+        uintptr_t settle, uintptr_t revert);
+    s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
+    static void DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     static void DynarecCall(I386* cpu);
 #endif
 #endif
+    template<bool timed>
+    I386_Run_Result RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();
     void SkipPolling(u16 port, int width);
@@ -920,6 +977,32 @@ private:
     int GetStackAddressSize() const;
     u32 GetFarTransferLimit() const;
     bool StackHasRoom(u32 limit, u16 attributes, u32 stack, u32 bytes) const;
+
+    static u8 GetBusPattern(const InstructionContext& instruction);
+    u32 GetBusCycles(u32 size) const;
+    u32 GetBusDramFold(u32 size, bool read, bool write, u32 code_row) const;
+    bool TranslateCurrentPassive(u32 linear, u32& physical) const;
+    u8 GetBusPhysical(u32 linear, u32& physical) const;
+    void UpdateBusCode(u8 bus_class, u32 code_base);
+    u32 GetBusCodeRow(u32 eip, u32 length) const;
+    void AddBusTime();
+    void AddBusQueue(u32 data, bool transfer);
+    u32 AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& transfer);
+    u32 AddBusAccess(u32 linear, u32 size, int write, u32 code_row);
+    void AddBusStringElement();
+    u32 AddBusStringAccess(u32 linear, u32 size, int write, bool load);
+    void AddBusTransferAccesses(u32 reads, u32 writes, u32 size);
+    void AddBusInterrupt(u64& clocks, bool error_code);
+    void PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse) const;
+    u64 GetBusRepeatSplit(u32 linear, u32 size, u32& cycles) const;
+    u64 GetBusRepeatTime(const BusRepeat& repeat, u32 elements) const;
+    u32 CountBusRepeatChanges(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse,
+        u32& row) const;
+    u32 LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget) const;
+    u32 AddBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse);
+    void AddBusSlowAccess(u32 physical, u32 size, bool write);
+    u32 CarryBusTime();
+    u32 GetBusPending() const;
     bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
         GT_Bus_Access_Context& context);
 
@@ -1291,6 +1374,8 @@ private:
     u32* m_dynarec_hash;
     u8* m_dynarec_bytes;
     u32 m_dynarec_bytes_used;
+    DynarecBusRun* m_dynarec_bus_runs;
+    u32 m_dynarec_bus_runs_used;
     u32* m_dynarec_page_blocks;
     u64* m_dynarec_page_granules;
     u8* m_dynarec_page_heat;
@@ -1317,6 +1402,7 @@ private:
     u32 m_dynarec_remaining;
     u32 m_dynarec_wait;
     u32 m_dynarec_start;
+    uintptr_t m_dynarec_spill;
 #endif
 
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;
@@ -1363,6 +1449,17 @@ private:
     bool m_breakpoint_hit;
     bool m_run_to_hit;
 
+    BusTiming m_bus;
+    bool m_bus_timed;
+    u32 m_bus_queue;
+    u32 m_bus_row;
+    s32 m_bus_fraction;
+    u32 m_bus_code_base;
+    u32 m_bus_code_cost;
+    u32 m_bus_code_rate;
+    bool m_bus_code_dram;
+    const u8* m_bus_page_class;
+
     PollState m_poll;
     u32 m_poll_batch;
     u32 m_poll_budget;
@@ -1385,6 +1482,47 @@ static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
 static const u8 k_i386_tlb_dirty = 0x08;
 
+static const u32 k_i386_bus_queue = 16 << 8;
+static const u32 k_i386_bus_no_row = 0xFFFFFFFFU;
+static const u32 k_i386_bus_code_row = 0x7FFFFFFFU;
+
+enum I386_Bus_Pattern
+{
+    I386_BUS_NONE = 0,
+    I386_BUS_READ,
+    I386_BUS_WRITE,
+    I386_BUS_RMW,
+    I386_BUS_PUSH,
+    I386_BUS_POP,
+    I386_BUS_PUSH_READ,
+    I386_BUS_POP_WRITE,
+    I386_BUS_MOFFS_READ,
+    I386_BUS_MOFFS_WRITE,
+    I386_BUS_STRING,
+    I386_BUS_CALL,
+    I386_BUS_RET,
+    I386_BUS_JUMP,
+    I386_BUS_JCC,
+    I386_BUS_LOOP,
+    I386_BUS_CALL_RM,
+    I386_BUS_JUMP_RM,
+    I386_BUS_FAR,
+    I386_BUS_PUSHA,
+    I386_BUS_POPA,
+    I386_BUS_ENTER,
+    I386_BUS_LEAVE,
+    I386_BUS_XLAT,
+    I386_BUS_READ_FAR,
+    I386_BUS_BOUND,
+    I386_BUS_DESC_READ,
+    I386_BUS_DESC_WRITE,
+    I386_BUS_GROUP = 32
+};
+
+static const u8 k_i386_bus_pattern_mask = 0x3F;
+static const u8 k_i386_bus_byte = 0x40;
+static const u8 k_i386_bus_word = 0x80;
+
 static const u8 k_i386_immediate_byte = 1;
 static const u8 k_i386_immediate_word = 2;
 static const u8 k_i386_immediate_enter = 3;
@@ -1399,6 +1537,7 @@ static const u8 k_i386_encoding_modrm = 0x80;
 #include "i386_memory_inline.h"
 #include "i386_inline.h"
 #include "i386_decode_inline.h"
+#include "i386_bus_inline.h"
 #include "i386_run_inline.h"
 
 #endif /* I386_H */

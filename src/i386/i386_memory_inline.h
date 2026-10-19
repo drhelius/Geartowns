@@ -155,6 +155,9 @@ INLINE u32 I386::ReadPhysical(u32 physical, u32 size, GT_Bus_Access_Context& con
     if (likely(IsValidPointer(page) && (physical & 0xFFF) <= 0x1000 - size))
         return LoadHost(page + (physical & 0xFFF), (int)size * 8);
 
+    if (m_bus_timed)
+        AddBusSlowAccess(physical, size, false);
+
     if (size == 1)
         return m_memory->Read8Physical(physical, context);
 
@@ -173,6 +176,9 @@ INLINE void I386::WritePhysical(u32 physical, u32 value, u32 size, GT_Bus_Access
         StoreHost(page + (physical & 0xFFF), value, (int)size * 8);
         return;
     }
+
+    if (m_bus_timed)
+        AddBusSlowAccess(physical, size, true);
 
     if (size == 1)
         m_memory->Write8Physical(physical, (u8)value, context);

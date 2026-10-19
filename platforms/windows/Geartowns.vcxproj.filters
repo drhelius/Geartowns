@@ -178,6 +178,9 @@
     <ClCompile Include="..\..\src\i386\i386_encoding.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\i386\i386_bus.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\i386\i386_functors.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -417,6 +420,7 @@
     <ClInclude Include="..\..\src\i386\i386_decode_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_memory_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_run_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\i386_bus_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_names.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\io.h"><Filter>src</Filter></ClInclude>

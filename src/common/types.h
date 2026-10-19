@@ -455,6 +455,58 @@ struct GT_Machine_Video_Timing
     bool ntsc_field;
 };
 
+enum GT_Bus_Class
+{
+    GT_BUS_NONE = 0,
+    GT_BUS_DRAM,
+    GT_BUS_VRAM,
+    GT_BUS_SPRITE,
+    GT_BUS_ROM,
+    GT_BUS_CMOS,
+    GT_BUS_FMR,
+    GT_BUS_PCM,
+    GT_BUS_MMIO,
+    GT_BUS_CLASS_COUNT
+};
+
+enum GT_Machine_Bus_Mode
+{
+    GT_MACHINE_BUS_FIXED = 0,
+    GT_MACHINE_BUS_WAIT_PORTS,
+    GT_MACHINE_BUS_SPEED_PORT
+};
+
+// In 1/256 clocks at the model's clock, reads first
+struct GT_Machine_Bus_Waits
+{
+    u16 dram_far[2];
+    u16 dram_near[2];
+    u16 dram_change[2];
+    u16 dram_cycle[2];
+    u16 vram_cycle[2];
+    u16 sprite_cycle[2];
+    u16 rom_cycle;
+    u16 rom_code;
+    u16 cmos_cycle[2];
+};
+
+struct GT_Machine_Bus_Timing
+{
+    GT_Machine_Bus_Mode mode;
+    const GT_Machine_Bus_Waits* compatible;
+    const GT_Machine_Bus_Waits* fast;
+    u16 refresh;
+    u16 refill;
+    u16 misalign;
+    u16 string_row;
+    u16 string_read;
+    u16 fmr_byte[2];
+    u16 fmr_word[2];
+    u16 pcm[2];
+    u16 mmio[2];
+    u16 io[2];
+};
+
 struct GT_Machine_Profile
 {
     const char* name;
@@ -473,6 +525,7 @@ struct GT_Machine_Profile
     bool three_mode_floppy;
     const char* firmware_set;
     const GT_Machine_Video_Timing* video_timing;
+    const GT_Machine_Bus_Timing* bus_timing;
 };
 
 struct GT_Machine_Config

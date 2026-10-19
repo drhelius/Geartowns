@@ -159,8 +159,6 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // Interval Timer II period high
             return m_pit->Read(port, context.clocks);
         case 0x006C:
-            // 1 us wait
-            m_system_control->Wait(context);
             return m_system_control->Read(port, context.clocks);
         case 0x0070:
             // RTC data
@@ -778,7 +776,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             break;
         case 0x006C:
             // 1 us wait
-            m_system_control->Wait(context);
+            m_system_control->Wait(context, true);
             break;
         case 0x0070:
             // RTC data

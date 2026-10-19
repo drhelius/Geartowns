@@ -98,6 +98,7 @@ public:
     void PrepareCPUMap();
     const u8* const* GetCPUReadPages() const;
     u8* const* GetCPUWritePages() const;
+    const u8* GetCPUPageBus() const;
 
     void SetPhysicalAddressMask(u32 mask);
     void SetDMAWindows(const GT_Machine_DMA_Window* windows);
@@ -162,6 +163,7 @@ private:
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
     void SynchronizeRegister(GT_Bus_Access_Context& context);
     u32 NormalizePhysicalAddress(u32 physical) const;
+    static u8 GetBusClass(const GT_Debug_Memory_Region& info);
     bool IsCanonicalPage(u32 page) const;
     void UpdateRAMRegions();
     void UpdateCPUPage(u32 page);
@@ -179,6 +181,7 @@ private:
     const u8** m_cpu_read_pages;
     u8** m_cpu_write_pages;
     u8* m_cpu_page_regions;
+    u8* m_cpu_page_bus;
     u32 m_cpu_map_generation;
 
     DebugRegion m_debug_regions[GT_DEBUG_MEMORY_MAX_REGIONS];

@@ -29,6 +29,8 @@ class Memory;
 
 #define SYSTEM_CONTROL_SERIAL_ROM_SIZE 32
 
+typedef void (*GT_Bus_Mode_Callback)(void* context);
+
 class SystemControl
 {
 public:
@@ -59,8 +61,10 @@ public:
     void SetSerialRom(const u8* serial_rom);
     void SetFeatures(u32 features);
     void SetCPUClockRate(u32 cpu_clock_rate);
+    void SetWriteWait(u32 cycles);
+    void SetBusModeCallback(void* context, GT_Bus_Mode_Callback callback);
     bool Decodes(u16 port) const;
-    void Wait(GT_Bus_Access_Context& context) const;
+    void Wait(GT_Bus_Access_Context& context, bool write) const;
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port, u64 clocks) const;
     const u8* GetSerialRom() const;
@@ -76,6 +80,7 @@ public:
 private:
     u8 GetCPUMisc3() const;
     void WriteSerialROM(u8 value);
+    void NotifyBusMode();
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
@@ -86,6 +91,9 @@ private:
     u16 m_machine_id;
     u32 m_features;
     u32 m_wait_cycles;
+    u32 m_write_wait_cycles;
+    void* m_bus_mode_context;
+    GT_Bus_Mode_Callback m_bus_mode_callback;
     u8 m_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE];
 };
 

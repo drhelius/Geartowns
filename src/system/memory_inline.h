@@ -32,6 +32,11 @@ INLINE u8* const* Memory::GetCPUWritePages() const
     return m_cpu_write_pages;
 }
 
+INLINE const u8* Memory::GetCPUPageBus() const
+{
+    return m_cpu_page_bus;
+}
+
 INLINE u32 Memory::GetMapGeneration() const
 {
     return m_map_generation;

@@ -22,10 +22,10 @@
 
 #include "system_control.h"
 
-INLINE void SystemControl::Wait(GT_Bus_Access_Context& context) const
+INLINE void SystemControl::Wait(GT_Bus_Access_Context& context, bool write) const
 {
-    if ((m_features & GT_MACHINE_FEATURE_WAIT_1US) != 0)
-        context.wait_cycles += m_wait_cycles;
+    if (write && (m_features & GT_MACHINE_FEATURE_WAIT_1US) != 0)
+        context.wait_cycles += m_write_wait_cycles;
 }
 
 INLINE void SystemControl::RequestCPUReset(u8 cause)

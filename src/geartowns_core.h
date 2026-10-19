@@ -178,6 +178,8 @@ private:
     bool CanAutoSelect(GT_Machine_Model model);
     bool LoadMachineFirmware(bool force, bool report);
     void ApplyMachineConfig();
+    void ApplyBusTiming();
+    static void BusModeCallback(void* context);
     void InitMemoryMap();
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);

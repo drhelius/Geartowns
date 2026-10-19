@@ -36,6 +36,9 @@ SystemControl::SystemControl()
     m_machine_id = 0x0101;
     m_features = 0;
     m_wait_cycles = 16;
+    m_write_wait_cycles = 16;
+    InitPointer(m_bus_mode_context);
+    InitPointer(m_bus_mode_callback);
     memcpy(m_serial_rom, k_system_control_serial_rom, sizeof(m_serial_rom));
     m_state.reset_cause = 0;
     m_state.reset_pending = false;
@@ -88,6 +91,18 @@ void SystemControl::SetFeatures(u32 features)
 void SystemControl::SetCPUClockRate(u32 cpu_clock_rate)
 {
     m_wait_cycles = cpu_clock_rate / 1000000;
+}
+
+void SystemControl::SetWriteWait(u32 cycles)
+{
+    m_write_wait_cycles = cycles;
+}
+
+// Writes that change the bus waits: 05E2h, 05E6h and 05ECh
+void SystemControl::SetBusModeCallback(void* context, GT_Bus_Mode_Callback callback)
+{
+    m_bus_mode_context = context;
+    m_bus_mode_callback = callback;
 }
 
 bool SystemControl::Decodes(u16 port) const
@@ -286,16 +301,25 @@ void SystemControl::Write(u16 port, u8 value)
             m_state.port_05e0 = value;
             break;
         case 0x05E2:
-            if (Decodes(port))
+            if (Decodes(port) && m_state.port_05e2 != value)
+            {
                 m_state.port_05e2 = value;
+                NotifyBusMode();
+            }
             break;
         case 0x05E6:
-            if (Decodes(port))
+            if (Decodes(port) && m_state.port_05e6 != value)
+            {
                 m_state.port_05e6 = value;
+                NotifyBusMode();
+            }
             break;
         case 0x05EC:
-            if (Decodes(port))
+            if (Decodes(port) && m_state.high_speed != ((value & 0x01) != 0))
+            {
                 m_state.high_speed = (value & 0x01) != 0;
+                NotifyBusMode();
+            }
             break;
     }
 
@@ -311,6 +335,12 @@ void SystemControl::Write(u16 port, u8 value)
             (m_state.power_off ? 0x04 : 0x00);
         m_trace_logger->TraceLog(entry);
     }
+}
+
+void SystemControl::NotifyBusMode()
+{
+    if (IsValidPointer(m_bus_mode_callback))
+        m_bus_mode_callback(m_bus_mode_context);
 }
 
 // While the active low chip select is on, an ID RESET falling edge rewinds the ROM

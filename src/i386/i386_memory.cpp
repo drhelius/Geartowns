@@ -123,6 +123,7 @@ void I386::RefreshMemoryPointers()
     m_memory->PrepareCPUMap();
     m_read_pages = m_memory->GetCPUReadPages();
     m_write_pages = m_memory->GetCPUWritePages();
+    m_bus_page_class = m_memory->GetCPUPageBus();
     m_memory_generation = m_memory->GetMapGeneration();
     CloseCodeWindow();
 
@@ -763,27 +764,42 @@ void I386::TestTLB()
 // The window starts at the page start, or at EIP 0 when the segment
 // begins inside the page, and ends at the page end or the CS limit
 // Otherwise it stays closed and the bytes come from FetchCodeSlow8
+// Also sets the code fetch cost, from the page, even when the window doesn't open
 NO_INLINE void I386::OpenCodeWindow(u32 eip)
 {
     CloseCodeWindow();
 
+    u32 base = m_state.segments[I386_SEGMENT_CS].base;
+    u32 linear = base + eip;
+
+    const TLBEntry* entry = NULL;
+
+    if ((m_state.cr0 & 0x80000000U) != 0)
+    {
+        entry = &GetRecentTLBEntry(linear);
+
+        if ((entry->flags & k_i386_tlb_valid) == 0 || entry->linear_page != (linear & 0xFFFFF000U))
+            entry = NULL;
+    }
+
+    if (m_bus_timed)
+    {
+        u32 physical = IsValidPointer(entry) ? entry->physical_page | (linear & 0xFFF) : 0;
+        u8 bus_class = IsValidPointer(entry) ? m_bus_page_class[physical >> 12] : GetBusPhysical(linear, physical);
+        UpdateBusCode(bus_class, base + (physical & 0xFFFFF000U) - (linear & 0xFFFFF000U));
+    }
+
     if ((s64)eip > m_code_limit)
         return;
 
-    u32 linear = m_state.segments[I386_SEGMENT_CS].base + eip;
     const u8* page;
 
     if ((m_state.cr0 & 0x80000000U) == 0)
         page = m_read_pages[linear >> 12];
+    else if (IsValidPointer(entry))
+        page = entry->read_page;
     else
-    {
-        const TLBEntry& entry = GetRecentTLBEntry(linear);
-
-        if (entry.linear_page != (linear & 0xFFFFF000U))
-            return;
-
-        page = entry.read_page;
-    }
+        return;
 
     if (!IsValidPointer(page))
         return;

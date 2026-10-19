@@ -38,6 +38,7 @@ static const u32 k_dynarec_exit_return = 0x04;
 static const u32 k_dynarec_exit_end = 0x08;
 static const u32 k_dynarec_exit_link = 0x10;
 static const u32 k_dynarec_exit_slot = 0x20;
+static const u32 k_dynarec_exit_prefetch = 0x40;
 
 class DynarecEmitter
 {
@@ -51,6 +52,18 @@ public:
     u32 GetInstructionEIP(int index) const;
 
 private:
+    // From entry level s: stall max(0, knee - s) + floor bytes, exit level clamp(s + offset, low, high)
+    struct BusRun
+    {
+        s32 knee;
+        u32 floor;
+        s32 offset;
+        u32 low;
+        u32 high;
+        u32 add;
+        bool transfer;
+    };
+
     struct Instruction
     {
         I386::InstructionContext context;
@@ -63,6 +76,10 @@ private:
         u32 clocks;
         u32 before;
         u32 next_check;
+        u32 bus_code_row;
+        BusRun bus_before;
+        BusRun bus_after;
+        BusRun bus_taken;
         jit_node* fallback;
         jit_node* resume;
     };
@@ -77,14 +94,24 @@ private:
     s32 SignExtend(u32 value, int width) const;
     void ComputeLiveness();
 
+    void ComputeBus();
+    BusRun AppendBus(const BusRun& run, const Instruction& instruction, bool transfer) const;
+    static u32 StepBusLevel(u32 level, s32 step, u32 prefetch);
+    static u32 GetBusStall(const BusRun& run, u32 level);
+    static u32 GetBusLevel(const BusRun& run, u32 level);
+    void EmitBusRun(const BusRun& run, int carry);
+    void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access);
+
     void EmitBlock();
     void EmitLink(jit_node* exit);
     void EmitFallback(Instruction& instruction, int index, int last);
-    void Exit(int steps, u32 clocks, u32 flags);
-    void ExitLinked(int steps, u32 clocks, u32 flags, int slot);
-    void ExitTo(u32 target, int steps, u32 clocks, int slot);
+    void Exit(int steps, u32 clocks, u32 flags, const BusRun* run = NULL);
+    void ExitLinked(int steps, u32 clocks, u32 flags, int slot, const BusRun* run);
+    void ExitTo(u32 target, int steps, u32 clocks, int slot, const BusRun* run);
     void StoreEIP(u32 eip);
-    void CallStep(u32 next_check, u32 native_clocks, u32 before);
+    void CallStep(u32 next_check, u32 native_clocks, u32 before, const I386::DynarecBusRun* settle,
+        const I386::DynarecBusRun* revert);
+    const I386::DynarecBusRun* AddBusRun(const BusRun& run);
     intptr_t Offset(const void* member) const;
     intptr_t RegisterOffset(int index, int width) const;
     void LoadU32(int r, int base, intptr_t offset);
@@ -94,7 +121,8 @@ private:
     void LoadHost(int r, int host, int width);
     void StoreHost(int host, int r, int width, int scratch);
     u8 EmitEffectiveOffset(int r, int t, const I386::InstructionContext& c);
-    void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback);
+    void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback,
+        bool bus = true);
     void EmitOperandAddress(Instruction& instruction, int width, int access);
     void EmitSZP(int f, int t, int u, int result, int width, u16 needed);
     void EmitArithmeticFlags(bool subtract, int result, int left, int right, int f, int t, int width, u16 needed,
@@ -132,6 +160,8 @@ private:
     jit_node* m_block_start;
     u8 m_key;
     int m_count;
+    bool m_timed;
+    u32 m_bus_code_row;
     Instruction m_instructions[64];
 };
 

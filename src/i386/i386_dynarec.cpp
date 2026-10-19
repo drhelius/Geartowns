@@ -40,6 +40,9 @@ static const u8 k_dynarec_entry_hot = 2;
 static const u32 k_dynarec_block_bytes = 64;
 static const u32 k_dynarec_max_watch_bytes = 512;
 static const u32 k_dynarec_block_code = 64 * 1024;
+static const u32 k_dynarec_bus_runs = GT_DYNAREC_MAX_BLOCKS * 4;
+// Two per instruction of the longest block
+static const u32 k_dynarec_max_bus_runs = 128;
 static const u32 k_dynarec_default_threshold = 8;
 static const u32 k_dynarec_default_block_limit = 64;
 
@@ -90,6 +93,7 @@ void I386::EnableDynarec(bool enable)
     m_dynarec_blocks = new DynarecBlock[GT_DYNAREC_MAX_BLOCKS];
     m_dynarec_hash = new u32[GT_DYNAREC_MAX_BLOCKS];
     m_dynarec_bytes = new u8[GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes];
+    m_dynarec_bus_runs = new DynarecBusRun[k_dynarec_bus_runs];
     m_dynarec_region_generation = 0;
 
     // The entry function stays at the start of the code memory, flushes start after it
@@ -161,6 +165,7 @@ void I386::FlushDynarec()
     memset(m_dynarec_hash, 0xFF, GT_DYNAREC_MAX_BLOCKS * sizeof(u32));
     m_dynarec_block_count = 0;
     m_dynarec_bytes_used = 0;
+    m_dynarec_bus_runs_used = 0;
     m_dynarec_code_used = m_dynarec_code_start;
     m_dynarec_link_block = k_dynarec_none;
     m_dynarec_flushes++;
@@ -203,6 +208,7 @@ void I386::CheckDynarecMemory()
 
 // RunFor with translated blocks: the interpreter steps whatever no block covers, with the same loop condition,
 // step epilogue and interrupt checks, so the slice ends at the same instruction as in RunFor
+template<bool timed>
 I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
     bool intr_pending)
 {
@@ -273,7 +279,13 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 m_dynarec_current = k_dynarec_none;
 
                 if ((exit & k_dynarec_exit_transfer) != 0)
-                    clocks += GetNextInstructionComponents();
+                {
+                    u32 components = GetNextInstructionComponents();
+                    clocks += components;
+
+                    if (timed && (exit & k_dynarec_exit_prefetch) != 0)
+                        m_bus_queue = MIN(m_bus_queue + components * m_bus_code_rate, k_i386_bus_queue);
+                }
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
                 if ((exit & k_dynarec_exit_return) != 0)
@@ -295,7 +307,8 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 continue;
             }
 
-            if (!RunFastStep(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
+            if (!RunFastStep<timed>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
+                intr_pending))
                 break;
 
             // Instructions that follow an interpreted one in sequence belong to the block that starts before them.
@@ -328,7 +341,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     if (unlikely(m_dynarec_cool_clocks >= k_dynarec_cool_period_clocks))
         CoolDynarecPages();
 
-    total.cycles = clocks;
+    total.cycles = clocks + (timed ? CarryBusTime() : 0);
     total.steps = steps + m_poll_steps;
     total.instruction_completed = completed;
     m_poll_steps = 0;
@@ -336,9 +349,14 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     return total;
 }
 
+template I386_Run_Result I386::RunDynarec<false>(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
+    bool intr_pending);
+template I386_Run_Result I386::RunDynarec<true>(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
+    bool intr_pending);
+
 // The block at CS:EIP when it is compiled, valid and inside the code window, which opens as StartInstruction opens it
 // Entry points are counted and compiled once they get hot, successors of blocks that ran to their end right away
-I386::DynarecBlock* I386::FindDynarecBlock(u8 entry)
+INLINE I386::DynarecBlock* I386::FindDynarecBlock(u8 entry)
 {
     u32 eip = m_state.eip;
 
@@ -443,7 +461,7 @@ u32 I386::LookupDynarecBlock(const u8* host, u32 eip, u64 key) const
 }
 
 // Only main RAM and ROM pages are compiled, everything else runs in the interpreter
-void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
+NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
 {
     u32 page = k_dynarec_none;
 
@@ -456,7 +474,8 @@ void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     }
 
     if (m_dynarec_code_used + k_dynarec_block_code > m_dynarec_memory->GetSize() ||
-        m_dynarec_bytes_used + k_dynarec_max_watch_bytes > GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes)
+        m_dynarec_bytes_used + k_dynarec_max_watch_bytes > GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes ||
+        m_dynarec_bus_runs_used + k_dynarec_max_bus_runs > k_dynarec_bus_runs)
     {
         FlushDynarec();
         return;
@@ -464,6 +483,7 @@ void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
 
     DynarecEmitter emitter(this);
     u32 code_size = 0;
+    u32 bus_runs = m_dynarec_bus_runs_used;
 
     m_dynarec_memory->BeginWrite();
     bool compiled = emitter.Compile(block, available, m_dynarec_block_limit,
@@ -472,6 +492,7 @@ void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
 
     if (!compiled)
     {
+        m_dynarec_bus_runs_used = bus_runs;
         block.state = k_dynarec_interpret;
         return;
     }
@@ -683,12 +704,23 @@ void I386::CoolDynarecPages()
 // Runs one instruction of a block in the interpreter, as the fast loop of RunFor does
 // Returns zero while the block can go on: nothing ended the batch, the code window and the block are still valid
 // and the slice budget covers every instruction up to the next check
-uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before)
+uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+    uintptr_t settle, uintptr_t revert)
 {
     StepState& step = cpu->m_step;
     u16 old_task = cpu->m_state.task_register.selector;
+    u32 level = cpu->m_bus_queue;
 
-    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks + (u32)before;
+    if (settle != 0)
+    {
+        const DynarecBusRun& run = *(const DynarecBusRun*)settle;
+        s32 value = MIN(MAX((s32)level + run.offset, (s32)run.low), (s32)run.high);
+        cpu->m_bus_fraction += cpu->GetDynarecBusTime(run, level);
+        cpu->m_bus_queue = (u32)value;
+    }
+
+    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks + (u32)before +
+        (cpu->m_bus_timed ? cpu->GetBusPending() : 0);
 
     step.clocks = 0;
     step.instruction_completed = true;
@@ -697,6 +729,8 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
 
     if (unlikely(!cpu->ExecuteOPCode()))
         cpu->CompleteFault(old_task);
+    else if (cpu->m_bus_timed && (step.instruction_completed || cpu->m_state.repeat.active))
+        cpu->AddBusTime();
 
     if (unlikely(cpu->m_state.interrupt_shadow_steps > 0) && step.instruction_completed)
         cpu->CountInterruptShadow();
@@ -720,11 +754,24 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
         cpu->OpenCodeWindow(cpu->m_state.eip);
         u32 watch_offset = block.watch_eip - cpu->m_code_window_eip;
 
-        return watch_offset >= cpu->m_code_window_size || watch_offset + block.watch_length > cpu->m_code_window_size ||
-            cpu->m_code_window + (block.eip - cpu->m_code_window_eip) != block.host;
+        if (watch_offset >= cpu->m_code_window_size || watch_offset + block.watch_length > cpu->m_code_window_size ||
+            cpu->m_code_window + (block.eip - cpu->m_code_window_eip) != block.host)
+            return 1;
+    }
+
+    if (revert != 0)
+    {
+        cpu->m_bus_fraction -= cpu->GetDynarecBusTime(*(const DynarecBusRun*)revert, level);
+        cpu->m_bus_queue = level;
     }
 
     return 0;
+}
+
+s32 I386::GetDynarecBusTime(const DynarecBusRun& run, u32 level) const
+{
+    s32 stall = run.knee - (s32)level;
+    return (s32)((u32)MAX(stall, 0) * run.cost + run.add);
 }
 
 #if !defined(GT_DISABLE_DISASSEMBLER)

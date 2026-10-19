@@ -72,10 +72,18 @@ INLINE u32 I386::RunCheckedStep()
     else if (debug_active)
         before.eflags = m_state.eflags;
 
+    bool continuation = m_state.repeat.active;
     bool completed = debug_active ? ExecuteOPCodeDebug(before) : ExecuteOPCode();
 
     if (!completed)
         CompleteFault(old_task);
+    else if (m_bus_timed && (result.instruction_completed || m_state.repeat.active))
+    {
+        if (continuation)
+            AddBusStringElement();
+        else
+            AddBusTime();
+    }
 
     if (m_state.interrupt_shadow_steps > 0 && result.instruction_completed)
         CountInterruptShadow();
@@ -93,7 +101,12 @@ INLINE u32 I386::RunInstruction(GT_Bus_Access_Context& context)
 {
     m_io_start_cycles = 0;
     SetBusContext(context);
-    return RunCheckedStep();
+    RunCheckedStep();
+
+    if (m_bus_timed)
+        m_step.clocks += CarryBusTime();
+
+    return (u32)m_step.clocks;
 }
 
 INLINE void I386::CountInterruptShadow()
@@ -112,10 +125,11 @@ INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
 }
 
 // One step of the fast loop, shared by RunFor and RunDynarec. Returns false when the batch must end
+template<bool timed>
 INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
     bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending)
 {
-    m_io_start_cycles = (u32)clocks + context.wait_cycles;
+    m_io_start_cycles = (u32)clocks + context.wait_cycles + (timed ? GetBusPending() : 0);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     DisassembleNextInstruction();
 #endif
@@ -127,6 +141,8 @@ INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& con
 
     if (unlikely(!ExecuteOPCode()))
         CompleteFault(old_task);
+    else if (timed && likely(m_step.instruction_completed || m_state.repeat.active))
+        AddBusTime();
 
     if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
         CountInterruptShadow();

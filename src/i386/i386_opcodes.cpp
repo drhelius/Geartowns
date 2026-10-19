@@ -2272,6 +2272,8 @@ bool I386::OPCodes_IN()
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
+    m_step.clocks += m_bus.io[0];
+
     if (!SynchronizeIOAccess())
         return true;
 
@@ -2331,6 +2333,8 @@ bool I386::OPCodes_OUT()
 
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+
+    m_step.clocks += m_bus.io[1];
 
     if (!SynchronizeIOAccess())
         return true;

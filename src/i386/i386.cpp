@@ -1418,9 +1418,10 @@ bool I386::CausesDoubleFault(u8 first, u8 second) const
     bool second_contributory = second == 0 || second == 9 || (second >= 10 && second <= 13);
 
     if (first == 14)
-        return second_contributory || second == 14;
+        return second_contributory;
 
-    return first_contributory && second_contributory;
+    // Unlike Intel's table, a #PF while delivering #TS is a double fault on the 386, other contributory faults are not
+    return first_contributory && (second_contributory || (first == 10 && second == 14));
 }
 
 bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_eip,
@@ -1466,7 +1467,8 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
         I386_Pending_Exception next = m_exception;
         memset(&m_exception, 0, sizeof(m_exception));
 
-        if (current.vector == 8)
+        // A #PF while delivering #PF shuts the 386 down instead of raising #DF
+        if (current.vector == 8 || (current.vector == 14 && next.vector == 14))
         {
             m_state.shutdown = true;
             return false;

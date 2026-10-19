@@ -122,7 +122,13 @@ bool SystemControl::Decodes(u16 port) const
             return (m_features & GT_MACHINE_FEATURE_MEMORY_WAIT) != 0;
         case 0x05EC:
             return (m_features & GT_MACHINE_FEATURE_SPEED_CONTROL) != 0;
+        // The Marty's board decodes none of 05E0h-05E8h, its RAM card answers 05E8h
+        case 0x05E0:
+            return (m_features & GT_MACHINE_FEATURE_RAM_CARD) == 0;
         case 0x05E8:
+            if ((m_features & GT_MACHINE_FEATURE_RAM_CARD) != 0)
+                return m_memory->GetMainRAMSize() > k_system_control_board_ram;
+
             return (m_features & GT_MACHINE_FEATURE_RAM_SIZE) != 0;
         default:
             return true;
@@ -178,12 +184,11 @@ u8 SystemControl::Read(u16 port, u64 clocks)
         case 0x05C2:
             // No expansion board, so the expansion bus never raised the NMI
             return 0xF7;
-        case 0x05E0:
-            return m_state.port_05e0;
         case 0x0024:
         case 0x0025:
         case 0x0028:
         case 0x006C:
+        case 0x05E0:
         case 0x05E2:
         case 0x05E6:
         case 0x05E8:
@@ -221,7 +226,7 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
         case 0x05C2:
             return 0xF7;
         case 0x05E0:
-            return m_state.port_05e0;
+            return Decodes(port) ? m_state.port_05e0 : 0xFF;
         case 0x0024:
             return Decodes(port) ? GetCPUMisc3() : 0xFF;
         case 0x0025:
@@ -298,7 +303,8 @@ void SystemControl::Write(u16 port, u8 value)
             m_state.expansion_nmi = (value & 0x08) != 0;
             break;
         case 0x05E0:
-            m_state.port_05e0 = value;
+            if (Decodes(port))
+                m_state.port_05e0 = value;
             break;
         case 0x05E2:
             if (Decodes(port) && m_state.port_05e2 != value)

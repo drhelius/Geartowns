@@ -23,7 +23,7 @@
 #include "../common/common.h"
 
 #define GT_MACHINE_RELEASE_ORDER_COUNT 8
-#define GT_MACHINE_FEATURE_COUNT 13
+#define GT_MACHINE_FEATURE_COUNT 14
 #define GT_MACHINE_CPU_SPEED_COUNT 8
 #define GT_MACHINE_RAM_SIZE_COUNT 11
 
@@ -52,7 +52,9 @@ const u32 k_machine_features_ux = k_machine_features_10f | GT_MACHINE_FEATURE_NM
     GT_MACHINE_FEATURE_LSPEED | GT_MACHINE_FEATURE_POWER_OFF_RESET;
 const u32 k_machine_features_ug = k_machine_features_10f | GT_MACHINE_FEATURE_SPEED_CONTROL |
     GT_MACHINE_FEATURE_UG_REGISTERS | GT_MACHINE_FEATURE_FREE_RUN_TIMER;
-const u32 k_machine_features_marty = k_machine_features_ux | GT_MACHINE_FEATURE_FREE_RUN_TIMER;
+const u32 k_machine_features_marty = (k_machine_features_ux & ~(GT_MACHINE_FEATURE_RAM_SIZE |
+    GT_MACHINE_FEATURE_MEMORY_WAIT)) | GT_MACHINE_FEATURE_UG_REGISTERS | GT_MACHINE_FEATURE_FREE_RUN_TIMER |
+    GT_MACHINE_FEATURE_RAM_CARD;
 const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_REGISTERS |
     GT_MACHINE_FEATURE_FREE_RUN_TIMER | GT_MACHINE_FEATURE_CRT_POWER_OFF;
 
@@ -157,7 +159,8 @@ const char* const k_machine_feature_names[GT_MACHINE_FEATURE_COUNT] =
     "Speed control (05ECh)",
     "UG registers (0024h)",
     "Free-running timer (0026h)",
-    "CRT power off (0022h)"
+    "CRT power off (0022h)",
+    "RAM card size (05E8h)"
 };
 
 #endif /* MACHINE_PROFILES_H */

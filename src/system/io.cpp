@@ -629,13 +629,13 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             break;
         case 0x05C0:
         case 0x05C2:
-        case 0x05E0:
             value = m_system_control->Peek(port, clocks);
             break;
         case 0x0024:
         case 0x0025:
         case 0x0028:
         case 0x006C:
+        case 0x05E0:
         case 0x05E2:
         case 0x05E6:
         case 0x05E8:

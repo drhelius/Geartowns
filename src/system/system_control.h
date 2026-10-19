@@ -98,6 +98,7 @@ private:
 };
 
 static const u64 k_system_control_id_settle_clocks = (GT_MACHINE_CLOCK_RATE / 1000000) * 300;
+static const u32 k_system_control_board_ram = 0x200000;
 static const u8 k_system_control_reset_soft = 0x01;
 static const u8 k_system_control_reset_shutdown = 0x02;
 

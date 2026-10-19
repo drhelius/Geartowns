@@ -148,7 +148,7 @@ public:
     void StepInto();
     void StepOver();
     bool StepOut();
-    void StepFrame();
+    void StepFrames(int frames);
     void Reset();
     json GetDebugStatus();
     json RunToAddress(const McpAddress& address);

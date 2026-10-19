@@ -446,11 +446,23 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "debug_step_frame"},
         {"title", "Debug Step Frame"},
-        {"description", "Run one frame with breakpoints active, then pause."},
+        {"description", "Run frames with breakpoints active, then pause. By default it answers when they finish or a "
+            "breakpoint stops them, with the debug_get_status fields, frames run and breakpoint_hit."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
-            {"properties", json::object()},
+            {"properties", {
+                {"frames", {
+                    {"type", "integer"},
+                    {"description", "Default 1, at most 1800 when waiting."},
+                    {"minimum", 1},
+                    {"maximum", 216000}
+                }},
+                {"wait", {
+                    {"type", "boolean"},
+                    {"description", "Default true. false answers at once; poll debug_get_status or debug_pause."}
+                }}
+            }},
             {"additionalProperties", false}
         }}
     });
@@ -2240,9 +2252,8 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "mouse_click"},
         {"title", "Mouse Click"},
-        {"description", "Click a mouse button, at screenshot pixel x, y when given (moved there like mouse_move). Press "
-            "and release take 4 frames each. drag presses at x, y, moves straight to to_x, to_y and releases, also on "
-            "errors. Runs frames, kept in rewind."},
+        {"description", "Click a mouse button, at screenshot pixel x, y when given (moved there like mouse_move). drag "
+            "presses at x, y, moves straight to to_x, to_y and releases, also on errors. Runs frames, kept in rewind."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2277,6 +2288,18 @@ json McpServer::BuildToolList()
                     {"type", "integer"},
                     {"description", "drag end row."},
                     {"minimum", 0}
+                }},
+                {"press_frames", {
+                    {"type", "integer"},
+                    {"description", "Frames held down. Default 4."},
+                    {"minimum", 1},
+                    {"maximum", 120}
+                }},
+                {"release_frames", {
+                    {"type", "integer"},
+                    {"description", "Frames up after a release. Default 4."},
+                    {"minimum", 1},
+                    {"maximum", 120}
                 }}
             }},
             {"additionalProperties", false}
@@ -2894,11 +2917,6 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
             return {{"success", true}, {"pending", true},
                 {"note", "The call stack is empty, so it steps one instruction instead"}};
 
-        return {{"success", true}, {"pending", true}};
-    }
-    else if (normalizedTool == "debug_step_frame")
-    {
-        m_debugAdapter.StepFrame();
         return {{"success", true}, {"pending", true}};
     }
     else if (normalizedTool == "debug_reset")
@@ -3569,7 +3587,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         return m_debugAdapter.ControllerSetType(arguments["player"], arguments["type"]);
     }
     else if ((normalizedTool == "keyboard_type") || (normalizedTool == "mouse_move") ||
-        (normalizedTool == "mouse_click"))
+        (normalizedTool == "mouse_click") || (normalizedTool == "debug_step_frame"))
     {
         return {{"error", normalizedTool + " must be handled by the MCP manager"}};
     }

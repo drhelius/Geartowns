@@ -146,7 +146,7 @@ After hitting a breakpoint or pausing:
 | Step Into | `debug_step_into` | Execute one instruction, enter calls and interrupts |
 | Step Over | `debug_step_over` | Execute one instruction, run through CALL subroutines |
 | Step Out | `debug_step_out` | Run until the current subroutine or interrupt handler returns |
-| Step Frame | `debug_step_frame` | Run one frame with breakpoints active, then pause |
+| Step Frame | `debug_step_frame` | Run `frames` (default 1) with breakpoints active, then pause; answers with the status when done, or at once with `wait: false` |
 | Run To | `debug_run_to_cursor` | Continue until PC reaches target address |
 | Continue | `debug_continue` | Resume normal execution |
 | Reset | `debug_reset` | Reset the emulated FM Towns |
@@ -220,7 +220,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 
 ### Screenshots
 
-- `get_screenshot` — current rendered frame as PNG
+- `get_screenshot` — current rendered frame as PNG; right after `load_state` it is the frame saved in the state or, when it can't be restored, an error until a frame runs
 
 Use screenshots after stepping or continuing to see the visual impact of changes.
 
@@ -319,7 +319,9 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 - `keyboard_type` types ASCII text, useful at Towns OS and DOS prompts
 - `controller_set_type` selects the device on a game port (`auto`, `none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`); `auto` takes the device the game database names for the loaded game, or the default
 - `controller_button` presses, releases or taps pad buttons; on a mouse port the directions move the mouse and A/B are the left/right buttons
-- `mouse_click` with `x`, `y` clicks at a screen pixel from `get_screenshot` (`double_click`, `right` button, or `press`/`release` around a `mouse_move` for drags); `mouse_move` places the pointer, and `mouse_get_cursor` reads where it was last measured without running frames
+- `mouse_click` with `x`, `y` clicks at a screen pixel from `get_screenshot` (`double_click`, `right` button, `press_frames`/`release_frames` for software that needs longer clicks); `drag` with `to_x`, `to_y` drags in one call and always releases, or use `press`/`release` around a `mouse_move`
+- `mouse_move` places the pointer; with a button held it moves straight from the last known position without measuring (`estimated`), and `mouse_get_cursor` reads where it was last measured or estimated without running frames
+- If the pointer isn't found, the error says why; software that hides the pointer while busy usually works on a retry
 - `get_input_state` shows each port's device, its setting and where it came from, and the pressed buttons and keys
 
 ---
@@ -353,7 +355,7 @@ Offsets in region areas are 0-based. ROMs, media images and I/O PORTS cannot be 
 - **Symbols**: Use `add_symbol` liberally to label addresses you've identified — makes disassembly readable. Use `list_symbols` (with `filter`, an exact `name` or an `address`) to review
 - **Bookmarks**: Use `add_disassembler_bookmark` for code locations and `add_memory_bookmark` for data regions
 - **Watches**: Use `add_memory_watch` for variables you're tracking across steps (8, 16, 32 or 64 bits)
-- **Save states**: Use `save_state` / `load_state` to snapshot and restore emulator state at interesting points
+- **Save states**: Use `save_state` / `load_state` to snapshot and restore emulator state at interesting points; a load puts the saved frame back on screen (`frame_restored`)
 - **Rewind**: Use `get_rewind_status` + `rewind_seek` to scrub back through recent execution history without manual save states
 - **Screenshots**: Capture visual state with `get_screenshot` after significant changes
 

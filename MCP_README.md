@@ -371,7 +371,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `debug_step_into` - Step one instruction, entering calls and interrupts. A `REP` string instruction runs all its elements and a `HLT` waits until an IRQ wakes the CPU
 - `debug_step_over` - Step over subroutine calls, `INT n` handlers and IRQs that come in during the step
 - `debug_step_out` - Run until the current subroutine or interrupt handler returns; with an empty call stack it steps one instruction and adds a `note`
-- `debug_step_frame` - Run one complete frame with breakpoints active, then pause
+- `debug_step_frame` - Run complete frames with breakpoints active, then pause; `frames` sets how many (default 1). By default it answers when they finish or a breakpoint stops them, with the `debug_get_status` fields plus `frames` run, `requested_frames` and `breakpoint_hit`, for up to 1800 frames. `wait: false` answers at once and takes up to 216000 frames; poll `debug_get_status` or stop them with `debug_pause`. A reset, state load or rewind during a wait ends it with an error
 - `debug_run_to_cursor` - Continue execution until reaching specified address
 - `debug_reset` - Reset emulation
 - `debug_get_status` - Get debug status: `paused`, `at_breakpoint`, `pc` (linear), `logical_pc`, `mode`, `halted`, `breakpoint`, `media_loading`, `media_ready`, `powered_on`, `frame`
@@ -563,7 +563,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `read_floppy_sector` - Read the sector with ID R (`sector`) on a track by `drive`, `cylinder`, `head`: IDs, status and data as hex. Without `sector` it lists the track's sectors: C, H, R, N, size, density, deleted mark, status and image offset
 
 ### Screen Capture
-- `get_screenshot` - Capture current screen frame as base64 PNG
+- `get_screenshot` - Capture current screen frame as base64 PNG. Right after a state load it is the frame saved in the state; when the state has none or the screen size changed, it returns an error until a frame runs
 - `start_video_recording` - Start recording video and audio to an AVI file (MJPEG, uncompressed or PNG compressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`, `lossless_compressed`). `lossless` is uncompressed; `lossless_compressed` stores PNG frames, much smaller but playable only with FFmpeg based players. Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses the debug output screen aspect ratio while debugging. When a shader preset is active outside debug mode, the shader output is recorded at the output window size and `scale` and `aspect_ratio` are ignored. Frames are recorded only while the emulator runs, so continue or step execution before stopping
 - `stop_video_recording` - Stop the active recording and finalize the AVI file. Returns `file_path` and the number of recorded `frames`
 
@@ -579,8 +579,8 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `swap_floppies` - Swap the disks in drives 0 and 1
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`
 - `list_save_state_slots` - List all 5 save state slots with information (media name, timestamp, validity)
-- `save_state` - Save emulator state to the selected slot, to `slot` (1-5, which becomes the selected one) or to an absolute `file_path`
-- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`
+- `save_state` - Save emulator state, with the current frame, to the selected slot, to `slot` (1-5, which becomes the selected one) or to an absolute `file_path`
+- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`. It puts the saved frame back on screen without running the machine; `frame_restored` is false when the state has no frame or the screen size changed
 - `get_rewind_status` - Get rewind buffer status (enabled, snapshots, capacity, buffered seconds)
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 
@@ -590,9 +590,9 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_input_state` - Get each port's device `type`, its `setting` (auto or a device), its `source` (explicit, database, default or fallback), `database_type` when an explicit choice contradicts the game database, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
 - `keyboard_type` - Type ASCII text (up to 256 characters) through a frame macro on the JIS layout; optional `frames_per_key`
-- `mouse_move` - Move the mouse pointer to screen pixel `x`, `y` (the coordinates of `get_screenshot`; the top-left of the pointer image lands there), or by `dx`, `dy` mouse counts. A screen move finds the pointer by moving it 32 counts out and back and comparing frames, moves 4 counts per frame (Towns OS moves bigger steps faster) and checks again until it is there. It runs emulated frames, kept in rewind like any input, and a breakpoint stops it. Optional `player` picks the port, default the first one set to mouse
-- `mouse_click` - Click the `left` or `right` button (`click`, `double_click`, `press` or `release`), at screen pixel `x`, `y` when given. Press and release last 4 frames each; `press`, `mouse_move` and `release` make a drag. A pointer that snaps to a grid and can't land on the exact pixel still clicks when it covers the target
-- `mouse_get_cursor` - Read where the last `mouse_move` or `mouse_click` measured the pointer: position, box, pixels per mouse count, and whether the current frame still draws it there. Read-only, it never runs frames
+- `mouse_move` - Move the mouse pointer to screen pixel `x`, `y` (the coordinates of `get_screenshot`; the top-left of the pointer image lands there), or by `dx`, `dy` mouse counts. A screen move finds the pointer by moving it 32 counts out and back and comparing frames, moves 4 counts per frame (Towns OS moves bigger steps faster) and checks again until it is there. Both axes share the steps, so diagonal moves are straight lines. Measurements that don't look like a pointer (too small, stopped at the screen edge, an out-of-range pixels per count) are retried, after 30 frames when the pointer wasn't seen moving at all (software that hides it while busy), and the error says why the last one failed. With a button held by `mouse_click` `press`, a screen move goes straight from the last known position instead, since moving out and back would drag; the result has `estimated: true`. It runs emulated frames, kept in rewind like any input; a breakpoint, reset, state load or rewind stops it. Optional `player` picks the port, default the first one set to mouse
+- `mouse_click` - Click the `left` or `right` button (`click`, `double_click`, `press`, `release` or `drag`), at screen pixel `x`, `y` when given. `press_frames` and `release_frames` set how long the button stays down and up (1-120, default 4). `drag` moves to `x`, `y` with the button up, presses, moves straight to `to_x`, `to_y` and releases, also when something fails, returning `from` (measured) and `to` (estimated); `press`, `mouse_move` and `release` make the same drag over several calls. A pointer that snaps to a grid and can't land on the exact pixel still clicks when it covers the target
+- `mouse_get_cursor` - Read where the last `mouse_move` or `mouse_click` measured the pointer: position, box, pixels per mouse count, and whether the current frame still draws it there. `estimated: true` marks a position moved by counts or with a button held since the last measurement. A reset, state load, rewind, failed mouse tool or `controller_button` mouse move forgets it. Read-only, it never runs frames
 
 ## Available MCP Resources
 

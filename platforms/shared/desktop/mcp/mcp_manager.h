@@ -55,7 +55,18 @@ struct McpInputMacroState
     u64 breakpoint_stops;
 };
 
+struct McpStepFramesState
+{
+    bool active;
+    json request_id;
+    int frames;
+    u64 start_frame;
+    u64 breakpoint_stops;
+    u32 generation;
+};
+
 static const u64 k_mcp_tap_frames = 10;
+static const int k_mcp_step_wait_max_frames = 1800;
 
 enum McpMouseMotion
 {
@@ -128,6 +139,8 @@ struct McpMouseMacroState
     bool button_press_first;
     int button_step;
     int button_wait;
+    int press_frames;
+    int release_frames;
     u64 frame;
     u64 start_frame;
     bool restore_pause;
@@ -149,6 +162,7 @@ public:
         m_pending_media_load_request_id = json();
         reset_input_macro();
         reset_mouse_macro();
+        reset_step_frames();
         reset_mouse_motion();
     }
 
@@ -187,6 +201,7 @@ public:
         m_pending_media_load_file_path.clear();
         reset_input_macro();
         reset_mouse_macro();
+        reset_step_frames();
         reset_mouse_motion();
         m_debug_adapter->ClearControllerState();
 
@@ -228,6 +243,7 @@ public:
         release_input_macro_keys();
         reset_input_macro();
         reset_mouse_macro();
+        reset_step_frames();
         reset_mouse_motion();
 
         if (IsValidPointer(m_debug_adapter))
@@ -283,6 +299,12 @@ public:
         if (m_mouse_macro.active)
         {
             pump_mouse_macro();
+            return;
+        }
+
+        if (m_step_frames.active)
+        {
+            pump_step_frames();
             return;
         }
 
@@ -349,6 +371,23 @@ public:
                 {
                     SafeDelete(response);
                     pump_input_macro();
+                }
+
+                SafeDelete(command);
+                break;
+            }
+
+            if (tool == "debug_step_frame")
+            {
+                json result = start_step_frames(command->arguments, command->requestId);
+
+                if (!result.is_null())
+                {
+                    DebugResponse* response = new DebugResponse();
+                    response->requestId = command->requestId;
+                    response->result = result;
+                    UpdateResponseError(response);
+                    m_response_queue.Push(response);
                 }
 
                 SafeDelete(command);
@@ -703,6 +742,8 @@ private:
         macro.button_press_first = false;
         macro.button_step = 0;
         macro.button_wait = 0;
+        macro.press_frames = 0;
+        macro.release_frames = 0;
         macro.frame = 0;
         macro.start_frame = 0;
         macro.restore_pause = false;
@@ -814,6 +855,8 @@ private:
         macro.button_mask = button == "right" ? GT_GAMEPAD_B : GT_GAMEPAD_A;
         macro.button_steps = action == "double_click" ? 4 : ((action == "click") || drag ? 2 : 1);
         macro.button_press_first = action != "release";
+        macro.press_frames = arguments.value("press_frames", k_mcp_mouse_button_frames);
+        macro.release_frames = arguments.value("release_frames", k_mcp_mouse_button_frames);
         macro.frame = emu_frame_counter;
         macro.start_frame = emu_frame_counter;
         macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
@@ -1151,7 +1194,7 @@ private:
         bool pressed = macro.button_press_first && ((macro.button_step % 2) == 0);
         m_debug_adapter->SetMouseButton(macro.player, macro.button_mask, pressed);
         macro.button_step++;
-        macro.button_wait = k_mcp_mouse_button_frames - 1;
+        macro.button_wait = (pressed ? macro.press_frames : macro.release_frames) - 1;
     }
 
     void finish_mouse_macro_success()
@@ -1226,6 +1269,78 @@ private:
         m_response_queue.Push(response);
     }
 
+    void reset_step_frames()
+    {
+        m_step_frames.active = false;
+        m_step_frames.request_id = json();
+        m_step_frames.frames = 0;
+        m_step_frames.start_frame = 0;
+        m_step_frames.breakpoint_stops = 0;
+        m_step_frames.generation = 0;
+    }
+
+    json start_step_frames(const json& arguments, const json& request_id)
+    {
+        int frames = arguments.value("frames", 1);
+        bool wait = arguments.value("wait", true);
+
+        if (emu_is_empty())
+            return {{"error", "Emulator is powered off"}};
+
+        if (wait && (frames > k_mcp_step_wait_max_frames))
+            return {{"error", "Waiting covers up to " + std::to_string(k_mcp_step_wait_max_frames) +
+                " frames, pass wait false for more and poll debug_get_status"}};
+
+        if (!wait)
+        {
+            m_debug_adapter->StepFrames(frames);
+            return {{"success", true}, {"pending", true}, {"requested_frames", frames}};
+        }
+
+        reset_step_frames();
+        m_step_frames.request_id = request_id;
+        m_step_frames.frames = frames;
+        m_step_frames.start_frame = emu_frame_counter;
+        m_step_frames.breakpoint_stops = emu_debug_breakpoint_stops;
+        m_step_frames.generation = emu_machine_generation;
+        m_step_frames.active = true;
+        m_debug_adapter->StepFrames(frames);
+        return json();
+    }
+
+    void pump_step_frames()
+    {
+        DebugResponse* response = NULL;
+
+        if (emu_is_empty())
+        {
+            response = new DebugResponse();
+            response->result = {{"error", "Emulator is powered off"}};
+        }
+        else if (emu_machine_generation != m_step_frames.generation)
+        {
+            response = new DebugResponse();
+            response->result = {{"error", "Frames interrupted by a reset, state load or rewind"}};
+        }
+        else if (emu_is_debug_idle())
+        {
+            response = new DebugResponse();
+            response->result = m_debug_adapter->GetDebugStatus();
+            response->result["success"] = true;
+            response->result["frames"] = emu_frame_counter - m_step_frames.start_frame;
+            response->result["requested_frames"] = m_step_frames.frames;
+            response->result["breakpoint_hit"] = emu_debug_breakpoint_stops != m_step_frames.breakpoint_stops;
+        }
+
+        if (!IsValidPointer(response))
+            return;
+
+        response->requestId = m_step_frames.request_id;
+        UpdateResponseError(response);
+        reset_step_frames();
+        m_response_queue.Push(response);
+    }
+
 private:
     DebugAdapter* m_debug_adapter;
     McpServer* m_server;
@@ -1240,6 +1355,7 @@ private:
     std::vector<DelayedButtonRelease> m_delayed_releases;
     McpInputMacroState m_input_macro;
     McpMouseMacroState m_mouse_macro;
+    McpStepFramesState m_step_frames;
     bool m_mouse_motion_held[GT_MAX_GAMEPADS][MCP_MOUSE_MOTION_COUNT];
     u64 m_mouse_motion_frame;
 };

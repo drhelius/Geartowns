@@ -247,10 +247,10 @@ bool DebugAdapter::StepOut()
     return emu_debug_step_out();
 }
 
-void DebugAdapter::StepFrame()
+void DebugAdapter::StepFrames(int frames)
 {
     config_debug.debug = true;
-    emu_debug_step_frame();
+    emu_debug_step_frames(frames);
 }
 
 void DebugAdapter::Reset()

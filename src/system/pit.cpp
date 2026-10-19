@@ -198,8 +198,8 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
     else
         m_pit[chip].WriteCounter(index, value, tick);
 
-    // Loading a channel 1 count acknowledges its timeout
-    if (chip == 0 && index == 1)
+    // Loading a channel 1 count acknowledges its timeout, and so does a mode that drops OUT1
+    if (chip == 0 && counter == 1 && (index == 1 || ((value & 0x30) != 0 && !m_pit[0].GetOutput(1, tick))))
         m_state.timer_latch &= ~0x02;
 
     // Reprogramming can raise OUT at once

@@ -1388,6 +1388,7 @@ bool I386::RaiseException(u8 vector, u8 exception_class, bool has_error_code, u3
     m_exception.pending = true;
     m_exception.has_error_code = has_error_code;
     m_exception.has_return_eip = false;
+    m_exception.has_double_fault_eip = false;
     m_exception.vector = vector;
     m_exception.exception_class = exception_class;
     m_exception.error_code = (m_external_event && has_error_code && vector >= 10 && vector <= 13) ?
@@ -1476,6 +1477,9 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
 
         if (CausesDoubleFault(current.vector, next.vector))
         {
+            if (current.has_double_fault_eip)
+                current_return_eip = current.double_fault_eip;
+
             memset(&current, 0, sizeof(current));
             current.pending = true;
             current.has_error_code = true;

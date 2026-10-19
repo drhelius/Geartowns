@@ -146,10 +146,12 @@ struct I386_Pending_Exception
     bool pending;
     bool has_error_code;
     bool has_return_eip;
+    bool has_double_fault_eip;
     u8 vector;
     u8 exception_class;
     u32 error_code;
     u32 return_eip;
+    u32 double_fault_eip;
 };
 
 struct I386_Repeat_State

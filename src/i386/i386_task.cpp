@@ -352,7 +352,16 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
     TaskState new_state;
 
     if (!ReadTaskState(descriptor, new_state, context))
+    {
+        // A double fault from the new TSS's limit check saves the EIP after the switching instruction, as on the Marty
+        if (m_exception.pending && m_exception.vector == 10 && descriptor.limit < (new_state.tss32 ? 0x67U : 0x2BU))
+        {
+            m_exception.has_double_fault_eip = true;
+            m_exception.double_fault_eip = return_eip;
+        }
+
         return false;
+    }
 
     bool nested = switch_type == I386_TASK_SWITCH_CALL || switch_type == I386_TASK_SWITCH_INTERRUPT;
 

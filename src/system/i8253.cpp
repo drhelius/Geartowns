@@ -50,7 +50,7 @@ u8 I8253::ReadCounter(int index, u64 tick)
     I8253_Counter& counter = m_state.counters[index];
 
     if (!counter.programmed)
-        return 0xFF;
+        return 0x00;
 
     u16 value = 0;
     bool high = counter.access == 2;
@@ -87,7 +87,7 @@ u8 I8253::PeekCounter(int index, u64 tick) const
     const I8253_Counter& counter = m_state.counters[index];
 
     if (!counter.programmed)
-        return 0xFF;
+        return 0x00;
 
     u16 value = 0;
     bool high = counter.access == 2;

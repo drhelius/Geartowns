@@ -83,7 +83,8 @@ void PIT::Reset()
 {
     m_pit[0].Reset();
     m_pit[1].Reset();
-    m_state.timer_latch = 0;
+    // Channel 1's timeout powers on latched
+    m_state.timer_latch = 0x02;
     m_state.timer_enable = 0;
     m_state.sound = false;
     m_state.sound_memory = false;

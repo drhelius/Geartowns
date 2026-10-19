@@ -913,10 +913,10 @@ static void main_window(void)
         draw_list->PopClipRect();
         gui_notifications_render_output(image_min, image_max);
         gui_drive_activity_render_output(image_min, image_max);
-    }
 
-    if (config_video.fps)
-        gui_show_fps();
+        if (config_video.fps)
+            gui_show_fps(image_min, image_max);
+    }
 
     ImGui::End();
 

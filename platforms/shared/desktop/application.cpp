@@ -199,7 +199,6 @@ void application_destroy(void)
     macos_remove_dock_menu();
 #endif
 
-    remove_directory_and_contents(config_temp_path);
     save_window_size();
     ogl_renderer_destroy();
     ImGui_ImplSDL3_Shutdown();

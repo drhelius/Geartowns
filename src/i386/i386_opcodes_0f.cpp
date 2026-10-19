@@ -1416,7 +1416,7 @@ bool I386::OPCodes0F_BitScan()
             u32 sign = GetSignBit(width);
             u32 shifted = opcode == 0xBC ? 0 : bit == 0 ? sign >> 1 : (source << (width - bit)) & GetMask(width);
 
-            flags = GetSZP(-source, width) & ~I386_FLAG_ZF;
+            flags = GetSZP(0 - source, width) & ~I386_FLAG_ZF;
             flags |= (source & 0x0F) != 0 ? I386_FLAG_AF : 0;
             flags |= opcode == 0xBC ? (source >> 1) & 1 : (shifted & sign) != 0 ? I386_FLAG_CF : 0;
 

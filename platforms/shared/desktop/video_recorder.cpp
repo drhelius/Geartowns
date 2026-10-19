@@ -215,10 +215,10 @@ bool video_recorder_start(const char* path, int video_width, int video_height, d
     {
         slots[i].state = Video_Recorder_Slot_Free;
         slots[i].has_video = false;
-        slots[i].pixels = new u32[(size_t)width * height];
+        slots[i].pixels = new u32[(size_t)video_width * video_height];
     }
 
-    scaled_x = new int[width];
+    scaled_x = new int[video_width];
     scaled_source_width = 0;
 
     write_header();

@@ -226,7 +226,7 @@ void Memory::ResetCMOSSetup()
         header_sum += m_state.cmos[i] | (m_state.cmos[i + 1] << 8);
 
     // The BIOS clears every record unless the word at A4h is the sum of the words below it and A6h holds 4179h
-    if ((m_state.cmos[0xA4] | (m_state.cmos[0xA5] << 8)) != (header_sum & 0xFFFF) ||
+    if ((u32)(m_state.cmos[0xA4] | (m_state.cmos[0xA5] << 8)) != (header_sum & 0xFFFF) ||
         m_state.cmos[0xA6] != 0x79 || m_state.cmos[0xA7] != 0x41)
     {
         memset(m_state.cmos, 0, 0x0800);

@@ -33,7 +33,7 @@ PIT::PIT()
     m_state.sound = false;
     m_state.sound_memory = false;
     m_state.settled_tick = 0;
-    m_state.timer2_control = 0;
+    m_state.timer2_control = k_pit_timer2_disable;
     m_state.timer2_period = 0;
     m_state.timer2_expiry = GT_NO_EVENT;
     m_features = 0;
@@ -88,7 +88,7 @@ void PIT::Reset()
     m_state.sound = false;
     m_state.sound_memory = false;
     m_state.settled_tick = 0;
-    m_state.timer2_control = 0;
+    m_state.timer2_control = k_pit_timer2_disable;
     m_state.timer2_period = 0;
     m_state.timer2_expiry = GT_NO_EVENT;
     UpdateIRQ();
@@ -235,15 +235,23 @@ void PIT::WriteTimer2(u16 port, u8 value, u64 clocks)
     switch (port)
     {
         case 0x0068:
-            m_state.timer2_control = (value & k_pit_timer2_disable) |
-                (m_state.timer2_control & (k_pit_timer2_pending | k_pit_timer2_overrun));
+            if ((value & k_pit_timer2_disable) != 0)
+            {
+                m_state.timer2_control = k_pit_timer2_disable;
+                m_state.timer2_expiry = GT_NO_EVENT;
+            }
+            else if ((m_state.timer2_control & k_pit_timer2_disable) != 0)
+            {
+                m_state.timer2_control = 0;
+                m_state.timer2_expiry = clocks + GetTimer2Clocks();
+            }
             break;
+        // A new period applies from the next interval
         case 0x006A:
             m_state.timer2_period = (m_state.timer2_period & 0xFF00) | value;
             break;
         case 0x006B:
             m_state.timer2_period = (u16)((m_state.timer2_period & 0x00FF) | (value << 8));
-            m_state.timer2_expiry = clocks + GetTimer2Clocks();
             break;
     }
 
@@ -397,7 +405,7 @@ void PIT::LoadState(std::istream& stream, int version)
     }
     else
     {
-        m_state.timer2_control = 0;
+        m_state.timer2_control = k_pit_timer2_disable;
         m_state.timer2_period = 0;
         m_state.timer2_expiry = GT_NO_EVENT;
     }
@@ -419,6 +427,13 @@ void PIT::SanitizeState()
     m_state.timer_latch &= 0x03;
     m_state.timer_enable &= 0x03;
     m_state.timer2_control &= k_pit_timer2_disable | k_pit_timer2_pending | k_pit_timer2_overrun;
+
+    if ((m_state.timer2_control & k_pit_timer2_disable) != 0)
+    {
+        m_state.timer2_control = k_pit_timer2_disable;
+        m_state.timer2_expiry = GT_NO_EVENT;
+    }
+
     UpdateIRQ();
     UpdateNextEvent();
 }

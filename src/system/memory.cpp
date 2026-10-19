@@ -105,6 +105,7 @@ Memory::Memory()
     m_features = 0;
     SetDMAWindows(NULL);
     m_nmi_vector_protect = false;
+    m_backup_protect = 0;
     m_map_generation = 1;
     m_region_generation = 1;
     m_debug_snapshot_id = 1;
@@ -119,6 +120,7 @@ Memory::Memory()
     m_state.dictionary_bank = 0;
     m_state.card_bank = 0;
     m_state.card_attribute = false;
+    memset(m_state.backup_ram, 0, sizeof(m_state.backup_ram));
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     InitPointer(m_trace_logger);
@@ -162,6 +164,7 @@ void Memory::Reset()
 {
     ClearDebugRegions();
     m_nmi_vector_protect = false;
+    m_backup_protect = 0;
     m_state.card_bank = 0;
     m_state.card_attribute = false;
 
@@ -968,6 +971,27 @@ void Memory::SetNMIVectorProtect(bool protect)
     RemapRange(k_memory_nmi_vector & ~0xFFFU, 0x1000);
 }
 
+void Memory::SetBackupRAMProtect(u8 protect)
+{
+    m_backup_protect = protect;
+}
+
+u8 Memory::ReadBackupRAMCallback(void* device, u32 offset)
+{
+    Memory* memory = (Memory*)device;
+    return (offset & 0x01) != 0 ? 0xFF : memory->m_state.backup_ram[offset >> 1];
+}
+
+void Memory::WriteBackupRAMCallback(void* device, u32 offset, u8 value)
+{
+    Memory* memory = (Memory*)device;
+
+    if ((offset & 0x01) != 0 || (memory->m_backup_protect & (0x02 << (offset >> 13))) != 0)
+        return;
+
+    memory->m_state.backup_ram[offset >> 1] = value;
+}
+
 u32 Memory::GetRegionGeneration() const
 {
     return m_region_generation;
@@ -1362,6 +1386,7 @@ u8 Memory::GetBusClass(const GT_Debug_Memory_Region& info)
             return GT_BUS_ROM;
         case GT_DEBUG_REGION_CMOS:
         case GT_DEBUG_REGION_CMOS_LOW_WINDOW:
+        case GT_DEBUG_REGION_BACKUP_RAM:
             return GT_BUS_CMOS;
         case GT_DEBUG_REGION_FMR_PLANES:
         case GT_DEBUG_REGION_FMR_TEXT:
@@ -1542,6 +1567,11 @@ void Memory::Serialize(StateSerializer& serializer, int version)
         m_state.card_bank = 0;
         m_state.card_attribute = false;
     }
+
+    if (version >= 12)
+        G_SERIALIZE_ARRAY(serializer, m_state.backup_ram, k_memory_backup_ram_size);
+    else
+        memset(m_state.backup_ram, 0, sizeof(m_state.backup_ram));
 }
 
 void Memory::SanitizeState()

@@ -447,6 +447,7 @@ struct GT_Machine_Memory_Map
     u32 pcm_window;
     u32 system_rom;
     u32 extension_rom;
+    u32 backup_ram;
     const GT_Machine_DMA_Window* dma_windows;
 };
 

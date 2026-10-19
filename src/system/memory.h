@@ -36,6 +36,7 @@ typedef void (*GT_Memory_Write32_Fn)(void* device, u32 offset, u32 value);
 typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size);
 
 static const u32 k_memory_dma_slots = 4096;
+static const u32 k_memory_backup_ram_size = 0x3000;
 
 class Memory
 {
@@ -50,6 +51,7 @@ public:
         u8 dictionary_bank;
         u8 card_bank;
         bool card_attribute;
+        u8 backup_ram[k_memory_backup_ram_size];
     };
 
 public:
@@ -104,6 +106,9 @@ public:
     void SetDMAWindows(const GT_Machine_DMA_Window* windows);
     u32 TranslateDMAAddress(u32 address) const;
     void SetNMIVectorProtect(bool protect);
+    void SetBackupRAMProtect(u8 protect);
+    static u8 ReadBackupRAMCallback(void* device, u32 offset);
+    static void WriteBackupRAMCallback(void* device, u32 offset, u8 value);
     u32 GetMapGeneration() const;
     u32 GetRegionGeneration() const;
 #if !defined(GT_DISABLE_DYNAREC)
@@ -190,6 +195,7 @@ private:
     u32 m_features;
     u32 m_dma_map[k_memory_dma_slots];
     bool m_nmi_vector_protect;
+    u8 m_backup_protect;
     u32 m_map_generation;
     u32 m_region_generation;
     u64 m_debug_snapshot_id;

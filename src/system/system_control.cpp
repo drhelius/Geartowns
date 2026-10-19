@@ -174,6 +174,7 @@ void SystemControl::Reset()
     m_state.port_0494 = 0;
     m_state.port_0496 = 0;
     m_memory->SetNMIVectorProtect(false);
+    m_memory->SetBackupRAMProtect(0);
 }
 
 u8 SystemControl::Read(u16 port, u64 clocks)
@@ -337,7 +338,10 @@ void SystemControl::Write(u16 port, u8 value)
         // Unknown Marty latches, as wide as the ROM's reset writes mask them
         case 0x0486:
             if (Decodes(port))
+            {
                 m_state.port_0486 = value & 0x0E;
+                m_memory->SetBackupRAMProtect(m_state.port_0486);
+            }
             break;
         case 0x0487:
             if (Decodes(port))
@@ -484,5 +488,7 @@ void SystemControl::Serialize(StateSerializer& serializer, int version)
 void SystemControl::SanitizeState()
 {
     m_state.reset_cause &= 0x03;
+    m_state.port_0486 &= 0x0E;
     m_memory->SetNMIVectorProtect(m_state.write_protect);
+    m_memory->SetBackupRAMProtect(m_state.port_0486);
 }

@@ -1961,6 +1961,13 @@ void GeartownsCore::InitMemoryMap()
         m_firmware->GetExtensionRom(), NULL, GT_FIRMWARE_EXTENSION_MAP_SIZE, map.extension_rom, rom_flags))
         Error("Unable to map the extension ROM");
 
+    // A byte-wide SRAM on the even addresses, 0486h bits 1-3 write-protect its 8 KiB blocks
+    if ((map.backup_ram != 0) && !m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_BACKUP_RAM, "Backup RAM",
+        k_memory_backup_ram_size * 2, map.backup_ram, GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE |
+        GT_DEBUG_REGION_MAPPED, m_memory, Memory::ReadBackupRAMCallback, Memory::WriteBackupRAMCallback,
+        Memory::ReadBackupRAMCallback))
+        Error("Unable to map the backup RAM");
+
     if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_DICTIONARY_ROM, "Dictionary ROM", m_firmware->GetDictionaryRom(),
         NULL, GT_FIRMWARE_DICTIONARY_SIZE, map.dictionary_rom, data_rom_flags))
         Error("Unable to map the dictionary ROM");

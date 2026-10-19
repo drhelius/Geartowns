@@ -213,6 +213,7 @@ DebugAdapter::DebugAdapter(GeartownsCore* core)
     {
         m_mouse_pointers[i].valid = false;
         m_mouse_pointers[i].generation = 0;
+        m_mouse_pointers[i].estimated = false;
     }
 }
 
@@ -4776,6 +4777,8 @@ json DebugAdapter::ControllerButton(int player, const std::string& button, const
             if (action != "press" && action != "release" && action != "press_and_release")
                 return {{"error", "Invalid action"}};
 
+            ForgetMousePointer(player);
+
             json result = {{"success", true}, {"player", player}, {"button", button}, {"action", action}};
 
             if (action == "press_and_release")
@@ -4983,9 +4986,9 @@ static void FindPointerShift(const u32* before, const u32* out, int width, int h
 }
 
 bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* out, const u32* back, int width,
-    int height, int counts_x, int counts_y, bool& overlap, std::string& reason)
+    int height, int counts_x, int counts_y, McpMouseMiss& miss, std::string& reason)
 {
-    overlap = false;
+    miss = MCP_MOUSE_MISS_UNSEEN;
     std::vector<int> changed;
 
     for (int i = 0; i < width * height; i++)
@@ -5043,11 +5046,12 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
 
     if ((abs(shift_x) < pointer_width) && (abs(shift_y) < pointer_height))
     {
-        overlap = true;
+        miss = MCP_MOUSE_MISS_OVERLAP;
         reason = "the " + box + " pointer moved less than its size";
         return false;
     }
 
+    miss = MCP_MOUSE_MISS_REJECTED;
     bool small_x = (pointer_width < k_mcp_mouse_min_size) && (left > 0) && (right < (width - 1));
     bool small_y = (pointer_height < k_mcp_mouse_min_size) && (top > 0) && (bottom < (height - 1));
 
@@ -5090,6 +5094,7 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
     result.screen_height = height;
     result.frame = emu_frame_counter;
     result.generation = emu_machine_generation;
+    result.estimated = false;
     result.pixels.assign(pointer_width * pointer_height, 0);
     result.mask.assign(pointer_width * pointer_height, 0);
 
@@ -5100,6 +5105,7 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
         result.pixels[offset] = before[pointer[i]];
     }
 
+    miss = MCP_MOUSE_MISS_NONE;
     return true;
 }
 
@@ -5116,6 +5122,30 @@ bool DebugAdapter::IsMousePointerKnown(int player) const
 
     return pointer.valid && (pointer.generation == emu_machine_generation) &&
         (pointer.screen_width == runtime.screen_width) && (pointer.screen_height == runtime.screen_height);
+}
+
+void DebugAdapter::MoveMousePointerEstimate(int player, int counts_x, int counts_y)
+{
+    if (!IsMousePointerKnown(player))
+        return;
+
+    McpMousePointer& pointer = m_mouse_pointers[player - 1];
+    int x = pointer.x + (int)floor((counts_x * pointer.pixels_per_count_x) + 0.5);
+    int y = pointer.y + (int)floor((counts_y * pointer.pixels_per_count_y) + 0.5);
+
+    pointer.x = CLAMP(x, 0, pointer.screen_width - 1);
+    pointer.y = CLAMP(y, 0, pointer.screen_height - 1);
+    pointer.estimated = true;
+}
+
+void DebugAdapter::ForgetMousePointer(int player)
+{
+    m_mouse_pointers[player - 1].valid = false;
+}
+
+bool DebugAdapter::IsMouseButtonHeld(int player) const
+{
+    return (m_buttons[player - 1] & (GT_GAMEPAD_A | GT_GAMEPAD_B)) != 0;
 }
 
 json DebugAdapter::MouseGetCursor(int player)
@@ -5171,6 +5201,10 @@ json DebugAdapter::MouseGetCursor(int player)
     result["pixels_per_count"] = {{"x", pointer.pixels_per_count_x}, {"y", pointer.pixels_per_count_y}};
     result["measured_frames_ago"] = emu_frame_counter - pointer.frame;
     result["visible"] = (total > 0) && ((matched * 10) >= (total * 9));
+
+    if (pointer.estimated)
+        result["estimated"] = true;
+
     return result;
 }
 

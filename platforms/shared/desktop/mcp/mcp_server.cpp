@@ -2186,8 +2186,8 @@ json McpServer::BuildToolList()
         {"name", "mouse_get_cursor"},
         {"title", "Get Mouse Cursor"},
         {"description", "Read where mouse_move or mouse_click last measured the pointer (screenshot pixels, top-left of "
-            "its image), its box, pixels per count and whether it's still drawn there. Read-only, so unknown before "
-            "the first move."},
+            "its image), its box, pixels per count and whether it's still drawn there; estimated after count moves "
+            "or drags. Read-only, so unknown before the first move."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2203,7 +2203,8 @@ json McpServer::BuildToolList()
         {"title", "Mouse Move"},
         {"description", "Move the pointer to screenshot pixel x, y (top-left of its image) or by dx, dy counts. x, y finds "
             "the pointer with a 32-count move out and back, then moves 4 counts per frame (Towns OS speeds up bigger "
-            "steps) until it's there. Runs frames, kept in rewind; breakpoints stop it."},
+            "steps) until it's there; with a button held it moves straight from the last known position instead. "
+            "Runs frames, kept in rewind; breakpoints stop it."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2240,7 +2241,8 @@ json McpServer::BuildToolList()
         {"name", "mouse_click"},
         {"title", "Mouse Click"},
         {"description", "Click a mouse button, at screenshot pixel x, y when given (moved there like mouse_move). Press "
-            "and release take 4 frames each; press, mouse_move and release make a drag. Runs frames, kept in rewind."},
+            "and release take 4 frames each. drag presses at x, y, moves straight to to_x, to_y and releases, also on "
+            "errors. Runs frames, kept in rewind."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2254,7 +2256,7 @@ json McpServer::BuildToolList()
                 {"action", {
                     {"type", "string"},
                     {"description", "Default click."},
-                    {"enum", json::array({"click", "double_click", "press", "release"})}
+                    {"enum", json::array({"click", "double_click", "press", "release", "drag"})}
                 }},
                 {"x", {
                     {"type", "integer"},
@@ -2264,6 +2266,16 @@ json McpServer::BuildToolList()
                 {"y", {
                     {"type", "integer"},
                     {"description", "Row, with x."},
+                    {"minimum", 0}
+                }},
+                {"to_x", {
+                    {"type", "integer"},
+                    {"description", "drag end column."},
+                    {"minimum", 0}
+                }},
+                {"to_y", {
+                    {"type", "integer"},
+                    {"description", "drag end row."},
                     {"minimum", 0}
                 }}
             }},

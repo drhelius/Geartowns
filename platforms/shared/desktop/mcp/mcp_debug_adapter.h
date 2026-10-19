@@ -111,6 +111,14 @@ struct McpAddress
     int segment_register;
 };
 
+enum McpMouseMiss
+{
+    MCP_MOUSE_MISS_NONE = 0,
+    MCP_MOUSE_MISS_UNSEEN,
+    MCP_MOUSE_MISS_OVERLAP,
+    MCP_MOUSE_MISS_REJECTED
+};
+
 struct McpMousePointer
 {
     bool valid;
@@ -124,6 +132,7 @@ struct McpMousePointer
     double pixels_per_count_y;
     u64 frame;
     u32 generation;
+    bool estimated;
     std::vector<u32> pixels;
     std::vector<u8> mask;
 };
@@ -285,9 +294,12 @@ public:
     bool IsMouseMotionPending(int player) const;
     void SetMouseButton(int player, u16 mask, bool pressed);
     bool FindMousePointer(int player, const u32* before, const u32* out, const u32* back, int width, int height,
-        int counts_x, int counts_y, bool& overlap, std::string& reason);
+        int counts_x, int counts_y, McpMouseMiss& miss, std::string& reason);
     const McpMousePointer& GetMousePointer(int player) const;
     bool IsMousePointerKnown(int player) const;
+    void MoveMousePointerEstimate(int player, int counts_x, int counts_y);
+    void ForgetMousePointer(int player);
+    bool IsMouseButtonHeld(int player) const;
     json MouseGetCursor(int player);
     json KeyboardKey(const std::string& key, const std::string& action);
     bool GetKeyCode(const std::string& name, GT_Keys& key) const;

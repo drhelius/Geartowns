@@ -69,6 +69,7 @@ enum McpMouseMotion
 static const int k_mcp_mouse_wiggle_counts = 32;
 static const int k_mcp_mouse_wiggle_max_counts = 128;
 static const int k_mcp_mouse_wiggle_tries = 3;
+static const int k_mcp_mouse_unseen_frames = 30;
 static const int k_mcp_mouse_settle_frames = 3;
 static const int k_mcp_mouse_stall_frames = 60;
 static const int k_mcp_mouse_max_moves = 6;
@@ -80,7 +81,9 @@ enum McpMousePhase
     MCP_MOUSE_PHASE_START = 0,
     MCP_MOUSE_PHASE_WIGGLE_OUT,
     MCP_MOUSE_PHASE_WIGGLE_BACK,
+    MCP_MOUSE_PHASE_RETRY,
     MCP_MOUSE_PHASE_MOVE,
+    MCP_MOUSE_PHASE_DRAG,
     MCP_MOUSE_PHASE_BUTTONS
 };
 
@@ -92,8 +95,15 @@ struct McpMouseMacroState
     int player;
     bool click;
     bool absolute;
+    bool held;
+    bool drag;
+    bool dragged;
     int target_x;
     int target_y;
+    int to_x;
+    int to_y;
+    int from_x;
+    int from_y;
     int delta_x;
     int delta_y;
     int send_x;
@@ -660,8 +670,15 @@ private:
         macro.player = 0;
         macro.click = false;
         macro.absolute = false;
+        macro.held = false;
+        macro.drag = false;
+        macro.dragged = false;
         macro.target_x = 0;
         macro.target_y = 0;
+        macro.to_x = 0;
+        macro.to_y = 0;
+        macro.from_x = 0;
+        macro.from_y = 0;
         macro.delta_x = 0;
         macro.delta_y = 0;
         macro.send_x = 0;
@@ -750,6 +767,33 @@ private:
 
         std::string button = arguments.value("button", "left");
         std::string action = arguments.value("action", "click");
+        bool drag = click && (action == "drag");
+        bool to = arguments.contains("to_x") || arguments.contains("to_y");
+        int to_x = arguments.value("to_x", 0);
+        int to_y = arguments.value("to_y", 0);
+
+        if ((drag != to) || (to && (!arguments.contains("to_x") || !arguments.contains("to_y"))) ||
+            (drag && !absolute))
+        {
+            result["error"] = "drag needs x, y to start and to_x, to_y to end, which only go with drag";
+            return result;
+        }
+
+        if (drag && ((to_x < 0) || (to_y < 0) || (to_x >= runtime.screen_width) || (to_y >= runtime.screen_height)))
+        {
+            result["error"] = "to_x and to_y must be inside the " + std::to_string(runtime.screen_width) + "x" +
+                std::to_string(runtime.screen_height) + " screen";
+            return result;
+        }
+
+        bool held = m_debug_adapter->IsMouseButtonHeld(player);
+
+        if (absolute && held && !m_debug_adapter->IsMousePointerKnown(player))
+        {
+            result["error"] = "A button is held and the pointer position is unknown: release it and move to x, y "
+                "before pressing, or move by dx, dy";
+            return result;
+        }
 
         reset_mouse_macro();
         McpMouseMacroState& macro = m_mouse_macro;
@@ -757,14 +801,18 @@ private:
         macro.player = player;
         macro.click = click;
         macro.absolute = absolute;
+        macro.held = held;
+        macro.drag = drag;
         macro.target_x = x;
         macro.target_y = y;
+        macro.to_x = to_x;
+        macro.to_y = to_y;
         macro.delta_x = arguments.value("dx", 0);
         macro.delta_y = arguments.value("dy", 0);
         macro.button = button;
         macro.action = action;
         macro.button_mask = button == "right" ? GT_GAMEPAD_B : GT_GAMEPAD_A;
-        macro.button_steps = action == "double_click" ? 4 : (action == "click" ? 2 : 1);
+        macro.button_steps = action == "double_click" ? 4 : ((action == "click") || drag ? 2 : 1);
         macro.button_press_first = action != "release";
         macro.frame = emu_frame_counter;
         macro.start_frame = emu_frame_counter;
@@ -828,10 +876,15 @@ private:
         switch (macro.phase)
         {
             case MCP_MOUSE_PHASE_START:
-                if (macro.absolute)
+                if (macro.absolute && macro.held)
+                    begin_mouse_drag(macro.target_x, macro.target_y);
+                else if (macro.absolute)
                     begin_mouse_wiggle();
                 else if (!macro.click)
+                {
+                    m_debug_adapter->MoveMousePointerEstimate(macro.player, macro.delta_x, macro.delta_y);
                     begin_mouse_move(macro.delta_x, macro.delta_y);
+                }
                 else
                 {
                     macro.phase = MCP_MOUSE_PHASE_BUTTONS;
@@ -852,12 +905,30 @@ private:
                 if (feed_mouse_motion())
                     finish_mouse_wiggle();
                 break;
+            case MCP_MOUSE_PHASE_RETRY:
+                if (macro.settle > 0)
+                    macro.settle--;
+                else
+                    begin_mouse_wiggle();
+                break;
             case MCP_MOUSE_PHASE_MOVE:
                 if (!feed_mouse_motion())
                     break;
 
                 if (macro.absolute)
                     begin_mouse_wiggle();
+                else
+                    finish_mouse_macro_success();
+                break;
+            case MCP_MOUSE_PHASE_DRAG:
+                if (!feed_mouse_motion())
+                    break;
+
+                if (macro.click)
+                {
+                    macro.phase = MCP_MOUSE_PHASE_BUTTONS;
+                    step_mouse_buttons();
+                }
                 else
                     finish_mouse_macro_success();
                 break;
@@ -886,8 +957,10 @@ private:
 
         if ((macro.send_x != 0) || (macro.send_y != 0))
         {
-            int step_x = CLAMP(macro.send_x, -k_mcp_mouse_motion_step, k_mcp_mouse_motion_step);
-            int step_y = CLAMP(macro.send_y, -k_mcp_mouse_motion_step, k_mcp_mouse_motion_step);
+            int steps = (MAX(abs(macro.send_x), abs(macro.send_y)) + k_mcp_mouse_motion_step - 1) /
+                k_mcp_mouse_motion_step;
+            int step_x = ((macro.send_x * 2) + (macro.send_x < 0 ? -steps : steps)) / (steps * 2);
+            int step_y = ((macro.send_y * 2) + (macro.send_y < 0 ? -steps : steps)) / (steps * 2);
             m_debug_adapter->ApplyMouseMotion(macro.player, step_x, step_y);
             macro.send_x -= step_x;
             macro.send_y -= step_y;
@@ -940,29 +1013,34 @@ private:
         McpMouseMacroState& macro = m_mouse_macro;
         GT_Runtime_Info runtime;
         emu_get_runtime(runtime);
-        bool overlap = false;
+        McpMouseMiss miss = MCP_MOUSE_MISS_REJECTED;
         std::string reason = "the screen size changed";
         bool same_screen = (runtime.screen_width == macro.screen_width) &&
             (runtime.screen_height == macro.screen_height) && (macro.frame_out.size() == macro.frame_before.size());
         bool found = same_screen && m_debug_adapter->FindMousePointer(macro.player, macro.frame_before.data(),
             macro.frame_out.data(), (const u32*)emu_frame_buffer, macro.screen_width, macro.screen_height,
-            macro.wiggle_x, macro.wiggle_y, overlap, reason);
+            macro.wiggle_x, macro.wiggle_y, miss, reason);
 
         if (!found)
         {
             macro.wiggle_tries++;
 
-            if (!overlap)
+            if (miss != MCP_MOUSE_MISS_OVERLAP)
                 macro.wiggle_flip = !macro.wiggle_flip;
             else if (macro.wiggle_counts < k_mcp_mouse_wiggle_max_counts)
                 macro.wiggle_counts *= 2;
 
-            if (macro.wiggle_tries < k_mcp_mouse_wiggle_tries)
-                begin_mouse_wiggle();
-            else
+            if (macro.wiggle_tries >= k_mcp_mouse_wiggle_tries)
                 finish_mouse_macro_error("No mouse pointer found after " + std::to_string(macro.wiggle_tries) +
                     " tries, the last one because " + reason + ". The software may hide it, draw none or not "
                     "read this port; try again or move it with dx and dy");
+            else if (miss == MCP_MOUSE_MISS_UNSEEN)
+            {
+                macro.settle = k_mcp_mouse_unseen_frames;
+                macro.phase = MCP_MOUSE_PHASE_RETRY;
+            }
+            else
+                begin_mouse_wiggle();
 
             return;
         }
@@ -971,10 +1049,8 @@ private:
         const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
         int error_x = macro.target_x - pointer.x;
         int error_y = macro.target_y - pointer.y;
-        double steps_x = error_x / pointer.pixels_per_count_x;
-        double steps_y = error_y / pointer.pixels_per_count_y;
-        int counts_x = (int)(steps_x + (steps_x < 0.0 ? -0.5 : 0.5));
-        int counts_y = (int)(steps_y + (steps_y < 0.0 ? -0.5 : 0.5));
+        int counts_x = pixels_to_counts(error_x, pointer.pixels_per_count_x);
+        int counts_y = pixels_to_counts(error_y, pointer.pixels_per_count_y);
         int largest = MAX(abs(counts_x), abs(counts_y));
 
         if (largest > k_mcp_mouse_max_move_counts)
@@ -1011,11 +1087,38 @@ private:
         begin_mouse_move(counts_x, counts_y);
     }
 
+    int pixels_to_counts(int pixels, double pixels_per_count)
+    {
+        double counts = pixels / pixels_per_count;
+        return (int)(counts + (counts < 0.0 ? -0.5 : 0.5));
+    }
+
     void begin_mouse_move(int counts_x, int counts_y)
     {
         m_mouse_macro.send_x = counts_x;
         m_mouse_macro.send_y = counts_y;
         m_mouse_macro.phase = MCP_MOUSE_PHASE_MOVE;
+        feed_mouse_motion();
+    }
+
+    void begin_mouse_drag(int x, int y)
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+
+        if (!m_debug_adapter->IsMousePointerKnown(macro.player))
+        {
+            finish_mouse_macro_error("The pointer position was lost before the drag");
+            return;
+        }
+
+        const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+        int counts_x = pixels_to_counts(x - pointer.x, pointer.pixels_per_count_x);
+        int counts_y = pixels_to_counts(y - pointer.y, pointer.pixels_per_count_y);
+
+        m_debug_adapter->MoveMousePointerEstimate(macro.player, counts_x, counts_y);
+        macro.send_x = counts_x;
+        macro.send_y = counts_y;
+        macro.phase = MCP_MOUSE_PHASE_DRAG;
         feed_mouse_motion();
     }
 
@@ -1026,6 +1129,16 @@ private:
         if (macro.button_wait > 0)
         {
             macro.button_wait--;
+            return;
+        }
+
+        if (macro.drag && !macro.dragged && (macro.button_step == 1))
+        {
+            const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+            macro.from_x = pointer.x;
+            macro.from_y = pointer.y;
+            macro.dragged = true;
+            begin_mouse_drag(macro.to_x, macro.to_y);
             return;
         }
 
@@ -1047,9 +1160,15 @@ private:
         bool restore_pause = macro.restore_pause;
         json result = {{"success", true}, {"player", macro.player}, {"frames", emu_frame_counter - macro.start_frame}};
 
-        if (macro.absolute)
+        const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+
+        if (macro.drag)
         {
-            const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+            result["from"] = {{"x", macro.from_x}, {"y", macro.from_y}};
+            result["to"] = {{"x", pointer.x}, {"y", pointer.y}};
+        }
+        else if (macro.absolute)
+        {
             result["x"] = pointer.x;
             result["y"] = pointer.y;
             result["reached"] = (pointer.x == macro.target_x) && (pointer.y == macro.target_y);
@@ -1060,6 +1179,9 @@ private:
             result["dx"] = macro.delta_x;
             result["dy"] = macro.delta_y;
         }
+
+        if (macro.absolute && pointer.estimated)
+            result["estimated"] = true;
 
         if (macro.click)
         {
@@ -1086,6 +1208,9 @@ private:
 
         if (macro.click && (macro.button_steps > 1) && (macro.button_step > 0))
             m_debug_adapter->SetMouseButton(macro.player, macro.button_mask, false);
+
+        if (macro.player > 0)
+            m_debug_adapter->ForgetMousePointer(macro.player);
 
         DebugResponse* response = new DebugResponse();
         response->requestId = macro.request_id;

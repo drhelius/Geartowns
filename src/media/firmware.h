@@ -108,7 +108,7 @@ private:
     u8 m_dictionary_rom[GT_FIRMWARE_DICTIONARY_SIZE];
     u8 m_font20_rom[GT_FIRMWARE_FONT20_SIZE];
     u8 m_serial_rom[GT_FIRMWARE_SERIAL_SIZE];
-    u8 m_extension_rom[GT_FIRMWARE_EXTENSION_SIZE];
+    u8 m_extension_rom[GT_FIRMWARE_EXTENSION_MAP_SIZE];
 };
 
 static const GT_Firmware_Set k_firmware_sets[FIRMWARE_SET_COUNT] =

@@ -66,7 +66,10 @@ void Firmware::Unload()
     memset(m_dictionary_rom, 0xFF, sizeof(m_dictionary_rom));
     memset(m_font20_rom, 0xFF, sizeof(m_font20_rom));
     memset(m_serial_rom, 0xFF, sizeof(m_serial_rom));
-    memset(m_extension_rom, 0xFF, sizeof(m_extension_rom));
+    memset(m_extension_rom, 0xFF, GT_FIRMWARE_EXTENSION_SIZE);
+    // The board maps all of mrom.m37's first MiB: EX3, then 512 KiB of zeros
+    memset(m_extension_rom + GT_FIRMWARE_EXTENSION_SIZE, 0x00,
+        GT_FIRMWARE_EXTENSION_MAP_SIZE - GT_FIRMWARE_EXTENSION_SIZE);
     m_ready = false;
 }
 

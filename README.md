@@ -169,6 +169,10 @@ Geartowns provides [Agent Skills](https://agentskills.io/) that teach AI assista
 
 Install with `npx skills add drhelius/geartowns`. See the [skills README](skills/README.md) for details.
 
+## Hardware Accuracy 
+
+Geartowns is being developed based on the results of the [FM Towns Hardware Tests](https://github.com/drhelius/fmtowns-tests).
+
 ## Build Instructions
 
 ### Windows

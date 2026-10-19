@@ -29,6 +29,13 @@ static const u8 k_system_control_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE] =
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+// The Marty's comes from my own Marty 2 (DrHelius)
+static const u8 k_system_control_marty_serial_rom[SYSTEM_CONTROL_SERIAL_ROM_SIZE] =
+{
+    0x04, 0x65, 0x54, 0xA4, 0x95, 0x45, 0x35, 0x5F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x4A, 0x03, 0x00, 0x00, 0x09, 0x1D, 0x60, 0x00, 0x00
+};
+
 SystemControl::SystemControl()
 {
     InitPointer(m_memory);
@@ -84,7 +91,9 @@ void SystemControl::SetMachineID(u16 machine_id)
 
 void SystemControl::SetSerialRom(const u8* serial_rom)
 {
-    memcpy(m_serial_rom, IsValidPointer(serial_rom) ? serial_rom : k_system_control_serial_rom, sizeof(m_serial_rom));
+    const u8* generated = (m_machine_id & 0xFF00) == 0x4A00 ? k_system_control_marty_serial_rom :
+        k_system_control_serial_rom;
+    memcpy(m_serial_rom, IsValidPointer(serial_rom) ? serial_rom : generated, sizeof(m_serial_rom));
     SetMachineID(m_machine_id);
 }
 

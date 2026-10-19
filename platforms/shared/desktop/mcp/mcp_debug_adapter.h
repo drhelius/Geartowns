@@ -123,6 +123,7 @@ struct McpMousePointer
     double pixels_per_count_x;
     double pixels_per_count_y;
     u64 frame;
+    u32 generation;
     std::vector<u32> pixels;
     std::vector<u8> mask;
 };
@@ -284,8 +285,9 @@ public:
     bool IsMouseMotionPending(int player) const;
     void SetMouseButton(int player, u16 mask, bool pressed);
     bool FindMousePointer(int player, const u32* before, const u32* out, const u32* back, int width, int height,
-        int counts_x, int counts_y, bool& overlap);
+        int counts_x, int counts_y, bool& overlap, std::string& reason);
     const McpMousePointer& GetMousePointer(int player) const;
+    bool IsMousePointerKnown(int player) const;
     json MouseGetCursor(int player);
     json KeyboardKey(const std::string& key, const std::string& action);
     bool GetKeyCode(const std::string& name, GT_Keys& key) const;

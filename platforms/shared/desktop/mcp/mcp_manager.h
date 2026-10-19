@@ -72,6 +72,7 @@ static const int k_mcp_mouse_wiggle_tries = 3;
 static const int k_mcp_mouse_settle_frames = 3;
 static const int k_mcp_mouse_stall_frames = 60;
 static const int k_mcp_mouse_max_moves = 6;
+static const int k_mcp_mouse_max_move_counts = 1024;
 static const int k_mcp_mouse_button_frames = 4;
 
 enum McpMousePhase
@@ -121,6 +122,7 @@ struct McpMouseMacroState
     u64 start_frame;
     bool restore_pause;
     u64 breakpoint_stops;
+    u32 generation;
 };
 
 class McpManager
@@ -688,6 +690,7 @@ private:
         macro.start_frame = 0;
         macro.restore_pause = false;
         macro.breakpoint_stops = 0;
+        macro.generation = 0;
     }
 
     json start_mouse_macro(const std::string& tool, const json& arguments, const json& request_id)
@@ -767,6 +770,7 @@ private:
         macro.start_frame = emu_frame_counter;
         macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
         macro.breakpoint_stops = emu_debug_breakpoint_stops;
+        macro.generation = emu_machine_generation;
         macro.active = true;
 
         result["success"] = true;
@@ -779,6 +783,12 @@ private:
         if (emu_is_empty())
         {
             finish_mouse_macro_error("Emulator is powered off");
+            return;
+        }
+
+        if (emu_machine_generation != m_mouse_macro.generation)
+        {
+            finish_mouse_macro_error("Mouse interrupted by a reset, state load or rewind");
             return;
         }
 
@@ -908,8 +918,7 @@ private:
         const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
         GT_Runtime_Info runtime;
         emu_get_runtime(runtime);
-        bool known = pointer.valid && (pointer.frame <= emu_frame_counter) &&
-            (pointer.screen_width == runtime.screen_width) && (pointer.screen_height == runtime.screen_height);
+        bool known = m_debug_adapter->IsMousePointerKnown(macro.player);
         int x = macro.moves > 0 ? macro.target_x : (known ? pointer.x : 0);
         int y = macro.moves > 0 ? macro.target_y : (known ? pointer.y : 0);
         int reach = (macro.wiggle_counts * 2) + 32;
@@ -932,11 +941,12 @@ private:
         GT_Runtime_Info runtime;
         emu_get_runtime(runtime);
         bool overlap = false;
+        std::string reason = "the screen size changed";
         bool same_screen = (runtime.screen_width == macro.screen_width) &&
             (runtime.screen_height == macro.screen_height) && (macro.frame_out.size() == macro.frame_before.size());
         bool found = same_screen && m_debug_adapter->FindMousePointer(macro.player, macro.frame_before.data(),
             macro.frame_out.data(), (const u32*)emu_frame_buffer, macro.screen_width, macro.screen_height,
-            macro.wiggle_x, macro.wiggle_y, overlap);
+            macro.wiggle_x, macro.wiggle_y, overlap, reason);
 
         if (!found)
         {
@@ -950,8 +960,9 @@ private:
             if (macro.wiggle_tries < k_mcp_mouse_wiggle_tries)
                 begin_mouse_wiggle();
             else
-                finish_mouse_macro_error("No mouse pointer moved on screen when the mouse moved: the software hides "
-                    "it, draws none or doesn't read this port");
+                finish_mouse_macro_error("No mouse pointer found after " + std::to_string(macro.wiggle_tries) +
+                    " tries, the last one because " + reason + ". The software may hide it, draw none or not "
+                    "read this port; try again or move it with dx and dy");
 
             return;
         }
@@ -964,6 +975,14 @@ private:
         double steps_y = error_y / pointer.pixels_per_count_y;
         int counts_x = (int)(steps_x + (steps_x < 0.0 ? -0.5 : 0.5));
         int counts_y = (int)(steps_y + (steps_y < 0.0 ? -0.5 : 0.5));
+        int largest = MAX(abs(counts_x), abs(counts_y));
+
+        if (largest > k_mcp_mouse_max_move_counts)
+        {
+            counts_x = (counts_x * k_mcp_mouse_max_move_counts) / largest;
+            counts_y = (counts_y * k_mcp_mouse_max_move_counts) / largest;
+        }
+
         int distance = abs(error_x) + abs(error_y);
         bool closest = (counts_x == 0) && (counts_y == 0);
         bool stuck = (macro.moves >= k_mcp_mouse_max_moves) || ((macro.moves > 0) && (distance >= macro.last_distance));

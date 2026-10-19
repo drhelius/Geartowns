@@ -919,6 +919,7 @@ void emu_debug_state_restored(void)
     emu_debug_command = Debug_Command_None;
     emu_debug_step_frames_pending = 0;
     emu_debug_pc_changed = true;
+    emu_machine_generation++;
 }
 
 void update_savestates_data(void)
@@ -1816,6 +1817,7 @@ static void reset_run_state(void)
     emu_debug_command = Debug_Command_None;
     emu_debug_pc_changed = true;
     emu_frame_counter = 0;
+    emu_machine_generation++;
     reset_buffers();
     emu_audio_reset();
     rewind_reset();

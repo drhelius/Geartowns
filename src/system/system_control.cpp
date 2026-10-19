@@ -179,11 +179,11 @@ u8 SystemControl::Read(u16 port, u64 clocks)
             return (m_state.serial_rom_control & 0xC0) | data;
         }
         case 0x05C0:
-            // Only BNMI is driven, the undefined bits float high
-            return m_state.expansion_nmi ? 0xFF : 0xF7;
+            // Only BNMI latches, the undefined bits read 0
+            return m_state.expansion_nmi ? 0x08 : 0x00;
         case 0x05C2:
             // No expansion board, so the expansion bus never raised the NMI
-            return 0xF7;
+            return 0x00;
         case 0x0024:
         case 0x0025:
         case 0x0028:
@@ -222,9 +222,9 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
             return (m_state.serial_rom_control & 0xC0) | data;
         }
         case 0x05C0:
-            return m_state.expansion_nmi ? 0xFF : 0xF7;
+            return m_state.expansion_nmi ? 0x08 : 0x00;
         case 0x05C2:
-            return 0xF7;
+            return 0x00;
         case 0x05E0:
             return Decodes(port) ? m_state.port_05e0 : 0xFF;
         case 0x0024:
@@ -232,7 +232,7 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
         case 0x0025:
             return Decodes(port) ? 0x7F : 0xFF;
         case 0x0028:
-            return Decodes(port) ? (m_state.nmi_mask ? 0x01 : 0x00) : 0xFF;
+            return Decodes(port) ? (m_state.nmi_mask ? 0xFF : 0xFE) : 0xFF;
         case 0x006C:
             return Decodes(port) ? 0x00 : 0xFF;
         case 0x05E2:

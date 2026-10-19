@@ -45,15 +45,15 @@ INLINE u32 I386::GetBusCycles(u32 size) const
 INLINE u32 I386::GetBusDramFold(u32 size, bool read, bool write, u32 code_row) const
 {
     u32 cycles = GetBusCycles(size);
-    bool far = (code_row & k_i386_bus_code_row) != k_i386_bus_code_row;
+    bool far_row = (code_row & k_i386_bus_code_row) != k_i386_bus_code_row;
     u32 shift = code_row >> 31;
     u32 fold = 0;
 
     if (read)
-        fold += (far ? m_bus.dram_far[0] >> shift : m_bus.dram_near[0]) + cycles * m_bus.cycle[GT_BUS_DRAM][0];
+        fold += (far_row ? m_bus.dram_far[0] >> shift : m_bus.dram_near[0]) + cycles * m_bus.cycle[GT_BUS_DRAM][0];
 
     if (write)
-        fold += (far ? m_bus.dram_far[1] >> shift : m_bus.dram_near[1]) + cycles * m_bus.cycle[GT_BUS_DRAM][1];
+        fold += (far_row ? m_bus.dram_far[1] >> shift : m_bus.dram_near[1]) + cycles * m_bus.cycle[GT_BUS_DRAM][1];
 
     return fold;
 }
@@ -124,8 +124,8 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
     {
         u32 row = physical >> 10;
         u32 code = code_row & k_i386_bus_code_row;
-        bool far = code != k_i386_bus_code_row && row != code;
-        penalty += (s32)(far ? m_bus.dram_far[write] >> (code_row >> 31) : m_bus.dram_near[write]);
+        bool far_row = code != k_i386_bus_code_row && row != code;
+        penalty += (s32)(far_row ? m_bus.dram_far[write] >> (code_row >> 31) : m_bus.dram_near[write]);
         penalty += row != m_bus_row ? (s32)m_bus.dram_change[write] : 0;
         m_bus_row = row;
     }

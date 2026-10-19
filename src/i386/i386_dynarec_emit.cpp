@@ -882,11 +882,11 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
 
     if (code != k_i386_bus_code_row && far_add != near_add)
     {
-        jit_node_t* far = jit_bnei(t1, (jit_word_t)code);
+        jit_node_t* far_row = jit_bnei(t1, (jit_word_t)code);
         jit_ldxi_i(t2, DR_CPU, fraction);
         jit_subi(t2, t2, (jit_word_t)((s32)far_add - (s32)near_add));
         jit_stxi_i(fraction, DR_CPU, t2);
-        jit_patch(far);
+        jit_patch(far_row);
     }
 
     if (change_add != 0)

@@ -113,7 +113,7 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             return m_system_control->Read(port, context.clocks);
         case 0x0022:
             // Power control
-            break;
+            return 0x00;
         case 0x0024:
             // CPU misc 3
         case 0x0025:
@@ -253,9 +253,16 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0491:
             // Memory card attribute
             return m_memory->ReadMappingControl(port);
+        case 0x0486:
+        case 0x0487:
+        case 0x0488:
+        case 0x0494:
+        case 0x0496:
+            // Marty latches
+            return m_system_control->Read(port, context.clocks);
         case 0x048A:
-            // Memory card status
-            return 0x06;
+            // Memory card status, no card and its write protect line high
+            return 0x07;
         case 0x04C0:
             // CD-ROM master status
         case 0x04C2:
@@ -476,6 +483,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             value = m_system_control->Peek(port, clocks);
             break;
         case 0x0022:
+            value = 0x00;
             break;
         case 0x0040:
         case 0x0042:
@@ -562,8 +570,18 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
 
             value = m_video->Peek(port, clocks);
             break;
+        case 0x0486:
+        case 0x0487:
+        case 0x0488:
+        case 0x0494:
+        case 0x0496:
+            if (!m_system_control->Decodes(port))
+                return false;
+
+            value = m_system_control->Peek(port, clocks);
+            break;
         case 0x048A:
-            value = 0x06;
+            value = 0x07;
             break;
         case 0x04C0:
         case 0x04C2:
@@ -874,6 +892,14 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x0491:
             // Memory card attribute
             m_memory->WriteMappingControl(port, value);
+            break;
+        case 0x0486:
+        case 0x0487:
+        case 0x0488:
+        case 0x0494:
+        case 0x0496:
+            // Marty latches
+            m_system_control->Write(port, value);
             break;
         case 0x048A:
             // Memory card status

@@ -142,10 +142,15 @@ u8 FDC::Peek(u16 port, u64 clocks) const
 
 // Bit 0 always reads one
 // The drive type reads 3.5 inch, or 011b for a three-mode drive
+// Without an external drive port there are no type or DSKCHG lines
 u8 FDC::ReadDriveStatus(u64 clocks) const
 {
     u8 type = m_three_mode ? 0x0C : 0x04;
     u8 drives = ((m_features & GT_MACHINE_FEATURE_FDD_STATUS) != 0) && (m_internal_drives >= 2) ? 0x80 : 0x00;
+
+    if ((m_features & GT_MACHINE_FEATURE_FDD_READY_ONLY) != 0)
+        return (IsReady(clocks) ? 0x02 : 0x00) | drives;
+
     return (IsReady(clocks) ? 0x03 : 0x01) | type | drives;
 }
 

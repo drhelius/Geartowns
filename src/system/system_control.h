@@ -49,6 +49,11 @@ public:
         bool nmi_mask;
         bool low_speed;
         bool high_speed;
+        u8 port_0486;
+        u8 port_0487;
+        u8 port_0488;
+        u8 port_0494;
+        u8 port_0496;
     };
 
 public:

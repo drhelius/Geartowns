@@ -23,7 +23,7 @@
 #include "../common/common.h"
 
 #define GT_MACHINE_RELEASE_ORDER_COUNT 8
-#define GT_MACHINE_FEATURE_COUNT 14
+#define GT_MACHINE_FEATURE_COUNT 16
 #define GT_MACHINE_CPU_SPEED_COUNT 8
 #define GT_MACHINE_RAM_SIZE_COUNT 11
 
@@ -54,7 +54,7 @@ const u32 k_machine_features_ug = k_machine_features_10f | GT_MACHINE_FEATURE_SP
     GT_MACHINE_FEATURE_UG_REGISTERS | GT_MACHINE_FEATURE_FREE_RUN_TIMER;
 const u32 k_machine_features_marty = (k_machine_features_ux & ~(GT_MACHINE_FEATURE_RAM_SIZE |
     GT_MACHINE_FEATURE_MEMORY_WAIT)) | GT_MACHINE_FEATURE_UG_REGISTERS | GT_MACHINE_FEATURE_FREE_RUN_TIMER |
-    GT_MACHINE_FEATURE_RAM_CARD;
+    GT_MACHINE_FEATURE_RAM_CARD | GT_MACHINE_FEATURE_MARTY_PORTS | GT_MACHINE_FEATURE_FDD_READY_ONLY;
 const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_REGISTERS |
     GT_MACHINE_FEATURE_FREE_RUN_TIMER | GT_MACHINE_FEATURE_CRT_POWER_OFF;
 
@@ -160,7 +160,9 @@ const char* const k_machine_feature_names[GT_MACHINE_FEATURE_COUNT] =
     "UG registers (0024h)",
     "Free-running timer (0026h)",
     "CRT power off (0022h)",
-    "RAM card size (05E8h)"
+    "RAM card size (05E8h)",
+    "Marty ports (0486h-0496h)",
+    "Floppy status ready only (0208h)"
 };
 
 #endif /* MACHINE_PROFILES_H */

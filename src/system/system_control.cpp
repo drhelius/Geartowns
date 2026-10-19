@@ -53,6 +53,11 @@ SystemControl::SystemControl()
     m_state.nmi_mask = false;
     m_state.low_speed = false;
     m_state.high_speed = false;
+    m_state.port_0486 = 0;
+    m_state.port_0487 = 0;
+    m_state.port_0488 = 0;
+    m_state.port_0494 = 0;
+    m_state.port_0496 = 0;
 }
 
 SystemControl::~SystemControl()
@@ -122,6 +127,12 @@ bool SystemControl::Decodes(u16 port) const
             return (m_features & GT_MACHINE_FEATURE_MEMORY_WAIT) != 0;
         case 0x05EC:
             return (m_features & GT_MACHINE_FEATURE_SPEED_CONTROL) != 0;
+        case 0x0486:
+        case 0x0487:
+        case 0x0488:
+        case 0x0494:
+        case 0x0496:
+            return (m_features & GT_MACHINE_FEATURE_MARTY_PORTS) != 0;
         // The Marty's board decodes none of 05E0h-05E8h, its RAM card answers 05E8h
         case 0x05E0:
             return (m_features & GT_MACHINE_FEATURE_RAM_CARD) == 0;
@@ -156,6 +167,11 @@ void SystemControl::Reset()
     m_state.nmi_mask = false;
     m_state.low_speed = false;
     m_state.high_speed = false;
+    m_state.port_0486 = 0;
+    m_state.port_0487 = 0;
+    m_state.port_0488 = 0;
+    m_state.port_0494 = 0;
+    m_state.port_0496 = 0;
     m_memory->SetNMIVectorProtect(false);
 }
 
@@ -188,6 +204,11 @@ u8 SystemControl::Read(u16 port, u64 clocks)
         case 0x0025:
         case 0x0028:
         case 0x006C:
+        case 0x0486:
+        case 0x0487:
+        case 0x0488:
+        case 0x0494:
+        case 0x0496:
         case 0x05E0:
         case 0x05E2:
         case 0x05E6:
@@ -235,6 +256,16 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
             return Decodes(port) ? (m_state.nmi_mask ? 0xFF : 0xFE) : 0xFF;
         case 0x006C:
             return Decodes(port) ? 0x00 : 0xFF;
+        case 0x0486:
+            return Decodes(port) ? m_state.port_0486 : 0xFF;
+        case 0x0487:
+            return Decodes(port) ? m_state.port_0487 : 0xFF;
+        case 0x0488:
+            return Decodes(port) ? m_state.port_0488 : 0xFF;
+        case 0x0494:
+            return Decodes(port) ? m_state.port_0494 : 0xFF;
+        case 0x0496:
+            return Decodes(port) ? m_state.port_0496 : 0xFF;
         case 0x05E2:
             return Decodes(port) ? m_state.port_05e2 : 0xFF;
         case 0x05E6:
@@ -301,6 +332,27 @@ void SystemControl::Write(u16 port, u8 value)
             break;
         case 0x05C0:
             m_state.expansion_nmi = (value & 0x08) != 0;
+            break;
+        // Unknown Marty latches, as wide as the ROM's reset writes mask them
+        case 0x0486:
+            if (Decodes(port))
+                m_state.port_0486 = value & 0x0E;
+            break;
+        case 0x0487:
+            if (Decodes(port))
+                m_state.port_0487 = value & 0x0F;
+            break;
+        case 0x0488:
+            if (Decodes(port))
+                m_state.port_0488 = value & 0x01;
+            break;
+        case 0x0494:
+            if (Decodes(port))
+                m_state.port_0494 = value & 0x03;
+            break;
+        case 0x0496:
+            if (Decodes(port))
+                m_state.port_0496 = value & 0xF0;
             break;
         case 0x05E0:
             if (Decodes(port))
@@ -409,6 +461,23 @@ void SystemControl::Serialize(StateSerializer& serializer, int version)
         G_SERIALIZE(serializer, m_state.high_speed);
     else
         m_state.high_speed = false;
+
+    if (version >= 11)
+    {
+        G_SERIALIZE(serializer, m_state.port_0486);
+        G_SERIALIZE(serializer, m_state.port_0487);
+        G_SERIALIZE(serializer, m_state.port_0488);
+        G_SERIALIZE(serializer, m_state.port_0494);
+        G_SERIALIZE(serializer, m_state.port_0496);
+    }
+    else
+    {
+        m_state.port_0486 = 0;
+        m_state.port_0487 = 0;
+        m_state.port_0488 = 0;
+        m_state.port_0494 = 0;
+        m_state.port_0496 = 0;
+    }
 }
 
 void SystemControl::SanitizeState()

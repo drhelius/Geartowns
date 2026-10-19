@@ -46,7 +46,6 @@
 #include "video/video.h"
 #include "../config.h"
 #include "../emu.h"
-#include "../events.h"
 #include "../gui.h"
 #include "../gui_actions.h"
 #include "../gui_floppy.h"
@@ -4186,6 +4185,13 @@ json DebugAdapter::GetScreenshot()
         return result;
     }
 
+    if (emu_frame_stale)
+    {
+        result["error"] = "No frame since the state load: the state has no saved frame or the screen size changed. "
+            "Run a frame first (debug_step_frame)";
+        return result;
+    }
+
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
 
@@ -4647,10 +4653,16 @@ json DebugAdapter::LoadState()
         return result;
     }
 
-    emu_load_state_slot(slot);
+    if (!emu_load_state_slot(slot))
+    {
+        result["error"] = "Failed to load state";
+        Log("[MCP] LoadState failed: Slot %d", slot);
+        return result;
+    }
 
     result["success"] = true;
     result["slot"] = slot;
+    result["frame_restored"] = !emu_frame_stale;
 
     return result;
 }
@@ -4673,7 +4685,7 @@ json DebugAdapter::SaveStateFile(const std::string& file_path)
         return result;
     }
 
-    if (!m_core->SaveState(file_path.c_str(), -1, false))
+    if (!emu_save_state_file(file_path.c_str()))
     {
         result["error"] = "Failed to save state file";
         Log("[MCP] SaveStateFile failed: %s", file_path.c_str());
@@ -4704,20 +4716,16 @@ json DebugAdapter::LoadStateFile(const std::string& file_path)
         return result;
     }
 
-    if (!m_core->LoadState(file_path.c_str()))
+    if (!emu_load_state_file(file_path.c_str()))
     {
         result["error"] = "Failed to load state file";
         Log("[MCP] LoadStateFile failed: %s", file_path.c_str());
         return result;
     }
 
-    emu_floppy_reconcile();
-    emu_debug_state_restored();
-    events_sync_input();
-    rewind_reset();
-
     result["success"] = true;
     result["file_path"] = file_path;
+    result["frame_restored"] = !emu_frame_stale;
 
     return result;
 }

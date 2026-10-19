@@ -98,6 +98,7 @@ static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
 static bool unload_media(void);
 static bool get_floppy_state_path(int index, char* path, size_t path_size);
+static void restore_state_frame(const char* path, int index);
 static bool get_cmos_path(int model, char* path, size_t path_size);
 static void load_cmos(int model);
 static void save_cmos(void);
@@ -345,6 +346,7 @@ void emu_update(void)
         if (frame_completed)
         {
             emu_frame_counter++;
+            emu_frame_stale = false;
             emu_floppy_update();
         }
 
@@ -872,18 +874,22 @@ bool emu_load_state_slot(int index)
     const char* dir = get_configurated_dir(config_emulator.savestates_dir_option,
         config_emulator.savestates_path.c_str());
     char path[GT_MAX_PATH];
-    bool loaded = get_floppy_state_path(index, path, sizeof(path)) ? geartowns->LoadState(path, -1) :
-        geartowns->LoadState(dir, index);
 
-    if (loaded)
+    if (get_floppy_state_path(index, path, sizeof(path)))
     {
-        emu_floppy_reconcile();
-        emu_debug_state_restored();
-        events_sync_input();
-        rewind_reset();
+        dir = path;
+        index = -1;
     }
 
-    return loaded;
+    if (!geartowns->LoadState(dir, index))
+        return false;
+
+    restore_state_frame(dir, index);
+    emu_floppy_reconcile();
+    emu_debug_state_restored();
+    events_sync_input();
+    rewind_reset();
+    return true;
 }
 
 bool emu_save_state_file(const char* file_path)
@@ -899,6 +905,7 @@ bool emu_load_state_file(const char* file_path)
     if (emu_is_empty() || !geartowns->LoadState(file_path))
         return false;
 
+    restore_state_frame(file_path, -1);
     emu_floppy_reconcile();
     emu_debug_state_restored();
     events_sync_input();
@@ -1777,6 +1784,7 @@ static void reset_buffers(void)
     size_t frame_buffer_size = (size_t)GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4;
     memset(emu_frame_buffer, 0, frame_buffer_size);
     memset(audio_buffer, 0, GT_AUDIO_BUFFER_SIZE * sizeof(s16));
+    emu_frame_stale = false;
 }
 
 const u8* emu_get_rgba_frame(int width, int height)
@@ -1847,6 +1855,25 @@ static bool unload_media(void)
     rewind_reset();
     update_savestates_data();
     return true;
+}
+
+static void restore_state_frame(const char* path, int index)
+{
+    GT_Runtime_Info runtime;
+    emu_get_runtime(runtime);
+    GT_SaveState_Screenshot screenshot;
+    screenshot.width = 0;
+    screenshot.height = 0;
+    screenshot.size = GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * 4;
+    screenshot.data = new (std::nothrow) u8[screenshot.size];
+
+    emu_frame_stale = !IsValidPointer(screenshot.data) || !geartowns->GetSaveStateScreenshot(index, path, &screenshot) ||
+        ((int)screenshot.width != runtime.screen_width) || ((int)screenshot.height != runtime.screen_height);
+
+    if (!emu_frame_stale)
+        memcpy(emu_frame_buffer, screenshot.data, screenshot.size);
+
+    SafeDeleteArray(screenshot.data);
 }
 
 static bool get_floppy_state_path(int index, char* path, size_t path_size)

@@ -116,8 +116,7 @@ void Video::Reset()
     m_display_width = GT_FRAME_BUFFER_WIDTH;
     m_display_height = GT_FRAME_BUFFER_HEIGHT;
     UpdateColorCaches();
-    UpdateGeometry();
-    UpdateNextEvent();
+    StartFrame(m_scheduler->GetClocks());
     UpdateIRQ();
 }
 
@@ -290,6 +289,9 @@ u64 Video::GetStatusStableUntil() const
 // FDA0 changes at the next HSYNC edge or at the half-line that ends VSYNC, new frames start at events
 u64 Video::GetSyncStableUntil(u64 clocks) const
 {
+    if (m_timing.ntsc_field)
+        return GetNTSCSyncStableUntil(clocks);
+
     if (!m_state.running)
         return GT_NO_EVENT;
 
@@ -915,7 +917,14 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
         return;
 
     // Once started the counters run free, START only blanks the picture
-    if ((m_state.crtc[index] & 0x8000) != 0 && !m_state.running)
+    if ((m_state.crtc[index] & 0x8000) == 0 || m_state.running)
+        return;
+
+    m_state.running = true;
+
+    if (m_timing.ntsc_field)
+        JoinField(clocks);
+    else
         StartFrame(clocks);
 }
 
@@ -1002,24 +1011,64 @@ void Video::RunNextEvent()
         UpdateSpriteMapping();
 }
 
-// Timing registers are latched at each frame start
 // The vertical period counts VST + 1 half-lines
 // 525 lines on the VGA preset and 262.5 on 15 kHz ones
-// The Marty's 15 kHz frames are always an NTSC field, whatever VST says
-void Video::StartFrame(u64 clocks)
+// The Marty's 15 kHz modes count 525 whatever VST says, and its 24 and 31 kHz ones run two CRTC lines a TV line
+void Video::LatchFrameTiming()
 {
-    m_state.running = true;
-    m_state.frame_start_clocks = clocks;
     m_state.frame_line_clocks = MAX((u32)m_state.crtc[k_video_crtc_hst] + 1, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX((u32)m_state.crtc[k_video_crtc_vst] + 1, k_video_min_half_lines);
     m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
 
-    if (m_timing.ntsc_field && !IsHighLineRate())
-        m_state.frame_half_lines = k_video_ntsc_field_half_lines;
+    if (!m_timing.ntsc_field)
+        return;
 
+    if (IsHighLineRate())
+        m_state.frame_clock_rate = (u32)(((u64)m_state.frame_line_clocks * 2 * k_video_ntsc_clock_rate) /
+            k_video_ntsc_line_dots);
+    else
+        m_state.frame_half_lines = k_video_ntsc_field_half_lines;
+}
+
+// Timing registers are latched at each frame start
+// The Marty's fields run from reset, its CRTC follows them once started
+// and starts interlaced frames at the end of the field's vertical blanking
+void Video::StartFrame(u64 clocks)
+{
+    m_state.field_start_clocks = clocks;
+    m_state.frame_start_clocks = clocks;
+    m_state.event_half_line = 0;
+
+    if (m_state.running)
+    {
+        LatchFrameTiming();
+        LatchLayerStart(0);
+        LatchLayerStart(1);
+
+        if (IsFieldInterlaced())
+            m_state.frame_start_clocks += k_video_ntsc_crtc_start_clocks;
+    }
+
+    m_rendered_rows = 0;
+    m_line_changed = false;
+    m_canvas_split = false;
+    UpdateGeometry();
+    UpdateNextEvent();
+}
+
+// A CRTC started inside a field picks up the line the field has reached
+void Video::JoinField(u64 clocks)
+{
+    LatchFrameTiming();
     LatchLayerStart(0);
     LatchLayerStart(1);
-    m_state.event_half_line = 0;
+    m_state.frame_start_clocks = m_state.field_start_clocks;
+
+    if (IsFieldInterlaced())
+        m_state.frame_start_clocks += k_video_ntsc_crtc_start_clocks;
+
+    u32 half_line = GetBeamHalfLine(clocks) - m_state.crtc[k_video_crtc_vst1];
+    m_state.event_half_line = MIN(half_line, m_state.frame_half_lines - 1);
     m_rendered_rows = 0;
     m_line_changed = false;
     m_canvas_split = false;
@@ -1029,16 +1078,20 @@ void Video::StartFrame(u64 clocks)
 
 void Video::CompleteFrame(u64 clocks)
 {
-    UpdateCanvasZoom();
+    if (m_state.running)
+    {
+        UpdateCanvasZoom();
 
-    for (; m_rendered_rows < m_render_height; m_rendered_rows++)
-        RenderRow(m_rendered_rows);
+        for (; m_rendered_rows < m_render_height; m_rendered_rows++)
+            RenderRow(m_rendered_rows);
 
-    m_frame_width = m_render_width;
-    m_frame_height = m_render_height;
-    m_display_width = m_canvas_width;
-    m_display_height = m_canvas_height;
-    m_frame_ready = true;
+        m_frame_width = m_render_width;
+        m_frame_height = m_render_height;
+        m_display_width = m_canvas_width;
+        m_display_height = m_canvas_height;
+        m_frame_ready = true;
+    }
+
     m_state.frame_count++;
 
     // The vertical counter wraps at VST, so a VSYNC that starts past it never comes
@@ -1359,16 +1412,26 @@ void Video::UpdateNextEvent()
 {
     if (!m_state.running)
     {
-        m_next_event_clocks = GT_NO_EVENT;
+        m_next_event_half_line = m_state.frame_half_lines;
+        m_next_event_clocks = m_timing.ntsc_field ? GetFrameEndClocks() : GT_NO_EVENT;
+        m_beam_event_clocks = GT_NO_EVENT;
         m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
         return;
     }
 
-    // Every line end and the end of the frame
+    // Every line end and the end of the frame, on the Marty the field's
     u32 half_line = m_state.event_half_line;
     u32 next = (half_line + 2) & ~0x01U;
+    u64 end = GetFrameEndClocks();
     m_next_event_half_line = MIN(next, m_state.frame_half_lines);
     m_next_event_clocks = GetHalfLineClocks(m_next_event_half_line);
+
+    if (m_next_event_half_line == m_state.frame_half_lines || m_next_event_clocks >= end)
+    {
+        m_next_event_half_line = m_state.frame_half_lines;
+        m_next_event_clocks = end;
+    }
+
     m_scheduler->Schedule(SCHEDULER_EVENT_VIDEO, m_next_event_clocks);
 
     m_beam_event_clocks = GetHalfLineClocks(half_line);
@@ -1376,6 +1439,10 @@ void Video::UpdateNextEvent()
     m_beam_event_crtc_clocks = GetElapsedCRTCClocks(m_beam_event_clocks);
     m_beam_event_dot = GetBeamClock(m_beam_event_clocks);
     m_beam_vst1 = m_state.crtc[k_video_crtc_vst1];
+
+    // Interlaced lines and the Marty's field ends don't follow the cached position
+    if (m_timing.ntsc_field && (IsFieldInterlaced() || m_next_event_clocks == end))
+        m_beam_event_clocks = GT_NO_EVENT;
 }
 
 void Video::UpdateIRQ()
@@ -1383,16 +1450,19 @@ void Video::UpdateIRQ()
     m_pic->SetIRQLine(11, m_state.vsync_irq);
 }
 
+// The Marty's VSYNC comes from its field, so it never stops
 bool Video::HasVSync() const
 {
-    return m_state.crtc[k_video_crtc_vst1] <= m_state.crtc[k_video_crtc_vst];
+    return m_timing.ntsc_field || m_state.crtc[k_video_crtc_vst1] <= m_state.crtc[k_video_crtc_vst];
 }
 
 // Same bit layout as the FR status byte
 u8 Video::GetSyncStatus(u64 clocks) const
 {
-    if (!m_state.running)
-        return 0x00;
+    u8 status = m_timing.ntsc_field ? GetNTSCSyncStatus(clocks) : 0x00;
+
+    if (!m_state.running || clocks < m_state.frame_start_clocks)
+        return status;
 
     const u16* crtc = m_state.crtc;
     u32 half_line;
@@ -1413,13 +1483,14 @@ u8 Video::GetSyncStatus(u64 clocks) const
         clock = GetBeamClock(clocks);
     }
 
-    u8 status = 0x00;
+    if (!m_timing.ntsc_field)
+    {
+        if (clock < crtc[k_video_crtc_hsw1])
+            status |= 0x02;
 
-    if (clock < crtc[k_video_crtc_hsw1])
-        status |= 0x02;
-
-    if (half_line >= crtc[k_video_crtc_vst1] && half_line < crtc[k_video_crtc_vst2] && HasVSync())
-        status |= 0x04;
+        if (half_line >= crtc[k_video_crtc_vst1] && half_line < crtc[k_video_crtc_vst2] && HasVSync())
+            status |= 0x04;
+    }
 
     if (m_canvas_interlaced && (m_state.frame_count & 0x01) != 0)
         status |= 0x08;
@@ -1434,6 +1505,39 @@ u8 Video::GetSyncStatus(u64 clocks) const
     }
 
     return status;
+}
+
+// VSYNC is the field's first 3 lines and HSYNC the first 4.7 us of each line
+// Fields last 262.5 lines and HSYNC runs on, so every other field starts halfway through a line
+u8 Video::GetNTSCSyncStatus(u64 clocks) const
+{
+    u64 elapsed = clocks > m_state.field_start_clocks ? clocks - m_state.field_start_clocks : 0;
+    u64 dot = (elapsed * k_video_ntsc_clock_rate) / GT_MACHINE_CLOCK_RATE;
+    u64 phase = (m_state.frame_count & 0x01) != 0 ? k_video_ntsc_line_dots / 2 : 0;
+    u8 status = ((dot + phase) % k_video_ntsc_line_dots) < k_video_ntsc_hsync_dots ? 0x02 : 0x00;
+
+    if (dot < k_video_ntsc_vsync_dots)
+        status |= 0x04;
+
+    return status;
+}
+
+u64 Video::GetNTSCSyncStableUntil(u64 clocks) const
+{
+    u64 start = m_state.field_start_clocks;
+    u64 elapsed = clocks > start ? clocks - start : 0;
+    u64 phase = (m_state.frame_count & 0x01) != 0 ? k_video_ntsc_line_dots / 2 : 0;
+    u64 dot = (elapsed * k_video_ntsc_clock_rate) / GT_MACHINE_CLOCK_RATE + phase;
+    u64 line = dot - dot % k_video_ntsc_line_dots;
+    u64 edge = line + (dot - line < k_video_ntsc_hsync_dots ? k_video_ntsc_hsync_dots : k_video_ntsc_line_dots);
+    dot -= phase;
+    edge -= phase;
+
+    if (dot < k_video_ntsc_vsync_dots)
+        edge = MIN(edge, (u64)k_video_ntsc_vsync_dots);
+
+    u64 until = start + (edge * GT_MACHINE_CLOCK_RATE + k_video_ntsc_clock_rate - 1) / k_video_ntsc_clock_rate;
+    return MIN(until, start + k_video_ntsc_field_clocks);
 }
 
 void Video::RenderRows(u32 half_line)
@@ -1868,6 +1972,11 @@ void Video::Serialize(StateSerializer& serializer, int version)
         LatchLayerStart(0);
         LatchLayerStart(1);
     }
+
+    if (version >= 13)
+        G_SERIALIZE(serializer, m_state.field_start_clocks);
+    else
+        m_state.field_start_clocks = m_state.frame_start_clocks;
 }
 
 void Video::SanitizeState()

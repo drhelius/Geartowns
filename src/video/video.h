@@ -64,6 +64,7 @@ public:
         u8 display_enable;
         bool vsync_irq;
         bool running;
+        u64 field_start_clocks;
         u64 frame_start_clocks;
         u32 frame_line_clocks;
         u32 frame_half_lines;
@@ -161,7 +162,9 @@ private:
     void WritePalette(int component, u8 value);
     u8 ReadPalette(int component) const;
     void RunNextEvent();
+    void LatchFrameTiming();
     void StartFrame(u64 clocks);
+    void JoinField(u64 clocks);
     void CompleteFrame(u64 clocks);
     void UpdateGeometry();
     void UpdateCanvasZoom();
@@ -177,7 +180,11 @@ private:
     void UpdateIRQ();
     bool HasVSync() const;
     bool IsHighLineRate() const;
+    bool IsFieldInterlaced() const;
     u64 GetHalfLineClocks(u32 half_line) const;
+    u64 GetFrameEndClocks() const;
+    u8 GetNTSCSyncStatus(u64 clocks) const;
+    u64 GetNTSCSyncStableUntil(u64 clocks) const;
     u64 GetElapsedCRTCClocks(u64 clocks) const;
     void RenderRows(u32 half_line);
     void RenderRow(int row);
@@ -274,6 +281,14 @@ static const u32 k_video_min_line_clocks = 64;
 static const u32 k_video_min_half_lines = 16;
 static const u32 k_video_min_high_line_rate = 23600;
 static const u32 k_video_ntsc_field_half_lines = 525;
+static const u32 k_video_ntsc_clock_rate = 24545455;
+static const u32 k_video_ntsc_line_dots = 1560;
+static const u32 k_video_ntsc_hsync_dots = 116;
+static const u32 k_video_ntsc_vsync_dots = 3 * k_video_ntsc_line_dots;
+static const u64 k_video_ntsc_field_clocks = ((u64)k_video_ntsc_field_half_lines * k_video_ntsc_line_dots *
+    GT_MACHINE_CLOCK_RATE + 2ULL * k_video_ntsc_clock_rate - 1) / (2ULL * k_video_ntsc_clock_rate);
+static const u64 k_video_ntsc_crtc_start_clocks = (22ULL * k_video_ntsc_line_dots * GT_MACHINE_CLOCK_RATE +
+    k_video_ntsc_clock_rate - 1) / k_video_ntsc_clock_rate;
 static const u32 k_video_transparent = 0x00010000;
 static const u32 k_video_no_wrap = 0x7FFFFFFF;
 

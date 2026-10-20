@@ -71,6 +71,9 @@ INLINE int Video::GetDisplayHeight() const
 // Milliseconds between VSYNCs with the timing latched at the start of the frame
 INLINE float Video::GetFrameTime() const
 {
+    if (m_timing.ntsc_field)
+        return (float)(((double)k_video_ntsc_field_clocks * 1000.0) / GT_MACHINE_CLOCK_RATE);
+
     double clocks = ((double)m_state.frame_half_lines * m_state.frame_line_clocks) / 2.0;
     return (float)((clocks * 1000.0) / m_state.frame_clock_rate);
 }
@@ -243,6 +246,12 @@ INLINE bool Video::IsHighLineRate() const
     return m_state.frame_clock_rate >= (u64)m_state.frame_line_clocks * k_video_min_high_line_rate;
 }
 
+// The Marty interlaces 24 and 31 kHz modes into its NTSC field: each CRTC line it shows takes a whole TV line
+INLINE bool Video::IsFieldInterlaced() const
+{
+    return m_timing.ntsc_field && IsHighLineRate();
+}
+
 // Half-lines count from the VSYNC that started the frame
 // rounded up to the machine clock that reaches them
 INLINE u64 Video::GetHalfLineClocks(u32 half_line) const
@@ -252,21 +261,38 @@ INLINE u64 Video::GetHalfLineClocks(u32 half_line) const
     return m_state.frame_start_clocks + (crtc_clocks * GT_MACHINE_CLOCK_RATE + rate - 1) / rate;
 }
 
+// The Marty's frames end with the field, whatever the CRTC counts
+INLINE u64 Video::GetFrameEndClocks() const
+{
+    if (m_timing.ntsc_field)
+        return m_state.field_start_clocks + k_video_ntsc_field_clocks;
+
+    return GetHalfLineClocks(m_state.frame_half_lines);
+}
+
+// The CRTC's counters wait at the top until the frame start, which on the Marty can come after the field's
 INLINE u32 Video::GetBeamHalfLine(u64 clocks) const
 {
-    u64 elapsed = (clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate * 2;
+    u64 elapsed = clocks > m_state.frame_start_clocks ? clocks - m_state.frame_start_clocks : 0;
+    elapsed *= (u64)m_state.frame_clock_rate * 2;
     return m_state.crtc[k_video_crtc_vst1] + (u32)(elapsed / ((u64)GT_MACHINE_CLOCK_RATE * m_state.frame_line_clocks));
 }
 
 INLINE u64 Video::GetElapsedCRTCClocks(u64 clocks) const
 {
-    return ((clocks - m_state.frame_start_clocks) * m_state.frame_clock_rate) / GT_MACHINE_CLOCK_RATE;
+    u64 elapsed = clocks > m_state.frame_start_clocks ? clocks - m_state.frame_start_clocks : 0;
+    return (elapsed * m_state.frame_clock_rate) / GT_MACHINE_CLOCK_RATE;
 }
 
 INLINE u32 Video::GetBeamClock(u64 clocks) const
 {
-    u64 origin = ((u64)m_state.crtc[k_video_crtc_vst1] * m_state.frame_line_clocks) / 2;
-    return (u32)((origin + GetElapsedCRTCClocks(clocks)) % m_state.frame_line_clocks);
+    u64 line = m_state.frame_line_clocks;
+    u64 position = (m_state.crtc[k_video_crtc_vst1] * line) / 2 + GetElapsedCRTCClocks(clocks);
+
+    if (IsFieldInterlaced())
+        return (u32)((position % (line * 2)) / 2);
+
+    return (u32)(position % line);
 }
 
 INLINE u32 Video::ToXRGB(u8 red, u8 green, u8 blue) const

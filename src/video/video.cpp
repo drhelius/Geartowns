@@ -914,15 +914,9 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
     if (index != k_video_crtc_cr0)
         return;
 
-    bool start = (m_state.crtc[index] & 0x8000) != 0;
-
-    if (start && !m_state.running)
+    // Once started the counters run free, START only blanks the picture
+    if ((m_state.crtc[index] & 0x8000) != 0 && !m_state.running)
         StartFrame(clocks);
-    else if (!start && m_state.running)
-    {
-        m_state.running = false;
-        UpdateNextEvent();
-    }
 }
 
 void Video::LatchLayerStart(int layer)
@@ -1487,7 +1481,7 @@ void Video::RenderRow(int row)
     for (int x = 0; x < width; x++)
         destination[x] = black;
 
-    if (unlikely(m_state.crt_power_off))
+    if (unlikely(m_state.crt_power_off || (m_state.crtc[k_video_crtc_cr0] & 0x8000) == 0))
         return;
 
     if (IsTwoPage())

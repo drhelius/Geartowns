@@ -248,4 +248,33 @@ INLINE u32 I386::GetBusPending() const
     return (u32)(m_bus_fraction >> 16);
 }
 
+// Whole clocks before the access, the fraction pending with the rest of the bus time
+// Nothing answers a port the board doesn't decode, so a write there ends sooner
+INLINE void I386::AddBusPortWait(u16 port, int write)
+{
+    u32 wait = m_bus.io[write];
+
+    if (IsValidPointer(m_bus_decoded_ports) && (m_bus_decoded_ports[port >> 3] & (1 << (port & 7))) == 0)
+    {
+        if (write)
+            wait = m_bus.io_free_write;
+    }
+    else
+    {
+        for (int i = 0; i < GT_MACHINE_PORT_WAIT_BLOCKS; i++)
+        {
+            const BusPortWait& block = m_bus.io_blocks[i];
+
+            if ((u32)port - block.first <= block.span)
+            {
+                wait = block.wait[write];
+                break;
+            }
+        }
+    }
+
+    m_step.clocks += wait >> 16;
+    m_bus_fraction += (s32)(wait & 0xFFFF);
+}
+
 #endif /* I386_BUS_INLINE_H */

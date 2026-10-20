@@ -205,7 +205,7 @@ bool I386::ExecuteStringElement(bool& repeat)
         if (!allowed)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-        m_step.clocks += m_bus.io[opcode >= 0x6E ? 1 : 0];
+        AddBusPortWait(m_state.registers[I386_REG_EDX].low, opcode >= 0x6E ? 1 : 0);
 
         if (!SynchronizeIOAccess())
             return true;

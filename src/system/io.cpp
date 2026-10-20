@@ -51,6 +51,7 @@ IO::IO()
     InitPointer(m_input);
     InitPointer(m_rtc);
     InitPointer(m_dma);
+    memset(m_decoded_ports, 0xFF, sizeof(m_decoded_ports));
 }
 
 IO::~IO()
@@ -709,6 +710,25 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
 }
 
 // Machine clock until which reads of the port repeat the last one without side effects, 0 when unknown
+// One bit per port, from what the board decodes on this model
+void IO::UpdateDecodedPorts()
+{
+    memset(m_decoded_ports, 0, sizeof(m_decoded_ports));
+
+    for (u32 port = 0; port < 0x10000; port++)
+    {
+        u8 value = 0;
+
+        if (Peek((u16)port, 0, value))
+            m_decoded_ports[port >> 3] |= (u8)(1 << (port & 7));
+    }
+}
+
+const u8* IO::GetDecodedPorts() const
+{
+    return m_decoded_ports;
+}
+
 u64 IO::GetReadStableUntil(u16 port, int width, u64 clocks) const
 {
     if (width != 8)

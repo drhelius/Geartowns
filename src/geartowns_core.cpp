@@ -201,6 +201,7 @@ void GeartownsCore::Init()
     m_io->Init(m_scheduler, m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard,
         m_input, m_rtc, m_dma);
     m_i386->Init(m_memory, m_io);
+    m_i386->SetDecodedPorts(m_io->GetDecodedPorts());
     m_video->GetSprite()->SetBusCycleCounts(m_i386->GetBusCycleCounts());
     m_input->Init();
     m_trace_logger->Init(&m_scheduler->GetState()->clocks);
@@ -1854,6 +1855,9 @@ void GeartownsCore::ApplyMachineConfig()
         m_fdc->SetThreeMode(profile.three_mode_floppy);
         m_fdc->SetFeatures(profile.features);
     }
+
+    if (IsValidPointer(m_io))
+        m_io->UpdateDecodedPorts();
 }
 
 void GeartownsCore::ApplyBusTiming()

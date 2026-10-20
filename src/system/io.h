@@ -55,6 +55,8 @@ public:
     void Write32(u16 port, u32 value, GT_Bus_Access_Context& context);
     bool Peek(u16 port, u64 clocks, u8& value) const;
     u64 GetReadStableUntil(u16 port, int width, u64 clocks) const;
+    void UpdateDecodedPorts();
+    const u8* GetDecodedPorts() const;
 
 private:
     u8 ReadPort(u16 port, GT_Bus_Access_Context& context);
@@ -75,6 +77,7 @@ private:
     Input* m_input;
     MSM58321* m_rtc;
     UPD71071* m_dma;
+    u8 m_decoded_ports[0x2000];
 };
 
 #include "io_inline.h"

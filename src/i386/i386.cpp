@@ -98,6 +98,7 @@ I386::I386()
     memset(&m_bus, 0, sizeof(m_bus));
     m_bus_timed = false;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
+    InitPointer(m_bus_decoded_ports);
     InitPointer(m_bus_page_class);
     m_trace_internal = false;
     m_trace_cpu = false;

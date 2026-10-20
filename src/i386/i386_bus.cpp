@@ -108,7 +108,22 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
             bus.slow[GT_BUS_PCM][k] = ScaleBusWait(timing->pcm[k], cpu, model);
             bus.slow[GT_BUS_MMIO][k] = ScaleBusWait(timing->mmio[k], cpu, model);
             bus.fmr_word[k] = ScaleBusWait(timing->fmr_word[k], cpu, model);
-            bus.io[k] = (ScaleBusWait(timing->io[k], cpu, model) + 0x8000) >> 16;
+            bus.io[k] = ScaleBusWait(timing->io[k], cpu, model);
+        }
+
+        bus.io_free_write = ScaleBusWait(timing->io_free_write, cpu, model);
+
+        for (int i = 0; i < GT_MACHINE_PORT_WAIT_BLOCKS; i++)
+            bus.io_blocks[i].first = 0x10000;
+
+        for (int i = 0; IsValidPointer(timing->port_waits) && i < GT_MACHINE_PORT_WAIT_BLOCKS; i++)
+        {
+            const GT_Machine_Port_Wait& block = timing->port_waits[i];
+            bus.io_blocks[i].first = block.first;
+            bus.io_blocks[i].span = (u32)(block.last - block.first);
+
+            for (int k = 0; k < 2; k++)
+                bus.io_blocks[i].wait[k] = ScaleBusWait((u32)timing->io[k] + block.extra[k], cpu, model);
         }
 
         bus.cycle[GT_BUS_ROM][0] = ScaleBusWait(waits->rom_cycle, cpu, model);
@@ -137,9 +152,16 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
 #endif
 }
 
+// A bit per port the board decodes, all decoded without them
+void I386::SetDecodedPorts(const u8* ports)
+{
+    m_bus_decoded_ports = ports;
+}
+
+// Whole clocks of the generic wait
 u32 I386::GetBusPortWait(bool write) const
 {
-    return m_bus.io[write ? 1 : 0];
+    return (m_bus.io[write ? 1 : 0] + 0x8000) >> 16;
 }
 
 // Bus cycles per class, reads then writes, counted from power on and wrapping

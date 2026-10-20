@@ -437,6 +437,7 @@ public:
         u32 cpu_clock_rate, u32 model_clock_rate);
     bool IsBusTimed() const;
     u32 GetBusPortWait(bool write) const;
+    void SetDecodedPorts(const u8* ports);
     const u32* GetBusCycleCounts() const;
     u32 RunInstruction(GT_Bus_Access_Context& context);
     I386_Run_Result GetStepInfo() const;
@@ -625,6 +626,13 @@ private:
         u64 element[2];
     };
 
+    struct BusPortWait
+    {
+        u32 first;
+        u32 span;
+        u32 wait[2];
+    };
+
     // Bus timing in 1/65536 clocks, queue levels in 1/256 bytes
     struct BusTiming
     {
@@ -643,6 +651,8 @@ private:
         u32 string_row;
         u32 string_read;
         u32 io[2];
+        u32 io_free_write;
+        BusPortWait io_blocks[GT_MACHINE_PORT_WAIT_BLOCKS];
     };
 
     struct TimingCursor
@@ -1006,6 +1016,7 @@ private:
     void AddBusSlowAccess(u32 physical, u32 size, bool write);
     u32 CarryBusTime();
     u32 GetBusPending() const;
+    void AddBusPortWait(u16 port, int write);
     bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
         GT_Bus_Access_Context& context);
 
@@ -1458,6 +1469,7 @@ private:
     u32 m_bus_row;
     s32 m_bus_fraction;
     u32 m_bus_cycle_counts[GT_BUS_CLASS_COUNT][2];
+    const u8* m_bus_decoded_ports;
     u32 m_bus_code_base;
     u32 m_bus_code_cost;
     u32 m_bus_code_rate;

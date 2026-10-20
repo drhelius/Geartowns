@@ -62,7 +62,7 @@ const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_
 // Sprite times in half machine clocks. Other bus users delay the engine: CPU cycles to VRAM and sprite RAM in 1/256
 // machine clocks, display fetch bytes in 1/65536 machine clocks at 15 kHz and at 24 and 31 kHz
 // Entry times and fetch costs fitted on the Sprite Probe photos and disc 2: SX on a Marty, DX on a 20F
-const GT_Machine_Video_Timing k_machine_video_dx = { 570, 2317, false, 169, 75, 210, 870 };
+const GT_Machine_Video_Timing k_machine_video_dx = { 666, 2317, false, 169, 75, 210, 870 };
 const GT_Machine_Video_Timing k_machine_video_mx = { 960, 1819, false, 169, 75, 210, 870 };
 const GT_Machine_Video_Timing k_machine_video_sx = { 1888, 2193, false, 169, 75, 190, 1000 };
 const GT_Machine_Video_Timing k_machine_video_marty = { 1888, 2193, true, 169, 75, 190, 1000 };
@@ -77,18 +77,26 @@ const GT_Machine_Bus_Waits k_machine_bus_waits_dx = { { 0, 0 }, { 0, 0 }, { 0, 0
 const GT_Machine_Bus_Waits k_machine_bus_waits_dx_fast = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 768, 768 },
     { 768, 768 }, 1384, 1101, { 1578, 1024 } };
 
+// Port blocks slower than the generic wait, extra 1/256 clocks to read and to write, measured on a Marty
+// A write to a port the board doesn't decode ends sooner, as the io_free_write wait of the bus timing below
+const GT_Machine_Port_Wait k_machine_port_waits[GT_MACHINE_PORT_WAIT_BLOCKS] = { { 0x0060, 0x0060, { 748, 748 } },
+    { 0x04C0, 0x04CC, { 2282, 2282 } }, { 0x04D8, 0x04DE, { 748, 811 } }, { 0xFD90, 0xFDA4, { 926, 994 } } };
+
 const GT_Machine_Bus_Timing k_machine_bus_sx = { GT_MACHINE_BUS_FIXED, &k_machine_bus_waits_sx, NULL,
-    17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1536, 1024 } };
+    17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,
+    k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_ug = { GT_MACHINE_BUS_SPEED_PORT, &k_machine_bus_waits_sx,
     &k_machine_bus_waits_sx_fast, 17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 },
-    { 1536, 1024 }, { 1536, 1024 } };
+    { 1536, 1024 }, { 1649, 1308 }, 1068, k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_dx = { GT_MACHINE_BUS_FIXED, &k_machine_bus_waits_dx, NULL,
-    17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1536, 1024 } };
+    17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,
+    k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_10f = { GT_MACHINE_BUS_WAIT_PORTS, &k_machine_bus_waits_dx, NULL,
-    17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1536, 1024 } };
+    17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,
+    k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_cx = { GT_MACHINE_BUS_SPEED_PORT, &k_machine_bus_waits_dx,
     &k_machine_bus_waits_dx_fast, 17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 },
-    { 1536, 1024 }, { 1536, 1024 } };
+    { 1536, 1024 }, { 1649, 1308 }, 1068, k_machine_port_waits };
 
 const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
 {

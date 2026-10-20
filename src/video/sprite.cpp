@@ -62,7 +62,7 @@ void Sprite::Reset()
     memset(&m_state, 0, sizeof(m_state));
     m_state.clear_row = k_sprite_clear_rows;
     m_state.clear_half_clocks = m_timing->sprite_clear;
-    m_state.entry_half_clocks = m_timing->sprite_entry_15khz;
+    m_state.entry_half_clocks = m_timing->sprite_entry;
     ResetContention();
     UpdateEntryReciprocal();
 }
@@ -94,13 +94,13 @@ void Sprite::Write(u16 port, u8 value)
 
 // Each transfer swaps the halves, clears the new work half and walks the index from the first entry to 1023
 // The first index and the time per entry are latched here, later changes only affect the next transfer
-void Sprite::StartTransfer(u64 clocks, bool high_line_rate)
+void Sprite::StartTransfer(u64 clocks)
 {
     m_state.page = !m_state.page;
     m_state.busy = true;
     m_state.start_clocks = clocks;
     m_state.clear_half_clocks = m_timing->sprite_clear;
-    m_state.entry_half_clocks = high_line_rate ? m_timing->sprite_entry_31khz : m_timing->sprite_entry_15khz;
+    m_state.entry_half_clocks = m_timing->sprite_entry;
     m_state.first_index = GetFirstIndex();
     m_state.clear_row = 1;
     m_state.entry = 0;

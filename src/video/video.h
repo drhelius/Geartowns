@@ -124,6 +124,7 @@ public:
     u8 ReadFMRRegister(u32 offset, bool peek);
     void WriteFMRRegister(u32 offset, u8 value);
     Video_Layer_Format GetLayerFormat(int layer) const;
+    Video_Layer_Format GetOutputFormat(int layer) const;
     bool IsTwoPage() const;
     void UpdateVRAMMapping();
     void UpdateSpriteMapping();
@@ -165,6 +166,7 @@ private:
     void LatchFrameTiming();
     void StartFrame(u64 clocks);
     void JoinField(u64 clocks);
+    void DelaySpriteByFetch(u32 half_line);
     void CompleteFrame(u64 clocks);
     void UpdateGeometry();
     void UpdateCanvasZoom();

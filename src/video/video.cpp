@@ -1002,7 +1002,10 @@ void Video::RunNextEvent()
         m_state.event_half_line = half_line;
 
         if ((half_line & 0x01) == 0)
+        {
+            DelaySpriteByFetch(half_line);
             RenderRows(half_line);
+        }
 
         UpdateNextEvent();
     }
@@ -1028,6 +1031,37 @@ void Video::LatchFrameTiming()
             k_video_ntsc_line_dots);
     else
         m_state.frame_half_lines = k_video_ntsc_field_half_lines;
+}
+
+// The layers' fetch of the line just scanned holds the sprite engine back, by the bytes they read whatever FDA0 says
+// Interlaced into the Marty's field, only every other CRTC line is fetched
+void Video::DelaySpriteByFetch(u32 half_line)
+{
+    if (!m_sprite->IsBusy() || (IsFieldInterlaced() && (half_line & 0x02) != 0))
+        return;
+
+    const u16* crtc = m_state.crtc;
+    u32 beam = crtc[k_video_crtc_vst1] + half_line - 2;
+    int layers = IsTwoPage() ? 2 : 1;
+    u32 bytes = 0;
+
+    for (int layer = 0; layer < layers; layer++)
+    {
+        Video_Layer_Format format = GetOutputFormat(layer);
+        u32 hds = crtc[k_video_crtc_hds0 + layer * 2];
+        u32 hde = crtc[k_video_crtc_hde0 + layer * 2];
+
+        if (format == VIDEO_LAYER_OFF || hde <= hds || beam < crtc[k_video_crtc_vds0 + layer * 2] ||
+            beam >= crtc[k_video_crtc_vde0 + layer * 2])
+            continue;
+
+        u32 zoom_x = ((crtc[k_video_crtc_zoom] >> (layer * 8)) & 0x0F) + 1;
+        u32 bits = format == VIDEO_LAYER_4BPP ? 4 : (format == VIDEO_LAYER_8BPP ? 8 : 16);
+        bytes += ((hde - hds) / zoom_x) * bits / 8;
+    }
+
+    u32 cost = IsHighLineRate() ? m_timing.sprite_fetch_high : m_timing.sprite_fetch_low;
+    m_sprite->Delay((bytes * cost + 0x80) >> 8);
 }
 
 // Timing registers are latched at each frame start
@@ -1110,7 +1144,7 @@ void Video::CompleteFrame(u64 clocks)
     if (m_sprite->IsEnabled() && HasVSync())
     {
         if (!m_sprite->IsBusy())
-            m_sprite->StartTransfer(clocks, IsHighLineRate());
+            m_sprite->StartTransfer(clocks);
         else
             m_sprite->TraceBusyAtVSync();
     }

@@ -50,6 +50,17 @@ INLINE void Sprite::ApplyContention()
     m_state.contention_fraction = (u8)(delay & 0xFF);
 }
 
+// In 1/256 machine clocks
+INLINE void Sprite::Delay(u32 amount)
+{
+    if (!m_state.busy)
+        return;
+
+    u32 total = amount + m_state.contention_fraction;
+    m_state.start_clocks += total >> 8;
+    m_state.contention_fraction = (u8)(total & 0xFF);
+}
+
 INLINE void Sprite::ResetContention()
 {
     m_state.contention_fraction = 0;

@@ -61,7 +61,8 @@ public:
     u8 Read(u16 port) const;
     void Write(u16 port, u8 value);
     void Synchronize(u64 clocks);
-    void StartTransfer(u64 clocks, bool high_line_rate);
+    void StartTransfer(u64 clocks);
+    void Delay(u32 amount);
     void TraceBusyAtVSync();
     bool IsEnabled() const;
     bool IsBusy() const;

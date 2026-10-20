@@ -455,11 +455,12 @@ struct GT_Machine_Memory_Map
 struct GT_Machine_Video_Timing
 {
     u16 sprite_clear;
-    u16 sprite_entry_15khz;
-    u16 sprite_entry_31khz;
+    u16 sprite_entry;
     bool ntsc_field;
     u16 sprite_write_contention;
     u16 sprite_read_contention;
+    u16 sprite_fetch_low;
+    u16 sprite_fetch_high;
 };
 
 enum GT_Bus_Class

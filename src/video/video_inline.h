@@ -120,15 +120,22 @@ INLINE u32 Video::GetLayerZoomKey() const
 
 INLINE Video::Video_Layer_Format Video::GetLayerFormat(int layer) const
 {
-    u8 output = m_state.output[0];
     u8 enable = m_state.display_enable;
+
+    // FDA0 enables layer 0 with bits 3-2 and layer 1 with bits 1-0
+    if (IsTwoPage() ? ((enable >> (layer == 0 ? 2 : 0)) & 0x03) == 0 : (enable & 0x0C) == 0)
+        return VIDEO_LAYER_OFF;
+
+    return GetOutputFormat(layer);
+}
+
+// The format the output controller selects, whether or not FDA0 shows the layer
+INLINE Video::Video_Layer_Format Video::GetOutputFormat(int layer) const
+{
+    u8 output = m_state.output[0];
 
     if (IsTwoPage())
     {
-        // FDA0 enables layer 0 with bits 3-2 and layer 1 with bits 1-0
-        if (((enable >> (layer == 0 ? 2 : 0)) & 0x03) == 0)
-            return VIDEO_LAYER_OFF;
-
         switch ((output >> (layer * 2)) & 0x03)
         {
             case 0x01:
@@ -140,7 +147,7 @@ INLINE Video::Video_Layer_Format Video::GetLayerFormat(int layer) const
         }
     }
 
-    if (layer != 0 || (enable & 0x0C) == 0)
+    if (layer != 0)
         return VIDEO_LAYER_OFF;
 
     switch (output & 0x0F)

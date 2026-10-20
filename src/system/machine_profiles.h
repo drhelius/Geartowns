@@ -59,11 +59,11 @@ const u32 k_machine_features_marty = (k_machine_features_ux & ~(GT_MACHINE_FEATU
 const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_REGISTERS |
     GT_MACHINE_FEATURE_FREE_RUN_TIMER | GT_MACHINE_FEATURE_CRT_POWER_OFF;
 
-// Sprite times in half machine clocks
-const GT_Machine_Video_Timing k_machine_video_dx = { 570, 2322, 2381, false };
-const GT_Machine_Video_Timing k_machine_video_mx = { 960, 1824, 1824, false };
-const GT_Machine_Video_Timing k_machine_video_sx = { 1888, 2197, 2224, false };
-const GT_Machine_Video_Timing k_machine_video_marty = { 1888, 2197, 2224, true };
+// Sprite times in half machine clocks, CPU bus cycles to VRAM and sprite RAM delay the engine in 1/256 machine clocks
+const GT_Machine_Video_Timing k_machine_video_dx = { 570, 2322, 2381, false, 169, 75 };
+const GT_Machine_Video_Timing k_machine_video_mx = { 960, 1824, 1824, false, 169, 75 };
+const GT_Machine_Video_Timing k_machine_video_sx = { 1888, 2197, 2224, false, 169, 75 };
+const GT_Machine_Video_Timing k_machine_video_marty = { 1888, 2197, 2224, true, 169, 75 };
 
 // 1/256 clocks. SX: fitted on a real Marty. DX: Data Book RAM 3 and VRAM 6 (0 and 3 high speed), the rest as SX
 const GT_Machine_Bus_Waits k_machine_bus_waits_sx = { { 954, 338 }, { 155, 0 }, { 284, 305 }, { 0, 0 }, { 1152, 868 },

@@ -142,6 +142,12 @@ u32 I386::GetBusPortWait(bool write) const
     return m_bus.io[write ? 1 : 0];
 }
 
+// Bus cycles per class, reads then writes, counted from power on and wrapping
+const u32* I386::GetBusCycleCounts() const
+{
+    return &m_bus_cycle_counts[0][0];
+}
+
 void I386::UpdateBusCode(u8 bus_class, u32 code_base)
 {
     m_bus_code_dram = bus_class == GT_BUS_DRAM;
@@ -399,6 +405,7 @@ u32 I386::AddBusStringAccess(u32 linear, u32 size, int write, bool load)
         m_bus_row = row;
     }
 
+    m_bus_cycle_counts[bus_class][write] += cycles;
     m_bus_fraction += penalty + (s32)(cycles * m_bus.cycle[bus_class][write]);
     return aligned;
 }
@@ -555,6 +562,11 @@ u32 I386::AddBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool mov
     m_bus_row = row;
     m_bus_queue = k_i386_bus_queue;
     m_bus_fraction = (s32)(total & 0xFFFF);
+    m_bus_cycle_counts[repeat.destination_class][1] += elements * GetBusCycles(size);
+
+    if (move)
+        m_bus_cycle_counts[repeat.source_class][0] += elements * GetBusCycles(size);
+
     return (u32)(total >> 16);
 }
 

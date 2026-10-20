@@ -130,6 +130,7 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
         m_bus_row = row;
     }
 
+    m_bus_cycle_counts[bus_class][write] += cycles;
     m_bus_fraction += penalty + (s32)(cycles * m_bus.cycle[bus_class][write]);
     return (aligned << 8) | 1;
 }

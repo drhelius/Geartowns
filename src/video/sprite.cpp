@@ -27,6 +27,9 @@ Sprite::Sprite()
     InitPointer(m_sprite_ram);
     InitPointer(m_timing);
     InitPointer(m_trace_logger);
+    InitPointer(m_bus_cycle_counts);
+    m_bus_cycles_seen[0] = 0;
+    m_bus_cycles_seen[1] = 0;
     m_entry_reciprocal = 0;
     memset(&m_state, 0, sizeof(m_state));
 }
@@ -48,12 +51,19 @@ void Sprite::SetTraceLogger(TraceLogger* trace_logger)
     m_trace_logger = trace_logger;
 }
 
+void Sprite::SetBusCycleCounts(const u32* counts)
+{
+    m_bus_cycle_counts = counts;
+    ResetContention();
+}
+
 void Sprite::Reset()
 {
     memset(&m_state, 0, sizeof(m_state));
     m_state.clear_row = k_sprite_clear_rows;
     m_state.clear_half_clocks = m_timing->sprite_clear;
     m_state.entry_half_clocks = m_timing->sprite_entry_15khz;
+    ResetContention();
     UpdateEntryReciprocal();
 }
 
@@ -95,6 +105,7 @@ void Sprite::StartTransfer(u64 clocks, bool high_line_rate)
     m_state.clear_row = 1;
     m_state.entry = 0;
     m_state.pixel = 0;
+    ResetContention();
     UpdateEntryReciprocal();
 
     if (unlikely(IsValidPointer(m_trace_logger) &&
@@ -132,6 +143,10 @@ void Sprite::Run(u64 clocks)
 
     u64 transfer = elapsed - clear_time;
     u32 count = k_sprite_entries - m_state.first_index;
+
+    // Contention can move the start back over entries already drawn
+    if (transfer < (u64)m_state.entry * entry_time)
+        return;
 
     while (m_state.entry < count)
     {
@@ -313,6 +328,33 @@ void Sprite::Serialize(StateSerializer& serializer, int version)
     {
         m_state.clear_half_clocks = k_sprite_book_clear_half_clocks;
         m_state.entry_half_clocks = k_sprite_book_entry_half_clocks;
+    }
+
+    // The CPU's counts aren't saved, so the cycles the engine hasn't taken yet are
+    u32 pending[2] = { 0, 0 };
+
+    if (IsValidPointer(m_bus_cycle_counts))
+    {
+        pending[0] = GetBusCycles(0) - m_bus_cycles_seen[0];
+        pending[1] = GetBusCycles(1) - m_bus_cycles_seen[1];
+    }
+
+    if (version >= 14)
+    {
+        G_SERIALIZE(serializer, m_state.contention_fraction);
+        G_SERIALIZE_ARRAY(serializer, pending, 2);
+    }
+    else
+    {
+        m_state.contention_fraction = 0;
+        pending[0] = 0;
+        pending[1] = 0;
+    }
+
+    if (IsValidPointer(m_bus_cycle_counts))
+    {
+        m_bus_cycles_seen[0] = GetBusCycles(0) - pending[0];
+        m_bus_cycles_seen[1] = GetBusCycles(1) - pending[1];
     }
 }
 

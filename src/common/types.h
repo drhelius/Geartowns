@@ -458,6 +458,8 @@ struct GT_Machine_Video_Timing
     u16 sprite_entry_15khz;
     u16 sprite_entry_31khz;
     bool ntsc_field;
+    u16 sprite_write_contention;
+    u16 sprite_read_contention;
 };
 
 enum GT_Bus_Class

@@ -437,6 +437,7 @@ public:
         u32 cpu_clock_rate, u32 model_clock_rate);
     bool IsBusTimed() const;
     u32 GetBusPortWait(bool write) const;
+    const u32* GetBusCycleCounts() const;
     u32 RunInstruction(GT_Bus_Access_Context& context);
     I386_Run_Result GetStepInfo() const;
     I386_Run_Result RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
@@ -1456,6 +1457,7 @@ private:
     u32 m_bus_queue;
     u32 m_bus_row;
     s32 m_bus_fraction;
+    u32 m_bus_cycle_counts[GT_BUS_CLASS_COUNT][2];
     u32 m_bus_code_base;
     u32 m_bus_code_cost;
     u32 m_bus_code_rate;

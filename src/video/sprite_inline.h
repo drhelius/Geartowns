@@ -24,8 +24,46 @@
 
 INLINE void Sprite::Synchronize(u64 clocks)
 {
-    if (m_state.busy && clocks > m_state.start_clocks)
+    if (!m_state.busy)
+        return;
+
+    ApplyContention();
+
+    if (clocks > m_state.start_clocks)
         Run(clocks);
+}
+
+// The CPU's cycles to VRAM and sprite RAM since the last look hold the engine back, a write longer than a read
+INLINE void Sprite::ApplyContention()
+{
+    if (!IsValidPointer(m_bus_cycle_counts))
+        return;
+
+    u32 reads = GetBusCycles(0);
+    u32 writes = GetBusCycles(1);
+    u64 delay = (u64)(writes - m_bus_cycles_seen[1]) * m_timing->sprite_write_contention +
+        (u64)(reads - m_bus_cycles_seen[0]) * m_timing->sprite_read_contention + m_state.contention_fraction;
+
+    m_bus_cycles_seen[0] = reads;
+    m_bus_cycles_seen[1] = writes;
+    m_state.start_clocks += delay >> 8;
+    m_state.contention_fraction = (u8)(delay & 0xFF);
+}
+
+INLINE void Sprite::ResetContention()
+{
+    m_state.contention_fraction = 0;
+
+    if (!IsValidPointer(m_bus_cycle_counts))
+        return;
+
+    m_bus_cycles_seen[0] = GetBusCycles(0);
+    m_bus_cycles_seen[1] = GetBusCycles(1);
+}
+
+INLINE u32 Sprite::GetBusCycles(int write) const
+{
+    return m_bus_cycle_counts[GT_BUS_VRAM * 2 + write] + m_bus_cycle_counts[GT_BUS_SPRITE * 2 + write];
 }
 
 INLINE bool Sprite::IsEnabled() const

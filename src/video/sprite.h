@@ -48,6 +48,7 @@ public:
         u16 entry_y;
         u16 entry_attributes;
         u16 entry_color;
+        u8 contention_fraction;
     };
 
 public:
@@ -55,6 +56,7 @@ public:
     ~Sprite();
     void Init(u8* vram, const u8* sprite_ram, const GT_Machine_Video_Timing* timing);
     void SetTraceLogger(TraceLogger* trace_logger);
+    void SetBusCycleCounts(const u32* counts);
     void Reset();
     u8 Read(u16 port) const;
     void Write(u16 port, u8 value);
@@ -73,6 +75,9 @@ public:
 
 private:
     void Run(u64 clocks);
+    void ApplyContention();
+    void ResetContention();
+    u32 GetBusCycles(int write) const;
     void UpdateEntryReciprocal();
     void LoadEntry();
     void DrawPixels(u32 end);
@@ -90,6 +95,8 @@ private:
     const u8* m_sprite_ram;
     const GT_Machine_Video_Timing* m_timing;
     TraceLogger* m_trace_logger;
+    const u32* m_bus_cycle_counts;
+    u32 m_bus_cycles_seen[2];
     u64 m_entry_reciprocal;
 };
 

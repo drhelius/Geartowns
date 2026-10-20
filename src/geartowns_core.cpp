@@ -201,6 +201,7 @@ void GeartownsCore::Init()
     m_io->Init(m_scheduler, m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard,
         m_input, m_rtc, m_dma);
     m_i386->Init(m_memory, m_io);
+    m_video->GetSprite()->SetBusCycleCounts(m_i386->GetBusCycleCounts());
     m_input->Init();
     m_trace_logger->Init(&m_scheduler->GetState()->clocks);
     m_profiler->Init(&m_scheduler->GetState()->clocks);

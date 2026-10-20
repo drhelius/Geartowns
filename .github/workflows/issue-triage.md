@@ -87,21 +87,32 @@ If the issue already has the correct labels and needs no comment or duplicate cl
 
 ### Phase 3: Geartowns-Specific Checks
 
-1. Only the FM Towns Model 1/2 and Custom machine configurations are emulated. Other machine models, and CPU features, peripherals, storage controllers, or media formats not listed in `README.md`, are `feature request`.
+1. Only the machine models listed in the Machine tip of `README.md` are emulated. Other machine models, and CPU features, peripherals, storage controllers, or media formats not listed in `README.md`, are `feature request`.
 2. An already-supported configuration or title that regressed, crashes, corrupts graphics/audio/input, or diverges from hardware/reference emulator behavior is `bug`.
 3. Missing or wrong firmware (`FMT_SYS.ROM`, `FMT_DOS.ROM`, `FMT_FNT.ROM`, `FMT_DIC.ROM`; `FMT_F20.ROM` is optional) is a setup problem: `question` when the reporter asks for help, `not a bug` when it is reported as a defect.
 4. Bad disk or CD images, invalid save files, or expected FM Towns hardware behavior are `not a bug` when the evidence is clear.
-5. When a report says only that a title does not run, ask at most for the exact title and whether it is a CD or floppy release.
+5. A title name is enough to identify the media. Do not ask for the image format, whether it is a CD or floppy release, or the `Machine` settings.
 
 ### Phase 4: Missing Information
 
-Most reports can be investigated as written. Add `needs info` and post a clarification comment only when the issue cannot be investigated without the answer.
+Ask only for facts the maintainer would otherwise request in the first reply. Add `needs info` and post a clarification comment only when one of them is missing.
 
-1. Ask only when the report is empty or unclear, does not name the affected title when one is needed, or does not describe the symptom.
-2. Do not ask for the Geartowns version, desktop vs RetroArch/libretro, host platform, image hash, or dump status by default. Ask for one of them only when the report suggests it changes the outcome, such as behavior that differs between frontends or platforms, or a likely bad dump.
-3. Never ask for a fact the report already provides in any wording. An operating system counts as the platform, an app or core name counts as the frontend, and imprecise values such as `latest` count as provided.
-4. Ask at most two questions, each for exactly one missing fact. Never request ROM/media uploads, complete logs or configurations, secrets, or sensitive paths.
-5. Add `needs info` alongside the primary label when the issue type is clear. Use it without a primary label only when the type cannot be determined.
+1. Ask only on `bug` reports or when the issue type cannot be determined. Never ask on `feature request`, `question`, `not a bug`, `wontfix`, or duplicate issues.
+2. If the report is empty or unclear, does not name the affected title when one is needed, or does not describe the symptom, ask for that first.
+3. For a bug in emulation or in a specific title, such as a crash, hang, black screen, failure to boot or load, or wrong graphics, audio, or input, ask for whichever of these facts the report does not provide, in this order:
+   - The Geartowns version and whether it is the desktop app or the RetroArch/libretro core, as one bullet. Ask only for the part that is missing.
+   - The log, only for crashes, hangs, black screens, and failures to start, boot, or load: the output printed when the desktop app is started from a terminal, or the RetroArch log for the core. Mention only the one that matches the frontend when the report names it.
+4. When a Phase 3 check names a fact that matters more for this report, ask for it first.
+5. For bugs outside emulation, such as builds, packages, the GUI, the debugger, or MCP, ask only for the version and the host platform, and only when the report suggests they matter, such as a crash on launch that does not name the operating system.
+6. Ask only for the facts listed in this phase or named in Phase 3. Never ask for:
+   - A fact the report already provides in any wording. An operating system counts as the platform, an app or core name counts as the frontend, a RetroArch mention counts as libretro, and imprecise values such as `latest` count as the version.
+   - The host platform for emulation bugs, unless the report suggests the behavior differs between platforms.
+   - The image hash, dump status, region, or revision, unless the symptoms point at a bad dump.
+   - Reproduction steps when the report says where the problem happens, expected behavior, how a difference was measured, or settings that Phase 3 does not name.
+   - Screenshots, videos, ROM or media uploads, configuration files, secrets, or sensitive paths.
+   - Anything the maintainer can check alone, such as whether a title is supported or how it behaves on real hardware.
+7. Ask at most two bullets. If nothing from this phase or Phase 3 is missing, post no comment.
+8. Add `needs info` alongside the primary label when asking. Use it without a primary label only when the type cannot be determined.
 
 ### Phase 5: Duplicate Detection
 

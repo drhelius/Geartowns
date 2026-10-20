@@ -46,7 +46,7 @@ Standard formats and the line pitch the BIOS modes use:
 | FD90h | Palette index |
 | FD92h/FD94h/FD96h | Palette blue, red, green |
 | FD98h-FD9Fh | FM-R digital palette (low 4 bits each); a write sets DPMD and does not change the displayed colors |
-| FDA0h | Read: bit 0 VSYNC, bit 1 HSYNC. Write: bits 3-2 layer 0 enable, bits 1-0 layer 1 enable |
+| FDA0h | Read: bit 0 VSYNC, bit 1 HSYNC (0 during the pulse). Write: bits 3-2 layer 0 enable, bits 1-0 layer 1 enable |
 | FDA2h | UG and HG, with readback on: the last FDA0h write, bits 3-0 |
 | FDA4h | UG and HG: bit 0 turns readback on for FDA2h, CFF88h, CFF99h, CFF9Ch-CFF9Eh; off at power-on |
 | FF81h-FF83h, FF94h-FF99h | FM-R plane mask, display page, access page, kanji ROM, ANK (aliases of CFF8xh/CFF9xh) |
@@ -136,7 +136,7 @@ In the front layer, index 0 (16 colors) or bit 15 (32K colors) lets the back lay
 
 The VSYNC interrupt is IRQ11 (vector 4Bh with the BIOS setup). It stays pending until a write to 05CAh, independent
 of the PIC EOI. The VSYNC and HSYNC levels are readable at FDA0h, at CFF86h (bit 2 VSYNC, bit 7 HSYNC, bit 4 always
-1) and in the FR status.
+1) and in the FR status. FDA0h bit 1 and CFF86h bit 7 read 0 during the HSYNC pulse, FR bit 1 reads 1.
 
 ---
 

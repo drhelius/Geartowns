@@ -146,7 +146,7 @@ second FM-R page (VRAM offset +20000h).
 | CFF82 | FF82h | Display: bits 5 and 2–0 visible planes C3 and C2–C0, bit 4 displayed page (write) |
 | CFF83 | FF83h | Access page, bit 4 |
 | CFF84 | FF84h | Light pen status, always 0 |
-| CFF86 | FF86h | Sync status: bit 7 HSYNC, bit 4 always 1, bit 2 VSYNC |
+| CFF86 | FF86h | Sync status: bit 7 HSYNC (0 during the pulse), bit 4 always 1, bit 2 VSYNC |
 | CFF94 | FF94h | Kanji ROM JIS code high (write); bit 7 = level 2 kanji present, always 1 (read) |
 | CFF95 | FF95h | Kanji ROM JIS code low (write); resets the glyph row |
 | CFF96 | FF96h | Glyph row, left byte (bits 15–8) |

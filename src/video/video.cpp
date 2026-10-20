@@ -210,7 +210,7 @@ u8 Video::Read(u16 port, u64 clocks)
         case 0xFDA0:
         {
             u8 status = GetSyncStatus(clocks);
-            return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x02 : 0x00);
+            return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x00 : 0x02);
         }
         case 0xFDA2:
         case 0xFDA4:
@@ -267,7 +267,7 @@ u8 Video::Peek(u16 port, u64 clocks) const
         case 0xFDA0:
         {
             u8 status = GetSyncStatus(clocks);
-            return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x02 : 0x00);
+            return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x00 : 0x02);
         }
         case 0xFDA2:
             return (Decodes(port) && m_state.crt_readback) ? (m_state.display_enable & 0x0F) : 0xFF;
@@ -838,7 +838,7 @@ u8 Video::ReadFMRRegister(u32 offset, bool peek)
         case 0x0F86:
         {
             u8 status = GetSyncStatus(m_scheduler->GetClocks());
-            return 0x10 | ((status & 0x04) != 0 ? 0x04 : 0x00) | ((status & 0x02) != 0 ? 0x80 : 0x00);
+            return 0x10 | ((status & 0x04) != 0 ? 0x04 : 0x00) | ((status & 0x02) != 0 ? 0x00 : 0x80);
         }
         case 0x0F88:
             if (!m_state.crt_readback)

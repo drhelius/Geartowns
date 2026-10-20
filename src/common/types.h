@@ -523,6 +523,7 @@ struct GT_Machine_Bus_Timing
     u16 mmio[2];
     u16 io[2];
     u16 io_free_write;
+    u16 segment_load[2];
     const GT_Machine_Port_Wait* port_waits;
 };
 

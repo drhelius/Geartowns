@@ -1149,7 +1149,7 @@ bool I386::OPCodes0F_POP_FS_GS()
     if (!ReadMemory(I386_SEGMENT_SS, old_stack, 16, *m_bus_context, value, true))
         return false;
 
-    if (!LoadSegment(segment, (u16)value, *m_bus_context))
+    if (!LoadSegment(segment, (u16)value, *m_bus_context, true))
         return false;
 
     if (old_stack_size == 32)

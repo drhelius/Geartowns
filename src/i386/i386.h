@@ -652,6 +652,7 @@ private:
         u32 string_read;
         u32 io[2];
         u32 io_free_write;
+        u32 segment_load[2];
         u32 acknowledge;
         BusPortWait io_blocks[GT_MACHINE_PORT_WAIT_BLOCKS];
     };
@@ -1021,7 +1022,7 @@ private:
     bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
         GT_Bus_Access_Context& context);
 
-    bool LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context);
+    bool LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context, bool pop = false);
     bool LoadRealSegment(int segment, u16 selector);
     bool LoadProtectedSegment(int segment, u16 selector, GT_Bus_Access_Context& context);
     bool ReadDescriptor(u16 selector, Descriptor& descriptor, GT_Bus_Access_Context& context, u8 fault_vector = 13);

@@ -79,24 +79,25 @@ const GT_Machine_Bus_Waits k_machine_bus_waits_dx_fast = { { 0, 0 }, { 0, 0 }, {
 
 // Port blocks slower than the generic wait, extra 1/256 clocks to read and to write, measured on a Marty
 // A write to a port the board doesn't decode ends sooner, as the io_free_write wait of the bus timing below
+// Protected-mode segment loads read a descriptor: MOV and LxS, then POP, which overlaps it. DX takes half the cycles
 const GT_Machine_Port_Wait k_machine_port_waits[GT_MACHINE_PORT_WAIT_BLOCKS] = { { 0x0060, 0x0060, { 748, 748 } },
     { 0x04C0, 0x04CC, { 2282, 2282 } }, { 0x04D8, 0x04DE, { 748, 811 } }, { 0xFD90, 0xFDA4, { 926, 994 } } };
 
 const GT_Machine_Bus_Timing k_machine_bus_sx = { GT_MACHINE_BUS_FIXED, &k_machine_bus_waits_sx, NULL,
     17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,
-    k_machine_port_waits };
+    { 1664, 461 }, k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_ug = { GT_MACHINE_BUS_SPEED_PORT, &k_machine_bus_waits_sx,
     &k_machine_bus_waits_sx_fast, 17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 },
-    { 1536, 1024 }, { 1649, 1308 }, 1068, k_machine_port_waits };
+    { 1536, 1024 }, { 1649, 1308 }, 1068, { 1664, 461 }, k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_dx = { GT_MACHINE_BUS_FIXED, &k_machine_bus_waits_dx, NULL,
     17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,
-    k_machine_port_waits };
+    { 832, 230 }, k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_10f = { GT_MACHINE_BUS_WAIT_PORTS, &k_machine_bus_waits_dx, NULL,
     17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,
-    k_machine_port_waits };
+    { 832, 230 }, k_machine_port_waits };
 const GT_Machine_Bus_Timing k_machine_bus_cx = { GT_MACHINE_BUS_SPEED_PORT, &k_machine_bus_waits_dx,
     &k_machine_bus_waits_dx_fast, 17, 145, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 },
-    { 1536, 1024 }, { 1649, 1308 }, 1068, k_machine_port_waits };
+    { 1536, 1024 }, { 1649, 1308 }, 1068, { 832, 230 }, k_machine_port_waits };
 
 const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
 {

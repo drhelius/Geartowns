@@ -113,6 +113,8 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
         }
 
         bus.io_free_write = ScaleBusWait(timing->io_free_write, cpu, model);
+        bus.segment_load[0] = ScaleBusWait(timing->segment_load[0], cpu, model);
+        bus.segment_load[1] = ScaleBusWait(timing->segment_load[1], cpu, model);
 
         for (int i = 0; i < GT_MACHINE_PORT_WAIT_BLOCKS; i++)
             bus.io_blocks[i].first = 0x10000;

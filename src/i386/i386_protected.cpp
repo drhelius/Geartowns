@@ -223,10 +223,14 @@ bool I386::SetDescriptorType(const Descriptor& descriptor, u8 type, GT_Bus_Acces
     return WriteLinear(descriptor.address + 5, 8, access, context, true);
 }
 
-bool I386::LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context)
+bool I386::LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context, bool pop)
 {
     if (m_state.execution_mode != I386_MODE_PROTECTED)
         return LoadRealSegment(segment, selector);
+
+    // The descriptor read, which a POP's stack read partly overlaps
+    if ((selector & 0xFFFC) != 0)
+        m_bus_fraction += (s32)m_bus.segment_load[pop ? 1 : 0];
 
     return LoadProtectedSegment(segment, selector, context);
 }

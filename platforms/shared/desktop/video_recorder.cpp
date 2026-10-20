@@ -37,6 +37,7 @@
 #define VIDEO_RECORDER_MAX_SEGMENTS 1024
 #define VIDEO_RECORDER_MAX_ENCODERS 8
 #define VIDEO_RECORDER_MAX_SLOTS (VIDEO_RECORDER_MAX_ENCODERS + 2)
+#define VIDEO_RECORDER_MAX_DIMENSION 16384
 
 #define AVIF_HASINDEX 0x00000010
 #define AVIF_ISINTERLEAVED 0x00000100
@@ -173,7 +174,8 @@ bool video_recorder_start(const char* path, int video_width, int video_height, d
     if (recording)
         video_recorder_stop();
 
-    if ((video_width <= 0) || (video_height <= 0) || (fps <= 0.0) || (audio_sample_rate <= 0))
+    if ((video_width <= 0) || (video_height <= 0) || (video_width > VIDEO_RECORDER_MAX_DIMENSION) ||
+        (video_height > VIDEO_RECORDER_MAX_DIMENSION) || (fps <= 0.0) || (audio_sample_rate <= 0))
         return false;
 
     open_ofstream_utf8(file, path, std::ios::out | std::ios::binary | std::ios::trunc);

@@ -652,6 +652,7 @@ private:
         u32 string_read;
         u32 io[2];
         u32 io_free_write;
+        u32 acknowledge;
         BusPortWait io_blocks[GT_MACHINE_PORT_WAIT_BLOCKS];
     };
 
@@ -1501,6 +1502,7 @@ static const u8 k_i386_tlb_dirty = 0x08;
 static const u32 k_i386_bus_queue = 16 << 8;
 static const u32 k_i386_bus_no_row = 0xFFFFFFFFU;
 static const u32 k_i386_bus_code_row = 0x7FFFFFFFU;
+static const u32 k_i386_bus_acknowledge_ns = 2000;
 
 enum I386_Bus_Pattern
 {

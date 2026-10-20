@@ -886,6 +886,10 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
 
     u64 clocks = k_i386_real_interrupt_entry_clocks;
 
+    // The PICs' two locked acknowledge cycles come before the gate, an NMI has none
+    if (line >= 0)
+        m_bus_fraction += (s32)m_bus.acknowledge;
+
     // The debugger sees which IRQ line supplied the vector
     m_external_line = line;
     bool entered = EnterInterrupt(vector, m_state.eip, context, false, false, 0, false, true, &clocks);

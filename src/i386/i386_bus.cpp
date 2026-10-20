@@ -94,6 +94,7 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
         bus.misalign = (u32)timing->misalign * 256;
         bus.string_row = ScaleBusWait(timing->string_row, cpu, model);
         bus.string_read = ScaleBusWait(timing->string_read, cpu, model);
+        bus.acknowledge = (u32)(((u64)k_i386_bus_acknowledge_ns * cpu * 65536 + 500000000) / 1000000000);
 
         for (int k = 0; k < 2; k++)
         {

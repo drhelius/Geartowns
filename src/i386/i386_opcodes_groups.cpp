@@ -454,7 +454,7 @@ INLINE bool I386::OPCodes_Near_Transfer_RM(int width, bool call)
     else if (!BranchTo(target, width))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -505,7 +505,7 @@ INLINE bool I386::OPCodes_Far_Transfer_Memory(int width, bool call)
     if (!FarTransfer((u16)selector, target, width))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 

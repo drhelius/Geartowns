@@ -285,6 +285,19 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
 
                     if (timed && (exit & k_dynarec_exit_prefetch) != 0)
                         m_bus_queue = MIN(m_bus_queue + components * m_bus_code_rate, k_i386_bus_queue);
+                    else if (timed)
+                    {
+                        // A taken transfer whose target the block couldn't see, as AddBusTransfer
+                        u32 add = 0;
+                        u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
+                        m_bus_queue = GetBusTransferLevel(linear, components, add);
+
+                        if ((exit & k_dynarec_exit_access) != 0)
+                            add += GetBusTransferRow(m_state.eip);
+
+                        m_bus_fraction += (s32)add;
+                        clocks += CarryBusTime();
+                    }
                 }
 
 #if !defined(GT_DISABLE_DISASSEMBLER)

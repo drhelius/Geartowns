@@ -643,6 +643,8 @@ private:
         u32 dram_far[2];
         u32 dram_near[2];
         u32 dram_change[2];
+        u32 transfer_row;
+        u32 store_load;
         u32 cycle[GT_BUS_CLASS_COUNT][2];
         u32 slow[GT_BUS_CLASS_COUNT][2];
         u32 fmr_word[2];
@@ -1000,8 +1002,13 @@ private:
     u8 GetBusPhysical(u32 linear, u32& physical) const;
     void UpdateBusCode(u8 bus_class, u32 code_base);
     u32 GetBusCodeRow(u32 eip, u32 length) const;
+    u32 GetBusCodeNeed(u32 next_eip, u32 length) const;
+    u32 GetTransferComponents();
+    u32 GetBusTransferLevel(u32 linear, u32 components, u32& add) const;
+    u32 GetBusTransferRow(u32 eip) const;
     void AddBusTime();
     void AddBusQueue(u32 data, bool transfer);
+    void AddBusTransfer(bool access);
     u32 AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& transfer);
     u32 AddBusAccess(u32 linear, u32 size, int write, u32 code_row);
     void AddBusStringElement();
@@ -1469,6 +1476,7 @@ private:
     bool m_bus_timed;
     u32 m_bus_queue;
     u32 m_bus_row;
+    u32 m_bus_components;
     s32 m_bus_fraction;
     u32 m_bus_cycle_counts[GT_BUS_CLASS_COUNT][2];
     const u8* m_bus_decoded_ports;
@@ -1502,6 +1510,7 @@ static const u8 k_i386_tlb_dirty = 0x08;
 
 static const u32 k_i386_bus_queue = 16 << 8;
 static const u32 k_i386_bus_no_row = 0xFFFFFFFFU;
+static const u32 k_i386_bus_row_stored = 0x80000000U;
 static const u32 k_i386_bus_code_row = 0x7FFFFFFFU;
 static const u32 k_i386_bus_acknowledge_ns = 2000;
 

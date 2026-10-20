@@ -499,6 +499,8 @@ struct GT_Machine_Bus_Waits
     u16 dram_far[2];
     u16 dram_near[2];
     u16 dram_change[2];
+    u16 dram_transfer;
+    u16 dram_store_load;
     u16 dram_cycle[2];
     u16 vram_cycle[2];
     u16 sprite_cycle[2];

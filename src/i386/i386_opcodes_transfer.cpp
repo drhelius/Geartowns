@@ -207,7 +207,7 @@ bool I386::OPCodes_CALL_Far()
     if (!FarTransfer((u16)m_instruction.immediate2, target, operand_width))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -382,7 +382,7 @@ bool I386::OPCodes_RET_Far()
     if (!FarTransfer((u16)selector, target, operand_width))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -492,15 +492,17 @@ bool I386::OPCodes_LOOP()
     else if (opcode == 0xE1)
         taken = taken && (m_state.eflags & I386_FLAG_ZF) != 0;
 
-    if (taken)
+    if (!taken)
     {
-        if (!BranchTo(m_instruction.next_eip + (s8)(u8)m_instruction.immediate, operand_width))
-            return false;
-    }
-    else
         CommitEIP(m_instruction);
+        m_step.clocks += GetNextInstructionComponents();
+        return true;
+    }
 
-    m_step.clocks += GetNextInstructionComponents();
+    if (!BranchTo(m_instruction.next_eip + (s8)(u8)m_instruction.immediate, operand_width))
+        return false;
+
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -519,7 +521,7 @@ bool I386::OPCodes_JCXZ()
         if (!BranchTo(m_instruction.next_eip + (s8)(u8)m_instruction.immediate, operand_width))
             return false;
 
-        m_step.clocks += GetNextInstructionComponents();
+        m_step.clocks += GetTransferComponents();
     }
     else
     {
@@ -541,7 +543,7 @@ bool I386::OPCodes_JMP_Near()
     if (!BranchTo(target, operand_width))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -559,7 +561,7 @@ bool I386::OPCodes_JMP_Far()
     if (!FarTransfer((u16)m_instruction.immediate2, m_instruction.immediate, operand_width, true))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -573,6 +575,6 @@ bool I386::OPCodes_JMP_Short()
     if (!BranchTo(m_instruction.next_eip + (s8)(u8)m_instruction.immediate, operand_width))
         return false;
 
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }

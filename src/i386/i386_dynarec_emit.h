@@ -31,9 +31,10 @@ static const u8 k_dynarec_key_default32 = 0x01;
 static const u8 k_dynarec_key_paging = 0x02;
 static const u8 k_dynarec_key_stack32 = 0x04;
 
-// Blocks leave to the dispatcher with these flags: the m clocks of a transfer to count, a return for the debugger
-// call stack, an exit at the natural end of the block and a static exit the dispatcher can link
+// Blocks leave to the dispatcher with these flags: a transfer's m clocks to count and its data access, a return for
+// the debugger call stack, an exit at the natural end of the block and a static exit the dispatcher can link
 static const u32 k_dynarec_exit_transfer = 0x01;
+static const u32 k_dynarec_exit_access = 0x02;
 static const u32 k_dynarec_exit_return = 0x04;
 static const u32 k_dynarec_exit_end = 0x08;
 static const u32 k_dynarec_exit_link = 0x10;
@@ -61,7 +62,9 @@ private:
         u32 low;
         u32 high;
         u32 add;
+        u32 target;
         bool transfer;
+        bool access;
     };
 
     struct Instruction
@@ -77,6 +80,10 @@ private:
         u32 before;
         u32 next_check;
         u32 bus_code_row;
+        u32 transfer_target;
+        u32 transfer_level;
+        u32 transfer_add;
+        bool transfer_known;
         BusRun bus_before;
         BusRun bus_after;
         BusRun bus_taken;
@@ -95,11 +102,14 @@ private:
     void ComputeLiveness();
 
     void ComputeBus();
+    void ComputeBusTransfer(Instruction& instruction);
+    bool GetStaticTarget(const I386::InstructionContext& c, u32& target) const;
     BusRun AppendBus(const BusRun& run, const Instruction& instruction, bool transfer) const;
     static u32 StepBusLevel(u32 level, s32 step, u32 prefetch);
     static u32 GetBusStall(const BusRun& run, u32 level);
     static u32 GetBusLevel(const BusRun& run, u32 level);
     void EmitBusRun(const BusRun& run, int carry);
+    void EmitBusTransferRow(u32 target);
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access);
 
     void EmitBlock();

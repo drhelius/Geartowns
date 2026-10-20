@@ -126,8 +126,14 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
         u32 code = code_row & k_i386_bus_code_row;
         bool far_row = code != k_i386_bus_code_row && row != code;
         penalty += (s32)(far_row ? m_bus.dram_far[write] >> (code_row >> 31) : m_bus.dram_near[write]);
-        penalty += row != m_bus_row ? (s32)m_bus.dram_change[write] : 0;
-        m_bus_row = row;
+
+        // The stored bit marks a 2-cycle store, which a load right after it in its row overlaps
+        if (row != (m_bus_row & ~k_i386_bus_row_stored))
+            penalty += (s32)m_bus.dram_change[write];
+        else if (write == 0 && m_bus_row != row && far_row)
+            penalty -= (s32)m_bus.store_load;
+
+        m_bus_row = row | (write != 0 && cycles > 1 && m_bus.store_load != 0 ? k_i386_bus_row_stored : 0);
     }
 
     m_bus_cycle_counts[bus_class][write] += cycles;
@@ -140,6 +146,21 @@ INLINE u32 I386::GetBusCodeRow(u32 eip, u32 length) const
 {
     u32 row = m_bus_code_dram ? ((eip + m_bus_code_base) >> 10) & k_i386_bus_code_row : k_i386_bus_code_row;
     return row | (length == 1 ? 0x80000000U : 0);
+}
+
+INLINE u32 I386::GetBusCodeNeed(u32 next_eip, u32 length) const
+{
+    // Code comes in dwords: the instruction waits for the whole dword holding its last byte
+    // Its other bytes in that dword then take a decode clock each, while the queue goes on filling
+    u32 last = next_eip - 1 + m_bus_code_base;
+    u32 decode = MIN(length, (last & 3) + 1) - 1;
+    return ((length + (~last & 3)) << 8) + decode * m_bus_code_rate;
+}
+
+INLINE u32 I386::GetTransferComponents()
+{
+    m_bus_components = GetNextInstructionComponents();
+    return m_bus_components;
 }
 
 INLINE u32 I386::CarryBusTime()
@@ -223,24 +244,21 @@ INLINE void I386::AddBusQueue(u32 data, bool transfer)
     u32 clocks = (u32)m_step.clocks;
     u32 accesses = data & 0xFF;
     u32 cycles = data >> 8;
-    u32 length = (c.next_eip - c.start_eip) << 8;
+    u32 length = c.next_eip - c.start_eip;
+    u32 need = GetBusCodeNeed(c.next_eip, length);
     u32 free = clocks > accesses * 2 ? clocks - accesses * 2 : 0;
     s32 add = (s32)(cycles * m_bus.cycle_refresh + ((cycles - accesses) << 17));
 
     u32 queue = m_bus_queue;
-    u32 stall = length > queue ? length - queue : 0;
+    u32 stall = need > queue ? need - queue : 0;
     add += (s32)(stall * m_bus_code_cost);
-    queue += stall + free * m_bus_code_rate - length;
+    queue += stall + free * m_bus_code_rate - (length << 8);
 
     m_bus_queue = MIN(queue, k_i386_bus_queue);
     m_bus_fraction += add;
 
     if (transfer)
-    {
-        m_bus_queue = 0;
-        m_bus_fraction += (s32)m_bus.refill;
-        m_step.clocks += CarryBusTime();
-    }
+        AddBusTransfer(accesses != 0);
 }
 
 INLINE u32 I386::GetBusPending() const

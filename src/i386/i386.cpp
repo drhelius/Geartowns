@@ -242,6 +242,7 @@ void I386::Reset()
     m_fetch_remaining = 0;
     m_bus_queue = 0;
     m_bus_row = k_i386_bus_no_row;
+    m_bus_components = 0;
     m_bus_fraction = 0;
     UpdateBusCode(GT_BUS_NONE, 0);
 
@@ -963,6 +964,7 @@ void I386::LoadState(std::istream& stream, int version)
     StateSerializer serializer(stream);
     m_bus_queue = 0;
     m_bus_row = k_i386_bus_no_row;
+    m_bus_components = 0;
     m_bus_fraction = 0;
     Serialize(serializer, version);
     m_state.cr0 = (m_state.cr0 & 0x8000001FU) | m_cr0_fixed;

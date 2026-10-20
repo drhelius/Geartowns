@@ -112,6 +112,8 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
             bus.io[k] = ScaleBusWait(timing->io[k], cpu, model);
         }
 
+        bus.transfer_row = ScaleBusWait(waits->dram_transfer, cpu, model);
+        bus.store_load = ScaleBusWait(waits->dram_store_load, cpu, model);
         bus.io_free_write = ScaleBusWait(timing->io_free_write, cpu, model);
         bus.segment_load[0] = ScaleBusWait(timing->segment_load[0], cpu, model);
         bus.segment_load[1] = ScaleBusWait(timing->segment_load[1], cpu, model);
@@ -179,6 +181,47 @@ void I386::UpdateBusCode(u8 bus_class, u32 code_base)
     m_bus_code_base = code_base;
     m_bus_code_cost = m_bus.code_cost[bus_class];
     m_bus_code_rate = m_bus.code_rate[bus_class];
+}
+
+u32 I386::GetBusTransferLevel(u32 linear, u32 components, u32& add) const
+{
+    // The fetch restarts at the target's fetch unit, so the bytes before the target cost their time
+    // The m clocks of the transfer prefetch from there
+    u32 level = components * m_bus_code_rate;
+    u32 skipped = (linear & (m_bus.width - 1)) << 8;
+
+    if (level >= skipped)
+    {
+        add = 0;
+        return MIN(level - skipped, k_i386_bus_queue);
+    }
+
+    add = (skipped - level) * m_bus_code_cost;
+    return 0;
+}
+
+u32 I386::GetBusTransferRow(u32 eip) const
+{
+    u32 physical = eip + m_bus_code_base;
+
+    if (m_bus.transfer_row == 0 || m_bus_page_class[physical >> 12] != GT_BUS_DRAM ||
+        (physical >> 10) == (m_bus_row & ~k_i386_bus_row_stored))
+        return 0;
+
+    return m_bus.transfer_row;
+}
+
+NO_INLINE void I386::AddBusTransfer(bool access)
+{
+    u32 add = 0;
+    m_bus_queue = GetBusTransferLevel(m_state.segments[I386_SEGMENT_CS].base + m_state.eip, m_bus_components, add);
+    m_bus_components = 0;
+
+    if (access)
+        add += GetBusTransferRow(m_state.eip);
+
+    m_bus_fraction += (s32)(m_bus.refill + add);
+    m_step.clocks += CarryBusTime();
 }
 
 NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& transfer)
@@ -421,7 +464,7 @@ u32 I386::AddBusStringAccess(u32 linear, u32 size, int write, bool load)
     {
         u32 row = physical >> 10;
 
-        if (row != m_bus_row)
+        if (row != (m_bus_row & ~k_i386_bus_row_stored))
             penalty += (s32)m_bus.string_row;
 
         if (load)
@@ -453,7 +496,10 @@ void I386::AddBusInterrupt(u64& clocks, bool error_code)
 
     bool real = m_state.execution_mode == I386_MODE_REAL;
     AddBusTransferAccesses(real ? 1 : 4, error_code ? 4 : 3, real ? 2 : 4);
+
+    // Nothing from the code window: the dynarec's block lookup may have moved it before the interrupt
     m_bus_queue = 0;
+    m_bus_components = 0;
     m_bus_fraction += (s32)m_bus.refill;
     clocks += CarryBusTime();
 }
@@ -563,7 +609,7 @@ u32 I386::LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool m
     while (low < high)
     {
         u32 middle = low + (high - low) / 2;
-        u32 row = m_bus_row;
+        u32 row = m_bus_row & ~k_i386_bus_row_stored;
         u64 fraction = (u32)m_bus_fraction + GetBusRepeatTime(repeat, middle) +
             (u64)CountBusRepeatChanges(repeat, middle, size, move, reverse, row) * m_bus.string_row;
         u64 clocks = (u64)middle * iteration + (fraction >> 16);
@@ -579,7 +625,7 @@ u32 I386::LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool m
 
 u32 I386::AddBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse)
 {
-    u32 row = m_bus_row;
+    u32 row = m_bus_row & ~k_i386_bus_row_stored;
     u64 total = GetBusRepeatTime(repeat, elements) +
         (u64)CountBusRepeatChanges(repeat, elements, size, move, reverse, row) * m_bus.string_row +
         (u32)m_bus_fraction;

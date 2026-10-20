@@ -78,7 +78,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         m_state.segments[I386_SEGMENT_CS].dpl = m_state.current_privilege_level;
         m_state.eip = target;
         m_state.repeat.active = false;
-        clocks += GetNextInstructionComponents();
+        clocks += GetTransferComponents();
         return true;
     }
 
@@ -310,7 +310,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
     m_state.segments[I386_SEGMENT_CS].dpl = m_state.current_privilege_level;
     m_state.eip = gate32 ? target : (u16)target;
     m_state.repeat.active = false;
-    clocks += GetNextInstructionComponents();
+    clocks += GetTransferComponents();
     return true;
 }
 
@@ -445,7 +445,7 @@ bool I386::ProtectedFarReturn(int width, u16 adjustment, GT_Bus_Access_Context& 
     m_state.eip = checked_target;
 
     if (same_privilege)
-        clocks += GetNextInstructionComponents();
+        clocks += GetTransferComponents();
 
     return true;
 }

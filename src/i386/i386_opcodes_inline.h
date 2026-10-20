@@ -312,7 +312,7 @@ INLINE bool I386::OPCodes_Jcc()
         if (!BranchTo(target, width))
             return false;
 
-        m_step.clocks += GetNextInstructionComponents();
+        m_step.clocks += GetTransferComponents();
     }
     else
         CommitEIP(m_instruction);
@@ -384,7 +384,7 @@ INLINE bool I386::OPCodes_CALL_Near()
         return false;
 
     m_state.eip = target;
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 
@@ -415,7 +415,7 @@ INLINE bool I386::OPCodes_RET_Near()
         m_state.registers[I386_REG_ESP].low = (u16)stack;
 
     m_state.eip = target;
-    m_step.clocks += GetNextInstructionComponents();
+    m_step.clocks += GetTransferComponents();
     return true;
 }
 

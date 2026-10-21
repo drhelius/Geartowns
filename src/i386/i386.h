@@ -974,7 +974,7 @@ private:
         char* reason, size_t reason_size) const;
     bool ReadPhysical32Passive(u32 physical, u32& value) const;
     const I386_Segment* FindSegment(u16 selector) const;
-    static bool IsValidSegmentOffset(const I386_Segment& segment, u32 offset, bool null_unusable);
+    static bool IsValidSegmentOffset(const I386_Segment& segment, u32 offset);
 
     int FindTLBWay(u32 set, u32 linear_page) const;
     const TLBEntry* FindTLBHost(u32 linear, bool write);

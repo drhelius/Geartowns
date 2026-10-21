@@ -321,10 +321,6 @@ void I386::ValidateDataSegmentsForPrivilege(u8 privilege)
     for (int i = 0; i < 4; i++)
     {
         I386_Segment& segment = m_state.segments[k_data_segments[i]];
-
-        if ((segment.selector & 0xFFFC) == 0)
-            continue;
-
         bool executable = (segment.attributes & I386_SEGMENT_EXECUTABLE) != 0;
         bool conforming = (segment.attributes & I386_SEGMENT_CONFORMING) != 0;
         bool readable = (segment.attributes & I386_SEGMENT_READABLE) != 0;

@@ -88,8 +88,7 @@ void I386::UpdateSegmentFastPath(int index)
             if ((segment.attributes & I386_SEGMENT_EXPAND_DOWN) == 0)
                 m_read_limits[index] = m_write_limits[index] = segment.limit;
         }
-        else if ((segment.selector & 0xFFFC) != 0 &&
-            (segment.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
+        else if ((segment.attributes & (I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN)) == 0)
         {
             if (!executable || (segment.attributes & I386_SEGMENT_READABLE) != 0)
                 m_read_limits[index] = segment.limit;
@@ -102,8 +101,7 @@ void I386::UpdateSegmentFastPath(int index)
     u8 access_flags = 0;
     u16 flat_mask = I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN;
 
-    if ((segment.selector & 0xFFFC) != 0 && (segment.attributes & flat_mask) == I386_SEGMENT_PRESENT &&
-        segment.base == 0 && segment.limit == 0xFFFFFFFFU)
+    if ((segment.attributes & flat_mask) == I386_SEGMENT_PRESENT && segment.base == 0 && segment.limit == 0xFFFFFFFFU)
     {
         if (!executable || (segment.attributes & I386_SEGMENT_READABLE) != 0)
             access_flags |= k_i386_segment_fast_read;
@@ -142,7 +140,8 @@ bool I386::LogicalToLinearProtected(int segment, u32 offset, u32 size, bool writ
     const I386_Segment& state = m_state.segments[segment];
     u8 fault = stack || segment == I386_SEGMENT_SS ? 12 : 13;
 
-    if ((state.attributes & I386_SEGMENT_PRESENT) == 0 || (!execute && (state.selector & 0xFFFC) == 0))
+    // Only a protected-mode null load leaves the cache unusable: a null selector loaded in real mode works after PE
+    if ((state.attributes & I386_SEGMENT_PRESENT) == 0)
         return RaiseException(fault, I386_EXCEPTION_FAULT, true, 0);
 
     if (!execute)
@@ -882,7 +881,7 @@ bool I386::TryPeekLogical(I386_Segment_Register segment, u32 offset, u8& value) 
 
     const I386_Segment& state = m_state.segments[segment];
 
-    if (!IsValidSegmentOffset(state, offset, m_state.execution_mode == I386_MODE_PROTECTED))
+    if (!IsValidSegmentOffset(state, offset))
         return false;
 
     return TryPeekLinear(state.base + offset, value);
@@ -892,7 +891,7 @@ bool I386::TryPeekLogical(u16 selector, u32 offset, u8& value) const
 {
     const I386_Segment* state = FindSegment(selector);
 
-    if (!IsValidPointer(state) || !IsValidSegmentOffset(*state, offset, m_state.execution_mode == I386_MODE_PROTECTED))
+    if (!IsValidPointer(state) || !IsValidSegmentOffset(*state, offset))
         return false;
 
     return TryPeekLinear(state->base + offset, value);
@@ -1015,7 +1014,7 @@ bool I386::DebugTranslateLogical(I386_Segment_Register segment, u32 offset,
     translation.offset = offset;
     translation.segment_base = state.base;
     translation.segment_limit = state.limit;
-    translation.logical_valid = IsValidSegmentOffset(state, offset, m_state.execution_mode == I386_MODE_PROTECTED);
+    translation.logical_valid = IsValidSegmentOffset(state, offset);
 
     if (!translation.logical_valid)
     {
@@ -1042,7 +1041,7 @@ bool I386::DebugTranslateLogical(u16 selector, u32 offset, GT_Debug_Memory_Trans
     translation.offset = offset;
     translation.segment_base = state->base;
     translation.segment_limit = state->limit;
-    translation.logical_valid = IsValidSegmentOffset(*state, offset, m_state.execution_mode == I386_MODE_PROTECTED);
+    translation.logical_valid = IsValidSegmentOffset(*state, offset);
 
     if (!translation.logical_valid)
     {
@@ -1055,9 +1054,9 @@ bool I386::DebugTranslateLogical(u16 selector, u32 offset, GT_Debug_Memory_Trans
     return DebugTranslateLinear(translation.linear, translation);
 }
 
-bool I386::IsValidSegmentOffset(const I386_Segment& segment, u32 offset, bool null_unusable)
+bool I386::IsValidSegmentOffset(const I386_Segment& segment, u32 offset)
 {
-    if ((segment.attributes & I386_SEGMENT_PRESENT) == 0 || (null_unusable && (segment.selector & 0xFFFC) == 0))
+    if ((segment.attributes & I386_SEGMENT_PRESENT) == 0)
         return false;
 
     if ((segment.attributes & I386_SEGMENT_EXPAND_DOWN) != 0)

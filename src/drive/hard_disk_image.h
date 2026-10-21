@@ -26,6 +26,13 @@
 
 class MediaFile;
 
+struct HardDiskJournalEntry
+{
+    u64 write;
+    u32 lba;
+    u8 data[512];
+};
+
 class HardDiskImage
 {
 public:
@@ -43,7 +50,17 @@ public:
     bool Flush();
     u32 GetUnflushedBlocks() const;
     u32 GetWriteCount() const;
+    u64 GetSession() const;
+    u64 GetLastWrite() const;
+    bool Restore(u64 session, u64 write);
     static bool Create(const char* path, u64 size);
+
+private:
+    void StoreBlock(u32 lba, const u8* buffer);
+    bool Undo(u64 write);
+    bool Redo(u64 write);
+    void Journal(u32 lba, const u8* data, u64 write);
+    void ClearJournal();
 
 private:
     MediaFile* m_file;
@@ -56,8 +73,17 @@ private:
     u32 m_overlay_blocks;
     u32 m_write_count;
     bool m_flush_failed;
+    u64 m_session;
+    u64 m_next_write;
+    u64 m_last_write;
+    u64 m_journal_base;
+    std::vector<HardDiskJournalEntry> m_journal;
+    u32 m_journal_start;
+    u32 m_journal_count;
+    std::vector<HardDiskJournalEntry> m_redo;
 };
 
 static const u32 k_hard_disk_block_size = 512;
+static const u32 k_hard_disk_journal_entries = (32 * 1024 * 1024) / sizeof(HardDiskJournalEntry);
 
 #endif /* HARD_DISK_IMAGE_H */

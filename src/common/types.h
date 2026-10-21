@@ -614,6 +614,10 @@ struct GT_SaveState_Media
     u32 floppy_crc[GT_MAX_FLOPPY_DRIVES];
     bool cdrom_inserted;
     u32 cdrom_crc;
+    bool hard_disk_attached[GT_MAX_HARD_DISKS];
+    u32 hard_disk_blocks[GT_MAX_HARD_DISKS];
+    u64 hard_disk_session[GT_MAX_HARD_DISKS];
+    u64 hard_disk_write[GT_MAX_HARD_DISKS];
 };
 
 struct GT_SaveState_Screenshot

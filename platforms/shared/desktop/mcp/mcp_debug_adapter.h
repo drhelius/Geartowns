@@ -334,6 +334,7 @@ private:
         std::string& error);
     const char* GetSymbolAt(u32 linear);
     std::string FormatLogical(u16 selector, u32 offset, u32 linear);
+    void AddHardDiskStateChanges(json& result);
 
 private:
     GeartownsCore* m_core;

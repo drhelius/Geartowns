@@ -595,7 +595,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`
 - `list_save_state_slots` - List all 5 save state slots with information (media name, timestamp, validity)
 - `save_state` - Save emulator state, with the current frame, to the selected slot, to `slot` (1-5, which becomes the selected one) or to an absolute `file_path`
-- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`. It puts the saved frame back on screen without running the machine; `frame_restored` is false when the state has no frame or the screen size changed
+- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`. It puts the saved frame back on screen without running the machine; `frame_restored` is false when the state has no frame or the screen size changed. Hard disk writes made since the state are undone; `hard_disks_changed` lists the SCSI IDs where that wasn't possible
 - `get_rewind_status` - Get rewind buffer status (enabled, snapshots, capacity, buffered seconds)
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 

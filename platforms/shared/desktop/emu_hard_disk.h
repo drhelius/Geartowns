@@ -53,6 +53,8 @@ EXTERN void emu_hard_disk_update(void);
 EXTERN bool emu_hard_disk_take_flush_error(void);
 EXTERN bool emu_hard_disk_get_info(int id, Emu_HardDiskInfo* info);
 EXTERN const char* emu_hard_disk_get_content_path(void);
+EXTERN void emu_hard_disk_state_loaded(bool rewind);
+EXTERN u32 emu_hard_disk_take_state_changes(void);
 
 #undef EMU_HARD_DISK_IMPORT
 #undef EXTERN

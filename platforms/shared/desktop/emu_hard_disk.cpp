@@ -32,6 +32,8 @@ static u32 write_count = 0;
 static int idle_frames = 0;
 static bool flush_failed = false;
 static bool flush_error = false;
+static u32 state_changes = 0;
+static bool rewind_changed = false;
 
 static bool valid_id(int id);
 static void set_config(int id, const char* path, bool write_protected);
@@ -209,6 +211,23 @@ const char* emu_hard_disk_get_content_path(void)
     }
 
     return "";
+}
+
+void emu_hard_disk_state_loaded(bool rewind)
+{
+    u32 changes = emu_get_core()->GetHardDiskStateChanges();
+
+    if (!rewind || !rewind_changed)
+        state_changes |= changes;
+
+    rewind_changed = rewind && (changes != 0);
+}
+
+u32 emu_hard_disk_take_state_changes(void)
+{
+    u32 changes = state_changes;
+    state_changes = 0;
+    return changes;
 }
 
 static bool valid_id(int id)

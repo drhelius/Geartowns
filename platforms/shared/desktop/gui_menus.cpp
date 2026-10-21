@@ -2528,7 +2528,7 @@ static void draw_savestate_slot_info(int slot)
     if (slot < 0 || slot >= 5)
         return;
 
-    if (emu_savestates[slot].rom_name[0] != 0)
+    if (emu_savestates[slot].magic == GT_SAVESTATE_MAGIC)
     {
         if (emu_savestates[slot].version < GT_SAVESTATE_MIN_VERSION || emu_savestates[slot].version > GT_SAVESTATE_VERSION)
         {

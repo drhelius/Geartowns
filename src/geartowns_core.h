@@ -116,6 +116,7 @@ public:
     bool IsHardDiskPending(int id) const;
     const char* GetPendingHardDiskPath(int id) const;
     bool IsPendingHardDiskWriteProtected(int id) const;
+    u32 GetHardDiskStateChanges() const;
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
@@ -197,7 +198,7 @@ private:
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
     bool LoadState(std::istream& stream, GT_SaveState_Media* media = NULL);
     void Serialize(StateSerializer& serializer, GT_Machine_Config& config, int version);
-    void SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media);
+    void SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version);
     void SanitizeMachineConfig(GT_Machine_Config& config);
     std::string GetSaveStatePath(const char* path, int index);
 
@@ -238,6 +239,7 @@ private:
     std::string m_hard_disk_paths[GT_MAX_HARD_DISKS];
     bool m_hard_disk_write_protected[GT_MAX_HARD_DISKS];
     bool m_hard_disk_pending[GT_MAX_HARD_DISKS];
+    u32 m_hard_disk_state_changes;
     bool m_powered;
     bool m_paused;
     GT_Debug_Step m_debug_step;

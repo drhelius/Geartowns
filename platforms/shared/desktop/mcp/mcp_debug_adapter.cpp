@@ -4697,7 +4697,7 @@ json DebugAdapter::ListSaveStateSlots()
         json slot;
         slot["slot"] = i + 1;
 
-        if (emu_savestates[i].rom_name[0] != 0)
+        if (emu_savestates[i].magic == GT_SAVESTATE_MAGIC)
         {
             slot["rom_name"] = emu_savestates[i].rom_name;
             slot["timestamp"] = emu_savestates[i].timestamp;
@@ -4778,7 +4778,7 @@ json DebugAdapter::LoadState()
 
     update_savestates_data();
 
-    if (emu_savestates[config_emulator.save_slot].rom_name[0] == 0)
+    if (emu_savestates[config_emulator.save_slot].magic != GT_SAVESTATE_MAGIC)
     {
         result["error"] = "Save state slot is empty";
         Log("[MCP] LoadState failed: Slot %d is empty", slot);
@@ -4795,6 +4795,7 @@ json DebugAdapter::LoadState()
     result["success"] = true;
     result["slot"] = slot;
     result["frame_restored"] = !emu_frame_stale;
+    AddHardDiskStateChanges(result);
 
     return result;
 }
@@ -4858,8 +4859,27 @@ json DebugAdapter::LoadStateFile(const std::string& file_path)
     result["success"] = true;
     result["file_path"] = file_path;
     result["frame_restored"] = !emu_frame_stale;
+    AddHardDiskStateChanges(result);
 
     return result;
+}
+
+void DebugAdapter::AddHardDiskStateChanges(json& result)
+{
+    u32 changes = m_core->GetHardDiskStateChanges();
+
+    if (changes == 0)
+        return;
+
+    json ids = json::array();
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        if ((changes & (1 << i)) != 0)
+            ids.push_back(i);
+    }
+
+    result["hard_disks_changed"] = ids;
 }
 
 u16 DebugAdapter::ButtonMask(const std::string& button) const
@@ -5485,6 +5505,7 @@ json DebugAdapter::RewindSeek(int snapshot)
     result["cs"] = Hex(state.segment[I386_SEGMENT_CS].selector, 4);
     result["eip"] = Hex32(state.eip);
     result["linear_pc"] = Hex32(cpu->GetCurrentLinearPC());
+    AddHardDiskStateChanges(result);
     return result;
 }
 

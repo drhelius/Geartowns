@@ -99,6 +99,24 @@ void gui_hard_disks_update(void)
 {
     if (emu_hard_disk_take_flush_error())
         gui_notify(gui_NotificationError, NULL, "Unable to save the hard disk changes", "They are kept and retried");
+
+    u32 changes = emu_hard_disk_take_state_changes();
+
+    if (changes == 0)
+        return;
+
+    std::string ids;
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        if ((changes & (1 << i)) == 0)
+            continue;
+
+        ids += ids.empty() ? "SCSI ID " : ", ";
+        ids += (char)('0' + i);
+    }
+
+    gui_notify(gui_NotificationWarning, ICON_MD_STORAGE, "The hard disk changed since this state", ids.c_str());
 }
 
 bool gui_hard_disks_load(const char* path)

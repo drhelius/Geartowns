@@ -91,6 +91,7 @@ GeartownsCore::GeartownsCore()
         m_hard_disk_pending[i] = false;
     }
 
+    m_hard_disk_state_changes = 0;
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
@@ -1033,6 +1034,11 @@ bool GeartownsCore::IsPendingHardDiskWriteProtected(int id) const
     return IsHardDiskPending(id) && m_hard_disk_write_protected[id];
 }
 
+u32 GeartownsCore::GetHardDiskStateChanges() const
+{
+    return m_hard_disk_state_changes;
+}
+
 HardDiskImage* GeartownsCore::GetHardDisk(int id)
 {
     return (IsValidPointer(m_scsi) && (id >= 0) && (id < GT_MAX_HARD_DISKS)) ? m_scsi->GetDisk(id)->GetImage() : NULL;
@@ -1199,7 +1205,17 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
 
     state_media.cdrom_inserted = m_media->IsReady();
     state_media.cdrom_crc = m_media->GetCRC();
-    SerializeMedia(serializer, state_media);
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        const HardDiskImage* image = m_scsi->GetDisk(i)->GetImage();
+        state_media.hard_disk_attached[i] = m_scsi->GetDisk(i)->IsAttached();
+        state_media.hard_disk_blocks[i] = image->GetBlocks();
+        state_media.hard_disk_session[i] = image->GetSession();
+        state_media.hard_disk_write[i] = image->GetLastWrite();
+    }
+
+    SerializeMedia(serializer, state_media, GT_SAVESTATE_VERSION);
 
     m_scheduler->SaveState(stream);
     m_memory->SaveState(stream);
@@ -1443,7 +1459,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     }
 
     GT_SaveState_Media state_media = {};
-    SerializeMedia(serializer, state_media);
+    SerializeMedia(serializer, state_media, header.version);
 
     if (stream.fail())
     {
@@ -1478,6 +1494,18 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
         return false;
     }
 
+    for (int i = 0; (header.version >= 16) && (i < GT_MAX_HARD_DISKS); i++)
+    {
+        ScsiDisk* disk = m_scsi->GetDisk(i);
+
+        if ((state_media.hard_disk_attached[i] != disk->IsAttached()) ||
+            (disk->IsAttached() && (state_media.hard_disk_blocks[i] != disk->GetImage()->GetBlocks())))
+        {
+            Error("Save state is for another hard disk on SCSI ID %d", i);
+            return false;
+        }
+    }
+
     m_scheduler->LoadState(stream);
     m_memory->LoadState(stream, header.version);
     m_i386->LoadState(stream, header.version);
@@ -1499,6 +1527,17 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     {
         Error("Failed to unserialize save state");
         return false;
+    }
+
+    m_hard_disk_state_changes = 0;
+
+    for (int i = 0; (header.version >= 16) && (i < GT_MAX_HARD_DISKS); i++)
+    {
+        HardDiskImage* image = m_scsi->GetDisk(i)->GetImage();
+
+        if (state_media.hard_disk_attached[i] &&
+            !image->Restore(state_media.hard_disk_session[i], state_media.hard_disk_write[i]))
+            m_hard_disk_state_changes |= 1 << i;
     }
 
     ApplyBusTiming();
@@ -1647,7 +1686,7 @@ void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& co
         G_SERIALIZE(serializer, config.scsi);
 }
 
-void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media)
+void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version)
 {
     for (int i = 0; i < FDC_DRIVES; i++)
     {
@@ -1657,6 +1696,17 @@ void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Med
 
     G_SERIALIZE(serializer, media.cdrom_inserted);
     G_SERIALIZE(serializer, media.cdrom_crc);
+
+    if (version < 16)
+        return;
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        G_SERIALIZE(serializer, media.hard_disk_attached[i]);
+        G_SERIALIZE(serializer, media.hard_disk_blocks[i]);
+        G_SERIALIZE(serializer, media.hard_disk_session[i]);
+        G_SERIALIZE(serializer, media.hard_disk_write[i]);
+    }
 }
 
 void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)

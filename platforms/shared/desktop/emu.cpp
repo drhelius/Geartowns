@@ -890,6 +890,7 @@ bool emu_load_state_slot(int index)
 
     restore_state_frame(dir, index);
     emu_floppy_reconcile();
+    emu_hard_disk_state_loaded(false);
     emu_debug_state_restored();
     events_sync_input();
     rewind_reset();
@@ -911,6 +912,7 @@ bool emu_load_state_file(const char* file_path)
 
     restore_state_frame(file_path, -1);
     emu_floppy_reconcile();
+    emu_hard_disk_state_loaded(false);
     emu_debug_state_restored();
     events_sync_input();
     rewind_reset();
@@ -932,6 +934,7 @@ void update_savestates_data(void)
 
     for (int i = 0; i < 5; i++)
     {
+        emu_savestates[i].magic = 0;
         emu_savestates[i].rom_name[0] = 0;
         SafeDeleteArray(emu_savestates_screenshots[i].data);
         emu_savestates_screenshots[i].width = 0;
@@ -1889,6 +1892,10 @@ static bool get_floppy_state_path(int index, char* path, size_t path_size)
 
     const char* content = emu_floppy_get_content_path();
     char directory[GT_MAX_PATH];
+
+    if (content[0] == '\0')
+        content = emu_hard_disk_get_content_path();
+
     char name[GT_MAX_PATH];
     char file_name[GT_MAX_PATH];
 

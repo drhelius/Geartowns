@@ -104,7 +104,7 @@ u8 UPD71071::Peek(u16 port) const
         case 0x06:
             return (u8)(address >> 16);
         case 0x07:
-            return m_state.high_address;
+            return channel.high_address;
         case 0x08:
             return (u8)m_state.device_control;
         case 0x09:
@@ -151,7 +151,7 @@ void UPD71071::Write(u16 port, u8 value)
             WriteAddress((port & 0x0F) - 0x04, value);
             break;
         case 0x07:
-            m_state.high_address = value;
+            m_state.channels[m_state.selected_channel].high_address = value;
             break;
         case 0x08:
             m_state.device_control = (u16)((m_state.device_control & 0xFF00) | value);
@@ -334,7 +334,7 @@ bool UPD71071::TransferUnit(int channel, u64 clocks, bool& terminal)
     if (word && (state.current_address & 0x01) != 0)
         state.current_address = (state.current_address - 1) & 0x00FFFFFF;
 
-    u32 address = m_memory->TranslateDMAAddress(((u32)m_state.high_address << 24) | state.current_address);
+    u32 address = m_memory->TranslateDMAAddress(((u32)state.high_address << 24) | state.current_address);
     GT_Bus_Access_Context context = { };
     context.clocks = clocks;
     context.origin = GT_BUS_ORIGIN_DMA;
@@ -433,7 +433,7 @@ void UPD71071::TraceEvent(u8 event, int channel, u8 reg, u8 value, bool terminal
     GT_Trace_Entry entry = {};
     entry.type = TRACE_DMA;
     entry.event = event;
-    entry.dma.address = ((u32)m_state.high_address << 24) | (base ? state.base_address : state.current_address);
+    entry.dma.address = ((u32)state.high_address << 24) | (base ? state.base_address : state.current_address);
     entry.dma.count = base ? state.base_count : state.current_count;
     entry.dma.channel = (u8)channel;
     entry.dma.mode = state.mode;
@@ -461,17 +461,17 @@ void UPD71071::UpdateNextEvent()
 void UPD71071::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void UPD71071::LoadState(std::istream& stream)
+void UPD71071::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void UPD71071::Serialize(StateSerializer& serializer)
+void UPD71071::Serialize(StateSerializer& serializer, int version)
 {
     for (int i = 0; i < UPD71071_CHANNELS; i++)
     {
@@ -480,11 +480,24 @@ void UPD71071::Serialize(StateSerializer& serializer)
         G_SERIALIZE(serializer, m_state.channels[i].current_count);
         G_SERIALIZE(serializer, m_state.channels[i].base_count);
         G_SERIALIZE(serializer, m_state.channels[i].mode);
+
+        if (version >= 15)
+            G_SERIALIZE(serializer, m_state.channels[i].high_address);
     }
 
     G_SERIALIZE(serializer, m_state.device_control);
     G_SERIALIZE(serializer, m_state.temporary);
-    G_SERIALIZE(serializer, m_state.high_address);
+
+    // Older states kept one high address byte for every channel
+    if (version < 15)
+    {
+        u8 high_address = 0;
+        G_SERIALIZE(serializer, high_address);
+
+        for (int i = 0; i < UPD71071_CHANNELS; i++)
+            m_state.channels[i].high_address = high_address;
+    }
+
     G_SERIALIZE(serializer, m_state.selected_channel);
     G_SERIALIZE(serializer, m_state.base_access);
     G_SERIALIZE(serializer, m_state.bus_16bit);

@@ -400,8 +400,6 @@ void gui_debug_window_dma(void)
         draw_grid_label("SELECTED");
         ImGui::TextColored(orange, "CH%d", state->selected_channel & 3); ImGui::SameLine(0.0f, space);
         ImGui::TextColored(blue, "%s", state->base_access ? "BASE" : "CURRENT");
-        draw_grid_label("HIGH ADDRESS");
-        ImGui::TextColored(white, "$%02X", state->high_address);
 
         ImGui::EndTable();
     }
@@ -455,14 +453,15 @@ void gui_debug_window_dma(void)
                 ImGui::EndTooltip();
             }
 
+            u32 high = (u32)item.high_address << 24;
             ImGui::TableNextColumn();
-            ImGui::TextColored(cyan, "$%08X", item.current_address);
+            ImGui::TextColored(cyan, "$%08X", high | item.current_address);
 
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("BASE $%08X", item.base_address);
+                ImGui::SetTooltip("BASE $%08X", high | item.base_address);
 
             if (ImGui::IsItemClicked())
-                goto_physical(item.current_address);
+                goto_physical(high | item.current_address);
 
             ImGui::TableNextColumn();
             ImGui::TextColored(white, "$%04X/$%04X", item.current_count, item.base_count);

@@ -2203,8 +2203,8 @@ json DebugAdapter::GetDMAStatus()
             {"service", to_lower(k_debug_dma_service_names[(mode >> 6) & 3])},
             {"auto_initialize", (mode & 0x10) != 0},
             {"decrement", (mode & 0x20) != 0},
-            {"current_address", Hex32(item.current_address)},
-            {"base_address", Hex32(item.base_address)},
+            {"current_address", Hex32(((u32)item.high_address << 24) | item.current_address)},
+            {"base_address", Hex32(((u32)item.high_address << 24) | item.base_address)},
             {"current_count", Hex(item.current_count, 4)},
             {"base_count", Hex(item.base_count, 4)},
             {"masked", (state->mask & bit) != 0},
@@ -2224,7 +2224,6 @@ json DebugAdapter::GetDMAStatus()
         {"terminal_count", Hex(state->status_tc & 0x0F, 1)},
         {"selected_channel", state->selected_channel & 3},
         {"selected_register", state->base_access ? "base" : "current"},
-        {"high_address", Hex(state->high_address, 2)},
         {"channels", channels}
     };
 }

@@ -53,6 +53,7 @@ public:
         u16 current_count;
         u16 base_count;
         u8 mode;
+        u8 high_address;
     };
 
     struct UPD71071_State
@@ -60,7 +61,6 @@ public:
         UPD71071_Channel channels[UPD71071_CHANNELS];
         u16 device_control;
         u16 temporary;
-        u8 high_address;
         u8 selected_channel;
         bool base_access;
         bool bus_16bit;
@@ -89,7 +89,7 @@ public:
     u32 HandleEvent(u64 clocks);
     UPD71071_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void Initialize();
@@ -102,7 +102,7 @@ private:
     void CheckUnsupported();
     void UpdateNextEvent();
     void TraceEvent(u8 event, int channel, u8 reg, u8 value, bool terminal);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

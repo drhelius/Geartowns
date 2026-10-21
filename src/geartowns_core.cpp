@@ -1372,7 +1372,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_fdc->LoadState(stream, header.version);
     m_keyboard->LoadState(stream);
     m_rtc->LoadState(stream);
-    m_dma->LoadState(stream);
+    m_dma->LoadState(stream, header.version);
     m_scsi->LoadState(stream, header.version);
 
     if (stream.fail())

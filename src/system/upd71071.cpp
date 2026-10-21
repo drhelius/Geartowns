@@ -31,6 +31,10 @@ UPD71071::UPD71071()
     InitPointer(m_debug_callback);
     InitPointer(m_debugger);
     memset(m_endpoints, 0, sizeof(m_endpoints));
+
+    for (int i = 0; i < UPD71071_CHANNELS; i++)
+        m_unit_fifths[i] = k_upd71071_unit_fifths;
+
     m_unsupported_logged = false;
     memset(&m_state, 0, sizeof(m_state));
     m_state.active_channel = -1;
@@ -187,6 +191,11 @@ void UPD71071::SetEndpoint(int channel, const GT_DMA_Endpoint& endpoint)
     m_endpoints[channel & 0x03] = endpoint;
 }
 
+void UPD71071::SetUnitClocks(int channel, u32 fifths)
+{
+    m_unit_fifths[channel & 0x03] = MAX(fifths, 5u);
+}
+
 void UPD71071::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
@@ -249,6 +258,8 @@ u32 UPD71071::HandleEvent(u64 clocks)
     u8 bit = (u8)(1 << channel);
     bool software = (m_state.software_requests & bit) != 0;
     bool terminal = false;
+    u32 fifths = m_unit_fifths[channel];
+    u64 unit = (fifths / 5) + (((u32)m_state.channels[channel].current_count % 5) < (fifths % 5) ? 1 : 0);
 
     if (!TransferUnit(channel, clocks, terminal))
     {
@@ -273,9 +284,9 @@ u32 UPD71071::HandleEvent(u64 clocks)
         m_state.active_channel = -1;
 
     // The CPU gets the bus back between single transfers
-    m_state.next_clocks = clocks + (m_state.active_channel >= 0 ? k_upd71071_unit_clocks : k_upd71071_unit_clocks * 2);
+    m_state.next_clocks = clocks + (m_state.active_channel >= 0 ? unit : unit * 2);
     UpdateNextEvent();
-    return (u32)k_upd71071_unit_clocks;
+    return (u32)unit;
 }
 
 void UPD71071::WriteCount(int index, u8 value)

@@ -571,7 +571,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `read_floppy_sector` - Read the sector with ID R (`sector`) on a track by `drive`, `cylinder`, `head`: IDs, status and data as hex. Without `sector` it lists the track's sectors: C, H, R, N, size, density, deleted mark, status and image offset
 
 ### Hard Disks
-- `get_scsi_status` - Get the SCSI host interface (`built_in`, `card` or `none`): control and status bits, data, bus phase, target and LUN, last message, DRQ and IRQ8, the command in progress (CDB, decoded command, status, bytes moved) and each attached disk's sense key and code
+- `get_scsi_status` - Get the SCSI host interface (`built_in`, `card` or `none`): control and status bits, data, the 0C34h word DMA flag on the UG and HG, bus phase, target and LUN, last message, DRQ, IRQ8 and whether word DMA is on, the command in progress (CDB, decoded command, status, bytes moved) and each attached disk's sense key and code
 - `list_hard_disks` - Get SCSI IDs 0-6: image, blocks and size, write protect, blocks the machine wrote that are not in the image file yet, and `at_next_reset` when a change waits for a reset; plus the machine's `interface` (`built_in`, `card` for Model 1/2 or `none`) and whether it is fitted now
 - `attach_hard_disk` - Attach a raw image of 512-byte sectors (`.hdd`, `.h0`-`.h6`, `.hdm`) to SCSI `id`; optional `write_protected`, by default the ID's Write Protected setting. A running machine takes it at the next reset, one that is off at once. `create_size_mb` (1-2047) first creates a blank image at `file_path`, never replacing an existing file
 - `detach_hard_disk` - Detach the disk on SCSI `id` after writing its changes; on a running machine at the next reset

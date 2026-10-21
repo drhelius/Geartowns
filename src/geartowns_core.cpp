@@ -2061,7 +2061,10 @@ void GeartownsCore::ApplyMachineConfig()
     }
 
     if (IsValidPointer(m_scsi))
+    {
         m_scsi->SetFitted(m_machine_config.scsi);
+        m_scsi->SetFeatures(profile.features);
+    }
 
     if (IsValidPointer(m_io))
         m_io->UpdateDecodedPorts();
@@ -2071,6 +2074,10 @@ void GeartownsCore::ApplyBusTiming()
 {
     if (!IsValidPointer(m_i386) || !IsValidPointer(m_system_control))
         return;
+
+    if (IsValidPointer(m_dma))
+        m_dma->SetUnitClocks(k_scsi_dma_channel, m_system_control->GetState()->high_speed ? k_scsi_fast_dma_fifths :
+            k_upd71071_unit_fifths);
 
     const GT_Machine_Profile& profile = k_machine_profiles[m_machine_config.model];
     const GT_Machine_Bus_Timing* timing = profile.bus_timing;

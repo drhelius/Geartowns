@@ -31,7 +31,7 @@
 #include "../gui_colors.h"
 #include "gui_debug_constants.h"
 
-static const char* const k_control_bits[8] = { "RST", "DMAE", "SEL", NULL, "ATN", NULL, "IMSK", "WEN" };
+static const char* const k_control_bits[8] = { "RST", "DMAE", "SEL", "W/B", "ATN", NULL, "IMSK", "WEN" };
 static const char* const k_status_bits[8] = { NULL, "INT", NULL, "BUSY", "C/D", "MSG", "I/O", "REQ" };
 
 static void setup_scsi_columns(void);
@@ -39,14 +39,14 @@ static void draw_scsi_label(const char* label);
 static void draw_scsi_register(const char* label, u8 value, bool fitted);
 static void draw_scsi_port(const char* port);
 static void draw_scsi_detail(void);
-static void draw_scsi_bits(u8 value, const char* const* names, bool fitted);
+static void draw_scsi_bits(u8 value, const char* const* names, bool fitted, int high, int low);
 static void draw_scsi_disk_row(int id);
 
 void gui_debug_window_scsi(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(289, 243), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(292, 423), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(295, 438), ImGuiCond_FirstUseEver);
     ImGui::Begin("SCSI", &config_debug.show_scsi);
 
     ImGui::PushFont(gui_default_font);
@@ -57,6 +57,7 @@ void gui_debug_window_scsi(void)
     bool selected = fitted && (state->target >= 0);
     ScsiDisk::ScsiDisk_State* disk = selected ? scsi->GetDisk(state->target)->GetState() : NULL;
     u8 status = scsi->Peek(0x0C32);
+    bool word_port = fitted && scsi->Decodes(0x0C34);
     float space = ImGui::CalcTextSize(" ").x;
     ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
 
@@ -72,15 +73,20 @@ void gui_debug_window_scsi(void)
         draw_scsi_register("CONTROL", state->control, fitted);
         draw_scsi_port("0C32");
         draw_scsi_detail();
-        draw_scsi_bits(state->control, k_control_bits, fitted);
+        draw_scsi_bits(state->control, k_control_bits, fitted, 7, 4);
+        draw_scsi_detail();
+        draw_scsi_bits(state->control, k_control_bits, fitted, 3, 0);
 
         draw_scsi_register("STATUS", status, fitted);
         draw_scsi_port("0C32");
         draw_scsi_detail();
-        draw_scsi_bits(status, k_status_bits, fitted);
+        draw_scsi_bits(status, k_status_bits, fitted, 7, 0);
 
         draw_scsi_register("DATA", state->data, fitted);
         draw_scsi_port("0C30");
+
+        draw_scsi_register("WORDDMA", scsi->Peek(0x0C34), word_port);
+        draw_scsi_port("0C34");
 
         ImGui::EndTable();
     }
@@ -284,12 +290,12 @@ static void draw_scsi_detail(void)
     ImGui::TableNextColumn();
 }
 
-static void draw_scsi_bits(u8 value, const char* const* names, bool fitted)
+static void draw_scsi_bits(u8 value, const char* const* names, bool fitted, int high, int low)
 {
     float space = ImGui::CalcTextSize(" ").x;
     bool first = true;
 
-    for (int bit = 7; bit >= 0; bit--)
+    for (int bit = high; bit >= low; bit--)
     {
         if (!IsValidPointer(names[bit]))
             continue;

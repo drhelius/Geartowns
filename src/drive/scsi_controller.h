@@ -84,6 +84,8 @@ public:
     void SetTraceLogger(TraceLogger* trace_logger);
     void SetFitted(bool fitted);
     bool IsFitted() const;
+    void SetFeatures(u32 features);
+    bool Decodes(u16 port) const;
     void Reset();
     u8 Read(u16 port, u64 clocks);
     u8 Peek(u16 port) const;
@@ -99,6 +101,7 @@ private:
     u8 GetBusOutputs(u8 control) const;
     bool IsInputPhase() const;
     bool IsOutputPhase() const;
+    bool IsWordDMA() const;
     void WriteControl(u8 value, u64 clocks);
     void ResetBus();
     void Select(u64 clocks);
@@ -130,6 +133,8 @@ private:
     ScsiDisk m_disks[SCSI_TARGETS];
     ScsiController_State m_state;
     bool m_fitted;
+    bool m_word_dma;
+    bool m_word_port;
 };
 
 static const int k_scsi_irq = 8;
@@ -138,6 +143,7 @@ static const int k_scsi_dma_channel = 1;
 static const u8 k_scsi_control_wen = 0x80;
 static const u8 k_scsi_control_imsk = 0x40;
 static const u8 k_scsi_control_atn = 0x10;
+static const u8 k_scsi_control_wb = 0x08;
 static const u8 k_scsi_control_sel = 0x04;
 static const u8 k_scsi_control_dmae = 0x02;
 static const u8 k_scsi_control_rst = 0x01;
@@ -158,6 +164,8 @@ static const u8 k_scsi_message_identify = 0x80;
 
 static const u64 k_scsi_busy_clocks = GT_MACHINE_CLOCK_RATE / 200000;
 static const u64 k_scsi_phase_clocks = GT_MACHINE_CLOCK_RATE / 2000;
+static const u32 k_scsi_fast_dma_fifths = (u32)(((u64)GT_MACHINE_CLOCK_RATE * 165 * 5) / 100000000);
+static const u8 k_scsi_word_port = 0x7F;
 
 #include "scsi_controller_inline.h"
 

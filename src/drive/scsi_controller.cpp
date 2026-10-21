@@ -45,6 +45,8 @@ ScsiController::ScsiController()
     memset(&m_state, 0, sizeof(m_state));
     m_state.target = -1;
     m_fitted = false;
+    m_word_dma = false;
+    m_word_port = false;
 }
 
 ScsiController::~ScsiController()
@@ -79,6 +81,17 @@ void ScsiController::SetFitted(bool fitted)
     m_fitted = fitted;
 }
 
+void ScsiController::SetFeatures(u32 features)
+{
+    m_word_dma = (features & GT_MACHINE_FEATURE_SCSI_WORD_DMA) != 0;
+    m_word_port = (features & GT_MACHINE_FEATURE_SCSI_WORD_PORT) != 0;
+}
+
+bool ScsiController::Decodes(u16 port) const
+{
+    return (port != 0x0C34) || m_word_port;
+}
+
 void ScsiController::Reset()
 {
     memset(&m_state, 0, sizeof(m_state));
@@ -106,6 +119,8 @@ u8 ScsiController::Read(u16 port, u64 clocks)
             return m_state.data;
         case 0x0C32:
             return ReadStatus();
+        case 0x0C34:
+            return m_word_port ? k_scsi_word_port : 0xFF;
         default:
             return 0xFF;
     }
@@ -122,6 +137,8 @@ u8 ScsiController::Peek(u16 port) const
             return m_state.data;
         case 0x0C32:
             return ReadStatus();
+        case 0x0C34:
+            return m_word_port ? k_scsi_word_port : 0xFF;
         default:
             return 0xFF;
     }
@@ -508,26 +525,40 @@ void ScsiController::Trace(u8 event, u8 value)
 
 bool ScsiController::DMAReadCallback(void* device, u16& value, bool word)
 {
-    UNUSED(word);
     ScsiController* scsi = (ScsiController*)device;
+    u64 clocks = scsi->m_scheduler->GetClocks();
 
     if (!scsi->m_state.drq || (scsi->m_state.phase != SCSI_PHASE_DATA_IN))
         return false;
 
-    value = scsi->InputByte(scsi->m_scheduler->GetClocks());
+    value = scsi->InputByte(clocks);
+
+    if (word && scsi->IsWordDMA())
+        value |= (u16)((scsi->m_state.drq && (scsi->m_state.phase == SCSI_PHASE_DATA_IN) ?
+            scsi->InputByte(clocks) : 0xFF) << 8);
+
     return true;
 }
 
 bool ScsiController::DMAWriteCallback(void* device, u16 value, bool word)
 {
-    UNUSED(word);
     ScsiController* scsi = (ScsiController*)device;
+    u64 clocks = scsi->m_scheduler->GetClocks();
 
     if (!scsi->m_state.drq || (scsi->m_state.phase != SCSI_PHASE_DATA_OUT))
         return false;
 
-    scsi->OutputByte((u8)value, scsi->m_scheduler->GetClocks());
+    scsi->OutputByte((u8)value, clocks);
+
+    if (word && scsi->IsWordDMA() && scsi->m_state.drq && (scsi->m_state.phase == SCSI_PHASE_DATA_OUT))
+        scsi->OutputByte((u8)(value >> 8), clocks);
+
     return true;
+}
+
+bool ScsiController::IsWordDMA() const
+{
+    return m_word_dma && ((m_state.control & k_scsi_control_wb) != 0);
 }
 
 void ScsiController::SaveState(std::ostream& stream)

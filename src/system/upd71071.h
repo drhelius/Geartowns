@@ -84,6 +84,7 @@ public:
     void Write(u16 port, u8 value);
     u8 Peek(u16 port) const;
     void SetEndpoint(int channel, const GT_DMA_Endpoint& endpoint);
+    void SetUnitClocks(int channel, u32 fifths);
     void SetRequest(int channel, bool active);
     void ExternalEnd(int channel);
     u32 HandleEvent(u64 clocks);
@@ -109,6 +110,7 @@ private:
     Memory* m_memory;
     Scheduler* m_scheduler;
     GT_DMA_Endpoint m_endpoints[UPD71071_CHANNELS];
+    u32 m_unit_fifths[UPD71071_CHANNELS];
     bool m_unsupported_logged;
     TraceLogger* m_trace_logger;
     GT_DMA_Debug_Fn m_debug_callback;
@@ -125,7 +127,7 @@ static const u8 k_upd71071_io_to_memory = 0x01;
 static const u8 k_upd71071_memory_to_io = 0x02;
 static const u8 k_upd71071_demand = 0x00;
 static const u8 k_upd71071_single = 0x01;
-static const u64 k_upd71071_unit_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 2) / 1000000;
+static const u32 k_upd71071_unit_fifths = (u32)(((u64)GT_MACHINE_CLOCK_RATE * 2 * 5) / 1000000);
 
 #include "upd71071_inline.h"
 

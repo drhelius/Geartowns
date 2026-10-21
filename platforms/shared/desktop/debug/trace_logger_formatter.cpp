@@ -1046,11 +1046,11 @@ static void format_scsi(const GT_Trace_Entry& entry, char* buffer, size_t size)
         {
             u8 value = entry.scsi.value;
             format_event(buffer, size, "SCSI", "CONTROL",
-                "$0C32 <- $%02X  WEN:%u IMSK:%u ATN:%u SEL:%u DMAE:%u RST:%u  Status:$%02X", value,
+                "$0C32 <- $%02X  WEN:%u IMSK:%u ATN:%u W/B:%u SEL:%u DMAE:%u RST:%u  Status:$%02X", value,
                 (value & k_scsi_control_wen) != 0 ? 1 : 0, (value & k_scsi_control_imsk) != 0 ? 1 : 0,
-                (value & k_scsi_control_atn) != 0 ? 1 : 0, (value & k_scsi_control_sel) != 0 ? 1 : 0,
-                (value & k_scsi_control_dmae) != 0 ? 1 : 0, (value & k_scsi_control_rst) != 0 ? 1 : 0,
-                entry.scsi.status);
+                (value & k_scsi_control_atn) != 0 ? 1 : 0, (value & k_scsi_control_wb) != 0 ? 1 : 0,
+                (value & k_scsi_control_sel) != 0 ? 1 : 0, (value & k_scsi_control_dmae) != 0 ? 1 : 0,
+                (value & k_scsi_control_rst) != 0 ? 1 : 0, entry.scsi.status);
             break;
         }
         case TRACE_SCSI_RESET:

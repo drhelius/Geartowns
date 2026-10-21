@@ -404,6 +404,12 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0C32:
             // SCSI status
             return m_scsi->Read(port, context.clocks);
+        case 0x0C34:
+            // SCSI word DMA flag
+            if (!m_scsi->Decodes(port))
+                break;
+
+            return m_scsi->Read(port, context.clocks);
         case 0xFD90:
             // Palette index
         case 0xFD92:
@@ -651,6 +657,12 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x0C32:
             value = m_scsi->Peek(port);
             break;
+        case 0x0C34:
+            if (!m_scsi->Decodes(port))
+                return false;
+
+            value = m_scsi->Peek(port);
+            break;
         case 0x05C0:
         case 0x05C2:
             value = m_system_control->Peek(port, clocks);
@@ -748,6 +760,8 @@ u64 IO::GetReadStableUntil(u16 port, int width, u64 clocks) const
             // CD-ROM master status, changes only at CD-ROM and DMA events
         case 0x0C32:
             // SCSI status, changes only at SCSI and DMA events
+        case 0x0C34:
+            // SCSI word DMA flag
             return GT_NO_EVENT;
         case 0xFDA0:
             // VSYNC and HSYNC status

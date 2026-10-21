@@ -158,6 +158,7 @@ static const stDebugPortLabel k_debug_port_labels[] =
     { 0x0A0A, "SIO_MODEM_CONTROL", "RS-232C modem control" },
     { 0x0C30, "SCSI_DATA", "SCSI data" },
     { 0x0C32, "SCSI_STATUS", "SCSI status read, control write" },
+    { 0x0C34, "SCSI_WORDDMA", "SCSI word DMA flag" },
     { 0xFD90, "PAL_INDEX", "Palette index" },
     { 0xFD92, "PAL_BLUE", "Palette blue" },
     { 0xFD94, "PAL_RED", "Palette red" },

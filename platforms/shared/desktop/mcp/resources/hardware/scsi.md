@@ -18,6 +18,7 @@ looks set and 562h stays 0, and the boot device scan then skips SCSI.
 |---|---|---|
 | 0C30h | Data: in a phase with REQ set, takes the byte and acknowledges it | Data: same |
 | 0C32h | Status | Control |
+| 0C34h | UG and HG: WORDDMA flag, 7Fh (bit 7 = 0: word DMA supported, bits 6-0 one) | |
 
 | Bit | Control (write) | Status (read) |
 |---:|---|---|
@@ -25,13 +26,19 @@ looks set and 562h stays 0, and the boot device scan then skips SCSI.
 | 6 | IMSK: 1 lets INT reach IRQ8 | I/O |
 | 5 | RMSK (UX, CX and later, ignored) | MSG |
 | 4 | ATN: asks for a Message Out phase | C/D |
-| 3 | W/B word DMA (CX, ignored) | BUSY |
+| 3 | W/B: word DMA (CX, UG, HG) | BUSY |
 | 2 | SEL: selection, with the IDs on the data bus | EX (reads 0) |
 | 1 | DMAE: data phases request DMA on channel 1 | INT |
 | 0 | RST: resets the bus and every target | PERR (reads 0) |
 
 INT is set while REQ is up in the Command, Status and Message phases; IRQ8 follows INT and IMSK. Towns OS writes
 C2h and C6h (IMSK set) and serves IRQ8, while the BIOS polls with IMSK clear.
+
+Word DMA: on the CX, UG and HG, `W/B` = 1 with DMA channel 1 in word mode moves two SCSI bytes per DMA cycle, the
+first to the even address. Towns OS V2.1 on the CX writes CAh (`WEN`, `IMSK`, `W/B`, `DMAE`) and mode 45h. Other
+models ignore `W/B`. The CX has no WORDDMA flag (software identifies it by machine ID); the Data Book prints that
+port as 0034h, while Linux reads 0C34h. With high speed on (05ECh bit 0, CX, UG and HG) a SCSI DMA cycle takes about
+1.65 µs instead of 2.0 µs.
 
 | C/D | MSG | I/O | Phase |
 |---:|---:|---:|---|

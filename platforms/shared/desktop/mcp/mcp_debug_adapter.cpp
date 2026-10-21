@@ -3710,7 +3710,7 @@ static json hard_disk_json(int id)
 
 json DebugAdapter::GetSCSIStatus()
 {
-    static const char* const control_names[8] = { "rst", "dmae", "sel", NULL, "atn", NULL, "imsk", "wen" };
+    static const char* const control_names[8] = { "rst", "dmae", "sel", "w_b", "atn", NULL, "imsk", "wen" };
     static const char* const status_names[8] = { NULL, "int", NULL, "busy", "c_d", "msg", "i_o", "req" };
     static const char* const phase_names[SCSI_PHASE_COUNT] = { "bus_free", "selection", "command", "data_in",
         "data_out", "status", "message_in", "message_out" };
@@ -3761,7 +3761,8 @@ json DebugAdapter::GetSCSIStatus()
             {"control_bits", control_bits},
             {"status", hex_text(status, 2)},
             {"status_bits", status_bits},
-            {"data", hex_text(state->data, 2)}
+            {"data", hex_text(state->data, 2)},
+            {"word_dma_flag", scsi->Decodes(0x0C34) ? json(hex_text(scsi->Peek(0x0C34), 2)) : json()}
         }},
         {"bus", {
             {"phase", phase_names[state->phase % SCSI_PHASE_COUNT]},
@@ -3772,7 +3773,9 @@ json DebugAdapter::GetSCSIStatus()
         }},
         {"signals", {
             {"drq", state->drq},
-            {"irq8", state->interrupt && ((state->control & k_scsi_control_imsk) != 0)}
+            {"irq8", state->interrupt && ((state->control & k_scsi_control_imsk) != 0)},
+            {"word_dma", ((k_machine_profiles[m_core->GetMachineConfig().model].features &
+                GT_MACHINE_FEATURE_SCSI_WORD_DMA) != 0) && ((state->control & k_scsi_control_wb) != 0)}
         }},
         {"command", json()},
         {"disks", disks}

@@ -1753,7 +1753,8 @@ json McpServer::BuildToolList()
         {"name", "get_scsi_status"},
         {"title", "Get SCSI Status"},
         {"description", "Read the SCSI host interface: control and status bits, data, bus phase, target and LUN, last "
-            "message, DRQ and IRQ8, the command in progress (CDB, status, bytes moved) and each disk's sense."},
+            "message, DRQ, IRQ8 and word DMA, the 0C34h flag on the UG and HG, the command in progress (CDB, status, bytes "
+            "moved) and each disk's sense."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

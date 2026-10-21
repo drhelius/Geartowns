@@ -35,6 +35,8 @@ CdRom::CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio)
     InitPointer(m_dma);
     InitPointer(m_audio);
     InitPointer(m_trace_logger);
+    InitPointer(m_read_context);
+    InitPointer(m_read_callback);
     m_cdrom_media = cdrom_media;
     m_cdrom_audio = cdrom_audio;
     memset(&m_state, 0, sizeof(m_state));
@@ -394,6 +396,12 @@ void CdRom::SetTraceLogger(TraceLogger* trace_logger)
     m_cdrom_audio->SetTraceLogger(trace_logger);
 }
 
+void CdRom::SetReadCallback(void* context, GT_Read_Callback callback)
+{
+    m_read_context = context;
+    m_read_callback = callback;
+}
+
 void CdRom::ExecuteCommand(u64 clocks)
 {
     if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_COMMAND))
@@ -474,6 +482,9 @@ void CdRom::CommandRead(u64 clocks)
 {
     u32 start = 0;
     u32 end = 0;
+
+    if (IsValidPointer(m_read_callback))
+        m_read_callback(m_read_context);
 
     // The pickup leaves CD-DA to read data
     m_cdrom_audio->Stop();

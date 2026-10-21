@@ -108,7 +108,10 @@ Blocks are 512 bytes. A LUN other than 0 and an unknown opcode end with CHECK CO
 
 - LBA 0 holds an IPL4 boot sector. LBA 1 holds the partition table: up to 10 entries of 30h bytes from offset 20h,
   FFh in an entry's first byte marks the boot partition, and the dword at +2 is its start LBA.
-- The BIOS enters the IPL with BL = 1 (SCSI) and BH = the unit. A bootable CD boots before the hard disk.
+- The BIOS enters the IPL with BL = 1 (SCSI) and BH = the unit. A bootable CD boots before the hard disk, unless
+  H and the ID are held at power-on: the 1F/2F and later ROMs reset the keyboard and read the keys after its answer
+  (C+D CD-ROM, F+0/F+1 floppy, H+0-H+4 SCSI); the Model 1/2 and Marty ROMs don't. `debug_reset` with `boot` holds
+  them through one reset.
 - Towns OS registers its hard disk drives in the CMOS, not on the disk. A disk installed on one model stops on
   another until it is registered there (Towns OS V2.1: TownsMENU Settings menu, Drive Configuration, Add Drive).
 - Towns OS V2.1 formats its partitions with 2048-byte logical sectors.

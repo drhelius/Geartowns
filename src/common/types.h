@@ -412,6 +412,22 @@ enum GT_Machine_Feature
     GT_MACHINE_FEATURE_SCSI_WORD_PORT  = 0x80000
 };
 
+enum GT_Boot_Device
+{
+    GT_BOOT_DEVICE_AUTO = 0,
+    GT_BOOT_DEVICE_CDROM,
+    GT_BOOT_DEVICE_FLOPPY_0,
+    GT_BOOT_DEVICE_FLOPPY_1,
+    GT_BOOT_DEVICE_HARD_DISK_0,
+    GT_BOOT_DEVICE_HARD_DISK_1,
+    GT_BOOT_DEVICE_HARD_DISK_2,
+    GT_BOOT_DEVICE_HARD_DISK_3,
+    GT_BOOT_DEVICE_HARD_DISK_4,
+    GT_BOOT_DEVICE_COUNT
+};
+
+typedef void (*GT_Read_Callback)(void* context);
+
 enum GT_Machine_Source
 {
     GT_MACHINE_SOURCE_USER = 0,

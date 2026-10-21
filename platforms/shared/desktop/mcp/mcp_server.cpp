@@ -470,11 +470,18 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "debug_reset"},
         {"title", "Debug Reset"},
-        {"description", "Reset the FM Towns."},
+        {"description", "Reset the FM Towns; boot holds the system ROM's boot device keys through this reset."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
-            {"properties", json::object()},
+            {"properties", {
+                {"boot", {
+                    {"type", "string"},
+                    {"description", "Boot device: C+D, F+0/1 or H+0-4 held until the first CD, floppy or SCSI read."},
+                    {"enum", json::array({"cdrom", "floppy1", "floppy2", "hard_disk0", "hard_disk1", "hard_disk2",
+                        "hard_disk3", "hard_disk4"})}
+                }}
+            }},
             {"additionalProperties", false}
         }}
     });
@@ -3031,8 +3038,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "debug_reset")
     {
-        m_debugAdapter.Reset();
-        return {{"success", true}};
+        return m_debugAdapter.Reset(arguments.value("boot", ""));
     }
     else if (normalizedTool == "debug_get_status")
     {

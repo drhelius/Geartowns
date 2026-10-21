@@ -47,6 +47,8 @@ ScsiController::ScsiController()
     m_fitted = false;
     m_word_dma = false;
     m_word_port = false;
+    InitPointer(m_read_context);
+    InitPointer(m_read_callback);
 }
 
 ScsiController::~ScsiController()
@@ -90,6 +92,12 @@ void ScsiController::SetFeatures(u32 features)
 bool ScsiController::Decodes(u16 port) const
 {
     return (port != 0x0C34) || m_word_port;
+}
+
+void ScsiController::SetReadCallback(void* context, GT_Read_Callback callback)
+{
+    m_read_context = context;
+    m_read_callback = callback;
 }
 
 void ScsiController::Reset()
@@ -379,6 +387,9 @@ void ScsiController::ExecuteCommand(u64 clocks)
     ScsiDisk* disk = &m_disks[m_state.target];
     Scsi_Data data = SCSI_DATA_NONE;
     Trace(TRACE_SCSI_COMMAND, m_state.command[0]);
+
+    if (((m_state.command[0] == 0x08) || (m_state.command[0] == 0x28)) && IsValidPointer(m_read_callback))
+        m_read_callback(m_read_context);
 
     // Logical units other than 0 get CHECK CONDITION
     if ((m_state.lun != 0) || ((m_state.command[1] >> 5) != 0))

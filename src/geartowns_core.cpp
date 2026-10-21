@@ -92,6 +92,7 @@ GeartownsCore::GeartownsCore()
     }
 
     m_hard_disk_state_changes = 0;
+    m_boot_device = GT_BOOT_DEVICE_AUTO;
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
@@ -206,6 +207,9 @@ void GeartownsCore::Init()
     m_pit->Init(m_pic, m_scheduler, m_audio);
     m_system_control->Init(m_memory);
     m_system_control->SetBusModeCallback(this, BusModeCallback);
+    m_cdrom->SetReadCallback(this, BootReadCallback);
+    m_fdc->SetReadCallback(this, BootReadCallback);
+    m_scsi->SetReadCallback(this, BootReadCallback);
     m_video->Init(m_pic, m_pit, m_scheduler, m_memory, m_firmware->GetFontRom());
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
@@ -1040,6 +1044,46 @@ u32 GeartownsCore::GetHardDiskStateChanges() const
     return m_hard_disk_state_changes;
 }
 
+void GeartownsCore::SetBootDevice(GT_Boot_Device device)
+{
+    m_boot_device = ((device >= GT_BOOT_DEVICE_AUTO) && (device < GT_BOOT_DEVICE_COUNT)) ? device : GT_BOOT_DEVICE_AUTO;
+}
+
+GT_Boot_Device GeartownsCore::GetBootDevice() const
+{
+    return m_boot_device;
+}
+
+void GeartownsCore::ApplyBootDevice()
+{
+    static const GT_Keys k_digits[5] = { GT_KEY_0, GT_KEY_1, GT_KEY_2, GT_KEY_3, GT_KEY_4 };
+    GT_Keys keys[2] = { GT_KEY_NONE, GT_KEY_NONE };
+
+    if (m_boot_device == GT_BOOT_DEVICE_CDROM)
+    {
+        keys[0] = GT_KEY_C;
+        keys[1] = GT_KEY_D;
+    }
+    else if ((m_boot_device == GT_BOOT_DEVICE_FLOPPY_0) || (m_boot_device == GT_BOOT_DEVICE_FLOPPY_1))
+    {
+        keys[0] = GT_KEY_F;
+        keys[1] = k_digits[m_boot_device - GT_BOOT_DEVICE_FLOPPY_0];
+    }
+    else if (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0)
+    {
+        keys[0] = GT_KEY_H;
+        keys[1] = k_digits[m_boot_device - GT_BOOT_DEVICE_HARD_DISK_0];
+    }
+
+    m_keyboard->SetBootKeys(keys, m_boot_device != GT_BOOT_DEVICE_AUTO ? 2 : 0);
+    m_boot_device = GT_BOOT_DEVICE_AUTO;
+}
+
+void GeartownsCore::BootReadCallback(void* context)
+{
+    static_cast<GeartownsCore*>(context)->m_keyboard->ClearBootKeys();
+}
+
 HardDiskImage* GeartownsCore::GetHardDisk(int id)
 {
     return (IsValidPointer(m_scsi) && (id >= 0) && (id < GT_MAX_HARD_DISKS)) ? m_scsi->GetDisk(id)->GetImage() : NULL;
@@ -1520,7 +1564,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_cdrom->LoadState(stream, header.version);
     m_cdrom_audio->LoadState(stream);
     m_fdc->LoadState(stream, header.version);
-    m_keyboard->LoadState(stream);
+    m_keyboard->LoadState(stream, header.version);
     m_rtc->LoadState(stream);
     m_dma->LoadState(stream, header.version);
     m_scsi->LoadState(stream, header.version);
@@ -1841,7 +1885,10 @@ void GeartownsCore::Reset()
         m_scsi->Reset();
 
     if (IsValidPointer(m_keyboard))
+    {
         m_keyboard->Reset();
+        ApplyBootDevice();
+    }
 
     if (IsValidPointer(m_rtc))
         m_rtc->Reset(m_scheduler->GetClocks());

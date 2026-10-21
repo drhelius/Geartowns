@@ -117,6 +117,8 @@ public:
     const char* GetPendingHardDiskPath(int id) const;
     bool IsPendingHardDiskWriteProtected(int id) const;
     u32 GetHardDiskStateChanges() const;
+    void SetBootDevice(GT_Boot_Device device);
+    GT_Boot_Device GetBootDevice() const;
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
@@ -193,6 +195,8 @@ private:
     void ApplyMachineConfig();
     void ApplyBusTiming();
     static void BusModeCallback(void* context);
+    static void BootReadCallback(void* context);
+    void ApplyBootDevice();
     void InitMemoryMap();
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
@@ -241,6 +245,7 @@ private:
     bool m_hard_disk_write_protected[GT_MAX_HARD_DISKS];
     bool m_hard_disk_pending[GT_MAX_HARD_DISKS];
     u32 m_hard_disk_state_changes;
+    GT_Boot_Device m_boot_device;
     bool m_powered;
     bool m_paused;
     GT_Debug_Step m_debug_step;

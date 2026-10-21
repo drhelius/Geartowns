@@ -373,7 +373,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `debug_step_out` - Run until the current subroutine or interrupt handler returns; with an empty call stack it steps one instruction and adds a `note`
 - `debug_step_frame` - Run complete frames with breakpoints active, then pause; `frames` sets how many (default 1). By default it answers when they finish or a breakpoint stops them, with the `debug_get_status` fields plus `frames` run, `requested_frames` and `breakpoint_hit`, for up to 1800 frames. `wait: false` answers at once and takes up to 216000 frames; poll `debug_get_status` or stop them with `debug_pause`. A reset, state load or rewind during a wait ends it with an error
 - `debug_run_to_cursor` - Continue execution until reaching specified address
-- `debug_reset` - Reset emulation
+- `debug_reset` - Reset emulation; optional `boot` (`cdrom`, `floppy1`, `floppy2`, `hard_disk0`-`hard_disk4`) holds the system ROM's boot device keys through this reset, released at the first CD, floppy or SCSI read (1F/2F and later; the Model 1/2 and Marty ROMs ignore them)
 - `debug_get_status` - Get debug status: `paused`, `at_breakpoint`, `pc` (linear), `logical_pc`, `mode`, `halted`, `breakpoint`, `media_loading`, `media_ready`, `powered_on`, `frame`
 - `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`; optional `speed` (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
 

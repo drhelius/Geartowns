@@ -273,8 +273,36 @@ void Keyboard::SendResetResponse(int count)
     m_state.fifo_count = (u8)count;
     m_state.rearm_pending = false;
     m_state.kbint = true;
+
+    for (int i = 0; i < m_state.boot_key_count; i++)
+        PushEvent(m_state.boot_keys[i], k_keyboard_make);
+
     UpdateIRQ();
     UpdateNextEvent();
+}
+
+void Keyboard::SetBootKeys(const GT_Keys* keys, int count)
+{
+    m_state.boot_key_count = 0;
+
+    for (int i = 0; (i < count) && (i < KEYBOARD_BOOT_KEYS); i++)
+    {
+        if (IsValidKey(keys[i]))
+            m_state.boot_keys[m_state.boot_key_count++] = (u8)keys[i];
+    }
+}
+
+void Keyboard::ClearBootKeys()
+{
+    m_state.boot_key_count = 0;
+}
+
+int Keyboard::GetBootKeys(GT_Keys* keys) const
+{
+    for (int i = 0; i < m_state.boot_key_count; i++)
+        keys[i] = (GT_Keys)m_state.boot_keys[i];
+
+    return m_state.boot_key_count;
 }
 
 // A JIS keyboard message: make, break or typematic flags with CTRL and SHIFT, then the key code
@@ -353,17 +381,17 @@ void Keyboard::UpdateNextEvent()
 void Keyboard::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void Keyboard::LoadState(std::istream& stream)
+void Keyboard::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void Keyboard::Serialize(StateSerializer& serializer)
+void Keyboard::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE_ARRAY(serializer, m_state.fifo, KEYBOARD_FIFO_SIZE);
     G_SERIALIZE(serializer, m_state.fifo_read);
@@ -378,12 +406,22 @@ void Keyboard::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.repeat_clocks);
     G_SERIALIZE(serializer, m_state.repeat_delay);
     G_SERIALIZE(serializer, m_state.repeat_interval);
+
+    if (version < 17)
+    {
+        m_state.boot_key_count = 0;
+        return;
+    }
+
+    G_SERIALIZE_ARRAY(serializer, m_state.boot_keys, KEYBOARD_BOOT_KEYS);
+    G_SERIALIZE(serializer, m_state.boot_key_count);
 }
 
 void Keyboard::SanitizeState()
 {
     m_state.fifo_read &= KEYBOARD_FIFO_SIZE - 1;
     m_state.fifo_count = (u8)MIN(m_state.fifo_count, KEYBOARD_FIFO_SIZE);
+    m_state.boot_key_count = (u8)MIN(m_state.boot_key_count, KEYBOARD_BOOT_KEYS);
 
     if (!IsValidKey((GT_Keys)m_state.repeat_key))
         m_state.repeat_key = GT_KEY_NONE;

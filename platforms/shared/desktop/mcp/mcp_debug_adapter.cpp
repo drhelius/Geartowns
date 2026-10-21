@@ -257,10 +257,25 @@ void DebugAdapter::StepFrames(int frames)
     emu_debug_step_frames(frames);
 }
 
-void DebugAdapter::Reset()
+json DebugAdapter::Reset(const std::string& boot)
 {
+    static const char* const devices[GT_BOOT_DEVICE_COUNT] = { "", "cdrom", "floppy1", "floppy2", "hard_disk0",
+        "hard_disk1", "hard_disk2", "hard_disk3", "hard_disk4" };
+    int device = GT_BOOT_DEVICE_AUTO;
+
+    for (int i = 1; boot.size() && (i < GT_BOOT_DEVICE_COUNT); i++)
+    {
+        if (boot == devices[i])
+            device = i;
+    }
+
+    if (!boot.empty() && (device == GT_BOOT_DEVICE_AUTO))
+        return {{"error", "Unknown boot device"}};
+
+    m_core->SetBootDevice((GT_Boot_Device)device);
     emu_reset();
     ClearControllerState();
+    return {{"success", true}};
 }
 
 json DebugAdapter::GetDebugStatus()

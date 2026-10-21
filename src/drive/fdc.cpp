@@ -30,6 +30,8 @@ FDC::FDC()
     InitPointer(m_scheduler);
     InitPointer(m_dma);
     InitPointer(m_trace_logger);
+    InitPointer(m_read_context);
+    InitPointer(m_read_callback);
     memset(&m_state, 0, sizeof(m_state));
     memset(m_access_count, 0, sizeof(m_access_count));
     memset(m_write_count, 0, sizeof(m_write_count));
@@ -59,6 +61,18 @@ void FDC::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
     m_mb8877.SetTraceLogger(trace_logger);
+}
+
+void FDC::SetReadCallback(void* context, GT_Read_Callback callback)
+{
+    m_read_context = context;
+    m_read_callback = callback;
+}
+
+void FDC::NotifyRead()
+{
+    if (IsValidPointer(m_read_callback))
+        m_read_callback(m_read_context);
 }
 
 // Disks stay in their drives, a disk present at power on is ready at once

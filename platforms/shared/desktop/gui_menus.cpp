@@ -39,6 +39,7 @@
 #include "shader_preset.h"
 #include "utils.h"
 #include "geartowns.h"
+#include "drive/hard_disk_image.h"
 #include "rewind.h"
 #include "events.h"
 #include "input_macro.h"
@@ -74,6 +75,7 @@ static bool menu_machine_model(void);
 static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile);
 static bool menu_machine_ram(const GT_Machine_Profile& profile);
 static void menu_machine_hardware(GT_Machine_Model model);
+static void menu_boot_device(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
 static float get_combo_width(float text_width);
@@ -172,6 +174,12 @@ static void menu_geartowns(void)
         if (ImGui::MenuItem("Reset", config_hotkeys[config_HotkeyIndex_Reset].str, false, media_actions_enabled))
         {
             gui_action_reset();
+        }
+
+        if (ImGui::BeginMenu("Reset and Boot From", media_actions_enabled))
+        {
+            menu_boot_device();
+            ImGui::EndMenu();
         }
 
         if (ImGui::MenuItem("Pause", config_hotkeys[config_HotkeyIndex_Pause].str, &config_emulator.paused, media_actions_enabled))
@@ -1155,6 +1163,49 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
     }
 
     ImGui::EndTooltip();
+}
+
+static void menu_boot_device(void)
+{
+    static const char* const names[GT_BOOT_DEVICE_COUNT] = { "", "CD-ROM", "Floppy 1", "Floppy 2", "Hard Disk ID 0",
+        "Hard Disk ID 1", "Hard Disk ID 2", "Hard Disk ID 3", "Hard Disk ID 4" };
+    static const char* const keys[GT_BOOT_DEVICE_COUNT] = { "", "C and D", "F and 0", "F and 1", "H and 0", "H and 1",
+        "H and 2", "H and 3", "H and 4" };
+    GeartownsCore* core = emu_get_core();
+    const GT_Machine_Config& config = core->GetPendingMachineConfig();
+    bool supported = (config.model != GT_MACHINE_MODEL1_2) && (config.model != GT_MACHINE_MARTY);
+
+    for (int i = GT_BOOT_DEVICE_CDROM; i < GT_BOOT_DEVICE_COUNT; i++)
+    {
+        bool enabled = supported;
+
+        if ((i == GT_BOOT_DEVICE_FLOPPY_0) || (i == GT_BOOT_DEVICE_FLOPPY_1))
+            enabled = enabled && ((i - GT_BOOT_DEVICE_FLOPPY_0) < config.floppy_drives);
+        else if (i >= GT_BOOT_DEVICE_HARD_DISK_0)
+        {
+            int id = i - GT_BOOT_DEVICE_HARD_DISK_0;
+            bool attached = core->IsHardDiskPending(id) ? (core->GetPendingHardDiskPath(id)[0] != 0) :
+                core->GetHardDisk(id)->IsOpen();
+            enabled = enabled && attached;
+        }
+
+        if (i == GT_BOOT_DEVICE_HARD_DISK_0)
+            ImGui::Separator();
+
+        if (ImGui::MenuItem(names[i], NULL, false, enabled))
+        {
+            core->SetBootDevice((GT_Boot_Device)i);
+            gui_action_reset();
+        }
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            if (supported)
+                ImGui::SetTooltip("Holds %s while the system ROM picks the boot device", keys[i]);
+            else
+                ImGui::SetTooltip("This model's system ROM doesn't read boot keys");
+        }
+    }
 }
 
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size)

@@ -166,6 +166,7 @@ static bool hard_disk_state_warned = false;
 static int floppy_drive = 0;
 static bool floppy_multidrive = false;
 static bool save_disk = false;
+static GT_Boot_Device boot_device = GT_BOOT_DEVICE_AUTO;
 static bool cmos_shared = true;
 static bool cmos_shared_active = false;
 static std::string cmos_path;
@@ -461,6 +462,7 @@ void retro_reset(void)
 
     check_variables();
     cmos_save();
+    core->SetBootDevice(boot_device);
     core->ResetMedia();
     report_machine();
     clear_input_state();
@@ -749,6 +751,7 @@ static bool load_content(const char* path)
 
     core->LatchAutoMedia();
     cmos_load();
+    core->SetBootDevice(boot_device);
 
     if (!core->PowerOn())
     {
@@ -1886,6 +1889,22 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         machine_settings.ram_mb = strcmp(var.value, "auto") == 0 ? GT_MACHINE_AUTO : atoi(var.value);
+    }
+
+    var.key = "geartowns_boot_device";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        static const char* const devices[GT_BOOT_DEVICE_COUNT] = { "auto", "cdrom", "floppy1", "floppy2", "hdd0",
+            "hdd1", "hdd2", "hdd3", "hdd4" };
+        boot_device = GT_BOOT_DEVICE_AUTO;
+
+        for (int i = 0; i < GT_BOOT_DEVICE_COUNT; i++)
+        {
+            if (strcmp(var.value, devices[i]) == 0)
+                boot_device = (GT_Boot_Device)i;
+        }
     }
 
     var.key = "geartowns_rtc";

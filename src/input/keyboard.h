@@ -24,6 +24,7 @@
 #include "../common/common.h"
 
 #define KEYBOARD_FIFO_SIZE 32
+#define KEYBOARD_BOOT_KEYS 4
 
 class PIC;
 class Scheduler;
@@ -49,6 +50,8 @@ public:
         u64 repeat_clocks;
         u16 repeat_delay;
         u16 repeat_interval;
+        u8 boot_keys[KEYBOARD_BOOT_KEYS];
+        u8 boot_key_count;
     };
 
 public:
@@ -66,9 +69,12 @@ public:
     void KeyReleased(GT_Keys key);
     void ReleaseAllKeys();
     bool IsKeyPressed(GT_Keys key) const;
+    void SetBootKeys(const GT_Keys* keys, int count);
+    void ClearBootKeys();
+    int GetBootKeys(GT_Keys* keys) const;
     Keyboard_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void WriteCommand(u8 value);
@@ -81,7 +87,7 @@ private:
     void UpdateIRQ();
     void UpdateNextEvent();
     void TraceEvent(u8 event, u8 value, u8 flags, u8 key);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

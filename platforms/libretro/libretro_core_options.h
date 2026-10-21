@@ -407,6 +407,27 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "auto"
     },
     {
+        "geartowns_boot_device",
+        "Boot Device (restart)",
+        NULL,
+        "Holds the system ROM's boot keys at power-on and on every restart: C+D for the CD-ROM, F+0 or F+1 for a floppy drive, H+0 to H+4 for a SCSI hard disk, released at the first read from a disk. The 1F/2F and later models read them; the Model 1/2 and Marty ROMs don't. Auto boots as usual, the CD first, so a hard disk boots with a bootable CD in the drive only when it is chosen here.",
+        NULL,
+        "system",
+        {
+            { "auto",    "Auto" },
+            { "cdrom",   "CD-ROM" },
+            { "floppy1", "Floppy 1" },
+            { "floppy2", "Floppy 2" },
+            { "hdd0",    "Hard Disk ID 0" },
+            { "hdd1",    "Hard Disk ID 1" },
+            { "hdd2",    "Hard Disk ID 2" },
+            { "hdd3",    "Hard Disk ID 3" },
+            { "hdd4",    "Hard Disk ID 4" },
+            { NULL, NULL },
+        },
+        "auto"
+    },
+    {
         "geartowns_rtc",
         "Clock Start (restart)",
         NULL,

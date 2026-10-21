@@ -85,6 +85,7 @@ public:
     void SetFitted(bool fitted);
     bool IsFitted() const;
     void SetFeatures(u32 features);
+    void SetReadCallback(void* context, GT_Read_Callback callback);
     bool Decodes(u16 port) const;
     void Reset();
     u8 Read(u16 port, u64 clocks);
@@ -135,6 +136,8 @@ private:
     bool m_fitted;
     bool m_word_dma;
     bool m_word_port;
+    void* m_read_context;
+    GT_Read_Callback m_read_callback;
 };
 
 static const int k_scsi_irq = 8;

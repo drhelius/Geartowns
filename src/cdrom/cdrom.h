@@ -126,6 +126,7 @@ public:
     void SetReadSpeed(int speed);
     int GetReadSpeed() const;
     u32 GetAccessCount() const;
+    void SetReadCallback(void* context, GT_Read_Callback callback);
     bool IsBusy() const;
     CdRom_State* GetState();
     void SaveState(std::ostream& stream);
@@ -195,6 +196,8 @@ private:
     TraceLogger* m_trace_logger;
     CdRom_State m_state;
     u32 m_access_count;
+    void* m_read_context;
+    GT_Read_Callback m_read_callback;
     int m_read_speed;
     u64 m_sector_clocks;
     double m_seek_scale;

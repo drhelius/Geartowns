@@ -31,15 +31,19 @@ static const u8 k_dynarec_key_default32 = 0x01;
 static const u8 k_dynarec_key_paging = 0x02;
 static const u8 k_dynarec_key_stack32 = 0x04;
 
-// Blocks leave to the dispatcher with these flags: a transfer's m clocks to count and its data access, a return for
-// the debugger call stack, an exit at the natural end of the block and a static exit the dispatcher can link
+// Blocks leave to the dispatcher with these flags: the m clocks of a transfer to count, a return for the debugger
+// call stack, an exit at the natural end of the block and a static exit the dispatcher can link
 static const u32 k_dynarec_exit_transfer = 0x01;
-static const u32 k_dynarec_exit_access = 0x02;
 static const u32 k_dynarec_exit_return = 0x04;
 static const u32 k_dynarec_exit_end = 0x08;
 static const u32 k_dynarec_exit_link = 0x10;
 static const u32 k_dynarec_exit_slot = 0x20;
 static const u32 k_dynarec_exit_prefetch = 0x40;
+
+// Whether a transfer waited for its own code: never, always, or when the run's entry level is under stall_below
+static const u8 k_dynarec_stall_never = 0;
+static const u8 k_dynarec_stall_always = 1;
+static const u8 k_dynarec_stall_below = 2;
 
 class DynarecEmitter
 {
@@ -63,8 +67,11 @@ private:
         u32 high;
         u32 add;
         u32 target;
+        s32 stall_below;
+        u8 stall;
         bool transfer;
         bool access;
+        bool static_target;
     };
 
     struct Instruction
@@ -83,6 +90,7 @@ private:
         u32 transfer_target;
         u32 transfer_level;
         u32 transfer_add;
+        bool transfer_static;
         bool transfer_known;
         BusRun bus_before;
         BusRun bus_after;
@@ -109,7 +117,7 @@ private:
     static u32 GetBusStall(const BusRun& run, u32 level);
     static u32 GetBusLevel(const BusRun& run, u32 level);
     void EmitBusRun(const BusRun& run, int carry);
-    void EmitBusTransferRow(u32 target);
+    void EmitBusTransferRow(const BusRun& run);
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access);
 
     void EmitBlock();

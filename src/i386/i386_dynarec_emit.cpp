@@ -652,7 +652,7 @@ u16 DynarecEmitter::GetConditionFlags(int condition) const
 // A run restarts after each helper
 void DynarecEmitter::ComputeBus()
 {
-    BusRun empty = { 0, 0, 0, 0, k_i386_bus_queue, 0, 0, false, false };
+    BusRun empty = { 0, 0, 0, 0, k_i386_bus_queue, 0, 0, 0, 0, false, false, false };
     BusRun run = empty;
 
     for (int i = 0; i < m_count; i++)
@@ -662,6 +662,7 @@ void DynarecEmitter::ComputeBus()
 
         instruction.bus_before = run;
         instruction.bus_code_row = m_timed ? m_cpu->GetBusCodeRow(c.start_eip, c.next_eip - c.start_eip) : 0;
+        instruction.transfer_static = false;
         instruction.transfer_known = false;
 
         if (!m_timed)
@@ -688,11 +689,11 @@ void DynarecEmitter::ComputeBusTransfer(Instruction& instruction)
     u32 target = 0;
     u32 components = 0;
 
-    instruction.transfer_target = 0;
+    instruction.transfer_static = GetStaticTarget(instruction.context, target);
+    instruction.transfer_target = target;
     instruction.transfer_level = 0;
     instruction.transfer_add = 0;
-    instruction.transfer_known = GetStaticTarget(instruction.context, target) &&
-        GetTargetComponents(target, components);
+    instruction.transfer_known = instruction.transfer_static && GetTargetComponents(target, components);
 
     if (!instruction.transfer_known)
         return;
@@ -797,13 +798,17 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
     result.high = StepBusLevel(run.high, step, prefetch + need - length);
     result.add = run.add + cycles * bus.cycle_refresh + ((cycles - accesses) << 17);
     result.target = 0;
+    result.stall_below = 0;
+    result.stall = k_dynarec_stall_never;
     result.transfer = transfer;
     result.access = false;
+    result.static_target = false;
 
     if (read || write)
         result.add += m_cpu->GetBusDramFold(size, read, write, instruction.bus_code_row);
 
-    // For a target outside the code window the dispatcher sets the queue and adds the row change
+    // For a target outside the code window the dispatcher sets the queue
+    // The instruction stalled when its level, clamp(s + offset, low, high) of the run before it, was under need
     if (transfer)
     {
         result.offset = 0;
@@ -811,7 +816,11 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
         result.high = instruction.transfer_level;
         result.add += bus.refill + instruction.transfer_add;
         result.target = instruction.transfer_target;
-        result.access = instruction.transfer_known && (read || write);
+        result.access = read || write;
+        result.static_target = instruction.transfer_static;
+        result.stall = run.low >= need ? k_dynarec_stall_never : run.high < need ? k_dynarec_stall_always :
+            k_dynarec_stall_below;
+        result.stall_below = (s32)need - run.offset;
     }
 
     return result;
@@ -870,8 +879,8 @@ void DynarecEmitter::EmitBusRun(const BusRun& run, int carry)
     if (add != 0)
         jit_addi(DR_T2, DR_T2, (jit_word_t)add);
 
-    if (run.transfer && run.access && m_cpu->m_bus.transfer_row != 0)
-        EmitBusTransferRow(run.target);
+    if (run.transfer && run.access && run.stall != k_dynarec_stall_never && m_cpu->m_bus.transfer_row != 0)
+        EmitBusTransferRow(run);
 
     if (run.transfer)
     {
@@ -908,19 +917,46 @@ void DynarecEmitter::EmitBusRun(const BusRun& run, int carry)
     jit_stxi_i(queue, DR_CPU, DR_T0);
 }
 
-void DynarecEmitter::EmitBusTransferRow(u32 target)
+void DynarecEmitter::EmitBusTransferRow(const BusRun& run)
 {
-    u32 physical = target + m_cpu->m_bus_code_base;
+    u32 base = m_cpu->m_bus_code_base;
+    jit_node_t* waited = NULL;
+    jit_node_t* same = NULL;
 
-    LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_bus_row));
-    jit_andi(DR_T1, DR_T1, (jit_word_t)(~k_i386_bus_row_stored));
-    jit_node_t* same = jit_beqi(DR_T1, (jit_word_t)(physical >> 10));
+    if (run.stall == k_dynarec_stall_below)
+    {
+        LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_bus_queue));
+        waited = jit_bgei(DR_T0, (jit_word_t)run.stall_below);
+    }
+
+    LoadU32(DR_T3, DR_CPU, Offset(&m_cpu->m_bus_row));
+    jit_andi(DR_T3, DR_T3, (jit_word_t)(~k_i386_bus_row_stored));
     jit_ldxi(DR_T1, DR_CPU, Offset(&m_cpu->m_bus_page_class));
-    jit_ldxi_uc(DR_T1, DR_T1, (jit_word_t)(physical >> 12));
+
+    if (run.static_target)
+    {
+        u32 physical = run.target + base;
+        same = jit_beqi(DR_T3, (jit_word_t)(physical >> 10));
+        jit_ldxi_uc(DR_T1, DR_T1, (jit_word_t)(physical >> 12));
+    }
+    else
+    {
+        LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_state.eip));
+        jit_addi(DR_T0, DR_T0, (jit_word_t)base);
+        Mask(DR_T0, 32);
+        jit_rshi_u(DR_T0, DR_T0, 10);
+        same = jit_beqr(DR_T0, DR_T3);
+        jit_rshi_u(DR_T0, DR_T0, 2);
+        jit_ldxr_uc(DR_T1, DR_T1, DR_T0);
+    }
+
     jit_node_t* other = jit_bnei(DR_T1, GT_BUS_DRAM);
     jit_addi(DR_T2, DR_T2, (jit_word_t)m_cpu->m_bus.transfer_row);
     jit_patch(other);
     jit_patch(same);
+
+    if (IsValidPointer(waited))
+        jit_patch(waited);
 }
 
 // Aligned DRAM adds only near-row or row-change time, the rest calls DynarecBusAccess. Clobbers linear, t1, t2
@@ -2638,8 +2674,7 @@ void DynarecEmitter::EmitCall(Instruction& instruction, int index, int width)
     if (known)
         ExitLinked(index + 1, instruction.before + instruction.clocks + components, k_dynarec_exit_end, 1, run);
     else
-        Exit(index + 1, instruction.before + instruction.clocks,
-            k_dynarec_exit_transfer | k_dynarec_exit_access | k_dynarec_exit_end, run);
+        Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_transfer | k_dynarec_exit_end, run);
 }
 
 void DynarecEmitter::EmitReturn(Instruction& instruction, int index, int width, u16 release)
@@ -2673,8 +2708,7 @@ void DynarecEmitter::EmitReturn(Instruction& instruction, int index, int width, 
     }
 
     Exit(index + 1, instruction.before + instruction.clocks,
-        k_dynarec_exit_transfer | k_dynarec_exit_access | k_dynarec_exit_return | k_dynarec_exit_end,
-        m_timed ? &instruction.bus_taken : NULL);
+        k_dynarec_exit_transfer | k_dynarec_exit_return | k_dynarec_exit_end, m_timed ? &instruction.bus_taken : NULL);
 }
 
 #endif

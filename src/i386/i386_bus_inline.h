@@ -257,8 +257,9 @@ INLINE void I386::AddBusQueue(u32 data, bool transfer)
     m_bus_queue = MIN(queue, k_i386_bus_queue);
     m_bus_fraction += add;
 
+    // Only a transfer that waited for its own code finds its access behind the refill
     if (transfer)
-        AddBusTransfer(accesses != 0);
+        AddBusTransfer(accesses != 0 && stall != 0);
 }
 
 INLINE u32 I386::GetBusPending() const

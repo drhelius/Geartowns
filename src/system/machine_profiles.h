@@ -68,7 +68,7 @@ const GT_Machine_Video_Timing k_machine_video_sx = { 1888, 2193, false, 169, 75,
 const GT_Machine_Video_Timing k_machine_video_marty = { 1888, 2193, true, 169, 75, 190, 1000 };
 
 // 1/256 clocks. SX: fitted on a real Marty. DX: Data Book RAM 3 and VRAM 6 (0 and 3 high speed), the rest as SX
-// dram_transfer: a transfer right after its own access to another row reopens the target's row
+// dram_transfer: a transfer that waited for its code, then accessed another row, reopens the target's row
 // dram_store_load: a load right after a 2-cycle store to its row overlaps the store's last clock
 const GT_Machine_Bus_Waits k_machine_bus_waits_sx = { { 954, 338 }, { 155, 0 }, { 284, 305 }, 954, 256, { 0, 0 },
     { 1152, 868 }, { 1130, 840 }, 1384, 1250, { 1578, 1024 } };

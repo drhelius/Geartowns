@@ -27,6 +27,7 @@
 #include "cdrom/cdrom_media.h"
 #include "drive/fdc.h"
 #include "drive/scsi_controller.h"
+#include "drive/hard_disk_image.h"
 #include "media/firmware.h"
 #include "input/input.h"
 #include "input/keyboard.h"
@@ -83,6 +84,12 @@ GeartownsCore::GeartownsCore()
 
     for (int i = 0; i < GT_MACHINE_COUNT; i++)
         m_firmware_sources[i].set = -1;
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        m_hard_disk_write_protected[i] = false;
+        m_hard_disk_pending[i] = false;
+    }
 
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
@@ -723,6 +730,7 @@ bool GeartownsCore::PowerOn()
 void GeartownsCore::PowerOff()
 {
     m_powered = false;
+    FlushHardDisks();
 
     if (IsValidPointer(m_i386))
         m_i386->ResetDisassembler();
@@ -942,6 +950,101 @@ void GeartownsCore::SwapFloppies()
 FloppyDisk* GeartownsCore::GetFloppy(int drive)
 {
     return IsValidPointer(m_fdc) ? m_fdc->GetDisk(drive) : NULL;
+}
+
+bool GeartownsCore::AttachHardDisk(int id, const char* path, bool write_protected)
+{
+    if ((id < 0) || (id >= GT_MAX_HARD_DISKS) || !IsValidPointer(path) || !IsValidPointer(m_scsi))
+        return false;
+
+    if (m_powered)
+    {
+        HardDiskImage image;
+
+        if (!image.Open(path, true))
+            return false;
+
+        m_hard_disk_paths[id] = path;
+        m_hard_disk_write_protected[id] = write_protected;
+        m_hard_disk_pending[id] = true;
+    }
+    else
+    {
+        m_hard_disk_pending[id] = false;
+
+        if (!m_scsi->GetDisk(id)->Attach(path, write_protected))
+            return false;
+    }
+
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
+
+    return true;
+}
+
+void GeartownsCore::DetachHardDisk(int id)
+{
+    if ((id < 0) || (id >= GT_MAX_HARD_DISKS) || !IsValidPointer(m_scsi))
+        return;
+
+    if (m_powered)
+    {
+        m_hard_disk_paths[id].clear();
+        m_hard_disk_pending[id] = true;
+    }
+    else
+    {
+        m_hard_disk_pending[id] = false;
+        m_scsi->GetDisk(id)->Detach();
+    }
+
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
+}
+
+bool GeartownsCore::FlushHardDisks()
+{
+    bool ok = true;
+
+    for (int i = 0; IsValidPointer(m_scsi) && (i < GT_MAX_HARD_DISKS); i++)
+        ok = m_scsi->GetDisk(i)->GetImage()->Flush() && ok;
+
+    return ok;
+}
+
+HardDiskImage* GeartownsCore::GetHardDisk(int id)
+{
+    return (IsValidPointer(m_scsi) && (id >= 0) && (id < GT_MAX_HARD_DISKS)) ? m_scsi->GetDisk(id)->GetImage() : NULL;
+}
+
+bool GeartownsCore::HasHardDisks()
+{
+    for (int i = 0; IsValidPointer(m_scsi) && (i < GT_MAX_HARD_DISKS); i++)
+    {
+        if (m_hard_disk_pending[i] ? !m_hard_disk_paths[i].empty() : m_scsi->GetDisk(i)->IsAttached())
+            return true;
+    }
+
+    return false;
+}
+
+void GeartownsCore::ApplyHardDisks()
+{
+    for (int i = 0; IsValidPointer(m_scsi) && (i < GT_MAX_HARD_DISKS); i++)
+    {
+        if (!m_hard_disk_pending[i])
+            continue;
+
+        m_hard_disk_pending[i] = false;
+        m_scsi->GetDisk(i)->Detach();
+
+        if (!m_hard_disk_paths[i].empty())
+            m_scsi->GetDisk(i)->Attach(m_hard_disk_paths[i].c_str(), m_hard_disk_write_protected[i]);
+    }
 }
 
 void GeartownsCore::KeyPressed(GT_Keys key)
@@ -1558,7 +1661,8 @@ void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
     config.cpu = profile.cpu;
     config.ram_size = (u32)(sizes[size] * megabyte);
     config.floppy_drives = profile.floppy_drives;
-    config.scsi = (profile.features & GT_MACHINE_FEATURE_SCSI) != 0;
+    config.scsi = ((profile.features & GT_MACHINE_FEATURE_SCSI) != 0) ||
+        (config.scsi && (config.model == GT_MACHINE_MODEL1_2));
 
     if (config.cpu_clock_rate == 0)
         config.cpu_clock_rate = profile.cpu_clock_rate;
@@ -1627,6 +1731,7 @@ void GeartownsCore::Reset()
     m_debug_step = GT_DEBUG_STEP_NONE;
     m_debug_step_resume = false;
     m_debug_interrupt_deferred = false;
+    ApplyHardDisks();
     LoadMachineFirmware(false, false);
     ApplyMachineConfig();
 
@@ -1727,6 +1832,7 @@ void GeartownsCore::ResolveMachineConfig()
     config.model = !auto_model ? (GT_Machine_Model)m_machine_settings.model : CanAutoSelect(named) ? named : fallback;
     config.cpu_clock_rate = auto_cpu ? 0 : (u32)m_machine_settings.cpu_mhz * 1000000;
     config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * megabyte;
+    config.scsi = HasHardDisks();
     report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
     report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
@@ -1777,9 +1883,9 @@ void GeartownsCore::ResolveMachineConfig()
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "%s needs a 486 CPU, not emulated yet", entry->title);
 
-    if ((entry->flags & GT_GAMEDB_HDD) != 0)
+    if (((entry->flags & GT_GAMEDB_HDD) != 0) && !HasHardDisks())
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "%s installs to a hard disk, not emulated yet", entry->title);
+            "%s installs to a hard disk, attach a hard disk image", entry->title);
 }
 
 bool GeartownsCore::CanAutoSelect(GT_Machine_Model model)

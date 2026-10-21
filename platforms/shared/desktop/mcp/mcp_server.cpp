@@ -3481,7 +3481,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         event_filters[TRACE_MIXER] = TRACE_MIXER_EVENT_ALL;
         event_filters[TRACE_CDROM] = TRACE_CDROM_EVENT_ALL;
         event_filters[TRACE_FDC] = TRACE_FDC_EVENT_ALL;
-        event_filters[TRACE_SCSI] = TRACE_SCSI_EVENT_ALL;
+        event_filters[TRACE_SCSI] = TRACE_SCSI_EVENT_DEFAULT;
         event_filters[TRACE_KEYBOARD] = TRACE_KEYBOARD_EVENT_ALL;
         event_filters[TRACE_INPUT] = TRACE_INPUT_EVENT_DEFAULT;
         event_filters[TRACE_SYSTEM] = TRACE_SYSTEM_EVENT_DEFAULT;

@@ -767,6 +767,12 @@ static void trace_logger_menu_filters(void)
         trace_logger_menu_event_filter("Control", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_CONTROL);
         trace_logger_menu_event_filter("Bus Reset", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_RESET);
         trace_logger_menu_event_filter("Selection", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_SELECTION);
+        trace_logger_menu_event_filter("Commands", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_COMMANDS);
+        trace_logger_menu_event_filter("Phases", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_PHASES);
+        trace_logger_menu_event_filter("Status and Messages", &config_debug.trace_scsi_events,
+            TRACE_SCSI_EVENT_STATUS);
+        trace_logger_menu_event_filter("Data Transfers", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_DATA);
+        trace_logger_menu_event_filter("Errors", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_ERRORS);
         ImGui::EndDisabled();
         ImGui::EndMenu();
     }

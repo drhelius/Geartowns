@@ -29,6 +29,7 @@ class CdRomAudio;
 class CdRomMedia;
 class FDC;
 class FloppyDisk;
+class HardDiskImage;
 class ScsiController;
 class Keyboard;
 class MSM58321;
@@ -109,6 +110,9 @@ public:
     bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0, u32 data_crc = 0, const u8* source = NULL, u32 source_size = 0);
     void EjectFloppy(int drive);
     void SwapFloppies();
+    bool AttachHardDisk(int id, const char* path, bool write_protected = false);
+    void DetachHardDisk(int id);
+    bool FlushHardDisks();
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
@@ -144,6 +148,7 @@ public:
     FDC* GetFDC();
     FloppyDisk* GetFloppy(int drive);
     ScsiController* GetSCSI();
+    HardDiskImage* GetHardDisk(int id);
     Keyboard* GetKeyboard();
     TraceLogger* GetTraceLogger();
     Profiler* GetProfiler();
@@ -177,6 +182,8 @@ private:
     void Reset();
     void ResetCPU();
     void ResolveMachineConfig();
+    bool HasHardDisks();
+    void ApplyHardDisks();
     bool CanAutoSelect(GT_Machine_Model model);
     bool LoadMachineFirmware(bool force, bool report);
     void ApplyMachineConfig();
@@ -225,6 +232,9 @@ private:
     GT_Machine_Config m_pending_machine_config;
     GT_Machine_Report m_machine_report;
     GT_Machine_Report m_pending_machine_report;
+    std::string m_hard_disk_paths[GT_MAX_HARD_DISKS];
+    bool m_hard_disk_write_protected[GT_MAX_HARD_DISKS];
+    bool m_hard_disk_pending[GT_MAX_HARD_DISKS];
     bool m_powered;
     bool m_paused;
     GT_Debug_Step m_debug_step;

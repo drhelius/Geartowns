@@ -487,6 +487,11 @@ fdc.drives
 scsi.control
 scsi.reset
 scsi.selection
+scsi.commands
+scsi.phases
+scsi.status
+scsi.data
+scsi.errors
 keyboard.keys
 keyboard.reads
 keyboard.commands
@@ -498,7 +503,7 @@ system.memory_map
 system.rtc
 ```
 
-Hardware events are decoded as the guest sees them: register names and fields, IRQ lines and vectors, DMA channels with their device, CD-ROM commands with their MSF ranges, status packets and sector transfers, FDC commands and results, keyboard messages with the key name, and pad buttons. Video register writes carry the beam line and dot. I/O port writes are logged before the device acts on them, so the events they cause follow them.
+Hardware events are decoded as the guest sees them: register names and fields, IRQ lines and vectors, DMA channels with their device, CD-ROM commands with their MSF ranges, status packets and sector transfers, FDC commands and results, SCSI commands with their block ranges, bus phases, status, sense and data transfers, keyboard messages with the key name, and pad buttons. Video register writes carry the beam line and dot. I/O port writes are logged before the device acts on them, so the events they cause follow them.
 
 `video.missed_vblank` detects frames where the game missed VBlank. It watches one linear address, set with `vblank_watch_address` (hex, e.g. `1234ABCD`, `0x1234ABCD`, or `$1234ABCD`), for the access set with `vblank_watch_operation` (`read`, `write`, or `read_write`). CPU data accesses count, instruction fetches do not. At each VSYNC the frame that just ended is checked, and if the watched access did not happen during it, a `VBLANK MISSED` entry is logged with the watched address, operation, and the number of consecutive missed frames. The first VSYNC after starting the logger, changing the watch, resetting, or loading a state only arms the check. Both parameters persist in the configuration and keep their current values when omitted; the response echoes them when `video.missed_vblank` is active.
 

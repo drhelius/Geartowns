@@ -91,14 +91,19 @@ bool MediaFileNative::ListDirectory(const char* path, std::vector<std::string>& 
 #endif
 }
 
-bool MediaFileNative::Open(const char* path)
+bool MediaFileNative::Open(const char* path, bool writable)
 {
     Close();
 
     if (!IsValidPointer(path))
         return false;
 
-    open_ifstream_utf8(m_file, path, std::ios::in | std::ios::binary);
+    std::ios::openmode mode = std::ios::in | std::ios::binary;
+
+    if (writable)
+        mode |= std::ios::out;
+
+    open_ifstream_utf8(m_file, path, mode);
     return IsValid();
 }
 
@@ -185,4 +190,38 @@ s64 MediaFileNative::Read(void* buffer, u64 size)
 
     m_file.read(reinterpret_cast<char*>(buffer), (std::streamsize)size);
     return (s64)m_file.gcount();
+}
+
+s64 MediaFileNative::Write(const void* buffer, u64 size)
+{
+    if (!IsValidPointer(buffer))
+        return -1;
+
+    if (!m_file.is_open())
+        return -1;
+
+    if (size > (u64)(std::numeric_limits<std::streamsize>::max)())
+        return -1;
+
+    std::streampos position = m_file.tellg();
+    m_file.clear();
+    m_file.seekp(position, std::ios::beg);
+    m_file.write(reinterpret_cast<const char*>(buffer), (std::streamsize)size);
+
+    if (m_file.fail())
+    {
+        m_file.clear();
+        return -1;
+    }
+
+    return (s64)size;
+}
+
+bool MediaFileNative::Flush()
+{
+    if (!m_file.is_open())
+        return false;
+
+    m_file.flush();
+    return !m_file.fail();
 }

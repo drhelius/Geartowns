@@ -31,12 +31,12 @@ class MediaFile
 public:
     virtual ~MediaFile();
 
-    static MediaFile* OpenFile(const char* path);
+    static MediaFile* OpenFile(const char* path, bool writable = false);
     static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
     static void SetVfsInterface(const retro_vfs_interface* iface, unsigned version = 1);
     static bool HasVfsInterface();
 
-    virtual bool Open(const char* path) = 0;
+    virtual bool Open(const char* path, bool writable) = 0;
     virtual void Close() = 0;
     virtual bool IsOpen() const = 0;
     virtual bool IsValid() const = 0;
@@ -45,8 +45,11 @@ public:
     virtual s64 Tell() = 0;
     virtual bool Seek(s64 offset) = 0;
     virtual s64 Read(void* buffer, u64 size) = 0;
+    virtual s64 Write(const void* buffer, u64 size) = 0;
+    virtual bool Flush() = 0;
     bool ReadExact(void* buffer, u64 size);
     bool ReadAt(u64 offset, void* buffer, u64 size);
+    bool WriteAt(u64 offset, const void* buffer, u64 size);
 };
 
 #endif /* MEDIA_FILE_H */

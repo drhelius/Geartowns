@@ -22,6 +22,10 @@
 
 #include <iostream>
 #include "../common/common.h"
+#include "scsi_disk.h"
+
+#define SCSI_TARGETS GT_MAX_HARD_DISKS
+#define SCSI_COMMAND_SIZE 16
 
 class PIC;
 class Scheduler;
@@ -42,6 +46,15 @@ enum Scsi_Phase
     SCSI_PHASE_COUNT
 };
 
+enum Scsi_Event
+{
+    SCSI_EVENT_NONE = 0,
+    SCSI_EVENT_BUSY,
+    SCSI_EVENT_PHASE,
+    SCSI_EVENT_BUS_FREE,
+    SCSI_EVENT_COUNT
+};
+
 class ScsiController
 {
 public:
@@ -51,8 +64,17 @@ public:
         u8 data;
         u8 signals;
         bool interrupt;
+        bool drq;
         u8 phase;
         s8 target;
+        u8 lun;
+        u8 command[SCSI_COMMAND_SIZE];
+        u8 command_count;
+        u8 message;
+        u8 after_message;
+        u8 event;
+        u8 next_phase;
+        u64 event_clocks;
     };
 
 public:
@@ -67,6 +89,7 @@ public:
     u8 Peek(u16 port) const;
     void Write(u16 port, u8 value, u64 clocks);
     void HandleEvent(u64 clocks);
+    ScsiDisk* GetDisk(int id);
     ScsiController_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
@@ -74,9 +97,25 @@ public:
 private:
     u8 ReadStatus() const;
     u8 GetBusOutputs(u8 control) const;
-    void ResetBus(u64 clocks);
+    bool IsInputPhase() const;
+    bool IsOutputPhase() const;
+    void WriteControl(u8 value, u64 clocks);
+    void ResetBus();
     void Select(u64 clocks);
+    void EndSelection(u64 clocks);
+    void EnterPhase(u8 phase, u64 clocks);
+    void FreeBus();
+    u8 InputByte(u64 clocks);
+    void OutputByte(u8 value, u64 clocks);
+    void ExecuteCommand(u64 clocks);
+    void HandleMessage(u8 value, u64 clocks);
+    void EndData(u64 clocks);
+    void ScheduleEvent(u8 event, u8 phase, u64 clocks);
+    void CancelEvent();
+    void SetREQ(bool active);
     void UpdateIRQ();
+    void UpdateDRQ();
+    u32 GetCommandLength() const;
     void Trace(u8 event, u8 value);
     static bool DMAReadCallback(void* device, u16& value, bool word);
     static bool DMAWriteCallback(void* device, u16 value, bool word);
@@ -88,13 +127,13 @@ private:
     Scheduler* m_scheduler;
     UPD71071* m_dma;
     TraceLogger* m_trace_logger;
+    ScsiDisk m_disks[SCSI_TARGETS];
     ScsiController_State m_state;
     bool m_fitted;
 };
 
 static const int k_scsi_irq = 8;
 static const int k_scsi_dma_channel = 1;
-static const int k_scsi_targets = 7;
 
 static const u8 k_scsi_control_wen = 0x80;
 static const u8 k_scsi_control_imsk = 0x40;
@@ -109,6 +148,16 @@ static const u8 k_scsi_status_msg = 0x20;
 static const u8 k_scsi_status_cd = 0x10;
 static const u8 k_scsi_status_busy = 0x08;
 static const u8 k_scsi_status_int = 0x02;
+
+static const u8 k_scsi_message_command_complete = 0x00;
+static const u8 k_scsi_message_abort = 0x06;
+static const u8 k_scsi_message_reject = 0x07;
+static const u8 k_scsi_message_no_operation = 0x08;
+static const u8 k_scsi_message_device_reset = 0x0C;
+static const u8 k_scsi_message_identify = 0x80;
+
+static const u64 k_scsi_busy_clocks = GT_MACHINE_CLOCK_RATE / 200000;
+static const u64 k_scsi_phase_clocks = GT_MACHINE_CLOCK_RATE / 2000;
 
 #include "scsi_controller_inline.h"
 

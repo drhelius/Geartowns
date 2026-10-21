@@ -101,6 +101,8 @@ SOURCES_CXX := \
     $(SRC_DIR)/drive/fdc.cpp \
     $(SRC_DIR)/drive/mb8877.cpp \
     $(SRC_DIR)/drive/scsi_controller.cpp \
+    $(SRC_DIR)/drive/scsi_disk.cpp \
+    $(SRC_DIR)/drive/hard_disk_image.cpp \
     $(SRC_DIR)/drive/floppy_disk.cpp \
     $(SRC_DIR)/drive/floppy_image.cpp \
     $(SRC_DIR)/i386/i386.cpp \

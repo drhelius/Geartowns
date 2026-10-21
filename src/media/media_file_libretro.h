@@ -37,7 +37,7 @@ public:
     static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
     static bool IsCdRomUriPath(const char* path);
 
-    virtual bool Open(const char* path) override;
+    virtual bool Open(const char* path, bool writable) override;
     virtual void Close() override;
     virtual bool IsOpen() const override;
     virtual bool IsValid() const override;
@@ -46,11 +46,14 @@ public:
     virtual s64 Tell() override;
     virtual bool Seek(s64 offset) override;
     virtual s64 Read(void* buffer, u64 size) override;
+    virtual s64 Write(const void* buffer, u64 size) override;
+    virtual bool Flush() override;
 
 private:
     bool Reopen();
     bool SkipBytes(s64 bytes);
     unsigned GetOpenHints(const char* path);
+    unsigned GetOpenMode() const;
 
 private:
     static const retro_vfs_interface* s_vfs_interface;
@@ -58,6 +61,7 @@ private:
     LibretroVfsFile m_file;
     char* m_path;
     s64 m_position;
+    bool m_writable;
 };
 
 #endif

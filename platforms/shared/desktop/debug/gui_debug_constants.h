@@ -851,4 +851,111 @@ static inline bool gui_debug_ym3438_register_name(int part, u8 address, char* na
     return false;
 }
 
+static inline const char* gui_debug_scsi_command_name(u8 command)
+{
+    switch (command)
+    {
+        case 0x00: return "TEST UNIT READY";
+        case 0x01: return "REZERO UNIT";
+        case 0x03: return "REQUEST SENSE";
+        case 0x04: return "FORMAT UNIT";
+        case 0x08: return "READ(6)";
+        case 0x0A: return "WRITE(6)";
+        case 0x0B: return "SEEK(6)";
+        case 0x12: return "INQUIRY";
+        case 0x15: return "MODE SELECT(6)";
+        case 0x16: return "RESERVE";
+        case 0x17: return "RELEASE";
+        case 0x1A: return "MODE SENSE(6)";
+        case 0x1B: return "START STOP UNIT";
+        case 0x1D: return "SEND DIAGNOSTIC";
+        case 0x1E: return "PREVENT ALLOW";
+        case 0x25: return "READ CAPACITY";
+        case 0x28: return "READ(10)";
+        case 0x2A: return "WRITE(10)";
+        case 0x2B: return "SEEK(10)";
+        case 0x2F: return "VERIFY(10)";
+        default: return "UNKNOWN";
+    }
+}
+
+static const char* const k_debug_scsi_phase_names[8] =
+{
+    "BUS FREE", "SELECTION", "COMMAND", "DATA IN", "DATA OUT", "STATUS", "MESSAGE IN", "MESSAGE OUT"
+};
+
+static const char* const k_debug_scsi_sense_keys[16] =
+{
+    "NO SENSE", "RECOVERED ERROR", "NOT READY", "MEDIUM ERROR", "HARDWARE ERROR", "ILLEGAL REQUEST",
+    "UNIT ATTENTION", "DATA PROTECT", "BLANK CHECK", "VENDOR SPECIFIC", "COPY ABORTED", "ABORTED COMMAND", "EQUAL",
+    "VOLUME OVERFLOW", "MISCOMPARE", "RESERVED"
+};
+
+static inline const char* gui_debug_scsi_sense_code_name(u8 code)
+{
+    switch (code)
+    {
+        case 0x11: return "UNRECOVERED READ ERROR";
+        case 0x1D: return "MISCOMPARE DURING VERIFY";
+        case 0x20: return "INVALID COMMAND OPERATION CODE";
+        case 0x21: return "LBA OUT OF RANGE";
+        case 0x24: return "INVALID FIELD IN CDB";
+        case 0x25: return "LOGICAL UNIT NOT SUPPORTED";
+        case 0x27: return "WRITE PROTECTED";
+        default: return "";
+    }
+}
+
+static inline const char* gui_debug_scsi_message_name(u8 message)
+{
+    if ((message & 0x80) != 0)
+        return "IDENTIFY";
+
+    switch (message)
+    {
+        case 0x00: return "COMMAND COMPLETE";
+        case 0x06: return "ABORT";
+        case 0x07: return "MESSAGE REJECT";
+        case 0x08: return "NO OPERATION";
+        case 0x0C: return "BUS DEVICE RESET";
+        default: return "UNKNOWN";
+    }
+}
+
+static inline void gui_debug_scsi_command(const u8* command, char* text, size_t size)
+{
+    const char* name = gui_debug_scsi_command_name(command[0]);
+    u32 lba6 = ((u32)(command[1] & 0x1F) << 16) | ((u32)command[2] << 8) | command[3];
+    u32 lba10 = ((u32)command[2] << 24) | ((u32)command[3] << 16) | ((u32)command[4] << 8) | command[5];
+    u32 blocks10 = ((u32)command[7] << 8) | command[8];
+
+    switch (command[0])
+    {
+        case 0x08:
+        case 0x0A:
+            snprintf(text, size, "%s LBA %06X x%u", name, lba6, command[4] == 0 ? 256 : command[4]);
+            break;
+        case 0x0B:
+            snprintf(text, size, "%s LBA %06X", name, lba6);
+            break;
+        case 0x28:
+        case 0x2A:
+        case 0x2F:
+            snprintf(text, size, "%s LBA %08X x%u", name, lba10, blocks10);
+            break;
+        case 0x2B:
+            snprintf(text, size, "%s LBA %08X", name, lba10);
+            break;
+        case 0x03:
+        case 0x12:
+        case 0x15:
+        case 0x1A:
+            snprintf(text, size, "%s length %u", name, command[4]);
+            break;
+        default:
+            snprintf(text, size, "%s", name);
+            break;
+    }
+}
+
 #endif /* GUI_DEBUG_CONSTANTS_H */

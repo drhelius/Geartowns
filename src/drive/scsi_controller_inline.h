@@ -27,6 +27,11 @@ INLINE bool ScsiController::IsFitted() const
     return m_fitted;
 }
 
+INLINE ScsiDisk* ScsiController::GetDisk(int id)
+{
+    return (id >= 0 && id < SCSI_TARGETS) ? &m_disks[id] : NULL;
+}
+
 INLINE ScsiController::ScsiController_State* ScsiController::GetState()
 {
     return &m_state;
@@ -43,6 +48,18 @@ INLINE u8 ScsiController::GetBusOutputs(u8 control) const
 INLINE u8 ScsiController::ReadStatus() const
 {
     return m_state.signals | (m_state.interrupt ? k_scsi_status_int : 0);
+}
+
+INLINE bool ScsiController::IsInputPhase() const
+{
+    return (m_state.phase == SCSI_PHASE_DATA_IN) || (m_state.phase == SCSI_PHASE_STATUS) ||
+        (m_state.phase == SCSI_PHASE_MESSAGE_IN);
+}
+
+INLINE bool ScsiController::IsOutputPhase() const
+{
+    return (m_state.phase == SCSI_PHASE_COMMAND) || (m_state.phase == SCSI_PHASE_DATA_OUT) ||
+        (m_state.phase == SCSI_PHASE_MESSAGE_OUT);
 }
 
 #endif /* SCSI_CONTROLLER_INLINE_H */

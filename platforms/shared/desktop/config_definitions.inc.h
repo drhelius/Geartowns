@@ -131,7 +131,7 @@ static inline void process(config_Operation operation)
         TRACE_CDROM_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceFdcEvents", config_debug.trace_fdc_events, TRACE_FDC_EVENT_ALL, 0,
         TRACE_FDC_EVENT_ALL);
-    CONFIG_INT_RANGE("Debug", "TraceScsiEvents", config_debug.trace_scsi_events, TRACE_SCSI_EVENT_ALL, 0,
+    CONFIG_INT_RANGE("Debug", "TraceScsiEvents", config_debug.trace_scsi_events, TRACE_SCSI_EVENT_DEFAULT, 0,
         TRACE_SCSI_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceKeyboardEvents", config_debug.trace_keyboard_events, TRACE_KEYBOARD_EVENT_ALL, 0,
         TRACE_KEYBOARD_EVENT_ALL);

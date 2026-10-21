@@ -41,6 +41,7 @@
 
 #define GT_MAX_GAMEPADS 2
 #define GT_MAX_FLOPPY_DRIVES 2
+#define GT_MAX_HARD_DISKS 7
 
 #define GT_MAX_PATH 4096
 

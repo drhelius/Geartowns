@@ -30,6 +30,7 @@ MediaFileLibretro::MediaFileLibretro()
 {
     m_path = NULL;
     m_position = 0;
+    m_writable = false;
 }
 
 MediaFileLibretro::~MediaFileLibretro()
@@ -100,7 +101,13 @@ unsigned MediaFileLibretro::GetOpenHints(const char* path)
         RETRO_VFS_FILE_ACCESS_HINT_NONE : RETRO_VFS_FILE_ACCESS_HINT_FREQUENT_ACCESS;
 }
 
-bool MediaFileLibretro::Open(const char* path)
+unsigned MediaFileLibretro::GetOpenMode() const
+{
+    return m_writable ? RETRO_VFS_FILE_ACCESS_READ_WRITE | RETRO_VFS_FILE_ACCESS_UPDATE_EXISTING :
+        RETRO_VFS_FILE_ACCESS_READ;
+}
+
+bool MediaFileLibretro::Open(const char* path, bool writable)
 {
     Close();
 
@@ -114,10 +121,11 @@ bool MediaFileLibretro::Open(const char* path)
     m_path = new char[path_size];
     memcpy(m_path, path, path_size);
     m_file.SetInterface(s_vfs_interface);
+    m_writable = writable;
 
     unsigned hints = GetOpenHints(path);
 
-    if (!m_file.Open(path, RETRO_VFS_FILE_ACCESS_READ, hints))
+    if (!m_file.Open(path, GetOpenMode(), hints))
     {
         SafeDeleteArray(m_path);
         m_position = 0;
@@ -228,6 +236,31 @@ s64 MediaFileLibretro::Read(void* buffer, u64 size)
     return read;
 }
 
+s64 MediaFileLibretro::Write(const void* buffer, u64 size)
+{
+    if (!IsValidPointer(buffer))
+        return -1;
+
+    if (!m_file.IsOpen() || !m_writable)
+        return -1;
+
+    if (size > (u64)INT64_MAX)
+        return -1;
+
+    s64 before = Tell();
+    s64 written = m_file.Write(buffer, size);
+
+    if (written > 0)
+        m_position = before + written;
+
+    return written;
+}
+
+bool MediaFileLibretro::Flush()
+{
+    return m_file.IsOpen() && m_file.Flush();
+}
+
 bool MediaFileLibretro::Reopen()
 {
     if (!m_path)
@@ -235,7 +268,7 @@ bool MediaFileLibretro::Reopen()
 
     unsigned hints = GetOpenHints(m_path);
 
-    if (!m_file.Open(m_path, RETRO_VFS_FILE_ACCESS_READ, hints))
+    if (!m_file.Open(m_path, GetOpenMode(), hints))
     {
         m_position = 0;
         return false;

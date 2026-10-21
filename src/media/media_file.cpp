@@ -30,13 +30,13 @@ MediaFile::~MediaFile()
 
 }
 
-MediaFile* MediaFile::OpenFile(const char* path)
+MediaFile* MediaFile::OpenFile(const char* path, bool writable)
 {
 #if defined(__LIBRETRO__)
     if (MediaFileLibretro::HasVfsInterface())
     {
         MediaFile* file = new MediaFileLibretro;
-        if (file->Open(path))
+        if (file->Open(path, writable))
             return file;
 
         SafeDelete(file);
@@ -48,7 +48,7 @@ MediaFile* MediaFile::OpenFile(const char* path)
 #endif
 
     MediaFile* file = new MediaFileNative;
-    if (file->Open(path))
+    if (file->Open(path, writable))
         return file;
 
     SafeDelete(file);
@@ -119,4 +119,15 @@ bool MediaFile::ReadAt(u64 offset, void* buffer, u64 size)
         return false;
 
     return ReadExact(buffer, size);
+}
+
+bool MediaFile::WriteAt(u64 offset, const void* buffer, u64 size)
+{
+    if (!CanSeek() || (offset > (u64)INT64_MAX) || (size > (u64)INT64_MAX) || !IsValidPointer(buffer))
+        return false;
+
+    if (!Seek((s64)offset))
+        return false;
+
+    return Write(buffer, size) == (s64)size;
 }

@@ -1035,6 +1035,11 @@ static void format_fdc(const GT_Trace_Entry& entry, char* buffer, size_t size)
 
 static void format_scsi(const GT_Trace_Entry& entry, char* buffer, size_t size)
 {
+    char target[8] = "-";
+
+    if (entry.scsi.target >= 0)
+        snprintf(target, sizeof(target), "%d", entry.scsi.target);
+
     switch (entry.event)
     {
         case TRACE_SCSI_CONTROL:
@@ -1051,16 +1056,68 @@ static void format_scsi(const GT_Trace_Entry& entry, char* buffer, size_t size)
         case TRACE_SCSI_RESET:
             format_event(buffer, size, "SCSI", "BUS RESET", "Control:$%02X", entry.scsi.control);
             break;
-        default:
-        {
-            char target[24] = "no target";
-
+        case TRACE_SCSI_SELECTION:
             if (entry.scsi.target >= 0)
-                snprintf(target, sizeof(target), "ID %d answers", entry.scsi.target);
+                format_event(buffer, size, "SCSI", "SELECTION", "Data:$%02X  ID %d answers", entry.scsi.value,
+                    entry.scsi.target);
+            else
+                format_event(buffer, size, "SCSI", "SELECTION", "Data:$%02X  no target", entry.scsi.value);
+            break;
+        case TRACE_SCSI_COMMAND:
+        {
+            char command[64];
+            char bytes[40] = "";
+            gui_debug_scsi_command(entry.scsi.command, command, sizeof(command));
 
-            format_event(buffer, size, "SCSI", "SELECTION", "Data:$%02X  %s", entry.scsi.value, target);
+            for (u32 i = 0; (i < entry.scsi.count) && (i < sizeof(entry.scsi.command)); i++)
+            {
+                char hex[4];
+                snprintf(hex, sizeof(hex), "%02X", entry.scsi.command[i]);
+                strncat(bytes, hex, sizeof(bytes) - strlen(bytes) - 1);
+            }
+
+            format_event(buffer, size, "SCSI", "COMMAND", "ID %s  %s  CDB:%s", target, command, bytes);
             break;
         }
+        case TRACE_SCSI_PHASE:
+            format_event(buffer, size, "SCSI", "PHASE", "%s  ID %s  Status:$%02X",
+                k_debug_scsi_phase_names[entry.scsi.value & 0x07], target, entry.scsi.status);
+            break;
+        case TRACE_SCSI_STATUS:
+            if (entry.scsi.value == k_scsi_good)
+                format_event(buffer, size, "SCSI", "STATUS", "ID %s  GOOD", target);
+            else
+                format_event(buffer, size, "SCSI", "STATUS", "ID %s  $%02X CHECK CONDITION  %s %02Xh %s", target,
+                    entry.scsi.value, k_debug_scsi_sense_keys[entry.scsi.key & 0x0F], entry.scsi.code,
+                    gui_debug_scsi_sense_code_name(entry.scsi.code));
+            break;
+        case TRACE_SCSI_MESSAGE:
+            format_event(buffer, size, "SCSI", "MESSAGE", "%s $%02X %s  ID %s",
+                entry.scsi.phase == SCSI_PHASE_MESSAGE_OUT ? "OUT" : "IN", entry.scsi.value,
+                gui_debug_scsi_message_name(entry.scsi.value), target);
+            break;
+        case TRACE_SCSI_DATA_START:
+            format_event(buffer, size, "SCSI", "DATA START", "%s  ID %s  %s  %u bytes  DMAE:%u",
+                entry.scsi.phase == SCSI_PHASE_DATA_IN ? "IN" : "OUT", target,
+                gui_debug_scsi_command_name(entry.scsi.command[0]), entry.scsi.lba,
+                (entry.scsi.control & k_scsi_control_dmae) != 0 ? 1 : 0);
+            break;
+        case TRACE_SCSI_DATA_END:
+            format_event(buffer, size, "SCSI", "DATA END", "%s  ID %s  %s  %u of %u bytes",
+                entry.scsi.phase == SCSI_PHASE_DATA_IN ? "IN" : "OUT", target,
+                gui_debug_scsi_command_name(entry.scsi.command[0]), entry.scsi.count, entry.scsi.lba);
+            break;
+        default:
+            format_event(buffer, size, "SCSI", "ERROR", "ID %s  %s  %s %02Xh %s%s", target,
+                gui_debug_scsi_command_name(entry.scsi.command[0]), k_debug_scsi_sense_keys[entry.scsi.key & 0x0F],
+                entry.scsi.code, gui_debug_scsi_sense_code_name(entry.scsi.code), entry.scsi.value != 0 ? "  at LBA" : "");
+
+            if (entry.scsi.value != 0)
+            {
+                size_t length = strlen(buffer);
+                snprintf(buffer + length, size - length, " %08X", entry.scsi.lba);
+            }
+            break;
     }
 }
 

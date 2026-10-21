@@ -42,6 +42,7 @@ public:
     bool WriteBlock(u32 lba, const u8* buffer);
     bool Flush();
     u32 GetUnflushedBlocks() const;
+    u32 GetWriteCount() const;
     static bool Create(const char* path, u64 size);
 
 private:
@@ -53,6 +54,7 @@ private:
     std::vector<u32> m_overlay_index;
     std::vector<u8> m_overlay;
     u32 m_overlay_blocks;
+    u32 m_write_count;
     bool m_flush_failed;
 };
 

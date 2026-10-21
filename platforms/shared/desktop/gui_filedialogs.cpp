@@ -35,6 +35,7 @@
 #include "debug/gui_debug_memory.h"
 #include "gui_menus.h"
 #include "gui_floppy.h"
+#include "gui_hard_disks.h"
 #include "utils.h"
 
 enum FileDialogID
@@ -48,6 +49,8 @@ enum FileDialogID
     FileDialog_OpenFloppy,
     FileDialog_SaveFloppy,
     FileDialog_NewFloppy,
+    FileDialog_AttachHardDisk,
+    FileDialog_CreateHardDisk,
     FileDialog_ChooseScreenshotPath,
     FileDialog_ChooseVideoRecordingPath,
     FileDialog_SaveScreenshot,
@@ -72,6 +75,7 @@ static FileDialogID pending_dialog_id = FileDialog_None;
 static std::string pending_dialog_path;
 static bool dialog_active = false;
 static int dialog_floppy_drive = 0;
+static int dialog_hard_disk_id = 0;
 static GT_Machine_Model dialog_firmware_model = GT_MACHINE_MODEL1_2;
 static int dialog_sprite_index = 0;
 static bool pending_refocus_window = false;
@@ -296,6 +300,35 @@ void gui_file_dialog_new_floppy(int drive)
         filters, 2, default_path);
 }
 
+void gui_file_dialog_attach_hard_disk(int id)
+{
+    if (!begin_dialog())
+        return;
+
+    dialog_hard_disk_id = id;
+    SDL_DialogFileFilter filters[] = {
+        { "Hard Disk Images", "hdd;h0;h1;h2;h3;h4;h5;h6" },
+        { "All Files", "*" }
+    };
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_AttachHardDisk, application_sdl_window,
+        filters, 2, default_path, false);
+}
+
+void gui_file_dialog_create_hard_disk(int id)
+{
+    if (!begin_dialog())
+        return;
+
+    dialog_hard_disk_id = id;
+    SDL_DialogFileFilter filters[] = {
+        { "Hard Disk Images", "hdd;h0;h1;h2;h3;h4;h5;h6" }
+    };
+    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_CreateHardDisk, application_sdl_window,
+        filters, 1, default_path);
+}
+
 void gui_file_dialog_load_bios(void)
 {
     if (!begin_dialog())
@@ -439,6 +472,14 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
     else if (id == FileDialog_SaveLog || id == FileDialog_SaveDisassemblerFull ||
         id == FileDialog_SaveDisassemblerVisible)
         append_extension_if_missing(pending_dialog_path, ".txt");
+    else if (id == FileDialog_CreateHardDisk)
+    {
+        size_t dot = pending_dialog_path.find_last_of('.');
+        size_t separator = pending_dialog_path.find_last_of("/\\");
+
+        if ((dot == std::string::npos) || ((separator != std::string::npos) && (dot < separator)))
+            pending_dialog_path += ".hdd";
+    }
     else if (id == FileDialog_SaveFloppy || id == FileDialog_NewFloppy)
     {
         const char* path = pending_dialog_path.c_str();
@@ -495,6 +536,12 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_NewFloppy:
             gui_floppy_dialog_new_blank(dialog_floppy_drive, path);
+            break;
+        case FileDialog_AttachHardDisk:
+            gui_hard_disks_dialog_attach(dialog_hard_disk_id, path);
+            break;
+        case FileDialog_CreateHardDisk:
+            gui_hard_disks_dialog_create(dialog_hard_disk_id, path);
             break;
         case FileDialog_SaveScreenshot:
             gui_action_save_screenshot(path);

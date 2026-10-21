@@ -33,6 +33,7 @@
 #include "config.h"
 #include "debug/gui_debug_trace_logger.h"
 #include "emu_floppy.h"
+#include "emu_hard_disk.h"
 #include "events.h"
 #include "gui_notifications.h"
 #include "input_macro.h"
@@ -156,6 +157,7 @@ bool emu_init(void)
     geartowns->Init();
     geartowns->GetMedia()->SetTempPath(config_temp_path);
     emu_floppy_init();
+    emu_hard_disk_init();
 
     sound_queue_init();
 
@@ -209,6 +211,7 @@ void emu_destroy(void)
         Error("Unable to save one or more floppy disks on exit");
 
     save_cmos();
+    emu_hard_disk_flush();
     runahead_destroy();
     rewind_destroy();
     SafeDelete(mcp_manager);
@@ -348,6 +351,7 @@ void emu_update(void)
             emu_frame_counter++;
             emu_frame_stale = false;
             emu_floppy_update();
+            emu_hard_disk_update();
         }
 
         rewind_push();

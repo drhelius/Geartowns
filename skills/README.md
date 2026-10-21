@@ -37,7 +37,7 @@ This downloads and configures the skills for use with your AI agent. See the [sk
 - Setting execution, read, write, access, I/O port, range, and interrupt breakpoints
 - Address translation through segmentation and paging
 - Stepping through code (into, over, out, frame, run-to)
-- Execution tracing with interleaved hardware events (interrupts, I/O, DMA, CD-ROM, floppy, VSYNC)
+- Execution tracing with interleaved hardware events (interrupts, I/O, DMA, CD-ROM, floppy, SCSI, VSYNC)
 - Hardware inspection: CRTC and video output, VRAM layers, sprite engine, YM3438 FM, RF5C68 PCM, 8259A PIC, 8253 PIT, uPD71071 DMA, CD-ROM and floppy controllers
 - Sprite viewer and VRAM layer capture with image output
 - Screenshot capture
@@ -64,7 +64,7 @@ This downloads and configures the skills for use with your AI agent. See the [sk
 - Text and Shift-JIS string discovery for translations
 - Sprite and graphics data location via sprite viewer and VRAM inspection
 - Data table and structure reverse engineering
-- Reading CD and floppy sectors to locate data on the media
+- Reading CD, floppy and hard disk sectors to locate data on the media
 - Save state management for safe experimentation
 - Fast forwarding to reach specific game states
 

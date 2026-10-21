@@ -959,14 +959,16 @@ bool GeartownsCore::AttachHardDisk(int id, const char* path, bool write_protecte
 
     if (m_powered)
     {
-        HardDiskImage image;
+        HardDiskImage probe;
 
-        if (!image.Open(path, true))
+        if (!probe.Open(path, true))
             return false;
 
+        const HardDiskImage* image = m_scsi->GetDisk(id)->GetImage();
         m_hard_disk_paths[id] = path;
         m_hard_disk_write_protected[id] = write_protected;
-        m_hard_disk_pending[id] = true;
+        m_hard_disk_pending[id] = !image->IsOpen() || (strcmp(image->GetPath(), path) != 0) ||
+            (image->IsWriteProtected() != write_protected);
     }
     else
     {
@@ -992,7 +994,7 @@ void GeartownsCore::DetachHardDisk(int id)
     if (m_powered)
     {
         m_hard_disk_paths[id].clear();
-        m_hard_disk_pending[id] = true;
+        m_hard_disk_pending[id] = m_scsi->GetDisk(id)->IsAttached();
     }
     else
     {
@@ -1014,6 +1016,21 @@ bool GeartownsCore::FlushHardDisks()
         ok = m_scsi->GetDisk(i)->GetImage()->Flush() && ok;
 
     return ok;
+}
+
+bool GeartownsCore::IsHardDiskPending(int id) const
+{
+    return (id >= 0) && (id < GT_MAX_HARD_DISKS) && m_hard_disk_pending[id];
+}
+
+const char* GeartownsCore::GetPendingHardDiskPath(int id) const
+{
+    return IsHardDiskPending(id) ? m_hard_disk_paths[id].c_str() : "";
+}
+
+bool GeartownsCore::IsPendingHardDiskWriteProtected(int id) const
+{
+    return IsHardDiskPending(id) && m_hard_disk_write_protected[id];
 }
 
 HardDiskImage* GeartownsCore::GetHardDisk(int id)
@@ -1859,6 +1876,13 @@ void GeartownsCore::ResolveMachineConfig()
     }
 
     SanitizeMachineConfig(config);
+
+    if (auto_ram && config.scsi && HasHardDisks() && (config.ram_size < 4 * megabyte))
+    {
+        config.ram_size = 4 * megabyte;
+        report.ram = GT_MACHINE_SOURCE_HARD_DISK;
+        SanitizeMachineConfig(config);
+    }
 
     if ((database || three_mode) && (config.model != named))
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE, k_machine_profiles[named].emulated ?

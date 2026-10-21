@@ -155,6 +155,7 @@
     <ClCompile Include="..\shared\desktop\config.cpp" />
     <ClCompile Include="..\shared\desktop\emu.cpp" />
     <ClCompile Include="..\shared\desktop\emu_floppy.cpp" />
+    <ClCompile Include="..\shared\desktop\emu_hard_disk.cpp" />
     <ClCompile Include="..\shared\desktop\single_instance.cpp" />
     <ClCompile Include="..\shared\desktop\shift_jis.cpp" />
     <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp" />
@@ -188,6 +189,7 @@
     <ClCompile Include="..\shared\desktop\gui_popups.cpp" />
     <ClCompile Include="..\shared\desktop\gui_floppy.cpp" />
     <ClCompile Include="..\shared\desktop\gui_firmware.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_hard_disks.cpp" />
     <ClCompile Include="..\shared\desktop\gui_notifications.cpp" />
     <ClCompile Include="..\shared\desktop\gui_drive_activity.cpp" />
     <ClCompile Include="..\shared\desktop\gui.cpp" />
@@ -350,6 +352,7 @@
     <ClInclude Include="..\shared\desktop\console_utils.h" />
     <ClInclude Include="..\shared\desktop\emu.h" />
     <ClInclude Include="..\shared\desktop\emu_floppy.h" />
+    <ClInclude Include="..\shared\desktop\emu_hard_disk.h" />
     <ClInclude Include="..\shared\dependencies\json\json.hpp" />
     <ClInclude Include="..\shared\desktop\mcp\mcp_debug_adapter.h" />
     <ClInclude Include="..\shared\desktop\mcp\mcp_manager.h" />
@@ -387,6 +390,7 @@
     <ClInclude Include="..\shared\desktop\gui_popups.h" />
     <ClInclude Include="..\shared\desktop\gui_floppy.h" />
     <ClInclude Include="..\shared\desktop\gui_firmware.h" />
+    <ClInclude Include="..\shared\desktop\gui_hard_disks.h" />
     <ClInclude Include="..\shared\desktop\gui_notifications.h" />
     <ClInclude Include="..\shared\desktop\gui_drive_activity.h" />
     <ClInclude Include="..\shared\desktop\gui.h" />

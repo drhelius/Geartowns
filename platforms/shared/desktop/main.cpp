@@ -168,7 +168,8 @@ int main(int argc, char* argv[])
     {
         printf("Usage: %s [options] [media_file] [symbol_file]\n", argv[0]);
         printf("\nArguments:\n");
-        printf("  [media_file]              CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .mfm, .m3u), also in .zip\n");
+        printf("  [media_file]              CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .mfm, .m3u), also in .zip,\n");
+        printf("                            or hard disk (.hdd, .h0-.h6)\n");
         printf("  [symbol_file]             Optional symbol file for debugging\n");
         printf("\nOptions:\n");
         printf("  -f, --fullscreen          Start in fullscreen mode\n");

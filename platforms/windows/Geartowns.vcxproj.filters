@@ -18,6 +18,9 @@
     </ClCompile>
     <ClCompile Include="..\shared\desktop\emu_floppy.cpp">
       <Filter>desktop</Filter>
+    <ClCompile Include="..\shared\desktop\emu_hard_disk.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui.cpp">
       <Filter>desktop</Filter>
@@ -99,6 +102,9 @@
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_firmware.cpp">
       <Filter>desktop</Filter>
+    <ClCompile Include="..\shared\desktop\gui_hard_disks.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_notifications.cpp">
       <Filter>desktop</Filter>
@@ -536,6 +542,9 @@
     </ClInclude>
     <ClInclude Include="..\shared\desktop\emu_floppy.h">
       <Filter>desktop</Filter>
+    <ClInclude Include="..\shared\desktop\emu_hard_disk.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui.h">
       <Filter>desktop</Filter>
@@ -626,6 +635,9 @@
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_firmware.h">
       <Filter>desktop</Filter>
+    <ClInclude Include="..\shared\desktop\gui_hard_disks.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_notifications.h">
       <Filter>desktop</Filter>

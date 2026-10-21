@@ -44,6 +44,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_popups.cpp \
     $(DESKTOP_SRC_DIR)/gui_floppy.cpp \
     $(DESKTOP_SRC_DIR)/gui_firmware.cpp \
+    $(DESKTOP_SRC_DIR)/gui_hard_disks.cpp \
     $(DESKTOP_SRC_DIR)/gui_notifications.cpp \
     $(DESKTOP_SRC_DIR)/gui_drive_activity.cpp \
     $(DESKTOP_SRC_DIR)/gui_actions.cpp \
@@ -60,6 +61,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/video_recorder.cpp \
     $(DESKTOP_SRC_DIR)/emu.cpp \
     $(DESKTOP_SRC_DIR)/emu_floppy.cpp \
+    $(DESKTOP_SRC_DIR)/emu_hard_disk.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
     $(DESKTOP_SRC_DIR)/shift_jis.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \

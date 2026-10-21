@@ -54,12 +54,12 @@ This server provides tools for game development, rom hacking, translation, rever
 - **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control, keyboard, CRTC, output controller, YM3438, RF5C68, CD-ROM controller and MB8877 floppy controller
 - **Sprite Viewer**: Inspect the sprite engine, list sprite entries and get sprite patterns and VRAM layers as images
 - **Audio Inspection**: YM3438 FM channels, operators and registers, RF5C68 PCM channels, electronic volumes and sound interrupts, debugger mutes per source and channel
-- **Storage Inspection**: CD-ROM TOC, CD audio and disc sectors; floppy drives, track sector lists and sector data
+- **Storage Inspection**: CD-ROM TOC, CD audio and disc sectors; floppy drives, track sector lists and sector data; SCSI hard disks and their sectors
 - **Symbol Support**: Add, remove, load, list, and look up user symbols, plus automatic labels
 - **Input State**: Inspect effective pressed buttons, held keyboard keys and pending tap releases
 - **Bookmarks**: Memory and disassembler bookmarks for navigation
 - **Call Stack**: View calls, interrupts and exceptions with their vectors
-- **Trace Logger**: CPU instruction trace with interleaved hardware events (interrupts, I/O ports, PIC, timers, DMA, video, sprites, FM, PCM, mixer, CD-ROM, FDC, keyboard, game ports, system), in memory or streamed to disk
+- **Trace Logger**: CPU instruction trace with interleaved hardware events (interrupts, I/O ports, PIC, timers, DMA, video, sprites, FM, PCM, mixer, CD-ROM, FDC, SCSI, keyboard, game ports, system), in memory or streamed to disk
 - **Profiler**: Per-function and per-interrupt-vector call counts, calls per frame, and inclusive/exclusive cycle statistics
 - **Screenshot Capture**: Get current frame as PNG image
 - **Video Recording**: Record emulated video and audio to AVI files on disk
@@ -570,15 +570,22 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `list_floppy_drives` - Get both drives: image, D77 disk name (Shift-JIS converted to UTF-8), media, geometry (with `total_size` and `mixed` when tracks differ from track 0), RPM, write protect, modified, head cylinder, motor, ready and selected
 - `read_floppy_sector` - Read the sector with ID R (`sector`) on a track by `drive`, `cylinder`, `head`: IDs, status and data as hex. Without `sector` it lists the track's sectors: C, H, R, N, size, density, deleted mark, status and image offset
 
+### Hard Disks
+- `list_hard_disks` - Get SCSI IDs 0-6: image, blocks and size, write protect, blocks the machine wrote that are not in the image file yet, and `at_next_reset` when a change waits for a reset; plus the machine's `interface` (`built_in`, `card` for Model 1/2 or `none`) and whether it is fitted now
+- `attach_hard_disk` - Attach a raw image of 512-byte sectors (`.hdd`, `.h0`-`.h6`) to SCSI `id`; optional `write_protected`. A running machine takes it at the next reset, one that is off at once. `create_size_mb` (1-2047) first creates a blank image at `file_path`, never replacing an existing file
+- `detach_hard_disk` - Detach the disk on SCSI `id` after writing its changes; on a running machine at the next reset
+- `flush_hard_disks` - Write the changes to the image files now; otherwise they are written about 2 seconds after the machine stops writing, and on detach, power off and quit
+- `read_hard_disk_sector` - Read sector `lba` of the disk on SCSI `id` as hex, as the machine sees it, unwritten changes included, without bus traffic
+
 ### Screen Capture
 - `get_screenshot` - Capture current screen frame as base64 PNG. Right after a state load it is the frame saved in the state; when the state has none or the screen size changed, it returns an error until a frame runs
 - `start_video_recording` - Start recording video and audio to an AVI file (MJPEG, uncompressed or PNG compressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`, `lossless_compressed`). `lossless` is uncompressed; `lossless_compressed` stores PNG frames, much smaller but playable only with FFmpeg based players. Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses the debug output screen aspect ratio while debugging. When a shader preset is active outside debug mode, the shader output is recorded at the output window size and `scale` and `aspect_ratio` are ignored. Frames are recorded only while the emulator runs, so continue or step execution before stopping
 - `stop_video_recording` - Stop the active recording and finalize the AVI file. Returns `file_path` and the number of recorded `frames`
 
 ### Media & State Management
-- `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, and the floppy drives (image, disk name, media, write protect, modified)
+- `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, the floppy drives (image, disk name, media, write protect, modified) and the hard disks (as `list_hard_disks`)
 - `list_recent_media` - List the most recent CD images and floppies opened by Geartowns
-- `load_media` - Load a CD image or a floppy image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip)
+- `load_media` - Load a CD image, a floppy image or a hard disk image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd to the first free one). A hard disk powers on an empty machine, or waits for the next reset on a running one
 - `eject_cdrom` - Eject the CD as the CD-ROM menu does; the machine keeps running with an empty drive
 - `insert_playlist_disc` - Insert playlist disc `index` (from the `get_cdrom_status` playlist) into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector

@@ -221,6 +221,10 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Floppy", "Drive2WriteProtected", config_emulator.floppy_write_protected[1], false);
     CONFIG_STRING_ARRAY("Floppy", "Recent%d", config_emulator.recent_floppies, config_max_recent_floppies, "");
 
+    // Hard disks
+    CONFIG_STRING_ARRAY("HardDisk", "Path%d", config_emulator.hard_disk_paths, GT_MAX_HARD_DISKS, "");
+    CONFIG_INT_ARRAY("HardDisk", "WriteProtected%d", config_emulator.hard_disk_write_protected, GT_MAX_HARD_DISKS, 0);
+
     // Services
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);
     CONFIG_STRING_NOT_EMPTY("Emulator", "MCPHTTPAddress", config_emulator.mcp_http_address, "127.0.0.1");

@@ -37,9 +37,11 @@
 #include "gui_popups.h"
 #include "gui_floppy.h"
 #include "gui_firmware.h"
+#include "gui_hard_disks.h"
 #include "gui_notifications.h"
 #include "gui_drive_activity.h"
 #include "emu_floppy.h"
+#include "emu_hard_disk.h"
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "events.h"
@@ -220,6 +222,8 @@ void gui_render(void)
 
     if (config_emulator.show_firmware)
         gui_firmware_window();
+
+    gui_hard_disks_update();
 
     show_loading_popup();
     gui_notifications_render();
@@ -451,6 +455,9 @@ bool gui_load_rom(const char* path, const char* symbol_path)
 
     GeartownsCore* core = emu_get_core();
     int drives = emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives : core->GetMachineConfig().floppy_drives;
+
+    if (emu_hard_disk_is_image(path))
+        return gui_hard_disks_load(path);
 
     if (emu_floppy_is_image(path))
     {

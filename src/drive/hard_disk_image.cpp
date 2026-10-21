@@ -26,6 +26,7 @@ HardDiskImage::HardDiskImage()
     m_blocks = 0;
     m_write_protected = false;
     m_overlay_blocks = 0;
+    m_write_count = 0;
     m_flush_failed = false;
 }
 
@@ -151,6 +152,7 @@ bool HardDiskImage::WriteBlock(u32 lba, const u8* buffer)
     }
 
     memcpy(&m_overlay[(size_t)(m_overlay_index[lba] - 1) * k_hard_disk_block_size], buffer, k_hard_disk_block_size);
+    m_write_count++;
     return true;
 }
 
@@ -192,6 +194,11 @@ bool HardDiskImage::Flush()
 u32 HardDiskImage::GetUnflushedBlocks() const
 {
     return m_overlay_blocks;
+}
+
+u32 HardDiskImage::GetWriteCount() const
+{
+    return m_write_count;
 }
 
 bool HardDiskImage::Create(const char* path, u64 size)

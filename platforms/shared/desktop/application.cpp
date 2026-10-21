@@ -29,6 +29,8 @@
 #include "ogl_renderer.h"
 #include "emu.h"
 #include "emu_floppy.h"
+#include "emu_hard_disk.h"
+#include "gui_hard_disks.h"
 #include "display.h"
 #include "utils.h"
 #include "single_instance.h"
@@ -514,6 +516,9 @@ static void handle_title(void)
     Media* media = emu_get_core()->GetMedia();
     const char* name = media->IsReady() ? media->GetFileName() : get_filename(emu_floppy_get_content_path());
 
+    if ((name[0] == 0) && !emu_is_empty())
+        name = get_filename(emu_hard_disk_get_content_path());
+
     if (strcmp(name, title_name) == 0)
         return;
 
@@ -589,8 +594,13 @@ static void sdl_events_quit(const SDL_Event* event)
 
 static void request_quit(void)
 {
-    if (emu_floppy_flush())
+    bool floppies = emu_floppy_flush();
+    bool hard_disks = emu_hard_disk_flush();
+
+    if (floppies && hard_disks)
         running = false;
+    else if (!hard_disks)
+        gui_hard_disks_open_quit_confirmation();
     else
         gui_floppy_open_quit_confirmation();
 }

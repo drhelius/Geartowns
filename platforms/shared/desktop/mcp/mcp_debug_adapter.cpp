@@ -27,6 +27,7 @@
 #include "mcp_debug_adapter.h"
 #include "common/log.h"
 #include "drive/floppy_disk.h"
+#include "drive/hard_disk_image.h"
 #include "input/keyboard.h"
 #include "system/msm58321.h"
 #include "system/pic.h"
@@ -49,6 +50,7 @@
 #include "../gui.h"
 #include "../gui_actions.h"
 #include "../gui_floppy.h"
+#include "../emu_hard_disk.h"
 #include "../rewind.h"
 #include "../debug/gui_debug_cdrom.h"
 #include "../debug/gui_debug_constants.h"
@@ -419,7 +421,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 }
 
 static const char* const k_mcp_breakpoint_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "linear", "physical", "io" };
-static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database", "floppy" };
+static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database", "floppy", "hard_disk" };
 static const char* const k_mcp_firmware_sources[] = { "none", "model_folder", "own_set", "compatible_set", "unknown",
     "other_set" };
 static const char* const k_mcp_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] =
@@ -3682,6 +3684,114 @@ json DebugAdapter::EjectFloppy(int drive)
     return {{"success", true}, {"drive", drive}};
 }
 
+static json hard_disk_json(int id)
+{
+    Emu_HardDiskInfo info;
+    emu_hard_disk_get_info(id, &info);
+    json disk = {{"id", id}, {"attached", info.attached}};
+
+    if (info.attached)
+    {
+        disk["file_path"] = info.path;
+        disk["blocks"] = info.blocks;
+        disk["size_mb"] = (double)info.blocks / 2048.0;
+        disk["write_protected"] = info.write_protected;
+        disk["unwritten_blocks"] = info.unflushed;
+    }
+
+    if (info.pending)
+        disk["at_next_reset"] = {{"attached", info.pending_attached}, {"file_path", info.pending_path},
+            {"write_protected", info.pending_write_protected}};
+
+    return disk;
+}
+
+json DebugAdapter::ListHardDisks()
+{
+    GT_Machine_Model model = emu_is_empty() ? m_core->GetPendingMachineConfig().model : m_core->GetMachineConfig().model;
+    const char* interface = (k_machine_profiles[model].features & GT_MACHINE_FEATURE_SCSI) != 0 ? "built_in" :
+        (model == GT_MACHINE_MODEL1_2) ? "card" : "none";
+    json disks = json::array();
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+        disks.push_back(hard_disk_json(i));
+
+    return {{"interface", interface}, {"interface_fitted", m_core->GetMachineConfig().scsi}, {"disks", disks}};
+}
+
+json DebugAdapter::AttachHardDisk(int id, const std::string& file_path, const json& write_protected,
+    const json& create_size_mb)
+{
+    if ((id < 0) || (id >= GT_MAX_HARD_DISKS))
+        return {{"error", "id must be 0-6"}};
+
+    const char* path = file_path.c_str();
+    bool protect = write_protected.is_boolean() && write_protected.get<bool>();
+
+    if (!is_absolute_path(path))
+        return {{"error", "file_path must be an absolute path"}};
+
+    if (create_size_mb.is_number_integer())
+    {
+        int size_mb = create_size_mb.get<int>();
+
+        if ((size_mb < 1) || (size_mb > 2047))
+            return {{"error", "create_size_mb must be 1-2047"}};
+
+        if (path_exists(path))
+            return {{"error", "A file already exists at " + file_path}};
+
+        if (!emu_hard_disk_create(id, path, size_mb, protect))
+            return {{"error", "Failed to create the hard disk image"}};
+    }
+    else if (!emu_hard_disk_attach(id, path, protect))
+        return {{"error", "Failed to attach the hard disk image"}};
+
+    json result = hard_disk_json(id);
+    result["success"] = true;
+    return result;
+}
+
+json DebugAdapter::DetachHardDisk(int id)
+{
+    if ((id < 0) || (id >= GT_MAX_HARD_DISKS))
+        return {{"error", "id must be 0-6"}};
+
+    emu_hard_disk_detach(id);
+    json result = hard_disk_json(id);
+    result["success"] = true;
+    return result;
+}
+
+json DebugAdapter::FlushHardDisks()
+{
+    if (!emu_hard_disk_flush())
+        return {{"error", "Unable to write the hard disk changes, they stay in memory"}};
+
+    return {{"success", true}};
+}
+
+json DebugAdapter::ReadHardDiskSector(int id, s64 lba)
+{
+    if ((id < 0) || (id >= GT_MAX_HARD_DISKS))
+        return {{"error", "id must be 0-6"}};
+
+    HardDiskImage* image = m_core->GetHardDisk(id);
+
+    if (!image->IsOpen())
+        return {{"error", "No hard disk on ID " + std::to_string(id)}};
+
+    if ((lba < 0) || (lba >= (s64)image->GetBlocks()))
+        return {{"error", "lba must be 0-" + std::to_string(image->GetBlocks() - 1)}};
+
+    u8 buffer[k_hard_disk_block_size];
+
+    if (!image->ReadBlock((u32)lba, buffer))
+        return {{"error", "Unable to read the image file"}};
+
+    return {{"id", id}, {"lba", lba}, {"data", hex_bytes(buffer, k_hard_disk_block_size)}};
+}
+
 json DebugAdapter::SwapFloppies()
 {
     if (m_core->GetMachineConfig().floppy_drives < 2)
@@ -4399,6 +4509,7 @@ json DebugAdapter::GetMediaInfo()
     }
 
     result["floppy_drives"] = drives;
+    result["hard_disks"] = ListHardDisks()["disks"];
     return result;
 }
 
@@ -4540,6 +4651,24 @@ json DebugAdapter::FinishLoadMedia(const std::string& file_path)
 {
     if (gui_is_rom_loading() && !gui_finish_loading_rom())
         return {{"error", "Failed to load media file"}};
+
+    if (emu_hard_disk_is_image(file_path.c_str()))
+    {
+        for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+        {
+            Emu_HardDiskInfo info;
+            emu_hard_disk_get_info(i, &info);
+
+            if (strcmp(info.pending ? info.pending_path : info.path, file_path.c_str()) != 0)
+                continue;
+
+            json result = hard_disk_json(i);
+            result["success"] = true;
+            return result;
+        }
+
+        return {{"error", "Failed to attach the hard disk image"}};
+    }
 
     if (emu_floppy_is_image(file_path.c_str()))
     {

@@ -113,6 +113,9 @@ public:
     bool AttachHardDisk(int id, const char* path, bool write_protected = false);
     void DetachHardDisk(int id);
     bool FlushHardDisks();
+    bool IsHardDiskPending(int id) const;
+    const char* GetPendingHardDiskPath(int id) const;
+    bool IsPendingHardDiskWriteProtected(int id) const;
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);

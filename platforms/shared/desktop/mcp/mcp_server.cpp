@@ -1753,8 +1753,8 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_media_info"},
         {"title", "Get Media Info"},
-        {"description", "Read the loaded media, the firmware, where each model takes its firmware from, and the floppy "
-            "drives."},
+        {"description", "Read the loaded media, the firmware, where each model takes its firmware from, the floppy "
+            "drives and the hard disks."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1778,7 +1778,8 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "load_media"},
         {"title", "Load Media"},
-        {"description", "Load FM Towns media from a local file."},
+        {"description", "Load FM Towns media from a local file; a hard disk image (.hdd, .h0-.h6) attaches to its "
+            "ID or the first free one and powers on an empty machine."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1884,6 +1885,101 @@ json McpServer::BuildToolList()
                 {"drive", floppy_drive}
             }},
             {"required", json::array({"drive"})}
+        }}
+    });
+
+    json hard_disk_id = {
+        {"type", "integer"},
+        {"description", "SCSI ID."},
+        {"minimum", 0},
+        {"maximum", 6}
+    };
+
+    tools.push_back({
+        {"name", "list_hard_disks"},
+        {"title", "List Hard Disks"},
+        {"description", "List SCSI IDs 0-6: image, size, write protect, blocks not yet written to the file, and changes "
+            "waiting for the next reset; and the machine's SCSI interface (built_in, card or none)."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "attach_hard_disk"},
+        {"title", "Attach Hard Disk"},
+        {"description", "Attach a raw image of 512-byte sectors to a SCSI ID; a running machine takes it at the next "
+            "reset. create_size_mb first creates a blank image, never replacing a file."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"id", hard_disk_id},
+                {"file_path", {
+                    {"type", "string"},
+                    {"description", "Absolute path, usually .hdd or .h0-.h6."}
+                }},
+                {"write_protected", {
+                    {"type", "boolean"},
+                    {"description", "Default false; read-only files attach protected."}
+                }},
+                {"create_size_mb", {
+                    {"type", "integer"},
+                    {"minimum", 1},
+                    {"maximum", 2047}
+                }}
+            }},
+            {"required", json::array({"id", "file_path"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "detach_hard_disk"},
+        {"title", "Detach Hard Disk"},
+        {"description", "Detach a SCSI ID's disk after writing its changes; a running machine at the next reset."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"id", hard_disk_id}
+            }},
+            {"required", json::array({"id"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "flush_hard_disks"},
+        {"title", "Flush Hard Disks"},
+        {"description", "Write the hard disks' changes to their image files now instead of after 2 s without writes."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", true}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "read_hard_disk_sector"},
+        {"title", "Read Hard Disk Sector"},
+        {"description", "Read a 512-byte sector as the guest sees it, unwritten changes included, without bus traffic."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"id", hard_disk_id},
+                {"lba", {
+                    {"type", "integer"},
+                    {"minimum", 0}
+                }}
+            }},
+            {"required", json::array({"id", "lba"})},
+            {"additionalProperties", false}
         }}
     });
 
@@ -3426,6 +3522,29 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "swap_floppies")
     {
         return m_debugAdapter.SwapFloppies();
+    }
+    else if (normalizedTool == "list_hard_disks")
+    {
+        return m_debugAdapter.ListHardDisks();
+    }
+    else if (normalizedTool == "attach_hard_disk")
+    {
+        json write_protected = arguments.contains("write_protected") ? arguments["write_protected"] : json();
+        json create_size_mb = arguments.contains("create_size_mb") ? arguments["create_size_mb"] : json();
+        return m_debugAdapter.AttachHardDisk(arguments.value("id", -1), arguments.value("file_path", ""), write_protected,
+            create_size_mb);
+    }
+    else if (normalizedTool == "detach_hard_disk")
+    {
+        return m_debugAdapter.DetachHardDisk(arguments.value("id", -1));
+    }
+    else if (normalizedTool == "flush_hard_disks")
+    {
+        return m_debugAdapter.FlushHardDisks();
+    }
+    else if (normalizedTool == "read_hard_disk_sector")
+    {
+        return m_debugAdapter.ReadHardDiskSector(arguments.value("id", -1), arguments.value("lba", (s64)-1));
     }
     else if (normalizedTool == "set_floppy_write_protect")
     {

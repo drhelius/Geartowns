@@ -26,6 +26,7 @@
 #include "gui_colors.h"
 #include "gui_floppy.h"
 #include "gui_firmware.h"
+#include "gui_hard_disks.h"
 #include "gui_notifications.h"
 #include "config.h"
 #include "application.h"
@@ -187,6 +188,8 @@ static void menu_geartowns(void)
 
         if (floppy_drives > 1)
             gui_floppy_menu(1, "Floppy 2", floppy_drives);
+
+        gui_hard_disks_menu();
 
         ImGui::Separator();
 
@@ -815,6 +818,9 @@ static void menu_machine(void)
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         ImGui::TextDisabled("Auto: game not detected");
 
+    if (report.ram == GT_MACHINE_SOURCE_HARD_DISK)
+        ImGui::TextDisabled("Auto: 4 MB for the hard disk");
+
     for (int i = 0; i < report.warning_count; i++)
         ImGui::TextColored(machine_warning_color, "%s", report.warnings[i]);
 
@@ -1093,16 +1099,20 @@ static void menu_machine_hardware(GT_Machine_Model model)
     ImGui::TextDisabled("Memory map: %s", k_machine_maps[profile.map].name);
     ImGui::TextDisabled("Machine ID: %04Xh", profile.machine_id);
     ImGui::TextDisabled("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
+    ImGui::TextDisabled("SCSI: %s", (profile.features & GT_MACHINE_FEATURE_SCSI) != 0 ? "built in" :
+        (model == GT_MACHINE_MODEL1_2) ? "card, fitted while a hard disk is attached" : "none");
     ImGui::TextDisabled("Firmware: %s", firmware);
 
-    if (profile.features == 0)
+    u32 registers = profile.features & ~(u32)GT_MACHINE_FEATURE_SCSI;
+
+    if (registers == 0)
         ImGui::TextDisabled("Towns II registers: none");
     else
         ImGui::TextDisabled("Towns II registers:");
 
     for (int i = 0; i < GT_MACHINE_FEATURE_COUNT; i++)
     {
-        if ((profile.features & (1 << i)) != 0)
+        if ((registers & (1u << i)) != 0)
             ImGui::TextDisabled("  %s", k_machine_feature_names[i]);
     }
 
@@ -2337,6 +2347,7 @@ static void file_dialogs(void)
     gui_popup_modal_about();
     gui_popup_modal_load_defaults();
     gui_floppy_popups();
+    gui_hard_disks_popups();
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     gui_popup_modal_physical_cdrom();
 #endif

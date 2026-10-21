@@ -92,7 +92,7 @@ FM Towns hardware documentation is available in the [references/](references/) d
 load_bios → load_media → get_media_info → get_i386_status → get_screenshot
 ```
 
-Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. `list_recent_media` shows recently opened images.
+Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. Titles installed to a hard disk run from a raw image on a SCSI ID: `attach_hard_disk` (or `load_media` with `.hdd`, `.h0`-`.h6`), which a running machine takes at the next reset. `list_recent_media` shows recently opened images.
 
 Load symbols with `load_symbols` (a text file with `ADDRESS NAME` or `NAME = ADDRESS` per line) or add individual labels with `add_symbol`.
 
@@ -155,14 +155,14 @@ After each step, call `get_i386_status` and `get_disassembly` to see where you a
 
 ### 5. Trace Execution
 
-The trace logger records executed instructions (CS:EIP, linear address, mode, bytes, Intel syntax) interleaved with hardware events (IRQ requests, interrupt entries, I/O port accesses, DMA, CD-ROM and floppy controller commands, VSYNC).
+The trace logger records executed instructions (CS:EIP, linear address, mode, bytes, Intel syntax) interleaved with hardware events (IRQ requests, interrupt entries, I/O port accesses, DMA, CD-ROM and floppy controller commands, SCSI commands and phases, VSYNC).
 
 1. `set_trace_log` with `enabled: true` to start recording (optionally set `filters` and `output`)
 2. Let the game run or step through code (the trace records while the debugger runs the machine)
 3. `set_trace_log` with `enabled: false` to stop (entries are preserved)
 4. `get_trace_log` to read recorded entries (`start` negative reads the last N lines, `count` up to 1000)
 
-Trace filters are event streams such as `cpu.instructions`, `cpu.irqs`, `io.writes`, `video.vsync` or `cdrom.commands`, or a whole group: `cpu`, `io`, `pic`, `timer`, `dma`, `video`, `sprite`, `fm`, `pcm`, `mixer`, `cdrom`, `fdc`, `keyboard`, `input`, `system` (the tool schema lists every stream). Instruction lines carry the general and segment registers and EFLAGS. `output: "disk"` also streams the trace to a text file (`output_path`, `disk_size`) for long captures; `memory_size` sets how many entries are kept in memory.
+Trace filters are event streams such as `cpu.instructions`, `cpu.irqs`, `io.writes`, `video.vsync` or `cdrom.commands`, or a whole group: `cpu`, `io`, `pic`, `timer`, `dma`, `video`, `sprite`, `fm`, `pcm`, `mixer`, `cdrom`, `fdc`, `scsi`, `keyboard`, `input`, `system` (the tool schema lists every stream). Instruction lines carry the general and segment registers and EFLAGS. `output: "disk"` also streams the trace to a text file (`output_path`, `disk_size`) for long captures; `memory_size` sets how many entries are kept in memory.
 
 Tracing is essential for understanding timing-sensitive code, interrupt handlers, and hardware interaction sequences.
 
@@ -209,7 +209,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `get_sound_status` — electronic volumes, FM and PCM mutes, output gate, sound interrupt causes and mask
 - `set_audio_mute` — mute `fm`, `pcm`, `cdda` or `buzzer` (or one `channel`) in the debugger without changing emulated state; useful to isolate a sound source
 
-### CD-ROM and Floppy
+### CD-ROM, Floppy and Hard Disks
 
 - `get_cdrom_status` — CD-ROM controller: master status, last command and parameters, status queue, transfer mode, drive state, head position, plus CD-DA playback (`audio`) and the `.m3u` `playlist`
 - `list_cdrom_tracks` — the disc TOC: track types, start and end MSF, LBA, length
@@ -217,6 +217,10 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `get_fdc_status` — MB8877 floppy controller: decoded command, registers, BUSY/DRQ/INTRQ, drive control
 - `list_floppy_drives` — both drives: image, disk name, media, geometry, write protect, head position, motor
 - `read_floppy_sector` — read a sector by ID (`drive`, `cylinder`, `head`, `sector`); without `sector` it lists the track's sector IDs
+- `list_hard_disks` — SCSI IDs 0-6: image, size, write protect, unwritten blocks and changes waiting for a reset, and whether the machine has the interface
+- `attach_hard_disk` / `detach_hard_disk` — change a SCSI ID's disk (at the next reset on a running machine); `create_size_mb` makes a blank image first
+- `read_hard_disk_sector` — read a 512-byte sector by `id` and `lba` as the machine sees it, without bus traffic
+- `flush_hard_disks` — write pending changes to the image files now
 
 ### Screenshots
 

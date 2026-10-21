@@ -101,6 +101,8 @@ struct config_Emulator
     bool floppy_persistence;
     bool floppy_write_protected[config_floppy_drives];
     std::string recent_floppies[config_max_recent_floppies];
+    std::string hard_disk_paths[GT_MAX_HARD_DISKS];
+    int hard_disk_write_protected[GT_MAX_HARD_DISKS];
 };
 
 struct config_Machine

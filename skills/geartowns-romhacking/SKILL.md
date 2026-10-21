@@ -62,7 +62,7 @@ Replace `/path/to/geartowns` with the actual binary path from the install script
 
 ### Firmware and Media
 
-The FM Towns needs its firmware (FMT_SYS.ROM and companion files). Set the BIOS directory in the emulator before starting, or call `load_bios` with the directory path. Then load the game with `load_media` (CD image: `.cue`, `.chd`, `.iso`, `.zip`) and, if the game needs a boot floppy, `insert_floppy` (`.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u`, `.zip`). `get_media_info` confirms what is loaded.
+The FM Towns needs its firmware (FMT_SYS.ROM and companion files). Set the BIOS directory in the emulator before starting, or call `load_bios` with the directory path. Then load the game with `load_media` (CD image: `.cue`, `.chd`, `.iso`, `.zip`) and, if the game needs a boot floppy, `insert_floppy` (`.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u`, `.zip`). Games installed to a hard disk use `attach_hard_disk` with a raw image (`.hdd`, `.h0`-`.h6`), and `read_hard_disk_sector` reads its sectors. `get_media_info` confirms what is loaded.
 
 ### Hardware Documentation (References)
 

@@ -259,6 +259,11 @@ public:
     json CreateBlankFloppy(int drive, const std::string& file_path, const std::string& type, bool formatted);
     json EjectFloppy(int drive);
     json SwapFloppies();
+    json ListHardDisks();
+    json AttachHardDisk(int id, const std::string& file_path, const json& write_protected, const json& create_size_mb);
+    json DetachHardDisk(int id);
+    json FlushHardDisks();
+    json ReadHardDiskSector(int id, s64 lba);
     json SetFloppyWriteProtect(int drive, bool write_protected);
 
     // Trace and profiler

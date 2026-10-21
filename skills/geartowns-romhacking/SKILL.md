@@ -79,6 +79,7 @@ FM Towns hardware documentation is available in the [references/](references/) d
 | Sound | [references/sound.md](references/sound.md) | YM3438 FM, RF5C68 PCM, wave RAM |
 | CD-ROM | [references/cdrom.md](references/cdrom.md) | Sector addressing (LBA, MSF), data and audio tracks |
 | Floppy | [references/floppy.md](references/floppy.md) | Floppy disk images, sector layout, D77 format |
+| SCSI | [references/scsi.md](references/scsi.md) | Hard disk images, boot sector and partition table, SCSI commands |
 
 ---
 

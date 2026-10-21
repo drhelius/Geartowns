@@ -252,6 +252,7 @@ public:
     json GetCDROMAudioStatus();
     json ReadCDROMSector(u32 lba, const std::string& mode);
     json GetFDCStatus();
+    json GetSCSIStatus();
     json ListFloppyDrives();
     json ListFloppySectors(int drive, int cylinder, int head);
     json ReadFloppySector(int drive, int cylinder, int head, int sector);

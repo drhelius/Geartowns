@@ -215,8 +215,8 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 
 | Port | Name | Function |
 |---|---|---|
-| 0C30h | SCSI_DATA | SCSI data |
-| 0C32h | SCSI_STATUS | SCSI status read, control write |
+| 0C30h | SCSI_DATA | SCSI data: command, data, status and message bytes, one per access while REQ is set |
+| 0C32h | SCSI_STATUS | SCSI status read (REQ, I/O, MSG, C/D, BUSY, INT), control write (WEN, IMSK, ATN, SEL, DMAE, RST) |
 
 ### Palettes and CRT Output
 

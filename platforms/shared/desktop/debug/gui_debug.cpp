@@ -37,6 +37,7 @@
 #include "gui_debug_memory.h"
 #include "gui_debug_profiler.h"
 #include "gui_debug_rewind.h"
+#include "gui_debug_scsi.h"
 #include "gui_debug_system.h"
 #include "gui_debug_trace_logger.h"
 #include "gui_debug_video.h"
@@ -197,6 +198,12 @@ void gui_debug_windows(void)
 
         if (config_debug.show_disk_viewer)
             gui_debug_window_disk_viewer();
+
+        if (config_debug.show_scsi)
+            gui_debug_window_scsi();
+
+        if (config_debug.show_scsi_disks)
+            gui_debug_window_scsi_disks();
 
         gui_debug_memory_auxiliary_windows();
     }

@@ -27,7 +27,7 @@ metadata:
 
 ## Overview
 
-Debug FM Towns games using the Geartowns emulator as an MCP server. Control execution (pause, step, breakpoints), inspect the Intel 80386 CPU and hardware (CRTC, VRAM layers, sprite engine, YM3438 FM, RF5C68 PCM, 8259A PIC, 8253 PIT, uPD71071 DMA, CD-ROM and floppy controllers), read/write memory, disassemble code, trace instructions, and capture screenshots — all through MCP tool calls. Hardware documentation is available in the [references/](references/) directory.
+Debug FM Towns games using the Geartowns emulator as an MCP server. Control execution (pause, step, breakpoints), inspect the Intel 80386 CPU and hardware (CRTC, VRAM layers, sprite engine, YM3438 FM, RF5C68 PCM, 8259A PIC, 8253 PIT, uPD71071 DMA, CD-ROM and floppy controllers, SCSI host interface), read/write memory, disassemble code, trace instructions, and capture screenshots — all through MCP tool calls. Hardware documentation is available in the [references/](references/) directory.
 
 ## MCP Server Prerequisite
 
@@ -81,6 +81,7 @@ FM Towns hardware documentation is available in the [references/](references/) d
 | Sound | [references/sound.md](references/sound.md) | YM3438 FM, RF5C68 PCM, electronic volumes, sound interrupts |
 | CD-ROM | [references/cdrom.md](references/cdrom.md) | CD-ROM controller ports, commands, status packets, CD-DA, DMA transfer |
 | Floppy | [references/floppy.md](references/floppy.md) | MB8877 floppy controller, drive control, D77 disk images |
+| SCSI | [references/scsi.md](references/scsi.md) | SCSI host interface, bus phases, hard disk commands and sense, boot and disk layout |
 
 ---
 
@@ -217,6 +218,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `get_fdc_status` — MB8877 floppy controller: decoded command, registers, BUSY/DRQ/INTRQ, drive control
 - `list_floppy_drives` — both drives: image, disk name, media, geometry, write protect, head position, motor
 - `read_floppy_sector` — read a sector by ID (`drive`, `cylinder`, `head`, `sector`); without `sector` it lists the track's sector IDs
+- `get_scsi_status` — SCSI host interface: control and status bits, bus phase, target, DRQ/IRQ8, the command in progress and each disk's sense
 - `list_hard_disks` — SCSI IDs 0-6: image, size, write protect, unwritten blocks and changes waiting for a reset, and whether the machine has the interface
 - `attach_hard_disk` / `detach_hard_disk` — change a SCSI ID's disk (at the next reset on a running machine); `create_size_mb` makes a blank image first
 - `read_hard_disk_sector` — read a 512-byte sector by `id` and `lba` as the machine sees it, without bus traffic

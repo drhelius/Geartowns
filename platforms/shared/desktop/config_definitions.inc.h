@@ -77,6 +77,8 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "CDROMAudio", config_debug.show_cdrom_audio, false);
     CONFIG_BOOL("Debug", "FDC", config_debug.show_fdc, false);
     CONFIG_BOOL("Debug", "FloppyDrives", config_debug.show_floppy_drives, false);
+    CONFIG_BOOL("Debug", "SCSI", config_debug.show_scsi, false);
+    CONFIG_BOOL("Debug", "SCSIDisks", config_debug.show_scsi_disks, false);
     CONFIG_BOOL("Debug", "DiskViewer", config_debug.show_disk_viewer, false);
     CONFIG_INT_RANGE("Debug", "DiskViewerDrive", config_debug.disk_viewer_drive, 0, 0, 1);
     CONFIG_INT_RANGE("Debug", "DiskViewerCylinder", config_debug.disk_viewer_cylinder, 0, 0, 81);

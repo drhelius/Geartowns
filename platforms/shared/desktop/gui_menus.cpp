@@ -2129,6 +2129,13 @@ static void menu_debug(void)
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("SCSI", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Controller", "", &config_debug.show_scsi);
+            ImGui::MenuItem("Show Disks", "", &config_debug.show_scsi_disks);
+            ImGui::EndMenu();
+        }
+
         if (ImGui::BeginMenu("System", config_debug.debug))
         {
             ImGui::MenuItem("Show Interrupts", "", &config_debug.show_pic);

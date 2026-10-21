@@ -38,7 +38,7 @@ This downloads and configures the skills for use with your AI agent. See the [sk
 - Address translation through segmentation and paging
 - Stepping through code (into, over, out, frame, run-to)
 - Execution tracing with interleaved hardware events (interrupts, I/O, DMA, CD-ROM, floppy, SCSI, VSYNC)
-- Hardware inspection: CRTC and video output, VRAM layers, sprite engine, YM3438 FM, RF5C68 PCM, 8259A PIC, 8253 PIT, uPD71071 DMA, CD-ROM and floppy controllers
+- Hardware inspection: CRTC and video output, VRAM layers, sprite engine, YM3438 FM, RF5C68 PCM, 8259A PIC, 8253 PIT, uPD71071 DMA, CD-ROM and floppy controllers, SCSI host interface
 - Sprite viewer and VRAM layer capture with image output
 - Screenshot capture
 - Call stack analysis and CPU profiling

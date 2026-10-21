@@ -43,6 +43,7 @@
 #include "drive/fdc.h"
 #include "drive/floppy_image.h"
 #include "drive/mb8877.h"
+#include "drive/scsi_controller.h"
 #include "video/sprite.h"
 #include "video/video.h"
 #include "../config.h"
@@ -57,6 +58,7 @@
 #include "../debug/gui_debug_floppy.h"
 #include "../debug/gui_debug_disassembler.h"
 #include "../debug/gui_debug_i386_tables.h"
+#include "../debug/gui_debug_scsi.h"
 #include "../debug/gui_debug_profiler.h"
 #include "../debug/gui_debug_rewind.h"
 #include "../debug/gui_debug_system.h"
@@ -3704,6 +3706,99 @@ static json hard_disk_json(int id)
             {"write_protected", info.pending_write_protected}};
 
     return disk;
+}
+
+json DebugAdapter::GetSCSIStatus()
+{
+    static const char* const control_names[8] = { "rst", "dmae", "sel", NULL, "atn", NULL, "imsk", "wen" };
+    static const char* const status_names[8] = { NULL, "int", NULL, "busy", "c_d", "msg", "i_o", "req" };
+    static const char* const phase_names[SCSI_PHASE_COUNT] = { "bus_free", "selection", "command", "data_in",
+        "data_out", "status", "message_in", "message_out" };
+
+    ScsiController* scsi = m_core->GetSCSI();
+    ScsiController::ScsiController_State* state = scsi->GetState();
+    std::string interface = to_lower(gui_debug_scsi_interface());
+    std::replace(interface.begin(), interface.end(), ' ', '_');
+
+    if (!scsi->IsFitted())
+        return {{"interface", interface}};
+
+    u8 status = scsi->Peek(0x0C32);
+    json control_bits = json::array();
+    json status_bits = json::array();
+    json disks = json::array();
+
+    for (int bit = 7; bit >= 0; bit--)
+    {
+        if (IsValidPointer(control_names[bit]) && ((state->control >> bit) & 1))
+            control_bits.push_back(control_names[bit]);
+
+        if (IsValidPointer(status_names[bit]) && ((status >> bit) & 1))
+            status_bits.push_back(status_names[bit]);
+    }
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        ScsiDisk* disk = scsi->GetDisk(i);
+
+        if (!disk->IsAttached())
+            continue;
+
+        ScsiDisk::ScsiDisk_State* disk_state = disk->GetState();
+        disks.push_back({
+            {"id", i},
+            {"sense_key", hex_text(disk_state->sense_key, 1)},
+            {"sense_key_name", k_debug_scsi_sense_keys[disk_state->sense_key & 0x0F]},
+            {"sense_code", hex_text(disk_state->sense_code, 2)},
+            {"sense_code_name", gui_debug_scsi_sense_code_name(disk_state->sense_code)}
+        });
+    }
+
+    json result = {
+        {"interface", interface},
+        {"registers", {
+            {"control", hex_text(state->control, 2)},
+            {"control_bits", control_bits},
+            {"status", hex_text(status, 2)},
+            {"status_bits", status_bits},
+            {"data", hex_text(state->data, 2)}
+        }},
+        {"bus", {
+            {"phase", phase_names[state->phase % SCSI_PHASE_COUNT]},
+            {"target", state->target >= 0 ? json(state->target) : json()},
+            {"lun", state->lun},
+            {"message", hex_text(state->message, 2)},
+            {"message_name", gui_debug_scsi_message_name(state->message)}
+        }},
+        {"signals", {
+            {"drq", state->drq},
+            {"irq8", state->interrupt && ((state->control & k_scsi_control_imsk) != 0)}
+        }},
+        {"command", json()},
+        {"disks", disks}
+    };
+
+    if ((state->target >= 0) && (state->command_count != 0))
+    {
+        ScsiDisk::ScsiDisk_State* disk_state = scsi->GetDisk(state->target)->GetState();
+        char decoded[64];
+        std::string cdb;
+        gui_debug_scsi_received_command(state->command, state->command_count, decoded, sizeof(decoded));
+
+        for (int i = 0; i < state->command_count; i++)
+            cdb += (i == 0 ? "" : " ") + hex_text(state->command[i], 2);
+
+        result["command"] = {
+            {"cdb", cdb},
+            {"decoded", decoded},
+            {"status", hex_text(disk_state->status, 2)},
+            {"status_name", gui_debug_scsi_status_name(disk_state->status)},
+            {"transferred_bytes", disk_state->position},
+            {"length_bytes", disk_state->length}
+        };
+    }
+
+    return result;
 }
 
 json DebugAdapter::ListHardDisks()

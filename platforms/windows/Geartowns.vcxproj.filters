@@ -85,6 +85,9 @@
     <ClCompile Include="..\shared\desktop\debug\gui_debug_floppy.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_scsi.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\debug\gui_debug_trace_logger.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -616,6 +619,9 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_floppy.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_scsi.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_trace_logger.h">

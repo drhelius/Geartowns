@@ -53,6 +53,12 @@
       "title": "FM Towns Floppy Disk",
       "description": "Media and geometry, FDC ports, drive control and select, MB8877A commands and status, a sector read, D77 images",
       "mimeType": "text/markdown"
+    },
+    {
+      "uri": "scsi",
+      "title": "FM Towns SCSI Hard Disks",
+      "description": "SCSI host ports, control and status bits, bus phases, a command with DMA, hard disk commands and sense, boot and disk layout",
+      "mimeType": "text/markdown"
     }
   ]
 }

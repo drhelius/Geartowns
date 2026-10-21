@@ -206,12 +206,13 @@ static const McpToolCategory kMcpToolCategories[] =
     {"hardware_audio", "Audio Hardware", "Inspect the YM3438 FM chip and its registers, the RF5C68 PCM chip, electronic volumes and sound interrupts, and mute sources or channels in the debugger."},
     {"hardware_cdrom", "CD-ROM Hardware", "Inspect the CD-ROM controller, the disc TOC and CD audio playback, and read disc sectors."},
     {"hardware_floppy", "Floppy Hardware", "Inspect the MB8877 floppy controller and drives, list a track's sectors, and read sector data."},
-    {"media", "Media", "Load firmware or CD images, insert, eject and swap floppies, list recent media, and inspect loaded media, firmware and floppy drives."},
+    {"hardware_scsi", "SCSI Hardware", "Inspect the SCSI host interface, list the hard disks on IDs 0-6, and read their sectors."},
+    {"media", "Media", "Load firmware or CD images, insert, eject and swap floppies, attach, detach and flush hard disks, list recent media, and inspect loaded media, firmware and floppy drives."},
     {"capture", "Capture", "Capture current screenshots and record AVI video."},
     {"state", "Save States", "List save slots, and save or load emulator state in a slot or a file."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
     {"input", "Input", "Press pad buttons, move and click the mouse, set each game port's device, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
-    {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, PIC, timers, DMA, video, sprites, sound, CD-ROM, FDC, keyboard, game ports, system) and read the trace."},
+    {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, PIC, timers, DMA, video, sprites, sound, CD-ROM, FDC, SCSI, keyboard, game ports, system) and read the trace."},
     {"profiler", "Profiler", "Profile CPU cycles and call counts per function and interrupt vector."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
 };
@@ -278,10 +279,16 @@ static const char* const kMcpFloppyTools[] =
     "get_fdc_status", "list_floppy_drives", "read_floppy_sector"
 };
 
+static const char* const kMcpScsiTools[] =
+{
+    "get_scsi_status", "list_hard_disks", "read_hard_disk_sector"
+};
+
 static const char* const kMcpMediaTools[] =
 {
     "load_media", "eject_cdrom", "insert_playlist_disc", "get_media_info", "list_recent_media",
-    "load_bios", "insert_floppy", "create_blank_floppy", "eject_floppy", "swap_floppies", "set_floppy_write_protect"
+    "load_bios", "insert_floppy", "create_blank_floppy", "eject_floppy", "swap_floppies", "set_floppy_write_protect",
+    "attach_hard_disk", "detach_hard_disk", "flush_hard_disks"
 };
 
 static const char* const kMcpCaptureTools[] =
@@ -328,6 +335,7 @@ static const McpToolCategoryTools kMcpToolCategoryTools[] =
     {"hardware_audio", kMcpAudioTools, MCP_ARRAY_COUNT(kMcpAudioTools)},
     {"hardware_cdrom", kMcpCdromTools, MCP_ARRAY_COUNT(kMcpCdromTools)},
     {"hardware_floppy", kMcpFloppyTools, MCP_ARRAY_COUNT(kMcpFloppyTools)},
+    {"hardware_scsi", kMcpScsiTools, MCP_ARRAY_COUNT(kMcpScsiTools)},
     {"media", kMcpMediaTools, MCP_ARRAY_COUNT(kMcpMediaTools)},
     {"capture", kMcpCaptureTools, MCP_ARRAY_COUNT(kMcpCaptureTools)},
     {"state", kMcpStateTools, MCP_ARRAY_COUNT(kMcpStateTools)},

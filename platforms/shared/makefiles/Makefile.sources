@@ -78,6 +78,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memeditor.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memory.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_profiler.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_scsi.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_rewind.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_system.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_trace_logger.cpp \

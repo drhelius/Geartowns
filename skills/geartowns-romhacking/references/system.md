@@ -128,8 +128,8 @@ reads can't tear it. The Marty BIOS times its delays with it and doesn't start w
 Channels: 0 floppy, 1 SCSI, 2 printer, 3 CD-ROM. With base-only access clear, writing count and address loads both
 the base and the current registers and reads return the current ones; the current registers count during a
 transfer and reload from the base on auto-initialize. The controller counts address bits 0-23; bits 24-31 come
-from one board register shared by base and current, with no carry from bit 23. Mask a channel before reprogramming
-it.
+from a board register per channel, written through 00A7h with that channel selected and shared by its base and
+current address, with no carry from bit 23. Mask a channel before reprogramming it.
 
 Device control: bit 0 MTM, 1 AHLD, 2 DDMA (1 disables all DMA), 3 CMP, 4 ROT, 5 EXW, 6 RQL, 7 AKL, 8 BHLD, 9 WEV.
 The Model 1/2 BIOS writes 20h to 00A8h and 00h to 00A9h (extended write, everything else off).

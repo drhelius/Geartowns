@@ -339,6 +339,8 @@ struct config_Debug
     bool show_cdrom_audio;
     bool show_fdc;
     bool show_floppy_drives;
+    bool show_scsi;
+    bool show_scsi_disks;
     bool show_disk_viewer;
     int disk_viewer_drive;
     int disk_viewer_cylinder;

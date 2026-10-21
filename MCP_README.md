@@ -51,7 +51,7 @@ This server provides tools for game development, rom hacking, translation, rever
 - **i386 Addressing**: Every address takes linear, `SR:offset` or `selector:offset` forms, translated through segmentation and paging
 - **Multiple Memory Areas**: Linear and physical spaces, side-effect free I/O port reads, Main RAM, VRAM, Sprite RAM, CMOS, ROMs, PCM wave RAM, media images and inserted floppy images
 - **Disassembly**: Intel-syntax 80386 disassembly from current memory, with control flow, targets, I/O port and interrupt vector names
-- **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control, keyboard, CRTC, output controller, YM3438, RF5C68, CD-ROM controller and MB8877 floppy controller
+- **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control, keyboard, CRTC, output controller, YM3438, RF5C68, CD-ROM controller, MB8877 floppy controller and SCSI host interface
 - **Sprite Viewer**: Inspect the sprite engine, list sprite entries and get sprite patterns and VRAM layers as images
 - **Audio Inspection**: YM3438 FM channels, operators and registers, RF5C68 PCM channels, electronic volumes and sound interrupts, debugger mutes per source and channel
 - **Storage Inspection**: CD-ROM TOC, CD audio and disc sectors; floppy drives, track sector lists and sector data; SCSI hard disks and their sectors
@@ -571,6 +571,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `read_floppy_sector` - Read the sector with ID R (`sector`) on a track by `drive`, `cylinder`, `head`: IDs, status and data as hex. Without `sector` it lists the track's sectors: C, H, R, N, size, density, deleted mark, status and image offset
 
 ### Hard Disks
+- `get_scsi_status` - Get the SCSI host interface (`built_in`, `card` or `none`): control and status bits, data, bus phase, target and LUN, last message, DRQ and IRQ8, the command in progress (CDB, decoded command, status, bytes moved) and each attached disk's sense key and code
 - `list_hard_disks` - Get SCSI IDs 0-6: image, blocks and size, write protect, blocks the machine wrote that are not in the image file yet, and `at_next_reset` when a change waits for a reset; plus the machine's `interface` (`built_in`, `card` for Model 1/2 or `none`) and whether it is fitted now
 - `attach_hard_disk` - Attach a raw image of 512-byte sectors (`.hdd`, `.h0`-`.h6`) to SCSI `id`; optional `write_protected`. A running machine takes it at the next reset, one that is off at once. `create_size_mb` (1-2047) first creates a blank image at `file_path`, never replacing an existing file
 - `detach_hard_disk` - Detach the disk on SCSI `id` after writing its changes; on a running machine at the next reset
@@ -628,6 +629,7 @@ Complete technical reference documentation for all FM Towns hardware components:
 - **FM Towns Sound** (`geartowns://hardware/sound`)
 - **FM Towns CD-ROM** (`geartowns://hardware/cdrom`)
 - **FM Towns Floppy Disk** (`geartowns://hardware/floppy`)
+- **FM Towns SCSI Hard Disks** (`geartowns://hardware/scsi`)
 
 ## How MCP Works in Geartowns
 

@@ -1749,6 +1749,19 @@ json McpServer::BuildToolList()
         }}
     });
 
+    tools.push_back({
+        {"name", "get_scsi_status"},
+        {"title", "Get SCSI Status"},
+        {"description", "Read the SCSI host interface: control and status bits, data, bus phase, target and LUN, last "
+            "message, DRQ and IRQ8, the command in progress (CDB, status, bytes moved) and each disk's sense."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
     // Media tools
     tools.push_back({
         {"name", "get_media_info"},
@@ -3504,6 +3517,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
 
         return m_debugAdapter.ReadFloppySector(arguments.value("drive", -1), arguments.value("cylinder", -1),
             arguments.value("head", -1), arguments.value("sector", -1));
+    }
+    else if (normalizedTool == "get_scsi_status")
+    {
+        return m_debugAdapter.GetSCSIStatus();
     }
     else if (normalizedTool == "insert_floppy")
     {

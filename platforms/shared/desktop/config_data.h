@@ -28,6 +28,7 @@ static const int config_version = 5;
 static const int config_minimum_version = 1;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;
+static const int config_max_recent_hard_disks = 5;
 static const int config_floppy_drives = 2;
 static const int config_ControllerType_Auto = -1;
 
@@ -101,8 +102,8 @@ struct config_Emulator
     bool floppy_persistence;
     bool floppy_write_protected[config_floppy_drives];
     std::string recent_floppies[config_max_recent_floppies];
-    std::string hard_disk_paths[GT_MAX_HARD_DISKS];
     int hard_disk_write_protected[GT_MAX_HARD_DISKS];
+    std::string recent_hard_disks[config_max_recent_hard_disks];
 };
 
 struct config_Machine

@@ -1779,7 +1779,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "list_recent_media"},
         {"title", "List Recent Media"},
-        {"description", "List recent CD images with file_path values for load_media, and recent floppies."},
+        {"description", "List recent CD images with file_path values for load_media, recent floppies and recent hard disks."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1937,7 +1937,7 @@ json McpServer::BuildToolList()
                 }},
                 {"write_protected", {
                     {"type", "boolean"},
-                    {"description", "Default false; read-only files attach protected."}
+                    {"description", "Default: the ID's Write Protected setting; read-only files attach protected."}
                 }},
                 {"create_size_mb", {
                     {"type", "integer"},

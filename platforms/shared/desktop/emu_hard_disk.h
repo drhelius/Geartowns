@@ -41,7 +41,6 @@ struct Emu_HardDiskInfo
     char pending_path[GT_MAX_PATH];
 };
 
-EXTERN void emu_hard_disk_init(void);
 EXTERN bool emu_hard_disk_is_image(const char* path);
 EXTERN int emu_hard_disk_get_image_id(const char* path);
 EXTERN bool emu_hard_disk_attach(int id, const char* path, bool write_protected);

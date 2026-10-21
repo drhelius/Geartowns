@@ -157,7 +157,6 @@ bool emu_init(void)
     geartowns->Init();
     geartowns->GetMedia()->SetTempPath(config_temp_path);
     emu_floppy_init();
-    emu_hard_disk_init();
 
     sound_queue_init();
 

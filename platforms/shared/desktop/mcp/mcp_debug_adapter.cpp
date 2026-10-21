@@ -3821,7 +3821,8 @@ json DebugAdapter::AttachHardDisk(int id, const std::string& file_path, const js
         return {{"error", "id must be 0-6"}};
 
     const char* path = file_path.c_str();
-    bool protect = write_protected.is_boolean() && write_protected.get<bool>();
+    bool protect = write_protected.is_boolean() ? write_protected.get<bool>() :
+        config_emulator.hard_disk_write_protected[id] != 0;
 
     if (!is_absolute_path(path))
         return {{"error", "file_path must be an absolute path"}};
@@ -4643,9 +4644,26 @@ json DebugAdapter::ListRecentMedia()
         });
     }
 
+    json recent_hard_disks = json::array();
+
+    for (int index = 0; index < config_max_recent_hard_disks; index++)
+    {
+        const std::string& path = config_emulator.recent_hard_disks[index];
+
+        if (path.empty())
+            continue;
+
+        recent_hard_disks.push_back({
+            {"index", index},
+            {"file_path", path},
+            {"file_name", get_filename(path.c_str())}
+        });
+    }
+
     result["count"] = recent_media.size();
     result["recent_media"] = recent_media;
     result["recent_floppies"] = recent_floppies;
+    result["recent_hard_disks"] = recent_hard_disks;
 
     return result;
 }

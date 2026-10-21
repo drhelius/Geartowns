@@ -36,24 +36,6 @@ static u32 state_changes = 0;
 static bool rewind_changed = false;
 
 static bool valid_id(int id);
-static void set_config(int id, const char* path, bool write_protected);
-
-void emu_hard_disk_init(void)
-{
-    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
-    {
-        std::string path = config_emulator.hard_disk_paths[i];
-
-        if (path.empty())
-            continue;
-
-        if (!emu_get_core()->AttachHardDisk(i, path.c_str(), config_emulator.hard_disk_write_protected[i] != 0))
-        {
-            Error("Unable to attach hard disk %d: %s", i, path.c_str());
-            set_config(i, "", false);
-        }
-    }
-}
 
 bool emu_hard_disk_is_image(const char* path)
 {
@@ -93,7 +75,8 @@ bool emu_hard_disk_attach(int id, const char* path, bool write_protected)
     if (!valid_id(id) || !IsValidPointer(path) || !emu_get_core()->AttachHardDisk(id, path, write_protected))
         return false;
 
-    set_config(id, path, write_protected);
+    config_emulator.hard_disk_write_protected[id] = write_protected ? 1 : 0;
+    config_push_recent_hard_disk(path);
     return true;
 }
 
@@ -103,7 +86,6 @@ bool emu_hard_disk_detach(int id)
         return false;
 
     emu_get_core()->DetachHardDisk(id);
-    set_config(id, "", false);
     return true;
 }
 
@@ -127,10 +109,11 @@ bool emu_hard_disk_set_write_protected(int id, bool write_protected)
 
     const char* path = info.pending ? info.pending_path : info.path;
 
-    if (path[0] == 0)
-        return false;
+    if (path[0] != 0)
+        return emu_hard_disk_attach(id, path, write_protected);
 
-    return emu_hard_disk_attach(id, path, write_protected);
+    config_emulator.hard_disk_write_protected[id] = write_protected ? 1 : 0;
+    return true;
 }
 
 bool emu_hard_disk_flush(void)
@@ -235,8 +218,3 @@ static bool valid_id(int id)
     return (id >= 0) && (id < GT_MAX_HARD_DISKS);
 }
 
-static void set_config(int id, const char* path, bool write_protected)
-{
-    config_emulator.hard_disk_paths[id] = path;
-    config_emulator.hard_disk_write_protected[id] = write_protected ? 1 : 0;
-}

@@ -45,6 +45,7 @@ static int create_custom_mb = 100;
 static int create_size_mb = 100;
 
 static void disk_menu(int id);
+static void attach(int id, const char* path);
 static void draw_create_popup(void);
 static void draw_quit_popup(void);
 static void notify_attached(int id, const char* path, const char* message);
@@ -129,7 +130,7 @@ bool gui_hard_disks_load(const char* path)
         return false;
     }
 
-    if (!emu_hard_disk_attach(id, path, false))
+    if (!emu_hard_disk_attach(id, path, config_emulator.hard_disk_write_protected[id] != 0))
     {
         std::string message("Unable to attach the hard disk image:\n");
         message += path;
@@ -164,20 +165,12 @@ void gui_hard_disks_dialog_attach(int id, const char* path)
     std::string full_path(path);
     size_t separator = full_path.find_last_of("/\\");
     config_emulator.last_open_path = separator == std::string::npos ? "" : full_path.substr(0, separator + 1);
-
-    if (emu_hard_disk_attach(id, path, false))
-        notify_attached(id, path, "Hard disk attached");
-    else
-    {
-        std::string message("Unable to attach the hard disk image:\n");
-        message += path;
-        gui_set_error_message(message.c_str());
-    }
+    attach(id, path);
 }
 
 void gui_hard_disks_dialog_create(int id, const char* path)
 {
-    if (emu_hard_disk_create(id, path, create_size_mb, false))
+    if (emu_hard_disk_create(id, path, create_size_mb, config_emulator.hard_disk_write_protected[id] != 0))
         notify_attached(id, path, "Hard disk created");
     else
     {
@@ -247,13 +240,53 @@ static void disk_menu(int id)
 
     ImGui::Separator();
 
-    bool write_protected = info.pending_write_protected;
+    bool write_protected = present ? info.pending_write_protected : config_emulator.hard_disk_write_protected[id] != 0;
 
-    if (ImGui::MenuItem("Write Protected", NULL, &write_protected, present) &&
+    if (ImGui::MenuItem("Write Protected", NULL, &write_protected) &&
         !emu_hard_disk_set_write_protected(id, write_protected))
         gui_notify(gui_NotificationError, NULL, "Unable to change the write protection of this disk");
 
+    ImGui::Separator();
+
+    if (ImGui::BeginMenu("Recent", !loading))
+    {
+        for (int i = 0; i < config_max_recent_hard_disks; i++)
+        {
+            const std::string& recent = config_emulator.recent_hard_disks[i];
+
+            if (recent.empty())
+                continue;
+
+            ImGui::PushID(i);
+
+            if (ImGui::MenuItem(get_filename(recent.c_str())))
+            {
+                std::string path = recent;
+                attach(id, path.c_str());
+            }
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", recent.c_str());
+
+            ImGui::PopID();
+        }
+
+        ImGui::EndMenu();
+    }
+
     ImGui::EndMenu();
+}
+
+static void attach(int id, const char* path)
+{
+    if (emu_hard_disk_attach(id, path, config_emulator.hard_disk_write_protected[id] != 0))
+        notify_attached(id, path, "Hard disk attached");
+    else
+    {
+        std::string message("Unable to attach the hard disk image:\n");
+        message += path;
+        gui_set_error_message(message.c_str());
+    }
 }
 
 static void draw_create_popup(void)

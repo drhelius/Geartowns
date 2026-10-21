@@ -29,6 +29,7 @@ class CdRomAudio;
 class CdRomMedia;
 class FDC;
 class FloppyDisk;
+class ScsiController;
 class Keyboard;
 class MSM58321;
 class UPD71071;
@@ -142,6 +143,7 @@ public:
     CdRomAudio* GetCDROMAudio();
     FDC* GetFDC();
     FloppyDisk* GetFloppy(int drive);
+    ScsiController* GetSCSI();
     Keyboard* GetKeyboard();
     TraceLogger* GetTraceLogger();
     Profiler* GetProfiler();
@@ -184,7 +186,7 @@ private:
 
     bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
     bool LoadState(std::istream& stream, GT_SaveState_Media* media = NULL);
-    void Serialize(StateSerializer& serializer, GT_Machine_Config& config);
+    void Serialize(StateSerializer& serializer, GT_Machine_Config& config, int version);
     void SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media);
     void SanitizeMachineConfig(GT_Machine_Config& config);
     std::string GetSaveStatePath(const char* path, int index);
@@ -206,6 +208,7 @@ private:
     CdRomAudio* m_cdrom_audio;
     CdRom* m_cdrom;
     FDC* m_fdc;
+    ScsiController* m_scsi;
     Keyboard* m_keyboard;
     TraceLogger* m_trace_logger;
     Profiler* m_profiler;

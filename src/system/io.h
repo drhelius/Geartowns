@@ -25,6 +25,7 @@
 class Audio;
 class CdRom;
 class FDC;
+class ScsiController;
 class Input;
 class Keyboard;
 class MSM58321;
@@ -44,7 +45,8 @@ public:
     IO();
     ~IO();
     void Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory,
-        SystemControl* system_control, CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc,
+        SystemControl* system_control, CdRom* cdrom, FDC* fdc, ScsiController* scsi, Keyboard* keyboard, Input* input,
+        MSM58321* rtc,
         UPD71071* dma);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
@@ -73,6 +75,7 @@ private:
     SystemControl* m_system_control;
     CdRom* m_cdrom;
     FDC* m_fdc;
+    ScsiController* m_scsi;
     Keyboard* m_keyboard;
     Input* m_input;
     MSM58321* m_rtc;

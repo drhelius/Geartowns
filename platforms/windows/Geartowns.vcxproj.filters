@@ -283,6 +283,9 @@
     <ClCompile Include="..\..\src\drive\mb8877.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\drive\scsi_controller.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\drive\floppy_disk.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -457,6 +460,8 @@
     <ClInclude Include="..\..\src\drive\fdc_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\mb8877.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\mb8877_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\scsi_controller.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\scsi_controller_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\floppy_disk.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\floppy_disk_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\floppy_image.h"><Filter>src</Filter></ClInclude>

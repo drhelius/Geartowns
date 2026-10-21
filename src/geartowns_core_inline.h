@@ -147,6 +147,11 @@ INLINE FDC* GeartownsCore::GetFDC()
     return m_fdc;
 }
 
+INLINE ScsiController* GeartownsCore::GetSCSI()
+{
+    return m_scsi;
+}
+
 INLINE Keyboard* GeartownsCore::GetKeyboard()
 {
     return m_keyboard;

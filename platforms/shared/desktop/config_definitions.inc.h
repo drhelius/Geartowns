@@ -104,6 +104,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "TraceMixer", config_debug.trace_mixer, false);
     CONFIG_BOOL("Debug", "TraceCdrom", config_debug.trace_cdrom, false);
     CONFIG_BOOL("Debug", "TraceFdc", config_debug.trace_fdc, false);
+    CONFIG_BOOL("Debug", "TraceScsi", config_debug.trace_scsi, false);
     CONFIG_BOOL("Debug", "TraceKeyboard", config_debug.trace_keyboard, false);
     CONFIG_BOOL("Debug", "TraceInput", config_debug.trace_input, false);
     CONFIG_BOOL("Debug", "TraceSystem", config_debug.trace_system, false);
@@ -130,6 +131,8 @@ static inline void process(config_Operation operation)
         TRACE_CDROM_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceFdcEvents", config_debug.trace_fdc_events, TRACE_FDC_EVENT_ALL, 0,
         TRACE_FDC_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceScsiEvents", config_debug.trace_scsi_events, TRACE_SCSI_EVENT_ALL, 0,
+        TRACE_SCSI_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceKeyboardEvents", config_debug.trace_keyboard_events, TRACE_KEYBOARD_EVENT_ALL, 0,
         TRACE_KEYBOARD_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceInputEvents", config_debug.trace_input_events, TRACE_INPUT_EVENT_DEFAULT, 0,

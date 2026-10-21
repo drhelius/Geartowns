@@ -23,6 +23,7 @@
 #include "../audio/rf5c68.h"
 #include "../cdrom/cdrom.h"
 #include "../drive/fdc.h"
+#include "../drive/scsi_controller.h"
 #include "../input/input.h"
 #include "../input/keyboard.h"
 #include "memory.h"
@@ -47,6 +48,7 @@ IO::IO()
     InitPointer(m_system_control);
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
+    InitPointer(m_scsi);
     InitPointer(m_keyboard);
     InitPointer(m_input);
     InitPointer(m_rtc);
@@ -59,8 +61,8 @@ IO::~IO()
 }
 
 void IO::Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory,
-    SystemControl* system_control, CdRom* cdrom, FDC* fdc, Keyboard* keyboard, Input* input, MSM58321* rtc,
-    UPD71071* dma)
+    SystemControl* system_control, CdRom* cdrom, FDC* fdc, ScsiController* scsi, Keyboard* keyboard, Input* input,
+    MSM58321* rtc, UPD71071* dma)
 {
     m_scheduler = scheduler;
     m_audio = audio;
@@ -73,6 +75,7 @@ void IO::Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* vid
     m_system_control = system_control;
     m_cdrom = cdrom;
     m_fdc = fdc;
+    m_scsi = scsi;
     m_keyboard = keyboard;
     m_input = input;
     m_rtc = rtc;
@@ -400,7 +403,7 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // SCSI data
         case 0x0C32:
             // SCSI status
-            break;
+            return m_scsi->Read(port, context.clocks);
         case 0xFD90:
             // Palette index
         case 0xFD92:
@@ -643,8 +646,10 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x0A06:
         case 0x0A08:
         case 0x0A0A:
+            break;
         case 0x0C30:
         case 0x0C32:
+            value = m_scsi->Peek(port);
             break;
         case 0x05C0:
         case 0x05C2:
@@ -741,6 +746,8 @@ u64 IO::GetReadStableUntil(u16 port, int width, u64 clocks) const
             return m_video->GetStatusStableUntil();
         case 0x04C0:
             // CD-ROM master status, changes only at CD-ROM and DMA events
+        case 0x0C32:
+            // SCSI status, changes only at SCSI and DMA events
             return GT_NO_EVENT;
         case 0xFDA0:
             // VSYNC and HSYNC status
@@ -1072,6 +1079,7 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // SCSI data
         case 0x0C32:
             // SCSI control
+            m_scsi->Write(port, value, context.clocks);
             break;
         case 0xFD90:
             // Palette index

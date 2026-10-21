@@ -39,6 +39,7 @@ enum GT_Trace_Type : u8
     TRACE_MIXER,
     TRACE_CDROM,
     TRACE_FDC,
+    TRACE_SCSI,
     TRACE_KEYBOARD,
     TRACE_INPUT,
     TRACE_SYSTEM,
@@ -60,6 +61,7 @@ static_assert(TRACE_TYPE_COUNT < 32, "Trace category flags exceed 32 bits");
 #define TRACE_FLAG_MIXER            (1U << TRACE_MIXER)
 #define TRACE_FLAG_CDROM            (1U << TRACE_CDROM)
 #define TRACE_FLAG_FDC              (1U << TRACE_FDC)
+#define TRACE_FLAG_SCSI             (1U << TRACE_SCSI)
 #define TRACE_FLAG_KEYBOARD         (1U << TRACE_KEYBOARD)
 #define TRACE_FLAG_INPUT            (1U << TRACE_INPUT)
 #define TRACE_FLAG_SYSTEM           (1U << TRACE_SYSTEM)
@@ -260,6 +262,18 @@ enum GT_Trace_FDC_Event : u8
 #define TRACE_FDC_EVENT_RESULTS  (1U << TRACE_FDC_END)
 #define TRACE_FDC_EVENT_DRIVES   ((1U << TRACE_FDC_DRIVE_CONTROL) | (1U << TRACE_FDC_DRIVE_SELECT))
 #define TRACE_FDC_EVENT_ALL      (TRACE_FDC_EVENT_COMMANDS | TRACE_FDC_EVENT_RESULTS | TRACE_FDC_EVENT_DRIVES)
+
+enum GT_Trace_SCSI_Event : u8
+{
+    TRACE_SCSI_CONTROL = 0,
+    TRACE_SCSI_RESET,
+    TRACE_SCSI_SELECTION
+};
+
+#define TRACE_SCSI_EVENT_CONTROL   (1U << TRACE_SCSI_CONTROL)
+#define TRACE_SCSI_EVENT_RESET     (1U << TRACE_SCSI_RESET)
+#define TRACE_SCSI_EVENT_SELECTION (1U << TRACE_SCSI_SELECTION)
+#define TRACE_SCSI_EVENT_ALL       (TRACE_SCSI_EVENT_CONTROL | TRACE_SCSI_EVENT_RESET | TRACE_SCSI_EVENT_SELECTION)
 
 enum GT_Trace_Keyboard_Event : u8
 {
@@ -462,6 +476,15 @@ struct GT_Trace_Entry
             s8 drive;
             u8 cylinder;
         } fdc;
+
+        struct
+        {
+            u8 control;
+            u8 status;
+            u8 value;
+            u8 phase;
+            s8 target;
+        } scsi;
 
         struct
         {

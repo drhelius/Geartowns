@@ -26,6 +26,7 @@
 #include "cdrom/cdrom_audio.h"
 #include "cdrom/cdrom_media.h"
 #include "drive/fdc.h"
+#include "drive/scsi_controller.h"
 #include "media/firmware.h"
 #include "input/input.h"
 #include "input/keyboard.h"
@@ -65,6 +66,7 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_cdrom_audio);
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
+    InitPointer(m_scsi);
     InitPointer(m_keyboard);
     InitPointer(m_trace_logger);
     InitPointer(m_profiler);
@@ -107,6 +109,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_cdrom);
     SafeDelete(m_cdrom_audio);
     SafeDelete(m_fdc);
+    SafeDelete(m_scsi);
     SafeDelete(m_keyboard);
     SafeDelete(m_trace_logger);
     SafeDelete(m_profiler);
@@ -167,6 +170,9 @@ void GeartownsCore::Init()
     if (!IsValidPointer(m_fdc))
         m_fdc = new FDC();
 
+    if (!IsValidPointer(m_scsi))
+        m_scsi = new ScsiController();
+
     if (!IsValidPointer(m_keyboard))
         m_keyboard = new Keyboard();
 
@@ -196,10 +202,11 @@ void GeartownsCore::Init()
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
     m_fdc->Init(m_pic, m_scheduler, m_dma);
+    m_scsi->Init(m_pic, m_scheduler, m_dma);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
-    m_io->Init(m_scheduler, m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_keyboard,
-        m_input, m_rtc, m_dma);
+    m_io->Init(m_scheduler, m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_scsi,
+        m_keyboard, m_input, m_rtc, m_dma);
     m_i386->Init(m_memory, m_io);
     m_i386->SetDecodedPorts(m_io->GetDecodedPorts());
     m_video->GetSprite()->SetBusCycleCounts(m_i386->GetBusCycleCounts());
@@ -218,6 +225,7 @@ void GeartownsCore::Init()
     m_audio->SetTraceLogger(m_trace_logger);
     m_cdrom->SetTraceLogger(m_trace_logger);
     m_fdc->SetTraceLogger(m_trace_logger);
+    m_scsi->SetTraceLogger(m_trace_logger);
     m_keyboard->SetTraceLogger(m_trace_logger);
     m_input->SetTraceLogger(m_trace_logger);
     m_media->Init();
@@ -681,6 +689,9 @@ INLINE void GeartownsCore::DispatchEvents()
             case SCHEDULER_EVENT_FDC:
                 m_fdc->HandleEvent(clocks);
                 break;
+            case SCHEDULER_EVENT_SCSI:
+                m_scsi->HandleEvent(clocks);
+                break;
             case SCHEDULER_EVENT_KEYBOARD:
                 m_keyboard->HandleEvent(clocks);
                 break;
@@ -760,7 +771,8 @@ bool GeartownsCore::IsMachineConfigPending()
         (m_pending_machine_config.cpu != m_machine_config.cpu) ||
         (m_pending_machine_config.ram_size != m_machine_config.ram_size) ||
         (m_pending_machine_config.floppy_drives != m_machine_config.floppy_drives) ||
-        (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate);
+        (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate) ||
+        (m_pending_machine_config.scsi != m_machine_config.scsi);
 }
 
 bool GeartownsCore::GetFloppyNotice(GT_Floppy_Notice& notice)
@@ -1055,7 +1067,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     Debug("Serializing save state...");
 
     StateSerializer serializer(stream);
-    Serialize(serializer, m_machine_config);
+    Serialize(serializer, m_machine_config, GT_SAVESTATE_VERSION);
 
     GT_SaveState_Media state_media = {};
 
@@ -1084,6 +1096,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_keyboard->SaveState(stream);
     m_rtc->SaveState(stream);
     m_dma->SaveState(stream);
+    m_scsi->SaveState(stream);
 
     if (stream.fail())
     {
@@ -1293,14 +1306,15 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
     GT_Machine_Config machine_config = m_machine_config;
     StateSerializer serializer(stream);
-    Serialize(serializer, machine_config);
+    Serialize(serializer, machine_config, header.version);
     SanitizeMachineConfig(machine_config);
 
     // The CPU speed may differ, the hardware may not
     // The running machine keeps its own configuration either way
     bool same_machine = (m_machine_config.model == machine_config.model) &&
         (m_machine_config.cpu == machine_config.cpu) && (m_machine_config.ram_size == machine_config.ram_size) &&
-        (m_machine_config.floppy_drives == machine_config.floppy_drives);
+        (m_machine_config.floppy_drives == machine_config.floppy_drives) &&
+        (m_machine_config.scsi == machine_config.scsi);
 
     if (!same_machine)
     {
@@ -1359,6 +1373,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_keyboard->LoadState(stream);
     m_rtc->LoadState(stream);
     m_dma->LoadState(stream);
+    m_scsi->LoadState(stream, header.version);
 
     if (stream.fail())
     {
@@ -1500,13 +1515,16 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
     return success;
 }
 
-void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& config)
+void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& config, int version)
 {
     G_SERIALIZE(serializer, config.model);
     G_SERIALIZE(serializer, config.cpu);
     G_SERIALIZE(serializer, config.ram_size);
     G_SERIALIZE(serializer, config.floppy_drives);
     G_SERIALIZE(serializer, config.cpu_clock_rate);
+
+    if (version >= 15)
+        G_SERIALIZE(serializer, config.scsi);
 }
 
 void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media)
@@ -1540,6 +1558,7 @@ void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
     config.cpu = profile.cpu;
     config.ram_size = (u32)(sizes[size] * megabyte);
     config.floppy_drives = profile.floppy_drives;
+    config.scsi = (profile.features & GT_MACHINE_FEATURE_SCSI) != 0;
 
     if (config.cpu_clock_rate == 0)
         config.cpu_clock_rate = profile.cpu_clock_rate;
@@ -1643,6 +1662,9 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_fdc))
         m_fdc->Reset();
+
+    if (IsValidPointer(m_scsi))
+        m_scsi->Reset();
 
     if (IsValidPointer(m_keyboard))
         m_keyboard->Reset();
@@ -1855,6 +1877,9 @@ void GeartownsCore::ApplyMachineConfig()
         m_fdc->SetThreeMode(profile.three_mode_floppy);
         m_fdc->SetFeatures(profile.features);
     }
+
+    if (IsValidPointer(m_scsi))
+        m_scsi->SetFitted(m_machine_config.scsi);
 
     if (IsValidPointer(m_io))
         m_io->UpdateDecodedPorts();

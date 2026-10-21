@@ -484,6 +484,9 @@ cdrom.cdda
 fdc.commands
 fdc.results
 fdc.drives
+scsi.control
+scsi.reset
+scsi.selection
 keyboard.keys
 keyboard.reads
 keyboard.commands

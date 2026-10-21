@@ -26,6 +26,7 @@
 #include "../emu.h"
 #include "system/i8259.h"
 #include "drive/fdc.h"
+#include "drive/scsi_controller.h"
 #include "video/sprite.h"
 
 static const double k_trace_fm_sample_rate = (double)GT_SOUND_CLOCK_RATE / k_ym3438_native_sample_cycles;
@@ -48,6 +49,7 @@ static void format_pcm(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_mixer(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_cdrom(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_fdc(const GT_Trace_Entry& entry, char* buffer, size_t size);
+static void format_scsi(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_keyboard(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_input(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_system(const GT_Trace_Entry& entry, char* buffer, size_t size);
@@ -161,6 +163,9 @@ void trace_logger_format_entry(const GT_Trace_Entry& entry,
             break;
         case TRACE_FDC:
             format_fdc(entry, buffer, buffer_size);
+            break;
+        case TRACE_SCSI:
+            format_scsi(entry, buffer, buffer_size);
             break;
         case TRACE_KEYBOARD:
             format_keyboard(entry, buffer, buffer_size);
@@ -1025,6 +1030,37 @@ static void format_fdc(const GT_Trace_Entry& entry, char* buffer, size_t size)
             format_event(buffer, size, "FDC", "DRIVE SEL", "Select:$%02X  Switch:%u  Drive:%s  Cylinder:%u",
                 entry.fdc.data, entry.fdc.status & 0x01, drive, entry.fdc.cylinder);
             break;
+    }
+}
+
+static void format_scsi(const GT_Trace_Entry& entry, char* buffer, size_t size)
+{
+    switch (entry.event)
+    {
+        case TRACE_SCSI_CONTROL:
+        {
+            u8 value = entry.scsi.value;
+            format_event(buffer, size, "SCSI", "CONTROL",
+                "$0C32 <- $%02X  WEN:%u IMSK:%u ATN:%u SEL:%u DMAE:%u RST:%u  Status:$%02X", value,
+                (value & k_scsi_control_wen) != 0 ? 1 : 0, (value & k_scsi_control_imsk) != 0 ? 1 : 0,
+                (value & k_scsi_control_atn) != 0 ? 1 : 0, (value & k_scsi_control_sel) != 0 ? 1 : 0,
+                (value & k_scsi_control_dmae) != 0 ? 1 : 0, (value & k_scsi_control_rst) != 0 ? 1 : 0,
+                entry.scsi.status);
+            break;
+        }
+        case TRACE_SCSI_RESET:
+            format_event(buffer, size, "SCSI", "BUS RESET", "Control:$%02X", entry.scsi.control);
+            break;
+        default:
+        {
+            char target[24] = "no target";
+
+            if (entry.scsi.target >= 0)
+                snprintf(target, sizeof(target), "ID %d answers", entry.scsi.target);
+
+            format_event(buffer, size, "SCSI", "SELECTION", "Data:$%02X  %s", entry.scsi.value, target);
+            break;
+        }
     }
 }
 

@@ -406,7 +406,8 @@ enum GT_Machine_Feature
     GT_MACHINE_FEATURE_RAM_CARD        = 0x2000,
     GT_MACHINE_FEATURE_MARTY_PORTS     = 0x4000,
     GT_MACHINE_FEATURE_FDD_READY_ONLY  = 0x8000,
-    GT_MACHINE_FEATURE_TIMER1_LATCHED  = 0x10000
+    GT_MACHINE_FEATURE_TIMER1_LATCHED  = 0x10000,
+    GT_MACHINE_FEATURE_SCSI            = 0x20000
 };
 
 enum GT_Machine_Source
@@ -557,6 +558,7 @@ struct GT_Machine_Config
     u32 ram_size;
     int floppy_drives;
     u32 cpu_clock_rate;
+    bool scsi;
 };
 
 struct GT_Machine_Settings

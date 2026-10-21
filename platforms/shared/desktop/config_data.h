@@ -274,6 +274,7 @@ struct config_Debug
     bool trace_mixer;
     bool trace_cdrom;
     bool trace_fdc;
+    bool trace_scsi;
     bool trace_keyboard;
     bool trace_input;
     bool trace_system;
@@ -289,6 +290,7 @@ struct config_Debug
     int trace_mixer_events;
     int trace_cdrom_events;
     int trace_fdc_events;
+    int trace_scsi_events;
     int trace_keyboard_events;
     int trace_input_events;
     int trace_system_events;

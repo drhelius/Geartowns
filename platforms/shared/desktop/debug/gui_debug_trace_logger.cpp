@@ -759,6 +759,18 @@ static void trace_logger_menu_filters(void)
         ImGui::EndMenu();
     }
 
+    if (ImGui::BeginMenu("SCSI"))
+    {
+        ImGui::MenuItem("Enabled", "", &config_debug.trace_scsi);
+        ImGui::Separator();
+        ImGui::BeginDisabled(!config_debug.trace_scsi);
+        trace_logger_menu_event_filter("Control", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_CONTROL);
+        trace_logger_menu_event_filter("Bus Reset", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_RESET);
+        trace_logger_menu_event_filter("Selection", &config_debug.trace_scsi_events, TRACE_SCSI_EVENT_SELECTION);
+        ImGui::EndDisabled();
+        ImGui::EndMenu();
+    }
+
     if (ImGui::BeginMenu("Keyboard"))
     {
         ImGui::MenuItem("Enabled", "", &config_debug.trace_keyboard);
@@ -1137,6 +1149,7 @@ static u32 trace_logger_get_config_flags(void)
     if (config_debug.trace_mixer) flags |= TRACE_FLAG_MIXER;
     if (config_debug.trace_cdrom) flags |= TRACE_FLAG_CDROM;
     if (config_debug.trace_fdc) flags |= TRACE_FLAG_FDC;
+    if (config_debug.trace_scsi) flags |= TRACE_FLAG_SCSI;
     if (config_debug.trace_keyboard) flags |= TRACE_FLAG_KEYBOARD;
     if (config_debug.trace_input) flags |= TRACE_FLAG_INPUT;
     if (config_debug.trace_system) flags |= TRACE_FLAG_SYSTEM;
@@ -1165,6 +1178,7 @@ static void trace_logger_set_config_flags(u32 flags)
     config_debug.trace_mixer = (flags & TRACE_FLAG_MIXER) != 0;
     config_debug.trace_cdrom = (flags & TRACE_FLAG_CDROM) != 0;
     config_debug.trace_fdc = (flags & TRACE_FLAG_FDC) != 0;
+    config_debug.trace_scsi = (flags & TRACE_FLAG_SCSI) != 0;
     config_debug.trace_keyboard = (flags & TRACE_FLAG_KEYBOARD) != 0;
     config_debug.trace_input = (flags & TRACE_FLAG_INPUT) != 0;
     config_debug.trace_system = (flags & TRACE_FLAG_SYSTEM) != 0;
@@ -1186,6 +1200,7 @@ static int* trace_logger_get_config_event_filter(GT_Trace_Type type)
         case TRACE_MIXER: return &config_debug.trace_mixer_events;
         case TRACE_CDROM: return &config_debug.trace_cdrom_events;
         case TRACE_FDC: return &config_debug.trace_fdc_events;
+        case TRACE_SCSI: return &config_debug.trace_scsi_events;
         case TRACE_KEYBOARD: return &config_debug.trace_keyboard_events;
         case TRACE_INPUT: return &config_debug.trace_input_events;
         case TRACE_SYSTEM: return &config_debug.trace_system_events;
@@ -1344,6 +1359,7 @@ static void render_entry_colored(const GT_Trace_Entry& entry, u64 index, bool pr
         case TRACE_MIXER: ImGui::TextColored(violet, "%s", buf); break;
         case TRACE_CDROM: ImGui::TextColored(cyan, "%s", buf); break;
         case TRACE_FDC: ImGui::TextColored(cornflower, "%s", buf); break;
+        case TRACE_SCSI: ImGui::TextColored(cornflower, "%s", buf); break;
         case TRACE_KEYBOARD: ImGui::TextColored(yellow, "%s", buf); break;
         case TRACE_INPUT: ImGui::TextColored(yellow, "%s", buf); break;
         default: ImGui::TextColored(white, "%s", buf); break;

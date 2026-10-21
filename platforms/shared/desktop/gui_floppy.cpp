@@ -201,13 +201,14 @@ void gui_floppy_menu(int drive, const char* label, int drives)
 
     if (drives > 1)
     {
-        ImGui::Separator();
-
         Emu_FloppyInfo other;
         emu_floppy_get_info(drive ^ 1, &other);
 
         if ((info.inserted || other.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
+        {
+            ImGui::Separator();
             emu_floppy_swap();
+        }
     }
 
     ImGui::EndMenu();

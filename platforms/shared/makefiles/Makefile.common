@@ -96,8 +96,10 @@ ifeq ($(UNAME_S), Linux)
 else ifeq ($(UNAME_S), Darwin)
     PLATFORM = "macOS"
     LDFLAGS += -framework OpenGL `pkg-config --libs sdl3`
+    LDFLAGS += -falign-functions=64
     CPPFLAGS += `pkg-config --cflags sdl3`
     CPPFLAGS += -I/opt/local/include
+    CPPFLAGS += -falign-functions=64
     TARGET := $(TARGET_NAME)
 else
     PLATFORM = "Generic Unix-like/BSD"

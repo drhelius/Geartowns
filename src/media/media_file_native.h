@@ -32,6 +32,7 @@ public:
     static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
 
     virtual bool Open(const char* path, bool writable) override;
+    virtual bool Create(const char* path) override;
     virtual void Close() override;
     virtual bool IsOpen() const override;
     virtual bool IsValid() const override;

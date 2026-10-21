@@ -19,6 +19,7 @@
 
 #include <time.h>
 #include "hard_disk_image.h"
+#include "floppy_image.h"
 #include "../media/media_file.h"
 
 static u64 s_sessions = 0;
@@ -44,19 +45,32 @@ HardDiskImage::~HardDiskImage()
     Close();
 }
 
-bool HardDiskImage::Open(const char* path, bool write_protected)
+bool HardDiskImage::Open(const char* path, bool write_protected, const char* working_path)
 {
     Close();
 
     if (!IsValidPointer(path) || (path[0] == 0))
         return false;
 
-    m_file = write_protected ? NULL : MediaFile::OpenFile(path, true);
+    bool copy_on_write = IsValidPointer(working_path) && (working_path[0] != 0);
+
+    if (copy_on_write)
+    {
+        m_file = MediaFile::OpenFile(working_path, !write_protected);
+
+        if (IsValidPointer(m_file))
+            Log("Hard disk working copy %s", working_path);
+        else if (!write_protected)
+            m_working_path = working_path;
+    }
+
+    if (!IsValidPointer(m_file))
+        m_file = (write_protected || copy_on_write) ? NULL : MediaFile::OpenFile(path, true);
 
     if (!IsValidPointer(m_file))
     {
         m_file = MediaFile::OpenFile(path, false);
-        write_protected = true;
+        write_protected = write_protected || !copy_on_write;
     }
 
     if (!IsValidPointer(m_file))
@@ -99,6 +113,7 @@ void HardDiskImage::Close()
     SafeDelete(m_file);
     m_path.clear();
     m_file_name.clear();
+    m_working_path.clear();
     m_blocks = 0;
     m_write_protected = false;
     m_overlay_index.clear();
@@ -181,9 +196,10 @@ bool HardDiskImage::Flush()
     if (!IsValidPointer(m_file) || (m_overlay_blocks == 0))
         return true;
 
+    bool copied = m_working_path.empty() || CreateWorkingCopy();
     u32 lba = 0;
 
-    for (; lba < m_blocks; lba++)
+    for (; copied && (lba < m_blocks); lba++)
     {
         u32 slot = m_overlay_index[lba];
 
@@ -195,7 +211,7 @@ bool HardDiskImage::Flush()
             break;
     }
 
-    if (!m_file->Flush() || (lba < m_blocks))
+    if (!copied || !m_file->Flush() || (lba < m_blocks))
     {
         if (!m_flush_failed)
             Error("Unable to write hard disk image %s, its changes stay in memory", m_path.c_str());
@@ -240,6 +256,37 @@ bool HardDiskImage::Restore(u64 session, u64 write)
         return true;
 
     return (write < m_last_write) ? Undo(write) : Redo(write);
+}
+
+bool HardDiskImage::CreateWorkingCopy()
+{
+    MediaFile* copy = MediaFile::CreateFile(m_working_path.c_str());
+
+    if (!IsValidPointer(copy))
+        return false;
+
+    std::vector<u8> chunk(1024 * 1024);
+    u64 size = (u64)m_blocks * k_hard_disk_block_size;
+    bool ok = true;
+
+    for (u64 offset = 0; ok && (offset < size); offset += chunk.size())
+    {
+        u64 count = MIN((u64)chunk.size(), size - offset);
+        ok = m_file->ReadAt(offset, chunk.data(), count) && copy->WriteAt(offset, chunk.data(), count);
+    }
+
+    ok = copy->Flush() && ok;
+    SafeDelete(copy);
+    MediaFile* file = ok ? MediaFile::OpenFile(m_working_path.c_str(), true) : NULL;
+
+    if (!IsValidPointer(file))
+        return false;
+
+    SafeDelete(m_file);
+    m_file = file;
+    Log("Hard disk working copy created: %s", m_working_path.c_str());
+    m_working_path.clear();
+    return true;
 }
 
 void HardDiskImage::StoreBlock(u32 lba, const u8* buffer)
@@ -351,6 +398,34 @@ void HardDiskImage::ClearJournal()
     std::vector<HardDiskJournalEntry>().swap(m_journal);
     m_journal_start = 0;
     m_journal_count = 0;
+}
+
+bool HardDiskImage::IsImage(const char* path)
+{
+    if (!IsValidPointer(path))
+        return false;
+
+    if (ends_with_no_case(path, ".hdd") || (GetImageId(path) >= 0))
+        return true;
+
+    if (!ends_with_no_case(path, ".hdm"))
+        return false;
+
+    MediaFile* file = MediaFile::OpenFile(path);
+    bool hard_disk = IsValidPointer(file) && (file->GetSize() > (s64)k_floppy_max_image_size);
+    SafeDelete(file);
+    return hard_disk;
+}
+
+int HardDiskImage::GetImageId(const char* path)
+{
+    size_t length = IsValidPointer(path) ? strlen(path) : 0;
+
+    if ((length > 3) && (path[length - 3] == '.') && ((path[length - 2] | 0x20) == 'h') &&
+        (path[length - 1] >= '0') && (path[length - 1] < '0' + GT_MAX_HARD_DISKS))
+        return path[length - 1] - '0';
+
+    return -1;
 }
 
 bool HardDiskImage::Create(const char* path, u64 size)

@@ -32,6 +32,7 @@
 #include "drive/fdc.h"
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
+#include "drive/hard_disk_image.h"
 #include "system/msm58321.h"
 #include "video/video.h"
 #include "libretro_core_options.h"
@@ -52,6 +53,7 @@
 #define DISK_DRIVE_FLOPPY_2 2
 #define DISK_DRIVE_COUNT (1 + FDC_DRIVES)
 #define FLOPPY_IDLE_FRAMES 180
+#define HARD_DISK_IDLE_FRAMES 120
 #define CMOS_SAVE_FRAMES 180
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
@@ -157,6 +159,10 @@ static std::string floppy_working_path[FDC_DRIVES];
 static u32 floppy_write_count[FDC_DRIVES];
 static int floppy_idle_frames[FDC_DRIVES];
 static bool floppy_flush_failed[FDC_DRIVES];
+static u32 hard_disk_write_count = 0;
+static int hard_disk_idle_frames = 0;
+static bool hard_disk_flush_failed = false;
+static bool hard_disk_state_warned = false;
 static int floppy_drive = 0;
 static bool floppy_multidrive = false;
 static bool save_disk = false;
@@ -245,6 +251,8 @@ static void remove_file(const char* path, bool vfs);
 static bool floppy_load_image(unsigned index, int floppy);
 static bool floppy_flush(int floppy);
 static void floppy_update(void);
+static bool hard_disk_attach(const char* path);
+static void hard_disk_update(void);
 static void cmos_load(void);
 static void cmos_save(void);
 static void cmos_update(void);
@@ -492,7 +500,7 @@ void retro_get_system_info(struct retro_system_info *info)
     info->library_version  = GT_VERSION;
     info->need_fullpath    = true;
     info->block_extract    = true;
-    info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|mfm|bin|m3u";
+    info->valid_extensions = "cue|chd|iso|zip|d77|d88|hdm|xdf|img|mfm|bin|m3u|hdd|h0|h1|h2|h3|h4|h5|h6";
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
@@ -543,6 +551,7 @@ void retro_run(void)
     bool powered = core->IsPoweredOn();
     core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
     floppy_update();
+    hard_disk_update();
     cmos_update();
 
     if (powered && !core->IsPoweredOn())
@@ -648,6 +657,15 @@ bool retro_unserialize(const void *data, size_t size)
     {
         load_input_state(buffer + savestate_size);
         sync_keyboard_state();
+        bool changed = core->GetHardDiskStateChanges() != 0;
+
+        if (changed && !hard_disk_state_warned)
+        {
+            log_cb(RETRO_LOG_WARN, "The hard disk changed since this state was saved\n");
+            show_message("The hard disk changed since this state was saved", 3, RETRO_LOG_WARN);
+        }
+
+        hard_disk_state_warned = changed;
     }
 
     return loaded;
@@ -792,10 +810,21 @@ static void unload_content(void)
         core->EjectFloppy(i);
     }
 
+    if (!core->FlushHardDisks())
+        log_cb(RETRO_LOG_ERROR, "Unable to save the hard disk changes\n");
+
     cmos_save();
     cmos_shared_active = false;
     core->EjectMedia();
     core->PowerOff();
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+        core->DetachHardDisk(i);
+
+    hard_disk_write_count = 0;
+    hard_disk_idle_frames = 0;
+    hard_disk_flush_failed = false;
+    hard_disk_state_warned = false;
     disk_clear();
     clear_input_state();
 
@@ -2000,6 +2029,9 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
     if (ends_with_no_case(path, ".m3u"))
         return disk_add_playlist(path, images);
 
+    if (HardDiskImage::IsImage(path))
+        return hard_disk_attach(path);
+
     if (FloppyImage::IsImageName(path) || ends_with_no_case(path, ".zip") || path_is_raw_floppy(path))
     {
         if (disk_add_floppy_images(path, images))
@@ -2015,7 +2047,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
 
     if (!path_is_cd_content(path))
     {
-        log_cb(RETRO_LOG_ERROR, "Not a CD-ROM (CUE, CHD, ISO) or floppy disk image: %s\n", path);
+        log_cb(RETRO_LOG_ERROR, "Not a CD-ROM (CUE, CHD, ISO), floppy or hard disk image: %s\n", path);
         return false;
     }
 
@@ -2854,6 +2886,83 @@ static void floppy_update(void)
 
         floppy_flush_failed[i] = !saved;
     }
+}
+
+static bool hard_disk_attach(const char* path)
+{
+    if (content_loaded)
+    {
+        log_cb(RETRO_LOG_ERROR, "Hard disks are attached with the content and can't be swapped: %s\n", path);
+        return false;
+    }
+
+    int id = HardDiskImage::GetImageId(path);
+
+    for (int i = 0; (id < 0) && (i < GT_MAX_HARD_DISKS); i++)
+    {
+        if (!core->GetHardDisk(i)->IsOpen())
+            id = i;
+    }
+
+    if (id < 0)
+    {
+        log_cb(RETRO_LOG_ERROR, "Every SCSI ID already has a hard disk: %s\n", path);
+        return false;
+    }
+
+    if (core->GetHardDisk(id)->IsOpen())
+    {
+        log_cb(RETRO_LOG_ERROR, "SCSI ID %d already has a hard disk: %s\n", id, path);
+        return false;
+    }
+
+    std::string name = get_file_name(path, false);
+    size_t dot = name.find_last_of('.');
+    std::string working = retro_save_directory;
+    append_path_component(working, (get_save_disk_name(name.substr(0, dot)) + ".save" + name.substr(dot)).c_str());
+
+    if (!core->AttachHardDisk(id, path, false, working.c_str()))
+    {
+        log_cb(RETRO_LOG_ERROR, "Unable to attach the hard disk image %s\n", path);
+        return false;
+    }
+
+    log_cb(RETRO_LOG_INFO, "Hard disk on SCSI ID %d: %s\n", id, path);
+    return true;
+}
+
+static void hard_disk_update(void)
+{
+    u32 count = 0;
+    u32 unflushed = 0;
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        HardDiskImage* image = core->GetHardDisk(i);
+        count += image->GetWriteCount();
+        unflushed += image->GetUnflushedBlocks();
+    }
+
+    if (count != hard_disk_write_count)
+    {
+        hard_disk_write_count = count;
+        hard_disk_idle_frames = 0;
+        return;
+    }
+
+    if ((unflushed == 0) || (++hard_disk_idle_frames < HARD_DISK_IDLE_FRAMES))
+        return;
+
+    hard_disk_idle_frames = 0;
+    bool saved = core->FlushHardDisks();
+
+    if (!saved && !hard_disk_flush_failed)
+    {
+        log_cb(RETRO_LOG_ERROR, "Unable to save the hard disk changes\n");
+        show_message("Unable to save the hard disk changes", 3, RETRO_LOG_ERROR);
+    }
+
+    hard_disk_flush_failed = !saved;
 }
 
 static void cmos_load(void)

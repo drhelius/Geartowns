@@ -110,7 +110,7 @@ public:
     bool InsertFloppy(int drive, const u8* data, u32 size, bool write_protected, u32 base_crc = 0, u32 data_crc = 0, const u8* source = NULL, u32 source_size = 0);
     void EjectFloppy(int drive);
     void SwapFloppies();
-    bool AttachHardDisk(int id, const char* path, bool write_protected = false);
+    bool AttachHardDisk(int id, const char* path, bool write_protected = false, const char* working_path = NULL);
     void DetachHardDisk(int id);
     bool FlushHardDisks();
     bool IsHardDiskPending(int id) const;
@@ -237,6 +237,7 @@ private:
     GT_Machine_Report m_machine_report;
     GT_Machine_Report m_pending_machine_report;
     std::string m_hard_disk_paths[GT_MAX_HARD_DISKS];
+    std::string m_hard_disk_working_paths[GT_MAX_HARD_DISKS];
     bool m_hard_disk_write_protected[GT_MAX_HARD_DISKS];
     bool m_hard_disk_pending[GT_MAX_HARD_DISKS];
     u32 m_hard_disk_state_changes;

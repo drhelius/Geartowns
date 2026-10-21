@@ -61,10 +61,10 @@ void ScsiDisk::Reset()
     memset(&m_state, 0, sizeof(m_state));
 }
 
-bool ScsiDisk::Attach(const char* path, bool write_protected)
+bool ScsiDisk::Attach(const char* path, bool write_protected, const char* working_path)
 {
     Reset();
-    return m_image.Open(path, write_protected);
+    return m_image.Open(path, write_protected, working_path);
 }
 
 void ScsiDisk::Detach()

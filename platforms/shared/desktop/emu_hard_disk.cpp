@@ -39,15 +39,7 @@ static bool valid_id(int id);
 
 bool emu_hard_disk_is_image(const char* path)
 {
-    if (!IsValidPointer(path))
-        return false;
-
-    if (ends_with_no_case(path, ".hdd"))
-        return true;
-
-    size_t length = strlen(path);
-    return (length > 3) && (path[length - 3] == '.') && ((path[length - 2] | 0x20) == 'h') &&
-        (path[length - 1] >= '0') && (path[length - 1] < '0' + GT_MAX_HARD_DISKS);
+    return HardDiskImage::IsImage(path);
 }
 
 int emu_hard_disk_get_image_id(const char* path)
@@ -55,8 +47,8 @@ int emu_hard_disk_get_image_id(const char* path)
     if (!emu_hard_disk_is_image(path))
         return -1;
 
-    if (!ends_with_no_case(path, ".hdd"))
-        return path[strlen(path) - 1] - '0';
+    if (HardDiskImage::GetImageId(path) >= 0)
+        return HardDiskImage::GetImageId(path);
 
     for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {

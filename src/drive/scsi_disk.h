@@ -61,7 +61,7 @@ public:
     void Init(int id);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
-    bool Attach(const char* path, bool write_protected);
+    bool Attach(const char* path, bool write_protected, const char* working_path = NULL);
     void Detach();
     bool IsAttached() const;
     HardDiskImage* GetImage();

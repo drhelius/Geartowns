@@ -953,7 +953,7 @@ FloppyDisk* GeartownsCore::GetFloppy(int drive)
     return IsValidPointer(m_fdc) ? m_fdc->GetDisk(drive) : NULL;
 }
 
-bool GeartownsCore::AttachHardDisk(int id, const char* path, bool write_protected)
+bool GeartownsCore::AttachHardDisk(int id, const char* path, bool write_protected, const char* working_path)
 {
     if ((id < 0) || (id >= GT_MAX_HARD_DISKS) || !IsValidPointer(path) || !IsValidPointer(m_scsi))
         return false;
@@ -967,6 +967,7 @@ bool GeartownsCore::AttachHardDisk(int id, const char* path, bool write_protecte
 
         const HardDiskImage* image = m_scsi->GetDisk(id)->GetImage();
         m_hard_disk_paths[id] = path;
+        m_hard_disk_working_paths[id] = IsValidPointer(working_path) ? working_path : "";
         m_hard_disk_write_protected[id] = write_protected;
         m_hard_disk_pending[id] = !image->IsOpen() || (strcmp(image->GetPath(), path) != 0) ||
             (image->IsWriteProtected() != write_protected);
@@ -975,7 +976,7 @@ bool GeartownsCore::AttachHardDisk(int id, const char* path, bool write_protecte
     {
         m_hard_disk_pending[id] = false;
 
-        if (!m_scsi->GetDisk(id)->Attach(path, write_protected))
+        if (!m_scsi->GetDisk(id)->Attach(path, write_protected, working_path))
             return false;
     }
 
@@ -1066,7 +1067,8 @@ void GeartownsCore::ApplyHardDisks()
         m_scsi->GetDisk(i)->Detach();
 
         if (!m_hard_disk_paths[i].empty())
-            m_scsi->GetDisk(i)->Attach(m_hard_disk_paths[i].c_str(), m_hard_disk_write_protected[i]);
+            m_scsi->GetDisk(i)->Attach(m_hard_disk_paths[i].c_str(), m_hard_disk_write_protected[i],
+                m_hard_disk_working_paths[i].c_str());
     }
 }
 

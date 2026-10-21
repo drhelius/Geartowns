@@ -38,7 +38,7 @@ class HardDiskImage
 public:
     HardDiskImage();
     ~HardDiskImage();
-    bool Open(const char* path, bool write_protected);
+    bool Open(const char* path, bool write_protected, const char* working_path = NULL);
     void Close();
     bool IsOpen() const;
     const char* GetPath() const;
@@ -54,9 +54,12 @@ public:
     u64 GetLastWrite() const;
     bool Restore(u64 session, u64 write);
     static bool Create(const char* path, u64 size);
+    static bool IsImage(const char* path);
+    static int GetImageId(const char* path);
 
 private:
     void StoreBlock(u32 lba, const u8* buffer);
+    bool CreateWorkingCopy();
     bool Undo(u64 write);
     bool Redo(u64 write);
     void Journal(u32 lba, const u8* data, u64 write);
@@ -66,6 +69,7 @@ private:
     MediaFile* m_file;
     std::string m_path;
     std::string m_file_name;
+    std::string m_working_path;
     u32 m_blocks;
     bool m_write_protected;
     std::vector<u32> m_overlay_index;

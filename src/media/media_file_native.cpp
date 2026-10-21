@@ -107,6 +107,17 @@ bool MediaFileNative::Open(const char* path, bool writable)
     return IsValid();
 }
 
+bool MediaFileNative::Create(const char* path)
+{
+    Close();
+
+    if (!IsValidPointer(path))
+        return false;
+
+    open_ifstream_utf8(m_file, path, std::ios::in | std::ios::out | std::ios::trunc | std::ios::binary);
+    return m_file.is_open() && !m_file.fail();
+}
+
 void MediaFileNative::Close()
 {
     if (m_file.is_open())

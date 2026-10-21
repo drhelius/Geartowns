@@ -138,6 +138,31 @@ bool MediaFileLibretro::Open(const char* path, bool writable)
     return true;
 }
 
+bool MediaFileLibretro::Create(const char* path)
+{
+    Close();
+
+    if (!IsValidPointer(path) || !s_vfs_interface || !s_vfs_interface->open || !s_vfs_interface->close ||
+        !s_vfs_interface->write)
+        return false;
+
+    size_t path_size = strlen(path) + 1;
+    m_path = new char[path_size];
+    memcpy(m_path, path, path_size);
+    m_file.SetInterface(s_vfs_interface);
+    m_writable = true;
+
+    if (!m_file.Open(path, RETRO_VFS_FILE_ACCESS_READ_WRITE, RETRO_VFS_FILE_ACCESS_HINT_NONE))
+    {
+        SafeDeleteArray(m_path);
+        m_position = 0;
+        return false;
+    }
+
+    m_position = 0;
+    return true;
+}
+
 void MediaFileLibretro::Close()
 {
     m_file.SetInterface(NULL);

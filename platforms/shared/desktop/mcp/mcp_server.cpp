@@ -1791,7 +1791,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "load_media"},
         {"title", "Load Media"},
-        {"description", "Load FM Towns media from a local file; a hard disk image (.hdd, .h0-.h6) attaches to its "
+        {"description", "Load FM Towns media from a local file; a hard disk image (.hdd, .h0-.h6, .hdm over 8 MB) attaches to its "
             "ID or the first free one and powers on an empty machine."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
@@ -1933,7 +1933,7 @@ json McpServer::BuildToolList()
                 {"id", hard_disk_id},
                 {"file_path", {
                     {"type", "string"},
-                    {"description", "Absolute path, usually .hdd or .h0-.h6."}
+                    {"description", "Absolute path, usually .hdd, .h0-.h6 or .hdm."}
                 }},
                 {"write_protected", {
                     {"type", "boolean"},

@@ -38,6 +38,7 @@ public:
     static bool IsCdRomUriPath(const char* path);
 
     virtual bool Open(const char* path, bool writable) override;
+    virtual bool Create(const char* path) override;
     virtual void Close() override;
     virtual bool IsOpen() const override;
     virtual bool IsValid() const override;

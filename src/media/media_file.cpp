@@ -55,6 +55,30 @@ MediaFile* MediaFile::OpenFile(const char* path, bool writable)
     return NULL;
 }
 
+MediaFile* MediaFile::CreateFile(const char* path)
+{
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsInterface())
+    {
+        MediaFile* file = new MediaFileLibretro;
+
+        if (file->Create(path))
+            return file;
+
+        SafeDelete(file);
+        return NULL;
+    }
+#endif
+
+    MediaFile* file = new MediaFileNative;
+
+    if (file->Create(path))
+        return file;
+
+    SafeDelete(file);
+    return NULL;
+}
+
 bool MediaFile::ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files)
 {
     folders.clear();

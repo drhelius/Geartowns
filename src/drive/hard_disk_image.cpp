@@ -260,7 +260,7 @@ bool HardDiskImage::Restore(u64 session, u64 write)
 
 bool HardDiskImage::CreateWorkingCopy()
 {
-    MediaFile* copy = MediaFile::CreateFile(m_working_path.c_str());
+    MediaFile* copy = MediaFile::OpenNewFile(m_working_path.c_str());
 
     if (!IsValidPointer(copy))
         return false;

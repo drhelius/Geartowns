@@ -55,7 +55,7 @@ MediaFile* MediaFile::OpenFile(const char* path, bool writable)
     return NULL;
 }
 
-MediaFile* MediaFile::CreateFile(const char* path)
+MediaFile* MediaFile::OpenNewFile(const char* path)
 {
 #if defined(__LIBRETRO__)
     if (MediaFileLibretro::HasVfsInterface())

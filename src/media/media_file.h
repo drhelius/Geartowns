@@ -32,7 +32,7 @@ public:
     virtual ~MediaFile();
 
     static MediaFile* OpenFile(const char* path, bool writable = false);
-    static MediaFile* CreateFile(const char* path);
+    static MediaFile* OpenNewFile(const char* path);
     static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
     static void SetVfsInterface(const retro_vfs_interface* iface, unsigned version = 1);
     static bool HasVfsInterface();

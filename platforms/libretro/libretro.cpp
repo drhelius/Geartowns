@@ -770,12 +770,12 @@ static bool load_content(const char* path)
     log_cb(RETRO_LOG_INFO, "Save state size: %zu bytes\n", savestate_size);
     disk_sync();
 
-    struct retro_memory_descriptor descriptors[2] = {};
+    struct retro_memory_descriptor descriptors[8] = {};
     unsigned count = 0;
     u8* ram = core->GetMemory()->GetWorkingRAM();
     u32 ram_size = core->GetMemory()->GetWorkingRAMSize();
 
-    for (u32 start = 0; (start < ram_size) && (count < 2); count++)
+    for (u32 start = 0; (start < ram_size) && (count < sizeof(descriptors) / sizeof(descriptors[0])); count++)
     {
         u32 length = 1;
 

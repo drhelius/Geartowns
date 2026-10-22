@@ -3932,6 +3932,12 @@ json DebugAdapter::SetFloppyWriteProtect(int drive, bool write_protected)
 json DebugAdapter::GetTraceLog(s64 start, int count)
 {
     json result;
+    const char* stop_reason = gui_debug_trace_logger_get_stop_reason();
+    result["enabled"] = gui_debug_trace_logger_is_enabled();
+
+    if (IsValidPointer(stop_reason))
+        result["stopped_by"] = stop_reason;
+
     TraceLogger* tl = m_core->GetTraceLogger();
     u32 retained = tl->GetCount();
     u64 total = tl->GetSequence();

@@ -409,7 +409,7 @@ void emu_load_media_async(const char* file_path)
         loading_thread_active = false;
     }
 
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("media_change");
     strncpy_fit(loading_file_path, file_path, sizeof(loading_file_path));
     loading_request_type = Loading_Request_File;
     loading_result = false;
@@ -433,7 +433,7 @@ void emu_load_physical_cdrom_async(const char* device_id)
         loading_thread_active = false;
     }
 
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("media_change");
     Log("Queueing physical CD-ROM async load: %s", device_id);
     strncpy_fit(loading_file_path, device_id, sizeof(loading_file_path));
     loading_request_type = Loading_Request_PhysicalCdRom;
@@ -558,7 +558,7 @@ bool emu_power_on(void)
     if (!IsValidPointer(geartowns) || loading_state.load() != Loading_State_None)
         return false;
 
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("power");
     sync_cmos();
 
     if (!geartowns->PowerOn())
@@ -577,7 +577,7 @@ void emu_power_off(void)
     if (!IsValidPointer(geartowns) || loading_state.load() != Loading_State_None)
         return;
 
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("power");
     geartowns->PowerOff();
     save_cmos();
     reset_run_state();
@@ -589,7 +589,7 @@ void emu_reset(void)
     if (!IsValidPointer(geartowns))
         return;
 
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("reset");
     sync_cmos();
     geartowns->ResetMedia();
     emu_update_pad_types();
@@ -1861,7 +1861,7 @@ static bool unload_media(void)
     if (!geartowns->GetMedia()->IsReady())
         return false;
 
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("media_change");
     emu_debug_command = Debug_Command_None;
     reset_buffers();
     emu_audio_reset();

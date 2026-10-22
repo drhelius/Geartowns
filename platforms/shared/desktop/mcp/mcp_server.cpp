@@ -2449,7 +2449,8 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_trace_log"},
         {"title", "Get Trace Log"},
-        {"description", "Read trace entries: instructions and hardware events, each line starting with the CPU clock."},
+        {"description", "Read trace entries: instructions and hardware events, each line starting with the CPU clock. "
+            "enabled says whether it records; after a reset, power or media change stopped it, stopped_by says which."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2473,7 +2474,7 @@ json McpServer::BuildToolList()
         {"name", "set_trace_log"},
         {"title", "Set Trace Logger"},
         {"description", "Start or stop the trace logger, to memory or disk, with event filters. It records while the "
-            "debugger runs the machine, so starting it turns the debugger on."},
+            "debugger runs the machine, so starting it turns the debugger on. A reset, power or media change stops it."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

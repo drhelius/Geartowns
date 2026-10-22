@@ -188,6 +188,7 @@ void CdRom::ResetController()
     m_state.dei = false;
     m_state.dry = true;
     m_state.cdda_stopped = false;
+    m_state.change_padding = false;
     m_state.event = CDROM_EVENT_NONE;
     m_state.event_clocks = 0;
     m_state.read_lba = 0;
@@ -346,6 +347,11 @@ void CdRom::CheckCommand(u64 clocks)
         ((m_state.command & k_cdrom_command_mask) != CDROM_COMMAND_TOC_READ))
         return;
 
+    // The Towns BIOS reads only the media change and would take the unread padding packet as its next reply
+    if (m_state.change_padding && (m_state.status_count >= 4))
+        m_state.status_count -= 4;
+
+    m_state.change_padding = false;
     m_state.active_command = m_state.command;
     memcpy(m_state.active_params, m_state.params, CDROM_PARAM_COUNT);
     m_state.command_received = false;
@@ -687,7 +693,10 @@ void CdRom::CommandGetState(bool cdda_stopped)
 
         // The Linux 2.0.33 driver takes a media change alone as neither success nor error
         if (m_state.status_count == 4)
+        {
             PushStatus(0x00, 0x00);
+            m_state.change_padding = true;
+        }
     }
     else
         PushStatus(0x00, cdda_stopped ? 0x0D : GetStatusSecondByte());
@@ -1234,6 +1243,11 @@ void CdRom::Serialize(StateSerializer& serializer, int version)
         G_SERIALIZE(serializer, m_state.cdda_stopped);
     else
         m_state.cdda_stopped = false;
+
+    if (version >= 18)
+        G_SERIALIZE(serializer, m_state.change_padding);
+    else
+        m_state.change_padding = false;
 }
 
 void CdRom::SanitizeState()

@@ -95,6 +95,7 @@ public:
         bool dry;
         bool disc_changed;
         bool cdda_stopped;
+        bool change_padding;
         CdRom_Event event;
         u64 event_clocks;
         CdRom_Transfer transfer;

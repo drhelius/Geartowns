@@ -1907,6 +1907,14 @@ static void check_variables(void)
         }
     }
 
+    var.key = "geartowns_drive_letters";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->EnableDriveLetterAssignment(strcmp(var.value, "Enabled") == 0);
+    }
+
     var.key = "geartowns_rtc";
     var.value = NULL;
 

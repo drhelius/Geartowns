@@ -93,6 +93,7 @@ GeartownsCore::GeartownsCore()
 
     m_hard_disk_state_changes = 0;
     m_boot_device = GT_BOOT_DEVICE_AUTO;
+    m_drive_letter_assignment = true;
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
@@ -1054,6 +1055,11 @@ GT_Boot_Device GeartownsCore::GetBootDevice() const
     return m_boot_device;
 }
 
+void GeartownsCore::EnableDriveLetterAssignment(bool enabled)
+{
+    m_drive_letter_assignment = enabled;
+}
+
 void GeartownsCore::ApplyBootDevice()
 {
     static const GT_Keys k_digits[5] = { GT_KEY_0, GT_KEY_1, GT_KEY_2, GT_KEY_3, GT_KEY_4 };
@@ -1113,6 +1119,35 @@ void GeartownsCore::ApplyHardDisks()
         if (!m_hard_disk_paths[i].empty())
             m_scsi->GetDisk(i)->Attach(m_hard_disk_paths[i].c_str(), m_hard_disk_write_protected[i],
                 m_hard_disk_working_paths[i].c_str());
+    }
+}
+
+void GeartownsCore::AssignDriveLetters()
+{
+    static const u8 k_partition_signature[6] = { 0x95, 0x78, 0x8E, 0x6D, 0x92, 0xCA };
+    u8 table[k_hard_disk_block_size];
+
+    if (!m_drive_letter_assignment || !m_machine_config.scsi || !IsValidPointer(m_scsi))
+        return;
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        ScsiDisk* disk = m_scsi->GetDisk(i);
+        u16 partitions = 0;
+
+        if (!disk->IsAttached() || !disk->GetImage()->ReadBlock(1, table) ||
+            (memcmp(table, k_partition_signature, sizeof(k_partition_signature)) != 0))
+            continue;
+
+        // LBA 1 lists ten partitions of 30h bytes from 20h, type 1 is MS-DOS
+        for (int partition = 0; partition < 10; partition++)
+        {
+            if (table[0x20 + (partition * 0x30) + 1] == 0x01)
+                partitions |= 1 << partition;
+        }
+
+        if (m_memory->AssignCMOSDriveLetters(i, partitions))
+            Log("Drive letters assigned to the hard disk on SCSI ID %d", i);
     }
 }
 
@@ -1847,6 +1882,7 @@ void GeartownsCore::Reset()
     ApplyHardDisks();
     LoadMachineFirmware(false, false);
     ApplyMachineConfig();
+    AssignDriveLetters();
 
     if (IsValidPointer(m_scheduler))
         m_scheduler->Reset();

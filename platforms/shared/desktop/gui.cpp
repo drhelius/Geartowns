@@ -182,6 +182,7 @@ void gui_apply_settings(void)
     emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
     emu_set_dynarec(config_emulator.dynarec);
     emu_set_native_resolution(config_video.native_resolution);
+    emu_set_drive_letter_assignment(config_emulator.hard_disk_drive_letters);
     emu_apply_firmware_folders();
     emu_apply_machine_settings();
 }

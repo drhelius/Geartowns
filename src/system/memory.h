@@ -128,6 +128,7 @@ public:
     void ResetCMOS(int floppy_drives);
     bool LoadCMOSFile(const u8* data, size_t size, int floppy_drives);
     void SaveCMOSFile(u8* data) const;
+    bool AssignCMOSDriveLetters(int unit, u16 partitions);
     u8 ReadCMOS(u32 index) const;
     void WriteCMOS(u32 index, u8 value);
     u8* GetVideoRAM();

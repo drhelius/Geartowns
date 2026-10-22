@@ -428,6 +428,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "auto"
     },
     {
+        "geartowns_drive_letters",
+        "Assign Drive Letters (restart)",
+        NULL,
+        "Towns OS keeps hard disk drive letters in the CMOS, not on the disk. When enabled, each restart gives free letters to the partitions the CMOS doesn't list yet, so disks set up elsewhere boot. When disabled, register them yourself in Towns OS.",
+        NULL,
+        "system",
+        {
+            { "Enabled",  NULL },
+            { "Disabled", NULL },
+            { NULL, NULL },
+        },
+        "Enabled"
+    },
+    {
         "geartowns_rtc",
         "Clock Start (restart)",
         NULL,

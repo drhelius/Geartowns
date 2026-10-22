@@ -176,6 +176,7 @@ EXTERN void emu_set_cdrom_speed(int speed);
 EXTERN void emu_set_dynarec(bool enabled);
 EXTERN bool emu_is_dynarec_enabled(void);
 EXTERN void emu_set_native_resolution(bool enabled);
+EXTERN void emu_set_drive_letter_assignment(bool enabled);
 EXTERN void emu_apply_machine_settings(void);
 EXTERN bool emu_latch_auto_media(void);
 EXTERN void emu_apply_firmware_folders(void);

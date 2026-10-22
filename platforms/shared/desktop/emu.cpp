@@ -745,6 +745,12 @@ void emu_set_native_resolution(bool enabled)
         geartowns->GetVideo()->EnableNativeResolution(enabled);
 }
 
+void emu_set_drive_letter_assignment(bool enabled)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->EnableDriveLetterAssignment(enabled);
+}
+
 void emu_apply_machine_settings(void)
 {
     if (!IsValidPointer(geartowns))

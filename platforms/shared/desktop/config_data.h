@@ -104,6 +104,7 @@ struct config_Emulator
     std::string recent_floppies[config_max_recent_floppies];
     int hard_disk_write_protected[GT_MAX_HARD_DISKS];
     std::string recent_hard_disks[config_max_recent_hard_disks];
+    bool hard_disk_drive_letters;
 };
 
 struct config_Machine

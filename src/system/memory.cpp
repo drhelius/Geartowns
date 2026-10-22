@@ -92,6 +92,8 @@ static const u8 k_memory_cmos_tail[15] =
 
 static const u32 k_memory_cmos_setup_offset = 0x00E8;
 static const u32 k_memory_cmos_setup_size = 0x100;
+static const int k_memory_cmos_drive_count = 16;
+static const int k_memory_cmos_first_hard_disk_drive = 3;
 
 Memory::Memory()
 {
@@ -217,6 +219,56 @@ void Memory::SaveCMOSFile(u8* data) const
     data[2] = GT_CMOS_FILE_VERSION & 0xFF;
     data[3] = GT_CMOS_FILE_VERSION >> 8;
     memcpy(data + GT_CMOS_FILE_HEADER_SIZE, m_state.cmos, GT_CMOS_SIZE);
+}
+
+bool Memory::AssignCMOSDriveLetters(int unit, u16 partitions)
+{
+    u8* setup = m_state.cmos + k_memory_cmos_setup_offset;
+    u8* drives = setup + 6;
+    bool assigned = false;
+    int drive = k_memory_cmos_first_hard_disk_drive;
+    u8 sum = 0;
+
+    for (u32 i = 0; i < k_memory_cmos_setup_size; i++)
+        sum += setup[i];
+
+    if ((sum != 0) || (memcmp(setup, k_memory_cmos_setup, 6) != 0))
+        return false;
+
+    for (int i = 0; i < k_memory_cmos_drive_count; i++)
+    {
+        u8 id = drives[(i * 2) + 1];
+
+        if ((drives[i * 2] == 0x02) && ((id >> 4) == unit))
+            partitions &= (u16)~(1 << (id & 0x0F));
+    }
+
+    for (int partition = 0; partition < 16; partition++)
+    {
+        if ((partitions & (1 << partition)) == 0)
+            continue;
+
+        while ((drive < k_memory_cmos_drive_count) && (drives[drive * 2] != 0xFF))
+            drive++;
+
+        if (drive >= k_memory_cmos_drive_count)
+            break;
+
+        drives[drive * 2] = 0x02;
+        drives[(drive * 2) + 1] = (u8)((unit << 4) | partition);
+        assigned = true;
+    }
+
+    if (!assigned)
+        return false;
+
+    sum = 0;
+
+    for (u32 i = 0; i < k_memory_cmos_setup_size - 1; i++)
+        sum += setup[i];
+
+    setup[k_memory_cmos_setup_size - 1] = (u8)(0 - sum);
+    return true;
 }
 
 void Memory::ResetCMOSSetup()

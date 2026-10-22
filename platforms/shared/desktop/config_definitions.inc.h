@@ -226,6 +226,7 @@ static inline void process(config_Operation operation)
     // Hard disks
     CONFIG_INT_ARRAY("HardDisk", "WriteProtected%d", config_emulator.hard_disk_write_protected, GT_MAX_HARD_DISKS, 0);
     CONFIG_STRING_ARRAY("HardDisk", "Recent%d", config_emulator.recent_hard_disks, config_max_recent_hard_disks, "");
+    CONFIG_BOOL("HardDisk", "AssignDriveLetters", config_emulator.hard_disk_drive_letters, true);
 
     // Services
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);

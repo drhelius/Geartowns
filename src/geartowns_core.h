@@ -119,6 +119,7 @@ public:
     u32 GetHardDiskStateChanges() const;
     void SetBootDevice(GT_Boot_Device device);
     GT_Boot_Device GetBootDevice() const;
+    void EnableDriveLetterAssignment(bool enabled);
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
@@ -190,6 +191,7 @@ private:
     void ResolveMachineConfig();
     bool HasHardDisks();
     void ApplyHardDisks();
+    void AssignDriveLetters();
     bool CanAutoSelect(GT_Machine_Model model);
     bool LoadMachineFirmware(bool force, bool report);
     void ApplyMachineConfig();
@@ -246,6 +248,7 @@ private:
     bool m_hard_disk_pending[GT_MAX_HARD_DISKS];
     u32 m_hard_disk_state_changes;
     GT_Boot_Device m_boot_device;
+    bool m_drive_letter_assignment;
     bool m_powered;
     bool m_paused;
     GT_Debug_Step m_debug_step;

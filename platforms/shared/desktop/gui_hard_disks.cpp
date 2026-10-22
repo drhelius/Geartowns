@@ -61,6 +61,22 @@ void gui_hard_disks_menu(void)
 
     ImGui::Separator();
 
+    if (ImGui::MenuItem("Assign Drive Letters", "", &config_emulator.hard_disk_drive_letters))
+    {
+        emu_set_drive_letter_assignment(config_emulator.hard_disk_drive_letters);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Towns OS keeps hard disk drive letters in the CMOS, not on the disk.");
+        ImGui::Text("When enabled, each reset gives free letters to partitions it doesn't list yet.");
+        ImGui::Text("When disabled, register them yourself in Towns OS.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::Separator();
+
     GT_Machine_Model model = current_model();
 
     if ((k_machine_profiles[model].features & GT_MACHINE_FEATURE_SCSI) != 0)

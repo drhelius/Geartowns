@@ -658,6 +658,8 @@ private:
         }
         else if (m_input_macro.restore_pause && emu_is_paused())
             emu_resume();
+        else if (emu_is_paused())
+            finish_input_macro_error("Input macro interrupted by a pause");
     }
 
     void finish_input_macro_success()
@@ -904,6 +906,8 @@ private:
         }
         else if (m_mouse_macro.restore_pause && emu_is_paused())
             emu_resume();
+        else if (emu_is_paused())
+            finish_mouse_macro_error("Mouse interrupted by a pause");
     }
 
     void step_mouse_macro()
@@ -1330,6 +1334,11 @@ private:
             response->result["frames"] = emu_frame_counter - m_step_frames.start_frame;
             response->result["requested_frames"] = m_step_frames.frames;
             response->result["breakpoint_hit"] = emu_debug_breakpoint_stops != m_step_frames.breakpoint_stops;
+        }
+        else if (emu_is_paused())
+        {
+            response = new DebugResponse();
+            response->result = {{"error", "Frames interrupted by a pause"}};
         }
 
         if (!IsValidPointer(response))

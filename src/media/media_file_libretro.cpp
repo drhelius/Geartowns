@@ -318,13 +318,12 @@ bool MediaFileLibretro::SkipBytes(s64 bytes)
     if (!m_file.IsOpen())
         return false;
 
-    u8 scratch[4096];
     s64 remaining = bytes;
 
     while (remaining > 0)
     {
-        u64 to_read = (remaining > (s64)sizeof(scratch)) ? (u64)sizeof(scratch) : (u64)remaining;
-        s64 read = m_file.Read(scratch, to_read);
+        u64 to_read = (remaining > (s64)sizeof(m_skip_buffer)) ? (u64)sizeof(m_skip_buffer) : (u64)remaining;
+        s64 read = m_file.Read(m_skip_buffer, to_read);
 
         if (read <= 0)
             return false;

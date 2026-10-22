@@ -171,6 +171,7 @@ static bool cmos_shared = true;
 static bool cmos_shared_active = false;
 static std::string cmos_path;
 static u8 cmos_saved[GT_CMOS_SIZE];
+static u8 cmos_file_data[GT_CMOS_FILE_SIZE];
 static int cmos_frames = 0;
 static bool cmos_save_failed = false;
 
@@ -3029,9 +3030,8 @@ static void cmos_save(void)
     if (!cmos_shared_active || memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0)
         return;
 
-    u8 data[GT_CMOS_FILE_SIZE];
-    core->GetMemory()->SaveCMOSFile(data);
-    bool saved = write_content_file(cmos_path.c_str(), data, GT_CMOS_FILE_SIZE);
+    core->GetMemory()->SaveCMOSFile(cmos_file_data);
+    bool saved = write_content_file(cmos_path.c_str(), cmos_file_data, GT_CMOS_FILE_SIZE);
 
     if (saved)
     {

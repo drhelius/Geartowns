@@ -82,8 +82,7 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
     }
 
     u8* pending_data[GT_FIRMWARE_COUNT] = {};
-    GT_Firmware_Info pending_info[GT_FIRMWARE_COUNT];
-    memset(pending_info, 0, sizeof(pending_info));
+    memset(m_pending_info, 0, sizeof(m_pending_info));
     Container container;
     bool success = OpenContainer(source.path, source.zip, container);
 
@@ -95,7 +94,7 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
         GT_Firmware_Type type = (GT_Firmware_Type)i;
         pending_data[i] = new (std::nothrow) u8[GetExpectedSize(type)];
         bool ok = IsValidPointer(pending_data[i]) &&
-            ReadComponent(container, type, pending_data[i], pending_info[i], true);
+            ReadComponent(container, type, pending_data[i], m_pending_info[i], true);
 
         if (!ok)
         {
@@ -108,8 +107,8 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
                 break;
             }
 
-            pending_info[i].size = GetExpectedSize(type);
-            pending_info[i].synthetic = true;
+            m_pending_info[i].size = GetExpectedSize(type);
+            m_pending_info[i].synthetic = true;
         }
     }
 
@@ -134,7 +133,7 @@ bool Firmware::LoadSource(const GT_Firmware_Source& source, bool quiet)
         else
             memset(destination, 0xFF, expected_size);
 
-        m_info[i] = pending_info[i];
+        m_info[i] = m_pending_info[i];
 
         if (m_info[i].synthetic)
             m_info[i].crc = CalculateCRC32(0, destination, expected_size);
@@ -418,13 +417,14 @@ bool Firmware::IdentifySource(GT_Firmware_Source& source)
 
 void Firmware::AddCandidate(std::vector<GT_Firmware_Source>& candidates, const char* path, bool zip)
 {
-    GT_Firmware_Source source;
+    candidates.emplace_back();
+    GT_Firmware_Source& source = candidates.back();
     memset(&source, 0, sizeof(source));
     strncpy_fit(source.path, path, sizeof(source.path));
     source.zip = zip;
 
-    if (IdentifySource(source))
-        candidates.push_back(source);
+    if (!IdentifySource(source))
+        candidates.pop_back();
 }
 
 bool Firmware::OpenZip(const char* path, MediaFile** file, mz_zip_archive& zip)
@@ -655,7 +655,7 @@ int Firmware::FindZipEntry(mz_zip_archive& zip, const char* name)
 {
     for (mz_uint file = 0; file < mz_zip_reader_get_num_files(&zip); file++)
     {
-        char file_name[GT_MAX_PATH];
+        char file_name[MZ_ZIP_MAX_ARCHIVE_FILENAME_SIZE];
         mz_zip_reader_get_filename(&zip, file, file_name, sizeof(file_name));
 
         if ((strlen(file_name) == strlen(name)) && ends_with_no_case(file_name, name))

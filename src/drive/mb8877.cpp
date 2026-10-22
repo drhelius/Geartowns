@@ -881,9 +881,8 @@ void MB8877::FinishWriteTrack()
 
     if (IsValidPointer(disk) && track >= 0)
     {
-        u8 run[k_floppy_max_sectors * k_floppy_sector_header_size + MB8877_TRACK_BUFFER_SIZE];
-        u32 size = m_fdc->IsSelectedFormattable() ? ParseTrack(run) : 0;
-        disk->ReplaceTrack(track, run, size, m_fdc->GetRPM());
+        u32 size = m_fdc->IsSelectedFormattable() ? ParseTrack(m_track_run) : 0;
+        disk->ReplaceTrack(track, m_track_run, size, m_fdc->GetRPM());
     }
 
     DropDRQ();

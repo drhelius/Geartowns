@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include "../common/common.h"
+#include "floppy_image.h"
 
 #define MB8877_TRACK_BUFFER_SIZE 16384
 
@@ -157,6 +158,7 @@ private:
     FDC* m_fdc;
     MB8877_State m_state;
     TraceLogger* m_trace_logger;
+    u8 m_track_run[k_floppy_max_sectors * k_floppy_sector_header_size + MB8877_TRACK_BUFFER_SIZE];
 };
 
 static const u8 k_mb8877_busy = 0x01;

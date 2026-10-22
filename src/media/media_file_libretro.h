@@ -63,6 +63,7 @@ private:
     char* m_path;
     s64 m_position;
     bool m_writable;
+    u8 m_skip_buffer[4096];
 };
 
 #endif

@@ -101,6 +101,7 @@ private:
 private:
     GT_Firmware_Source m_source;
     GT_Firmware_Info m_info[GT_FIRMWARE_COUNT];
+    GT_Firmware_Info m_pending_info[GT_FIRMWARE_COUNT];
     bool m_ready;
     u8 m_system_rom[GT_FIRMWARE_SYSTEM_SIZE];
     u8 m_os_rom[GT_FIRMWARE_OS_SIZE];

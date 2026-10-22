@@ -18,7 +18,7 @@
  */
 
 #include "cdrom_chd_image.h"
-#include "cdrom_chd_file_adapter.h"
+#include "../media/chd_file_adapter.h"
 #include "../media/crc.h"
 
 CdRomChdImage::CdRomChdImage() : CdRomImage()
@@ -79,7 +79,7 @@ bool CdRomChdImage::LoadFromFile(const char* path, bool preload)
         return m_ready;
     }
 
-    m_file_adapter = new CdRomChdFileAdapter;
+    m_file_adapter = new ChdFileAdapter;
     chd_error err = m_file_adapter->Open(path) ? chd_open_core_file(m_file_adapter->GetCoreFile(), CHD_OPEN_READ, NULL, &m_chd_file) : CHDERR_FILE_NOT_FOUND;
 
     if (err == CHDERR_NONE)

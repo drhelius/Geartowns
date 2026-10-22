@@ -262,7 +262,7 @@
     <ClCompile Include="..\..\src\cdrom\cdrom_audio.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\cdrom\cdrom_chd_file_adapter.cpp">
+    <ClCompile Include="..\..\src\media\chd_file_adapter.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\cdrom\cdrom_chd_image.cpp">
@@ -462,7 +462,7 @@
     <ClInclude Include="..\..\src\cdrom\cdrom_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_audio.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_audio_inline.h"><Filter>src</Filter></ClInclude>
-    <ClInclude Include="..\..\src\cdrom\cdrom_chd_file_adapter.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\media\chd_file_adapter.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_chd_image.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_common.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_cuebin_image.h"><Filter>src</Filter></ClInclude>

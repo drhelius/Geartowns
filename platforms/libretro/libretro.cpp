@@ -2938,7 +2938,8 @@ static bool hard_disk_attach(const char* path)
     std::string name = get_file_name(path, false);
     size_t dot = name.find_last_of('.');
     std::string working = retro_save_directory;
-    append_path_component(working, (get_save_disk_name(name.substr(0, dot)) + ".save" + name.substr(dot)).c_str());
+    std::string extension = ends_with_no_case(path, ".chd") ? ".hdd" : name.substr(dot);
+    append_path_component(working, (get_save_disk_name(name.substr(0, dot)) + ".save" + extension).c_str());
 
     if (!core->AttachHardDisk(id, path, false, working.c_str()))
     {

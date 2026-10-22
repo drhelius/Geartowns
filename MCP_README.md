@@ -573,7 +573,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Hard Disks
 - `get_scsi_status` - Get the SCSI host interface (`built_in`, `card` or `none`): control and status bits, data, the 0C34h word DMA flag on the UG and HG, bus phase, target and LUN, last message, DRQ, IRQ8 and whether word DMA is on, the command in progress (CDB, decoded command, status, bytes moved) and each attached disk's sense key and code
 - `list_hard_disks` - Get SCSI IDs 0-6: image, blocks and size, write protect, blocks the machine wrote that are not in the image file yet, and `at_next_reset` when a change waits for a reset; plus the machine's `interface` (`built_in`, `card` for Model 1/2 or `none`) and whether it is fitted now
-- `attach_hard_disk` - Attach a raw image of 512-byte sectors (`.hdd`, `.h0`-`.h6`, `.hdm`) to SCSI `id`; optional `write_protected`, by default the ID's Write Protected setting. A running machine takes it at the next reset, one that is off at once. `create_size_mb` (1-2047) first creates a blank image at `file_path`, never replacing an existing file
+- `attach_hard_disk` - Attach a raw image of 512-byte sectors (`.hdd`, `.h0`-`.h6`, `.hdm`) or a MAME hard disk `.chd` (writes go to a raw working copy in the Save Files folder) to SCSI `id`; optional `write_protected`, by default the ID's Write Protected setting. A running machine takes it at the next reset, one that is off at once. `create_size_mb` (1-2047) first creates a blank image at `file_path`, never replacing an existing file
 - `detach_hard_disk` - Detach the disk on SCSI `id` after writing its changes; on a running machine at the next reset
 - `flush_hard_disks` - Write the changes to the image files now; otherwise they are written about 2 seconds after the machine stops writing, and on detach, power off and quit
 - `read_hard_disk_sector` - Read sector `lba` of the disk on SCSI `id` as hex, as the machine sees it, unwritten changes included, without bus traffic
@@ -586,7 +586,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Media & State Management
 - `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, the floppy drives (image, disk name, media, write protect, modified) and the hard disks (as `list_hard_disks`)
 - `list_recent_media` - List the most recent CD images, floppies and hard disks opened by Geartowns
-- `load_media` - Load a CD image, a floppy image or a hard disk image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd and .hdm over 8 MB to the first free one). A hard disk powers on an empty machine, or waits for the next reset on a running one
+- `load_media` - Load a CD image, a floppy image or a hard disk image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd, .hdm over 8 MB and hard disk .chd to the first free one). A hard disk powers on an empty machine, or waits for the next reset on a running one
 - `eject_cdrom` - Eject the CD as the CD-ROM menu does; the machine keeps running with an empty drive
 - `insert_playlist_disc` - Insert playlist disc `index` (from the `get_cdrom_status` playlist) into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector

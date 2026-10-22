@@ -17,19 +17,19 @@
  *
  */
 
-#ifndef CDROM_CHD_FILE_ADAPTER_H
-#define CDROM_CHD_FILE_ADAPTER_H
+#ifndef CHD_FILE_ADAPTER_H
+#define CHD_FILE_ADAPTER_H
 
 #include <libchdr/chd.h>
 #include "../common/types.h"
 
 class MediaFile;
 
-class CdRomChdFileAdapter
+class ChdFileAdapter
 {
 public:
-    CdRomChdFileAdapter();
-    ~CdRomChdFileAdapter();
+    ChdFileAdapter();
+    ~ChdFileAdapter();
     bool Open(const char* path);
     core_file* GetCoreFile();
 
@@ -44,10 +44,10 @@ private:
     static int SeekCallback(core_file* file, s64 offset, int whence);
 
 private:
-    CdRomChdFileAdapter(const CdRomChdFileAdapter&);
-    CdRomChdFileAdapter& operator=(const CdRomChdFileAdapter&);
+    ChdFileAdapter(const ChdFileAdapter&);
+    ChdFileAdapter& operator=(const ChdFileAdapter&);
     core_file m_core_file;
     MediaFile* m_file;
 };
 
-#endif /* CDROM_CHD_FILE_ADAPTER_H */
+#endif /* CHD_FILE_ADAPTER_H */

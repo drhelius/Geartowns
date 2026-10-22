@@ -18,15 +18,56 @@
  */
 
 #include <time.h>
+#include <libchdr/chd.h>
 #include "hard_disk_image.h"
 #include "floppy_image.h"
 #include "../media/media_file.h"
+#include "../media/chd_file_adapter.h"
 
 static u64 s_sessions = 0;
+static const u32 k_no_hunk = 0xFFFFFFFF;
+
+static chd_file* OpenHardDiskChd(const char* path, ChdFileAdapter* adapter, u32* blocks, chd_error* error)
+{
+    chd_file* chd = NULL;
+    *error = adapter->Open(path) ? chd_open_core_file(adapter->GetCoreFile(), CHD_OPEN_READ, NULL, &chd) :
+        CHDERR_FILE_NOT_FOUND;
+
+    if (*error != CHDERR_NONE)
+        return NULL;
+
+    const chd_header* header = chd_get_header(chd);
+    char metadata[256] = { };
+    int cylinders = 0;
+    int heads = 0;
+    int sectors = 0;
+    int bytes = 0;
+    *error = chd_get_metadata(chd, HARD_DISK_METADATA_TAG, 0, metadata, sizeof(metadata) - 1, NULL, NULL, NULL);
+
+    if ((*error == CHDERR_NONE) && (sscanf(metadata, HARD_DISK_METADATA_FORMAT, &cylinders, &heads, &sectors, &bytes) == 4) &&
+        (bytes == (int)k_hard_disk_block_size) && (cylinders > 0) && (heads > 0) && (sectors > 0) &&
+        (header->hunkbytes != 0) && ((header->hunkbytes % k_hard_disk_block_size) == 0))
+    {
+        u64 total = MIN((u64)cylinders * heads * sectors, header->logicalbytes / k_hard_disk_block_size);
+
+        if ((total != 0) && (total <= 0xFFFFFFFF))
+        {
+            *blocks = (u32)total;
+            return chd;
+        }
+    }
+
+    *error = CHDERR_INVALID_DATA;
+    chd_close(chd);
+    return NULL;
+}
 
 HardDiskImage::HardDiskImage()
 {
     InitPointer(m_file);
+    InitPointer(m_chd_adapter);
+    InitPointer(m_chd);
+    m_hunk_index = k_no_hunk;
     m_blocks = 0;
     m_write_protected = false;
     m_overlay_blocks = 0;
@@ -64,36 +105,47 @@ bool HardDiskImage::Open(const char* path, bool write_protected, const char* wor
             m_working_path = working_path;
     }
 
-    if (!IsValidPointer(m_file))
-        m_file = (write_protected || copy_on_write) ? NULL : MediaFile::OpenFile(path, true);
-
-    if (!IsValidPointer(m_file))
+    if (!IsValidPointer(m_file) && ends_with_no_case(path, ".chd"))
     {
-        m_file = MediaFile::OpenFile(path, false);
-        write_protected = write_protected || !copy_on_write;
+        if (!OpenChd(path))
+            return false;
+
+        write_protected = write_protected || m_working_path.empty();
+    }
+    else
+    {
+        if (!IsValidPointer(m_file))
+            m_file = (write_protected || copy_on_write) ? NULL : MediaFile::OpenFile(path, true);
+
+        if (!IsValidPointer(m_file))
+        {
+            m_file = MediaFile::OpenFile(path, false);
+            write_protected = write_protected || !copy_on_write;
+        }
+
+        if (!IsValidPointer(m_file))
+        {
+            Error("Unable to open hard disk image %s", path);
+            return false;
+        }
+
+        s64 size = m_file->GetSize();
+
+        if ((size < (s64)k_hard_disk_block_size) || !m_file->CanSeek())
+        {
+            Error("Invalid hard disk image %s", path);
+            SafeDelete(m_file);
+            return false;
+        }
+
+        if ((size % k_hard_disk_block_size) != 0)
+            Log("Hard disk image %s is not a whole number of 512 byte sectors, the last %d bytes are ignored", path,
+                (int)(size % k_hard_disk_block_size));
+
+        u64 blocks = (u64)size / k_hard_disk_block_size;
+        m_blocks = (u32)MIN(blocks, (u64)0xFFFFFFFF);
     }
 
-    if (!IsValidPointer(m_file))
-    {
-        Error("Unable to open hard disk image %s", path);
-        return false;
-    }
-
-    s64 size = m_file->GetSize();
-
-    if ((size < (s64)k_hard_disk_block_size) || !m_file->CanSeek())
-    {
-        Error("Invalid hard disk image %s", path);
-        SafeDelete(m_file);
-        return false;
-    }
-
-    if ((size % k_hard_disk_block_size) != 0)
-        Log("Hard disk image %s is not a whole number of 512 byte sectors, the last %d bytes are ignored", path,
-            (int)(size % k_hard_disk_block_size));
-
-    u64 blocks = (u64)size / k_hard_disk_block_size;
-    m_blocks = (u32)MIN(blocks, (u64)0xFFFFFFFF);
     m_write_protected = write_protected;
     m_path = path;
     m_session = ((u64)time(NULL) << 20) + ++s_sessions;
@@ -107,10 +159,11 @@ bool HardDiskImage::Open(const char* path, bool write_protected, const char* wor
 
 void HardDiskImage::Close()
 {
-    if (IsValidPointer(m_file) && (m_overlay_blocks != 0))
+    if (IsOpen() && (m_overlay_blocks != 0))
         Flush();
 
     SafeDelete(m_file);
+    CloseChd();
     m_path.clear();
     m_file_name.clear();
     m_working_path.clear();
@@ -130,7 +183,7 @@ void HardDiskImage::Close()
 
 bool HardDiskImage::IsOpen() const
 {
-    return IsValidPointer(m_file);
+    return IsValidPointer(m_file) || IsValidPointer(m_chd);
 }
 
 const char* HardDiskImage::GetPath() const
@@ -155,7 +208,7 @@ bool HardDiskImage::IsWriteProtected() const
 
 bool HardDiskImage::ReadBlock(u32 lba, u8* buffer)
 {
-    if (!IsValidPointer(m_file) || (lba >= m_blocks))
+    if (!IsOpen() || (lba >= m_blocks))
         return false;
 
     if (!m_overlay_index.empty() && (m_overlay_index[lba] != 0))
@@ -165,12 +218,12 @@ bool HardDiskImage::ReadBlock(u32 lba, u8* buffer)
         return true;
     }
 
-    return m_file->ReadAt((u64)lba * k_hard_disk_block_size, buffer, k_hard_disk_block_size);
+    return ReadImage(lba, buffer, 1);
 }
 
 bool HardDiskImage::WriteBlock(u32 lba, const u8* buffer)
 {
-    if (!IsValidPointer(m_file) || m_write_protected || (lba >= m_blocks))
+    if (!IsOpen() || m_write_protected || (lba >= m_blocks))
         return false;
 
     u8 old[k_hard_disk_block_size];
@@ -193,10 +246,10 @@ bool HardDiskImage::WriteBlock(u32 lba, const u8* buffer)
 
 bool HardDiskImage::Flush()
 {
-    if (!IsValidPointer(m_file) || (m_overlay_blocks == 0))
+    if (!IsOpen() || (m_overlay_blocks == 0))
         return true;
 
-    bool copied = m_working_path.empty() || CreateWorkingCopy();
+    bool copied = m_working_path.empty() ? IsValidPointer(m_file) : CreateWorkingCopy();
     u32 lba = 0;
 
     for (; copied && (lba < m_blocks); lba++)
@@ -249,7 +302,7 @@ u64 HardDiskImage::GetLastWrite() const
 
 bool HardDiskImage::Restore(u64 session, u64 write)
 {
-    if (!IsValidPointer(m_file) || (session != m_session))
+    if (!IsOpen() || (session != m_session))
         return false;
 
     if (write == m_last_write)
@@ -266,13 +319,14 @@ bool HardDiskImage::CreateWorkingCopy()
         return false;
 
     std::vector<u8> chunk(1024 * 1024);
-    u64 size = (u64)m_blocks * k_hard_disk_block_size;
+    u32 chunk_blocks = (u32)chunk.size() / k_hard_disk_block_size;
     bool ok = true;
 
-    for (u64 offset = 0; ok && (offset < size); offset += chunk.size())
+    for (u64 lba = 0; ok && (lba < m_blocks); lba += chunk_blocks)
     {
-        u64 count = MIN((u64)chunk.size(), size - offset);
-        ok = m_file->ReadAt(offset, chunk.data(), count) && copy->WriteAt(offset, chunk.data(), count);
+        u32 count = (u32)MIN((u64)chunk_blocks, m_blocks - lba);
+        ok = ReadImage((u32)lba, chunk.data(), count) &&
+            copy->WriteAt(lba * k_hard_disk_block_size, chunk.data(), (u64)count * k_hard_disk_block_size);
     }
 
     ok = copy->Flush() && ok;
@@ -283,9 +337,66 @@ bool HardDiskImage::CreateWorkingCopy()
         return false;
 
     SafeDelete(m_file);
+    CloseChd();
     m_file = file;
     Log("Hard disk working copy created: %s", m_working_path.c_str());
     m_working_path.clear();
+    return true;
+}
+
+bool HardDiskImage::OpenChd(const char* path)
+{
+    chd_error error = CHDERR_NONE;
+    m_chd_adapter = new ChdFileAdapter;
+    m_chd = OpenHardDiskChd(path, m_chd_adapter, &m_blocks, &error);
+
+    if (!IsValidPointer(m_chd))
+    {
+        Error("Unable to open hard disk CHD %s: %s", path, chd_error_string(error));
+        SafeDelete(m_chd_adapter);
+        m_blocks = 0;
+        return false;
+    }
+
+    m_hunk.resize(chd_get_header(m_chd)->hunkbytes);
+    m_hunk_index = k_no_hunk;
+    return true;
+}
+
+void HardDiskImage::CloseChd()
+{
+    if (IsValidPointer(m_chd))
+        chd_close(m_chd);
+
+    InitPointer(m_chd);
+    SafeDelete(m_chd_adapter);
+    std::vector<u8>().swap(m_hunk);
+    m_hunk_index = k_no_hunk;
+}
+
+bool HardDiskImage::ReadImage(u32 lba, u8* buffer, u32 count)
+{
+    if (IsValidPointer(m_file))
+        return m_file->ReadAt((u64)lba * k_hard_disk_block_size, buffer, (u64)count * k_hard_disk_block_size);
+
+    u32 hunk_blocks = (u32)m_hunk.size() / k_hard_disk_block_size;
+
+    for (u32 i = 0; i < count; i++)
+    {
+        u32 hunk = (lba + i) / hunk_blocks;
+
+        if (hunk != m_hunk_index)
+        {
+            m_hunk_index = (chd_read(m_chd, hunk, m_hunk.data()) == CHDERR_NONE) ? hunk : k_no_hunk;
+
+            if (m_hunk_index == k_no_hunk)
+                return false;
+        }
+
+        memcpy(buffer + ((size_t)i * k_hard_disk_block_size),
+            &m_hunk[(size_t)((lba + i) % hunk_blocks) * k_hard_disk_block_size], k_hard_disk_block_size);
+    }
+
     return true;
 }
 
@@ -408,6 +519,9 @@ bool HardDiskImage::IsImage(const char* path)
     if (ends_with_no_case(path, ".hdd") || (GetImageId(path) >= 0))
         return true;
 
+    if (ends_with_no_case(path, ".chd"))
+        return GetChdHash(path, NULL);
+
     if (!ends_with_no_case(path, ".hdm"))
         return false;
 
@@ -426,6 +540,26 @@ int HardDiskImage::GetImageId(const char* path)
         return path[length - 1] - '0';
 
     return -1;
+}
+
+bool HardDiskImage::GetChdHash(const char* path, u32* hash)
+{
+    ChdFileAdapter adapter;
+    chd_error error = CHDERR_NONE;
+    u32 blocks = 0;
+    chd_file* chd = IsValidPointer(path) ? OpenHardDiskChd(path, &adapter, &blocks, &error) : NULL;
+
+    if (!IsValidPointer(chd))
+        return false;
+
+    if (IsValidPointer(hash))
+    {
+        const u8* sha1 = chd_get_header(chd)->sha1;
+        *hash = ((u32)sha1[0] << 24) | ((u32)sha1[1] << 16) | ((u32)sha1[2] << 8) | sha1[3];
+    }
+
+    chd_close(chd);
+    return true;
 }
 
 bool HardDiskImage::Create(const char* path, u64 size)

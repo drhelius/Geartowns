@@ -307,7 +307,7 @@ void gui_file_dialog_attach_hard_disk(int id)
 
     dialog_hard_disk_id = id;
     SDL_DialogFileFilter filters[] = {
-        { "Hard Disk Images", "hdd;hdm;h0;h1;h2;h3;h4;h5;h6" },
+        { "Hard Disk Images", "hdd;hdm;chd;h0;h1;h2;h3;h4;h5;h6" },
         { "All Files", "*" }
     };
     const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();

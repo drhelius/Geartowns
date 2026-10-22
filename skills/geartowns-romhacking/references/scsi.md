@@ -119,6 +119,7 @@ Blocks are 512 bytes. A LUN other than 0 and an unknown opcode end with CHECK CO
 ## 6. Images
 
 Hard disk images are raw 512-byte sectors with no header (`.hdd`, `.h0`-`.h6`, and `.hdm` over 8 MB; smaller
-`.hdm` files are floppies). `read_hard_disk_sector` reads one
-as the machine sees it, `list_hard_disks` shows the attached images, and `get_scsi_status` the interface and each
-disk's sense data.
+`.hdm` files are floppies), or MAME hard disk CHDs (`.chd` with `GDDD` geometry and 512-byte sectors; other CHDs are
+CD-ROMs). A CHD is read-only: writes go to a raw working copy, made at the first flush and used instead from then on.
+`read_hard_disk_sector` reads one as the machine sees it, `list_hard_disks` shows the attached images, and
+`get_scsi_status` the interface and each disk's sense data.

@@ -59,7 +59,7 @@
     <ClCompile Include="..\..\src\system\scheduler.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom_audio.cpp" />
-    <ClCompile Include="..\..\src\cdrom\cdrom_chd_file_adapter.cpp" />
+    <ClCompile Include="..\..\src\media\chd_file_adapter.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom_chd_image.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom_cuebin_image.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom_drive.cpp" />
@@ -270,7 +270,7 @@
     <ClInclude Include="..\..\src\cdrom\cdrom_inline.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_audio.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_audio_inline.h" />
-    <ClInclude Include="..\..\src\cdrom\cdrom_chd_file_adapter.h" />
+    <ClInclude Include="..\..\src\media\chd_file_adapter.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_chd_image.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_common.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_cuebin_image.h" />

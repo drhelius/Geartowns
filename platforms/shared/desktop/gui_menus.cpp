@@ -589,7 +589,7 @@ static void menu_emulator(void)
                     "Default Location\0Same as Disk\0Custom Location\0\0");
 
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Where floppy working copies and the CMOS of each machine are saved.\nThe CMOS uses the default location with Same as Disk.");
+                    ImGui::SetTooltip("Where working copies of floppies and CHD hard disks, and the CMOS of each machine, are saved.\nThe CMOS uses the default location with Same as Disk.");
 
                 switch ((Directory_Location)config_emulator.savefiles_dir_option)
                 {

@@ -17,38 +17,38 @@
  *
  */
 
-#include "cdrom_chd_file_adapter.h"
-#include "../media/media_file.h"
+#include "chd_file_adapter.h"
+#include "media_file.h"
 #include "../common/common.h"
 
-CdRomChdFileAdapter::CdRomChdFileAdapter()
+ChdFileAdapter::ChdFileAdapter()
 {
     m_core_file.argp = this;
-    m_core_file.fsize = &CdRomChdFileAdapter::SizeCallback;
-    m_core_file.fread = &CdRomChdFileAdapter::ReadCallback;
-    m_core_file.fclose = &CdRomChdFileAdapter::CloseCallback;
-    m_core_file.fseek = &CdRomChdFileAdapter::SeekCallback;
+    m_core_file.fsize = &ChdFileAdapter::SizeCallback;
+    m_core_file.fread = &ChdFileAdapter::ReadCallback;
+    m_core_file.fclose = &ChdFileAdapter::CloseCallback;
+    m_core_file.fseek = &ChdFileAdapter::SeekCallback;
     m_file = NULL;
 }
 
-CdRomChdFileAdapter::~CdRomChdFileAdapter()
+ChdFileAdapter::~ChdFileAdapter()
 {
     Close();
 }
 
-bool CdRomChdFileAdapter::Open(const char* path)
+bool ChdFileAdapter::Open(const char* path)
 {
     Close();
     m_file = MediaFile::OpenFile(path);
     return m_file != NULL;
 }
 
-core_file* CdRomChdFileAdapter::GetCoreFile()
+core_file* ChdFileAdapter::GetCoreFile()
 {
     return &m_core_file;
 }
 
-u64 CdRomChdFileAdapter::GetSize()
+u64 ChdFileAdapter::GetSize()
 {
     if (!m_file)
         return (u64)-1;
@@ -57,7 +57,7 @@ u64 CdRomChdFileAdapter::GetSize()
     return size >= 0 ? (u64)size : (u64)-1;
 }
 
-size_t CdRomChdFileAdapter::Read(void* buffer, size_t size, size_t count)
+size_t ChdFileAdapter::Read(void* buffer, size_t size, size_t count)
 {
     if (!m_file || (size == 0) || (count == 0) || (count > ((size_t)-1 / size)))
         return 0;
@@ -79,13 +79,13 @@ size_t CdRomChdFileAdapter::Read(void* buffer, size_t size, size_t count)
     return total / size;
 }
 
-int CdRomChdFileAdapter::Close()
+int ChdFileAdapter::Close()
 {
     SafeDelete(m_file);
     return 0;
 }
 
-int CdRomChdFileAdapter::Seek(s64 offset, int whence)
+int ChdFileAdapter::Seek(s64 offset, int whence)
 {
     if (!m_file)
         return -1;
@@ -104,26 +104,26 @@ int CdRomChdFileAdapter::Seek(s64 offset, int whence)
     return m_file->Seek(base + offset) ? 0 : -1;
 }
 
-u64 CdRomChdFileAdapter::SizeCallback(core_file* file)
+u64 ChdFileAdapter::SizeCallback(core_file* file)
 {
-    CdRomChdFileAdapter* adapter = reinterpret_cast<CdRomChdFileAdapter*>(file->argp);
+    ChdFileAdapter* adapter = reinterpret_cast<ChdFileAdapter*>(file->argp);
     return adapter ? adapter->GetSize() : (u64)-1;
 }
 
-size_t CdRomChdFileAdapter::ReadCallback(void* buffer, size_t size, size_t count, core_file* file)
+size_t ChdFileAdapter::ReadCallback(void* buffer, size_t size, size_t count, core_file* file)
 {
-    CdRomChdFileAdapter* adapter = reinterpret_cast<CdRomChdFileAdapter*>(file->argp);
+    ChdFileAdapter* adapter = reinterpret_cast<ChdFileAdapter*>(file->argp);
     return adapter ? adapter->Read(buffer, size, count) : 0;
 }
 
-int CdRomChdFileAdapter::CloseCallback(core_file* file)
+int ChdFileAdapter::CloseCallback(core_file* file)
 {
-    CdRomChdFileAdapter* adapter = reinterpret_cast<CdRomChdFileAdapter*>(file->argp);
+    ChdFileAdapter* adapter = reinterpret_cast<ChdFileAdapter*>(file->argp);
     return adapter ? adapter->Close() : 0;
 }
 
-int CdRomChdFileAdapter::SeekCallback(core_file* file, s64 offset, int whence)
+int ChdFileAdapter::SeekCallback(core_file* file, s64 offset, int whence)
 {
-    CdRomChdFileAdapter* adapter = reinterpret_cast<CdRomChdFileAdapter*>(file->argp);
+    ChdFileAdapter* adapter = reinterpret_cast<ChdFileAdapter*>(file->argp);
     return adapter ? adapter->Seek(offset, whence) : -1;
 }

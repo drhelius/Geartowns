@@ -36,6 +36,7 @@ static u32 state_changes = 0;
 static bool rewind_changed = false;
 
 static bool valid_id(int id);
+static std::string get_working_path(const char* path);
 
 bool emu_hard_disk_is_image(const char* path)
 {
@@ -64,7 +65,8 @@ int emu_hard_disk_get_image_id(const char* path)
 
 bool emu_hard_disk_attach(int id, const char* path, bool write_protected)
 {
-    if (!valid_id(id) || !IsValidPointer(path) || !emu_get_core()->AttachHardDisk(id, path, write_protected))
+    if (!valid_id(id) || !IsValidPointer(path) ||
+        !emu_get_core()->AttachHardDisk(id, path, write_protected, get_working_path(path).c_str()))
         return false;
 
     config_emulator.hard_disk_write_protected[id] = write_protected ? 1 : 0;
@@ -208,5 +210,36 @@ u32 emu_hard_disk_take_state_changes(void)
 static bool valid_id(int id)
 {
     return (id >= 0) && (id < GT_MAX_HARD_DISKS);
+}
+
+static std::string get_working_path(const char* path)
+{
+    u32 hash = 0;
+
+    if (!ends_with_no_case(path, ".chd") || !HardDiskImage::GetChdHash(path, &hash))
+        return "";
+
+    char directory[GT_MAX_PATH];
+
+    switch ((Directory_Location)config_emulator.savefiles_dir_option)
+    {
+        case Directory_Location_ROM:
+            get_directory(path, directory, sizeof(directory));
+            break;
+        case Directory_Location_Custom:
+            strncpy_fit(directory, config_emulator.savefiles_path.c_str(), sizeof(directory));
+            break;
+        default:
+            strncpy_fit(directory, config_root_path, sizeof(directory));
+            break;
+    }
+
+    char name[GT_MAX_PATH];
+    char file_name[GT_MAX_PATH];
+    char working[GT_MAX_PATH];
+    get_filename_without_extension(path, name, sizeof(name));
+    snprintf(file_name, sizeof(file_name), "%s.%08X.geartowns.hdd", name, hash);
+    join_path(directory, file_name, working, sizeof(working));
+    return working;
 }
 

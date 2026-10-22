@@ -96,7 +96,6 @@ SOURCES_CXX := \
     $(SRC_DIR)/audio/vgm_recorder.cpp \
     $(SRC_DIR)/cdrom/cdrom.cpp \
     $(SRC_DIR)/cdrom/cdrom_audio.cpp \
-    $(SRC_DIR)/cdrom/cdrom_chd_file_adapter.cpp \
     $(SRC_DIR)/cdrom/cdrom_chd_image.cpp \
     $(SRC_DIR)/cdrom/cdrom_cuebin_image.cpp \
     $(SRC_DIR)/cdrom/cdrom_image.cpp \
@@ -127,6 +126,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/i386/exec_memory.cpp \
     $(SRC_DIR)/input/input.cpp \
     $(SRC_DIR)/input/keyboard.cpp \
+    $(SRC_DIR)/media/chd_file_adapter.cpp \
     $(SRC_DIR)/media/firmware.cpp \
     $(SRC_DIR)/media/media.cpp \
     $(SRC_DIR)/media/media_file.cpp \

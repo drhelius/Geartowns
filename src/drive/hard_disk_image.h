@@ -25,6 +25,8 @@
 #include "../common/common.h"
 
 class MediaFile;
+class ChdFileAdapter;
+typedef struct _chd_file chd_file;
 
 struct HardDiskJournalEntry
 {
@@ -56,8 +58,12 @@ public:
     static bool Create(const char* path, u64 size);
     static bool IsImage(const char* path);
     static int GetImageId(const char* path);
+    static bool GetChdHash(const char* path, u32* hash);
 
 private:
+    bool OpenChd(const char* path);
+    void CloseChd();
+    bool ReadImage(u32 lba, u8* buffer, u32 count);
     void StoreBlock(u32 lba, const u8* buffer);
     bool CreateWorkingCopy();
     bool Undo(u64 write);
@@ -67,6 +73,10 @@ private:
 
 private:
     MediaFile* m_file;
+    ChdFileAdapter* m_chd_adapter;
+    chd_file* m_chd;
+    std::vector<u8> m_hunk;
+    u32 m_hunk_index;
     std::string m_path;
     std::string m_file_name;
     std::string m_working_path;

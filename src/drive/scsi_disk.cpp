@@ -64,7 +64,13 @@ void ScsiDisk::Reset()
 bool ScsiDisk::Attach(const char* path, bool write_protected, const char* working_path)
 {
     Reset();
-    return m_image.Open(path, write_protected, working_path);
+
+    if (!m_image.Open(path, write_protected, working_path))
+        return false;
+
+    Log("Hard disk image %s: %u sectors%s", path, m_image.GetBlocks(),
+        m_image.IsWriteProtected() ? ", write protected" : "");
+    return true;
 }
 
 void ScsiDisk::Detach()

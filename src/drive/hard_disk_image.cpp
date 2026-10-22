@@ -152,8 +152,6 @@ bool HardDiskImage::Open(const char* path, bool write_protected, const char* wor
 
     size_t separator = m_path.find_last_of("/\\");
     m_file_name = separator == std::string::npos ? m_path : m_path.substr(separator + 1);
-
-    Log("Hard disk image %s: %u sectors%s", path, m_blocks, m_write_protected ? ", write protected" : "");
     return true;
 }
 

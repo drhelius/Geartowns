@@ -1049,7 +1049,7 @@ void Video::DelaySpriteByFetch(u32 half_line)
     {
         Video_Layer_Format format = GetOutputFormat(layer);
         u32 hds = crtc[k_video_crtc_hds0 + layer * 2];
-        u32 hde = crtc[k_video_crtc_hde0 + layer * 2];
+        u32 hde = MIN((u32)crtc[k_video_crtc_hde0 + layer * 2], m_state.frame_line_clocks);
 
         if (format == VIDEO_LAYER_OFF || hde <= hds || beam < crtc[k_video_crtc_vds0 + layer * 2] ||
             beam >= crtc[k_video_crtc_vde0 + layer * 2])
@@ -1241,10 +1241,11 @@ void Video::UpdateGeometry()
     u32 v_end = 0;
     int layers = IsTwoPage() ? 2 : 1;
 
+    // A window reaching into HSYNC or past the end of the line only shows the part in between
     for (int layer = 0; layer < layers; layer++)
     {
-        u32 hds = m_state.crtc[k_video_crtc_hds0 + layer * 2];
-        u32 hde = m_state.crtc[k_video_crtc_hde0 + layer * 2];
+        u32 hds = MAX((u32)m_state.crtc[k_video_crtc_hds0 + layer * 2], (u32)m_state.crtc[k_video_crtc_hsw1]);
+        u32 hde = MIN((u32)m_state.crtc[k_video_crtc_hde0 + layer * 2], m_state.frame_line_clocks);
         u32 vds = m_state.crtc[k_video_crtc_vds0 + layer * 2];
         u32 vde = m_state.crtc[k_video_crtc_vde0 + layer * 2];
 

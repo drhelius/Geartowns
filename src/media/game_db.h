@@ -63,6 +63,7 @@ const GT_DB_Entry k_game_database[] =
     // FM Towns (Model 1/2) with more RAM
     { 0x83352AF9, "Abel - Shin Mokushiroku Taisen", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0 },
     { 0x913CEBC6, "Alone in the Dark 2", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 4, 0, 0, 0 },
+    { 0x41A67A62, "Appare CD Vol. 1 - Hiryuu no Maki", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0 },
     { 0x9780336E, "Cubic Sketch V1.1 L10", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0 },
     { 0x336B02B3, "Cyberia", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 4, 0, 0, 0 },
     { 0x27504E28, "DAPS for Windows", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0 },
@@ -135,6 +136,7 @@ const GT_DB_Entry k_game_database[] =
     { 0xD11E3504, "Mad Stalker - FullMetalForce", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD },
     { 0x478F99B0, "Manami no Doko made Iku no 2 - Return of the Kuro Pack", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, GT_GAMEDB_PORT_MOUSE, 0 },
     { 0x61A92F7C, "Muscle Bomber - The Body Explosion", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD },
+    { 0x45065A9C, "Muscle Bomber - The Body Explosion (Demo)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD },
     { 0xB2B60C8C, "Palamedes", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD },
     { 0xDA977A6D, "Toudou Ryuunosuke Tantei Nikki - Ougon no Rashinban - Shouyoumaru San Francisco Kouro Satsujin Jiken", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, GT_GAMEDB_PORT_MOUSE, 0 },
 
@@ -223,6 +225,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x0C2BBF4E, "Fujitsu Habitat V2.1 L10", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0xF20B6346, "Fujitsu Habitat V2.1 L13A", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0x53C901F8, "G5", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
+    { 0x9A13BAC0, "G5 (Rev A)", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0xB74E5198, "Ginga Eiyuu Densetsu III SP", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0xFA9ED047, "Gou II - Towns Special", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0x24244E28, "Gulf War - Soukouden", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
@@ -279,6 +282,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x86440501, "Psychic Detective Series Vol. 5 - Nightmare", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0xBB250646, "Queen of Duelist, The", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD },
     { 0xFF5E877C, "Queen of Duellist Gaiden, The + Gaiden Alpha", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
+    { 0x9D583659, "Queen of Duellist, The (Rev A)", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD },
     { 0x833FE0CF, "Rance IV - Kyoudan no Isan", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0xD32CC1FF, "Record of Lodoss War - Lodoss-tou Senki - Haiiro no Majo", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },
     { 0xB2E7ED5B, "Record of Lodoss War - Lodoss-tou Senki II - Goshiki no Maryuu", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0 },

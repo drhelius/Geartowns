@@ -55,6 +55,8 @@ Video::Video()
     m_render_width = GT_FRAME_BUFFER_WIDTH;
     m_render_height = GT_FRAME_BUFFER_HEIGHT;
     m_rendered_rows = 0;
+    m_partial_rows = 0;
+    m_partial_x = 0;
     m_line_changed = false;
     m_native_resolution = true;
     m_canvas_h_start = 0;
@@ -378,7 +380,7 @@ void Video::Write(u16 port, u8 value, u64 clocks)
         case 0xFD92:
         case 0xFD94:
         case 0xFD96:
-            WritePalette((port - 0xFD92) >> 1, value);
+            WritePalette((port - 0xFD92) >> 1, value, clocks);
             break;
         case 0xFD98:
         case 0xFD99:
@@ -946,10 +948,16 @@ u8 Video::ReadCRTC(bool high, u64 clocks) const
     return high ? (u8)(value >> 8) : (u8)value;
 }
 
-void Video::WritePalette(int component, u8 value)
+void Video::WritePalette(int component, u8 value, u64 clocks)
 {
     u8 index = m_state.palette_index;
-    u8 previous = ReadPalette(component);
+    u8 stored = (m_state.output[1] & 0x10) != 0 ? value : value & 0xF0;
+
+    if (stored == ReadPalette(component))
+        return;
+
+    RenderLineToBeam(clocks);
+    m_line_changed = true;
 
     switch ((m_state.output[1] >> 4) & 0x03)
     {
@@ -966,9 +974,6 @@ void Video::WritePalette(int component, u8 value)
             UpdatePaletteColor(2, index);
             break;
     }
-
-    if (ReadPalette(component) != previous)
-        m_line_changed = true;
 }
 
 u8 Video::ReadPalette(int component) const
@@ -1084,6 +1089,7 @@ void Video::StartFrame(u64 clocks)
     }
 
     m_rendered_rows = 0;
+    m_partial_rows = 0;
     m_line_changed = false;
     m_canvas_split = false;
     UpdateGeometry();
@@ -1104,6 +1110,7 @@ void Video::JoinField(u64 clocks)
     u32 half_line = GetBeamHalfLine(clocks) - m_state.crtc[k_video_crtc_vst1];
     m_state.event_half_line = MIN(half_line, m_state.frame_half_lines - 1);
     m_rendered_rows = 0;
+    m_partial_rows = 0;
     m_line_changed = false;
     m_canvas_split = false;
     UpdateGeometry();
@@ -1370,11 +1377,16 @@ void Video::ResizeCanvas(u32 zoom_x, u32 zoom_y)
 void Video::SetCanvasZoom(u32 zoom_x, u32 zoom_y)
 {
     u32 fit = (m_canvas_clocks + GT_MAX_FRAME_BUFFER_WIDTH - 1) / GT_MAX_FRAME_BUFFER_WIDTH;
+    u32 h_divider = (zoom_x % fit) == 0 ? zoom_x : fit;
+    u32 v_divider = m_canvas_interlaced || m_canvas_split ? 1 : zoom_y;
+
+    if (h_divider != m_canvas_h_divider || v_divider != m_canvas_v_divider)
+        m_partial_rows = 0;
 
     m_canvas_zoom_x = zoom_x;
     m_canvas_zoom_y = zoom_y;
-    m_canvas_h_divider = (zoom_x % fit) == 0 ? zoom_x : fit;
-    m_canvas_v_divider = m_canvas_interlaced || m_canvas_split ? 1 : zoom_y;
+    m_canvas_h_divider = h_divider;
+    m_canvas_v_divider = v_divider;
     m_render_width = MAX((int)(m_canvas_clocks / m_canvas_h_divider), 1);
     m_render_height = MAX(m_canvas_height / (int)m_canvas_v_divider, 1);
 }
@@ -1608,17 +1620,58 @@ void Video::RenderRows(u32 half_line)
         RenderRow(m_rendered_rows);
 }
 
-void Video::RenderRow(int row)
+void Video::RenderLineToBeam(u64 clocks)
 {
-    if (!m_render || !IsValidPointer(m_frame_buffer))
+    u32 next = m_state.crtc[k_video_crtc_vst1] + m_next_event_half_line;
+
+    if (!m_state.running || clocks < m_state.frame_start_clocks || next < m_canvas_v_start + 2)
         return;
 
-    int width = m_render_width;
-    u32* destination = (u32*)m_frame_buffer + row * width;
+    u32 line = (next - m_canvas_v_start) / 2 - 1;
+    int first = m_canvas_interlaced ? (int)line * 2 : (int)line;
+    int count = m_canvas_interlaced ? 2 : 1;
+    u32 dot = GetBeamClock(clocks);
+
+    if (first >= m_canvas_height || dot <= m_canvas_h_start)
+        return;
+
+    // Only this line of the row keeps the old colors
+    if (m_canvas_v_divider > 1)
+    {
+        m_canvas_split = true;
+        ResizeCanvas(m_canvas_zoom_x, m_canvas_zoom_y);
+        m_rendered_rows = first;
+    }
+
+    if (m_rendered_rows != first || first + count > m_render_height)
+        return;
+
+    u32 divider = m_canvas_h_divider;
+    int x = (int)MIN((dot - m_canvas_h_start + divider - 1) / divider, (u32)m_render_width);
+    int from = m_partial_rows > first ? m_partial_x : 0;
+
+    for (int row = first; row < first + count; row++)
+        RenderRowPart(row, from, x);
+
+    m_partial_rows = first + count;
+    m_partial_x = MAX(x, from);
+}
+
+void Video::RenderRow(int row)
+{
+    RenderRowPart(row, row < m_partial_rows ? m_partial_x : 0, m_render_width);
+}
+
+void Video::RenderRowPart(int row, int x, int end)
+{
+    if (!m_render || !IsValidPointer(m_frame_buffer) || x >= end)
+        return;
+
+    u32* destination = (u32*)m_frame_buffer + row * m_render_width;
     u32 black = ToXRGB(0, 0, 0);
 
-    for (int x = 0; x < width; x++)
-        destination[x] = black;
+    for (int i = x; i < end; i++)
+        destination[i] = black;
 
     if (unlikely(m_state.crt_power_off || (m_state.crtc[k_video_crtc_cr0] & 0x8000) == 0))
         return;
@@ -1627,14 +1680,14 @@ void Video::RenderRow(int row)
     {
         // The back layer is drawn opaque and the front one lets transparent pixels through
         int front = m_state.output[1] & 0x01;
-        RenderLayerRow(destination, front ^ 1, row, true);
-        RenderLayerRow(destination, front, row, false);
+        RenderLayerRow(destination, front ^ 1, row, x, end, true);
+        RenderLayerRow(destination, front, row, x, end, false);
     }
     else
-        RenderLayerRow(destination, 0, row, true);
+        RenderLayerRow(destination, 0, row, x, end, true);
 }
 
-void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
+void Video::RenderLayerRow(u32* destination, int layer, int row, int from, int to, bool opaque)
 {
     if (GetLayerFormat(layer) == VIDEO_LAYER_OFF)
         return;
@@ -1655,8 +1708,8 @@ void Video::RenderLayerRow(u32* destination, int layer, int row, bool opaque)
     u32 first = MAX(hds, haj);
     u32 h_start = m_canvas_h_start;
     u32 divider = m_canvas_h_divider;
-    int x = first > h_start ? (int)((first - h_start + divider - 1) / divider) : 0;
-    int end = hde > h_start ? (int)MIN((hde - h_start + divider - 1) / divider, (u32)m_render_width) : 0;
+    int x = first > h_start ? MAX((int)((first - h_start + divider - 1) / divider), from) : from;
+    int end = hde > h_start ? (int)MIN((hde - h_start + divider - 1) / divider, (u32)to) : 0;
 
     if (x >= end)
         return;
@@ -2034,6 +2087,7 @@ void Video::SanitizeState()
 
     // The rows drawn before saving are not part of the state, the rest of the frame redraws them
     m_rendered_rows = 0;
+    m_partial_rows = 0;
     m_canvas_split = false;
     UpdateColorCaches();
     UpdateGeometry();

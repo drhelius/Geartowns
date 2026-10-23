@@ -160,7 +160,7 @@ private:
     void WriteCRTC(u8 value, bool high, u64 clocks);
     void LatchLayerStart(int layer);
     u8 ReadCRTC(bool high, u64 clocks) const;
-    void WritePalette(int component, u8 value);
+    void WritePalette(int component, u8 value, u64 clocks);
     u8 ReadPalette(int component) const;
     void RunNextEvent();
     void LatchFrameTiming();
@@ -189,8 +189,10 @@ private:
     u64 GetNTSCSyncStableUntil(u64 clocks) const;
     u64 GetElapsedCRTCClocks(u64 clocks) const;
     void RenderRows(u32 half_line);
+    void RenderLineToBeam(u64 clocks);
     void RenderRow(int row);
-    void RenderLayerRow(u32* destination, int layer, int row, bool opaque);
+    void RenderRowPart(int row, int x, int end);
+    void RenderLayerRow(u32* destination, int layer, int row, int from, int to, bool opaque);
     void DecodeLayerRun(u32* colors, int layer, u32 start, u32 pixel, u32 count, u32 wrap, u8 planes, bool opaque);
     void DecodeLayerPixels(u32* colors, int layer, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
     void DecodeFMRPagePixels(u32* colors, u32 start, u32 pixel, u32 count, u8 planes, bool opaque);
@@ -257,6 +259,8 @@ private:
     int m_render_width;
     int m_render_height;
     int m_rendered_rows;
+    int m_partial_rows;
+    int m_partial_x;
     bool m_line_changed;
     bool m_native_resolution;
     u32 m_canvas_h_start;

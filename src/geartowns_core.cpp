@@ -94,6 +94,7 @@ GeartownsCore::GeartownsCore()
     m_hard_disk_state_changes = 0;
     m_boot_device = GT_BOOT_DEVICE_AUTO;
     m_drive_letter_assignment = true;
+    m_ram_size_locked = false;
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
@@ -1064,6 +1065,15 @@ void GeartownsCore::EnableDriveLetterAssignment(bool enabled)
     m_drive_letter_assignment = enabled;
 }
 
+void GeartownsCore::LockRAMSize(bool locked)
+{
+    m_ram_size_locked = locked;
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
+}
+
 void GeartownsCore::ApplyBootDevice()
 {
     static const GT_Keys k_digits[5] = { GT_KEY_0, GT_KEY_1, GT_KEY_2, GT_KEY_3, GT_KEY_4 };
@@ -2024,6 +2034,15 @@ void GeartownsCore::ResolveMachineConfig()
         config.ram_size = 4 * megabyte;
         report.ram = GT_MACHINE_SOURCE_HARD_DISK;
         SanitizeMachineConfig(config);
+    }
+
+    if (m_ram_size_locked && m_powered && (config.ram_size != m_machine_config.ram_size))
+    {
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "Restart the content to change the RAM from %u MB to %u MB", m_machine_config.ram_size / megabyte,
+            config.ram_size / megabyte);
+        config.ram_size = m_machine_config.ram_size;
+        report.ram = m_machine_report.ram;
     }
 
     if ((database || three_mode) && (config.model != named))

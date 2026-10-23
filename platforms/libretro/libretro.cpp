@@ -388,6 +388,7 @@ void retro_init(void)
 
     core = new GeartownsCore();
     core->Init();
+    core->LockRAMSize(true);
     core->GetRuntimeInfo(runtime_info);
 
     frame_buffer = new u8[GT_MAX_FRAME_BUFFER_WIDTH * GT_MAX_FRAME_BUFFER_HEIGHT * sizeof(u32)];

@@ -120,6 +120,7 @@ public:
     void SetBootDevice(GT_Boot_Device device);
     GT_Boot_Device GetBootDevice() const;
     void EnableDriveLetterAssignment(bool enabled);
+    void LockRAMSize(bool locked);
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
@@ -249,6 +250,7 @@ private:
     u32 m_hard_disk_state_changes;
     GT_Boot_Device m_boot_device;
     bool m_drive_letter_assignment;
+    bool m_ram_size_locked;
     bool m_powered;
     bool m_paused;
     GT_Debug_Step m_debug_step;

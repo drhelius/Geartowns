@@ -21,7 +21,8 @@
 #define BACKERS_H
 
 static const char * BACKERS_STR = 
-" · Romain Tisserand (rtissera)"
+" · Héctor Calvarro (kelv)"
+"\n · Romain Tisserand (rtissera)"
 "\n · Michael Mellor (dinglyburrow)"
 "\n · Francisco Javier Trujillo (fjtrujy)"
 "\n · Libretro / RetroArch team"

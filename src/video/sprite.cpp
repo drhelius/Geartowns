@@ -30,6 +30,7 @@ Sprite::Sprite()
     InitPointer(m_bus_cycle_counts);
     m_bus_cycles_seen[0] = 0;
     m_bus_cycles_seen[1] = 0;
+    m_entry_lead = 0;
     m_entry_reciprocal = 0;
     memset(&m_state, 0, sizeof(m_state));
 }
@@ -85,7 +86,16 @@ void Sprite::Write(u16 port, u8 value)
         return;
     }
 
+    u32 offset_x = GetOffsetX();
+    u32 offset_y = GetOffsetY();
     m_state.registers[m_state.address] = value & k_sprite_register_masks[m_state.address];
+
+    // The engine was brought to the write first, so the entry being drawn moves from its next pixel on
+    if (m_state.entry_loaded && (m_state.entry_attributes & k_sprite_attribute_offset) != 0)
+    {
+        m_state.entry_x = (u16)((m_state.entry_x + GetOffsetX() - offset_x) & 0x1FF);
+        m_state.entry_y = (u16)((m_state.entry_y + GetOffsetY() - offset_y) & 0x1FF);
+    }
 
     if (unlikely(IsValidPointer(m_trace_logger) &&
         m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_REGISTER)))
@@ -105,6 +115,7 @@ void Sprite::StartTransfer(u64 clocks)
     m_state.clear_row = 1;
     m_state.entry = 0;
     m_state.pixel = 0;
+    m_state.entry_loaded = false;
     ResetContention();
     UpdateEntryReciprocal();
 
@@ -121,7 +132,7 @@ void Sprite::TraceBusyAtVSync()
 }
 
 // The clear and every index entry, drawn or not, take the model's time in half clocks
-// with the entry's 256 pixels spread over its time
+// The entry is read when its time starts and its 256 pixels are spread over the time left after the lead
 void Sprite::Run(u64 clocks)
 {
     u64 elapsed = (clocks - m_state.start_clocks) * 2;
@@ -151,13 +162,20 @@ void Sprite::Run(u64 clocks)
     while (m_state.entry < count)
     {
         u64 offset = transfer - (u64)m_state.entry * entry_time;
-        u32 end = offset >= entry_time ? k_sprite_pixels : (u32)(((offset << 8) * m_entry_reciprocal) >> 32);
+
+        if (!m_state.entry_loaded)
+        {
+            if (offset == 0)
+                return;
+
+            LoadEntry();
+        }
+
+        u32 end = offset <= m_entry_lead ? 0 : offset >= entry_time ? k_sprite_pixels :
+            (u32)((((offset - m_entry_lead) << 8) * m_entry_reciprocal) >> 32);
 
         if (end <= m_state.pixel)
             return;
-
-        if (m_state.pixel == 0)
-            LoadEntry();
 
         DrawPixels(end);
 
@@ -166,6 +184,7 @@ void Sprite::Run(u64 clocks)
 
         m_state.entry++;
         m_state.pixel = 0;
+        m_state.entry_loaded = false;
     }
 
     m_state.busy = false;
@@ -176,12 +195,16 @@ void Sprite::Run(u64 clocks)
 }
 
 // Pixels due within an entry without dividing, exact while entries take at most 4096 half clocks
+// The lead is in 1/256 of the entry, fitted on the Marty's split of an entry whose offsets changed while drawn
 void Sprite::UpdateEntryReciprocal()
 {
-    m_entry_reciprocal = ((1ULL << 32) + m_state.entry_half_clocks - 1) / m_state.entry_half_clocks;
+    u32 entry_time = m_state.entry_half_clocks;
+    m_entry_lead = (entry_time * k_sprite_entry_lead) >> 8;
+    u32 draw_time = entry_time - m_entry_lead;
+    m_entry_reciprocal = ((1ULL << 32) + draw_time - 1) / draw_time;
 }
 
-// The entry is read when its first pixel is due, later CPU writes to it wait for the next transfer
+// Later CPU writes to the entry wait for the next transfer
 void Sprite::LoadEntry()
 {
     const u8* entry = m_sprite_ram + ((u32)(m_state.first_index + m_state.entry) << 3);
@@ -189,11 +212,12 @@ void Sprite::LoadEntry()
     u32 y = read_u16_le(entry + 2);
     m_state.entry_attributes = read_u16_le(entry + 4);
     m_state.entry_color = read_u16_le(entry + 6);
+    m_state.entry_loaded = true;
 
     if ((m_state.entry_attributes & k_sprite_attribute_offset) != 0)
     {
-        x += ((m_state.registers[k_sprite_offset_x + 1] & 0x01) << 8) | m_state.registers[k_sprite_offset_x];
-        y += ((m_state.registers[k_sprite_offset_y + 1] & 0x01) << 8) | m_state.registers[k_sprite_offset_y];
+        x += GetOffsetX();
+        y += GetOffsetY();
     }
 
     m_state.entry_x = x & 0x1FF;
@@ -350,6 +374,12 @@ void Sprite::Serialize(StateSerializer& serializer, int version)
         pending[0] = 0;
         pending[1] = 0;
     }
+
+    // Older states read the entry with its first pixel
+    if (version >= 19)
+        G_SERIALIZE(serializer, m_state.entry_loaded);
+    else
+        m_state.entry_loaded = m_state.pixel > 0;
 
     if (IsValidPointer(m_bus_cycle_counts))
     {

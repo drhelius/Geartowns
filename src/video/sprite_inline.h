@@ -117,6 +117,16 @@ INLINE u16 Sprite::GetFirstIndex() const
     return (u16)(((m_state.registers[k_sprite_control1] & 0x03) << 8) | m_state.registers[k_sprite_control0]);
 }
 
+INLINE u32 Sprite::GetOffsetX() const
+{
+    return ((m_state.registers[k_sprite_offset_x + 1] & 0x01) << 8) | m_state.registers[k_sprite_offset_x];
+}
+
+INLINE u32 Sprite::GetOffsetY() const
+{
+    return ((m_state.registers[k_sprite_offset_y + 1] & 0x01) << 8) | m_state.registers[k_sprite_offset_y];
+}
+
 INLINE u32 Sprite::GetWorkOffset() const
 {
     return k_sprite_work_base + (m_state.page ? k_sprite_half_size : 0);

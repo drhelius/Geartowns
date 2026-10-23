@@ -44,6 +44,7 @@ public:
         u16 clear_row;
         u16 entry;
         u16 pixel;
+        bool entry_loaded;
         u16 entry_x;
         u16 entry_y;
         u16 entry_attributes;
@@ -85,6 +86,8 @@ private:
     template<bool indexed>
     void DrawPattern(u32 pixel, u32 end);
     u16 GetFirstIndex() const;
+    u32 GetOffsetX() const;
+    u32 GetOffsetY() const;
     u8* GetWorkHalf() const;
     void TraceEvent(u8 event, u8 value);
     void Serialize(StateSerializer& serializer, int version);
@@ -98,6 +101,7 @@ private:
     TraceLogger* m_trace_logger;
     const u32* m_bus_cycle_counts;
     u32 m_bus_cycles_seen[2];
+    u32 m_entry_lead;
     u64 m_entry_reciprocal;
 };
 
@@ -123,6 +127,7 @@ static const u32 k_sprite_half_size = 0x20000;
 static const u32 k_sprite_clear_rows = 128;
 static const u32 k_sprite_clear_row_size = k_sprite_half_size / k_sprite_clear_rows;
 static const u32 k_sprite_max_entry_half_clocks = 4096;
+static const u32 k_sprite_entry_lead = 25;
 static const u16 k_sprite_book_clear_half_clocks = (GT_MACHINE_CLOCK_RATE / 500000) * 32;
 static const u16 k_sprite_book_entry_half_clocks = (GT_MACHINE_CLOCK_RATE / 500000) * 75;
 

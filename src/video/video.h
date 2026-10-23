@@ -183,6 +183,7 @@ private:
     bool HasVSync() const;
     bool IsHighLineRate() const;
     bool IsFieldInterlaced() const;
+    u32 GetPaletteLeadLines() const;
     u64 GetHalfLineClocks(u32 half_line) const;
     u64 GetFrameEndClocks() const;
     u8 GetNTSCSyncStatus(u64 clocks) const;
@@ -295,6 +296,7 @@ static const u64 k_video_ntsc_field_clocks = ((u64)k_video_ntsc_field_half_lines
     GT_MACHINE_CLOCK_RATE + 2ULL * k_video_ntsc_clock_rate - 1) / (2ULL * k_video_ntsc_clock_rate);
 static const u64 k_video_ntsc_crtc_start_clocks = (22ULL * k_video_ntsc_line_dots * GT_MACHINE_CLOCK_RATE +
     k_video_ntsc_clock_rate - 1) / k_video_ntsc_clock_rate;
+static const u32 k_video_ntsc_vga_palette_lead = 34;
 static const u32 k_video_transparent = 0x00010000;
 static const u32 k_video_no_wrap = 0x7FFFFFFF;
 

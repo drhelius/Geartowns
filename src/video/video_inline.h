@@ -259,6 +259,11 @@ INLINE bool Video::IsFieldInterlaced() const
     return m_timing.ntsc_field && IsHighLineRate();
 }
 
+INLINE u32 Video::GetPaletteLeadLines() const
+{
+    return IsFieldInterlaced() && (m_state.crtc[k_video_crtc_cr1] & 0x03) == 2 ? k_video_ntsc_vga_palette_lead : 0;
+}
+
 // Half-lines count from the VSYNC that started the frame
 // rounded up to the machine clock that reaches them
 INLINE u64 Video::GetHalfLineClocks(u32 half_line) const

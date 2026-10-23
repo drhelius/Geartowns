@@ -1622,7 +1622,8 @@ void Video::RenderRows(u32 half_line)
 
 void Video::RenderLineToBeam(u64 clocks)
 {
-    u32 next = m_state.crtc[k_video_crtc_vst1] + m_next_event_half_line;
+    u32 lead = GetPaletteLeadLines();
+    u32 next = m_state.crtc[k_video_crtc_vst1] + m_next_event_half_line + lead * 2;
 
     if (!m_state.running || clocks < m_state.frame_start_clocks || next < m_canvas_v_start + 2)
         return;
@@ -1632,7 +1633,7 @@ void Video::RenderLineToBeam(u64 clocks)
     int count = m_canvas_interlaced ? 2 : 1;
     u32 dot = GetBeamClock(clocks);
 
-    if (first >= m_canvas_height || dot <= m_canvas_h_start)
+    if (lead == 0 && (first >= m_canvas_height || dot <= m_canvas_h_start))
         return;
 
     // Only this line of the row keeps the old colors
@@ -1640,7 +1641,18 @@ void Video::RenderLineToBeam(u64 clocks)
     {
         m_canvas_split = true;
         ResizeCanvas(m_canvas_zoom_x, m_canvas_zoom_y);
-        m_rendered_rows = first;
+        m_rendered_rows = line >= lead ? (int)(line - lead) : 0;
+    }
+
+    // The Marty shows palette writes in VGA-clock modes further down than its counters, so the rows up to there keep
+    // the old colors too
+    if (lead > 0)
+    {
+        for (int last = MIN(first, m_render_height); m_rendered_rows < last; m_rendered_rows++)
+            RenderRow(m_rendered_rows);
+
+        if (dot <= m_canvas_h_start)
+            return;
     }
 
     if (m_rendered_rows != first || first + count > m_render_height)

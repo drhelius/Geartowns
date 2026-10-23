@@ -429,7 +429,22 @@ void Media::GatherDataFromDB()
         }
     }
 
-    Debug("Media not found in database. CRC: %08X", m_media_info.crc);
+    u32 key = m_media_info.cdrom ? m_cdrom_media->GetVolumeKey() : 0;
+
+    for (int i = 0; (key != 0) && (k_game_database[i].title != 0); i++)
+    {
+        const GT_DB_Entry& entry = k_game_database[i];
+
+        if (entry.fallback_key == key)
+        {
+            m_db_entry = &entry;
+            Log("Media found in database by volume label: %s. CRC: %08X, volume key: %08X", entry.title,
+                m_media_info.crc, key);
+            return;
+        }
+    }
+
+    Debug("Media not found in database. CRC: %08X, volume key: %08X", m_media_info.crc, key);
 }
 
 const GT_DB_Entry* Media::FindFloppyEntry(u32 crc)

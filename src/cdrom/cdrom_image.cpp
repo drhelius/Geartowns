@@ -20,6 +20,7 @@
 #include <string>
 #include <algorithm>
 #include "cdrom_image.h"
+#include "../media/crc.h"
 
 CdRomImage::CdRomImage()
 {
@@ -65,6 +66,7 @@ void CdRomImage::Reset()
     m_file_extension[0] = 0;
     m_current_sector = 0;
     m_crc = 0;
+    m_volume_key = 0;
 }
 
 bool CdRomImage::IsReady()
@@ -144,6 +146,25 @@ CdRomImage::TableOfContents* CdRomImage::GetTOC()
 u32 CdRomImage::GetCRC()
 {
     return m_crc;
+}
+
+u32 CdRomImage::GetVolumeKey()
+{
+    return m_volume_key;
+}
+
+void CdRomImage::CheckVolumeDescriptor(u32 sector, const u8* data)
+{
+    if ((sector != 16) || (memcmp(data + 1, "CD001", 5) != 0))
+        return;
+
+    bool dated = false;
+
+    for (int i = 813; i < 829; i++)
+        dated = dated || ((data[i] != '0') && (data[i] != 0));
+
+    if (dated)
+        m_volume_key = CalculateCRC32(CalculateCRC32(0, data + 40, 32), data + 813, 17);
 }
 
 u32 CdRomImage::GetCurrentSector()

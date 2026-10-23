@@ -47,6 +47,11 @@ INLINE u32 CdRomMedia::GetCRC()
     }
 }
 
+INLINE u32 CdRomMedia::GetVolumeKey()
+{
+    return IsValidPointer(m_current_image) ? m_current_image->GetVolumeKey() : 0;
+}
+
 INLINE const char* CdRomMedia::GetFilePath()
 {
     if (IsValidPointer(m_current_image))

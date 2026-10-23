@@ -70,6 +70,7 @@ public:
     const char* GetFileExtension();
     TableOfContents* GetTOC();
     u32 GetCRC();
+    u32 GetVolumeKey();
     u32 GetCurrentSector();
     void SetCurrentSector(u32 sector);
     bool IsAudioSector(u32 lba, bool include_lead_in = false);
@@ -79,6 +80,7 @@ public:
 protected:
     void GatherPaths(const char* path);
     void InitTrack(Track& track);
+    void CheckVolumeDescriptor(u32 sector, const u8* data);
 
 protected:
     TableOfContents m_toc;
@@ -89,6 +91,7 @@ protected:
     char m_file_extension[512];
     u32 m_current_sector;
     u32 m_crc;
+    u32 m_volume_key;
 };
 
 #endif /* CDROM_IMAGE_H */

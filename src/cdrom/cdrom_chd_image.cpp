@@ -543,6 +543,7 @@ bool CdRomChdImage::ReadTOC()
 void CdRomChdImage::CalculateCRC()
 {
     m_crc = 0;
+    m_volume_key = 0;
 
     if (m_toc.tracks.empty())
     {
@@ -596,6 +597,7 @@ void CdRomChdImage::CalculateCRC()
         }
 
         m_crc = CalculateCRC32(m_crc, buffer, sector_data_size);
+        CheckVolumeDescriptor(sec, buffer);
     }
 
     m_current_sector = current_sector;

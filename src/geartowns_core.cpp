@@ -1048,6 +1048,10 @@ u32 GeartownsCore::GetHardDiskStateChanges() const
 void GeartownsCore::SetBootDevice(GT_Boot_Device device)
 {
     m_boot_device = ((device >= GT_BOOT_DEVICE_AUTO) && (device < GT_BOOT_DEVICE_COUNT)) ? device : GT_BOOT_DEVICE_AUTO;
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
 }
 
 GT_Boot_Device GeartownsCore::GetBootDevice() const
@@ -2012,7 +2016,10 @@ void GeartownsCore::ResolveMachineConfig()
 
     SanitizeMachineConfig(config);
 
-    if (auto_ram && config.scsi && HasHardDisks() && (config.ram_size < 4 * megabyte))
+    bool hard_disk_boot = (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) ||
+        (IsValidPointer(entry) && ((entry->flags & GT_GAMEDB_HDD) != 0));
+
+    if (auto_ram && config.scsi && HasHardDisks() && (!database || hard_disk_boot) && (config.ram_size < 4 * megabyte))
     {
         config.ram_size = 4 * megabyte;
         report.ram = GT_MACHINE_SOURCE_HARD_DISK;

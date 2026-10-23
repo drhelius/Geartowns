@@ -26,7 +26,7 @@
     #define EXTERN extern
 #endif
 
-EXTERN void gui_floppy_menu(int drive, const char* label, int drives);
+EXTERN void gui_floppy_menu(int drives);
 EXTERN void gui_floppy_popups(void);
 EXTERN void gui_floppy_open_disks(const char* path);
 EXTERN bool gui_floppy_open(const char* path, const char* symbol_path);

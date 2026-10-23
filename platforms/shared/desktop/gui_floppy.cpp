@@ -71,9 +71,24 @@ static void draw_blank_popup(void);
 static void draw_quit_popup(void);
 static void draw_second_popup(void);
 static int machine_drives(void);
+static void drive_menu(int drive, int drives);
 
-void gui_floppy_menu(int drive, const char* label, int drives)
+void gui_floppy_menu(int drives)
 {
+    if (!ImGui::BeginMenu("Floppies"))
+        return;
+
+    for (int i = 0; i < drives; i++)
+        drive_menu(i, drives);
+
+    ImGui::EndMenu();
+}
+
+static void drive_menu(int drive, int drives)
+{
+    char label[16];
+    snprintf(label, sizeof(label), "Drive %d", drive + 1);
+
     if (!ImGui::BeginMenu(label))
         return;
 

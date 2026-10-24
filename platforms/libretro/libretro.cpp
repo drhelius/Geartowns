@@ -87,7 +87,7 @@ static u8* frame_buffer;
 static s16 audio_buf[GT_AUDIO_BUFFER_SIZE];
 static int audio_sample_count = 0;
 static size_t savestate_size = 0;
-static GT_Machine_Settings machine_settings = { GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
+static GT_Machine_Settings machine_settings = { GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
 #if !defined(GT_DISABLE_DYNAREC)
 static int dynarec_option = -1;
 #endif
@@ -428,6 +428,7 @@ void retro_deinit(void)
     machine_settings.model = GT_MACHINE_AUTO;
     machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     machine_settings.ram_mb = GT_MACHINE_AUTO;
+    machine_settings.fpu = GT_MACHINE_AUTO;
 #if !defined(GT_DISABLE_DYNAREC)
     dynarec_option = -1;
 #endif
@@ -1891,6 +1892,14 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         machine_settings.ram_mb = strcmp(var.value, "auto") == 0 ? GT_MACHINE_AUTO : atoi(var.value);
+    }
+
+    var.key = "geartowns_fpu";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        machine_settings.fpu = strcmp(var.value, "none") == 0 ? 0 : strcmp(var.value, "80387") == 0 ? 1 : GT_MACHINE_AUTO;
     }
 
     var.key = "geartowns_boot_device";

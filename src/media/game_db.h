@@ -38,6 +38,7 @@ struct GT_DB_Entry
 #define GT_GAMEDB_FLAG_NONE                0x0000
 #define GT_GAMEDB_HDD                      0x0001
 #define GT_GAMEDB_CPU_486                  0x0002
+#define GT_GAMEDB_FPU                      0x0004
 #define GT_GAMEDB_FLOPPY_BOOT              0x0010
 #define GT_GAMEDB_FLOPPY_REQUIRED          0x0020
 #define GT_GAMEDB_FLOPPY_OPTIONAL          0x0040
@@ -153,9 +154,9 @@ const GT_DB_Entry k_game_database[] =
     { 0xF6B8469F, "ElFish", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0xFF53CE45 }, // HR
     { 0x71570BC6, "Gadget - Invention, Travel, & Adventure", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 20, 0, 0, 0x17C3D391 }, // HR, MA recommended
     { 0xC2A397F7, "Horde, The", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0x78DBF7F5 }, // HR
-    { 0xB63BB04F, "Para Para Paradise (Disc A) (Akane Kouda)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
-    { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
-    { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
+    { 0xB63BB04F, "Para Para Paradise (Disc A) (Akane Kouda)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
+    { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
+    { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
     { 0x75236D99, "Ravenloft - Aku no Keshin", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0xBF2C9875 }, // HR
     { 0x6BEA56A2, "Teo - Mou Hitotsu no Chikyuu (Version 1.0)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
     { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM

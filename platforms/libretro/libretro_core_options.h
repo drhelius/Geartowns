@@ -407,6 +407,21 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "auto"
     },
     {
+        "geartowns_fpu",
+        "FPU (restart)",
+        NULL,
+        "The math coprocessor. Auto fits an 80387 when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model. The UX, UG and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
+        NULL,
+        "system",
+        {
+            { "auto",  "Auto" },
+            { "none",  "None" },
+            { "80387", "80387" },
+            { NULL, NULL },
+        },
+        "auto"
+    },
+    {
         "geartowns_boot_device",
         "Boot Device (restart)",
         NULL,

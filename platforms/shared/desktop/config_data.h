@@ -112,6 +112,7 @@ struct config_Machine
     int model;
     int cpu_mhz;
     int ram_mb;
+    int fpu;
     std::string firmware_paths[GT_MACHINE_COUNT];
 };
 
@@ -253,6 +254,7 @@ struct config_Debug
     bool show_disassembler;
     bool show_processor;
     bool show_processor_details;
+    bool show_x87;
     bool show_call_stack;
     bool show_i386_descriptors;
     bool show_i386_paging;

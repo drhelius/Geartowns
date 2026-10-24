@@ -58,6 +58,7 @@
 #include "../debug/gui_debug_floppy.h"
 #include "../debug/gui_debug_disassembler.h"
 #include "../debug/gui_debug_i386_tables.h"
+#include "../debug/gui_debug_x87.h"
 #include "../debug/gui_debug_scsi.h"
 #include "../debug/gui_debug_profiler.h"
 #include "../debug/gui_debug_rewind.h"
@@ -1432,8 +1433,57 @@ json DebugAdapter::GetI386Status()
         {"dr6", Hex32(state.debug_registers[6])}, {"dr7", Hex32(state.debug_registers[7])}
     };
     status["test_registers"] = {{"tr6", Hex32(state.test_registers[0])}, {"tr7", Hex32(state.test_registers[1])}};
+    status["fpu"] = m_core->GetMachineConfig().fpu ? GetX87Status() : json();
 
     return status;
+}
+
+json DebugAdapter::GetX87Status()
+{
+    X87* fpu = m_core->GetX87();
+    X87::X87_State* state = fpu->GetState();
+    u16 tags = fpu->GetTagWord();
+    int top = (state->status >> 11) & 7;
+    json stack = json::array();
+
+    for (int i = 0; i < X87_REGISTER_COUNT; i++)
+    {
+        int physical = (top + i) & 7;
+        int tag = (tags >> (physical * 2)) & 3;
+        const X87::X87_Register& value = state->registers[physical];
+        char text[64];
+        gui_debug_x87_format_value(value.sign_exponent, value.significand, text, sizeof(text));
+        stack.push_back({
+            {"st", i},
+            {"register", physical},
+            {"tag", to_lower(gui_debug_x87_tag_name(tag))},
+            {"raw", Hex(value.sign_exponent, 4) + Hex((u32)(value.significand >> 32), 8) + Hex((u32)value.significand, 8)},
+            {"value", tag == 3 ? json() : json(text)}
+        });
+    }
+
+    u16 control = state->control;
+    u16 status = state->status;
+
+    return {
+        {"control", Hex(control, 4)},
+        {"masks", {{"im", (control & 0x01) != 0}, {"dm", (control & 0x02) != 0}, {"zm", (control & 0x04) != 0},
+            {"om", (control & 0x08) != 0}, {"um", (control & 0x10) != 0}, {"pm", (control & 0x20) != 0}}},
+        {"precision", to_lower(gui_debug_x87_precision_name(control))},
+        {"rounding", to_lower(gui_debug_x87_rounding_name(control))},
+        {"status", Hex(status, 4)},
+        {"top", top},
+        {"conditions", {{"c0", (status & 0x0100) != 0}, {"c1", (status & 0x0200) != 0},
+            {"c2", (status & 0x0400) != 0}, {"c3", (status & 0x4000) != 0}}},
+        {"exceptions", {{"ie", (status & 0x01) != 0}, {"de", (status & 0x02) != 0}, {"ze", (status & 0x04) != 0},
+            {"oe", (status & 0x08) != 0}, {"ue", (status & 0x10) != 0}, {"pe", (status & 0x20) != 0},
+            {"sf", (status & 0x40) != 0}, {"es", (status & 0x80) != 0}, {"busy", (status & 0x8000) != 0}}},
+        {"tag", Hex(tags, 4)},
+        {"stack", stack},
+        {"last_instruction", Hex(state->instruction_selector, 4) + ":" + Hex32(state->instruction_offset)},
+        {"last_opcode", Hex(0xD8 | ((state->opcode >> 8) & 7), 2) + " " + Hex(state->opcode & 0xFF, 2)},
+        {"last_operand", Hex(state->operand_selector, 4) + ":" + Hex32(state->operand_offset)}
+    };
 }
 
 json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
@@ -2299,6 +2349,7 @@ json DebugAdapter::GetSystemStatus()
     json model_setting = settings.model < 0 ? json("auto") : json(k_machine_profiles[settings.model].key);
     json cpu_setting = settings.cpu_mhz <= 0 ? json("auto") : json(settings.cpu_mhz);
     json ram_setting = settings.ram_mb <= 0 ? json("auto") : json(settings.ram_mb);
+    json fpu_setting = settings.fpu < 0 ? json("auto") : settings.fpu == 0 ? json("none") : json("80387");
     json warnings = json::array();
     json registers = json::object();
     u64 clocks = m_core->GetScheduler()->GetClocks();
@@ -2345,13 +2396,16 @@ json DebugAdapter::GetSystemStatus()
             {"cpu", k_machine_cpus[machine.cpu].name},
             {"cpu_clock_hz", machine.cpu_clock_rate},
             {"ram_kb", machine.ram_size / 1024},
+            {"fpu", machine.fpu ? json("80387") : json()},
             {"floppy_drives", machine.floppy_drives},
             {"machine_id", Hex(gui_debug_system_machine_id(), 4)},
             {"memory_map", k_machine_maps[profile.map].name},
             {"firmware_set", IsValidPointer(profile.firmware_set) ? profile.firmware_set : ""},
-            {"settings", {{"model", model_setting}, {"cpu_speed_mhz", cpu_setting}, {"ram_mb", ram_setting}}},
+            {"settings", {{"model", model_setting}, {"cpu_speed_mhz", cpu_setting}, {"ram_mb", ram_setting},
+                {"fpu", fpu_setting}}},
             {"source", {{"model", k_mcp_machine_sources[report.model]},
-                {"cpu_clock", k_mcp_machine_sources[report.cpu_clock]}, {"ram", k_mcp_machine_sources[report.ram]}}},
+                {"cpu_clock", k_mcp_machine_sources[report.cpu_clock]}, {"ram", k_mcp_machine_sources[report.ram]},
+                {"fpu", k_mcp_machine_sources[report.fpu]}}},
             {"game_database", IsValidPointer(report.title) ? json(report.title) : json()},
             {"warnings", warnings},
             {"reset_pending", m_core->IsMachineConfigPending()}

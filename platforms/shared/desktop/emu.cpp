@@ -760,6 +760,7 @@ void emu_apply_machine_settings(void)
     settings.model = config_machine.model;
     settings.cpu_mhz = config_machine.cpu_mhz;
     settings.ram_mb = config_machine.ram_mb;
+    settings.fpu = config_machine.fpu;
     geartowns->SetMachineSettings(settings);
 }
 

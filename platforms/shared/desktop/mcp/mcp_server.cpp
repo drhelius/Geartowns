@@ -1015,7 +1015,8 @@ json McpServer::BuildToolList()
         {"name", "get_i386_status"},
         {"title", "Get Intel 80386 Status"},
         {"description", "Read the CPU: registers, EFLAGS, CS:EIP with linear and physical PC, CR0-CR3, mode, CPL, IOPL, "
-            "code and stack size, last exception, segment caches, GDTR/IDTR/LDTR/TR, debug and test registers."},
+            "code and stack size, last exception, segment caches, GDTR/IDTR/LDTR/TR, debug and test registers, and the "
+            "80387 (stack, CW, SW, tags, last instruction) when one is fitted."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

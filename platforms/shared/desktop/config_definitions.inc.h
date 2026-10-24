@@ -22,6 +22,7 @@
 
 static void process_machine_model(config_Operation operation, int* model);
 static void process_machine_value(config_Operation operation, const char* key, int* value, const int* values, int count);
+static void process_machine_fpu(config_Operation operation, int* fpu);
 
 static inline void process(config_Operation operation)
 {
@@ -36,6 +37,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "Disassembler", config_debug.show_disassembler, true);
     CONFIG_BOOL("Debug", "Processor", config_debug.show_processor, true);
     CONFIG_BOOL("Debug", "ProcessorDetails", config_debug.show_processor_details, false);
+    CONFIG_BOOL("Debug", "FPU", config_debug.show_x87, false);
     CONFIG_BOOL("Debug", "CallStack", config_debug.show_call_stack, false);
     CONFIG_BOOL("Debug", "DescriptorTables", config_debug.show_i386_descriptors, false);
     CONFIG_BOOL("Debug", "Paging", config_debug.show_i386_paging, false);
@@ -236,6 +238,7 @@ static inline void process(config_Operation operation)
     process_machine_model(operation, &config_machine.model);
     process_machine_value(operation, "CPUSpeed", &config_machine.cpu_mhz, k_machine_cpu_speeds_mhz, GT_MACHINE_CPU_SPEED_COUNT);
     process_machine_value(operation, "RAM", &config_machine.ram_mb, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT);
+    process_machine_fpu(operation, &config_machine.fpu);
 
     //**************************************
     // Video
@@ -572,6 +575,13 @@ static void process_machine_value(config_Operation operation, const char* key, i
         if (parsed == values[i])
             *value = parsed;
     }
+}
+
+static void process_machine_fpu(config_Operation operation, int* fpu)
+{
+    std::string text = *fpu < 0 ? "auto" : *fpu == 0 ? "none" : "80387";
+    process_string(operation, "Machine", "FPU", &text, "auto", false);
+    *fpu = text == "none" ? 0 : text == "80387" ? 1 : GT_MACHINE_AUTO;
 }
 
 static void sync_shader_preset_parameter_defaults(void)

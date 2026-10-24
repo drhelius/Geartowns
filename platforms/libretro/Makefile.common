@@ -19,7 +19,8 @@ SOURCES_C   +=  $(DEPS_DIR)/lightning/lib/lightning.c \
                 $(DEPS_DIR)/lightning/lib/jit_size.c
 endif
 
-SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
+SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
+                $(CORE_DIR)/libretro.cpp \
                 $(CORE_DIR)/libretro_vfs_file.cpp \
                 $(SOURCE_DIR)/geartowns_core.cpp \
                 $(SOURCE_DIR)/common/profiler.cpp \
@@ -58,6 +59,7 @@ SOURCES_CXX :=  $(CORE_DIR)/libretro.cpp \
                 $(SOURCE_DIR)/i386/i386_protected_transfer.cpp \
                 $(SOURCE_DIR)/i386/i386_task.cpp \
                 $(SOURCE_DIR)/i386/exec_memory.cpp \
+                $(SOURCE_DIR)/i386/x87.cpp \
                 $(SOURCE_DIR)/input/input.cpp \
                 $(SOURCE_DIR)/input/keyboard.cpp \
                 $(SOURCE_DIR)/media/chd_file_adapter.cpp \

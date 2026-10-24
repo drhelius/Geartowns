@@ -203,6 +203,7 @@ public:
 
     // CPU
     json GetI386Status();
+    json GetX87Status();
     json GetI386Descriptors(const std::string& table, int start, int count);
     json GetPageDirectory(int index);
     json WriteI386Register(const std::string& name, u32 value);

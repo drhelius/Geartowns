@@ -74,6 +74,8 @@ static void menu_machine(void);
 static bool menu_machine_model(void);
 static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile);
 static bool menu_machine_ram(const GT_Machine_Profile& profile);
+static bool menu_machine_fpu(const GT_Machine_Profile& profile);
+static const char* get_machine_fpu_text(const GT_Machine_Profile& profile);
 static void menu_machine_hardware(GT_Machine_Model model);
 static void menu_boot_device(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
@@ -845,6 +847,9 @@ static void menu_machine(void)
     if (menu_machine_ram(profile))
         changed = true;
 
+    if (menu_machine_fpu(profile))
+        changed = true;
+
     menu_machine_hardware(core->GetPendingMachineConfig().model);
 
 #if !defined(GT_DISABLE_DYNAREC)
@@ -1096,6 +1101,79 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
     return changed;
 }
 
+static bool menu_machine_fpu(const GT_Machine_Profile& profile)
+{
+    if (!ImGui::BeginMenu("FPU"))
+        return false;
+
+    bool changed = false;
+    bool in_use = emu_get_core()->GetPendingMachineConfig().fpu;
+    const char* labels[2] = { "None (Original)", "80387" };
+    char auto_label[32];
+    char preview[96];
+    snprintf(auto_label, sizeof(auto_label), "Auto (%s)", in_use ? "80387" : "None");
+    snprintf(preview, sizeof(preview), "%s", config_machine.fpu == GT_MACHINE_AUTO ? auto_label :
+        labels[config_machine.fpu != 0 ? 1 : 0]);
+
+    if ((config_machine.fpu > 0) && !in_use)
+        snprintf(preview, sizeof(preview), "80387, none on the %s", profile.name);
+
+    float text_width = MAX(ImGui::CalcTextSize(labels[0]).x, ImGui::CalcTextSize(preview).x);
+    ImGui::PushItemWidth(get_combo_width(text_width));
+
+    if (ImGui::BeginCombo("##machine_fpu", preview))
+    {
+        if (ImGui::Selectable(auto_label, config_machine.fpu == GT_MACHINE_AUTO))
+        {
+            config_machine.fpu = GT_MACHINE_AUTO;
+            changed = true;
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Selectable(labels[0], config_machine.fpu == 0))
+        {
+            config_machine.fpu = 0;
+            changed = true;
+        }
+
+        ImGui::BeginDisabled(profile.fpu == GT_MACHINE_FPU_NONE);
+
+        if (ImGui::Selectable(labels[1], config_machine.fpu > 0))
+        {
+            config_machine.fpu = 1;
+            changed = true;
+        }
+
+        ImGui::EndDisabled();
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Auto fits an 80387 if the game database asks for one");
+        ImGui::Text("or keeps the model's original, with no FPU.");
+        ImGui::Text("Reset the emulator to apply changes.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+    return changed;
+}
+
+static const char* get_machine_fpu_text(const GT_Machine_Profile& profile)
+{
+    if (profile.fpu == GT_MACHINE_FPU_INTEGRATED)
+        return "integrated";
+
+    if (profile.fpu == GT_MACHINE_FPU_NONE)
+        return "none, no socket";
+
+    return profile.cpu == GT_MACHINE_CPU_80486SX ? "487SX card, optional" : "80387 card, optional";
+}
+
 static void menu_machine_hardware(GT_Machine_Model model)
 {
     if (!ImGui::BeginMenu("Hardware"))
@@ -1106,6 +1184,7 @@ static void menu_machine_hardware(GT_Machine_Model model)
     gui_get_firmware_status(model, firmware, sizeof(firmware));
 
     ImGui::TextDisabled("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
+    ImGui::TextDisabled("FPU: %s", get_machine_fpu_text(profile));
     ImGui::TextDisabled("Memory map: %s", k_machine_maps[profile.map].name);
     ImGui::TextDisabled("Machine ID: %04Xh", profile.machine_id);
     ImGui::TextDisabled("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
@@ -1147,6 +1226,7 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
     ImGui::Text("Models: %s", profile.models);
     ImGui::Text("Released: %s", profile.released);
     ImGui::Text("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
+    ImGui::Text("FPU: %s", get_machine_fpu_text(profile));
     ImGui::Text("RAM: %s MB", ram);
     ImGui::Text("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
     ImGui::Text("Firmware:");
@@ -1212,8 +1292,9 @@ static void menu_boot_device(void)
 
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size)
 {
-    snprintf(text, text_size, "%s · %s %u MHz · %u MB", k_machine_profiles[config.model].name,
-        k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, config.ram_size / (1024 * 1024));
+    snprintf(text, text_size, "%s · %s %u MHz%s · %u MB", k_machine_profiles[config.model].name,
+        k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, config.fpu ? " + 80387" : "",
+        config.ram_size / (1024 * 1024));
 }
 
 static float get_combo_width(float text_width)
@@ -1653,7 +1734,7 @@ static void menu_input(void)
 
                     if (ImGui::BeginMenu("Keyboard Mode"))
                     {
-                        ImGui::PushItemWidth(160.0f);
+                        ImGui::PushItemWidth(170.0f);
 
                         if (ImGui::Combo("##keyboard_mode", &config_input.keyboard_mode[i], "Gamepad\0FM Towns Keyboard\0\0"))
                             events_sync_input();
@@ -2143,6 +2224,12 @@ static void menu_debug(void)
             ImGui::MenuItem("Show Call Stack", "", &config_debug.show_call_stack);
             ImGui::MenuItem("Show Breakpoints", "", &config_debug.show_breakpoints);
             ImGui::MenuItem("Show Symbols", "", &config_debug.show_symbols);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Intel 80387", config_debug.debug))
+        {
+            ImGui::MenuItem("Show Status", "", &config_debug.show_x87);
             ImGui::EndMenu();
         }
 

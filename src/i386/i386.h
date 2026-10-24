@@ -38,6 +38,7 @@ class TraceLogger;
 class IO;
 class ExecMemory;
 class DynarecEmitter;
+class X87;
 
 enum I386_Register
 {
@@ -433,6 +434,7 @@ public:
     void Reset();
     void SetResetEDX(u32 edx);
     void SetCR0FixedBits(u32 bits);
+    void SetFPU(X87* fpu);
     void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
         u32 cpu_clock_rate, u32 model_clock_rate);
     bool IsBusTimed() const;
@@ -1150,6 +1152,9 @@ private:
     bool OPCodes_SALC();
     bool OPCodes_XLAT();
     bool OPCodes_Escape();
+    bool EscapeCoprocessor();
+    bool CheckCoprocessorOperand(u32 size, bool write);
+    bool TransferCoprocessorOperand(u8* data, u32 size, bool write);
     bool OPCodes_LOOP();
     bool OPCodes_JCXZ();
     bool OPCodes_IN();
@@ -1493,6 +1498,7 @@ private:
     bool m_poll_active;
     bool m_poll_enabled;
     u32 m_cr0_fixed;
+    X87* m_x87;
 };
 
 static const u32 k_i386_poll_max_instructions = 16;
@@ -1544,6 +1550,7 @@ enum I386_Bus_Pattern
     I386_BUS_BOUND,
     I386_BUS_DESC_READ,
     I386_BUS_DESC_WRITE,
+    I386_BUS_ESC,
     I386_BUS_GROUP = 32
 };
 

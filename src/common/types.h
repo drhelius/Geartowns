@@ -380,6 +380,13 @@ enum GT_Machine_CPU
     GT_MACHINE_CPU_COUNT
 };
 
+enum GT_Machine_FPU
+{
+    GT_MACHINE_FPU_NONE = 0,
+    GT_MACHINE_FPU_SOCKET,
+    GT_MACHINE_FPU_INTEGRATED
+};
+
 enum GT_Machine_Map
 {
     GT_MACHINE_MAP_32BIT = 0,
@@ -558,6 +565,7 @@ struct GT_Machine_Profile
     bool emulated;
     u16 machine_id;
     GT_Machine_CPU cpu;
+    GT_Machine_FPU fpu;
     u32 cpu_clock_rate;
     GT_Machine_Map map;
     u32 features;
@@ -578,6 +586,7 @@ struct GT_Machine_Config
     int floppy_drives;
     u32 cpu_clock_rate;
     bool scsi;
+    bool fpu;
 };
 
 struct GT_Machine_Settings
@@ -585,6 +594,7 @@ struct GT_Machine_Settings
     int model;
     int cpu_mhz;
     int ram_mb;
+    int fpu;
 };
 
 struct GT_Machine_Report
@@ -592,6 +602,7 @@ struct GT_Machine_Report
     GT_Machine_Source model;
     GT_Machine_Source cpu_clock;
     GT_Machine_Source ram;
+    GT_Machine_Source fpu;
     bool fallback;
     const char* title;
     int warning_count;

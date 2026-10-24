@@ -98,7 +98,7 @@ Load symbols with `load_symbols` (a text file with `ADDRESS NAME` or `NAME = ADD
 
 Always call `debug_pause` before inspecting state. While paused:
 
-- **CPU state**: `get_i386_status` — general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode (real, protected, vm86), CPL, IOPL, segment descriptor caches, GDTR/IDTR/LDTR/TR, debug registers
+- **CPU state**: `get_i386_status` — general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode (real, protected, vm86), CPL, IOPL, segment descriptor caches, GDTR/IDTR/LDTR/TR, debug registers, and an `fpu` section (stack, CW, SW, tags, last instruction) when an 80387 is fitted
 - **Disassembly**: `get_disassembly` with `start_address` and `end_address` or `count` — decodes the current contents of memory; use `code_size` (`auto`, `16`, `32`) to force 16-bit or 32-bit decoding and `detailed` for control flow, targets, I/O port names and interrupt vector names
 - **Call stack**: `get_call_stack` — calls, interrupts and exceptions with their vectors
 - **Memory**: `read_memory` with a memory area ID (use `list_memory_areas` to discover available areas and their IDs)
@@ -174,7 +174,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 
 ### CPU (Intel 80386)
 
-- `get_i386_status` — full CPU state: registers, EFLAGS, CR0/CR2/CR3, mode, CPL, IOPL, descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers
+- `get_i386_status` — full CPU state: registers, EFLAGS, CR0/CR2/CR3, mode, CPL, IOPL, descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers, and the 80387 when fitted
 - `write_i386_register` — modify a register live (EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, CS-GS). Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode
 - `get_i386_descriptors` — decode `gdt`, `ldt` or `idt` entries (`table`, `start`, `count`)
 - `get_page_directory` — present page-directory entries, or with `index` the present pages of that page table

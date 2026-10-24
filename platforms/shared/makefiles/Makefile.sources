@@ -34,6 +34,7 @@ SOURCES_CXX := \
     $(DEPS_DIR)/imgui/implot.cpp \
     $(DEPS_DIR)/imgui/implot_items.cpp \
     $(DEPS_DIR)/imgui/implot_demo.cpp \
+    $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
     $(DESKTOP_SRC_DIR)/main.cpp \
     $(DESKTOP_SRC_DIR)/application.cpp \
     $(DESKTOP_SRC_DIR)/application_headless.cpp \
@@ -72,6 +73,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_framebuffers.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_floppy.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_i386.cpp \
+    $(DESKTOP_SRC_DIR)/debug/gui_debug_x87.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_i386_tables.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_input.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug_memory_provider.cpp \
@@ -124,6 +126,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/i386/i386_protected_transfer.cpp \
     $(SRC_DIR)/i386/i386_task.cpp \
     $(SRC_DIR)/i386/exec_memory.cpp \
+    $(SRC_DIR)/i386/x87.cpp \
     $(SRC_DIR)/input/input.cpp \
     $(SRC_DIR)/input/keyboard.cpp \
     $(SRC_DIR)/media/chd_file_adapter.cpp \

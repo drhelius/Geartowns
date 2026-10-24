@@ -19,6 +19,7 @@
 
 #include "i386.h"
 #include "exec_memory.h"
+#include "x87.h"
 #include "../common/profiler.h"
 #include "../common/trace_logger.h"
 #include "../system/memory.h"
@@ -95,6 +96,7 @@ I386::I386()
     InitPointer(m_profiler);
     m_reset_edx = 0x00000300;
     m_cr0_fixed = 0x7FFFFFE0;
+    InitPointer(m_x87);
     memset(&m_bus, 0, sizeof(m_bus));
     m_bus_timed = false;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
@@ -282,6 +284,13 @@ void I386::Reset()
     m_state.cr0 = m_cr0_fixed;
     m_state.cr2 = 0;
     m_state.cr3 = 0;
+
+    // A 387 asserts ERROR# while RESET ends, so the 386 starts with ET set
+    if (IsValidPointer(m_x87))
+    {
+        m_x87->Reset();
+        m_state.cr0 |= 0x10;
+    }
 
     m_state.registers[I386_REG_EDX].value = m_reset_edx;
     m_state.debug_registers[6] = 0xFFFF1FF0;
@@ -1235,6 +1244,11 @@ void I386::SetResetEDX(u32 edx)
 void I386::SetCR0FixedBits(u32 bits)
 {
     m_cr0_fixed = bits;
+}
+
+void I386::SetFPU(X87* fpu)
+{
+    m_x87 = fpu;
 }
 
 void I386::SetTraceLogger(TraceLogger* trace_logger)

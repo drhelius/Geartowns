@@ -32,6 +32,7 @@
 #include "gui_debug_framebuffers.h"
 #include "gui_debug_floppy.h"
 #include "gui_debug_i386.h"
+#include "gui_debug_x87.h"
 #include "gui_debug_i386_tables.h"
 #include "gui_debug_input.h"
 #include "gui_debug_memory.h"
@@ -105,6 +106,9 @@ void gui_debug_windows(void)
 
         if (config_debug.show_processor_details)
             gui_debug_window_i386_details();
+
+        if (config_debug.show_x87)
+            gui_debug_window_x87();
 
         if (config_debug.show_memory)
             gui_debug_window_memory();

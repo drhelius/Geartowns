@@ -97,6 +97,11 @@ INLINE I386* GeartownsCore::GetI386()
     return m_i386;
 }
 
+INLINE X87* GeartownsCore::GetX87()
+{
+    return m_x87;
+}
+
 INLINE IO* GeartownsCore::GetIO()
 {
     return m_io;

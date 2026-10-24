@@ -36,6 +36,7 @@ class MSM58321;
 class UPD71071;
 class Firmware;
 class I386;
+class X87;
 class Input;
 class Media;
 class Memory;
@@ -144,6 +145,7 @@ public:
     Input* GetInput();
     Memory* GetMemory();
     I386* GetI386();
+    X87* GetX87();
     IO* GetIO();
     PIC* GetPIC();
     PIT* GetPIT();
@@ -216,6 +218,7 @@ private:
     Media* m_media;
     Memory* m_memory;
     I386* m_i386;
+    X87* m_x87;
     IO* m_io;
     PIC* m_pic;
     PIT* m_pit;

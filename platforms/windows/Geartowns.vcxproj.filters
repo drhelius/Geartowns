@@ -49,6 +49,9 @@
     <ClCompile Include="..\shared\desktop\debug\gui_debug_i386.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\debug\gui_debug_x87.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\debug\gui_debug_memory_provider.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
@@ -182,6 +185,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\i386\exec_memory.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\i386\x87.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\i386\i386_encoding.cpp">
@@ -388,6 +394,9 @@
     <ClCompile Include="..\shared\dependencies\lightning\lib\jit_size.c">
       <Filter>dependencies\lightning</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\dependencies\bochs_fpu\bochs_fpu.cpp">
+      <Filter>dependencies\bochs_fpu</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <Filter>dependencies\miniz</Filter>
     </ClCompile>
@@ -441,6 +450,8 @@
     <ClInclude Include="..\..\src\i386\i386_bus_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_names.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\i386\i386_opcodes_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\x87.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\i386\x87_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\io.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\io_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\pic.h"><Filter>src</Filter></ClInclude>
@@ -577,6 +588,9 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_i386.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\debug\gui_debug_x87.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\debug\gui_debug_memory_provider.h">
@@ -821,6 +835,9 @@
     </Filter>
     <Filter Include="dependencies\lightning">
       <UniqueIdentifier>{5b8f3d2e-7c41-4a9e-b6d0-2f1e8a9c4d73}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\bochs_fpu">
+      <UniqueIdentifier>{9856d8c8-f107-4426-94b4-ec402b67d4c4}</UniqueIdentifier>
     </Filter>
     <Filter Include="dependencies\miniz">
       <UniqueIdentifier>{466b2296-06dc-4afd-a898-3c4ed168681e}</UniqueIdentifier>

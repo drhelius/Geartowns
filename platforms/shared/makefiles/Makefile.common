@@ -34,6 +34,7 @@ CODEQL_OBJECTS := $(filter-out $(DEPS_DIR)/%,$(OBJECTS))
 
 INCLUDES += -I$(SRC_DIR) -I$(DESKTOP_SRC_DIR)
 
+INCLUDES += -I$(DEPS_DIR)/bochs_fpu
 INCLUDES += -I$(DEPS_DIR)/glad
 INCLUDES += -I$(DEPS_DIR)/imgui
 INCLUDES += -I$(DEPS_DIR)/json

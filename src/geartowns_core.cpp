@@ -39,6 +39,7 @@
 #include "media/game_db.h"
 #include "system/memory.h"
 #include "i386/i386.h"
+#include "i386/x87.h"
 #include "system/io.h"
 #include "system/pic.h"
 #include "system/pit.h"
@@ -57,6 +58,7 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_media);
     InitPointer(m_memory);
     InitPointer(m_i386);
+    InitPointer(m_x87);
     InitPointer(m_io);
     InitPointer(m_pic);
     InitPointer(m_pit);
@@ -78,6 +80,7 @@ GeartownsCore::GeartownsCore()
     m_machine_settings.model = GT_MACHINE_MODEL1_2;
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     m_machine_settings.ram_mb = GT_MACHINE_AUTO;
+    m_machine_settings.fpu = GT_MACHINE_AUTO;
     InitPointer(m_auto_entry);
     m_auto_three_mode = false;
     memset(m_firmware_sources, 0, sizeof(m_firmware_sources));
@@ -111,6 +114,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_input);
     SafeDelete(m_media);
     SafeDelete(m_i386);
+    SafeDelete(m_x87);
     SafeDelete(m_io);
     SafeDelete(m_pic);
     SafeDelete(m_pit);
@@ -156,6 +160,9 @@ void GeartownsCore::Init()
 
     if (!IsValidPointer(m_i386))
         m_i386 = new I386();
+
+    if (!IsValidPointer(m_x87))
+        m_x87 = new X87();
 
     if (!IsValidPointer(m_io))
         m_io = new IO();
@@ -1328,6 +1335,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_rtc->SaveState(stream);
     m_dma->SaveState(stream);
     m_scsi->SaveState(stream);
+    m_x87->SaveState(stream);
 
     if (stream.fail())
     {
@@ -1343,6 +1351,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     Debug("Save state header version: %u", header.version);
 #else
     GT_SaveState_Header header;
+    memset(&header, 0, sizeof(header));
     header.magic = GT_SAVESTATE_MAGIC;
     header.version = GT_SAVESTATE_VERSION;
     header.timestamp = (s64)time(NULL);
@@ -1545,7 +1554,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     bool same_machine = (m_machine_config.model == machine_config.model) &&
         (m_machine_config.cpu == machine_config.cpu) && (m_machine_config.ram_size == machine_config.ram_size) &&
         (m_machine_config.floppy_drives == machine_config.floppy_drives) &&
-        (m_machine_config.scsi == machine_config.scsi);
+        (m_machine_config.scsi == machine_config.scsi) && (m_machine_config.fpu == machine_config.fpu);
 
     if (!same_machine)
     {
@@ -1617,6 +1626,11 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_rtc->LoadState(stream);
     m_dma->LoadState(stream, header.version);
     m_scsi->LoadState(stream, header.version);
+
+    if (header.version >= 20)
+        m_x87->LoadState(stream);
+    else
+        m_x87->Reset();
 
     if (stream.fail())
     {
@@ -1779,6 +1793,9 @@ void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& co
 
     if (version >= 15)
         G_SERIALIZE(serializer, config.scsi);
+
+    if (version >= 20)
+        G_SERIALIZE(serializer, config.fpu);
 }
 
 void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version)
@@ -1823,6 +1840,7 @@ void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
     config.cpu = profile.cpu;
     config.ram_size = (u32)(sizes[size] * megabyte);
     config.floppy_drives = profile.floppy_drives;
+    config.fpu = (profile.fpu == GT_MACHINE_FPU_INTEGRATED) || (config.fpu && (profile.fpu != GT_MACHINE_FPU_NONE));
     config.scsi = ((profile.features & GT_MACHINE_FEATURE_SCSI) != 0) ||
         (config.scsi && (config.model == GT_MACHINE_MODEL1_2));
 
@@ -1977,6 +1995,7 @@ void GeartownsCore::ResolveMachineConfig()
     bool auto_model = m_machine_settings.model < 0;
     bool auto_cpu = m_machine_settings.cpu_mhz <= 0;
     bool auto_ram = m_machine_settings.ram_mb <= 0;
+    bool auto_fpu = m_machine_settings.fpu < 0;
     bool database = auto_model && IsValidPointer(entry);
     GT_Machine_Model named = database ? (GT_Machine_Model)entry->model : GT_MACHINE_MODEL1_2;
     bool three_mode = auto_model && m_auto_three_mode && !k_machine_profiles[named].three_mode_floppy;
@@ -1999,9 +2018,11 @@ void GeartownsCore::ResolveMachineConfig()
     config.cpu_clock_rate = auto_cpu ? 0 : (u32)m_machine_settings.cpu_mhz * 1000000;
     config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * megabyte;
     config.scsi = HasHardDisks();
+    config.fpu = !auto_fpu && (m_machine_settings.fpu != 0);
     report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
     report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    report.fpu = auto_fpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.fallback = auto_model && (config.model != named);
     report.title = IsValidPointer(entry) ? entry->title : NULL;
     report.warning_count = 0;
@@ -2024,7 +2045,17 @@ void GeartownsCore::ResolveMachineConfig()
         report.ram = GT_MACHINE_SOURCE_DATABASE;
     }
 
+    if (database && auto_fpu && ((entry->flags & GT_GAMEDB_FPU) != 0))
+    {
+        config.fpu = true;
+        report.fpu = GT_MACHINE_SOURCE_DATABASE;
+    }
+
     SanitizeMachineConfig(config);
+
+    if (!auto_fpu && (m_machine_settings.fpu != 0) && !config.fpu)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "This machine has no socket for an FPU");
 
     bool hard_disk_boot = (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) ||
         (IsValidPointer(entry) && ((entry->flags & GT_GAMEDB_HDD) != 0));
@@ -2066,6 +2097,10 @@ void GeartownsCore::ResolveMachineConfig()
     if ((entry->flags & GT_GAMEDB_CPU_486) != 0)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "Needs a 486 CPU, not emulated yet");
+
+    if (((entry->flags & GT_GAMEDB_FPU) != 0) && !config.fpu)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "Needs an FPU, this machine has none");
 
     if (((entry->flags & GT_GAMEDB_HDD) != 0) && !HasHardDisks())
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
@@ -2159,6 +2194,7 @@ void GeartownsCore::ApplyMachineConfig()
     {
         m_i386->SetResetEDX(k_machine_cpus[m_machine_config.cpu].reset_edx);
         m_i386->SetCR0FixedBits(k_machine_cpus[m_machine_config.cpu].cr0_fixed);
+        m_i386->SetFPU(m_machine_config.fpu ? m_x87 : NULL);
     }
 
     if (IsValidPointer(m_fdc))

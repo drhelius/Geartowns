@@ -20,6 +20,7 @@
 #include <limits.h>
 #include "i386.h"
 #include "i386_opcodes_inline.h"
+#include "x87.h"
 #include "../system/io.h"
 
 static const u32 k_i386_escape_clocks = 20;
@@ -2051,6 +2052,9 @@ bool I386::OPCodes_WAIT()
     if ((m_state.cr0 & 0x0A) == 0x0A)
         return RaiseException(7, I386_EXCEPTION_FAULT);
 
+    if (IsValidPointer(m_x87) && m_x87->IsErrorPending())
+        return RaiseException(16, I386_EXCEPTION_FAULT);
+
     CommitEIP(m_instruction);
     return true;
 }
@@ -2456,11 +2460,16 @@ bool I386::OPCodes_STD()
 bool I386::OPCodes_Escape()
 {
     // No coprocessor answers: its bus cycle still costs clocks and reads back all ones
-    if (!DecodeAndStart(true, 0, 2 + k_i386_escape_clocks, 6 + k_i386_escape_clocks))
+    u32 escape = IsValidPointer(m_x87) ? 0 : k_i386_escape_clocks;
+
+    if (!DecodeAndStart(true, 0, 2 + escape, 6 + escape))
         return false;
 
     if ((m_state.cr0 & 0x0C) != 0)
         return RaiseException(7, I386_EXCEPTION_FAULT);
+
+    if (IsValidPointer(m_x87))
+        return EscapeCoprocessor();
 
     u8 opcode = m_instruction.opcode;
     u8 operation = m_instruction.reg;
@@ -2581,5 +2590,120 @@ bool I386::OPCodes_Escape()
     }
 
     CommitEIP(m_instruction);
+    return true;
+}
+
+bool I386::EscapeCoprocessor()
+{
+    u8 opcode = m_instruction.opcode;
+    u8 modrm = m_instruction.modrm;
+
+    // ERROR# is sampled at every ESC but the no-wait control forms
+    if (X87::IsWaiting(opcode, modrm) && m_x87->IsErrorPending())
+        return RaiseException(16, I386_EXCEPTION_FAULT);
+
+    X87_Operation operation;
+    operation.opcode = opcode;
+    operation.modrm = modrm;
+    operation.memory = m_instruction.memory_operand;
+    operation.operand32 = m_instruction.operand_size == 4;
+    operation.protected_mode = m_state.execution_mode == I386_MODE_PROTECTED;
+    operation.instruction_selector = m_state.segments[I386_SEGMENT_CS].selector;
+    operation.instruction_offset = m_instruction.start_eip;
+    operation.operand_selector = operation.memory ? m_state.segments[m_instruction.segment].selector : 0;
+    operation.operand_offset = operation.memory ? m_instruction.effective_offset : 0;
+
+    u8 operand[108];
+    bool write = false;
+    u32 size = operation.memory ? X87::GetMemoryOperandSize(opcode, modrm, operation.operand32, write) : 0;
+
+    if (size != 0)
+    {
+        if (!CheckCoprocessorOperand(size, write))
+            return false;
+
+        if (!write && !TransferCoprocessorOperand(operand, size, false))
+            return false;
+    }
+
+    m_step.clocks = m_x87->GetClocks(opcode, modrm, operand) + m_address_clocks;
+
+    if (m_x87->Execute(operation, operand) && !TransferCoprocessorOperand(operand, size, true))
+        return false;
+
+    // FNSTSW AX
+    if (opcode == 0xDF && modrm == 0xE0)
+        SetRegister(I386_REG_EAX, 16, m_x87->GetStatusWord());
+
+    CommitEIP(m_instruction);
+    return true;
+}
+
+// The 386 checks only the first and last bytes before the transfer
+// An operand that wraps the address limit with a bad byte in between raises exception 9 instead
+bool I386::CheckCoprocessorOperand(u32 size, bool write)
+{
+    int segment = m_instruction.segment;
+    u32 first = m_instruction.effective_offset;
+    u32 last = Truncate(first + size - 1, m_instruction.address_size * 8);
+
+    if (!CheckMemoryAccess(segment, first, 1, write, *m_bus_context))
+        return false;
+
+    if (!CheckMemoryAccess(segment, last, 1, write, *m_bus_context))
+        return false;
+
+    if (last >= first)
+        return true;
+
+    u32 limit = m_instruction.address_size == 2 ? 0xFFFF : 0xFFFFFFFF;
+    u32 cr2 = m_state.cr2;
+
+    if (CheckMemoryAccess(segment, first, limit - first + 1, write, *m_bus_context) &&
+        ((last == 0) || CheckMemoryAccess(segment, 0, last, write, *m_bus_context)))
+        return true;
+
+    m_state.cr2 = cr2;
+    memset(&m_exception, 0, sizeof(m_exception));
+    return RaiseException(9, I386_EXCEPTION_ABORT);
+}
+
+bool I386::TransferCoprocessorOperand(u8* data, u32 size, bool write)
+{
+    int bits = m_instruction.address_size * 8;
+    u64 wrap = bits == 16 ? 0x10000ULL : 0x100000000ULL;
+    u32 offset = m_instruction.effective_offset;
+    u32 done = 0;
+
+    while (done < size)
+    {
+        u32 bytes = (size - done) >= 4 ? 4 : (size - done) >= 2 ? 2 : 1;
+
+        while (bytes > wrap - offset)
+            bytes >>= 1;
+
+        u32 value = 0;
+
+        if (write)
+        {
+            for (u32 i = 0; i < bytes; i++)
+                value |= (u32)data[done + i] << (i * 8);
+
+            if (!WriteMemory(m_instruction.segment, offset, bytes * 8, value, *m_bus_context))
+                return false;
+        }
+        else
+        {
+            if (!ReadMemory(m_instruction.segment, offset, bytes * 8, *m_bus_context, value))
+                return false;
+
+            for (u32 i = 0; i < bytes; i++)
+                data[done + i] = (u8)(value >> (i * 8));
+        }
+
+        done += bytes;
+        offset = Truncate(offset + bytes, bits);
+    }
+
     return true;
 }

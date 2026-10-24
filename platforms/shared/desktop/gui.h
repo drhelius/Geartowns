@@ -132,6 +132,7 @@ EXTERN void gui_reload_cdrom(void);
 EXTERN void gui_load_media_symbols(const char* media_path, const char* symbol_path);
 EXTERN bool gui_is_rom_loading(void);
 EXTERN bool gui_finish_loading_rom(void);
+EXTERN void gui_load_state_after_media(int slot, const char* path);
 EXTERN void gui_load_bios(const char* path);
 EXTERN void gui_load_model_firmware(GT_Machine_Model model, const char* path);
 EXTERN void gui_get_firmware_status(GT_Machine_Model model, char* text, size_t text_size);

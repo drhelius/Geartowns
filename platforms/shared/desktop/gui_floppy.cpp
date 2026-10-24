@@ -292,6 +292,11 @@ bool gui_floppy_is_pending(void)
     return pending_action != Floppy_Action_None;
 }
 
+bool gui_floppy_insert(int drive, const char* path)
+{
+    return request(drive, Floppy_Action_Insert, path, 0);
+}
+
 void gui_floppy_dialog_insert(int drive, const char* path)
 {
     std::string full_path(path);

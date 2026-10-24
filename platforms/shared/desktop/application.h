@@ -28,6 +28,10 @@ struct ApplicationParams
 {
     const char* rom_file = NULL;
     const char* symbol_file = NULL;
+    const char* cd_file = NULL;
+    const char* floppy_files[2] = { NULL, NULL };
+    const char* state_file = NULL;
+    int state_slot = 0;
     bool force_fullscreen = false;
     bool force_windowed = false;
     int mcp_mode = -1;
@@ -50,6 +54,7 @@ EXTERN int application_sdl_version_patch;
 EXTERN bool application_show_menu;
 
 EXTERN int application_init(const ApplicationParams& params);
+EXTERN void application_load_media(const ApplicationParams& params);
 EXTERN void application_apply_settings(void);
 EXTERN void application_destroy(void);
 EXTERN void application_mainloop(void);

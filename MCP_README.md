@@ -83,6 +83,8 @@ The HTTP transport mode runs the emulator with an embedded web server on `127.0.
 
 Add `--headless` to run without a GUI window. This is useful for servers, CLI agents, or any machine without a display. All MCP tools work identically in headless mode. Requires `--mcp-stdio` or `--mcp-http`.
 
+Media and machine can be set at launch too, for example `--cd game.cue --fd1 disk.d77 --model hg --load-state 1`. The machine options apply to that run only; run `geartowns --help` for the full list.
+
 ### Pause When Inactive
 
 While the MCP server is running, the emulator keeps running when its window loses focus, even with **Pause When Inactive** enabled in the **Emulator** menu. The setting keeps its value and applies again once the server stops. Tools that wait for frames to run (`debug_step_frame`, `mouse_move`, `mouse_click`, `keyboard_type`) end with an error if emulation is paused from the GUI while they wait.

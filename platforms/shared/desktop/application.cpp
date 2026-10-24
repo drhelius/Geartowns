@@ -137,25 +137,7 @@ int application_init(const ApplicationParams& params)
 
     application_apply_settings();
 
-    bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
-    bool symbol_file_argument = IsValidPointer(params.symbol_file) && (strlen(params.symbol_file) > 0);
-
-    if (rom_file_argument)
-    {
-        Log("Media file argument: %s", params.rom_file);
-
-        if (symbol_file_argument)
-            Log("Symbol file argument: %s", params.symbol_file);
-
-        gui_load_rom(params.rom_file, params.symbol_file);
-    }
-
-    if (!rom_file_argument && symbol_file_argument)
-    {
-        Log("Symbol file argument: %s", params.symbol_file);
-        gui_debug_reset_symbols();
-        gui_debug_load_symbols_file(params.symbol_file);
-    }
+    application_load_media(params);
 
     if (params.mcp_mode >= 0)
     {
@@ -324,6 +306,47 @@ void application_update_title_with_rom(const char* rom)
     char final_title[256];
     snprintf(final_title, 256, "%s - %s", WINDOW_TITLE, rom);
     SDL_SetWindowTitle(application_sdl_window, final_title);
+}
+
+void application_load_media(const ApplicationParams& params)
+{
+    for (int i = 0; i < 2; i++)
+    {
+        if (!IsValidPointer(params.floppy_files[i]))
+            continue;
+
+        Log("Floppy drive %d argument: %s", i + 1, params.floppy_files[i]);
+        gui_floppy_insert(i, params.floppy_files[i]);
+    }
+
+    bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
+    bool symbol_file_argument = IsValidPointer(params.symbol_file) && (strlen(params.symbol_file) > 0);
+
+    if (rom_file_argument)
+    {
+        Log("Media file argument: %s", params.rom_file);
+
+        if (symbol_file_argument)
+            Log("Symbol file argument: %s", params.symbol_file);
+
+        gui_load_rom(params.rom_file, params.symbol_file);
+    }
+
+    if (!rom_file_argument && symbol_file_argument)
+    {
+        Log("Symbol file argument: %s", params.symbol_file);
+        gui_debug_reset_symbols();
+        gui_debug_load_symbols_file(params.symbol_file);
+    }
+
+    if (IsValidPointer(params.cd_file))
+    {
+        Log("CD-ROM argument: %s", params.cd_file);
+        gui_load_rom(params.cd_file);
+    }
+
+    if ((params.state_slot > 0) || IsValidPointer(params.state_file))
+        gui_load_state_after_media(params.state_slot, params.state_file);
 }
 
 bool application_check_single_instance(const char* rom_file, const char* symbol_file)

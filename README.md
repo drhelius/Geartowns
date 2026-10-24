@@ -139,22 +139,37 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 geartowns [options] [media_file] [symbol_file]
 
 Arguments:
-  [media_file]              CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .mfm, .m3u), also in .zip,
-                            or hard disk (.hdd, .h0-.h6, .hdm over 8 MB, hard disk .chd)
-  [symbol_file]             Optional symbol file for debugging
+  media_file                CD-ROM (.cue .chd .iso), floppy (.d77 .d88 .hdm
+                            .xdf .img .mfm), .m3u playlist, .zip, or hard disk
+                            (.hdd .h0-.h6, hard disk .chd, .hdm over 8 MB)
+  symbol_file               Symbol file for debugging
+
+Media:
+      --cd FILE             CD-ROM image or .m3u playlist
+      --fd1 FILE            Floppy image in drive 1
+      --fd2 FILE            Floppy image in drive 2
+      --load-state SLOT     Load save state slot 1-5, or a state file, once the
+                            media is loaded
+
+Machine (for this run only, the saved settings stay):
+      --model MODEL         auto, model1_2, 1f_2f, 10f_20f, cx, ux, ug, hg,
+                            marty
+      --cpu-mhz MHZ         auto, 16, 20, 25, 33, 40, 50, 66, 100
+      --ram MB              auto, 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26
 
 Options:
-    -f, --fullscreen        Start in fullscreen mode
-    -w, --windowed          Start in windowed mode with menu visible
+  -f, --fullscreen          Start in fullscreen mode
+  -w, --windowed            Start in windowed mode with menu visible
       --mcp-stdio           Auto-start MCP server with stdio transport
       --mcp-http            Auto-start MCP server with HTTP transport
       --mcp-router          Enable compact MCP tool routing
       --mcp-http-address A  HTTP bind address (default: 127.0.0.1)
       --mcp-http-port N     HTTP port for MCP server (default: 7777)
       --headless            Run without GUI (requires MCP)
-      --portable            Store configuration and user data beside the application
-    -v, --version           Display version information
-    -h, --help              Display this help message
+      --portable            Store configuration and user data beside the
+                            application
+  -v, --version             Display version information
+  -h, --help                Display this help message
 ```
 
 ### MCP Server

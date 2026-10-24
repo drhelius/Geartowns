@@ -31,6 +31,28 @@
 extern bool g_mcp_stdio_mode;
 extern bool g_mcp_router_enabled;
 
+struct Machine_Override
+{
+    bool set;
+    int value;
+    int saved;
+};
+
+static Machine_Override model_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
+static Machine_Override cpu_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
+static Machine_Override ram_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
+
+static bool option_has_value(const char* option);
+static const char* option_value(int argc, char* argv[], int* i);
+static bool parse_model(const char* text, int* model);
+static bool parse_number(const char* text, const int* values, int count, int* value);
+static void apply_override(Machine_Override& override, int* setting);
+static void restore_override(const Machine_Override& override, int* setting);
+static void apply_machine_overrides(void);
+static void restore_machine_settings(void);
+static void print_wrapped(const char* label, const std::string& text);
+static void print_usage(const char* program);
+
 int main(int argc, char* argv[])
 {
 #if !defined(_WIN32)
@@ -95,6 +117,62 @@ int main(int argc, char* argv[])
             {
                 portable = true;
             }
+            else if (strcmp(argv[i], "--cd") == 0)
+            {
+                if (!(app_params.cd_file = option_value(argc, argv, &i)))
+                    return -1;
+            }
+            else if ((strcmp(argv[i], "--fd1") == 0) || (strcmp(argv[i], "--fd2") == 0))
+            {
+                int drive = argv[i][4] - '1';
+
+                if (!(app_params.floppy_files[drive] = option_value(argc, argv, &i)))
+                    return -1;
+            }
+            else if (strcmp(argv[i], "--load-state") == 0)
+            {
+                const char* value = option_value(argc, argv, &i);
+
+                if (!value)
+                    return -1;
+
+                if ((strlen(value) == 1) && (value[0] >= '1') && (value[0] <= '5'))
+                    app_params.state_slot = value[0] - '0';
+                else
+                    app_params.state_file = value;
+            }
+            else if ((strcmp(argv[i], "--model") == 0) || (strcmp(argv[i], "--cpu-mhz") == 0) ||
+                (strcmp(argv[i], "--ram") == 0))
+            {
+                const char* option = argv[i];
+                const char* value = option_value(argc, argv, &i);
+                Machine_Override* override = &ram_override;
+                bool valid = false;
+
+                if (!value)
+                    return -1;
+
+                if (strcmp(option, "--model") == 0)
+                {
+                    override = &model_override;
+                    valid = parse_model(value, &override->value);
+                }
+                else if (strcmp(option, "--cpu-mhz") == 0)
+                {
+                    override = &cpu_override;
+                    valid = parse_number(value, k_machine_cpu_speeds_mhz, GT_MACHINE_CPU_SPEED_COUNT, &override->value);
+                }
+                else
+                    valid = parse_number(value, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT, &override->value);
+
+                override->set = valid;
+
+                if (!valid)
+                {
+                    fprintf(stderr, "Invalid value for %s: %s\n", option, value);
+                    return -1;
+                }
+            }
             else if (strcmp(argv[i], "--mcp-http-port") == 0)
             {
                 if (i + 1 >= argc || argv[i + 1][0] == '-')
@@ -139,7 +217,7 @@ int main(int argc, char* argv[])
 
     for (int i = 1; i < argc; i++)
     {
-        if ((strcmp(argv[i], "--mcp-http-port") == 0) || (strcmp(argv[i], "--mcp-http-address") == 0))
+        if (option_has_value(argv[i]))
         {
             if (i + 1 < argc)
                 i++;
@@ -173,31 +251,22 @@ int main(int argc, char* argv[])
 
     if (show_usage)
     {
-        printf("Usage: %s [options] [media_file] [symbol_file]\n", argv[0]);
-        printf("\nArguments:\n");
-        printf("  [media_file]              CD-ROM (.cue, .chd, .iso) or floppy (.d77, .d88, .hdm, .xdf, .img, .mfm, .m3u), also in .zip,\n");
-        printf("                            or hard disk (.hdd, .h0-.h6, .hdm over 8 MB, hard disk .chd)\n");
-        printf("  [symbol_file]             Optional symbol file for debugging\n");
-        printf("\nOptions:\n");
-        printf("  -f, --fullscreen          Start in fullscreen mode\n");
-        printf("  -w, --windowed            Start in windowed mode with menu visible\n");
-        printf("      --mcp-stdio           Auto-start MCP server with stdio transport\n");
-        printf("      --mcp-http            Auto-start MCP server with HTTP transport\n");
-        printf("      --mcp-router          Enable compact MCP tool routing\n");
-        printf("      --mcp-http-address A  HTTP bind address (default: 127.0.0.1)\n");
-        printf("      --mcp-http-port N     HTTP port for MCP server (default: 7777)\n");
-        printf("      --headless            Run without GUI (requires MCP)\n");
-        printf("      --portable            Store configuration and user data beside the application\n");
-        printf("  -v, --version             Display version information\n");
-        printf("  -h, --help                Display this help message\n");
+        print_usage(argv[0]);
         return ret;
     }
 
     if (app_params.force_fullscreen && app_params.force_windowed)
         app_params.force_fullscreen = false;
 
+    if (!app_params.rom_file && !app_params.cd_file && app_params.floppy_files[0])
+    {
+        app_params.rom_file = app_params.floppy_files[0];
+        app_params.floppy_files[0] = NULL;
+    }
+
     config_init(portable);
     config_read();
+    apply_machine_overrides();
 
     if (app_params.mcp_tcp_port_set)
         config_emulator.mcp_tcp_port = app_params.mcp_tcp_port;
@@ -219,13 +288,15 @@ int main(int argc, char* argv[])
             application_headless_destroy();
         }
 
+        restore_machine_settings();
         config_write();
         config_destroy();
 
         return ret;
     }
 
-    if (!application_check_single_instance(app_params.rom_file, app_params.symbol_file))
+    if (!application_check_single_instance(app_params.rom_file ? app_params.rom_file : app_params.cd_file,
+        app_params.symbol_file))
     {
         config_destroy();
         return 0;
@@ -238,8 +309,199 @@ int main(int argc, char* argv[])
 
     application_destroy();
 
+    restore_machine_settings();
     config_write();
     config_destroy();
 
     return ret;
+}
+
+static bool option_has_value(const char* option)
+{
+    static const char* const k_options[] = { "--mcp-http-port", "--mcp-http-address", "--cd", "--fd1", "--fd2",
+        "--load-state", "--model", "--cpu-mhz", "--ram" };
+
+    for (size_t i = 0; i < sizeof(k_options) / sizeof(k_options[0]); i++)
+    {
+        if (strcmp(option, k_options[i]) == 0)
+            return true;
+    }
+
+    return false;
+}
+
+static const char* option_value(int argc, char* argv[], int* i)
+{
+    if ((*i + 1 >= argc) || (argv[*i + 1][0] == '-'))
+    {
+        fprintf(stderr, "Missing value for %s\n", argv[*i]);
+        return NULL;
+    }
+
+    return argv[++(*i)];
+}
+
+static bool parse_model(const char* text, int* model)
+{
+    if (strcmp(text, "auto") == 0)
+    {
+        *model = GT_MACHINE_AUTO;
+        return true;
+    }
+
+    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+    {
+        GT_Machine_Model candidate = k_machine_release_order[i];
+
+        if (k_machine_profiles[candidate].emulated && (strcmp(k_machine_profiles[candidate].key, text) == 0))
+        {
+            *model = candidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool parse_number(const char* text, const int* values, int count, int* value)
+{
+    if (strcmp(text, "auto") == 0)
+    {
+        *value = GT_MACHINE_AUTO;
+        return true;
+    }
+
+    char* end = NULL;
+    long number = strtol(text, &end, 10);
+
+    if (!end || (*end != '\0') || (end == text))
+        return false;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (values[i] == number)
+        {
+            *value = values[i];
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void apply_override(Machine_Override& override, int* setting)
+{
+    if (!override.set)
+        return;
+
+    override.saved = *setting;
+    *setting = override.value;
+}
+
+static void restore_override(const Machine_Override& override, int* setting)
+{
+    if (override.set && (*setting == override.value))
+        *setting = override.saved;
+}
+
+static void apply_machine_overrides(void)
+{
+    apply_override(model_override, &config_machine.model);
+    apply_override(cpu_override, &config_machine.cpu_mhz);
+    apply_override(ram_override, &config_machine.ram_mb);
+}
+
+static void restore_machine_settings(void)
+{
+    restore_override(model_override, &config_machine.model);
+    restore_override(cpu_override, &config_machine.cpu_mhz);
+    restore_override(ram_override, &config_machine.ram_mb);
+}
+
+static void print_wrapped(const char* label, const std::string& text)
+{
+    const size_t k_column = 28;
+    const size_t k_width = 79;
+    std::string line(label);
+    size_t start = 0;
+
+    line.resize(k_column, ' ');
+
+    while (start < text.size())
+    {
+        size_t end = text.find(' ', start);
+        std::string word = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+
+        if ((line.size() > k_column) && (line.size() + 1 + word.size() > k_width))
+        {
+            printf("%s\n", line.c_str());
+            line.assign(k_column, ' ');
+        }
+
+        if (line.size() > k_column)
+            line += ' ';
+
+        line += word;
+        start = end == std::string::npos ? text.size() : end + 1;
+    }
+
+    printf("%s\n", line.c_str());
+}
+
+static void print_usage(const char* program)
+{
+    const char* name = strrchr(program, '/');
+    const char* name_windows = strrchr(program, '\\');
+    std::string models("auto");
+    std::string speeds("auto");
+    std::string sizes("auto");
+    char number[16];
+
+    if (name_windows > name)
+        name = name_windows;
+
+    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
+    {
+        if (k_machine_profiles[k_machine_release_order[i]].emulated)
+            models += std::string(", ") + k_machine_profiles[k_machine_release_order[i]].key;
+    }
+
+    for (int i = 0; i < GT_MACHINE_CPU_SPEED_COUNT; i++)
+    {
+        snprintf(number, sizeof(number), ", %d", k_machine_cpu_speeds_mhz[i]);
+        speeds += number;
+    }
+
+    for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
+    {
+        snprintf(number, sizeof(number), ", %d", k_machine_ram_sizes_mb[i]);
+        sizes += number;
+    }
+
+    printf("Usage: %s [options] [media_file] [symbol_file]\n", name ? name + 1 : program);
+    printf("\nArguments:\n");
+    print_wrapped("  media_file", "CD-ROM (.cue .chd .iso), floppy (.d77 .d88 .hdm .xdf .img .mfm), .m3u playlist, "
+        ".zip, or hard disk (.hdd .h0-.h6, hard disk .chd, .hdm over 8 MB)");
+    print_wrapped("  symbol_file", "Symbol file for debugging");
+    printf("\nMedia:\n");
+    print_wrapped("      --cd FILE", "CD-ROM image or .m3u playlist");
+    print_wrapped("      --fd1 FILE", "Floppy image in drive 1");
+    print_wrapped("      --fd2 FILE", "Floppy image in drive 2");
+    print_wrapped("      --load-state SLOT", "Load save state slot 1-5, or a state file, once the media is loaded");
+    printf("\nMachine (for this run only, the saved settings stay):\n");
+    print_wrapped("      --model MODEL", models);
+    print_wrapped("      --cpu-mhz MHZ", speeds);
+    print_wrapped("      --ram MB", sizes);
+    printf("\nOptions:\n");
+    print_wrapped("  -f, --fullscreen", "Start in fullscreen mode");
+    print_wrapped("  -w, --windowed", "Start in windowed mode with menu visible");
+    print_wrapped("      --mcp-stdio", "Auto-start MCP server with stdio transport");
+    print_wrapped("      --mcp-http", "Auto-start MCP server with HTTP transport");
+    print_wrapped("      --mcp-router", "Enable compact MCP tool routing");
+    print_wrapped("      --mcp-http-address A", "HTTP bind address (default: 127.0.0.1)");
+    print_wrapped("      --mcp-http-port N", "HTTP port for MCP server (default: 7777)");
+    print_wrapped("      --headless", "Run without GUI (requires MCP)");
+    print_wrapped("      --portable", "Store configuration and user data beside the application");
+    print_wrapped("  -v, --version", "Display version information");
+    print_wrapped("  -h, --help", "Display this help message");
 }

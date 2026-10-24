@@ -29,6 +29,9 @@ void I386::SetSlowMemory(bool slow)
 void I386::SetUserMode(bool user)
 {
     m_user_mode = user;
+    m_tlb_read_mask = user ? k_i386_tlb_user : 0;
+    m_tlb_write_mask = k_i386_tlb_dirty | (user ? k_i386_tlb_user | k_i386_tlb_writable :
+        m_write_protect ? k_i386_tlb_writable : 0);
     CloseCodeWindow();
 
     for (int i = 0; i < I386_TLB_SIZE; i++)
@@ -36,6 +39,26 @@ void I386::SetUserMode(bool user)
         InitPointer(m_tlb[i].read_page);
         InitPointer(m_tlb[i].write_page);
     }
+
+    UpdateAlignmentCheck();
+}
+
+void I386::UpdateWriteProtect()
+{
+    bool write_protect = m_i486 && (m_state.cr0 & 0x00010000U) != 0;
+
+    if (write_protect != m_write_protect)
+    {
+        m_write_protect = write_protect;
+        SetUserMode(m_user_mode);
+    }
+}
+
+void I386::LoadCR0(u32 value)
+{
+    m_state.cr0 = (value & m_cr0_writable) | m_cr0_fixed;
+    UpdateWriteProtect();
+    UpdateAlignmentCheck();
 }
 
 void I386::UpdateSegmentFastPaths()
@@ -245,6 +268,9 @@ bool I386::ReadMemorySlow(int segment, u32 offset, int width, GT_Bus_Access_Cont
     if (!LogicalToLinear(segment, offset, bytes, false, stack, linear))
         return false;
 
+    if (unlikely(m_alignment_check) && (linear & (bytes - 1)) != 0)
+        return RaiseException(17, I386_EXCEPTION_FAULT, true, 0);
+
     bool paging = (m_state.cr0 & 0x80000000U) != 0;
     bool single_page = (linear & 0xFFF) + bytes <= 0x1000;
 
@@ -318,6 +344,9 @@ bool I386::WriteMemorySlow(int segment, u32 offset, int width, u32 value, GT_Bus
 
     if (!LogicalToLinear(segment, offset, bytes, true, stack, linear))
         return false;
+
+    if (unlikely(m_alignment_check) && (linear & (bytes - 1)) != 0)
+        return RaiseException(17, I386_EXCEPTION_FAULT, true, 0);
 
     bool paging = (m_state.cr0 & 0x80000000U) != 0;
     bool single_page = (linear & 0xFFF) + bytes <= 0x1000;
@@ -522,12 +551,26 @@ INLINE void I386::CacheTLBPages(TLBEntry& entry)
     UpdateUserMode();
     CloseCodeWindow();
 
-    bool readable = !m_user_mode || (entry.flags & k_i386_tlb_user) != 0;
-    bool writable = (entry.flags & k_i386_tlb_dirty) != 0 && (!m_user_mode ||
-        (entry.flags & (k_i386_tlb_user | k_i386_tlb_writable)) == (k_i386_tlb_user | k_i386_tlb_writable));
+    bool readable = (entry.flags & m_tlb_read_mask) == m_tlb_read_mask;
+    bool writable = (entry.flags & m_tlb_write_mask) == m_tlb_write_mask;
 
     entry.read_page = readable ? m_read_pages[entry.physical_page >> 12] : NULL;
     entry.write_page = writable ? m_write_pages[entry.physical_page >> 12] : NULL;
+}
+
+INLINE int I386::GetTLBVictim(u32 set) const
+{
+    if (m_i486)
+    {
+        for (int way = 0; way < I386_TLB_WAYS; way++)
+        {
+            if ((m_tlb[set * I386_TLB_WAYS + way].flags & k_i386_tlb_valid) == 0)
+                return way;
+        }
+    }
+
+    u8 plru = m_tlb_plru[set];
+    return (plru & 1) != 0 ? ((plru & 4) != 0 ? 3 : 2) : ((plru & 2) != 0 ? 1 : 0);
 }
 
 // 32-entry, four-way set-associative TLB with tree pseudo-LRU replacement
@@ -553,10 +596,11 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
     {
         TLBEntry& entry = ways[way];
 
-        if (user && (((entry.flags & k_i386_tlb_user) == 0) || (write && (entry.flags & k_i386_tlb_writable) == 0)))
+        if ((user && (entry.flags & k_i386_tlb_user) == 0) ||
+            (write && (entry.flags & k_i386_tlb_writable) == 0 && (user || m_write_protect)))
         {
             m_state.cr2 = linear;
-            return RaiseException(14, I386_EXCEPTION_FAULT, true, 1 | (write ? 2 : 0) | 4);
+            return RaiseException(14, I386_EXCEPTION_FAULT, true, 1 | (write ? 2 : 0) | (user ? 4 : 0));
         }
 
         if (!write || (entry.flags & k_i386_tlb_dirty) != 0)
@@ -589,10 +633,12 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
         return RaiseException(14, I386_EXCEPTION_FAULT, true, (write ? 2 : 0) | (user ? 4 : 0));
     }
 
-    if (user && (((pde & pte) & 4) == 0 || (write && ((pde & pte) & 2) == 0)))
+    u32 rights = pde & pte;
+
+    if ((user && (rights & 4) == 0) || (write && (rights & 2) == 0 && (user || m_write_protect)))
     {
         m_state.cr2 = linear;
-        return RaiseException(14, I386_EXCEPTION_FAULT, true, 1 | (write ? 2 : 0) | 4);
+        return RaiseException(14, I386_EXCEPTION_FAULT, true, 1 | (write ? 2 : 0) | (user ? 4 : 0));
     }
 
     if ((pde & 0x20) == 0)
@@ -604,11 +650,9 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
         WritePhysical(pte_address, new_pte, 4, context);
 
     // A present tag is refilled in place, otherwise the tree selects the victim
+    // The 486 fills an invalid way first
     if (way < 0)
-    {
-        u8 plru = m_tlb_plru[set];
-        way = (plru & 1) != 0 ? ((plru & 4) != 0 ? 3 : 2) : ((plru & 2) != 0 ? 1 : 0);
-    }
+        way = GetTLBVictim(set);
 
     TLBEntry& entry = ways[way];
 
@@ -618,14 +662,17 @@ NO_INLINE bool I386::TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Con
     entry.physical_page = pte & 0xFFFFF000U;
     entry.flags = k_i386_tlb_valid;
 
-    if (((pde & pte) & 4) != 0)
+    if ((rights & 4) != 0)
         entry.flags |= k_i386_tlb_user;
 
-    if (((pde & pte) & 2) != 0)
+    if ((rights & 2) != 0)
         entry.flags |= k_i386_tlb_writable;
 
     if ((new_pte & 0x40) != 0)
         entry.flags |= k_i386_tlb_dirty;
+
+    if (m_i486)
+        entry.flags |= ((pte & 0x08) != 0 ? k_i386_tlb_pwt : 0) | ((pte & 0x10) != 0 ? k_i386_tlb_pcd : 0);
 
     CacheTLBPages(entry);
     TouchTLBWay(set, (u32)way);
@@ -658,7 +705,8 @@ bool I386::TranslateRepeatPage(u32 linear, u32 size, bool write, u32& physical)
         (write && (entry.flags & k_i386_tlb_dirty) == 0))
         return false;
 
-    if (user && ((entry.flags & k_i386_tlb_user) == 0 || (write && (entry.flags & k_i386_tlb_writable) == 0)))
+    if ((user && (entry.flags & k_i386_tlb_user) == 0) ||
+        (write && (entry.flags & k_i386_tlb_writable) == 0 && (user || m_write_protect)))
         return false;
 
     if (!IsValidPointer(entry.read_page))
@@ -681,6 +729,21 @@ void I386::FlushTLB()
 
     m_tlb_used = 0;
     ResetTLBReplacement();
+}
+
+bool I386::InvalidateTLBPage(u32 linear)
+{
+    u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
+    int way = FindTLBWay(set, linear & 0xFFFFF000U);
+
+    if (way < 0)
+        return false;
+
+    u32 index = set * I386_TLB_WAYS + (u32)way;
+    memset(&m_tlb[index], 0, sizeof(TLBEntry));
+    m_tlb_used &= ~(1U << index);
+    CloseCodeWindow();
+    return true;
 }
 
 // Cleared tree bits make way 3 the most recent one
@@ -756,6 +819,73 @@ void I386::TestTLB()
     }
 
     m_state.test_registers[1] = data & ~0x10U;
+}
+
+void I386::TestTLB486()
+{
+    static const u32 k_attribute_bits[3] = { 0x400, 0x100, 0x040 };
+    static const u8 k_attribute_flags[3] = { k_i386_tlb_dirty, k_i386_tlb_user, k_i386_tlb_writable };
+
+    u32 command = m_state.test_registers[0];
+    u32 data = m_state.test_registers[1];
+    u32 linear_page = command & 0xFFFFF000U;
+    u32 set = (command >> 12) & (I386_TLB_SETS - 1);
+    bool valid = (command & 0x800) != 0;
+    u32 lru = (u32)m_tlb_plru[set] << 7;
+
+    // TR7 PL picks the way from REP
+    if ((command & 1) == 0)
+    {
+        u32 way = (data & 0x10) != 0 ? (data >> 2) & 3 : (u32)GetTLBVictim(set);
+        TLBEntry& entry = m_tlb[set * I386_TLB_WAYS + way];
+
+        entry.linear_page = linear_page;
+        entry.physical_page = data & 0xFFFFF000U;
+        entry.flags = (valid ? k_i386_tlb_valid : 0) | ((command & 0x400) != 0 ? k_i386_tlb_dirty : 0) |
+            ((command & 0x100) != 0 ? k_i386_tlb_user : 0) | ((command & 0x040) != 0 ? k_i386_tlb_writable : 0) |
+            ((data & 0x400) != 0 ? k_i386_tlb_pwt : 0) | ((data & 0x800) != 0 ? k_i386_tlb_pcd : 0);
+        InitPointer(entry.read_page);
+        InitPointer(entry.write_page);
+        CloseCodeWindow();
+
+        if (valid)
+            CacheTLBPages(entry);
+
+        m_tlb_used |= 1U << (set * I386_TLB_WAYS + way);
+        TouchTLBWay(set, way);
+        return;
+    }
+
+    for (u32 way = 0; way < I386_TLB_WAYS; way++)
+    {
+        const TLBEntry& entry = m_tlb[set * I386_TLB_WAYS + way];
+        bool match = ((entry.flags & k_i386_tlb_valid) != 0) == valid && entry.linear_page == linear_page;
+
+        for (int i = 0; i < 3 && match; i++)
+        {
+            bool attribute = (command & k_attribute_bits[i]) != 0;
+            bool attribute_complement = (command & (k_attribute_bits[i] >> 1)) != 0;
+
+            if (attribute != attribute_complement && ((entry.flags & k_attribute_flags[i]) != 0) != attribute)
+                match = false;
+        }
+
+        if (!match)
+            continue;
+
+        u32 attributes = 0;
+
+        for (int i = 0; i < 3; i++)
+            attributes |= (entry.flags & k_attribute_flags[i]) != 0 ? k_attribute_bits[i] : k_attribute_bits[i] >> 1;
+
+        m_state.test_registers[0] = (command & ~0x7E0U) | attributes;
+        m_state.test_registers[1] = entry.physical_page | ((entry.flags & k_i386_tlb_pcd) != 0 ? 0x800 : 0) |
+            ((entry.flags & k_i386_tlb_pwt) != 0 ? 0x400 : 0) | lru | 0x10 | (way << 2);
+        TouchTLBWay(set, way);
+        return;
+    }
+
+    m_state.test_registers[1] = (data & ~0x390U) | lru;
 }
 
 // Opens the code window over the code page of EIP when it has host memory

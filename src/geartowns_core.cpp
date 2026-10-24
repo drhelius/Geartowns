@@ -794,7 +794,8 @@ bool GeartownsCore::IsMachineConfigPending()
         (m_pending_machine_config.ram_size != m_machine_config.ram_size) ||
         (m_pending_machine_config.floppy_drives != m_machine_config.floppy_drives) ||
         (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate) ||
-        (m_pending_machine_config.scsi != m_machine_config.scsi);
+        (m_pending_machine_config.scsi != m_machine_config.scsi) ||
+        (m_pending_machine_config.fpu != m_machine_config.fpu);
 }
 
 bool GeartownsCore::GetFloppyNotice(GT_Floppy_Notice& notice)
@@ -2192,8 +2193,7 @@ void GeartownsCore::ApplyMachineConfig()
 
     if (IsValidPointer(m_i386))
     {
-        m_i386->SetResetEDX(k_machine_cpus[m_machine_config.cpu].reset_edx);
-        m_i386->SetCR0FixedBits(k_machine_cpus[m_machine_config.cpu].cr0_fixed);
+        m_i386->SetCPU(k_machine_cpus[m_machine_config.cpu]);
         m_i386->SetFPU(m_machine_config.fpu ? m_x87 : NULL);
     }
 

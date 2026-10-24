@@ -192,4 +192,22 @@ static const I386_Extended_Opcode_Name k_i386_extended_opcode_names[] =
     { 0xBF, "movsx {Gv},{Ew}" }      // MOVSX r16/32,r/m16
 };
 
+static const I386_Extended_Opcode_Name k_i486_extended_opcode_names[] =
+{
+    { 0x08, "invd" },                // INVD
+    { 0x09, "wbinvd" },              // WBINVD
+    { 0xB0, "cmpxchg {Eb},{Gb}" },   // CMPXCHG r/m8,r8
+    { 0xB1, "cmpxchg {Ev},{Gv}" },   // CMPXCHG r/m16/32,r16/32
+    { 0xC0, "xadd {Eb},{Gb}" },      // XADD r/m8,r8
+    { 0xC1, "xadd {Ev},{Gv}" },      // XADD r/m16/32,r16/32
+    { 0xC8, "bswap {rV}" },          // BSWAP r32
+    { 0xC9, "bswap {rV}" },
+    { 0xCA, "bswap {rV}" },
+    { 0xCB, "bswap {rV}" },
+    { 0xCC, "bswap {rV}" },
+    { 0xCD, "bswap {rV}" },
+    { 0xCE, "bswap {rV}" },
+    { 0xCF, "bswap {rV}" }
+};
+
 #endif /* I386_NAMES_H */

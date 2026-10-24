@@ -196,7 +196,7 @@ void I386::ClearSegmentCache(u16 selector, I386_Segment& segment)
 
 bool I386::SetDescriptorAccessed(const Descriptor& descriptor, GT_Bus_Access_Context& context)
 {
-    if (descriptor.system)
+    if (descriptor.system || (m_i486 && (descriptor.type & 1) != 0))
         return true;
 
     u32 address = descriptor.address + 4;

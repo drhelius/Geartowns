@@ -55,11 +55,11 @@ INLINE void I386::SetBusContext(GT_Bus_Access_Context& context)
     UpdateMemoryMode();
 }
 
-// Data breakpoints, debugger memory breakpoints and write observers disable the memory fast paths
+// Data breakpoints, debugger memory breakpoints, write observers and the alignment check disable the memory fast paths
 INLINE void I386::UpdateMemoryMode()
 {
     bool slow = (m_state.debug_registers[7] & 0xFF) != 0 || m_debugger_memory_checks ||
-        (IsValidPointer(m_bus_context) && IsValidPointer(m_bus_context->observe_memory_write));
+        (IsValidPointer(m_bus_context) && IsValidPointer(m_bus_context->observe_memory_write)) || m_alignment_check;
 
     if (unlikely(slow != m_slow_memory))
         SetSlowMemory(slow);
@@ -72,6 +72,17 @@ INLINE void I386::UpdateUserMode()
 
     if (unlikely(user != m_user_mode))
         SetUserMode(user);
+}
+
+INLINE void I386::UpdateAlignmentCheck()
+{
+    bool check = m_user_mode && (m_state.cr0 & 0x00040000U) != 0 && (m_state.eflags & m_eflags_ac) != 0;
+
+    if (unlikely(check != m_alignment_check))
+    {
+        m_alignment_check = check;
+        UpdateMemoryMode();
+    }
 }
 
 INLINE void I386::CloseCodeWindow()

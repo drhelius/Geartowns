@@ -124,7 +124,8 @@ enum I386_Flags
     I386_FLAG_IOPL = 0x00003000,
     I386_FLAG_NT = 0x00004000,
     I386_FLAG_RF = 0x00010000,
-    I386_FLAG_VM = 0x00020000
+    I386_FLAG_VM = 0x00020000,
+    I386_FLAG_AC = 0x00040000
 };
 
 struct I386_Segment
@@ -432,8 +433,7 @@ public:
     ~I386();
     void Init(Memory* memory, IO* io = NULL);
     void Reset();
-    void SetResetEDX(u32 edx);
-    void SetCR0FixedBits(u32 bits);
+    void SetCPU(const GT_Machine_CPU_Info& info);
     void SetFPU(X87* fpu);
     void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
         u32 cpu_clock_rate, u32 model_clock_rate);
@@ -455,6 +455,7 @@ public:
     u32 EnterNMI(GT_Bus_Access_Context& context);
 
     I386_State* GetState();
+    const u32* GetCacheTestRegisters() const;
     void CopyState(I386_State& state) const;
     bool SetState(const I386_State& state);
 
@@ -943,6 +944,9 @@ private:
     void UpdateUserMode();
     void SetSlowMemory(bool slow);
     void SetUserMode(bool user);
+    void UpdateAlignmentCheck();
+    void UpdateWriteProtect();
+    void LoadCR0(u32 value);
     void RefreshMemoryPointers();
     const u8* GetReadHost(u32 linear, u32 size);
     const u8* PeekReadHost(u32 linear, u32 size) const;
@@ -983,9 +987,12 @@ private:
     const TLBEntry& GetRecentTLBEntry(u32 linear) const;
     void CacheTLBPages(TLBEntry& entry);
     void TouchTLBWay(u32 set, u32 way);
+    int GetTLBVictim(u32 set) const;
     void ResetTLBReplacement();
     void FlushTLB();
+    bool InvalidateTLBPage(u32 linear);
     void TestTLB();
+    void TestTLB486();
 
     template<int width> bool StackPush(u32 value);
     template<int width> bool StackPop(u32& value);
@@ -1221,6 +1228,10 @@ private:
     template<int width, int source_width, bool sign_extend> bool OPCodes0F_MOVX();
     bool OPCodes0F_Group8();
     bool OPCodes0F_BitScan();
+    bool OPCodes0F_INVD();
+    bool OPCodes0F_CMPXCHG();
+    bool OPCodes0F_XADD();
+    bool OPCodes0F_BSWAP();
 
     bool StoreSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context, u16 selector);
     bool LoadSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context, bool load_task_register);
@@ -1242,6 +1253,7 @@ private:
     bool OPCodes_LIDT();
     bool OPCodes_SMSW();
     bool OPCodes_LMSW();
+    bool OPCodes_INVLPG();
 
     bool OPCode0x00(); bool OPCode0x01(); bool OPCode0x02(); bool OPCode0x03();
     bool OPCode0x04(); bool OPCode0x05(); bool OPCode0x06(); bool OPCode0x07();
@@ -1309,7 +1321,8 @@ private:
     bool OPCode0xFC(); bool OPCode0xFD(); bool OPCode0xFE(); bool OPCode0xFF();
 
     bool OPCode0F_0x00(); bool OPCode0F_0x01(); bool OPCode0F_0x02(); bool OPCode0F_0x03();
-    bool OPCode0F_0x06(); bool OPCode0F_0x07(); bool OPCode0F_0x10(); bool OPCode0F_0x11(); bool OPCode0F_0x12();
+    bool OPCode0F_0x06(); bool OPCode0F_0x07(); bool OPCode0F_0x08(); bool OPCode0F_0x09();
+    bool OPCode0F_0x10(); bool OPCode0F_0x11(); bool OPCode0F_0x12();
     bool OPCode0F_0x13(); bool OPCode0F_0x20(); bool OPCode0F_0x21(); bool OPCode0F_0x22();
     bool OPCode0F_0x23(); bool OPCode0F_0x24(); bool OPCode0F_0x26(); bool OPCode0F_0x80();
     bool OPCode0F_0x81(); bool OPCode0F_0x82(); bool OPCode0F_0x83(); bool OPCode0F_0x84();
@@ -1322,10 +1335,13 @@ private:
     bool OPCode0F_0x9D(); bool OPCode0F_0x9E(); bool OPCode0F_0x9F(); bool OPCode0F_0xA0();
     bool OPCode0F_0xA1(); bool OPCode0F_0xA3(); bool OPCode0F_0xA4(); bool OPCode0F_0xA5();
     bool OPCode0F_0xA8(); bool OPCode0F_0xA9(); bool OPCode0F_0xAB(); bool OPCode0F_0xAC();
-    bool OPCode0F_0xAD(); bool OPCode0F_0xAF(); bool OPCode0F_0xB2(); bool OPCode0F_0xB3();
+    bool OPCode0F_0xAD(); bool OPCode0F_0xAF(); bool OPCode0F_0xB0(); bool OPCode0F_0xB1();
+    bool OPCode0F_0xB2(); bool OPCode0F_0xB3();
     bool OPCode0F_0xB4(); bool OPCode0F_0xB5(); bool OPCode0F_0xB6(); bool OPCode0F_0xB7();
     bool OPCode0F_0xBA(); bool OPCode0F_0xBB(); bool OPCode0F_0xBC(); bool OPCode0F_0xBD();
-    bool OPCode0F_0xBE(); bool OPCode0F_0xBF();
+    bool OPCode0F_0xBE(); bool OPCode0F_0xBF(); bool OPCode0F_0xC0(); bool OPCode0F_0xC1();
+    bool OPCode0F_0xC8(); bool OPCode0F_0xC9(); bool OPCode0F_0xCA(); bool OPCode0F_0xCB();
+    bool OPCode0F_0xCC(); bool OPCode0F_0xCD(); bool OPCode0F_0xCE(); bool OPCode0F_0xCF();
 
 private:
     const u8* const* m_read_pages;
@@ -1499,6 +1515,14 @@ private:
     bool m_poll_enabled;
     u32 m_cr0_fixed;
     X87* m_x87;
+    bool m_i486;
+    bool m_write_protect;
+    bool m_alignment_check;
+    u8 m_tlb_read_mask;
+    u8 m_tlb_write_mask;
+    u32 m_cr0_writable;
+    u32 m_eflags_ac;
+    u32 m_cache_test_registers[3];
 };
 
 static const u32 k_i386_poll_max_instructions = 16;
@@ -1513,6 +1537,8 @@ static const u8 k_i386_tlb_valid = 0x01;
 static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
 static const u8 k_i386_tlb_dirty = 0x08;
+static const u8 k_i386_tlb_pwt = 0x10;
+static const u8 k_i386_tlb_pcd = 0x20;
 
 static const u32 k_i386_bus_queue = 16 << 8;
 static const u32 k_i386_bus_no_row = 0xFFFFFFFFU;

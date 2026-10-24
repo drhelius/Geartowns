@@ -75,6 +75,7 @@ struct I386_Disassembly_Context
     u32 cs_base;
     int mode;
     bool default32;
+    bool i486;
 };
 
 static void append_text(char* output, size_t output_size, size_t& length, const char* text)
@@ -302,8 +303,19 @@ static void format_moffs(const I386_Decode_State& state, int width, char* output
         append_format(output, output_size, length, "[0x%08X]", state.immediate);
 }
 
-static const char* extended_format(u8 opcode)
+static const char* extended_format(u8 opcode, bool i486)
 {
+    if (i486)
+    {
+        size_t count = sizeof(k_i486_extended_opcode_names) / sizeof(k_i486_extended_opcode_names[0]);
+
+        for (size_t i = 0; i < count; i++)
+        {
+            if (k_i486_extended_opcode_names[i].opcode == opcode)
+                return k_i486_extended_opcode_names[i].name;
+        }
+    }
+
     size_t count = sizeof(k_i386_extended_opcode_names) / sizeof(k_i386_extended_opcode_names[0]);
 
     for (size_t i = 0; i < count; i++)
@@ -440,7 +452,7 @@ static void select_x87_format(const I386_Decode_State& state, char* selected, si
 }
 
 static const char* select_group_format(const I386_Decode_State& state, const char* format, char* selected,
-    size_t selected_size)
+    size_t selected_size, bool i486)
 {
     if (strcmp(format, "@x87") == 0)
         select_x87_format(state, selected, selected_size);
@@ -498,7 +510,7 @@ static const char* select_group_format(const I386_Decode_State& state, const cha
             "sgdt {Ms}", "sidt {Ms}", "lgdt {Ms}", "lidt {Ms}", "smsw {EwRv}", "@invalid", "lmsw {Ew}", "@invalid"
         };
 
-        snprintf(selected, selected_size, "%s", k_formats[state.reg]);
+        snprintf(selected, selected_size, "%s", i486 && state.reg == 7 ? "invlpg {M}" : k_formats[state.reg]);
     }
     else if (strcmp(format, "@g8") == 0)
     {
@@ -567,7 +579,7 @@ static void expand_token(const char* token, I386_Disassembly_Context& context, c
     else if (strcmp(token, "r8") == 0)
         snprintf(output, output_size, "%s", register_name(8, state.opcode));
     else if (strcmp(token, "rV") == 0)
-        snprintf(output, output_size, "%s", register_name(operand_width, state.opcode));
+        snprintf(output, output_size, "%s", register_name(operand_width, state.two_byte ? state.opcode2 : state.opcode));
     else if (strcmp(token, "eAX") == 0)
         snprintf(output, output_size, "%s", operand_width == 16 ? "ax" : "eax");
     else if (strcmp(token, "Ib") == 0)
@@ -678,7 +690,7 @@ static void mark_control_flow(const I386_Decode_State& state, I386_Disassembler_
 
 // Encoding rules only: protected-mode instructions keep their mnemonic in other modes, because look-ahead
 // disassembly cannot know the mode the code will run in
-static bool valid_encoding(const I386_Decode_State& state)
+static bool valid_encoding(const I386_Decode_State& state, bool i486)
 {
     if (state.invalid_lock)
         return false;
@@ -688,13 +700,13 @@ static bool valid_encoding(const I386_Decode_State& state)
         switch (state.opcode2)
         {
             case 0x01:
-                return state.reg > 3 || state.memory_operand;
+                return (state.reg > 3 && state.reg != 7) || state.memory_operand;
             case 0x20:
             case 0x22:
                 return state.reg == 0 || state.reg == 2 || state.reg == 3;
             case 0x24:
             case 0x26:
-                return state.reg >= 6;
+                return state.reg >= (i486 ? 3 : 6);
             case 0xB2:
             case 0xB4:
             case 0xB5:
@@ -729,12 +741,13 @@ static bool valid_encoding(const I386_Decode_State& state)
 static void format_instruction(I386_Disassembly_Context& context, char* output, size_t output_size)
 {
     const I386_Decode_State& state = *context.state;
-    const char* format = state.two_byte ? extended_format(state.opcode2) : k_i386_opcode_names[state.opcode];
+    const char* format = state.two_byte ? extended_format(state.opcode2, context.i486) :
+        k_i386_opcode_names[state.opcode];
     char selected[96];
 
-    format = select_group_format(state, format, selected, sizeof(selected));
+    format = select_group_format(state, format, selected, sizeof(selected), context.i486);
 
-    if (!valid_encoding(state))
+    if (!valid_encoding(state, context.i486))
         format = "@invalid";
 
     size_t length = 0;
@@ -982,6 +995,7 @@ void I386::FormatDisassemblerText(const I386_Decode_State& state, I386_Disassemb
     context.cs_base = cs_base;
     context.mode = record.mode;
     context.default32 = record.default32;
+    context.i486 = m_i486;
 
     format_instruction(context, record.name, sizeof(record.name));
     uppercase_intel_identifiers(record.name);

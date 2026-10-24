@@ -415,7 +415,7 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
         m_state.registers[i].value = new_state.registers[i];
 
     m_state.eip = new_state.eip;
-    m_state.eflags = (new_state.eflags & 0x00037FD5U) | I386_FLAG_FIXED;
+    m_state.eflags = (new_state.eflags & (0x00037FD5U | m_eflags_ac)) | I386_FLAG_FIXED;
 
     if (nested)
         m_state.eflags |= I386_FLAG_NT;
@@ -429,6 +429,7 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
 #endif
 
     bool ok = LoadTaskSegments(new_state, context);
+    UpdateAlignmentCheck();
 
     if (ok && m_state.eip > m_state.segments[I386_SEGMENT_CS].limit)
         ok = RaiseException(switch_type == I386_TASK_SWITCH_CALL ? 10 : 13, I386_EXCEPTION_FAULT, true, 0);

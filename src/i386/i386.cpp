@@ -97,6 +97,13 @@ I386::I386()
     m_reset_edx = 0x00000300;
     m_cr0_fixed = 0x7FFFFFE0;
     InitPointer(m_x87);
+    m_i486 = false;
+    m_write_protect = false;
+    m_alignment_check = false;
+    m_tlb_read_mask = 0;
+    m_tlb_write_mask = k_i386_tlb_dirty;
+    m_cr0_writable = 0x8000001FU;
+    m_eflags_ac = 0;
     memset(&m_bus, 0, sizeof(m_bus));
     m_bus_timed = false;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
@@ -219,6 +226,7 @@ void I386::Reset()
 
     memset(m_state.debug_registers, 0, sizeof(m_state.debug_registers));
     memset(m_state.test_registers, 0, sizeof(m_state.test_registers));
+    memset(m_cache_test_registers, 0, sizeof(m_cache_test_registers));
 
     memset(&m_exception, 0, sizeof(m_exception));
 
@@ -237,6 +245,10 @@ void I386::Reset()
     m_step_slow = false;
     m_slow_memory = false;
     m_user_mode = false;
+    m_write_protect = false;
+    m_alignment_check = false;
+    m_tlb_read_mask = 0;
+    m_tlb_write_mask = k_i386_tlb_dirty;
     InitPointer(m_code_window);
     m_code_window_eip = 0;
     m_code_window_size = 0;
@@ -281,7 +293,7 @@ void I386::Reset()
     m_state.eflags = I386_FLAG_FIXED;
     m_state.idtr.limit = 0x03FF;
 
-    m_state.cr0 = m_cr0_fixed;
+    m_state.cr0 = m_cr0_fixed | (m_i486 ? 0x60000000U : 0);
     m_state.cr2 = 0;
     m_state.cr3 = 0;
 
@@ -975,8 +987,9 @@ void I386::LoadState(std::istream& stream, int version)
     m_bus_row = k_i386_bus_no_row;
     m_bus_components = 0;
     m_bus_fraction = 0;
+    memset(m_cache_test_registers, 0, sizeof(m_cache_test_registers));
     Serialize(serializer, version);
-    m_state.cr0 = (m_state.cr0 & 0x8000001FU) | m_cr0_fixed;
+    m_state.cr0 = (m_state.cr0 & m_cr0_writable) | m_cr0_fixed;
     SanitizeState();
 }
 
@@ -1046,6 +1059,9 @@ void I386::Serialize(StateSerializer& serializer, int version)
         G_SERIALIZE(serializer, m_bus_row);
         G_SERIALIZE(serializer, m_bus_fraction);
     }
+
+    if (version >= 21)
+        G_SERIALIZE_ARRAY(serializer, m_cache_test_registers, 3);
 }
 
 void I386::SanitizeState()
@@ -1107,7 +1123,8 @@ void I386::SanitizeState()
     {
         m_tlb[i].linear_page &= 0xFFFFF000U;
         m_tlb[i].physical_page &= 0xFFFFF000U;
-        m_tlb[i].flags &= k_i386_tlb_valid | k_i386_tlb_user | k_i386_tlb_writable | k_i386_tlb_dirty;
+        m_tlb[i].flags &= k_i386_tlb_valid | k_i386_tlb_user | k_i386_tlb_writable | k_i386_tlb_dirty | k_i386_tlb_pwt |
+            k_i386_tlb_pcd;
         InitPointer(m_tlb[i].read_page);
         InitPointer(m_tlb[i].write_page);
     }
@@ -1133,6 +1150,9 @@ void I386::SanitizeState()
         m_state.current_privilege_level = privilege;
         UpdateUserMode();
     }
+
+    UpdateWriteProtect();
+    UpdateAlignmentCheck();
 
     if (m_state.repeat.active)
         PrepareString();
@@ -1236,14 +1256,23 @@ void I386::SetTraceEnabled(bool enabled)
     m_trace_count = 0;
 }
 
-void I386::SetResetEDX(u32 edx)
+void I386::SetCPU(const GT_Machine_CPU_Info& info)
 {
-    m_reset_edx = edx;
-}
+    bool i486 = info.family >= 4;
 
-void I386::SetCR0FixedBits(u32 bits)
-{
-    m_cr0_fixed = bits;
+    if (i486 != m_i486)
+    {
+#if !defined(GT_DISABLE_DYNAREC)
+        FlushDynarec();
+#endif
+        ClearDisassemblerRecords();
+    }
+
+    m_i486 = i486;
+    m_reset_edx = info.reset_edx;
+    m_cr0_fixed = info.cr0_fixed;
+    m_cr0_writable = i486 ? 0xE005002FU : 0x8000001FU;
+    m_eflags_ac = i486 ? I386_FLAG_AC : 0;
 }
 
 void I386::SetFPU(X87* fpu)

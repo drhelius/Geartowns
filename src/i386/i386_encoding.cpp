@@ -260,6 +260,9 @@ bool I386::DecodeInstructionBytes(const u8* bytes, u32 count, u32 eip, bool defa
 
 bool I386::OPCodeHasModRM(bool two_byte, u8 opcode) const
 {
+    if (m_i486 && two_byte && ((opcode & 0xFE) == 0xB0 || (opcode & 0xFE) == 0xC0))
+        return true;
+
     return (k_opcode_encoding[two_byte ? 256 + opcode : opcode] & k_i386_encoding_modrm) != 0;
 }
 

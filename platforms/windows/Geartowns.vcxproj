@@ -22,6 +22,7 @@
     <ClCompile Include="..\..\src\audio\audio.cpp" />
     <ClCompile Include="..\..\src\media\firmware.cpp" />
     <ClCompile Include="..\..\src\i386\i386.cpp" />
+    <ClCompile Include="..\..\src\i386\i386_486.cpp" />
     <ClCompile Include="..\..\src\i386\i386_disassembler.cpp" />
     <ClCompile Include="..\..\src\i386\i386_bus.cpp" />
     <ClCompile Include="..\..\src\i386\i386_dynarec.cpp" />

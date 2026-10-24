@@ -706,13 +706,13 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
         if (special_index == 0 && (value & 0x80000000U) != 0 && (value & 1) == 0)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-        if (special_index == 0)
-            value = (value & 0x8000001FU) | m_cr0_fixed;
-
-        *control_register = value;
+        // NW without CD
+        if (special_index == 0 && m_i486 && (value & 0x60000000U) == 0x20000000U)
+            return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
         if (special_index == 0)
         {
+            LoadCR0(value);
             UpdateExecutionMode();
 
             if ((old_cr0 & 1) == 0 && (m_state.cr0 & 1) != 0)
@@ -721,6 +721,8 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
                 UpdateUserMode();
             }
         }
+        else
+            *control_register = value;
 
         // The 386 keeps its TLB across CR0 writes, even when paging is turned on or off
         if (special_index == 3)
@@ -755,19 +757,27 @@ INLINE bool I386::MoveDebugRegister(u8 special_index, u8 general_index, bool wri
 
 INLINE bool I386::MoveTestRegister(u8 special_index, u8 general_index, bool write_special, u32 value)
 {
-    if (special_index < 6 || special_index > 7)
+    if (special_index < (m_i486 ? 3 : 6) || special_index > 7)
         return RaiseException(6, I386_EXCEPTION_FAULT);
+
+    u32* test_register = special_index >= 6 ? &m_state.test_registers[special_index - 6] :
+        &m_cache_test_registers[special_index - 3];
 
     if (write_special)
     {
-        m_state.test_registers[special_index - 6] = value;
+        *test_register = value;
 
         // Writing TR6 issues the TLB test command
         if (special_index == 6)
-            TestTLB();
+        {
+            if (m_i486)
+                TestTLB486();
+            else
+                TestTLB();
+        }
     }
     else
-        SetRegister(general_index, 32, m_state.test_registers[special_index - 6]);
+        SetRegister(general_index, 32, *test_register);
 
     return true;
 }
@@ -876,6 +886,11 @@ bool I386::OPCodes0F_Group7()
             return OPCodes_SMSW();
         case 6:
             return OPCodes_LMSW();
+        case 7:
+            if (m_i486)
+                return OPCodes_INVLPG();
+
+            return RaiseException(6, I386_EXCEPTION_FAULT);
         default:
             return RaiseException(6, I386_EXCEPTION_FAULT);
     }
@@ -1008,7 +1023,7 @@ bool I386::OPCodes0F_LOADALL()
         &m_state.segments[I386_SEGMENT_CS], &m_state.segments[I386_SEGMENT_ES] };
     bool paging = (m_state.cr0 & 0x80000000U) != 0;
 
-    m_state.eflags = (dwords[1] & 0x00037FD5U) | I386_FLAG_FIXED;
+    m_state.eflags = (dwords[1] & (0x00037FD5U | m_eflags_ac)) | I386_FLAG_FIXED;
     m_state.eip = dwords[2];
 
     for (int i = 0; i < 8; i++)
@@ -1032,7 +1047,7 @@ bool I386::OPCodes0F_LOADALL()
     m_state.idtr.limit = (u16)caches[1][2];
     m_state.gdtr.base = caches[2][1];
     m_state.gdtr.limit = (u16)caches[2][2];
-    m_state.cr0 = (dwords[0] & 0x8000001FU) | m_cr0_fixed;
+    LoadCR0(dwords[0]);
     UpdateExecutionMode();
 
     if (m_state.execution_mode == I386_MODE_PROTECTED)

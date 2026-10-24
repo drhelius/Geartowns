@@ -1608,6 +1608,10 @@ bool I386::IsLockAllowed(const InstructionContext& instruction) const
         if (opcode == 0xAB || opcode == 0xB3 || opcode == 0xBB)
             return true;
 
+        // CMPXCHG and XADD
+        if (m_i486 && ((opcode & 0xFE) == 0xB0 || (opcode & 0xFE) == 0xC0))
+            return true;
+
         // Group 8 permits LOCK on BTS, BTR, and BTC, but not BT
         return opcode == 0xBA && instruction.reg >= 5;
     }
@@ -2467,6 +2471,9 @@ bool I386::OPCodes_Escape()
 
     if ((m_state.cr0 & 0x0C) != 0)
         return RaiseException(7, I386_EXCEPTION_FAULT);
+
+    if (m_i486 && !X87::IsDefined(m_instruction.opcode, m_instruction.modrm))
+        return RaiseException(6, I386_EXCEPTION_FAULT);
 
     if (IsValidPointer(m_x87))
         return EscapeCoprocessor();

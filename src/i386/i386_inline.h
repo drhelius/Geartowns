@@ -27,6 +27,11 @@ INLINE I386_State* I386::GetState()
     return &m_state;
 }
 
+INLINE const u32* I386::GetCacheTestRegisters() const
+{
+    return m_cache_test_registers;
+}
+
 // Batch cycles at the start of the running instruction, zero outside a batch
 INLINE u32 I386::GetStartCycles() const
 {

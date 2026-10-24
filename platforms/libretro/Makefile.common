@@ -43,6 +43,7 @@ SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
                 $(SOURCE_DIR)/drive/floppy_disk.cpp \
                 $(SOURCE_DIR)/drive/floppy_image.cpp \
                 $(SOURCE_DIR)/i386/i386.cpp \
+                $(SOURCE_DIR)/i386/i386_486.cpp \
                 $(SOURCE_DIR)/i386/i386_bus.cpp \
                 $(SOURCE_DIR)/i386/i386_disassembler.cpp \
                 $(SOURCE_DIR)/i386/i386_dynarec.cpp \

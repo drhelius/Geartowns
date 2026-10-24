@@ -317,6 +317,8 @@ void DynarecEmitter::Classify(Instruction& instruction)
             opcode2 == 0xA5 || opcode2 == 0xAC || opcode2 == 0xAD || opcode2 == 0xAF || opcode2 == 0xBC ||
             opcode2 == 0xBD || opcode2 == 0xA1 || opcode2 == 0xA9 || opcode2 == 0xB4 || opcode2 == 0xB5)
             instruction.kind = DYNAREC_HELPER;
+        else if (m_cpu->m_i486 && ((opcode2 & 0xFE) == 0xB0 || (opcode2 & 0xFE) == 0xC0 || (opcode2 & 0xF8) == 0xC8))
+            instruction.kind = DYNAREC_HELPER;
         else
             instruction.ends_block = true;
 

@@ -84,6 +84,7 @@ public:
     void LoadState(std::istream& stream);
 
     static bool IsWaiting(u8 opcode, u8 modrm);
+    static bool IsDefined(u8 opcode, u8 modrm);
     static u32 GetMemoryOperandSize(u8 opcode, u8 modrm, bool operand32, bool& write);
 
 private:

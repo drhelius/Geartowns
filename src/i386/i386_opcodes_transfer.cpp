@@ -221,7 +221,7 @@ bool I386::OPCodes_PUSHF()
     if (m_state.execution_mode == I386_MODE_VM86 && GetIOPrivilegeLevel() < 3)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
-    u32 flags = operand_width == 32 ? m_state.eflags & 0x0000FFFFU : m_state.eflags;
+    u32 flags = operand_width == 32 ? m_state.eflags & (0x0000FFFFU | m_eflags_ac) : m_state.eflags;
 
     if (!StackPushSized(flags, operand_width, *m_bus_context))
         return false;
@@ -245,8 +245,9 @@ bool I386::OPCodes_POPF()
     if (!StackPopSized(value, operand_width, *m_bus_context))
         return false;
 
-    // POPFD writes only the low 16 bits too, so RF and VM never change
-    u32 mask = 0x00004FD5U;
+    // POPFD writes only the low 16 bits and AC, so RF and VM never change
+    u32 ac = operand_width == 32 ? m_eflags_ac : 0;
+    u32 mask = 0x00004FD5U | ac;
 
     if (m_state.execution_mode == I386_MODE_REAL || m_state.current_privilege_level == 0)
         mask |= I386_FLAG_IOPL;
@@ -254,7 +255,12 @@ bool I386::OPCodes_POPF()
     if (m_state.execution_mode == I386_MODE_PROTECTED && m_state.current_privilege_level > GetIOPrivilegeLevel())
         mask &= ~I386_FLAG_IF;
 
-    m_state.eflags = (m_state.eflags & ~mask) | (value & mask) | I386_FLAG_FIXED;
+    u32 old_eflags = m_state.eflags;
+    m_state.eflags = (old_eflags & ~mask) | (value & mask) | I386_FLAG_FIXED;
+
+    if (unlikely(((old_eflags ^ m_state.eflags) & ac) != 0))
+        UpdateAlignmentCheck();
+
     CommitEIP(m_instruction);
     return true;
 }
@@ -461,7 +467,7 @@ bool I386::OPCodes_IRET()
     if (!FarTransfer((u16)selector, target, operand_width))
         return false;
 
-    u32 mask = operand_width == 16 ? 0x00007FD5U : 0x00017FD5U;
+    u32 mask = operand_width == 16 ? 0x00007FD5U : 0x00017FD5U | m_eflags_ac;
 
     // The flags are written as POPF writes them, so a V86 IRET at CPL 3 keeps IOPL
     if (m_state.execution_mode == I386_MODE_VM86)
@@ -470,6 +476,7 @@ bool I386::OPCodes_IRET()
     m_state.eflags = (m_state.eflags & ~mask) | (flags & mask) | I386_FLAG_FIXED;
     m_state.nmi_blocked = false;
     UpdateExecutionMode();
+    UpdateAlignmentCheck();
     return true;
 }
 

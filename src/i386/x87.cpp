@@ -296,6 +296,51 @@ bool X87::IsWaiting(u8 opcode, u8 modrm)
     return !((opcode == 0xDB && modrm >= 0xE0 && modrm <= 0xE4) || (opcode == 0xDF && modrm == 0xE0));
 }
 
+bool X87::IsDefined(u8 opcode, u8 modrm)
+{
+    u8 operation = (modrm >> 3) & 7;
+
+    if ((modrm >> 6) != 3)
+    {
+        switch (opcode)
+        {
+            case 0xD9:
+            case 0xDF:
+                return operation != 1;
+            case 0xDB:
+                return operation != 1 && operation != 4 && operation != 6;
+            case 0xDD:
+                return operation != 1 && operation != 5;
+            default:
+                return true;
+        }
+    }
+
+    switch (opcode)
+    {
+        case 0xD9:
+            if (operation == 2)
+                return modrm == 0xD0;
+
+            if (operation == 4)
+                return modrm <= 0xE1 || modrm == 0xE4 || modrm == 0xE5;
+
+            return modrm != 0xEF;
+        case 0xDA:
+            return modrm == 0xE9;
+        case 0xDB:
+            return modrm >= 0xE0 && modrm <= 0xE4;
+        case 0xDD:
+            return operation < 6;
+        case 0xDE:
+            return operation != 3 || modrm == 0xD9;
+        case 0xDF:
+            return operation < 4 || modrm == 0xE0;
+        default:
+            return true;
+    }
+}
+
 u32 X87::GetMemoryOperandSize(u8 opcode, u8 modrm, bool operand32, bool& write)
 {
     u8 operation = (modrm >> 3) & 7;
@@ -1296,7 +1341,7 @@ bool X87::StoreBCD(u8* operand)
             value = 0 - value;
 
         // Only 18 digits fit, anything larger stores the indefinite
-        if ((s64)value > 999999999999999999LL)
+        if (value > 999999999999999999ULL)
             softfloat_setFlags(&status, softfloat_flag_invalid);
 
         if ((status.softfloat_exceptionFlags & softfloat_flag_invalid) == 0)

@@ -1934,7 +1934,7 @@ json McpServer::BuildToolList()
         {"name", "attach_hard_disk"},
         {"title", "Attach Hard Disk"},
         {"description", "Attach a raw image of 512-byte sectors to a SCSI ID; a running machine takes it at the next "
-            "reset. create_size_mb first creates a blank image, never replacing a file."},
+            "reset. create_size_mb first creates a blank or formatted image, never replacing a file."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1952,6 +1952,11 @@ json McpServer::BuildToolList()
                     {"type", "integer"},
                     {"minimum", 1},
                     {"maximum", 2047}
+                }},
+                {"formatted", {
+                    {"type", "boolean"},
+                    {"description", "With create_size_mb: true (default) for empty drives of up to 127 MB, "
+                        "partitioned and formatted like Towns OS, false for a blank disk."}
                 }}
             }},
             {"required", json::array({"id", "file_path"})},
@@ -3558,7 +3563,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         json write_protected = arguments.contains("write_protected") ? arguments["write_protected"] : json();
         json create_size_mb = arguments.contains("create_size_mb") ? arguments["create_size_mb"] : json();
         return m_debugAdapter.AttachHardDisk(arguments.value("id", -1), arguments.value("file_path", ""), write_protected,
-            create_size_mb);
+            create_size_mb, arguments.value("formatted", true));
     }
     else if (normalizedTool == "detach_hard_disk")
     {

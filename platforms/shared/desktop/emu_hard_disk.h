@@ -45,7 +45,7 @@ EXTERN bool emu_hard_disk_is_image(const char* path);
 EXTERN int emu_hard_disk_get_image_id(const char* path);
 EXTERN bool emu_hard_disk_attach(int id, const char* path, bool write_protected);
 EXTERN bool emu_hard_disk_detach(int id);
-EXTERN bool emu_hard_disk_create(int id, const char* path, int size_mb, bool write_protected);
+EXTERN bool emu_hard_disk_create(int id, const char* path, int size_mb, bool formatted, bool write_protected);
 EXTERN bool emu_hard_disk_set_write_protected(int id, bool write_protected);
 EXTERN bool emu_hard_disk_flush(void);
 EXTERN void emu_hard_disk_update(void);

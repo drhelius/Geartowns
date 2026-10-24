@@ -217,7 +217,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `read_floppy_sector` — read a sector by ID (`drive`, `cylinder`, `head`, `sector`); without `sector` it lists the track's sector IDs
 - `get_scsi_status` — SCSI host interface: control and status bits, bus phase, target, DRQ/IRQ8, the command in progress and each disk's sense
 - `list_hard_disks` — SCSI IDs 0-6: image, size, write protect, unwritten blocks and changes waiting for a reset, and whether the machine has the interface
-- `attach_hard_disk` / `detach_hard_disk` — change a SCSI ID's disk (at the next reset on a running machine); `create_size_mb` makes a blank image first
+- `attach_hard_disk` / `detach_hard_disk` — change a SCSI ID's disk (at the next reset on a running machine); `create_size_mb` makes an image first, formatted unless `formatted` is false
 - `read_hard_disk_sector` — read a 512-byte sector by `id` and `lba` as the machine sees it, without bus traffic
 - `flush_hard_disks` — write pending changes to the image files now
 

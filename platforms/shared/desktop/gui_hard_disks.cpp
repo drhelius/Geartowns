@@ -43,6 +43,7 @@ static int dialog_id = 0;
 static int create_choice = 1;
 static int create_custom_mb = 100;
 static int create_size_mb = 100;
+static bool create_formatted = true;
 
 static void disk_menu(int id);
 static void attach(int id, const char* path);
@@ -186,7 +187,8 @@ void gui_hard_disks_dialog_attach(int id, const char* path)
 
 void gui_hard_disks_dialog_create(int id, const char* path)
 {
-    if (emu_hard_disk_create(id, path, create_size_mb, config_emulator.hard_disk_write_protected[id] != 0))
+    if (emu_hard_disk_create(id, path, create_size_mb, create_formatted,
+        config_emulator.hard_disk_write_protected[id] != 0))
         notify_attached(id, path, "Hard disk created");
     else
     {
@@ -329,8 +331,17 @@ static void draw_create_popup(void)
     if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
-        ImGui::Text("Towns OS makes drives of up to 127 MB.");
-        ImGui::Text("Install it with the HD Install tool from its CD, then boot without the CD.");
+        ImGui::Text("Towns OS makes drives of up to 127 MB, up to ten per disk.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::Checkbox("Formatted", &create_formatted);
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Formatted disks have empty drives, ready for game installs.");
+        ImGui::Text("Unformatted disks need HD Install from the Towns OS CD before use.");
         ImGui::EndTooltip();
     }
 

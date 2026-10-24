@@ -55,7 +55,7 @@ public:
     u64 GetSession() const;
     u64 GetLastWrite() const;
     bool Restore(u64 session, u64 write);
-    static bool Create(const char* path, u64 size);
+    static bool Create(const char* path, u64 size, bool formatted);
     static bool IsImage(const char* path);
     static int GetImageId(const char* path);
     static bool GetChdHash(const char* path, u32* hash);

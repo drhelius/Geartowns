@@ -83,12 +83,12 @@ bool emu_hard_disk_detach(int id)
     return true;
 }
 
-bool emu_hard_disk_create(int id, const char* path, int size_mb, bool write_protected)
+bool emu_hard_disk_create(int id, const char* path, int size_mb, bool formatted, bool write_protected)
 {
     if (!valid_id(id) || !IsValidPointer(path) || (size_mb <= 0) || SDL_GetPathInfo(path, NULL))
         return false;
 
-    if (!HardDiskImage::Create(path, (u64)size_mb * 1024 * 1024))
+    if (!HardDiskImage::Create(path, (u64)size_mb * 1024 * 1024, formatted))
         return false;
 
     return emu_hard_disk_attach(id, path, write_protected);

@@ -3887,7 +3887,7 @@ json DebugAdapter::ListHardDisks()
 }
 
 json DebugAdapter::AttachHardDisk(int id, const std::string& file_path, const json& write_protected,
-    const json& create_size_mb)
+    const json& create_size_mb, bool formatted)
 {
     if ((id < 0) || (id >= GT_MAX_HARD_DISKS))
         return {{"error", "id must be 0-6"}};
@@ -3909,7 +3909,7 @@ json DebugAdapter::AttachHardDisk(int id, const std::string& file_path, const js
         if (path_exists(path))
             return {{"error", "A file already exists at " + file_path}};
 
-        if (!emu_hard_disk_create(id, path, size_mb, protect))
+        if (!emu_hard_disk_create(id, path, size_mb, formatted, protect))
             return {{"error", "Failed to create the hard disk image"}};
     }
     else if (!emu_hard_disk_attach(id, path, protect))

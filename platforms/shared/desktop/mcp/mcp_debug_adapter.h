@@ -262,7 +262,8 @@ public:
     json EjectFloppy(int drive);
     json SwapFloppies();
     json ListHardDisks();
-    json AttachHardDisk(int id, const std::string& file_path, const json& write_protected, const json& create_size_mb);
+    json AttachHardDisk(int id, const std::string& file_path, const json& write_protected, const json& create_size_mb,
+        bool formatted);
     json DetachHardDisk(int id);
     json FlushHardDisks();
     json ReadHardDiskSector(int id, s64 lba);

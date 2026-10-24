@@ -33,8 +33,9 @@ bytes, so other layouts are possible.
 | 020Dh | Drive type extension | |
 | 020Eh | Drive switch | Drive switch: bit 0 swaps drives 0-1 with 2-3 |
 
-Drive status (0208h read): bit 0 always 1, bit 1 READY of the selected drive, bit 2 external drive type (0 5.25",
-1 3.5"). Machines with three-mode drives read 011b in bits 4-2 instead, and 7Fh at 020Dh (FDDVEXT low).
+Drive status (0208h read): bit 0 DSKCHG of the selected drive from the 1F on (1 after a disk change until a step
+pulse with a disk in the drive, always 1 on the Model 1/2), bit 1 READY of the selected drive, bit 2 external drive
+type (0 5.25", 1 3.5"). Machines with three-mode drives read 011b in bits 4-2 instead, and 7Fh at 020Dh (FDDVEXT low).
 
 Drive control (0208h write): bit 0 IRQ enable, bit 1 MFM (double density), bit 2 side 1, bit 4 motor on, bit 5
 CLKSEL (0 2 MHz for 2HD and fast seeks, 1 1 MHz for 2D/2DD).

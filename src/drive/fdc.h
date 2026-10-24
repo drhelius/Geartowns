@@ -48,6 +48,7 @@ public:
         bool intrq;
         u8 cylinders[FDC_DRIVES];
         u64 ready_clocks[FDC_DRIVES];
+        bool disk_changed[FDC_DRIVES];
     };
 
 public:
@@ -108,7 +109,7 @@ private:
     void TraceDrive(u8 event, u8 value);
     static bool DMAReadCallback(void* device, u16& value, bool word);
     static bool DMAWriteCallback(void* device, u16 value, bool word);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

@@ -187,6 +187,9 @@ INLINE void FDC::Step(bool in)
 
     int cylinder = m_state.cylinders[drive] + (in ? 1 : -1);
     m_state.cylinders[drive] = (u8)CLAMP(cylinder, 0, (int)k_fdc_last_cylinder);
+
+    if (m_disks[drive].IsInserted())
+        m_state.disk_changed[drive] = false;
 }
 
 INLINE void FDC::Access(bool write)

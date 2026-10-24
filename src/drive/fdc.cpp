@@ -33,6 +33,7 @@ FDC::FDC()
     InitPointer(m_read_context);
     InitPointer(m_read_callback);
     memset(&m_state, 0, sizeof(m_state));
+    memset(m_state.disk_changed, 1, sizeof(m_state.disk_changed));
     memset(m_access_count, 0, sizeof(m_access_count));
     memset(m_write_count, 0, sizeof(m_write_count));
     m_internal_drives = FDC_DRIVES;
@@ -79,6 +80,10 @@ void FDC::NotifyRead()
 void FDC::Reset()
 {
     memset(&m_state, 0, sizeof(m_state));
+
+    for (int i = 0; i < FDC_DRIVES; i++)
+        m_state.disk_changed[i] = !m_disks[i].IsInserted();
+
     m_mb8877.Reset();
     UpdateIRQ();
     UpdateNextEvent(0);
@@ -154,18 +159,22 @@ u8 FDC::Peek(u16 port, u64 clocks) const
     }
 }
 
-// Bit 0 always reads one
+// Bit 0 is DSKCHG from the 1F on, one after a disk change until a step pulse with a disk in the drive, as the
+// disk BIOS reads it (the Data Book's 1F appendix says the opposite); the Model 1/2 has no such line and reads one
 // The drive type reads 3.5 inch, or 011b for a three-mode drive
 // Without an external drive port there are no type or DSKCHG lines
 u8 FDC::ReadDriveStatus(u64 clocks) const
 {
     u8 type = m_three_mode ? 0x0C : 0x04;
-    u8 drives = ((m_features & GT_MACHINE_FEATURE_FDD_STATUS) != 0) && (m_internal_drives >= 2) ? 0x80 : 0x00;
+    bool extended = (m_features & GT_MACHINE_FEATURE_FDD_STATUS) != 0;
+    u8 drives = extended && (m_internal_drives >= 2) ? 0x80 : 0x00;
 
     if ((m_features & GT_MACHINE_FEATURE_FDD_READY_ONLY) != 0)
         return (IsReady(clocks) ? 0x02 : 0x00) | drives;
 
-    return (IsReady(clocks) ? 0x03 : 0x01) | type | drives;
+    int drive = GetSelectedDrive();
+    u8 changed = !extended || (drive < 0) || m_state.disk_changed[drive] ? 0x01 : 0x00;
+    return (IsReady(clocks) ? 0x02 : 0x00) | changed | type | drives;
 }
 
 void FDC::Write(u16 port, u8 value, u64 clocks)
@@ -269,6 +278,7 @@ void FDC::SetDRQ(bool active)
 void FDC::ChangeDisk(int drive)
 {
     u64 clocks = m_scheduler->GetClocks();
+    m_state.disk_changed[drive] = true;
     m_state.ready_clocks[drive] = clocks + k_fdc_disk_swap_clocks;
 
     if (drive == GetSelectedDrive())
@@ -368,7 +378,7 @@ bool FDC::DMAWriteCallback(void* device, u16 value, bool word)
 void FDC::SaveState(std::ostream& stream, bool media)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
     m_mb8877.SaveState(stream);
 
     for (int i = 0; i < FDC_DRIVES; i++)
@@ -378,7 +388,7 @@ void FDC::SaveState(std::ostream& stream, bool media)
 void FDC::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     m_mb8877.LoadState(stream, version);
 
     for (int i = 0; i < FDC_DRIVES; i++)
@@ -387,7 +397,7 @@ void FDC::LoadState(std::istream& stream, int version)
     SanitizeState();
 }
 
-void FDC::Serialize(StateSerializer& serializer)
+void FDC::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE(serializer, m_state.drive_control);
     G_SERIALIZE(serializer, m_state.drive_select);
@@ -399,6 +409,11 @@ void FDC::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.intrq);
     G_SERIALIZE_ARRAY(serializer, m_state.cylinders, FDC_DRIVES);
     G_SERIALIZE_ARRAY(serializer, m_state.ready_clocks, FDC_DRIVES);
+
+    if (version >= 22)
+        G_SERIALIZE_ARRAY(serializer, m_state.disk_changed, FDC_DRIVES);
+    else
+        memset(m_state.disk_changed, 1, sizeof(m_state.disk_changed));
 }
 
 void FDC::SanitizeState()

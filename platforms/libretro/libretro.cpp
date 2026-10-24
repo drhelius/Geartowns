@@ -923,6 +923,7 @@ static void report_machine(void)
     bool model = ((report.model == GT_MACHINE_SOURCE_DATABASE) || disk) && (config.model != GT_MACHINE_MODEL1_2);
     bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
+    bool fpu = report.fpu == GT_MACHINE_SOURCE_DATABASE;
     u32 ram_mb = config.ram_size / (1024 * 1024);
     GT_Floppy_Notice floppy;
     bool floppy_notice = core->GetFloppyNotice(floppy);
@@ -938,9 +939,9 @@ static void report_machine(void)
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         snprintf(source, sizeof(source), " (Auto: not in the game database)");
 
-    log_cb(RETRO_LOG_INFO, "Machine: %s, %s %u MHz, %u MB RAM, %d floppy drives%s\n",
-        k_machine_profiles[config.model].name, k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, ram_mb,
-        config.floppy_drives, source);
+    log_cb(RETRO_LOG_INFO, "Machine: %s, %s %u MHz%s, %u MB RAM, %d floppy drives%s\n",
+        k_machine_profiles[config.model].name, k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000,
+        config.fpu ? " + 80387" : "", ram_mb, config.floppy_drives, source);
 
     for (int i = 0; i < report.warning_count; i++)
         log_cb(RETRO_LOG_WARN, "%s\n", report.warnings[i]);
@@ -948,7 +949,7 @@ static void report_machine(void)
     for (int i = 0; i < floppy.line_count; i++)
         log_cb(floppy.warning ? RETRO_LOG_WARN : RETRO_LOG_INFO, "%s\n", floppy.lines[i]);
 
-    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && (report.warning_count == 0) &&
+    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && !fpu && (report.warning_count == 0) &&
         !floppy_notice))
         return;
 
@@ -968,6 +969,12 @@ static void report_machine(void)
     if (ram)
     {
         snprintf(value, sizeof(value), "%s%u MB", choices[0] ? ", " : "", ram_mb);
+        strncat_fit(choices, value, sizeof(choices));
+    }
+
+    if (fpu)
+    {
+        snprintf(value, sizeof(value), "%s80387", choices[0] ? ", " : "");
         strncat_fit(choices, value, sizeof(choices));
     }
 

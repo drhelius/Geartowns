@@ -2008,6 +2008,7 @@ static void notify_machine(void)
     bool model = ((report.model == GT_MACHINE_SOURCE_DATABASE) || disk) && (config.model != GT_MACHINE_MODEL1_2);
     bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
     bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
+    bool fpu = report.fpu == GT_MACHINE_SOURCE_DATABASE;
     GT_Floppy_Notice floppy;
     bool floppy_notice = geartowns->GetFloppyNotice(floppy);
     const char* title = IsValidPointer(report.title) ? report.title : "1.44 MB floppy disk";
@@ -2036,7 +2037,7 @@ static void notify_machine(void)
         }
     }
 
-    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && (report.warning_count == 0) &&
+    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && !fpu && (report.warning_count == 0) &&
         !floppy_notice && ports.empty() && port_warnings.empty()))
         return;
 
@@ -2056,6 +2057,12 @@ static void notify_machine(void)
     if (ram)
     {
         snprintf(value, sizeof(value), "%s%u MB", choices.empty() ? "" : ", ", config.ram_size / (1024 * 1024));
+        choices += value;
+    }
+
+    if (fpu)
+    {
+        snprintf(value, sizeof(value), "%s80387", choices.empty() ? "" : ", ");
         choices += value;
     }
 

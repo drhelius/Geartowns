@@ -2057,20 +2057,19 @@ void GeartownsCore::ResolveMachineConfig()
 
     if (config.ram_size < entry->ram_mb * megabyte)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "%s needs %d MB, this machine has %u MB", entry->title, entry->ram_mb, config.ram_size / megabyte);
+            "Needs %d MB, this machine has %u MB", entry->ram_mb, config.ram_size / megabyte);
 
     if (config.cpu_clock_rate < entry->cpu_mhz * 1000000u)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "%s needs %d MHz, this machine runs at %u MHz", entry->title, entry->cpu_mhz,
-            config.cpu_clock_rate / 1000000);
+            "Needs %d MHz, this machine runs at %u MHz", entry->cpu_mhz, config.cpu_clock_rate / 1000000);
 
     if ((entry->flags & GT_GAMEDB_CPU_486) != 0)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "%s needs a 486 CPU, not emulated yet", entry->title);
+            "Needs a 486 CPU, not emulated yet");
 
     if (((entry->flags & GT_GAMEDB_HDD) != 0) && !HasHardDisks())
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "%s installs to a hard disk, attach a hard disk image", entry->title);
+            "Installs to a hard disk, attach a hard disk image");
 }
 
 bool GeartownsCore::CanAutoSelect(GT_Machine_Model model)

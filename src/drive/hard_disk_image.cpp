@@ -91,7 +91,7 @@ static chd_file* OpenHardDiskChd(const char* path, ChdFileAdapter* adapter, u32*
     return NULL;
 }
 
-static bool FormatPartition(FILE* file, u32 start, u32 blocks, u16 dos_time, u16 dos_date)
+static bool FormatPartition(FILE* file, u32 start, u32 blocks)
 {
     u32 megabytes = (blocks + 2047) / 2048;
     int index = 0;
@@ -120,17 +120,14 @@ static bool FormatPartition(FILE* file, u32 start, u32 blocks, u16 dos_time, u16
     write_u16_le(boot + 0x1E, (u16)data_sector);
     write_u32_le(boot + 0x20, data_sector * sector_blocks);
     write_u32_le(boot + 0x24, blocks);
+    FloppyImage::CopyBootLoader(boot);
     memcpy(boot + 0x200, fat_id, fat_id_size);
 
     for (u32 fat = 0; fat < 2; fat++)
         memcpy(&sectors[(1 + (fat * format.fat_sectors)) * format.sector_size], fat_id, fat_id_size);
 
     u8* root = &sectors[root_sector * format.sector_size];
-    memset(root, ' ', 11);
-    memcpy(root, k_hard_disk_label, strlen(k_hard_disk_label));
-    root[0x0B] = 0x28;
-    write_u16_le(root + 0x16, dos_time);
-    write_u16_le(root + 0x18, dos_date);
+    FloppyImage::WriteVolumeLabel(root);
 
     for (u32 i = 1; i < format.root_entries; i++)
         memset(root + (i * 32) + 1, 0xF6, 31);
@@ -144,17 +141,6 @@ static bool FormatImage(FILE* file, u32 blocks)
     u8 sectors[2 * k_hard_disk_block_size] = { };
     u8* table = sectors;
     u8* info = sectors + k_hard_disk_block_size;
-    time_t now = time(NULL);
-    struct tm* local = localtime(&now);
-    u16 dos_time = 0;
-    u16 dos_date = 0;
-
-    if (IsValidPointer(local) && (local->tm_year >= 80))
-    {
-        dos_time = (u16)((local->tm_hour << 11) | (local->tm_min << 5) | (local->tm_sec / 2));
-        dos_date = (u16)(((local->tm_year - 80) << 9) | ((local->tm_mon + 1) << 5) | local->tm_mday);
-    }
-
     memcpy(table, k_hard_disk_signature, sizeof(k_hard_disk_signature));
     write_u16_le(table + 0x06, k_hard_disk_reserved_blocks);
     write_u32_le(table + 0x0A, blocks - k_hard_disk_reserved_blocks);
@@ -180,7 +166,7 @@ static bool FormatImage(FILE* file, u32 blocks)
         write_u32_le(entry + 0x06, size);
         memcpy(entry + 0x10, "MS-DOS", 6);
         memcpy(entry + 0x20, k_hard_disk_label, strlen(k_hard_disk_label));
-        ok = ok && FormatPartition(file, start, size, dos_time, dos_date);
+        ok = ok && FormatPartition(file, start, size);
         start += size;
     }
 

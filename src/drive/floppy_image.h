@@ -53,6 +53,8 @@ public:
     static void SetDiskName(u8* disk, u32 disk_size, const char* name);
     static u8* Load(const u8* data, u32 size, u32* image_size);
     static u8* CreateBlank(FloppyImage_Blank type, bool formatted, u32* image_size);
+    static void CopyBootLoader(u8* boot_sector);
+    static void WriteVolumeLabel(u8* entry);
     static u8* ReplaceTrack(const u8* image, u32 size, int track, const u8* sectors, u32 sectors_size, u32* image_size);
     static u32 GetRawSize(const u8* image, u32 size);
     static bool ExportRaw(const u8* image, u32 size, u8* raw, u32 raw_size);

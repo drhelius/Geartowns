@@ -2,9 +2,11 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/introduction) server for the Geartowns emulator, enabling AI-assisted debugging and development of FM Towns software.
 
-This server provides tools for game development, rom hacking, translation, reverse engineering, and debugging through standardized MCP protocols compatible with AI agents like GitHub Copilot, Claude, Codex and others.
+This server provides tools for game development, rom hacking, translation, reverse engineering, and debugging through standardized MCP protocols compatible with AI agents like Claude Code, Codex and others.
 
 ## Downloads
+
+These MCP Bundles (`.mcpb`) package Geartowns with its MCP server configuration for MCP clients that install bundles, and are the packages published to the [MCP Registry](https://registry.modelcontextprotocol.io/). Claude Code and Codex use a regular Geartowns build instead, see [Quick Start](#quick-start).
 
 <table>
   <thead>
@@ -134,17 +136,25 @@ Without `--mcp-router`, call every MCP tool directly.
 
 The FM Towns needs its firmware (FMT_SYS.ROM and companion files). Set the BIOS directory in the emulator before starting, or call `load_bios` with the directory path.
 
-### STDIO Mode with VS Code
+Get a desktop build of Geartowns from the [downloads](README.md#downloads) or [build it from source](README.md#build-instructions). In the examples below, replace `/path/to/geartowns` with the full path to the executable:
 
-1. **Install [GitHub Copilot extension](https://code.visualstudio.com/docs/copilot/overview)** in VS Code
+- **macOS:** `/Applications/Geartowns.app/Contents/MacOS/geartowns`
+- **Linux:** `/path/to/geartowns`
+- **Windows:** `C:/path/to/geartowns.exe`
 
-2. **Configure VS Code settings**:
+### STDIO Mode with Claude Code
 
-   Add to your workspace folder a file named `.vscode/mcp.json` with:
+1. **Add the Geartowns MCP server** using the CLI:
+
+   ```bash
+   claude mcp add --transport stdio --scope user geartowns -- /path/to/geartowns --mcp-stdio
+   ```
+
+   Everything after `--` is passed to Geartowns untouched. `--scope user` makes the server available in all your projects. Use `--scope local` (the default) to add it only to the current project, or `--scope project` to share it through a `.mcp.json` file in the project root:
 
    ```json
    {
-     "servers": {
+     "mcpServers": {
        "geartowns": {
          "command": "/path/to/geartowns",
          "args": ["--mcp-stdio"]
@@ -153,79 +163,43 @@ The FM Towns needs its firmware (FMT_SYS.ROM and companion files). Set the BIOS 
    }
    ```
 
-   **Important:** Update the `command` path to match your build location:
-   - **macOS:** `/path/to/geartowns`
-   - **Linux:** `/path/to/geartowns`
-   - **Windows:** `C:/path/to/geartowns.exe`
-
-3. **Restart VS Code** may be necessary for settings to take effect
-
-4. **Open GitHub Copilot Chat** and start debugging:
-   - The emulator will auto-start with MCP server enabled
-   - Load a CD image or a floppy image
-   - Start chatting with Copilot about the program state
-   - You can add context from "MCP Resources" if needed
-
-### STDIO Mode with Claude Desktop
-
-#### Option 1: Desktop Extension (Recommended)
-
-The easiest way to install Geartowns MCP server on Claude Desktop is using the MCPB package:
-
-1. **Download the latest MCPB package** for your platform from the [releases page](https://github.com/drhelius/geartowns/releases).
-
-2. **Install the extension**:
-   - Open Claude Desktop
-   - Navigate to **Settings > Extensions**
-   - Click **Advanced settings**
-   - In the Extension Developer section, click **Install Extension…**
-   - Select the downloaded `.mcpb` file
-
-3. **Start debugging**: The extension is now available in your conversations. The emulator will automatically launch when the tool is enabled.
-
-#### Option 2: Manual Configuration
-
-If you prefer to build from source or configure manually:
-
-1. **Edit Claude Desktop config file**:
-
-   Follow [these instructions](https://modelcontextprotocol.io/quickstart/user#for-claude-desktop-users) to access Claude's config file, then edit it to include:
-
-   ```json
-   {
-     "mcpServers": {
-       "geartowns": {
-         "command": "/path/to/geartowns/platforms/macos/geartowns",
-         "args": ["--mcp-stdio"]
-       }
-     }
-   }
-   ```
-
-   **Config file locations:**
-   - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-   - **Linux:** `~/.config/Claude/claude_desktop_config.json`
-
-   **Important:** Update the `command` path to match your build location.
-
-2. **Restart Claude Desktop**
-
-### STDIO Mode with Claude Code
-
-1. **Add the Geartowns MCP server** using the CLI:
-   ```bash
-   claude mcp add --transport stdio geartowns -- /path/to/geartowns --mcp-stdio
-   ```
-
-   **Important:** Update the path to match your build location.
+   Claude Code asks for approval the first time it uses a server from `.mcp.json`.
 
 2. **Verify the server was added**:
+
    ```bash
    claude mcp list
    ```
 
-3. **Start debugging**: Open Claude Code and start chatting about the program state. The emulator will auto-start when tools are invoked.
+3. **Start debugging**: Start Claude Code and ask about the program state. Geartowns launches when the session starts. Run `/mcp` inside Claude Code to check the server status or reconnect it.
+
+### STDIO Mode with Codex
+
+The Codex CLI, IDE extension, and desktop app share the same MCP configuration, so you only need to add the server once.
+
+1. **Add the Geartowns MCP server** using the CLI:
+
+   ```bash
+   codex mcp add geartowns -- /path/to/geartowns --mcp-stdio
+   ```
+
+   Or add it to `~/.codex/config.toml`:
+
+   ```toml
+   [mcp_servers.geartowns]
+   command = "/path/to/geartowns"
+   args = ["--mcp-stdio"]
+   ```
+
+   To use the server only in one project, add the same table to `.codex/config.toml` in that project. Codex loads project configuration only for trusted projects. In TOML, write Windows paths with forward slashes or in single quotes.
+
+2. **Verify the server was added**:
+
+   ```bash
+   codex mcp list
+   ```
+
+3. **Start debugging**: Start Codex and ask about the program state. Geartowns launches when the session starts. Type `/mcp` in the Codex CLI to see the active servers.
 
 ### HTTP Mode
 
@@ -277,23 +251,20 @@ If you prefer to build from source or configure manually:
    geartowns.exe --mcp-http
    ```
 
-3. **Configure VS Code** `.vscode/mcp.json`:
+3. **Configure Claude Code**:
 
-   ```json
-   {
-     "servers": {
-       "geartowns": {
-         "type": "http",
-         "url": "http://127.0.0.1:7777/mcp",
-         "headers": {
-           "Authorization": "Bearer change-this-token"
-         }
-       }
-     }
-   }
+   ```bash
+   claude mcp add --transport http --scope user geartowns http://127.0.0.1:7777/mcp
    ```
 
-4. **Or configure Claude Desktop**:
+   If the server uses a bearer token, add the header:
+
+   ```bash
+   claude mcp add --transport http --scope user geartowns http://127.0.0.1:7777/mcp \
+     --header "Authorization: Bearer change-this-token"
+   ```
+
+   In a shared `.mcp.json`, read the token from the environment instead of committing it:
 
    ```json
    {
@@ -302,20 +273,34 @@ If you prefer to build from source or configure manually:
          "type": "http",
          "url": "http://127.0.0.1:7777/mcp",
          "headers": {
-           "Authorization": "Bearer change-this-token"
+           "Authorization": "Bearer ${GEARTOWNS_MCP_HTTP_TOKEN}"
          }
        }
      }
    }
    ```
 
-5. **Or configure Claude Code**:
+4. **Or configure Codex**:
 
    ```bash
-   claude mcp add --transport http geartowns http://127.0.0.1:7777/mcp
+   codex mcp add geartowns --url http://127.0.0.1:7777/mcp
    ```
 
-6. **Restart your AI client** and start debugging
+   If the server uses a bearer token, Codex reads it from an environment variable, so set `GEARTOWNS_MCP_HTTP_TOKEN` in the environment where Codex runs too:
+
+   ```bash
+   codex mcp add geartowns --url http://127.0.0.1:7777/mcp --bearer-token-env-var GEARTOWNS_MCP_HTTP_TOKEN
+   ```
+
+   The equivalent `~/.codex/config.toml` entry:
+
+   ```toml
+   [mcp_servers.geartowns]
+   url = "http://127.0.0.1:7777/mcp"
+   bearer_token_env_var = "GEARTOWNS_MCP_HTTP_TOKEN"
+   ```
+
+5. **Start a new Claude Code or Codex session** and start debugging
 
 > **Note:** The MCP HTTP Server must be running standalone before connecting the AI client.
 > **Security:** Without `GEARTOWNS_MCP_HTTP_TOKEN`, HTTP mode starts only on a loopback address. Wildcard and other non-loopback binds are refused. `Host` and browser `Origin` values are matched to the connection's actual destination address to prevent DNS rebinding and address spoofing.
@@ -620,7 +605,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 
 In addition to tools, the MCP server provides documentation resources that AI assistants can access to better understand the FM Towns hardware and programming.
 
-MCP clients usually offer resources in the "Add context..." section of the chat interface. You may need to manually add them when you think they are relevant.
+In Claude Code, type `@` in your prompt to pick a resource, or reference one directly, for example `@geartowns:geartowns://hardware/memory_map`. Codex reads resources through its built-in MCP resource tools, so ask it to read the ones that are relevant.
 
 ### Hardware Documentation Resources
 
@@ -650,8 +635,8 @@ Complete technical reference documentation for all FM Towns hardware components:
 ### STDIO Transport
 ```
 ┌─────────────────┐                    ┌──────────────────┐
-│   VS Code /     │       stdio        │    Geartowns     │
-│ Claude Desktop  │◄──────────────────►│    MCP Server    │
+│  Claude Code /  │       stdio        │    Geartowns     │
+│      Codex      │◄──────────────────►│    MCP Server    │
 │   (AI Client)   │       pipes        │   (background)   │
 └─────────────────┘                    └──────────────────┘
         │                                       │
@@ -668,8 +653,8 @@ Complete technical reference documentation for all FM Towns hardware components:
 ### HTTP Transport
 ```
 ┌─────────────────┐                    ┌──────────────────┐
-│   VS Code /     │  HTTP (port 7777)  │    Geartowns     │
-│ Claude Desktop  │◄──────────────────►│ MCP HTTP Server  │
+│  Claude Code /  │  HTTP (port 7777)  │    Geartowns     │
+│      Codex      │◄──────────────────►│ MCP HTTP Server  │
 │   (AI Client)   │                    │    (listener)    │
 └─────────────────┘                    └──────────────────┘
                                                 │

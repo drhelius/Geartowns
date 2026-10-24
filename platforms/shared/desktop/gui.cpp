@@ -19,6 +19,7 @@
 
 #include <math.h>
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "implot.h"
 #include "fonts/RobotoMedium.h"
 #include "fonts/MaterialIcons.h"
@@ -214,6 +215,7 @@ void gui_render(void)
 
     gui_main_window_hovered = false;
     gui_main_window_focused = false;
+    gui_main_window_active = false;
     gui_main_window_sdl_window_id = 0;
 
     if ((!config_debug.debug && emu_is_powered_on()) || (config_debug.debug && config_debug.show_screen))
@@ -236,7 +238,7 @@ void gui_render(void)
     if (!config_debug.debug && !emu_is_empty())
     {
         ImGuiIO& io = ImGui::GetIO();
-        gui_main_window_focused = !io.WantCaptureKeyboard && !io.WantTextInput;
+        gui_main_window_focused = (!io.WantCaptureKeyboard || gui_main_window_active) && !io.WantTextInput;
     }
 
     if (keyboard_was_active && !events_is_keyboard_active())
@@ -890,6 +892,8 @@ static void main_window(void)
         gui_main_window_hovered = ImGui::IsWindowHovered();
         gui_main_window_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     }
+
+    gui_main_window_active = ImGui::GetCurrentContext()->ActiveIdPreviousFrame == ImGui::GetCurrentWindow()->MoveId;
 
     ImGuiViewport* output_viewport = ImGui::GetWindowViewport();
     SDL_Window* output_window = output_viewport ? (SDL_Window*)output_viewport->PlatformHandle : NULL;

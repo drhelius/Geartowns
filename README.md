@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/github/license/drhelius/Geartowns)](https://github.com/drhelius/Geartowns/blob/main/LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/drhelius)](https://x.com/drhelius)
 
-Geartowns is a cross-platform Fujitsu FM Towns emulator written in C++ that runs on Windows, macOS, Linux, BSD and RetroArch, with an embedded MCP server for AI debugging and development.
+Geartowns a very accurate, cross-platform Fujitsu FM Towns emulator written in C++ that runs on Windows, macOS, Linux, BSD and RetroArch, with an embedded MCP server for AI debugging and development.
 
 This is an open source project with its ongoing development made possible thanks to the support by these awesome [backers](backers.md). If you find it useful, please consider [sponsoring](https://github.com/sponsors/drhelius).
 

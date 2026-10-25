@@ -34,7 +34,7 @@ static float sound_queue_ratio;
 
 static const float k_sound_queue_max_ratio_delta = 0.005f;
 
-static void sound_queue_update_ratio(int queued, int bytes, bool rate_control);
+static void sound_queue_update_ratio(int queued, int bytes, bool rate_control, float base_ratio);
 static bool is_running_in_wsl(void);
 
 void sound_queue_init(void)
@@ -156,13 +156,6 @@ void sound_queue_flush(void)
         sound_queue_ratio = 1.0f;
 }
 
-int sound_queue_get_sample_count(void)
-{
-    if (!sound_queue_stream)
-        return 0;
-    return SDL_GetAudioStreamQueued(sound_queue_stream) / (int)sizeof(s16);
-}
-
 float sound_queue_get_target_latency_ms(void)
 {
     if (sound_queue_bytes_per_second <= 0)
@@ -176,13 +169,14 @@ bool sound_queue_is_open(void)
     return sound_queue_sound_open;
 }
 
-void sound_queue_write(s16* samples, int count, bool sync, bool rate_control)
+void sound_queue_write(s16* samples, int count, bool sync, bool rate_control, float base_ratio)
 {
     if (!sound_queue_sound_open || !sound_queue_stream)
         return;
 
     int bytes = count * (int)sizeof(s16);
     int queued = SDL_GetAudioStreamQueued(sound_queue_stream);
+    int max_queued = rate_control ? sound_queue_max_queued_bytes + bytes : sound_queue_max_queued_bytes;
 
     if (bytes > sound_queue_max_queued_bytes)
     {
@@ -195,14 +189,14 @@ void sound_queue_write(s16* samples, int count, bool sync, bool rate_control)
     }
 
     if (sound_queue_playing)
-        sound_queue_update_ratio(queued, bytes, rate_control);
+        sound_queue_update_ratio(queued, bytes, rate_control, base_ratio);
 
     if (sound_queue_playing && sync)
     {
-        int room = sound_queue_max_queued_bytes - queued;
+        int room = max_queued - queued;
         if (room < bytes)
         {
-            SOUND_QUEUE_DEBUG("Sound Queue: Sync overrun, queued %d >= max %d, waiting...", queued, sound_queue_max_queued_bytes);
+            SOUND_QUEUE_DEBUG("Sound Queue: Sync wait, need %d bytes but only %d free (queued %d, max %d)", bytes, room, queued, max_queued);
             int needed = bytes - room;
             int wait_ms = (needed * 1000) / sound_queue_bytes_per_second;
             if (wait_ms >= 1)
@@ -211,9 +205,9 @@ void sound_queue_write(s16* samples, int count, bool sync, bool rate_control)
     }
     else if (sound_queue_playing)
     {
-        if (queued >= sound_queue_max_queued_bytes)
+        if (queued >= max_queued)
         {
-            SOUND_QUEUE_DEBUG("Sound Queue: Async overrun, dropping frame (queued %d >= max %d)", queued, sound_queue_max_queued_bytes);
+            SOUND_QUEUE_DEBUG("Sound Queue: Async overrun, dropping frame (queued %d >= max %d)", queued, max_queued);
             return;
         }
     }
@@ -242,14 +236,24 @@ void sound_queue_write(s16* samples, int count, bool sync, bool rate_control)
     }
 }
 
-// Frames paced by vsync can come slower than the device plays them, so a low queue plays up to 0.5% slower
-static void sound_queue_update_ratio(int queued, int bytes, bool rate_control)
+static void sound_queue_update_ratio(int queued, int bytes, bool rate_control, float base_ratio)
 {
-    int target = (sound_queue_max_queued_bytes - bytes) / 2;
     float ratio = 1.0f;
 
-    if (rate_control && (queued < target))
-        ratio = 1.0f - (((float)(target - queued) / (float)target) * k_sound_queue_max_ratio_delta);
+    if (rate_control)
+    {
+        int target = sound_queue_max_queued_bytes - bytes;
+
+        if (target < sound_queue_max_queued_bytes / 2)
+            target = sound_queue_max_queued_bytes / 2;
+
+        float error = (float)(target - queued) / (float)target;
+
+        if (error < -1.0f)
+            error = -1.0f;
+
+        ratio = base_ratio * (1.0f - (error * k_sound_queue_max_ratio_delta));
+    }
 
     if (ratio == sound_queue_ratio)
         return;

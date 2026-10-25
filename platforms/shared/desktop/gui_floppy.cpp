@@ -299,9 +299,6 @@ bool gui_floppy_insert(int drive, const char* path)
 
 void gui_floppy_dialog_insert(int drive, const char* path)
 {
-    std::string full_path(path);
-    size_t separator = full_path.find_last_of("/\\");
-    config_emulator.last_open_path = separator == std::string::npos ? "" : full_path.substr(0, separator + 1);
     request(drive, Floppy_Action_Insert, path, 0);
 }
 

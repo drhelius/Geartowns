@@ -179,9 +179,6 @@ bool gui_hard_disks_is_pending(void)
 
 void gui_hard_disks_dialog_attach(int id, const char* path)
 {
-    std::string full_path(path);
-    size_t separator = full_path.find_last_of("/\\");
-    config_emulator.last_open_path = separator == std::string::npos ? "" : full_path.substr(0, separator + 1);
     attach(id, path);
 }
 

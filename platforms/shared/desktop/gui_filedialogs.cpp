@@ -84,6 +84,12 @@ static bool was_exclusive_fullscreen = false;
 #endif
 
 static bool begin_dialog(void);
+static std::string* get_dialog_folder(FileDialogID id);
+static const char* get_dialog_location(FileDialogID id);
+static void remember_dialog_location(FileDialogID id, const char* path);
+static void show_open_file_dialog(FileDialogID id, const SDL_DialogFileFilter* filters, int filter_count);
+static void show_save_file_dialog(FileDialogID id, const SDL_DialogFileFilter* filters, int filter_count);
+static void show_open_folder_dialog(FileDialogID id);
 static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int filter);
 static void process_dialog_result(FileDialogID id, const char* path);
 
@@ -95,9 +101,7 @@ void gui_file_dialog_open_rom(void)
     SDL_DialogFileFilter filters[] = {
         { "CD-ROM Images", "cue;chd;iso;zip;m3u" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_OpenMedia, application_sdl_window,
-        filters, 1, default_path, false);
+    show_open_file_dialog(FileDialog_OpenMedia, filters, 1);
 }
 
 void gui_file_dialog_choose_screenshot_path(void)
@@ -128,8 +132,7 @@ void gui_file_dialog_save_screenshot(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "PNG Files", "png" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveScreenshot, application_sdl_window,
-        filters, 1, NULL);
+    show_save_file_dialog(FileDialog_SaveScreenshot, filters, 1);
 }
 
 void gui_file_dialog_save_sprite(int index)
@@ -139,8 +142,7 @@ void gui_file_dialog_save_sprite(int index)
 
     dialog_sprite_index = index;
     SDL_DialogFileFilter filters[] = { { "PNG Files", "png" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveSprite, application_sdl_window,
-        filters, 1, NULL);
+    show_save_file_dialog(FileDialog_SaveSprite, filters, 1);
 }
 
 void gui_file_dialog_save_log(void)
@@ -149,8 +151,7 @@ void gui_file_dialog_save_log(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Log Files", "txt" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveLog, application_sdl_window,
-        filters, 1, NULL);
+    show_save_file_dialog(FileDialog_SaveLog, filters, 1);
 }
 
 void gui_file_dialog_save_disassembler(bool full)
@@ -160,7 +161,7 @@ void gui_file_dialog_save_disassembler(bool full)
 
     FileDialogID id = full ? FileDialog_SaveDisassemblerFull : FileDialog_SaveDisassemblerVisible;
     SDL_DialogFileFilter filters[] = { { "Text Files", "txt" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)id, application_sdl_window, filters, 1, NULL);
+    show_save_file_dialog(id, filters, 1);
 }
 
 void gui_file_dialog_choose_trace_path(void)
@@ -179,8 +180,7 @@ void gui_file_dialog_load_symbols(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Symbol Files", "sym;txt;map" } };
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadSymbols, application_sdl_window,
-        filters, 1, NULL, false);
+    show_open_file_dialog(FileDialog_LoadSymbols, filters, 1);
 }
 
 void gui_file_dialog_save_all_sprites(void)
@@ -188,8 +188,7 @@ void gui_file_dialog_save_all_sprites(void)
     if (!begin_dialog())
         return;
 
-    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveAllSprites, application_sdl_window,
-        NULL, false);
+    show_open_folder_dialog(FileDialog_SaveAllSprites);
 }
 
 void gui_file_dialog_save_vgm(void)
@@ -198,8 +197,7 @@ void gui_file_dialog_save_vgm(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "VGM Files", "vgm" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveVGM, application_sdl_window,
-        filters, 1, NULL);
+    show_save_file_dialog(FileDialog_SaveVGM, filters, 1);
 }
 
 void gui_file_dialog_save_video(void)
@@ -208,8 +206,7 @@ void gui_file_dialog_save_video(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "AVI Files", "avi" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveVideo, application_sdl_window,
-        filters, 1, NULL);
+    show_save_file_dialog(FileDialog_SaveVideo, filters, 1);
 }
 
 void gui_file_dialog_load_state(void)
@@ -220,9 +217,7 @@ void gui_file_dialog_load_state(void)
     SDL_DialogFileFilter filters[] = {
         { "Save State Files", "state;state1;state2;state3;state4;state5" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadState, application_sdl_window,
-        filters, 1, default_path, false);
+    show_open_file_dialog(FileDialog_LoadState, filters, 1);
 }
 
 void gui_file_dialog_save_state(void)
@@ -231,9 +226,7 @@ void gui_file_dialog_save_state(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Save State Files", "state" } };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveState, application_sdl_window,
-        filters, 1, default_path);
+    show_save_file_dialog(FileDialog_SaveState, filters, 1);
 }
 
 void gui_file_dialog_choose_savestate_path(void)
@@ -265,9 +258,7 @@ void gui_file_dialog_open_floppy(int drive)
     SDL_DialogFileFilter filters[] = {
         { "Floppy Images", "d77;d88;hdm;xdf;img;mfm;bin;zip;m3u" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_OpenFloppy, application_sdl_window,
-        filters, 1, default_path, false);
+    show_open_file_dialog(FileDialog_OpenFloppy, filters, 1);
 }
 
 void gui_file_dialog_save_floppy(int drive)
@@ -280,9 +271,7 @@ void gui_file_dialog_save_floppy(int drive)
         { "D77 Images", "d77;d88" },
         { "Raw Images", "hdm;img;xdf" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveFloppy, application_sdl_window,
-        filters, 2, default_path);
+    show_save_file_dialog(FileDialog_SaveFloppy, filters, 2);
 }
 
 void gui_file_dialog_new_floppy(int drive)
@@ -295,9 +284,7 @@ void gui_file_dialog_new_floppy(int drive)
         { "D77 Images", "d77" },
         { "Raw Images", "hdm;img;xdf" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_NewFloppy, application_sdl_window,
-        filters, 2, default_path);
+    show_save_file_dialog(FileDialog_NewFloppy, filters, 2);
 }
 
 void gui_file_dialog_attach_hard_disk(int id)
@@ -310,9 +297,7 @@ void gui_file_dialog_attach_hard_disk(int id)
         { "Hard Disk Images", "hdd;hdm;chd;h0;h1;h2;h3;h4;h5;h6" },
         { "All Files", "*" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_AttachHardDisk, application_sdl_window,
-        filters, 2, default_path, false);
+    show_open_file_dialog(FileDialog_AttachHardDisk, filters, 2);
 }
 
 void gui_file_dialog_create_hard_disk(int id)
@@ -324,9 +309,7 @@ void gui_file_dialog_create_hard_disk(int id)
     SDL_DialogFileFilter filters[] = {
         { "Hard Disk Images", "hdd;h0;h1;h2;h3;h4;h5;h6" }
     };
-    const char* default_path = config_emulator.last_open_path.empty() ? NULL : config_emulator.last_open_path.c_str();
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_CreateHardDisk, application_sdl_window,
-        filters, 1, default_path);
+    show_save_file_dialog(FileDialog_CreateHardDisk, filters, 1);
 }
 
 void gui_file_dialog_load_bios(void)
@@ -358,8 +341,7 @@ void gui_file_dialog_save_memory_dump(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Binary Files", "bin" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveMemoryDump, application_sdl_window,
-        filters, 1, NULL);
+    show_save_file_dialog(FileDialog_SaveMemoryDump, filters, 1);
 }
 
 void gui_file_dialog_load_memory_dump(void)
@@ -368,8 +350,7 @@ void gui_file_dialog_load_memory_dump(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Binary Files", "bin;rom;dat" } };
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadMemoryDump, application_sdl_window,
-        filters, 1, NULL, false);
+    show_open_file_dialog(FileDialog_LoadMemoryDump, filters, 1);
 }
 
 void gui_file_dialog_save_debug_settings(void)
@@ -378,8 +359,7 @@ void gui_file_dialog_save_debug_settings(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Geartowns Debug Settings", "gtdebug" } };
-    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_SaveDebugSettings, application_sdl_window,
-        filters, 1, config_root_path);
+    show_save_file_dialog(FileDialog_SaveDebugSettings, filters, 1);
 }
 
 void gui_file_dialog_load_debug_settings(void)
@@ -388,8 +368,7 @@ void gui_file_dialog_load_debug_settings(void)
         return;
 
     SDL_DialogFileFilter filters[] = { { "Geartowns Debug Settings", "gtdebug" } };
-    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_LoadDebugSettings, application_sdl_window,
-        filters, 1, config_root_path, false);
+    show_open_file_dialog(FileDialog_LoadDebugSettings, filters, 1);
 }
 
 void gui_file_dialog_process_results(void)
@@ -410,6 +389,7 @@ void gui_file_dialog_process_results(void)
         std::string path = pending_dialog_path;
         pending_dialog_id = FileDialog_None;
         pending_dialog_path.clear();
+        remember_dialog_location(id, path.c_str());
         process_dialog_result(id, path.c_str());
     }
 
@@ -441,6 +421,96 @@ static bool begin_dialog(void)
 #endif
 
     return true;
+}
+
+static std::string* get_dialog_folder(FileDialogID id)
+{
+    switch (id)
+    {
+        case FileDialog_OpenMedia:
+            return &config_file_dialogs.rom;
+        case FileDialog_LoadState:
+        case FileDialog_SaveState:
+            return &config_file_dialogs.states;
+        case FileDialog_OpenFloppy:
+        case FileDialog_SaveFloppy:
+        case FileDialog_NewFloppy:
+            return &config_file_dialogs.floppies;
+        case FileDialog_AttachHardDisk:
+        case FileDialog_CreateHardDisk:
+            return &config_file_dialogs.hard_disks;
+        case FileDialog_SaveScreenshot:
+            return &config_file_dialogs.screenshots;
+        case FileDialog_SaveVGM:
+        case FileDialog_SaveVideo:
+            return &config_file_dialogs.recordings;
+        case FileDialog_LoadSymbols:
+        case FileDialog_SaveMemoryDump:
+        case FileDialog_LoadMemoryDump:
+        case FileDialog_SaveDebugSettings:
+        case FileDialog_LoadDebugSettings:
+        case FileDialog_SaveSprite:
+        case FileDialog_SaveAllSprites:
+        case FileDialog_SaveLog:
+        case FileDialog_SaveDisassemblerFull:
+        case FileDialog_SaveDisassemblerVisible:
+            return &config_file_dialogs.debug;
+        default:
+            return NULL;
+    }
+}
+
+static const char* get_dialog_location(FileDialogID id)
+{
+    std::string* folder = get_dialog_folder(id);
+
+    if (IsValidPointer(folder) && path_exists(folder->c_str()))
+        return folder->c_str();
+
+    return path_exists(config_file_dialogs.rom.c_str()) ? config_file_dialogs.rom.c_str() : NULL;
+}
+
+static void remember_dialog_location(FileDialogID id, const char* path)
+{
+    std::string* folder = get_dialog_folder(id);
+
+    if (!IsValidPointer(folder))
+        return;
+
+    std::string location(path);
+    SDL_PathInfo info;
+
+    if (!SDL_GetPathInfo(path, &info) || (info.type != SDL_PATHTYPE_DIRECTORY))
+        location.erase(location.find_last_of("/\\") + 1);
+    else if (location.find_last_of("/\\") != location.size() - 1)
+    {
+        // Windows file dialogs take a location without a trailing separator as a file name
+#if defined(_WIN32)
+        location += '\\';
+#else
+        location += '/';
+#endif
+    }
+
+    *folder = location;
+}
+
+static void show_open_file_dialog(FileDialogID id, const SDL_DialogFileFilter* filters, int filter_count)
+{
+    SDL_ShowOpenFileDialog(file_dialog_callback, (void*)(intptr_t)id, application_sdl_window, filters, filter_count,
+        get_dialog_location(id), false);
+}
+
+static void show_save_file_dialog(FileDialogID id, const SDL_DialogFileFilter* filters, int filter_count)
+{
+    SDL_ShowSaveFileDialog(file_dialog_callback, (void*)(intptr_t)id, application_sdl_window, filters, filter_count,
+        get_dialog_location(id));
+}
+
+static void show_open_folder_dialog(FileDialogID id)
+{
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)id, application_sdl_window,
+        get_dialog_location(id), false);
 }
 
 static void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int filter)
@@ -496,14 +566,8 @@ static void process_dialog_result(FileDialogID id, const char* path)
     switch (id)
     {
         case FileDialog_OpenMedia:
-        {
-            std::string full_path(path);
-            size_t separator = full_path.find_last_of("/\\");
-            config_emulator.last_open_path = separator == std::string::npos ? "" : full_path.substr(0, separator + 1);
             gui_load_rom(path);
             break;
-        }
-
         case FileDialog_ChooseScreenshotPath:
             strncpy_fit(gui_screenshots_path, path, sizeof(gui_screenshots_path));
             config_emulator.screenshots_path = path;

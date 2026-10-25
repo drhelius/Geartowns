@@ -24,7 +24,7 @@
 #include <string>
 #include "geartowns.h"
 
-static const int config_version = 6;
+static const int config_version = 7;
 static const int config_minimum_version = 5;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;
@@ -88,7 +88,6 @@ struct config_Emulator
     std::string bios_path;
     std::string screenshots_path;
     std::string video_recordings_path;
-    std::string last_open_path;
     int window_width;
     int window_height;
     bool show_notifications;
@@ -105,6 +104,17 @@ struct config_Emulator
     int hard_disk_write_protected[GT_MAX_HARD_DISKS];
     std::string recent_hard_disks[config_max_recent_hard_disks];
     bool hard_disk_drive_letters;
+};
+
+struct config_FileDialogs
+{
+    std::string rom;
+    std::string states;
+    std::string floppies;
+    std::string hard_disks;
+    std::string screenshots;
+    std::string recordings;
+    std::string debug;
 };
 
 struct config_Machine
@@ -367,6 +377,7 @@ struct config_Debug
 };
 
 EXTERN config_Emulator config_emulator;
+EXTERN config_FileDialogs config_file_dialogs;
 EXTERN config_Machine config_machine;
 EXTERN config_Video config_video;
 EXTERN config_Audio config_audio;

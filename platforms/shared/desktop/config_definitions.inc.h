@@ -207,7 +207,6 @@ static inline void process(config_Operation operation)
     CONFIG_STRING_NOT_EMPTY("Emulator", "ScreenshotPath", config_emulator.screenshots_path, config_root_path);
     CONFIG_INT("Emulator", "VideoRecordingDirOption", config_emulator.video_recordings_dir_option, 0);
     CONFIG_STRING_NOT_EMPTY("Emulator", "VideoRecordingPath", config_emulator.video_recordings_path, config_root_path);
-    CONFIG_STRING("Emulator", "LastOpenPath", config_emulator.last_open_path, "");
     CONFIG_STRING_ARRAY("Emulator", "RecentROM%d", config_emulator.recent_roms, config_max_recent_roms, "");
 
     // Firmware
@@ -229,6 +228,15 @@ static inline void process(config_Operation operation)
     CONFIG_INT_ARRAY("HardDisk", "WriteProtected%d", config_emulator.hard_disk_write_protected, GT_MAX_HARD_DISKS, 0);
     CONFIG_STRING_ARRAY("HardDisk", "Recent%d", config_emulator.recent_hard_disks, config_max_recent_hard_disks, "");
     CONFIG_BOOL("HardDisk", "AssignDriveLetters", config_emulator.hard_disk_drive_letters, true);
+
+    // File dialogs
+    CONFIG_STRING("FileDialogs", "ROM", config_file_dialogs.rom, "");
+    CONFIG_STRING("FileDialogs", "States", config_file_dialogs.states, "");
+    CONFIG_STRING("FileDialogs", "Floppies", config_file_dialogs.floppies, "");
+    CONFIG_STRING("FileDialogs", "HardDisks", config_file_dialogs.hard_disks, "");
+    CONFIG_STRING("FileDialogs", "Screenshots", config_file_dialogs.screenshots, "");
+    CONFIG_STRING("FileDialogs", "Recordings", config_file_dialogs.recordings, "");
+    CONFIG_STRING("FileDialogs", "Debug", config_file_dialogs.debug, "");
 
     // Services
     CONFIG_INT("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port, 7777);
@@ -485,7 +493,15 @@ static void normalize(void)
 
 static void migrate(int file_version)
 {
-    UNUSED(file_version);
+    std::string stored;
+
+    if (file_version < 7)
+    {
+        if (get_setting("Emulator", "LastOpenPath", &stored))
+            write_string("FileDialogs", "ROM", stored);
+
+        config_ini_data["Emulator"].remove("LastOpenPath");
+    }
 }
 
 static void process_machine_model(config_Operation operation, int* model)

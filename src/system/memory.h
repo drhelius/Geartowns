@@ -131,6 +131,7 @@ public:
     bool AssignCMOSDriveLetters(int unit, u16 partitions);
     u8 ReadCMOS(u32 index) const;
     void WriteCMOS(u32 index, u8 value);
+    void SetCMOSHighSpeed(bool enable);
     u8* GetVideoRAM();
     size_t GetVideoRAMSize() const;
     Memory_State* GetState();
@@ -196,6 +197,7 @@ private:
     u32 m_features;
     u32 m_dma_map[k_memory_dma_slots];
     bool m_nmi_vector_protect;
+    bool m_cmos_high_speed;
     u8 m_backup_protect;
     u32 m_map_generation;
     u32 m_region_generation;
@@ -222,6 +224,9 @@ private:
 // The real mode NMI vector, interrupt 2
 static const u32 k_memory_nmi_vector = 0x00008;
 static const u32 k_memory_nmi_vector_size = 4;
+
+// The HR's ROM boots in high speed when this CMOS byte holds 1
+static const u32 k_memory_cmos_speed = 0x0615;
 
 #include "memory_inline.h"
 

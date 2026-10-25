@@ -59,12 +59,27 @@ INLINE u8* Memory::GetCMOS()
 
 INLINE u8 Memory::ReadCMOS(u32 index) const
 {
-    return m_state.cmos[index & (GT_CMOS_SIZE - 1)];
+    index &= GT_CMOS_SIZE - 1;
+
+    if (m_cmos_high_speed && (index == k_memory_cmos_speed))
+        return 0x01;
+
+    return m_state.cmos[index];
 }
 
 INLINE void Memory::WriteCMOS(u32 index, u8 value)
 {
-    m_state.cmos[index & (GT_CMOS_SIZE - 1)] = value;
+    index &= GT_CMOS_SIZE - 1;
+
+    if (index == k_memory_cmos_speed)
+        m_cmos_high_speed = false;
+
+    m_state.cmos[index] = value;
+}
+
+INLINE void Memory::SetCMOSHighSpeed(bool enable)
+{
+    m_cmos_high_speed = enable;
 }
 
 INLINE Memory::Memory_State* Memory::GetState()

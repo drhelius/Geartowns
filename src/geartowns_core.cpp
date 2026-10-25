@@ -1915,7 +1915,11 @@ void GeartownsCore::Reset()
         m_profiler->Reset();
 
     if (IsValidPointer(m_memory))
+    {
         m_memory->Reset();
+        m_memory->SetCMOSHighSpeed((m_machine_report.model == GT_MACHINE_SOURCE_DATABASE) &&
+            (k_machine_cpus[m_machine_config.cpu].family >= 4));
+    }
 
     if (IsValidPointer(m_io))
         m_io->Reset();

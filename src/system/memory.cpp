@@ -107,6 +107,7 @@ Memory::Memory()
     m_features = 0;
     SetDMAWindows(NULL);
     m_nmi_vector_protect = false;
+    m_cmos_high_speed = false;
     m_backup_protect = 0;
     m_map_generation = 1;
     m_region_generation = 1;

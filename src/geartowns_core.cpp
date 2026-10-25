@@ -2095,9 +2095,9 @@ void GeartownsCore::ResolveMachineConfig()
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "Needs %d MHz, this machine runs at %u MHz", entry->cpu_mhz, config.cpu_clock_rate / 1000000);
 
-    if ((entry->flags & GT_GAMEDB_CPU_486) != 0)
+    if (((entry->flags & GT_GAMEDB_CPU_486) != 0) && (k_machine_cpus[config.cpu].family < 4))
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
-            "Needs a 486 CPU, not emulated yet");
+            "Needs a 486 CPU, this machine has an %s", k_machine_cpus[config.cpu].name);
 
     if (((entry->flags & GT_GAMEDB_FPU) != 0) && !config.fpu)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
@@ -2193,7 +2193,9 @@ void GeartownsCore::ApplyMachineConfig()
 
     if (IsValidPointer(m_i386))
     {
-        m_i386->SetCPU(k_machine_cpus[m_machine_config.cpu]);
+        const GT_Machine_CPU_Info& cpu = k_machine_cpus[m_machine_config.cpu];
+        m_x87->Init(cpu.family >= 4 ? X87_FLAVOR_80486 : X87_FLAVOR_80387);
+        m_i386->SetCPU(cpu);
         m_i386->SetFPU(m_machine_config.fpu ? m_x87 : NULL);
     }
 
@@ -2241,6 +2243,9 @@ void GeartownsCore::ApplyBusTiming()
         waits = &ports;
     }
 
+    // The HR's board lets the 486 cache only in high-speed mode with CMEN set
+    bool cache_control = (profile.features & GT_MACHINE_FEATURE_CACHE_CONTROL) != 0;
+    m_i386->SetBoardCache(!cache_control || (state->high_speed && (state->port_00c0 & 0x01) != 0));
     m_i386->SetBusTiming(timing, waits, k_machine_cpus[m_machine_config.cpu].bus_width, cpu_clock_rate,
         profile.cpu_clock_rate);
 

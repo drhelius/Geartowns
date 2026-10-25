@@ -56,9 +56,14 @@ void I386::UpdateWriteProtect()
 
 void I386::LoadCR0(u32 value)
 {
-    m_state.cr0 = (value & m_cr0_writable) | m_cr0_fixed;
+    u32 changed = m_state.cr0 ^ ((value & m_cr0_writable) | m_cr0_fixed);
+    m_state.cr0 ^= changed;
     UpdateWriteProtect();
     UpdateAlignmentCheck();
+
+    // CD turns the 486's cache off and on
+    if (unlikely(m_i486_timing) && (changed & 0x40000000U) != 0)
+        UpdateBusTiming();
 }
 
 void I386::UpdateSegmentFastPaths()

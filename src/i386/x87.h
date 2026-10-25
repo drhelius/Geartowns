@@ -79,7 +79,7 @@ public:
     u16 GetStatusWord() const;
     u16 GetTagWord() const;
     bool Execute(const X87_Operation& operation, u8* operand);
-    u32 GetClocks(u8 opcode, u8 modrm, const u8* operand) const;
+    u32 GetClocks(const X87_Operation& operation, const u8* operand) const;
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
 
@@ -88,6 +88,7 @@ public:
     static u32 GetMemoryOperandSize(u8 opcode, u8 modrm, bool operand32, bool& write);
 
 private:
+    u32 Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const;
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
     void Initialize();

@@ -83,7 +83,8 @@ void gui_debug_window_x87(void)
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 40);
 
         draw_label("FITTED");
-        ImGui::TextColored(fitted ? green : gray, "%s", fitted ? "80387" : "NONE");
+        const char* name = fitted ? get_machine_fpu_name(emu_get_core()->GetMachineConfig().cpu) : "NONE";
+        ImGui::TextColored(fitted ? green : gray, "%s", name);
 
         ImGui::EndTable();
     }

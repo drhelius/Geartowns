@@ -356,6 +356,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "ux",       "FM Towns II UX (80386SX 16 MHz)" },
             { "ug",       "FM Towns II UG (80386SX 20 MHz)" },
             { "hg",       "FM Towns II HG (80386DX 20 MHz)" },
+            { "hr",       "FM Towns II HR (80486SX 20 MHz)" },
             { "marty",    "FM Towns Marty (80386SX 16 MHz)" },
             { NULL, NULL },
         },
@@ -402,6 +403,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "20",   "20 MB" },
             { "24",   "24 MB" },
             { "26",   "26 MB" },
+            { "28",   "28 MB" },
             { NULL, NULL },
         },
         "auto"
@@ -410,13 +412,13 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_fpu",
         "FPU (restart)",
         NULL,
-        "The math coprocessor. Auto fits an 80387 when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model. The UX, UG and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
+        "The math coprocessor: an 80387 card on the 386 models, a 487SX card on the HR. Auto fits one when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model. The UX, UG and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
         NULL,
         "system",
         {
             { "auto",  "Auto" },
             { "none",  "None" },
-            { "80387", "80387" },
+            { "80387", "80387 or 487SX" },
             { NULL, NULL },
         },
         "auto"

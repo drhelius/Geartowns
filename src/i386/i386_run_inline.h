@@ -33,6 +33,7 @@ INLINE bool I386::ExecuteOPCode()
     return StartInstruction();
 }
 
+template<bool i486>
 INLINE u32 I386::RunCheckedStep()
 {
     GT_Bus_Access_Context& context = *m_bus_context;
@@ -73,16 +74,30 @@ INLINE u32 I386::RunCheckedStep()
         before.eflags = m_state.eflags;
 
     bool continuation = m_state.repeat.active;
+    bool timed = m_bus_timed;
+
+    if (i486)
+        Capture486Step();
+
     bool completed = debug_active ? ExecuteOPCodeDebug(before) : ExecuteOPCode();
 
     if (!completed)
         CompleteFault(old_task);
+    else if (i486 && (result.instruction_completed || m_state.repeat.active))
+    {
+        Apply486Clocks();
+
+        if (timed && continuation)
+            AddBusStringElement((u32)result.clocks);
+        else if (timed)
+            AddBusTime<true>();
+    }
     else if (m_bus_timed && (result.instruction_completed || m_state.repeat.active))
     {
         if (continuation)
-            AddBusStringElement();
+            AddBusStringElement(m_string.iteration_clocks);
         else
-            AddBusTime();
+            AddBusTime<false>();
     }
 
     if (m_state.interrupt_shadow_steps > 0 && result.instruction_completed)
@@ -99,9 +114,12 @@ INLINE u32 I386::RunCheckedStep()
 
 INLINE u32 I386::RunInstruction(GT_Bus_Access_Context& context)
 {
+    if (unlikely(m_i486_timing))
+        return RunInstruction486(context);
+
     m_io_start_cycles = 0;
     SetBusContext(context);
-    RunCheckedStep();
+    RunCheckedStep<false>();
 
     if (m_bus_timed)
         m_step.clocks += CarryBusTime();
@@ -125,11 +143,11 @@ INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
 }
 
 // One step of the fast loop, shared by RunFor and RunDynarec. Returns false when the batch must end
-template<bool timed>
+template<int timing>
 INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
     bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending)
 {
-    m_io_start_cycles = (u32)clocks + context.wait_cycles + (timed ? GetBusPending() : 0);
+    m_io_start_cycles = (u32)clocks + context.wait_cycles + ((timing & I386_TIMING_BUS) != 0 ? GetBusPending() : 0);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     DisassembleNextInstruction();
 #endif
@@ -139,10 +157,20 @@ INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& con
     m_step.end_batch = false;
     m_step.exception = false;
 
+    if ((timing & I386_TIMING_486) != 0)
+        Capture486Step();
+
     if (unlikely(!ExecuteOPCode()))
         CompleteFault(old_task);
-    else if (timed && likely(m_step.instruction_completed || m_state.repeat.active))
-        AddBusTime();
+    else if (timing == I386_TIMING_BUS && likely(m_step.instruction_completed || m_state.repeat.active))
+        AddBusTime<false>();
+    else if ((timing & I386_TIMING_486) != 0 && likely(m_step.instruction_completed || m_state.repeat.active))
+    {
+        Apply486Clocks();
+
+        if ((timing & I386_TIMING_BUS) != 0)
+            AddBusTime<true>();
+    }
 
     if (unlikely(m_state.interrupt_shadow_steps > 0) && m_step.instruction_completed)
         CountInterruptShadow();

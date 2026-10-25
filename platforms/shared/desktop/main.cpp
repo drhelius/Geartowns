@@ -515,7 +515,7 @@ static void print_usage(const char* program)
     print_wrapped("      --model MODEL", models);
     print_wrapped("      --cpu-mhz MHZ", speeds);
     print_wrapped("      --ram MB", sizes);
-    print_wrapped("      --fpu FPU", "auto, none, 80387");
+    print_wrapped("      --fpu FPU", "auto, none, 80387 (a 487SX on the HR)");
     printf("\nOptions:\n");
     print_wrapped("  -f, --fullscreen", "Start in fullscreen mode");
     print_wrapped("  -w, --windowed", "Start in windowed mode with menu visible");

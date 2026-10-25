@@ -54,6 +54,10 @@ public:
         u8 port_0488;
         u8 port_0494;
         u8 port_0496;
+        u8 port_00c0;
+        u8 port_00c2;
+        u8 port_05ee;
+        u8 port_04c8;
     };
 
 public:
@@ -85,6 +89,7 @@ public:
 private:
     u8 GetCPUMisc3() const;
     void WriteSerialROM(u8 value);
+    void LinkCacheControls();
     void NotifyBusMode();
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();

@@ -2260,7 +2260,9 @@ bool I386::OPCodes_IN()
     if (!DecodeOperands(false, immediate_port ? 1 : 0))
         return false;
 
-    if (!StartExecution(immediate_port ? 12 : 13))
+    const u8* port_clocks = m_port_clocks->in[immediate_port ? 0 : 1];
+
+    if (!StartExecution(port_clocks[0]))
         return false;
 
     int operand_width = m_instruction.operand_size * 8;
@@ -2272,12 +2274,11 @@ bool I386::OPCodes_IN()
         return false;
 
     if (m_state.execution_mode != I386_MODE_REAL)
-    {
-        bool permission_check = m_state.execution_mode == I386_MODE_VM86 ||
-            m_state.current_privilege_level > GetIOPrivilegeLevel();
+        m_step.clocks = port_clocks[GetPortMode()];
 
-        m_step.clocks = permission_check ? (immediate_port ? 26 : 27) : (immediate_port ? 6 : 7);
-    }
+    // The access lands on the last clock, after the 486's prefix clocks
+    if (m_i486_timing)
+        m_step.clocks += Get486PrefixClocks(m_instruction);
 
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -2322,7 +2323,9 @@ bool I386::OPCodes_OUT()
     if (!DecodeOperands(false, immediate_port ? 1 : 0))
         return false;
 
-    if (!StartExecution(immediate_port ? 10 : 11))
+    const u8* port_clocks = m_port_clocks->out[immediate_port ? 0 : 1];
+
+    if (!StartExecution(port_clocks[0]))
         return false;
 
     int operand_width = m_instruction.operand_size * 8;
@@ -2334,12 +2337,10 @@ bool I386::OPCodes_OUT()
         return false;
 
     if (m_state.execution_mode != I386_MODE_REAL)
-    {
-        bool permission_check = m_state.execution_mode == I386_MODE_VM86 ||
-            m_state.current_privilege_level > GetIOPrivilegeLevel();
+        m_step.clocks = port_clocks[GetPortMode()];
 
-        m_step.clocks = permission_check ? (immediate_port ? 24 : 25) : (immediate_port ? 4 : 5);
-    }
+    if (m_i486_timing)
+        m_step.clocks += Get486PrefixClocks(m_instruction);
 
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -2633,7 +2634,7 @@ bool I386::EscapeCoprocessor()
             return false;
     }
 
-    m_step.clocks = m_x87->GetClocks(opcode, modrm, operand) + m_address_clocks;
+    m_step.clocks = m_x87->GetClocks(operation, operand) + (m_i486 ? 0 : m_address_clocks);
 
     if (m_x87->Execute(operation, operand) && !TransferCoprocessorOperand(operand, size, true))
         return false;
@@ -2652,6 +2653,24 @@ bool I386::CheckCoprocessorOperand(u32 size, bool write)
 {
     int segment = m_instruction.segment;
     u32 first = m_instruction.effective_offset;
+
+    // The 486 checks the whole operand like any other access, so it has no exception 9
+    if (m_i486)
+    {
+        u32 linear = 0;
+
+        if (!LogicalToLinear(segment, first, size, write, false, linear))
+            return false;
+
+        // Environments and saves align to the operand size, the stack part of FSAVE and FRSTOR isn't checked
+        u32 alignment = size >= 14 ? (m_instruction.operand_size == 4 ? 4 : 2) : size >= 8 ? 8 : size;
+
+        if (unlikely(m_alignment_check) && (linear & (alignment - 1)) != 0)
+            return RaiseException(17, I386_EXCEPTION_FAULT, true, 0);
+
+        return CheckLinearAccess(linear, size, write, *m_bus_context);
+    }
+
     u32 last = Truncate(first + size - 1, m_instruction.address_size * 8);
 
     if (!CheckMemoryAccess(segment, first, 1, write, *m_bus_context))
@@ -2680,6 +2699,7 @@ bool I386::TransferCoprocessorOperand(u8* data, u32 size, bool write)
     int bits = m_instruction.address_size * 8;
     u64 wrap = bits == 16 ? 0x10000ULL : 0x100000000ULL;
     u32 offset = m_instruction.effective_offset;
+    u32 base = m_state.segments[m_instruction.segment].base;
     u32 done = 0;
 
     while (done < size)
@@ -2687,6 +2707,10 @@ bool I386::TransferCoprocessorOperand(u8* data, u32 size, bool write)
         u32 bytes = (size - done) >= 4 ? 4 : (size - done) >= 2 ? 2 : 1;
 
         while (bytes > wrap - offset)
+            bytes >>= 1;
+
+        // With alignment checks on, the pieces of a checked operand must not fault on their own
+        while (unlikely(m_alignment_check) && ((base + offset) & (bytes - 1)) != 0)
             bytes >>= 1;
 
         u32 value = 0;

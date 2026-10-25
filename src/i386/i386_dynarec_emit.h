@@ -84,8 +84,12 @@ private:
         u16 defs;
         u16 live;
         u32 clocks;
+        u32 taken_clocks;
+        u32 bus_clocks;
         u32 before;
+        u32 extra_before;
         u32 next_check;
+        u8 written;
         u32 bus_code_row;
         u32 transfer_target;
         u32 transfer_level;
@@ -102,6 +106,7 @@ private:
     bool Decode(u32 available, u32 instruction_limit);
     void Classify(Instruction& instruction);
     void SetNative(Instruction& instruction, u32 clocks, bool memory);
+    void Set486Clocks(Instruction& instruction);
     bool CanCarry(int width) const;
     u32 GetAddressClocks(const I386::InstructionContext& c) const;
     u16 GetConditionFlags(int condition) const;
@@ -119,6 +124,9 @@ private:
     void EmitBusRun(const BusRun& run, int carry);
     void EmitBusTransferRow(const BusRun& run);
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access);
+    void Emit486Misaligned(int linear, int t, u32 size, int access);
+    void Emit486FirstAGI(int t);
+    void Store486Written(int written);
 
     void EmitBlock();
     void EmitLink(jit_node* exit);
@@ -179,6 +187,9 @@ private:
     u8 m_key;
     int m_count;
     bool m_timed;
+    bool m_i486;
+    int m_exit_written;
+    int m_first_base;
     u32 m_bus_code_row;
     Instruction m_instructions[64];
 };

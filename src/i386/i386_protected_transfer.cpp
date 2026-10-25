@@ -34,7 +34,8 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
 
     if (!descriptor.system && (descriptor.attributes & I386_SEGMENT_EXECUTABLE) != 0)
     {
-        clocks = (call ? (indirect ? 38 : 34) : (indirect ? 31 : 27)) + address_clocks;
+        clocks = m_i486_timing ? (call ? 20 : indirect ? 18 : 19) :
+            (call ? (indirect ? 38 : 34) : (indirect ? 31 : 27)) + address_clocks;
 
         bool conforming = (descriptor.attributes & I386_SEGMENT_CONFORMING) != 0;
         bool privilege_allowed = conforming ? descriptor.dpl <= m_state.current_privilege_level :
@@ -78,7 +79,9 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         m_state.segments[I386_SEGMENT_CS].dpl = m_state.current_privilege_level;
         m_state.eip = target;
         m_state.repeat.active = false;
-        clocks += GetTransferComponents();
+
+        if (!m_i486_timing)
+            clocks += GetTransferComponents();
         return true;
     }
 
@@ -101,7 +104,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         bool ok = TaskSwitch(selector, descriptor, switch_type, return_eip, context, clocks, false);
 
         if (indirect)
-            clocks += 5 + address_clocks;
+            clocks = m_i486_timing ? clocks - (call ? 0 : 1) : clocks + 5 + address_clocks;
 
         return ok;
     }
@@ -140,7 +143,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         bool ok = TaskSwitch(task_selector, task, switch_type, return_eip, context, clocks, true);
 
         if (indirect)
-            clocks += 5 + address_clocks;
+            clocks = m_i486_timing ? clocks - (call ? 0 : 1) : clocks + 5 + address_clocks;
 
         return ok;
     }
@@ -198,7 +201,8 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         u32 new_stack = 0;
         u16 new_ss = 0;
 
-        clocks = (count == 0 ? (indirect ? 90 : 86) : (indirect ? 98 : 94) + 4 * count) + address_clocks;
+        clocks = m_i486_timing ? (count == 0 ? 69 : 77 + 4 * count) :
+            (count == 0 ? (indirect ? 90 : 86) : (indirect ? 98 : 94) + 4 * count) + address_clocks;
 
         if (!ReadPrivilegeStack(code.dpl, new_stack, new_ss, context))
             return false;
@@ -272,7 +276,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
     {
         const I386_Segment& stack_segment = m_state.segments[I386_SEGMENT_SS];
 
-        clocks = (indirect ? 56 : 52) + address_clocks;
+        clocks = m_i486_timing ? 35 : (indirect ? 56 : 52) + address_clocks;
 
         if (!StackHasRoom(stack_segment.limit, stack_segment.attributes, GetStackPointer(), 2 * gate_bytes))
             return RaiseException(12, I386_EXCEPTION_FAULT, true, 0);
@@ -295,7 +299,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
     }
     else
     {
-        clocks = (indirect ? 49 : 45) + address_clocks;
+        clocks = m_i486_timing ? (indirect ? 31 : 32) : (indirect ? 49 : 45) + address_clocks;
 
         if (target > code.limit)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -310,7 +314,10 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
     m_state.segments[I386_SEGMENT_CS].dpl = m_state.current_privilege_level;
     m_state.eip = gate32 ? target : (u16)target;
     m_state.repeat.active = false;
-    clocks += GetTransferComponents();
+
+    if (!m_i486_timing)
+        clocks += GetTransferComponents();
+
     return true;
 }
 
@@ -365,7 +372,9 @@ bool I386::ProtectedFarReturn(int width, u16 adjustment, GT_Bus_Access_Context& 
     u8 return_privilege = selector & 3;
     bool same_privilege = return_privilege == m_state.current_privilege_level;
 
-    clocks = same_privilege ? 32 : 68;
+    // RET imm16 takes one more on the 486
+    clocks = m_i486_timing ? (same_privilege ? 17 : 35) + (m_instruction.opcode == 0xCA ? 1 : 0) :
+        same_privilege ? 32 : 68;
 
     if (!executable || (!conforming && code.dpl != return_privilege) || (conforming && code.dpl > return_privilege))
         return RaiseException(13, I386_EXCEPTION_FAULT, true, selector & 0xFFFC);
@@ -440,7 +449,7 @@ bool I386::ProtectedFarReturn(int width, u16 adjustment, GT_Bus_Access_Context& 
     UpdateUserMode();
     m_state.eip = checked_target;
 
-    if (same_privilege)
+    if (same_privilege && !m_i486_timing)
         clocks += GetTransferComponents();
 
     return true;
@@ -476,7 +485,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
     // VM is only written at CPL 0, otherwise this is a plain protected mode return
     if (width == 32 && (flags & I386_FLAG_VM) != 0 && m_state.current_privilege_level == 0)
     {
-        clocks = 60;
+        clocks = m_i486_timing ? 36 : 60;
 
         u32 values[6];
 
@@ -532,7 +541,8 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
 
     u8 old_privilege = m_state.current_privilege_level;
 
-    clocks = return_privilege == old_privilege ? 38 : 82;
+    clocks = m_i486_timing ? (return_privilege == old_privilege ? 20 : 36) :
+        return_privilege == old_privilege ? 38 : 82;
 
     if (return_privilege == old_privilege)
     {

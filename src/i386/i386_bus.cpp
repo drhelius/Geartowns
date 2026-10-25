@@ -82,9 +82,9 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
 {
     BusTiming bus;
     memset(&bus, 0, sizeof(bus));
-    bool timed = IsValidPointer(timing) && IsValidPointer(waits) && model_clock_rate != 0;
+    bool valid = IsValidPointer(timing) && IsValidPointer(waits) && model_clock_rate != 0;
 
-    if (timed)
+    if (valid)
     {
         u32 cpu = cpu_clock_rate;
         u32 model = model_clock_rate;
@@ -92,7 +92,8 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
         bus.width = bus_width == 16 ? 2 : 4;
         bus.cycle_refresh = (u32)timing->refresh * 512;
         bus.refill = ScaleBusWait(timing->refill, cpu, model);
-        bus.misalign = (u32)timing->misalign * 256;
+        // The 486's table already counts the core's split of a misaligned operand
+        bus.misalign = m_i486_timing ? 0 : (u32)timing->misalign * 256;
         bus.string_row = ScaleBusWait(timing->string_row, cpu, model);
         bus.string_read = ScaleBusWait(timing->string_read, cpu, model);
         bus.acknowledge = (u32)(((u64)k_i386_bus_acknowledge_ns * cpu * 65536 + 500000000) / 1000000000);
@@ -145,7 +146,35 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
         }
     }
 
+    m_bus_table = bus;
+    m_bus_table_valid = valid;
+    UpdateBusTiming();
+}
+
+// HSPEED and CMEN on a board with cache controls, always on a board without them
+void I386::SetBoardCache(bool enabled)
+{
+    m_board_cache = enabled;
+}
+
+// The 486 runs its cache-hit clocks while its cache serves, and the bus model while every access goes to the bus
+void I386::UpdateBusTiming()
+{
+    bool cached = m_i486_timing && m_board_cache && (m_state.cr0 & 0x40000000U) == 0;
+    bool timed = m_bus_table_valid && !cached;
+    BusTiming bus;
+
+    if (timed)
+        bus = m_bus_table;
+    else
+        memset(&bus, 0, sizeof(bus));
+
     bool changed = timed != m_bus_timed || memcmp(&bus, &m_bus, sizeof(bus)) != 0;
+
+    // The run loop picks its instance per slice, so a 486 cache change ends the slice after the instruction
+    if (timed != m_bus_timed)
+        m_step.end_batch = true;
+
     m_bus = bus;
     m_bus_timed = timed;
 
@@ -225,6 +254,7 @@ NO_INLINE void I386::AddBusTransfer(bool access)
     m_step.clocks += CarryBusTime();
 }
 
+template<bool i486>
 NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& transfer)
 {
     const InstructionContext& c = m_instruction;
@@ -240,19 +270,19 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
     {
         case I386_BUS_PUSH_READ:
             if (c.memory_operand)
-                data = AddBusAccess(linear, size, 0, code_row);
-            data += AddBusAccess(stack_base + (stack & stack_mask), size, 1, code_row);
+                data = AddBusAccess<i486>(linear, size, 0, code_row);
+            data += AddBusAccess<i486>(stack_base + (stack & stack_mask), size, 1, code_row);
             break;
         case I386_BUS_POP_WRITE:
-            data = AddBusAccess(stack_base + ((stack - size) & stack_mask), size, 0, code_row);
+            data = AddBusAccess<i486>(stack_base + ((stack - size) & stack_mask), size, 0, code_row);
             if (c.memory_operand)
-                data += AddBusAccess(linear, size, 1, code_row);
+                data += AddBusAccess<i486>(linear, size, 1, code_row);
             break;
         case I386_BUS_MOFFS_READ:
         case I386_BUS_MOFFS_WRITE:
         {
             u8 segment = c.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : c.segment_override;
-            data = AddBusAccess(m_state.segments[segment].base + c.immediate, size,
+            data = AddBusAccess<i486>(m_state.segments[segment].base + c.immediate, size,
                 (pattern & k_i386_bus_pattern_mask) == I386_BUS_MOFFS_WRITE ? 1 : 0, code_row);
             break;
         }
@@ -268,22 +298,22 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
             switch (c.opcode & 0xFE)
             {
                 case 0xA4:
-                    data = AddBusAccess(source, width, 0, code_row);
-                    data += AddBusAccess(destination, width, 1, code_row);
+                    data = AddBusAccess<i486>(source, width, 0, code_row);
+                    data += AddBusAccess<i486>(destination, width, 1, code_row);
                     break;
                 case 0xA6:
-                    data = AddBusAccess(source, width, 0, code_row);
-                    data += AddBusAccess(destination, width, 0, code_row);
+                    data = AddBusAccess<i486>(source, width, 0, code_row);
+                    data += AddBusAccess<i486>(destination, width, 0, code_row);
                     break;
                 case 0x6C:
                 case 0xAA:
-                    data = AddBusAccess(destination, width, 1, code_row);
+                    data = AddBusAccess<i486>(destination, width, 1, code_row);
                     break;
                 case 0xAE:
-                    data = AddBusAccess(destination, width, 0, code_row);
+                    data = AddBusAccess<i486>(destination, width, 0, code_row);
                     break;
                 default:
-                    data = AddBusAccess(source, width, 0, code_row);
+                    data = AddBusAccess<i486>(source, width, 0, code_row);
                     break;
             }
             break;
@@ -298,13 +328,13 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
         }
         case I386_BUS_CALL_RM:
             if (c.memory_operand)
-                data = AddBusAccess(linear, size, 0, code_row);
-            data += AddBusAccess(stack_base + (stack & stack_mask), size, 1, code_row);
+                data = AddBusAccess<i486>(linear, size, 0, code_row);
+            data += AddBusAccess<i486>(stack_base + (stack & stack_mask), size, 1, code_row);
             transfer = true;
             break;
         case I386_BUS_JUMP_RM:
             if (c.memory_operand)
-                data = AddBusAccess(linear, size, 0, code_row);
+                data = AddBusAccess<i486>(linear, size, 0, code_row);
             transfer = true;
             break;
         case I386_BUS_FAR:
@@ -327,7 +357,8 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
                     AddBusTransferAccesses(table + 3, 0, size);
                     break;
                 case 0xFF:
-                    data = AddBusAccess(linear, size, 0, code_row) + AddBusAccess(linear + size, 2, 0, code_row);
+                    data = AddBusAccess<i486>(linear, size, 0, code_row) +
+                        AddBusAccess<i486>(linear + size, 2, 0, code_row);
                     AddBusTransferAccesses(table, c.reg == 3 ? 2 : 0, size);
                     break;
                 default:
@@ -344,16 +375,16 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
         }
         case I386_BUS_PUSHA:
             for (u32 i = 0; i < 8; i++)
-                data += AddBusAccess(stack_base + ((stack + i * size) & stack_mask), size, 1, code_row);
+                data += AddBusAccess<i486>(stack_base + ((stack + i * size) & stack_mask), size, 1, code_row);
             break;
         case I386_BUS_POPA:
             for (u32 i = 0; i < 8; i++)
-                data += AddBusAccess(stack_base + ((stack - (8 - i) * size) & stack_mask), size, 0, code_row);
+                data += AddBusAccess<i486>(stack_base + ((stack - (8 - i) * size) & stack_mask), size, 0, code_row);
             break;
         case I386_BUS_ENTER:
         {
             u32 level = (c.immediate2 & 0x1F);
-            data = AddBusAccess(stack_base + (m_state.registers[I386_REG_EBP].value & stack_mask), size, 1,
+            data = AddBusAccess<i486>(stack_base + (m_state.registers[I386_REG_EBP].value & stack_mask), size, 1,
                 code_row);
 
             if (level != 0)
@@ -361,22 +392,24 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
             break;
         }
         case I386_BUS_LEAVE:
-            data = AddBusAccess(stack_base + ((stack - size) & stack_mask), size, 0, code_row);
+            data = AddBusAccess<i486>(stack_base + ((stack - size) & stack_mask), size, 0, code_row);
             break;
         case I386_BUS_XLAT:
         {
             u8 segment = c.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : c.segment_override;
             u32 table = m_state.registers[I386_REG_EBX].value & (c.address_size == 2 ? 0xFFFFU : 0xFFFFFFFFU);
-            data = AddBusAccess(m_state.segments[segment].base + table, 1, 0, code_row);
+            data = AddBusAccess<i486>(m_state.segments[segment].base + table, 1, 0, code_row);
             break;
         }
         case I386_BUS_READ_FAR:
             if (c.memory_operand)
-                data = AddBusAccess(linear, size, 0, code_row) + AddBusAccess(linear + size, 2, 0, code_row);
+                data = AddBusAccess<i486>(linear, size, 0, code_row) +
+                    AddBusAccess<i486>(linear + size, 2, 0, code_row);
             break;
         case I386_BUS_BOUND:
             if (c.memory_operand)
-                data = AddBusAccess(linear, size, 0, code_row) + AddBusAccess(linear + size, size, 0, code_row);
+                data = AddBusAccess<i486>(linear, size, 0, code_row) +
+                    AddBusAccess<i486>(linear + size, size, 0, code_row);
             break;
         case I386_BUS_DESC_READ:
         case I386_BUS_DESC_WRITE:
@@ -384,7 +417,8 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
             int write = (pattern & k_i386_bus_pattern_mask) == I386_BUS_DESC_WRITE ? 1 : 0;
 
             if (c.memory_operand)
-                data = AddBusAccess(linear, 2, write, code_row) + AddBusAccess(linear + 2, 4, write, code_row);
+                data = AddBusAccess<i486>(linear, 2, write, code_row) +
+                    AddBusAccess<i486>(linear + 2, 4, write, code_row);
             break;
         }
         case I386_BUS_ESC:
@@ -396,7 +430,7 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
             u32 operand = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
 
             for (u32 done = 0; done < operand; done += 4)
-                data += AddBusAccess(linear + done, MIN(operand - done, 4U), write ? 1 : 0, code_row);
+                data += AddBusAccess<i486>(linear + done, MIN(operand - done, 4U), write ? 1 : 0, code_row);
             break;
         }
         default:
@@ -406,7 +440,11 @@ NO_INLINE u32 I386::AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& tr
     return data;
 }
 
-void I386::AddBusStringElement()
+template u32 I386::AddBusInstructionAccesses<false>(u8 pattern, u32 code_row, bool& transfer);
+template u32 I386::AddBusInstructionAccesses<true>(u8 pattern, u32 code_row, bool& transfer);
+
+// iteration: the clocks of one element in the table
+void I386::AddBusStringElement(u32 iteration)
 {
     if (!m_string.executed)
         return;
@@ -447,8 +485,8 @@ void I386::AddBusStringElement()
     busy += cycles << 1;
     s32 add = (s32)(cycles * m_bus.cycle_refresh);
 
-    if (busy > m_string.iteration_clocks)
-        add += (s32)((busy - m_string.iteration_clocks) << 16);
+    if (busy > iteration)
+        add += (s32)((busy - iteration) << 16);
 
     m_bus_queue = k_i386_bus_queue;
     m_bus_fraction += add;
@@ -495,8 +533,8 @@ u32 I386::AddBusStringAccess(u32 linear, u32 size, int write, bool load)
 void I386::AddBusTransferAccesses(u32 reads, u32 writes, u32 size)
 {
     u32 cycles = GetBusCycles(size);
-    s32 penalty = (s32)(reads * (m_bus.dram_far[0] + cycles * m_bus.cycle[GT_BUS_DRAM][0]) +
-        writes * (m_bus.dram_far[1] + cycles * m_bus.cycle[GT_BUS_DRAM][1]));
+    u32 read = m_bus.dram_far[0] + cycles * m_bus.cycle[GT_BUS_DRAM][0] + (m_i486_timing ? k_i486_bus_read : 0);
+    s32 penalty = (s32)(reads * read + writes * (m_bus.dram_far[1] + cycles * m_bus.cycle[GT_BUS_DRAM][1]));
 
     m_bus_fraction += penalty;
     m_bus_row = k_i386_bus_no_row;
@@ -518,10 +556,10 @@ void I386::AddBusInterrupt(u64& clocks, bool error_code)
 }
 
 // Odd-address word elements alternate crossing a dword, so even and odd elements get a time each
-void I386::PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse) const
+void I386::PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse,
+    u32 iteration) const
 {
     u32 cycles = GetBusCycles(size) * (move ? 2 : 1);
-    u32 iteration = move ? 4 : 5;
     u32 busy = cycles << 1;
     u64 base = (u64)cycles * m_bus.cycle_refresh + (busy > iteration ? (u64)(busy - iteration) << 16 : 0);
 
@@ -612,10 +650,9 @@ u32 I386::CountBusRepeatChanges(const BusRepeat& repeat, u32 elements, u32 size,
 }
 
 // Elements that start before the budget runs out, as the interpreter stops, however batches split
-u32 I386::LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget)
-    const
+u32 I386::LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget,
+    u32 iteration) const
 {
-    u32 iteration = move ? 4 : 5;
     u32 low = 1;
     u32 high = elements;
 
@@ -668,6 +705,7 @@ void I386::AddBusSlowAccess(u32 physical, u32 size, bool write)
 
 #if !defined(GT_DISABLE_DYNAREC)
 // access: size, 08h write, 10h RMW, 20h code in DRAM with its row from bit 8, 40h one-byte instruction
+template<bool i486>
 void I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access)
 {
     u32 size = (u32)(access & 7);
@@ -676,14 +714,17 @@ void I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access)
     bool both = (access & 0x10) != 0;
     bool write = (access & 0x08) != 0;
 
-    cpu->m_bus_fraction -= (s32)cpu->GetBusDramFold(size, both || !write, both || write, code_row);
+    cpu->m_bus_fraction -= (s32)cpu->GetBusDramFold(size, both || !write, both || write, code_row, i486);
 
     if (both)
     {
-        cpu->AddBusAccess((u32)linear, size, 0, code_row);
-        cpu->AddBusAccess((u32)linear, size, 1, code_row);
+        cpu->AddBusAccess<i486>((u32)linear, size, 0, code_row);
+        cpu->AddBusAccess<i486>((u32)linear, size, 1, code_row);
     }
     else
-        cpu->AddBusAccess((u32)linear, size, write ? 1 : 0, code_row);
+        cpu->AddBusAccess<i486>((u32)linear, size, write ? 1 : 0, code_row);
 }
+
+template void I386::DynarecBusAccess<false>(I386* cpu, uintptr_t linear, uintptr_t access);
+template void I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uintptr_t access);
 #endif

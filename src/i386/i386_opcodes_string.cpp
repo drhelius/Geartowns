@@ -368,6 +368,12 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
         return 0;
 
     u32 iteration_clocks = move ? 4 : 5;
+
+    // A 486 element adds 3 for each misaligned access, the same for the whole batch
+    if (m_i486_timing)
+        iteration_clocks = (move ? 3 : 4) + ((destination_linear & (size - 1)) != 0 ? 3 : 0) +
+            (move && (source_linear & (size - 1)) != 0 ? 3 : 0);
+
     u32 elements = m_bus_timed ? count : (u32)MIN((u64)count, ((u64)budget + iteration_clocks - 1) / iteration_clocks);
     u32 address_mask = address_width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
     bool reverse = (m_state.eflags & I386_FLAG_DF) != 0;
@@ -404,8 +410,8 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 
     if (m_bus_timed)
     {
-        PrepareBusRepeat(repeat, source_linear, destination_linear, size, move, reverse);
-        elements = LimitBusRepeat(repeat, elements, size, move, reverse, budget);
+        PrepareBusRepeat(repeat, source_linear, destination_linear, size, move, reverse, iteration_clocks);
+        elements = LimitBusRepeat(repeat, elements, size, move, reverse, budget, iteration_clocks);
     }
 
     u32 bytes = elements * size;
@@ -478,6 +484,9 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     m_step.instruction_completed = !m_state.repeat.active;
     m_step.end_batch = m_bus_context->end_batch;
     m_step.exception = false;
+
+    if (m_i486_timing)
+        m_486_written = (move ? 1 << I386_REG_ESI : 0) | (1 << I386_REG_EDI) | (1 << I386_REG_ECX);
 
     clocks = elements * iteration_clocks;
 
@@ -560,19 +569,17 @@ u32 I386::GetStringClocks(bool continuation) const
         }
     }
 
-    bool input = opcode <= 0x6D;
-    bool real = m_state.execution_mode == I386_MODE_REAL;
-    bool permission_check =
-        !real && (m_state.execution_mode == I386_MODE_VM86 || m_state.current_privilege_level > GetIOPrivilegeLevel());
+    int port = opcode <= 0x6D ? 0 : 1;
+    u32 mode = GetPortMode();
+    u32 prefix = m_i486_timing && !continuation ? Get486PrefixClocks(m_instruction) : 0;
 
     if (!m_string.repeated)
-        return real ? (input ? 15 : 14) : permission_check ? (input ? 29 : 28) : (input ? 9 : 8);
+        return m_port_clocks->single[port][mode] + prefix;
 
-    u32 overhead = input ? (real ? 13 : permission_check ? 27 : 7) : (real ? 5 : permission_check ? 26 : 6);
-    u32 clocks = continuation ? 0 : overhead;
+    u32 clocks = continuation ? 0 : m_port_clocks->repeat[port][mode] + prefix;
 
     if (GetRegister(I386_REG_ECX, m_string.address_width) != 0)
-        clocks += input ? 6 : real ? 12 : 5;
+        clocks += m_port_clocks->element[port][mode];
 
     return clocks;
 }

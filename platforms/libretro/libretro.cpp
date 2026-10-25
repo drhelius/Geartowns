@@ -939,9 +939,10 @@ static void report_machine(void)
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         snprintf(source, sizeof(source), " (Auto: not in the game database)");
 
-    log_cb(RETRO_LOG_INFO, "Machine: %s, %s %u MHz%s, %u MB RAM, %d floppy drives%s\n",
+    bool card = config.fpu && !k_machine_cpus[config.cpu].fpu;
+    log_cb(RETRO_LOG_INFO, "Machine: %s, %s %u MHz%s%s, %u MB RAM, %d floppy drives%s\n",
         k_machine_profiles[config.model].name, k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000,
-        config.fpu ? " + 80387" : "", ram_mb, config.floppy_drives, source);
+        card ? " + " : "", card ? get_machine_fpu_name(config.cpu) : "", ram_mb, config.floppy_drives, source);
 
     for (int i = 0; i < report.warning_count; i++)
         log_cb(RETRO_LOG_WARN, "%s\n", report.warnings[i]);
@@ -974,7 +975,7 @@ static void report_machine(void)
 
     if (fpu)
     {
-        snprintf(value, sizeof(value), "%s80387", choices[0] ? ", " : "");
+        snprintf(value, sizeof(value), "%s%s", choices[0] ? ", " : "", get_machine_fpu_name(config.cpu));
         strncat_fit(choices, value, sizeof(choices));
     }
 

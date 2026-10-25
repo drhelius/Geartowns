@@ -44,6 +44,8 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 0030h | MACHINE_ID_LO | Machine ID low, LSPEED write (UX) |
 | 0031h | MACHINE_ID_HI | Machine ID high |
 | 0032h | SERIAL_ROM | Serial ID ROM |
+| 00C0h | CACHE_CONTROL | Board cache control (HR) |
+| 00C2h | CACHE_MODE | Cache diagnostic mode (HR) |
 
 ### Timers (8253 x2)
 
@@ -134,6 +136,7 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 04C2h | CDROM_COMMAND | CD-ROM status read, command write |
 | 04C4h | CDROM_DATA | CD-ROM data read, parameter write |
 | 04C6h | CDROM_TRANSFER | CD-ROM transfer control |
+| 04C8h | CDROM_CACHE | CD-ROM cache (HR) |
 | 04CCh | CDROM_SUBCODE | CD-ROM subcode status |
 | 04CDh | CDROM_SUBCODE_DATA | CD-ROM subcode data |
 
@@ -183,6 +186,7 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 05E8h | RAM_SIZE | Installed RAM in MB (1F) |
 | 05ECh | SPEED_CONTROL | Speed control (CX) |
 | 05EDh | MAXIMUM_CLOCK | Maximum CPU clock in MHz (UG) |
+| 05EEh | VRAM_CACHE | VRAM cache (HR) |
 
 ### Keyboard
 

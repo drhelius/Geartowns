@@ -2062,7 +2062,7 @@ static void notify_machine(void)
 
     if (fpu)
     {
-        snprintf(value, sizeof(value), "%s80387", choices.empty() ? "" : ", ");
+        snprintf(value, sizeof(value), "%s%s", choices.empty() ? "" : ", ", get_machine_fpu_name(config.cpu));
         choices += value;
     }
 

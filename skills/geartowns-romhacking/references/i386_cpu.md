@@ -3,7 +3,8 @@
 ## 1. Overview
 
 The FM Towns Model 1/2 uses an Intel 80386DX at 16 MHz; an 80387 coprocessor is optional. The 80386 has no
-on-chip cache. The system ROM starts in real mode. Towns OS combines MS-DOS with a 386 DOS extender: DOS runs in
+on-chip cache. The FM Towns II HR uses an 80486SX at 20 MHz, which adds BSWAP, XADD, CMPXCHG, INVD, WBINVD and
+INVLPG, alignment checks and the bits marked 486 below; a 487SX card is optional. The system ROM starts in real mode. Towns OS combines MS-DOS with a 386 DOS extender: DOS runs in
 real mode and applications run as 32-bit protected-mode `.EXP` programs, one at a time, without using
 virtual-8086 mode as their environment. This reference covers the system architecture a debugger user needs; it is
 not an instruction set reference.
@@ -26,6 +27,7 @@ not an instruction set reference.
 | LDTR, TR | 16 | Selectors of the local descriptor table and task state segment, with hidden caches |
 | DR0–DR3, DR6, DR7 | 32 | Hardware breakpoints, status and control |
 | TR6, TR7 | 32 | TLB test registers |
+| TR3–TR5 | 32 | 486 only: cache test registers |
 
 ### 2.1 EFLAGS
 
@@ -44,6 +46,7 @@ not an instruction set reference.
 | 14 | NT | Nested task |
 | 16 | RF | Resume (suppresses an instruction breakpoint for the next instruction) |
 | 17 | VM | Virtual-8086 mode |
+| 18 | AC | 486 only: alignment check at CPL 3 when CR0.AM is set |
 
 ### 2.2 CR0
 
@@ -53,7 +56,12 @@ not an instruction set reference.
 | 1 | MP | Monitor coprocessor (WAIT raises #NM when TS is also set) |
 | 2 | EM | Emulate coprocessor (ESC instructions raise #NM) |
 | 3 | TS | Task switched (the next ESC instruction raises #NM) |
-| 4 | ET | Extension type (80387 vs 80287) |
+| 4 | ET | Extension type (80387 vs 80287); always 1 on a 486 |
+| 5 | NE | 486 only: FPU errors raise #MF instead of the external error line |
+| 16 | WP | 486 only: supervisor writes fault on read-only pages |
+| 18 | AM | 486 only: enables the AC flag |
+| 29 | NW | 486 only: cache not write-through |
+| 30 | CD | 486 only: cache disable |
 | 31 | PG | Paging enable, valid only with PE set |
 
 ---
@@ -166,9 +174,11 @@ caches translations in a 32-entry TLB that is flushed when CR3 is loaded.
 | 13 | #GP general protection | Fault | Yes |
 | 14 | #PF page fault | Fault | Yes |
 | 16 | #MF coprocessor error | Fault | No |
+| 17 | #AC alignment check (486) | Fault | Yes (0) |
 
-Vector 15 and 17–31 are reserved. Selector error codes: bits 15–3 index, bit 2 TI (LDT), bit 1 IDT, bit 0 EXT
-(external event). Vectors 9 and 16 come from the 80387.
+Vector 15 and 18–31 are reserved. Selector error codes: bits 15–3 index, bit 2 TI (LDT), bit 1 IDT, bit 0 EXT
+(external event). Vectors 9 and 16 come from the 80387. The 486's FPU raises 16 but never 9: an operand past a
+segment limit is an ordinary #GP or #SS.
 
 ### 6.2 Real Mode Interrupts
 

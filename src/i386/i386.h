@@ -39,6 +39,7 @@ class IO;
 class ExecMemory;
 class DynarecEmitter;
 class X87;
+struct I486_Form;
 
 enum I386_Register
 {
@@ -83,6 +84,16 @@ enum I386_Interrupt_Shadow
     I386_SHADOW_NONE = 0,
     I386_SHADOW_STI,
     I386_SHADOW_MOV_SS
+};
+
+// The run loop instances, a bit for the bus model and one for the 486's T1 clocks: today's 386, the 386 with the bus
+// model, the 486 with its cache on and the 486 with every access on the bus
+enum I386_Timing
+{
+    I386_TIMING_386 = 0,
+    I386_TIMING_BUS = 1,
+    I386_TIMING_486 = 2,
+    I386_TIMING_486_BUS = 3
 };
 
 enum I386_Call_Type
@@ -141,6 +152,16 @@ struct I386_Descriptor_Table
 {
     u32 base;
     u16 limit;
+};
+
+// Clocks of the port instructions in real mode, protected mode with CPL <= IOPL and with CPL > IOPL, and VM86 mode
+struct I386_Port_Clocks
+{
+    u8 in[2][4];
+    u8 out[2][4];
+    u8 single[2][4];
+    u8 repeat[2][4];
+    u8 element[2][4];
 };
 
 struct I386_Pending_Exception
@@ -434,9 +455,11 @@ public:
     void Init(Memory* memory, IO* io = NULL);
     void Reset();
     void SetCPU(const GT_Machine_CPU_Info& info);
+    bool IsI486() const;
     void SetFPU(X87* fpu);
     void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
         u32 cpu_clock_rate, u32 model_clock_rate);
+    void SetBoardCache(bool enabled);
     bool IsBusTimed() const;
     u32 GetBusPortWait(bool write) const;
     void SetDecodedPorts(const u8* ports);
@@ -456,6 +479,7 @@ public:
 
     I386_State* GetState();
     const u32* GetCacheTestRegisters() const;
+    void SetCacheTestRegister(int index, u32 value);
     void CopyState(I386_State& state) const;
     bool SetState(const I386_State& state);
 
@@ -802,9 +826,12 @@ private:
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
+    template<bool i486>
     u32 RunCheckedStep();
+    void RunChecked486Step();
+    u32 RunInstruction486(GT_Bus_Access_Context& context);
     bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
-    template<bool timed>
+    template<int timing>
     bool RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
         bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending);
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
@@ -824,7 +851,7 @@ private:
         u32 iteration_clocks, bool move, bool reverse);
     void CompleteFault(u16 old_task);
 #if !defined(GT_DISABLE_DYNAREC)
-    template<bool timed>
+    template<int timing>
     I386_Run_Result RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
     void FlushDynarec();
     DynarecBlock* FindDynarecBlock(u8 entry);
@@ -840,15 +867,17 @@ private:
     void CoolDynarecPages();
     void CheckDynarecMemory();
     static void DynarecCodeWrite(void* context, u32 offset, u32 size);
+    template<bool i486>
     static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
         uintptr_t settle, uintptr_t revert);
     s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
+    template<bool i486>
     static void DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     static void DynarecCall(I386* cpu);
 #endif
 #endif
-    template<bool timed>
+    template<int timing>
     I386_Run_Result RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();
@@ -993,6 +1022,27 @@ private:
     bool InvalidateTLBPage(u32 linear);
     void TestTLB();
     void TestTLB486();
+    void Capture486Step();
+    void Apply486Clocks();
+    static void Init486Forms();
+    static const I486_Form& Get486Form(const InstructionContext& c, u8& flags);
+    u32 Get486FormClocks(const I486_Form& form, const InstructionContext& c) const;
+    static u8 Get486FormWritten(const I486_Form& form, u8 flags, const InstructionContext& c);
+    static int Get486FormBase(u8 flags, const InstructionContext& c);
+    u32 Get486Clocks(const InstructionContext& c, bool taken) const;
+    u32 Get486StringClocks(const InstructionContext& c, bool continuation) const;
+    u32 Get486DataClocks(const InstructionContext& c) const;
+    u32 Get486MultiplyClocks(u32 multiplier, int width, bool signed_multiplier) const;
+    u32 Peek486Operand(const InstructionContext& c, int width) const;
+    bool Is486Taken(const InstructionContext& c) const;
+    static bool Has486Index(const InstructionContext& c);
+    static int Get486Base(const InstructionContext& c);
+    static u8 Get486Written(const InstructionContext& c);
+    u32 Get486PrefixClocks(const InstructionContext& c) const;
+    static u32 Count486Prefixes(const u8* bytes, u32 length);
+    u32 Get486Misaligned() const;
+    u32 Get486ExceptionClocks(u8 vector, bool vm86) const;
+    u32 GetPortMode() const;
 
     template<int width> bool StackPush(u32 value);
     template<int width> bool StackPop(u32& value);
@@ -1006,7 +1056,7 @@ private:
 
     static u8 GetBusPattern(const InstructionContext& instruction);
     u32 GetBusCycles(u32 size) const;
-    u32 GetBusDramFold(u32 size, bool read, bool write, u32 code_row) const;
+    u32 GetBusDramFold(u32 size, bool read, bool write, u32 code_row, bool i486) const;
     bool TranslateCurrentPassive(u32 linear, u32& physical) const;
     u8 GetBusPhysical(u32 linear, u32& physical) const;
     void UpdateBusCode(u8 bus_class, u32 code_base);
@@ -1015,21 +1065,27 @@ private:
     u32 GetTransferComponents();
     u32 GetBusTransferLevel(u32 linear, u32 components, u32& add) const;
     u32 GetBusTransferRow(u32 eip) const;
+    void UpdateBusTiming();
+    template<bool i486>
     void AddBusTime();
-    void AddBusQueue(u32 data, bool transfer);
+    void AddBusQueue(u32 data, bool transfer, u32 clocks);
     void AddBusTransfer(bool access);
+    template<bool i486>
     u32 AddBusInstructionAccesses(u8 pattern, u32 code_row, bool& transfer);
+    template<bool i486>
     u32 AddBusAccess(u32 linear, u32 size, int write, u32 code_row);
-    void AddBusStringElement();
+    void AddBusStringElement(u32 iteration);
     u32 AddBusStringAccess(u32 linear, u32 size, int write, bool load);
     void AddBusTransferAccesses(u32 reads, u32 writes, u32 size);
     void AddBusInterrupt(u64& clocks, bool error_code);
-    void PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse) const;
+    void PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse,
+        u32 iteration) const;
     u64 GetBusRepeatSplit(u32 linear, u32 size, u32& cycles) const;
     u64 GetBusRepeatTime(const BusRepeat& repeat, u32 elements) const;
     u32 CountBusRepeatChanges(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse,
         u32& row) const;
-    u32 LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget) const;
+    u32 LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget,
+        u32 iteration) const;
     u32 AddBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse);
     void AddBusSlowAccess(u32 physical, u32 size, bool write);
     u32 CarryBusTime();
@@ -1495,6 +1551,7 @@ private:
 
     BusTiming m_bus;
     bool m_bus_timed;
+    bool m_i486_timing;
     u32 m_bus_queue;
     u32 m_bus_row;
     u32 m_bus_components;
@@ -1523,6 +1580,15 @@ private:
     u32 m_cr0_writable;
     u32 m_eflags_ac;
     u32 m_cache_test_registers[3];
+    const I386_Port_Clocks* m_port_clocks;
+    bool m_486_continuation;
+    u8 m_486_written;
+    u32 m_486_extra;
+    u32 m_486_registers[I386_REG_COUNT];
+    BusTiming m_bus_table;
+    bool m_bus_table_valid;
+    bool m_board_cache;
+    u32 m_486_bus_clocks;
 };
 
 static const u32 k_i386_poll_max_instructions = 16;
@@ -1533,6 +1599,9 @@ static const u8 k_i386_segment_fast_read = 0x01;
 static const u8 k_i386_segment_fast_write = 0x02;
 static const u8 k_i386_segment_fast_execute = 0x04;
 
+static const u32 k_i486_keep = 0xFFFFFFFFU;
+static const u32 k_i486_data = 0xFFFFFFFEU;
+
 static const u8 k_i386_tlb_valid = 0x01;
 static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
@@ -1541,6 +1610,7 @@ static const u8 k_i386_tlb_pwt = 0x10;
 static const u8 k_i386_tlb_pcd = 0x20;
 
 static const u32 k_i386_bus_queue = 16 << 8;
+static const u32 k_i486_bus_read = 2U << 16;
 static const u32 k_i386_bus_no_row = 0xFFFFFFFFU;
 static const u32 k_i386_bus_row_stored = 0x80000000U;
 static const u32 k_i386_bus_code_row = 0x7FFFFFFFU;

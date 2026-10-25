@@ -27,9 +27,31 @@ INLINE I386_State* I386::GetState()
     return &m_state;
 }
 
+INLINE bool I386::IsI486() const
+{
+    return m_i486;
+}
+
+// Real mode, protected mode with CPL <= IOPL and with CPL > IOPL, VM86 mode
+INLINE u32 I386::GetPortMode() const
+{
+    if (m_state.execution_mode == I386_MODE_REAL)
+        return 0;
+
+    if (m_state.execution_mode == I386_MODE_VM86)
+        return 3;
+
+    return m_state.current_privilege_level > GetIOPrivilegeLevel() ? 2 : 1;
+}
+
 INLINE const u32* I386::GetCacheTestRegisters() const
 {
     return m_cache_test_registers;
+}
+
+INLINE void I386::SetCacheTestRegister(int index, u32 value)
+{
+    m_cache_test_registers[index] = value;
 }
 
 // Batch cycles at the start of the running instruction, zero outside a batch

@@ -303,6 +303,20 @@ u32 I386::GetTaskSwitchClocks(const Descriptor& descriptor, const TaskState& sta
     bool new_vm = new_386 && (state.eflags & I386_FLAG_VM) != 0;
     u32 clocks = 0;
 
+    // PRM486 Table 10.1: the instruction's base plus TS, which depends only on the new TSS
+    if (m_i486_timing)
+    {
+        u32 ts = !new_386 ? 143 : new_vm ? 140 : 162;
+
+        if (switch_type == I386_TASK_SWITCH_JMP)
+            return (via_gate ? 43 : 42) + ts;
+
+        if (switch_type == I386_TASK_SWITCH_CALL)
+            return (via_gate ? 38 : 37) + ts;
+
+        return (switch_type == I386_TASK_SWITCH_IRET ? 32 : 37) + ts;
+    }
+
     if (switch_type == I386_TASK_SWITCH_JMP)
     {
         if (new_386)

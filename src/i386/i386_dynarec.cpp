@@ -208,7 +208,7 @@ void I386::CheckDynarecMemory()
 
 // RunFor with translated blocks: the interpreter steps whatever no block covers, with the same loop condition,
 // step epilogue and interrupt checks, so the slice ends at the same instruction as in RunFor
-template<bool timed>
+template<int timing>
 I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
     bool intr_pending)
 {
@@ -278,14 +278,15 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
 
                 m_dynarec_current = k_dynarec_none;
 
-                if ((exit & k_dynarec_exit_transfer) != 0)
+                // The 486 has no m clocks
+                if (timing != I386_TIMING_486 && (exit & k_dynarec_exit_transfer) != 0)
                 {
-                    u32 components = GetNextInstructionComponents();
+                    u32 components = (timing & I386_TIMING_486) != 0 ? 0 : GetNextInstructionComponents();
                     clocks += components;
 
-                    if (timed && (exit & k_dynarec_exit_prefetch) != 0)
+                    if ((timing & I386_TIMING_BUS) != 0 && (exit & k_dynarec_exit_prefetch) != 0)
                         m_bus_queue = MIN(m_bus_queue + components * m_bus_code_rate, k_i386_bus_queue);
-                    else if (timed)
+                    else if ((timing & I386_TIMING_BUS) != 0)
                     {
                         // A taken transfer whose target the block couldn't see, as AddBusTransfer sets the queue
                         u32 add = 0;
@@ -316,7 +317,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 continue;
             }
 
-            if (!RunFastStep<timed>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
+            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
                 intr_pending))
                 break;
 
@@ -350,7 +351,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     if (unlikely(m_dynarec_cool_clocks >= k_dynarec_cool_period_clocks))
         CoolDynarecPages();
 
-    total.cycles = clocks + (timed ? CarryBusTime() : 0);
+    total.cycles = clocks + ((timing & I386_TIMING_BUS) != 0 ? CarryBusTime() : 0);
     total.steps = steps + m_poll_steps;
     total.instruction_completed = completed;
     m_poll_steps = 0;
@@ -358,10 +359,14 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     return total;
 }
 
-template I386_Run_Result I386::RunDynarec<false>(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
-    bool intr_pending);
-template I386_Run_Result I386::RunDynarec<true>(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
-    bool intr_pending);
+template I386_Run_Result I386::RunDynarec<I386_TIMING_386>(u32 cycle_budget, GT_Bus_Access_Context& context,
+    bool nmi_pending, bool intr_pending);
+template I386_Run_Result I386::RunDynarec<I386_TIMING_BUS>(u32 cycle_budget, GT_Bus_Access_Context& context,
+    bool nmi_pending, bool intr_pending);
+template I386_Run_Result I386::RunDynarec<I386_TIMING_486>(u32 cycle_budget, GT_Bus_Access_Context& context,
+    bool nmi_pending, bool intr_pending);
+template I386_Run_Result I386::RunDynarec<I386_TIMING_486_BUS>(u32 cycle_budget, GT_Bus_Access_Context& context,
+    bool nmi_pending, bool intr_pending);
 
 // The block at CS:EIP when it is compiled, valid and inside the code window, which opens as StartInstruction opens it
 // Entry points are counted and compiled once they get hot, successors of blocks that ran to their end right away
@@ -713,6 +718,7 @@ void I386::CoolDynarecPages()
 // Runs one instruction of a block in the interpreter, as the fast loop of RunFor does
 // Returns zero while the block can go on: nothing ended the batch, the code window and the block are still valid
 // and the slice budget covers every instruction up to the next check
+template<bool i486>
 uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
     uintptr_t settle, uintptr_t revert)
 {
@@ -736,10 +742,23 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
     step.end_batch = false;
     step.exception = false;
 
+    // An instruction that turns the 486's cache on or off counts as its slice began
+    bool timed = cpu->m_bus_timed;
+
+    if (i486)
+        cpu->Capture486Step();
+
     if (unlikely(!cpu->ExecuteOPCode()))
         cpu->CompleteFault(old_task);
+    else if (i486 && (step.instruction_completed || cpu->m_state.repeat.active))
+    {
+        cpu->Apply486Clocks();
+
+        if (timed)
+            cpu->AddBusTime<true>();
+    }
     else if (cpu->m_bus_timed && (step.instruction_completed || cpu->m_state.repeat.active))
-        cpu->AddBusTime();
+        cpu->AddBusTime<false>();
 
     if (unlikely(cpu->m_state.interrupt_shadow_steps > 0) && step.instruction_completed)
         cpu->CountInterruptShadow();
@@ -776,6 +795,11 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
 
     return 0;
 }
+
+template uintptr_t I386::DynarecStep<false>(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+    uintptr_t settle, uintptr_t revert);
+template uintptr_t I386::DynarecStep<true>(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+    uintptr_t settle, uintptr_t revert);
 
 s32 I386::GetDynarecBusTime(const DynarecBusRun& run, u32 level) const
 {

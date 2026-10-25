@@ -202,6 +202,11 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x00AF:
             // DMA mask
             return m_dma->Read(port);
+        case 0x00C0:
+            // Board cache control
+        case 0x00C2:
+            // Cache diagnostic mode
+            return m_system_control->Read(port, context.clocks);
         case 0x0200:
             // FDC status
         case 0x0202:
@@ -280,6 +285,9 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x04CD:
             // CD-ROM subcode data
             return m_cdrom->Read(port, context.clocks);
+        case 0x04C8:
+            // CD-ROM cache
+            return m_system_control->Read(port, context.clocks);
         case 0x04D0:
             // Game port A
         case 0x04D2:
@@ -371,6 +379,8 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // Speed control
         case 0x05ED:
             // Maximum clock
+        case 0x05EE:
+            // VRAM cache
             return m_system_control->Read(port, context.clocks);
         case 0x0600:
             // Keyboard data
@@ -671,12 +681,16 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x0025:
         case 0x0028:
         case 0x006C:
+        case 0x00C0:
+        case 0x00C2:
+        case 0x04C8:
         case 0x05E0:
         case 0x05E2:
         case 0x05E6:
         case 0x05E8:
         case 0x05EC:
         case 0x05ED:
+        case 0x05EE:
             if (!m_system_control->Decodes(port))
                 return false;
 
@@ -877,6 +891,12 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // DMA mask
             m_dma->Write(port, value);
             break;
+        case 0x00C0:
+            // Board cache control
+        case 0x00C2:
+            // Cache diagnostic mode
+            m_system_control->Write(port, value);
+            break;
         case 0x0200:
             // FDC command
         case 0x0202:
@@ -959,6 +979,10 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // CD-ROM subcode status
         case 0x04CD:
             // CD-ROM subcode data
+            break;
+        case 0x04C8:
+            // CD-ROM cache
+            m_system_control->Write(port, value);
             break;
         case 0x04D0:
             // Game port A
@@ -1059,6 +1083,8 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Memory wait
         case 0x05EC:
             // Speed control
+        case 0x05EE:
+            // VRAM cache
             m_system_control->Write(port, value);
             break;
         case 0x0600:

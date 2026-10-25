@@ -95,6 +95,7 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_count = 0;
     m_key = 0;
     m_timed = false;
+    m_first_base = -1;
     m_bus_code_row = 0;
 }
 
@@ -106,6 +107,9 @@ bool DynarecEmitter::Compile(I386::DynarecBlock& block, u32 available, u32 instr
     m_block = &block;
     m_key = (u8)block.key;
     m_timed = m_cpu->m_bus_timed;
+    m_i486 = m_cpu->m_i486_timing;
+    m_exit_written = -1;
+    m_first_base = -1;
 
     if (!Decode(available, instruction_limit))
         return false;
@@ -204,6 +208,7 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
     bool default32 = (m_key & k_dynarec_key_default32) != 0;
     u32 position = 0;
     u32 clocks = 0;
+    u32 extra = 0;
     int limit = MIN((int)instruction_limit, k_dynarec_max_instructions);
 
     m_count = 0;
@@ -230,6 +235,9 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 
         Classify(instruction);
 
+        if (m_i486)
+            Set486Clocks(instruction);
+
         if (clocks + instruction.clocks > k_dynarec_max_clocks)
             break;
 
@@ -238,7 +246,16 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 #endif
 
         instruction.before = clocks;
+        instruction.extra_before = extra;
         clocks += instruction.clocks;
+
+        // The most a 486 native can add at run time: its misaligned accesses, and the AGI clock of a first instruction
+        if (m_i486 && instruction.kind == DYNAREC_NATIVE)
+        {
+            u8 pattern = I386::GetBusPattern(instruction.context) & k_i386_bus_pattern_mask;
+            extra += instruction.memory ? (pattern == I386_BUS_RMW ? 6 : 3) : 0;
+            extra += m_count == 0 && I386::Get486Base(instruction.context) >= 0 ? 1 : 0;
+        }
         position += length;
         m_count++;
 
@@ -306,9 +323,14 @@ void DynarecEmitter::Classify(Instruction& instruction)
         }
         else if (opcode2 >= 0x90 && opcode2 <= 0x9F)
         {
-            // SETcc r/m8
-            SetNative(instruction, memory ? 5 : 4, memory);
-            instruction.uses = GetConditionFlags(opcode2 & 15);
+            // SETcc r/m8, whose 486 clocks depend on the condition
+            if (m_i486)
+                instruction.kind = DYNAREC_HELPER;
+            else
+            {
+                SetNative(instruction, memory ? 5 : 4, memory);
+                instruction.uses = GetConditionFlags(opcode2 & 15);
+            }
         }
         else if (opcode2 == 0xB6 || opcode2 == 0xB7 || opcode2 == 0xBE || opcode2 == 0xBF)
             SetNative(instruction, memory ? 6 : 3, memory);
@@ -409,7 +431,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
             break;
         case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
             // POP r16/32. Timed POP ESP stays interpreted: its bus time reads the stack from ESP
-            if (opcode == 0x5C && m_timed)
+            if (opcode == 0x5C && (m_timed || m_i486))
                 instruction.kind = DYNAREC_HELPER;
             else
                 SetNative(instruction, 4, true);
@@ -597,6 +619,26 @@ void DynarecEmitter::SetNative(Instruction& instruction, u32 clocks, bool memory
     instruction.kind = DYNAREC_NATIVE;
     instruction.memory = memory;
     instruction.clocks = clocks + (instruction.context.memory_operand ? GetAddressClocks(instruction.context) : 0);
+    instruction.taken_clocks = instruction.clocks;
+}
+
+// The 486 clocks of a native as Apply486Clocks counts them: the form, its prefixes and the AGI clock against the
+// instruction before it in the block. Helpers count their own in DynarecStep
+void DynarecEmitter::Set486Clocks(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    instruction.written = I386::Get486Written(c);
+
+    if (instruction.kind != DYNAREC_NATIVE)
+        return;
+
+    u32 prefixes = I386::Count486Prefixes(m_cpu->m_passive_bytes, c.next_eip - c.start_eip);
+    int base = I386::Get486Base(c);
+    u32 agi = base >= 0 && m_count > 0 && (m_instructions[m_count - 1].written & (1 << base)) != 0 ? 1 : 0;
+
+    instruction.bus_clocks = m_cpu->Get486Clocks(c, false) + prefixes;
+    instruction.clocks = instruction.bus_clocks + agi;
+    instruction.taken_clocks = m_cpu->Get486Clocks(c, true) + prefixes + agi;
 }
 
 // The base and index clock of the 386 effective address unit, as DecodeOperands counts it
@@ -695,7 +737,8 @@ void DynarecEmitter::ComputeBusTransfer(Instruction& instruction)
     instruction.transfer_target = target;
     instruction.transfer_level = 0;
     instruction.transfer_add = 0;
-    instruction.transfer_known = instruction.transfer_static && GetTargetComponents(target, components);
+    // The 486 has no m clocks
+    instruction.transfer_known = instruction.transfer_static && (m_i486 || GetTargetComponents(target, components));
 
     if (!instruction.transfer_known)
         return;
@@ -774,7 +817,9 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
     u32 cycles = data >> 8;
     u32 length = (c.next_eip - c.start_eip) << 8;
     u32 need = m_cpu->GetBusCodeNeed(c.next_eip, c.next_eip - c.start_eip);
-    u32 free = instruction.clocks > accesses * 2 ? instruction.clocks - accesses * 2 : 0;
+    // The 486's AGI clock waits for an address, not for the bus
+    u32 clocks = m_i486 ? instruction.bus_clocks : instruction.clocks;
+    u32 free = clocks > accesses * 2 ? clocks - accesses * 2 : 0;
     u32 prefetch = free * m_cpu->m_bus_code_rate;
 
     BusRun result;
@@ -807,7 +852,7 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
     result.static_target = false;
 
     if (read || write)
-        result.add += m_cpu->GetBusDramFold(size, read, write, instruction.bus_code_row);
+        result.add += m_cpu->GetBusDramFold(size, read, write, instruction.bus_code_row, m_i486);
 
     // For a target outside the code window the dispatcher sets the queue
     // The instruction stalled when its level, clamp(s + offset, low, high) of the run before it, was under need
@@ -1051,7 +1096,8 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
     uintptr_t flags = size | (access == DYNAREC_WRITE ? 0x08 : 0) | (access == DYNAREC_READ_WRITE ? 0x10 : 0) |
         (code != k_i386_bus_code_row ? 0x20 | ((uintptr_t)code << 8) : 0) | (shift != 0 ? 0x40 : 0);
     jit_stxi(Offset(&m_cpu->m_dynarec_spill), DR_CPU, host);
-    jit_movi(t2, (jit_word_t)(uintptr_t)&I386::DynarecBusAccess);
+    jit_movi(t2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<true> :
+        (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<false>);
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_pushargr(linear);
@@ -1069,16 +1115,18 @@ void DynarecEmitter::EmitBlock()
     int last = m_count - 1;
     int next_check = last;
 
+    // Checks bound the 486's run time extras by their maximum
     for (int i = last; i >= 0; i--)
     {
         Instruction& instruction = m_instructions[i];
-        instruction.next_check = i == last ? 0 : m_instructions[next_check].before;
+        instruction.next_check = i == last ? 0 : m_instructions[next_check].before +
+            m_instructions[next_check].extra_before;
 
         if (instruction.kind != DYNAREC_NATIVE)
             next_check = i;
     }
 
-    m_block->fit_clocks = m_instructions[next_check].before;
+    m_block->fit_clocks = m_instructions[next_check].before + m_instructions[next_check].extra_before;
     m_block->link[0] = 0xFFFFFFFFU;
     m_block->link[1] = 0xFFFFFFFFU;
 
@@ -1086,6 +1134,10 @@ void DynarecEmitter::EmitBlock()
     jit_prolog();
     jit_tramp(k_dynarec_frame);
     m_block_start = jit_label();
+
+    // The AGI clock of the first instruction against the one before the block, counted past its last fallback
+    m_first_base = m_i486 && m_instructions[0].kind == DYNAREC_NATIVE ? I386::Get486Base(m_instructions[0].context) :
+        -1;
 
     for (int i = 0; i < m_count; i++)
     {
@@ -1099,8 +1151,12 @@ void DynarecEmitter::EmitBlock()
                 instruction.fallback = jit_forward();
                 instruction.resume = jit_forward();
             }
+            else if (i == 0)
+                Emit486FirstAGI(DR_T0);
 
+            m_exit_written = m_i486 ? instruction.written : -1;
             EmitNative(instruction, i);
+            m_exit_written = -1;
 
             if (instruction.memory && k_dynarec_near_fallbacks)
             {
@@ -1115,6 +1171,9 @@ void DynarecEmitter::EmitBlock()
         }
         else
         {
+            if (m_i486 && i > 0)
+                Store486Written(m_instructions[i - 1].written);
+
             StoreEIP(instruction.context.start_eip);
             CallStep(instruction.next_check, 0, instruction.before, m_timed ? AddBusRun(instruction.bus_before) : NULL,
                 NULL);
@@ -1135,8 +1194,10 @@ void DynarecEmitter::EmitBlock()
     if (!end.ends_block)
     {
         StoreEIP(end.context.next_eip);
+        m_exit_written = m_i486 && end.kind == DYNAREC_NATIVE ? end.written : -1;
         ExitLinked(m_count, end.before + end.clocks, k_dynarec_exit_end, 0,
             m_timed && end.kind == DYNAREC_NATIVE ? &end.bus_after : NULL);
+        m_exit_written = -1;
     }
 
     for (int i = 0; i < m_count; i++)
@@ -1155,6 +1216,9 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
 {
     jit_link(instruction.fallback);
     StoreEIP(instruction.context.start_eip);
+
+    if (m_i486 && index > 0)
+        Store486Written(m_instructions[index - 1].written);
 
     const I386::DynarecBusRun* settle = m_timed ? AddBusRun(instruction.bus_before) : NULL;
     const I386::DynarecBusRun* revert = m_timed && !instruction.ends_block ? AddBusRun(instruction.bus_after) : NULL;
@@ -1175,6 +1239,9 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
 // Leaves for the dispatcher through the exit of the entry function, with the steps and clocks of the block up to here
 void DynarecEmitter::Exit(int steps, u32 clocks, u32 flags, const BusRun* run)
 {
+    if (m_exit_written >= 0)
+        Store486Written(m_exit_written);
+
     if (IsValidPointer(run))
         EmitBusRun(*run, DR_T3);
 
@@ -1192,6 +1259,9 @@ void DynarecEmitter::Exit(int steps, u32 clocks, u32 flags, const BusRun* run)
 // A static exit to the block at the EIP just stored, through the link code shared by every block
 void DynarecEmitter::ExitLinked(int steps, u32 clocks, u32 flags, int slot, const BusRun* run)
 {
+    if (m_exit_written >= 0)
+        Store486Written(m_exit_written);
+
     if (IsValidPointer(run))
         EmitBusRun(*run, DR_T3);
 
@@ -1218,6 +1288,9 @@ void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot, const B
 
     intptr_t step_total = Offset(&m_cpu->m_dynarec_steps);
     intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+
+    if (m_exit_written >= 0)
+        Store486Written(m_exit_written);
 
     if (IsValidPointer(run))
         EmitBusRun(*run, DR_T3);
@@ -1297,7 +1370,8 @@ void DynarecEmitter::StoreEIP(u32 eip)
 void DynarecEmitter::CallStep(u32 next_check, u32 native_clocks, u32 before, const I386::DynarecBusRun* settle,
     const I386::DynarecBusRun* revert)
 {
-    jit_movi(DR_T3, (jit_word_t)(uintptr_t)&I386::DynarecStep);
+    jit_movi(DR_T3, m_cpu->m_i486_timing ? (jit_word_t)(uintptr_t)&I386::DynarecStep<true> :
+        (jit_word_t)(uintptr_t)&I386::DynarecStep<false>);
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_pushargi((jit_word_t)next_check);
@@ -1656,8 +1730,53 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     jit_andi(r, t1, 0xFFF);
     jit_addr(r, r, t3);
 
+    if (bus && m_i486)
+    {
+        Emit486FirstAGI(t2);
+        Emit486Misaligned(t1, t2, size, access);
+    }
+
     if (bus && m_timed)
         EmitBusAccess(r, t1, t2, t3, size, access);
+}
+
+// 3 clocks for each access of a misaligned 486 operand, past the last check that can fall back to the interpreter
+void DynarecEmitter::Emit486Misaligned(int linear, int t, u32 size, int access)
+{
+    if (size <= 1)
+        return;
+
+    intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+
+    jit_andi(t, linear, (jit_word_t)(size - 1));
+    jit_node_t* aligned = jit_beqi(t, 0);
+    LoadU32(t, DR_CPU, clock_total);
+    jit_addi(t, t, access == DYNAREC_READ_WRITE ? 6 : 3);
+    jit_stxi_i(clock_total, DR_CPU, t);
+    jit_patch(aligned);
+}
+
+// Once, for the block's first instruction, whose base the instruction before the block may have written
+void DynarecEmitter::Emit486FirstAGI(int t)
+{
+    if (m_first_base < 0)
+        return;
+
+    intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+    jit_ldxi_uc(t, DR_CPU, Offset(&m_cpu->m_486_written));
+    jit_andi(t, t, (jit_word_t)(1 << m_first_base));
+    jit_node_t* free_base = jit_beqi(t, 0);
+    LoadU32(t, DR_CPU, clock_total);
+    jit_addi(t, t, 1);
+    jit_stxi_i(clock_total, DR_CPU, t);
+    jit_patch(free_base);
+    m_first_base = -1;
+}
+
+void DynarecEmitter::Store486Written(int written)
+{
+    jit_movi(DR_T0, (jit_word_t)written);
+    jit_stxi_c(Offset(&m_cpu->m_486_written), DR_CPU, DR_T0);
 }
 
 // SZP of a masked result ORed into f, for the flags in needed. t and u are scratch
@@ -2537,6 +2656,21 @@ void DynarecEmitter::EmitJcc(Instruction& instruction, int index, int condition,
 
     m_block->eip_limit = MAX(m_block->eip_limit, target);
 
+    // The 486 has no m clocks
+    if (m_i486)
+    {
+        EmitCondition(DR_T0, DR_T1, condition);
+        jit_node_t* jump = jit_bnei(DR_T0, 0);
+        StoreEIP(c.next_eip);
+        ExitLinked(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, 0,
+            m_timed ? &instruction.bus_after : NULL);
+        jit_patch(jump);
+        StoreEIP(target);
+        ExitTo(target, index + 1, instruction.before + instruction.taken_clocks, 1,
+            m_timed ? &instruction.bus_taken : NULL);
+        return;
+    }
+
     u32 components = 0;
     bool known = GetTargetComponents(target, components);
 
@@ -2569,11 +2703,11 @@ void DynarecEmitter::EmitLoop(Instruction& instruction, int index, s32 displacem
     m_block->eip_limit = MAX(m_block->eip_limit, target);
 
     u32 target_components = 0;
-    bool target_known = GetTargetComponents(target, target_components);
+    bool target_known = m_i486 || GetTargetComponents(target, target_components);
     u32 next_components = 0;
-    bool next_known = opcode == 0xE3 || GetTargetComponents(c.next_eip, next_components);
-    u32 next_clocks = opcode == 0xE3 ? 5 : 11;
-    u32 target_clocks = opcode == 0xE3 ? 9 : 11;
+    bool next_known = m_i486 || opcode == 0xE3 || GetTargetComponents(c.next_eip, next_components);
+    u32 next_clocks = m_i486 ? instruction.clocks : opcode == 0xE3 ? 5 : 11;
+    u32 target_clocks = m_i486 ? instruction.taken_clocks : opcode == 0xE3 ? 9 : 11;
     jit_node_t* taken = NULL;
 
     LoadRegister(DR_T0, I386_REG_ECX, count_width);
@@ -2631,6 +2765,13 @@ void DynarecEmitter::EmitJump(Instruction& instruction, int index, s32 displacem
 
     m_block->eip_limit = MAX(m_block->eip_limit, target);
 
+    if (m_i486)
+    {
+        StoreEIP(target);
+        ExitTo(target, index + 1, instruction.before + instruction.clocks, 1, m_timed ? &instruction.bus_taken : NULL);
+        return;
+    }
+
     u32 components = 0;
     bool known = GetTargetComponents(target, components);
 
@@ -2656,7 +2797,7 @@ void DynarecEmitter::EmitCall(Instruction& instruction, int index, int width)
     m_block->call_eip = c.start_eip;
 
     u32 components = 0;
-    bool known = GetTargetComponents(target, components);
+    bool known = m_i486 || GetTargetComponents(target, components);
     m_block->call_next_eip = width == 16 ? c.next_eip & 0xFFFF : c.next_eip;
 
     jit_movi(DR_T4, (jit_word_t)(width == 16 ? c.next_eip & 0xFFFF : c.next_eip));
@@ -2690,6 +2831,7 @@ void DynarecEmitter::EmitReturn(Instruction& instruction, int index, int width, 
     LoadHost(DR_T1, DR_T0, width);
     LoadU32(DR_T2, DR_CPU, Offset(&m_cpu->m_state.segments[I386_SEGMENT_CS].limit));
     jit_patch_at(jit_bgtr_u(DR_T1, DR_T2), instruction.fallback);
+    Emit486FirstAGI(DR_T2);
 
     // Counted past the CS limit check, the last that can fall back
     if (m_timed)
@@ -2698,12 +2840,24 @@ void DynarecEmitter::EmitReturn(Instruction& instruction, int index, int width, 
         LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_state.segments[I386_SEGMENT_SS].base));
         jit_addr(DR_T1, DR_T1, DR_T4);
         Mask(DR_T1, 32);
+
+        if (m_i486)
+            Emit486Misaligned(DR_T1, DR_T2, (u32)width / 8, DYNAREC_READ);
+
         EmitBusAccess(DR_T0, DR_T1, DR_T2, DR_T3, (u32)width / 8, DYNAREC_READ);
         jit_addi(DR_T4, DR_T4, (jit_word_t)(width / 8 + release));
         StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T4);
     }
     else
     {
+        if (m_i486)
+        {
+            LoadU32(DR_T2, DR_CPU, Offset(&m_cpu->m_state.segments[I386_SEGMENT_SS].base));
+            jit_addr(DR_T2, DR_T2, DR_T4);
+            Mask(DR_T2, 32);
+            Emit486Misaligned(DR_T2, DR_T3, (u32)width / 8, DYNAREC_READ);
+        }
+
         jit_addi(DR_T4, DR_T4, (jit_word_t)(width / 8 + release));
         StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T4);
         jit_stxi_i(Offset(&m_cpu->m_state.eip), DR_CPU, DR_T1);

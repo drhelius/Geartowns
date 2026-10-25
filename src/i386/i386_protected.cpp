@@ -214,6 +214,10 @@ bool I386::SetDescriptorAccessed(const Descriptor& descriptor, GT_Bus_Access_Con
             return true;
     }
 
+    // The 486 takes 11 more for each descriptor it marks accessed
+    if (m_i486_timing)
+        m_486_extra += 11;
+
     return WriteLinear(address, 16, (descriptor.high & 0xFFFF) | 0x0100, context, true);
 }
 
@@ -464,7 +468,8 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
     int width = gate32 ? 32 : 16;
 
     if (IsValidPointer(clocks))
-        *clocks = vm86 ? 119 : new_privilege < old_privilege ? 99 : 59;
+        *clocks = m_i486_timing ? (vm86 ? 82 : new_privilege < old_privilege ? 71 : 44) :
+            vm86 ? 119 : new_privilege < old_privilege ? 99 : 59;
 
     if (new_privilege < old_privilege)
     {

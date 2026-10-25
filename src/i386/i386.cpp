@@ -48,6 +48,26 @@ const u8 I386::k_szp_flags[256] =
 
 static const u32 k_i386_real_interrupt_entry_clocks = 33;
 
+// Fixed and DX ports, INS and OUTS. VM86 takes the CPL > IOPL clocks on the 386
+static const I386_Port_Clocks k_i386_port_clocks =
+{
+    { { 12, 6, 26, 26 }, { 13, 7, 27, 27 } },
+    { { 10, 4, 24, 24 }, { 11, 5, 25, 25 } },
+    { { 15, 9, 29, 29 }, { 14, 8, 28, 28 } },
+    { { 13, 7, 27, 27 }, { 5, 6, 26, 26 } },
+    { { 6, 6, 6, 6 }, { 12, 5, 5, 5 } }
+};
+
+// PRM486 Table 10.2
+static const I386_Port_Clocks k_i486_port_clocks =
+{
+    { { 14, 9, 29, 27 }, { 14, 8, 28, 27 } },
+    { { 16, 11, 31, 29 }, { 16, 10, 30, 29 } },
+    { { 17, 10, 32, 30 }, { 17, 10, 32, 30 } },
+    { { 16, 10, 30, 29 }, { 17, 11, 31, 30 } },
+    { { 8, 8, 8, 8 }, { 5, 5, 5, 5 } }
+};
+
 I386::I386()
 {
     InitPointer(m_memory);
@@ -104,8 +124,19 @@ I386::I386()
     m_tlb_write_mask = k_i386_tlb_dirty;
     m_cr0_writable = 0x8000001FU;
     m_eflags_ac = 0;
+    Init486Forms();
+    m_port_clocks = &k_i386_port_clocks;
+    m_i486_timing = false;
+    m_486_continuation = false;
+    m_486_written = 0;
+    m_486_extra = 0;
+    memset(m_486_registers, 0, sizeof(m_486_registers));
     memset(&m_bus, 0, sizeof(m_bus));
     m_bus_timed = false;
+    memset(&m_bus_table, 0, sizeof(m_bus_table));
+    m_bus_table_valid = false;
+    m_board_cache = true;
+    m_486_bus_clocks = 0;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
     InitPointer(m_bus_decoded_ports);
     InitPointer(m_bus_page_class);
@@ -249,6 +280,7 @@ void I386::Reset()
     m_alignment_check = false;
     m_tlb_read_mask = 0;
     m_tlb_write_mask = k_i386_tlb_dirty;
+    m_486_written = 0;
     InitPointer(m_code_window);
     m_code_window_eip = 0;
     m_code_window_size = 0;
@@ -330,6 +362,7 @@ void I386::Reset()
 
     UpdateSegmentFastPaths();
     UpdateDebugState();
+    UpdateBusTiming();
 }
 
 NO_INLINE bool I386::ExecuteOPCodeDebug(const I386_State& before)
@@ -385,9 +418,12 @@ NO_INLINE bool I386::ExecuteOPCodeDebug(const I386_State& before)
 void I386::CompleteFault(u16 old_task)
 {
     StepState& result = m_step;
+    u8 vector = m_exception.vector;
+    bool vm86 = m_state.execution_mode == I386_MODE_VM86;
 
+    // The 486 ignores the faulting instruction's partial work
     m_step_exception = {};
-    m_step_exception.cycles = result.clocks;
+    m_step_exception.cycles = m_i486_timing ? 0 : result.clocks;
     m_step_exception.instruction_completed = result.instruction_completed;
     m_step_exception.end_batch = result.end_batch;
     m_step_exception.exception_after_instruction =
@@ -395,6 +431,12 @@ void I386::CompleteFault(u16 old_task)
 
     ResolveException(*m_bus_context, m_step_exception);
     AddBusInterrupt(m_step_exception.cycles, false);
+
+    if (m_i486_timing)
+    {
+        m_step_exception.cycles += Get486ExceptionClocks(vector, vm86);
+        m_486_written = 0;
+    }
 
     result.clocks = m_step_exception.cycles;
     result.exception = m_step_exception.exception;
@@ -430,18 +472,22 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     m_poll_budget = cycle_budget;
     m_poll_active = m_poll_enabled;
 
-    if (m_bus_timed)
-        return RunTimed<true>(cycle_budget, context, nmi_pending, intr_pending);
+    if (m_i486_timing)
+        return m_bus_timed ? RunTimed<I386_TIMING_486_BUS>(cycle_budget, context, nmi_pending, intr_pending) :
+            RunTimed<I386_TIMING_486>(cycle_budget, context, nmi_pending, intr_pending);
 
-    return RunTimed<false>(cycle_budget, context, nmi_pending, intr_pending);
+    if (m_bus_timed)
+        return RunTimed<I386_TIMING_BUS>(cycle_budget, context, nmi_pending, intr_pending);
+
+    return RunTimed<I386_TIMING_386>(cycle_budget, context, nmi_pending, intr_pending);
 }
 
-template<bool timed>
+template<int timing>
 I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending)
 {
 #if !defined(GT_DISABLE_DYNAREC)
     if (m_dynarec_enabled)
-        return RunDynarec<timed>(cycle_budget, context, nmi_pending, intr_pending);
+        return RunDynarec<timing>(cycle_budget, context, nmi_pending, intr_pending);
 #endif
 
     I386_Run_Result total = {};
@@ -463,7 +509,7 @@ I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context,
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
-            if (!RunFastStep<timed>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
+            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
                 intr_pending))
                 break;
         }
@@ -484,7 +530,7 @@ I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context,
         }
     }
 
-    total.cycles = clocks + (timed ? CarryBusTime() : 0);
+    total.cycles = clocks + ((timing & I386_TIMING_BUS) != 0 ? CarryBusTime() : 0);
     total.steps = steps + m_poll_steps;
     total.instruction_completed = completed;
     m_poll_steps = 0;
@@ -522,7 +568,10 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
         }
     }
 
-    RunCheckedStep();
+    if (unlikely(m_i486_timing))
+        RunChecked486Step();
+    else
+        RunCheckedStep<false>();
 
     const StepState& step = m_step;
     total.cycles += step.clocks;
@@ -920,6 +969,14 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
     if (entered)
     {
         AddBusInterrupt(clocks, false);
+
+        // The 486 counts INT+11 for an external interrupt and INT+3 for NMI
+        if (m_i486_timing)
+        {
+            clocks += line >= 0 ? 11 : 3;
+            m_486_written = 0;
+        }
+
         return (u32)clocks;
     }
 
@@ -967,6 +1024,7 @@ bool I386::SetState(const I386_State& state)
     UpdateExecutionMode();
     SanitizeState();
     FlushTLB();
+    UpdateBusTiming();
 
     if (moved)
         ClearBreakpointHit();
@@ -1062,6 +1120,11 @@ void I386::Serialize(StateSerializer& serializer, int version)
 
     if (version >= 21)
         G_SERIALIZE_ARRAY(serializer, m_cache_test_registers, 3);
+
+    if (version >= 24)
+        G_SERIALIZE(serializer, m_486_written);
+    else
+        m_486_written = 0;
 }
 
 void I386::SanitizeState()
@@ -1269,6 +1332,8 @@ void I386::SetCPU(const GT_Machine_CPU_Info& info)
     }
 
     m_i486 = i486;
+    m_i486_timing = i486;
+    m_port_clocks = m_i486_timing ? &k_i486_port_clocks : &k_i386_port_clocks;
     m_reset_edx = info.reset_edx;
     m_cr0_fixed = info.cr0_fixed;
     m_cr0_writable = i486 ? 0xE005002FU : 0x8000001FU;
@@ -1595,6 +1660,9 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
     }
 
     UNUSED(fault);
+
+    if (m_i486_timing && IsValidPointer(clocks))
+        *clocks = 26;
 
     u32 table_offset = (u32)vector * 4;
 

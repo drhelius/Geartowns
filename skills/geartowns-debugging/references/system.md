@@ -178,18 +178,21 @@ there is no century rule. A write to register 13 resets the divider and READY st
 | Port | Read | Write |
 |---|---|---|
 | 0020h | Reset cause: bit 0 software reset, bit 1 CPU shutdown; the read clears them | Bit 0 reset the CPU, bit 6 power off, bit 7 write-protect the memory holding the NMI vector |
-| 0022h | | Bit 6 power off; HG: bit 7 turns the CRT off (the picture goes black) |
-| 0024h | UG and HG: capability flags, active low: bit 7 power-off flag valid, bit 6 CRT readback, bit 5 CRT power off, bit 4 free-running timer, bit 3 software power off; bits 2-0 read 1 (UG 2Fh, HG 07h) | |
+| 0022h | | Bit 6 power off; HG and HR: bit 7 turns the CRT off (the picture goes black) |
+| 0024h | UG, HG and HR: capability flags, active low: bit 7 power-off flag valid, bit 6 CRT readback, bit 5 CRT power off, bit 4 free-running timer, bit 3 software power off; bits 2-0 read 1 (UG 2Fh, HG and HR 07h) | |
 | 0025h | UX: 7Fh, bit 7 = 0 means the NMI mask exists | |
 | 0028h | UX: bit 0 NMI masked | UX: bit 0 masks NMI; power-on reset clears it, a software reset keeps it |
-| 0030h-0031h | Bits 15-3 machine ID, bits 2-0 CPU ID (001b = 80386DX, 011b = 80386SX); 0101h on Model 1/2, 0201h on the 1F/2F, 0401h on the 10F/20F, 0501h on the CX, 0303h on the UX, 0603h on the UG, 0801h on the HG, 4A03h on the Marty; UG and HG: bit 15 reads 1 for 300 µs after power-on | UX: 0030h bit 0 LSPEED, two-wait RAM |
+| 0030h-0031h | Bits 15-3 machine ID, bits 2-0 CPU ID (001b = 80386DX, 010b = 486, 011b = 80386SX); 0101h on Model 1/2, 0201h on the 1F/2F, 0401h on the 10F/20F, 0501h on the CX, 0303h on the UX, 0603h on the UG, 0801h on the HG, 0702h on the HR, 4A03h on the Marty; UG, HG and HR: bit 15 reads 1 for 300 µs after power-on | UX: 0030h bit 0 LSPEED, two-wait RAM |
 | 006Ch | 10F and later: 00h, and a 1 µs wait | 10F and later: a 1 µs wait |
 | 0032h | Bit 0 serial ID ROM data | Bit 7 ID RESET, bit 6 ID CLK, bit 5 /CS |
+| 00C0h | HR: bits 1-0 as written | HR: bit 0 CMEN enables the board cache in high speed mode, bit 1 RPINH stops replacement; the BIOS writes 0 at reset |
+| 00C2h | HR: bit 3 as written | HR: bit 3 SDMOD, cache diagnostic mode |
 | 0400h | Bit 0 resolution: 0 on Model 1/2 | |
 | 0404h | Bit 7 low window: 0 FM-R devices, 1 RAM | Same |
 | 0480h | Bit 1 boot window (0 ROM, 1 RAM), bit 0 dictionary and CMOS window | Same |
 | 0484h | | Bits 3-0 dictionary bank |
 | 048Ah | Memory card: bit 7 changed (cleared by the read), bit 5 battery dead, bit 4 battery low, bits 2-1 card detect (00 present, 11 absent), bit 0 write protect | |
+| 04C8h | HR: bit 7 = 0 (CD-ROM cache present), bit 0 as written; older models read FFh | HR: bit 0 enables the CD-ROM cache in high speed mode |
 | 05C0h | | Bit 3 expansion NMI enable |
 | 05C2h | Bit 3: the expansion bus caused the NMI | |
 | 05C8h | Bit 7 text VRAM written (cleared by the read) | |
@@ -198,7 +201,8 @@ there is no century rule. A write to register 13 resets the divider and READY st
 | 05E2h, 05E6h | 10F and later: the value written | Memory wait settings |
 | 05E8h | 1F and later: installed RAM in MB, bits 4-0 | |
 | 05ECh | CX: bit 7 = 0 means speed control exists, bit 0 the mode | CX: bit 0 high speed (1) or compatible (0) |
-| 05EDh | UG and HG: bit 7 = 0, bits 6-0 the maximum CPU clock in MHz | |
+| 05EDh | UG, HG and HR: bit 7 = 0, bits 6-0 the maximum CPU clock in MHz | |
+| 05EEh | HR: bit 7 = 0 (VRAM cache present), bit 0 as written | HR: bit 0 VCMEN admits VRAM to the cache in high speed mode |
 | 0490h | UX: memory card bank | Bits 5-0: the 1 MB bank of the card at D00000h |
 | 0491h | UX: bit 0 attribute space, bit 7 = 0 means JEIDA-4 capable | Bit 0: 0 card memory, 1 attribute space |
 

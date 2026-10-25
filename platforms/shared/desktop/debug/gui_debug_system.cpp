@@ -744,6 +744,10 @@ void gui_debug_window_system_control(void)
     u8 misc3 = 0;
     u8 maximum_clock = 0;
     u8 readback = 0;
+    u8 cache = 0;
+    u8 cache_mode = 0;
+    u8 vram_cache = 0;
+    u8 cd_cache = 0;
     bool has_nmi_mask = core->GetIO()->Peek(0x0028, clocks, nmi_mask);
     bool has_speed = core->GetIO()->Peek(0x05EC, clocks, speed);
     bool has_misc3 = core->GetIO()->Peek(0x0024, clocks, misc3);
@@ -753,6 +757,9 @@ void gui_debug_window_system_control(void)
     bool has_wait = core->GetIO()->Peek(0x05E2, clocks, wait) && core->GetIO()->Peek(0x05E6, clocks, wait_2);
     bool has_card = core->GetIO()->Peek(0x0490, clocks, card_bank) && core->GetIO()->Peek(0x0491, clocks, card_attribute);
     bool has_low_speed = (k_machine_profiles[machine.model].features & GT_MACHINE_FEATURE_LSPEED) != 0;
+    bool has_cache = core->GetIO()->Peek(0x00C0, clocks, cache) && core->GetIO()->Peek(0x00C2, clocks, cache_mode);
+    bool has_vram_cache = core->GetIO()->Peek(0x05EE, clocks, vram_cache);
+    bool has_cd_cache = core->GetIO()->Peek(0x04C8, clocks, cd_cache);
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "MODEL REGISTERS"); ImGui::Separator();
 
@@ -835,6 +842,31 @@ void gui_debug_window_system_control(void)
 
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(0490/1)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("CACHE");
+
+        if (has_cache)
+        {
+            ImGui::TextColored((cache & 0x01) ? green : gray, "CMEN"); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored((cache & 0x02) ? green : gray, "RPINH"); ImGui::SameLine(0.0f, space);
+            ImGui::TextColored((cache_mode & 0x08) ? green : gray, "SDMOD");
+        }
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(00C0/2)");
+
+        ImGui::TableNextRow();
+        draw_model_flag("VRAM CACHE", has_vram_cache, (vram_cache & 0x01) != 0, "ON", "OFF");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(05EE)");
+
+        ImGui::TableNextRow();
+        draw_model_flag("CD CACHE", has_cd_cache, (cd_cache & 0x01) != 0, "ON", "OFF");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04C8)");
 
         ImGui::EndTable();
     }

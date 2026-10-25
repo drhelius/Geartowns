@@ -73,6 +73,37 @@ static const u16 k_x87_d9_clocks[32] =
     288, 267, 296, 335, 52, 124, 22, 21, 98, 328, 104, 400, 51, 63, 400, 401
 };
 
+// PRM486 Table 10.3, cache hit. FLDENV, FSTENV, FRSTOR and FSAVE hold the real and VM86 count
+static const u16 k_x87_486_memory_clocks[8][8] =
+{
+    { 10, 11, 4, 4, 10, 10, 73, 73 },
+    { 3, 3, 7, 7, 44, 4, 67, 3 },
+    { 22, 23, 16, 16, 22, 22, 85, 85 },
+    { 11, 3, 32, 33, 3, 6, 3, 6 },
+    { 10, 14, 4, 4, 10, 10, 73, 73 },
+    { 3, 3, 8, 8, 131, 3, 154, 3 },
+    { 24, 25, 18, 18, 24, 24, 87, 87 },
+    { 14, 3, 33, 33, 75, 17, 175, 33 }
+};
+
+static const u16 k_x87_486_register_clocks[8][8] =
+{
+    { 10, 16, 4, 4, 10, 10, 73, 73 },
+    { 4, 4, 3, 3, 3, 3, 3, 3 },
+    { 3, 3, 3, 3, 3, 3, 3, 3 },
+    { 3, 3, 3, 3, 3, 3, 3, 3 },
+    { 10, 16, 4, 4, 10, 10, 73, 73 },
+    { 3, 4, 3, 3, 4, 4, 3, 3 },
+    { 10, 16, 4, 4, 10, 10, 73, 73 },
+    { 3, 4, 3, 3, 3, 3, 3, 3 }
+};
+
+static const u16 k_x87_486_d9_clocks[32] =
+{
+    6, 3, 3, 3, 4, 8, 3, 3, 4, 8, 8, 8, 8, 8, 4, 3,
+    242, 311, 244, 289, 19, 94, 3, 3, 84, 313, 85, 291, 29, 31, 241, 241
+};
+
 static const X87::X87_Register k_x87_default_nan = { 0xC000000000000000ULL, 0xFFFF };
 static const X87::X87_Register k_x87_zero = { 0x0000000000000000ULL, 0x0000 };
 static const X87::X87_Register k_x87_one = { 0x8000000000000000ULL, 0x3FFF };
@@ -257,20 +288,23 @@ X87::~X87()
 void X87::Init(X87_Flavor flavor)
 {
     m_flavor = flavor;
+    memset(&m_state, 0, sizeof(m_state));
+    Initialize();
     Reset();
 }
 
 void X87::Reset()
 {
+    // Without its self-test the 486 leaves the FPU as it was at RESET
+    if (m_flavor == X87_FLAVOR_80486)
+        return;
+
     memset(&m_state, 0, sizeof(m_state));
     Initialize();
 
     // The 387 asserts ERROR# after RESET, which is how the 386 detects it and sets CR0 ET
-    if (m_flavor == X87_FLAVOR_80387)
-    {
-        m_state.control &= ~k_x87_control_im;
-        m_state.status |= k_x87_status_busy | k_x87_status_es | k_x87_status_ie;
-    }
+    m_state.control &= ~k_x87_control_im;
+    m_state.status |= k_x87_status_busy | k_x87_status_es | k_x87_status_ie;
 }
 
 u16 X87::GetTagWord() const
@@ -412,8 +446,14 @@ bool X87::Execute(const X87_Operation& operation, u8* operand)
     return false;
 }
 
-u32 X87::GetClocks(u8 opcode, u8 modrm, const u8* operand) const
+u32 X87::GetClocks(const X87_Operation& operation, const u8* operand) const
 {
+    u8 opcode = operation.opcode;
+    u8 modrm = operation.modrm;
+
+    if (m_flavor == X87_FLAVOR_80486)
+        return Get486Clocks(opcode, modrm, operation.protected_mode);
+
     int row = opcode & 7;
     int reg = (modrm >> 3) & 7;
 
@@ -443,6 +483,53 @@ u32 X87::GetClocks(u8 opcode, u8 modrm, const u8* operand) const
         return 13;
 
     return k_x87_register_clocks[row][reg];
+}
+
+// Intel's average for each form, to the nearest clock with halves down, and notes 1-5 of the table
+u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
+{
+    int row = opcode & 7;
+    int reg = (modrm >> 3) & 7;
+    bool memory = (modrm >> 6) != 3;
+    u32 clocks = 0;
+
+    if (!memory && opcode == 0xD9 && modrm >= 0xE0)
+        clocks = k_x87_486_d9_clocks[modrm - 0xE0];
+    else if (!memory && opcode == 0xDA && modrm == 0xE9)
+        clocks = 5;
+    else if (!memory && opcode == 0xDE && modrm == 0xD9)
+        clocks = 5;
+    else if (!memory && opcode == 0xDB)
+        clocks = modrm == 0xE2 ? 7 : modrm == 0xE3 ? 17 : 3;
+    else
+        clocks = memory ? k_x87_486_memory_clocks[row][reg] : k_x87_486_register_clocks[row][reg];
+
+    // FLDENV, FSTENV, FRSTOR and FSAVE in protected mode
+    if (memory && protected_mode && (opcode == 0xD9 || opcode == 0xDD) && (reg == 4 || reg == 6))
+        clocks = opcode == 0xD9 ? (reg == 4 ? 34 : 56) : (reg == 4 ? 120 : 143);
+
+    // FST and FSTP of a zero to a single or double take 27 and 28
+    if (memory && (opcode == 0xD9 || opcode == 0xDD) && (reg == 2 || reg == 3) && !IsEmpty(0) &&
+        (Read(0).sign_exponent & 0x7FFF) == 0 && Read(0).significand == 0)
+        clocks = opcode == 0xD9 ? 27 : 28;
+
+    // Divisions are shorter at 24 and 53 bits of precision
+    if (reg >= 6 && (opcode == 0xD8 || opcode == 0xDC || opcode == 0xDE || (memory && opcode == 0xDA)))
+    {
+        int precision = (m_state.control >> 8) & 3;
+        clocks -= precision == 0 ? 38 : precision == 2 ? 11 : 0;
+    }
+
+    // The no-wait forms take longer while an error is pending
+    if (IsErrorPending())
+    {
+        bool initialize = !memory && opcode == 0xDB && (modrm == 0xE2 || modrm == 0xE3);
+        bool save = memory && reg == 6 && (opcode == 0xD9 || opcode == 0xDD);
+        bool store = (memory && reg == 7 && (opcode == 0xD9 || opcode == 0xDD)) || (opcode == 0xDF && modrm == 0xE0);
+        clocks += initialize || save ? 17 : store ? 18 : 0;
+    }
+
+    return clocks;
 }
 
 void X87::SaveState(std::ostream& stream)

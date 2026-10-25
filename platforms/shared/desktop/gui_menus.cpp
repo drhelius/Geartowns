@@ -1108,15 +1108,15 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
 
     bool changed = false;
     bool in_use = emu_get_core()->GetPendingMachineConfig().fpu;
-    const char* labels[2] = { "None (Original)", "80387" };
+    const char* labels[2] = { "None (Original)", get_machine_fpu_name(profile.cpu) };
     char auto_label[32];
     char preview[96];
-    snprintf(auto_label, sizeof(auto_label), "Auto (%s)", in_use ? "80387" : "None");
+    snprintf(auto_label, sizeof(auto_label), "Auto (%s)", in_use ? labels[1] : "None");
     snprintf(preview, sizeof(preview), "%s", config_machine.fpu == GT_MACHINE_AUTO ? auto_label :
         labels[config_machine.fpu != 0 ? 1 : 0]);
 
     if ((config_machine.fpu > 0) && !in_use)
-        snprintf(preview, sizeof(preview), "80387, none on the %s", profile.name);
+        snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
 
     float text_width = MAX(ImGui::CalcTextSize(labels[0]).x, ImGui::CalcTextSize(preview).x);
     ImGui::PushItemWidth(get_combo_width(text_width));
@@ -1152,7 +1152,7 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
     {
         ImGui::BeginTooltip();
         ImGui::Text("It is recommended to leave this option on Auto.");
-        ImGui::Text("Auto fits an 80387 if the game database asks for one");
+        ImGui::Text("Auto fits an 80387 or a 487SX if the game database asks for one");
         ImGui::Text("or keeps the model's original, with no FPU.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
@@ -1292,9 +1292,10 @@ static void menu_boot_device(void)
 
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size)
 {
-    snprintf(text, text_size, "%s · %s %u MHz%s · %u MB", k_machine_profiles[config.model].name,
-        k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, config.fpu ? " + 80387" : "",
-        config.ram_size / (1024 * 1024));
+    bool card = config.fpu && !k_machine_cpus[config.cpu].fpu;
+    snprintf(text, text_size, "%s · %s %u MHz%s%s · %u MB", k_machine_profiles[config.model].name,
+        k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, card ? " + " : "",
+        card ? get_machine_fpu_name(config.cpu) : "", config.ram_size / (1024 * 1024));
 }
 
 static float get_combo_width(float text_width)

@@ -148,19 +148,20 @@ const GT_DB_Entry k_game_database[] =
     { 0xF77D4A4F, "FM Towns Marty Tentou Auto Demo '93 Natsu", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MARTY, 0, 0, 0, 0, 0x04277417 },
     { 0xC19736AC, "Ms. Detective File 1 - Iwami Ginzan Satsujin Jiken (FM Towns Marty)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MARTY, 0, 0, 0, 0, 0 },
 
-    // 486 titles. The 486 models (HR, MA, MX) are not emulated yet, so these name the HG, the closest emulated model
-    { 0xA3A41A2E, "Alltynex", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 66, 0, 0, 0 }, // MX
-    { 0xC21B99C5, "Alltynex (T-En v1.1)", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 0, 66, 0, 0, 0 }, // MX
-    { 0xF6B8469F, "ElFish", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0xFF53CE45 }, // HR
-    { 0x71570BC6, "Gadget - Invention, Travel, & Adventure", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 20, 0, 0, 0x17C3D391 }, // HR, MA recommended
-    { 0xC2A397F7, "Horde, The", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0x78DBF7F5 }, // HR
-    { 0xB63BB04F, "Para Para Paradise (Disc A) (Akane Kouda)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
-    { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
-    { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HG, 8, 33, 0, 0, 0 }, // MA
-    { 0x75236D99, "Ravenloft - Aku no Keshin", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0xBF2C9875 }, // HR
-    { 0x6BEA56A2, "Teo - Mou Hitotsu no Chikyuu (Version 1.0)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
-    { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
-    { 0xADC925E6, "Theme Park", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HG, 4, 20, 0, 0, 0xC3C8B1CB }, // HR
+    // 486 titles. The MA and MX are not emulated yet, so theirs name the HR at their clock, with its 487SX for the FPU
+    // titles
+    { 0xA3A41A2E, "Alltynex", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 66, 0, 0, 0 }, // MX
+    { 0xC21B99C5, "Alltynex (T-En v1.1)", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 0, 66, 0, 0, 0 }, // MX
+    { 0xF6B8469F, "ElFish", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0xFF53CE45 }, // HR
+    { 0x71570BC6, "Gadget - Invention, Travel, & Adventure", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 8, 20, 0, 0, 0x17C3D391 }, // HR, MA recommended
+    { 0xC2A397F7, "Horde, The", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0x78DBF7F5 }, // HR
+    { 0xB63BB04F, "Para Para Paradise (Disc A) (Akane Kouda)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HR, 8, 33, 0, 0, 0 }, // MA
+    { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HR, 8, 33, 0, 0, 0 }, // MA
+    { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HR, 8, 33, 0, 0, 0 }, // MA
+    { 0x75236D99, "Ravenloft - Aku no Keshin", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0xBF2C9875 }, // HR
+    { 0x6BEA56A2, "Teo - Mou Hitotsu no Chikyuu (Version 1.0)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
+    { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
+    { 0xADC925E6, "Theme Park", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0xC3C8B1CB }, // HR
 
     // Hard disk installs
     { 0x09706738, "Gakuen King - Hidehiko Gakkou o Tsukuru", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0 },
@@ -396,7 +397,7 @@ const GT_DB_Entry k_floppy_database[] =
     { 0x4C4B61CE, "Rance - Hikari o Motomete (Disk 1)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0 },
     { 0x086BD554, "Rance 2 - Hangyaku no Shoujo-tachi (Disk A)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0 },
     { 0xB0F49347, "Rance 2 Hint Disk", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0 },
-    { 0x38A2C229, "Rumstorm", GT_GAMEDB_CPU_486, GT_MACHINE_HG, 0, 33, 0, 0, 0 }, // MA, a 486 at 33 MHz or faster
+    { 0x38A2C229, "Rumstorm", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 0, 33, 0, 0, 0 }, // MA, a 486 at 33 MHz or faster
     { 0x7208C490, "Samurai Spirits (Boot Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0 },
     { 0x3C43B7DA, "Shamhat - The Holy Circlet (User Disk) (FM Towns Marty)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MARTY, 0, 0, 0, 0, 0 },
     { 0xD58C19E0, "Uwaki na Anata - Switch o Irete (Boot Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0 },

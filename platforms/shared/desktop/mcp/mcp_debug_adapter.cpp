@@ -88,6 +88,11 @@ static const McpFlagName k_mcp_cr0_flags[] =
     { "pg", 0x80000000 }
 };
 
+static const McpFlagName k_mcp_cr0_486_flags[] =
+{
+    { "ne", 0x00000020 }, { "wp", 0x00010000 }, { "am", 0x00040000 }, { "nw", 0x20000000 }, { "cd", 0x40000000 }
+};
+
 static const char* k_mcp_segment_names[I386_SEGMENT_COUNT] = { "es", "cs", "ss", "ds", "fs", "gs" };
 static const int k_mcp_segment_order[I386_SEGMENT_COUNT] =
 {
@@ -1351,6 +1356,10 @@ json DebugAdapter::GetI386Status()
     for (size_t i = 0; i < sizeof(k_mcp_eflags) / sizeof(k_mcp_eflags[0]); i++)
         flags[k_mcp_eflags[i].name] = (state.eflags & k_mcp_eflags[i].mask) != 0;
 
+    // On a 386 these bits don't exist, and the 386DX reads CR0 bits 5-30 as 1
+    if (cpu->IsI486())
+        flags["ac"] = (state.eflags & I386_FLAG_AC) != 0;
+
     status["flags"] = flags;
     status["cs_eip"] = Hex(cs.selector, 4) + ":" + Hex(state.eip, code32 ? 8 : 4);
     status["ss_esp"] = Hex(ss.selector, 4) + ":" + Hex(state.registers[I386_REG_ESP].value, stack32 ? 8 : 4);
@@ -1369,6 +1378,9 @@ json DebugAdapter::GetI386Status()
 
     for (size_t i = 0; i < sizeof(k_mcp_cr0_flags) / sizeof(k_mcp_cr0_flags[0]); i++)
         cr0_flags[k_mcp_cr0_flags[i].name] = (state.cr0 & k_mcp_cr0_flags[i].mask) != 0;
+
+    for (size_t i = 0; cpu->IsI486() && (i < sizeof(k_mcp_cr0_486_flags) / sizeof(k_mcp_cr0_486_flags[0])); i++)
+        cr0_flags[k_mcp_cr0_486_flags[i].name] = (state.cr0 & k_mcp_cr0_486_flags[i].mask) != 0;
 
     status["cr0_flags"] = cr0_flags;
     status["mode"] = execution_mode_name(state.execution_mode);
@@ -1433,6 +1445,14 @@ json DebugAdapter::GetI386Status()
         {"dr6", Hex32(state.debug_registers[6])}, {"dr7", Hex32(state.debug_registers[7])}
     };
     status["test_registers"] = {{"tr6", Hex32(state.test_registers[0])}, {"tr7", Hex32(state.test_registers[1])}};
+
+    if (cpu->IsI486())
+    {
+        const u32* cache = cpu->GetCacheTestRegisters();
+        status["test_registers"]["tr3"] = Hex32(cache[0]);
+        status["test_registers"]["tr4"] = Hex32(cache[1]);
+        status["test_registers"]["tr5"] = Hex32(cache[2]);
+    }
     status["fpu"] = m_core->GetMachineConfig().fpu ? GetX87Status() : json();
 
     return status;
@@ -1527,7 +1547,7 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
     }
     else if (reg == "EFLAGS")
     {
-        state.eflags = (value & 0x00037FD5U) | I386_FLAG_FIXED;
+        state.eflags = (value & (0x00037FD5U | (cpu->IsI486() ? I386_FLAG_AC : 0))) | I386_FLAG_FIXED;
         pc_changed = true;
     }
     else if (reg == "CR0")
@@ -1546,6 +1566,8 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
         state.debug_registers[reg[2] - '0'] = value;
     else if (reg == "TR6" || reg == "TR7")
         state.test_registers[reg[2] - '6'] = value;
+    else if ((reg == "TR3" || reg == "TR4" || reg == "TR5") && cpu->IsI486())
+        cpu->SetCacheTestRegister(reg[2] - '3', value);
     else if (reg == "GDTR_BASE")
         state.gdtr.base = value;
     else if (reg == "GDTR_LIMIT" && value <= 0xFFFF)
@@ -1565,8 +1587,8 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
             return {{"error", text}};
     }
     else
-        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR6, TR7, "
-            "CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits are 16-bit)"}};
+        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR3-TR5 "
+            "(486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits are 16-bit)"}};
 
     state.repeat.active = false;
     cpu->SetState(state);
@@ -2389,6 +2411,16 @@ json DebugAdapter::GetSystemStatus()
     if (m_core->GetIO()->Peek(0x0490, clocks, value) && m_core->GetIO()->Peek(0x0491, clocks, value_2))
         registers["memory_card"] = {{"bank", value}, {"attribute_space", (value_2 & 0x01) != 0}};
 
+    if (m_core->GetIO()->Peek(0x00C0, clocks, value) && m_core->GetIO()->Peek(0x00C2, clocks, value_2))
+        registers["cache_control"] = {{"cmen", (value & 0x01) != 0}, {"rpinh", (value & 0x02) != 0},
+            {"sdmod", (value_2 & 0x08) != 0}};
+
+    if (m_core->GetIO()->Peek(0x05EE, clocks, value))
+        registers["vram_cache"] = (value & 0x01) != 0;
+
+    if (m_core->GetIO()->Peek(0x04C8, clocks, value))
+        registers["cd_cache"] = (value & 0x01) != 0;
+
     return {
         {"machine", {
             {"model", profile.name},
@@ -2396,7 +2428,7 @@ json DebugAdapter::GetSystemStatus()
             {"cpu", k_machine_cpus[machine.cpu].name},
             {"cpu_clock_hz", machine.cpu_clock_rate},
             {"ram_kb", machine.ram_size / 1024},
-            {"fpu", machine.fpu ? json("80387") : json()},
+            {"fpu", machine.fpu ? json(get_machine_fpu_name(machine.cpu)) : json()},
             {"floppy_drives", machine.floppy_drives},
             {"machine_id", Hex(gui_debug_system_machine_id(), 4)},
             {"memory_map", k_machine_maps[profile.map].name},

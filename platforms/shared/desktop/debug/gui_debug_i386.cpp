@@ -60,6 +60,9 @@ enum I386RegId
     I386RegId_DR6,
     I386RegId_DR7,
 
+    I386RegId_TR3,
+    I386RegId_TR4,
+    I386RegId_TR5,
     I386RegId_TR6,
     I386RegId_TR7,
 
@@ -89,6 +92,7 @@ struct I386FlagDefinition
 {
     const char* name;
     u8 bit;
+    bool i486;
 };
 
 struct I386RegisterDefinition
@@ -100,13 +104,16 @@ struct I386RegisterDefinition
 
 static const I386FlagDefinition k_eflags[] =
 {
-    { "VM", 17 }, { "RF", 16 }, { "NT", 14 }, { "I1", 13 }, { "I0", 12 }, { "OF", 11 }, { "DF", 10 },
-    { "IF", 9 }, { "TF", 8 }, { "SF", 7 }, { "ZF", 6 }, { "AF", 4 }, { "PF", 2 }, { "CF", 0 }
+    { "AC", 18, true }, { "VM", 17, false }, { "RF", 16, false }, { "NT", 14, false }, { "I1", 13, false },
+    { "I0", 12, false }, { "OF", 11, false }, { "DF", 10, false }, { "IF", 9, false }, { "TF", 8, false },
+    { "SF", 7, false }, { "ZF", 6, false }, { "AF", 4, false }, { "PF", 2, false }, { "CF", 0, false }
 };
 
 static const I386FlagDefinition k_cr0_flags[] =
 {
-    { "PG", 31 }, { "ET", 4 }, { "TS", 3 }, { "EM", 2 }, { "MP", 1 }, { "PE", 0 }
+    { "PG", 31, false }, { "CD", 30, true }, { "NW", 29, true }, { "AM", 18, true }, { "WP", 16, true },
+    { "NE", 5, true }, { "ET", 4, false }, { "TS", 3, false }, { "EM", 2, false }, { "MP", 1, false },
+    { "PE", 0, false }
 };
 
 static const I386RegisterDefinition k_registers[] =
@@ -286,7 +293,7 @@ static void I386WriteCallback32(u16 reg_id, u32 value, void* user_data)
                 pc_changed = true;
                 break;
             case I386RegId_EFLAGS:
-                state.eflags = (value & 0x00037FD5U) | I386_FLAG_FIXED;
+                state.eflags = (value & (0x00037FD5U | (cpu->IsI486() ? I386_FLAG_AC : 0))) | I386_FLAG_FIXED;
                 pc_changed = true;
                 break;
             case I386RegId_CR0:
@@ -304,6 +311,11 @@ static void I386WriteCallback32(u16 reg_id, u32 value, void* user_data)
             case I386RegId_DR3: state.debug_registers[3] = value; break;
             case I386RegId_DR6: state.debug_registers[6] = value; break;
             case I386RegId_DR7: state.debug_registers[7] = value; break;
+            case I386RegId_TR3:
+            case I386RegId_TR4:
+            case I386RegId_TR5:
+                cpu->SetCacheTestRegister(reg_id - I386RegId_TR3, value);
+                return;
             case I386RegId_TR6: state.test_registers[0] = value; break;
             case I386RegId_TR7: state.test_registers[1] = value; break;
             case I386RegId_GDTRBase: state.gdtr.base = value; break;
@@ -383,9 +395,11 @@ static void draw_flags(u16 reg_id, u32 value, const I386FlagDefinition* flags, i
         float value_x = ImGui::GetCursorPosX() +
             (int)((ImGui::CalcTextSize(flags[i].name).x - ImGui::CalcTextSize("0").x) * 0.5f);
 
+        ImGui::BeginDisabled(flags[i].i486 && !cpu->IsI486());
         ImGui::TextColored(orange, "%s", flags[i].name);
         ImGui::SetCursorPosX(value_x);
         EditableRegister1(reg_id, flags[i].bit, (value & (1U << flags[i].bit)) != 0, I386WriteCallback1, cpu);
+        ImGui::EndDisabled();
         ImGui::EndGroup();
     }
 }
@@ -597,30 +611,35 @@ static void draw_debug_registers(I386* cpu, const I386_State& state)
 {
     draw_section_title("DEBUG AND TEST REGISTERS");
 
-    static const char* k_names[] = { "DR0", "DR1", "DR2", "DR3", "DR6", "DR7", "TR6", "TR7" };
+    static const char* k_names[] = { "DR0", "DR1", "DR2", "DR3", "DR6", "DR7", "TR3", "TR4", "TR5", "TR6", "TR7" };
 
     static const u16 k_ids[] =
     {
-        I386RegId_DR0, I386RegId_DR1, I386RegId_DR2, I386RegId_DR3,
-        I386RegId_DR6, I386RegId_DR7, I386RegId_TR6, I386RegId_TR7
+        I386RegId_DR0, I386RegId_DR1, I386RegId_DR2, I386RegId_DR3, I386RegId_DR6, I386RegId_DR7,
+        I386RegId_TR3, I386RegId_TR4, I386RegId_TR5, I386RegId_TR6, I386RegId_TR7
     };
+
+    const u32* cache = cpu->GetCacheTestRegisters();
 
     const u32 values[] =
     {
         state.debug_registers[0], state.debug_registers[1], state.debug_registers[2], state.debug_registers[3],
-        state.debug_registers[6], state.debug_registers[7], state.test_registers[0], state.test_registers[1]
+        state.debug_registers[6], state.debug_registers[7], cache[0], cache[1], cache[2], state.test_registers[0],
+        state.test_registers[1]
     };
 
     ImGuiTableFlags flags = ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoPadOuterX;
 
     if (ImGui::BeginTable("i386_debug_registers", 2, flags))
     {
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 11; i++)
         {
             ImGui::TableNextColumn();
+            ImGui::BeginDisabled(i >= 6 && i <= 8 && !cpu->IsI486());
             ImGui::TextColored(violet, "%s", k_names[i]);
             ImGui::SameLine();
             EditableRegister32(NULL, NULL, k_ids[i], values[i], I386WriteCallback32, cpu, EditableRegisterFlags_None);
+            ImGui::EndDisabled();
         }
 
         ImGui::EndTable();
@@ -650,8 +669,8 @@ void gui_debug_window_i386(void)
     if (ImGui::BeginTable("i386", 1, ImGuiTableFlags_BordersInnerH))
     {
         ImGui::TableNextColumn();
-        draw_flags(I386RegId_EFLAGS, state.eflags, k_eflags, 7, cpu);
-        draw_flags(I386RegId_EFLAGS, state.eflags, k_eflags + 7, 7, cpu);
+        draw_flags(I386RegId_EFLAGS, state.eflags, k_eflags, 8, cpu);
+        draw_flags(I386RegId_EFLAGS, state.eflags, k_eflags + 8, 7, cpu);
 
         ImGui::TableNextColumn();
 
@@ -742,7 +761,8 @@ void gui_debug_window_i386(void)
         ImGui::PopStyleVar();
 
         ImGui::TableNextColumn();
-        draw_flags(I386RegId_CR0, state.cr0, k_cr0_flags, (int)(sizeof(k_cr0_flags) / sizeof(k_cr0_flags[0])), cpu);
+        draw_flags(I386RegId_CR0, state.cr0, k_cr0_flags, 6, cpu);
+        draw_flags(I386RegId_CR0, state.cr0, k_cr0_flags + 6, 5, cpu);
 
         ImGui::TableNextColumn();
         ImGui::TextColored(violet, " MODE:");

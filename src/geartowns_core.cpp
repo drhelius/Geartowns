@@ -1599,7 +1599,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
         return false;
     }
 
-    for (int i = 0; (header.version >= 16) && (i < GT_MAX_HARD_DISKS); i++)
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {
         ScsiDisk* disk = m_scsi->GetDisk(i);
 
@@ -1627,11 +1627,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_rtc->LoadState(stream);
     m_dma->LoadState(stream, header.version);
     m_scsi->LoadState(stream, header.version);
-
-    if (header.version >= 20)
-        m_x87->LoadState(stream);
-    else
-        m_x87->Reset();
+    m_x87->LoadState(stream);
 
     if (stream.fail())
     {
@@ -1641,7 +1637,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
     m_hard_disk_state_changes = 0;
 
-    for (int i = 0; (header.version >= 16) && (i < GT_MAX_HARD_DISKS); i++)
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {
         HardDiskImage* image = m_scsi->GetDisk(i)->GetImage();
 
@@ -1786,21 +1782,19 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
 
 void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& config, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, config.model);
     G_SERIALIZE(serializer, config.cpu);
     G_SERIALIZE(serializer, config.ram_size);
     G_SERIALIZE(serializer, config.floppy_drives);
     G_SERIALIZE(serializer, config.cpu_clock_rate);
-
-    if (version >= 15)
-        G_SERIALIZE(serializer, config.scsi);
-
-    if (version >= 20)
-        G_SERIALIZE(serializer, config.fpu);
+    G_SERIALIZE(serializer, config.scsi);
+    G_SERIALIZE(serializer, config.fpu);
 }
 
 void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version)
 {
+    UNUSED(version);
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         G_SERIALIZE(serializer, media.floppy_inserted[i]);
@@ -1809,9 +1803,6 @@ void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Med
 
     G_SERIALIZE(serializer, media.cdrom_inserted);
     G_SERIALIZE(serializer, media.cdrom_crc);
-
-    if (version < 16)
-        return;
 
     for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {

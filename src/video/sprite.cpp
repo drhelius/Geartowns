@@ -328,6 +328,7 @@ void Sprite::LoadState(std::istream& stream, int version)
 
 void Sprite::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE_ARRAY(serializer, m_state.registers, SPRITE_REGISTERS);
     G_SERIALIZE(serializer, m_state.address);
     G_SERIALIZE(serializer, m_state.page);
@@ -341,18 +342,8 @@ void Sprite::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.entry_y);
     G_SERIALIZE(serializer, m_state.entry_attributes);
     G_SERIALIZE(serializer, m_state.entry_color);
-
-    // Older states ran every model at the Data Book's 32 + 75 us
-    if (version >= 8)
-    {
-        G_SERIALIZE(serializer, m_state.clear_half_clocks);
-        G_SERIALIZE(serializer, m_state.entry_half_clocks);
-    }
-    else
-    {
-        m_state.clear_half_clocks = k_sprite_book_clear_half_clocks;
-        m_state.entry_half_clocks = k_sprite_book_entry_half_clocks;
-    }
+    G_SERIALIZE(serializer, m_state.clear_half_clocks);
+    G_SERIALIZE(serializer, m_state.entry_half_clocks);
 
     // The CPU's counts aren't saved, so the cycles the engine hasn't taken yet are
     u32 pending[2] = { 0, 0 };
@@ -363,23 +354,9 @@ void Sprite::Serialize(StateSerializer& serializer, int version)
         pending[1] = GetBusCycles(1) - m_bus_cycles_seen[1];
     }
 
-    if (version >= 14)
-    {
-        G_SERIALIZE(serializer, m_state.contention_fraction);
-        G_SERIALIZE_ARRAY(serializer, pending, 2);
-    }
-    else
-    {
-        m_state.contention_fraction = 0;
-        pending[0] = 0;
-        pending[1] = 0;
-    }
-
-    // Older states read the entry with its first pixel
-    if (version >= 19)
-        G_SERIALIZE(serializer, m_state.entry_loaded);
-    else
-        m_state.entry_loaded = m_state.pixel > 0;
+    G_SERIALIZE(serializer, m_state.contention_fraction);
+    G_SERIALIZE_ARRAY(serializer, pending, 2);
+    G_SERIALIZE(serializer, m_state.entry_loaded);
 
     if (IsValidPointer(m_bus_cycle_counts))
     {

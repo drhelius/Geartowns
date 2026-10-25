@@ -393,24 +393,14 @@ void PIT::SaveState(std::ostream& stream)
 
 void PIT::LoadState(std::istream& stream, int version)
 {
+    UNUSED(version);
     StateSerializer serializer(stream);
     Serialize(serializer);
     m_pit[0].LoadState(stream);
     m_pit[1].LoadState(stream);
-
-    if (version >= 3)
-    {
-        G_SERIALIZE(serializer, m_state.timer2_control);
-        G_SERIALIZE(serializer, m_state.timer2_period);
-        G_SERIALIZE(serializer, m_state.timer2_expiry);
-    }
-    else
-    {
-        m_state.timer2_control = k_pit_timer2_disable;
-        m_state.timer2_period = 0;
-        m_state.timer2_expiry = GT_NO_EVENT;
-    }
-
+    G_SERIALIZE(serializer, m_state.timer2_control);
+    G_SERIALIZE(serializer, m_state.timer2_period);
+    G_SERIALIZE(serializer, m_state.timer2_expiry);
     SanitizeState();
 }
 

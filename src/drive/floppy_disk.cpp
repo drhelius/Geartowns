@@ -295,6 +295,7 @@ void FloppyDisk::LoadState(std::istream& stream, int version)
 // A state without media keeps the disk in the drive and its writes
 void FloppyDisk::Serialize(StateSerializer& serializer, bool& media, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, media);
 
     if (!media)
@@ -322,14 +323,6 @@ void FloppyDisk::Serialize(StateSerializer& serializer, bool& media, int version
 
     if (m_state.size > 0)
         G_SERIALIZE_ARRAY(serializer, m_image, m_state.size);
-
-    if (version < 7)
-    {
-        if (serializer.IsLoading())
-            ClearWeakBytes();
-
-        return;
-    }
 
     u32 weak_count = m_weak_count;
     G_SERIALIZE(serializer, weak_count);

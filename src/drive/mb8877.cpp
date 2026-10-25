@@ -1226,6 +1226,7 @@ void MB8877::LoadState(std::istream& stream, int version)
 
 void MB8877::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.track);
     G_SERIALIZE(serializer, m_state.sector);
@@ -1257,17 +1258,8 @@ void MB8877::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.track_size);
 
     G_SERIALIZE_ARRAY(serializer, m_state.track_buffer, MB8877_TRACK_BUFFER_SIZE);
-
-    if (version >= 7)
-    {
-        G_SERIALIZE(serializer, m_state.sector_weak);
-        G_SERIALIZE(serializer, m_state.weak_reads);
-    }
-    else if (serializer.IsLoading())
-    {
-        m_state.sector_weak = false;
-        m_state.weak_reads = 0;
-    }
+    G_SERIALIZE(serializer, m_state.sector_weak);
+    G_SERIALIZE(serializer, m_state.weak_reads);
 
     if (serializer.IsLoading())
         m_state.track_size = MIN(m_state.track_size, (u32)MB8877_TRACK_BUFFER_SIZE);

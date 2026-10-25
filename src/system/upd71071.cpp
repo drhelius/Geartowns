@@ -484,6 +484,7 @@ void UPD71071::LoadState(std::istream& stream, int version)
 
 void UPD71071::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     for (int i = 0; i < UPD71071_CHANNELS; i++)
     {
         G_SERIALIZE(serializer, m_state.channels[i].current_address);
@@ -491,24 +492,11 @@ void UPD71071::Serialize(StateSerializer& serializer, int version)
         G_SERIALIZE(serializer, m_state.channels[i].current_count);
         G_SERIALIZE(serializer, m_state.channels[i].base_count);
         G_SERIALIZE(serializer, m_state.channels[i].mode);
-
-        if (version >= 15)
-            G_SERIALIZE(serializer, m_state.channels[i].high_address);
+        G_SERIALIZE(serializer, m_state.channels[i].high_address);
     }
 
     G_SERIALIZE(serializer, m_state.device_control);
     G_SERIALIZE(serializer, m_state.temporary);
-
-    // Older states kept one high address byte for every channel
-    if (version < 15)
-    {
-        u8 high_address = 0;
-        G_SERIALIZE(serializer, high_address);
-
-        for (int i = 0; i < UPD71071_CHANNELS; i++)
-            m_state.channels[i].high_address = high_address;
-    }
-
     G_SERIALIZE(serializer, m_state.selected_channel);
     G_SERIALIZE(serializer, m_state.base_access);
     G_SERIALIZE(serializer, m_state.bus_16bit);

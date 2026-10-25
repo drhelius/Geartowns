@@ -399,6 +399,7 @@ void FDC::LoadState(std::istream& stream, int version)
 
 void FDC::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, m_state.drive_control);
     G_SERIALIZE(serializer, m_state.drive_select);
     G_SERIALIZE(serializer, m_state.drive_switch);
@@ -409,11 +410,7 @@ void FDC::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.intrq);
     G_SERIALIZE_ARRAY(serializer, m_state.cylinders, FDC_DRIVES);
     G_SERIALIZE_ARRAY(serializer, m_state.ready_clocks, FDC_DRIVES);
-
-    if (version >= 22)
-        G_SERIALIZE_ARRAY(serializer, m_state.disk_changed, FDC_DRIVES);
-    else
-        memset(m_state.disk_changed, 1, sizeof(m_state.disk_changed));
+    G_SERIALIZE_ARRAY(serializer, m_state.disk_changed, FDC_DRIVES);
 }
 
 void FDC::SanitizeState()

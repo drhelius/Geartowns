@@ -1208,6 +1208,7 @@ void CdRom::LoadState(std::istream& stream, int version)
 
 void CdRom::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.command_received);
     G_SERIALIZE_ARRAY(serializer, m_state.params, CDROM_PARAM_COUNT);
@@ -1238,16 +1239,8 @@ void CdRom::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.sector_position);
     G_SERIALIZE(serializer, m_state.sector_end);
     G_SERIALIZE_ARRAY(serializer, m_state.sector, CDROM_SECTOR_SIZE);
-
-    if (version >= 6)
-        G_SERIALIZE(serializer, m_state.cdda_stopped);
-    else
-        m_state.cdda_stopped = false;
-
-    if (version >= 18)
-        G_SERIALIZE(serializer, m_state.change_padding);
-    else
-        m_state.change_padding = false;
+    G_SERIALIZE(serializer, m_state.cdda_stopped);
+    G_SERIALIZE(serializer, m_state.change_padding);
 }
 
 void CdRom::SanitizeState()

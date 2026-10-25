@@ -594,15 +594,7 @@ void ScsiController::LoadState(std::istream& stream, int version)
 
 void ScsiController::Serialize(StateSerializer& serializer, int version)
 {
-    // States from before the interface leave the bus free
-    if (version < 15)
-    {
-        memset(&m_state, 0, sizeof(m_state));
-        m_state.target = -1;
-        m_state.event_clocks = GT_NO_EVENT;
-        return;
-    }
-
+    UNUSED(version);
     G_SERIALIZE(serializer, m_state.control);
     G_SERIALIZE(serializer, m_state.data);
     G_SERIALIZE(serializer, m_state.signals);

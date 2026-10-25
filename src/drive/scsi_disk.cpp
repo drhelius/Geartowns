@@ -448,12 +448,7 @@ void ScsiDisk::LoadState(std::istream& stream, int version)
 
 void ScsiDisk::Serialize(StateSerializer& serializer, int version)
 {
-    if (version < 15)
-    {
-        memset(&m_state, 0, sizeof(m_state));
-        return;
-    }
-
+    UNUSED(version);
     G_SERIALIZE_ARRAY(serializer, m_state.buffer, SCSI_DISK_BUFFER_SIZE);
     G_SERIALIZE(serializer, m_state.buffer_size);
     G_SERIALIZE(serializer, m_state.buffer_position);

@@ -393,6 +393,7 @@ void Keyboard::LoadState(std::istream& stream, int version)
 
 void Keyboard::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE_ARRAY(serializer, m_state.fifo, KEYBOARD_FIFO_SIZE);
     G_SERIALIZE(serializer, m_state.fifo_read);
     G_SERIALIZE(serializer, m_state.fifo_count);
@@ -406,13 +407,6 @@ void Keyboard::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.repeat_clocks);
     G_SERIALIZE(serializer, m_state.repeat_delay);
     G_SERIALIZE(serializer, m_state.repeat_interval);
-
-    if (version < 17)
-    {
-        m_state.boot_key_count = 0;
-        return;
-    }
-
     G_SERIALIZE_ARRAY(serializer, m_state.boot_keys, KEYBOARD_BOOT_KEYS);
     G_SERIALIZE(serializer, m_state.boot_key_count);
 }

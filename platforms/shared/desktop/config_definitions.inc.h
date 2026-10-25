@@ -483,67 +483,9 @@ static void normalize(void)
 #endif
 }
 
-static bool stored_int_equals(const char* group, const char* key, int value)
-{
-    std::string stored;
-    int parsed = 0;
-    return get_setting(group, key, &stored) && parse_int_string(stored, &parsed) && (parsed == value);
-}
-
 static void migrate(int file_version)
 {
-    if (file_version < 3)
-    {
-        for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        {
-            char section[32];
-            snprintf(section, sizeof(section), "InputGamepad%d", i + 1);
-
-            if (stored_int_equals(section, "GamepadA", SDL_GAMEPAD_BUTTON_SOUTH) &&
-                stored_int_equals(section, "GamepadB", SDL_GAMEPAD_BUTTON_EAST))
-            {
-                write_int(section, "GamepadA", SDL_GAMEPAD_BUTTON_EAST);
-                write_int(section, "GamepadB", SDL_GAMEPAD_BUTTON_SOUTH);
-            }
-
-            if (stored_int_equals(section, "GamepadC", SDL_GAMEPAD_BUTTON_WEST) &&
-                stored_int_equals(section, "GamepadX", SDL_GAMEPAD_BUTTON_NORTH) &&
-                stored_int_equals(section, "GamepadY", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))
-            {
-                write_int(section, "GamepadC", SDL_GAMEPAD_BUTTON_EAST);
-                write_int(section, "GamepadX", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-                write_int(section, "GamepadY", SDL_GAMEPAD_BUTTON_NORTH);
-            }
-        }
-
-        if (stored_int_equals("InputKeyboard2", "KeyC", SDL_SCANCODE_5) &&
-            stored_int_equals("InputKeyboard2", "KeyX", SDL_SCANCODE_6))
-            write_int("InputKeyboard2", "KeyC", SDL_SCANCODE_U);
-    }
-
-    if (file_version < 4)
-    {
-        std::string bios_path;
-
-        if (get_setting("Emulator", "BiosPath", &bios_path))
-            write_string("Firmware", "Default", bios_path);
-
-        config_ini_data["Emulator"].remove("BiosPath");
-        config_ini_data["Machine"].remove("Model");
-        config_ini_data["Machine"].remove("CustomCPU");
-    }
-
-    if (file_version < 5)
-    {
-        for (int i = 0; i < GT_MAX_GAMEPADS; i++)
-        {
-            char section[32];
-            snprintf(section, sizeof(section), "Input%d", i + 1);
-
-            if (stored_int_equals(section, "ControllerType", i == 1 ? GT_CONTROLLER_MOUSE : GT_CONTROLLER_ORIGINAL_GAMEPAD))
-                write_int(section, "ControllerType", config_ControllerType_Auto);
-        }
-    }
+    UNUSED(file_version);
 }
 
 static void process_machine_model(config_Operation operation, int* model)

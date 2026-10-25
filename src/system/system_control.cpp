@@ -514,6 +514,7 @@ void SystemControl::LoadState(std::istream& stream, int version)
 
 void SystemControl::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, m_state.reset_cause);
     G_SERIALIZE(serializer, m_state.reset_pending);
     G_SERIALIZE(serializer, m_state.write_protect);
@@ -522,58 +523,20 @@ void SystemControl::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.serial_rom_bit);
     G_SERIALIZE(serializer, m_state.expansion_nmi);
     G_SERIALIZE(serializer, m_state.port_05e0);
-
-    if (version >= 3)
-    {
-        G_SERIALIZE(serializer, m_state.port_05e2);
-        G_SERIALIZE(serializer, m_state.port_05e6);
-        G_SERIALIZE(serializer, m_state.nmi_mask);
-        G_SERIALIZE(serializer, m_state.low_speed);
-    }
-    else
-    {
-        m_state.port_05e2 = 0;
-        m_state.port_05e6 = 0;
-        m_state.nmi_mask = false;
-        m_state.low_speed = false;
-    }
-
-    if (version >= 4)
-        G_SERIALIZE(serializer, m_state.high_speed);
-    else
-        m_state.high_speed = false;
-
-    if (version >= 11)
-    {
-        G_SERIALIZE(serializer, m_state.port_0486);
-        G_SERIALIZE(serializer, m_state.port_0487);
-        G_SERIALIZE(serializer, m_state.port_0488);
-        G_SERIALIZE(serializer, m_state.port_0494);
-        G_SERIALIZE(serializer, m_state.port_0496);
-    }
-    else
-    {
-        m_state.port_0486 = 0;
-        m_state.port_0487 = 0;
-        m_state.port_0488 = 0;
-        m_state.port_0494 = 0;
-        m_state.port_0496 = 0;
-    }
-
-    if (version >= 23)
-    {
-        G_SERIALIZE(serializer, m_state.port_00c0);
-        G_SERIALIZE(serializer, m_state.port_00c2);
-        G_SERIALIZE(serializer, m_state.port_05ee);
-        G_SERIALIZE(serializer, m_state.port_04c8);
-    }
-    else
-    {
-        m_state.port_00c0 = 0;
-        m_state.port_00c2 = 0;
-        m_state.port_05ee = 0;
-        m_state.port_04c8 = 0;
-    }
+    G_SERIALIZE(serializer, m_state.port_05e2);
+    G_SERIALIZE(serializer, m_state.port_05e6);
+    G_SERIALIZE(serializer, m_state.nmi_mask);
+    G_SERIALIZE(serializer, m_state.low_speed);
+    G_SERIALIZE(serializer, m_state.high_speed);
+    G_SERIALIZE(serializer, m_state.port_0486);
+    G_SERIALIZE(serializer, m_state.port_0487);
+    G_SERIALIZE(serializer, m_state.port_0488);
+    G_SERIALIZE(serializer, m_state.port_0494);
+    G_SERIALIZE(serializer, m_state.port_0496);
+    G_SERIALIZE(serializer, m_state.port_00c0);
+    G_SERIALIZE(serializer, m_state.port_00c2);
+    G_SERIALIZE(serializer, m_state.port_05ee);
+    G_SERIALIZE(serializer, m_state.port_04c8);
 }
 
 void SystemControl::SanitizeState()

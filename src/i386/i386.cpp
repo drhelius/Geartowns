@@ -1042,11 +1042,7 @@ void I386::SaveState(std::ostream& stream)
 void I386::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    m_bus_queue = 0;
-    m_bus_row = k_i386_bus_no_row;
     m_bus_components = 0;
-    m_bus_fraction = 0;
-    memset(m_cache_test_registers, 0, sizeof(m_cache_test_registers));
     Serialize(serializer, version);
     m_state.cr0 = (m_state.cr0 & m_cr0_writable) | m_cr0_fixed;
     SanitizeState();
@@ -1069,6 +1065,7 @@ void I386::SerializeDescriptorTable(StateSerializer& serializer, I386_Descriptor
 
 void I386::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     for (int i = 0; i < I386_REG_COUNT; i++)
         G_SERIALIZE(serializer, m_state.registers[i].value);
 
@@ -1111,21 +1108,11 @@ void I386::Serialize(StateSerializer& serializer, int version)
     }
 
     G_SERIALIZE_ARRAY(serializer, m_tlb_plru, I386_TLB_SETS);
-
-    if (version >= 10)
-    {
-        G_SERIALIZE(serializer, m_bus_queue);
-        G_SERIALIZE(serializer, m_bus_row);
-        G_SERIALIZE(serializer, m_bus_fraction);
-    }
-
-    if (version >= 21)
-        G_SERIALIZE_ARRAY(serializer, m_cache_test_registers, 3);
-
-    if (version >= 24)
-        G_SERIALIZE(serializer, m_486_written);
-    else
-        m_486_written = 0;
+    G_SERIALIZE(serializer, m_bus_queue);
+    G_SERIALIZE(serializer, m_bus_row);
+    G_SERIALIZE(serializer, m_bus_fraction);
+    G_SERIALIZE_ARRAY(serializer, m_cache_test_registers, 3);
+    G_SERIALIZE(serializer, m_486_written);
 }
 
 void I386::SanitizeState()

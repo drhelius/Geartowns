@@ -684,6 +684,7 @@ bool Audio::IsVgmRecording() const
 
 void Audio::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE(serializer, m_state.sound_clock_remainder);
     G_SERIALIZE(serializer, m_state.sample_clock_counter);
     G_SERIALIZE(serializer, m_state.pcm_lowpass_left);
@@ -694,17 +695,8 @@ void Audio::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE_ARRAY(serializer, &m_state.volume_control[0][0], AUDIO_VOLUME_CHIPS * AUDIO_VOLUME_CHANNELS);
     G_SERIALIZE(serializer, m_state.mute_control);
     G_SERIALIZE(serializer, m_state.output_control);
-
-    if (version >= 2)
-    {
-        G_SERIALIZE(serializer, m_state.output_dc_left);
-        G_SERIALIZE(serializer, m_state.output_dc_right);
-    }
-    else
-    {
-        m_state.output_dc_left = 0;
-        m_state.output_dc_right = 0;
-    }
+    G_SERIALIZE(serializer, m_state.output_dc_left);
+    G_SERIALIZE(serializer, m_state.output_dc_right);
 }
 
 void Audio::SanitizeState()

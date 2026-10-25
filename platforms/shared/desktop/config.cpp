@@ -218,6 +218,7 @@ void config_read(void)
     if (file_version < config_minimum_version)
     {
         Log("Settings version %d is outdated (current: %d). Using defaults.", file_version, config_version);
+        config_ini_data.clear();
         config_write();
         return;
     }

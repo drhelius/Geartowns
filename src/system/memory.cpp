@@ -1602,28 +1602,16 @@ void Memory::LoadState(std::istream& stream, int version)
 
 void Memory::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE_ARRAY(serializer, m_state.main_ram, m_main_ram_size);
     G_SERIALIZE_ARRAY(serializer, m_state.cmos, GT_CMOS_SIZE);
     G_SERIALIZE(serializer, m_state.main_memory);
     G_SERIALIZE(serializer, m_state.boot_ram);
     G_SERIALIZE(serializer, m_state.dictionary);
     G_SERIALIZE(serializer, m_state.dictionary_bank);
-
-    if (version >= 3)
-    {
-        G_SERIALIZE(serializer, m_state.card_bank);
-        G_SERIALIZE(serializer, m_state.card_attribute);
-    }
-    else
-    {
-        m_state.card_bank = 0;
-        m_state.card_attribute = false;
-    }
-
-    if (version >= 12)
-        G_SERIALIZE_ARRAY(serializer, m_state.backup_ram, k_memory_backup_ram_size);
-    else
-        memset(m_state.backup_ram, 0, sizeof(m_state.backup_ram));
+    G_SERIALIZE(serializer, m_state.card_bank);
+    G_SERIALIZE(serializer, m_state.card_attribute);
+    G_SERIALIZE_ARRAY(serializer, m_state.backup_ram, k_memory_backup_ram_size);
 }
 
 void Memory::SanitizeState()

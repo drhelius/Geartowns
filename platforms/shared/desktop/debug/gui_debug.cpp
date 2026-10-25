@@ -46,7 +46,7 @@
 static const char* GTDEBUG_MAGIC = "GTDEBUG1";
 static const int GTDEBUG_MAGIC_SIZE = 8;
 
-static std::string get_auto_debug_settings_path(bool legacy);
+static std::string get_auto_debug_settings_path(void);
 static bool read_settings_data(std::istream& stream, void* data, size_t size);
 static bool read_settings_count(std::istream& stream, int& count, size_t record_size);
 static void write_settings_string(std::ostream& stream, const std::string& text);
@@ -353,35 +353,30 @@ void gui_debug_auto_save_settings(void)
     if (!config_debug.auto_debug_settings)
         return;
 
-    std::string path = get_auto_debug_settings_path(false);
+    std::string path = get_auto_debug_settings_path();
 
     if (!path.empty())
         gui_debug_save_settings(path.c_str());
 }
 
-// A file saved before settings were keyed by CRC still loads
 void gui_debug_auto_load_settings(void)
 {
     if (!config_debug.auto_debug_settings)
         return;
 
-    for (int i = 0; i < 2; i++)
-    {
-        std::string path = get_auto_debug_settings_path(i == 1);
+    std::string path = get_auto_debug_settings_path();
 
-        if (path.empty())
-            continue;
-
-        std::ifstream file;
-        open_ifstream_utf8(file, path.c_str(), std::ios::binary);
-
-        if (!file.is_open())
-            continue;
-
-        file.close();
-        gui_debug_load_settings(path.c_str());
+    if (path.empty())
         return;
-    }
+
+    std::ifstream file;
+    open_ifstream_utf8(file, path.c_str(), std::ios::binary);
+
+    if (!file.is_open())
+        return;
+
+    file.close();
+    gui_debug_load_settings(path.c_str());
 }
 
 static void write_settings_string(std::ostream& stream, const std::string& text)
@@ -523,7 +518,7 @@ static bool read_settings_count(std::istream& stream, int& count, size_t record_
     return !stream.fail() && end >= position && (u64)count <= (u64)(end - position) / record_size;
 }
 
-static std::string get_auto_debug_settings_path(bool legacy)
+static std::string get_auto_debug_settings_path(void)
 {
     GeartownsCore* core = emu_get_core();
 
@@ -537,9 +532,6 @@ static std::string get_auto_debug_settings_path(bool legacy)
         filename = core->GetMedia()->GetFileName();
     else
     {
-        if (legacy)
-            return "";
-
         filename = emu_floppy_get_content_path();
         std::string::size_type separator = filename.find_last_of("/\\");
 
@@ -555,7 +547,7 @@ static std::string get_auto_debug_settings_path(bool legacy)
     if (dot != std::string::npos)
         filename.resize(dot);
 
-    if (cdrom && !legacy && core->GetMedia()->GetCRC() != 0)
+    if (cdrom && core->GetMedia()->GetCRC() != 0)
     {
         char crc[16];
         snprintf(crc, sizeof(crc), "_%08X", core->GetMedia()->GetCRC());

@@ -128,8 +128,6 @@ static const u32 k_sprite_clear_rows = 128;
 static const u32 k_sprite_clear_row_size = k_sprite_half_size / k_sprite_clear_rows;
 static const u32 k_sprite_max_entry_half_clocks = 4096;
 static const u32 k_sprite_entry_lead = 25;
-static const u16 k_sprite_book_clear_half_clocks = (GT_MACHINE_CLOCK_RATE / 500000) * 32;
-static const u16 k_sprite_book_entry_half_clocks = (GT_MACHINE_CLOCK_RATE / 500000) * 75;
 
 #include "sprite_inline.h"
 

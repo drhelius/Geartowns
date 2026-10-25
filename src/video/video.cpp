@@ -2007,6 +2007,7 @@ void Video::LoadState(std::istream& stream, int version)
 
 void Video::Serialize(StateSerializer& serializer, int version)
 {
+    UNUSED(version);
     G_SERIALIZE_ARRAY(serializer, m_state.vram, VIDEO_VRAM_SIZE);
     G_SERIALIZE_ARRAY(serializer, m_state.sprite_ram, VIDEO_SPRITE_RAM_SIZE);
     G_SERIALIZE_ARRAY(serializer, m_state.crtc, VIDEO_CRTC_REGISTER_COUNT);
@@ -2026,14 +2027,6 @@ void Video::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.frame_start_clocks);
     G_SERIALIZE(serializer, m_state.frame_line_clocks);
     G_SERIALIZE(serializer, m_state.frame_half_lines);
-
-    // Older states kept the VSYNC length for the sprite transfer, which now starts with the frame
-    if (version < 8)
-    {
-        u32 vsync_half_lines = 0;
-        G_SERIALIZE(serializer, vsync_half_lines);
-    }
-
     G_SERIALIZE(serializer, m_state.frame_clock_rate);
     G_SERIALIZE(serializer, m_state.frame_count);
     G_SERIALIZE(serializer, m_state.event_half_line);
@@ -2050,33 +2043,11 @@ void Video::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_canvas_zoom_y);
     G_SERIALIZE(serializer, m_canvas_offset);
     G_SERIALIZE(serializer, m_canvas_offset_key);
-
-    if (version >= 5)
-    {
-        G_SERIALIZE(serializer, m_state.crt_readback);
-        G_SERIALIZE(serializer, m_state.crt_power_off);
-    }
-    else
-    {
-        m_state.crt_readback = false;
-        m_state.crt_power_off = false;
-    }
-
-    if (version >= 9)
-    {
-        G_SERIALIZE_ARRAY(serializer, m_state.latched_fa, 2);
-        G_SERIALIZE_ARRAY(serializer, m_state.latched_haj, 2);
-    }
-    else
-    {
-        LatchLayerStart(0);
-        LatchLayerStart(1);
-    }
-
-    if (version >= 13)
-        G_SERIALIZE(serializer, m_state.field_start_clocks);
-    else
-        m_state.field_start_clocks = m_state.frame_start_clocks;
+    G_SERIALIZE(serializer, m_state.crt_readback);
+    G_SERIALIZE(serializer, m_state.crt_power_off);
+    G_SERIALIZE_ARRAY(serializer, m_state.latched_fa, 2);
+    G_SERIALIZE_ARRAY(serializer, m_state.latched_haj, 2);
+    G_SERIALIZE(serializer, m_state.field_start_clocks);
 }
 
 void Video::SanitizeState()

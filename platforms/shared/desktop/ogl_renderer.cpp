@@ -44,6 +44,11 @@ static int savestates_texture_slot = -1;
 static u32 savestates_texture_generation = 0;
 static u8* recording_buffer = NULL;
 static int recording_buffer_size = 0;
+static bool shader_output_valid = false;
+static int shader_output_width = 0;
+static int shader_output_height = 0;
+static int shader_source_width = 0;
+static int shader_source_height = 0;
 
 static uint32_t quad_shader_program = 0;
 static uint32_t quad_vao = 0;
@@ -61,6 +66,7 @@ static void update_debug_textures(void);
 static bool init_shaders(void);
 static void render_gui(void);
 static bool should_use_internal_shader_chain(void);
+static bool render_shader_output(bool new_frame);
 static bool render_internal_shader_chain(void);
 static bool render_external_shader_chain(void);
 static void render_internal_shader_chain_feedback(void);
@@ -147,6 +153,7 @@ void ogl_renderer_destroy(void)
 
     SafeDeleteArray(recording_buffer);
     recording_buffer_size = 0;
+    shader_output_valid = false;
 
     if (ogl_gui_initialized)
     {
@@ -160,7 +167,7 @@ void ogl_renderer_begin_render(void)
     ImGui_ImplOpenGL3_NewFrame();
 }
 
-void ogl_renderer_render(void)
+void ogl_renderer_render(bool new_frame)
 {
     emu_get_runtime(current_runtime);
     update_savestates_texture();
@@ -172,9 +179,12 @@ void ogl_renderer_render(void)
     bool shader_rendered = false;
 
     if (use_internal_shader_chain)
-        shader_rendered = render_internal_shader_chain();
+        shader_rendered = render_shader_output(new_frame);
     else
+    {
+        shader_output_valid = false;
         update_system_texture();
+    }
 
     record_video_frame(shader_rendered);
 
@@ -268,6 +278,7 @@ bool ogl_renderer_load_shader_preset(const char* path)
     if (!ogl_shader_chain_load_preset(resolved_path))
         return false;
 
+    shader_output_valid = false;
     config_video.shader_mode = config_ShaderMode_External;
     apply_shader_parameter_config();
 
@@ -283,6 +294,7 @@ bool ogl_renderer_load_shader_preset(const char* path)
 void ogl_renderer_unload_shader_preset(void)
 {
     ogl_shader_chain_unload_preset();
+    shader_output_valid = false;
     config_video.shader_mode = config_ShaderMode_PixelPerfect;
     config_video.shader_preset_path.clear();
 }
@@ -352,6 +364,25 @@ static bool should_use_internal_shader_chain(void)
             !config_debug.debug &&
             screen_geometry.physical_width > 0 &&
             screen_geometry.physical_height > 0;
+}
+
+static bool render_shader_output(bool new_frame)
+{
+    bool same_size = (shader_output_width == screen_geometry.physical_width) &&
+        (shader_output_height == screen_geometry.physical_height) &&
+        (shader_source_width == current_runtime.screen_width) &&
+        (shader_source_height == current_runtime.screen_height);
+
+    if (!new_frame && shader_output_valid && same_size)
+        return true;
+
+    shader_output_valid = render_internal_shader_chain();
+    shader_output_width = screen_geometry.physical_width;
+    shader_output_height = screen_geometry.physical_height;
+    shader_source_width = current_runtime.screen_width;
+    shader_source_height = current_runtime.screen_height;
+
+    return shader_output_valid;
 }
 
 static bool render_internal_shader_chain(void)

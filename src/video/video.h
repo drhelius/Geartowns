@@ -262,7 +262,6 @@ private:
     int m_rendered_rows;
     int m_partial_rows;
     int m_partial_x;
-    bool m_line_changed;
     bool m_native_resolution;
     u32 m_canvas_h_start;
     u32 m_canvas_v_start;
@@ -277,7 +276,6 @@ private:
     u32 m_canvas_h_divider;
     u32 m_canvas_v_divider;
     bool m_canvas_interlaced;
-    bool m_canvas_split;
     u32 m_palette16_colors[2][16];
     u32 m_palette256_colors[256];
     u32 m_direct_colors[0x8000];

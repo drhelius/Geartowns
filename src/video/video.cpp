@@ -57,7 +57,6 @@ Video::Video()
     m_rendered_rows = 0;
     m_partial_rows = 0;
     m_partial_x = 0;
-    m_line_changed = false;
     m_native_resolution = true;
     m_canvas_h_start = 0;
     m_canvas_v_start = 0;
@@ -72,7 +71,6 @@ Video::Video()
     m_canvas_h_divider = 1;
     m_canvas_v_divider = 1;
     m_canvas_interlaced = false;
-    m_canvas_split = false;
 }
 
 Video::~Video()
@@ -338,27 +336,12 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             m_state.output_index = value & 0x03;
             break;
         case 0x044A:
-        {
-            // PLT, YS and YM don't change the picture
-            u8 mask = m_state.output_index == 1 ? 0x01 : 0xFF;
-
-            if (((m_state.output[m_state.output_index] ^ value) & mask) != 0)
-                m_line_changed = true;
-
             m_state.output[m_state.output_index] = value;
             break;
-        }
         case 0x0450:
         case 0x0452:
-        {
-            u32 offset = m_sprite->GetDisplayOffset();
             m_sprite->Write(port, value);
-
-            if (m_sprite->GetDisplayOffset() != offset)
-                m_line_changed = true;
-
             break;
-        }
         case 0x0458:
             m_state.mask_index = value & 0x03;
             break;
@@ -394,9 +377,6 @@ void Video::Write(u16 port, u8 value, u64 clocks)
             m_state.digital_palette_modified = true;
             break;
         case 0xFDA0:
-            if (m_state.display_enable != value)
-                m_line_changed = true;
-
             m_state.display_enable = value;
             break;
         case 0xFDA4:
@@ -404,11 +384,8 @@ void Video::Write(u16 port, u8 value, u64 clocks)
                 m_state.crt_readback = (value & 0x01) != 0;
             break;
         case 0x0022:
-            if (Decodes(port) && m_state.crt_power_off != ((value & 0x80) != 0))
-            {
+            if (Decodes(port))
                 m_state.crt_power_off = (value & 0x80) != 0;
-                m_line_changed = true;
-            }
             break;
         default:
             break;
@@ -782,18 +759,10 @@ void Video::WriteFMRRegister(u32 offset, u8 value)
             m_state.fmr_mask = value;
             break;
         case 0x0F82:
-        {
             Synchronize(m_scheduler->GetClocks());
-            u8 planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
-            bool page = (value & 0x10) != 0;
-
-            if (planes != m_state.fmr_display_planes || page != m_state.fmr_display_page)
-                m_line_changed = true;
-
-            m_state.fmr_display_planes = planes;
-            m_state.fmr_display_page = page;
+            m_state.fmr_display_planes = (u8)((value & 0x07) | ((value >> 2) & 0x08));
+            m_state.fmr_display_page = (value & 0x10) != 0;
             break;
-        }
         case 0x0F83:
             m_state.fmr_page = (value & 0x10) != 0;
             break;
@@ -902,18 +871,10 @@ void Video::WriteCRTC(u8 value, bool high, u64 clocks)
         int layer = index < k_video_crtc_fa1 ? 0 : 1;
 
         if (!m_state.running || GetBeamHalfLine(clocks) < m_state.crtc[k_video_crtc_vds0 + layer * 2])
-        {
-            if (m_state.crtc[index] != previous)
-                m_line_changed = true;
-
             LatchLayerStart(layer);
-        }
 
         return;
     }
-
-    if (m_state.crtc[index] != previous && index >= k_video_crtc_hds0 && index <= k_video_crtc_cr0)
-        m_line_changed = true;
 
     if (index != k_video_crtc_cr0)
         return;
@@ -957,7 +918,6 @@ void Video::WritePalette(int component, u8 value, u64 clocks)
         return;
 
     RenderLineToBeam(clocks);
-    m_line_changed = true;
 
     switch ((m_state.output[1] >> 4) & 0x03)
     {
@@ -1090,8 +1050,6 @@ void Video::StartFrame(u64 clocks)
 
     m_rendered_rows = 0;
     m_partial_rows = 0;
-    m_line_changed = false;
-    m_canvas_split = false;
     UpdateGeometry();
     UpdateNextEvent();
 }
@@ -1111,8 +1069,6 @@ void Video::JoinField(u64 clocks)
     m_state.event_half_line = MIN(half_line, m_state.frame_half_lines - 1);
     m_rendered_rows = 0;
     m_partial_rows = 0;
-    m_line_changed = false;
-    m_canvas_split = false;
     UpdateGeometry();
     UpdateNextEvent();
 }
@@ -1378,7 +1334,7 @@ void Video::SetCanvasZoom(u32 zoom_x, u32 zoom_y)
 {
     u32 fit = (m_canvas_clocks + GT_MAX_FRAME_BUFFER_WIDTH - 1) / GT_MAX_FRAME_BUFFER_WIDTH;
     u32 h_divider = (zoom_x % fit) == 0 ? zoom_x : fit;
-    u32 v_divider = m_canvas_interlaced || m_canvas_split ? 1 : zoom_y;
+    u32 v_divider = m_canvas_interlaced ? 1 : zoom_y;
 
     if (h_divider != m_canvas_h_divider || v_divider != m_canvas_v_divider)
         m_partial_rows = 0;
@@ -1590,23 +1546,11 @@ u64 Video::GetNTSCSyncStableUntil(u64 clocks) const
 void Video::RenderRows(u32 half_line)
 {
     u32 beam = m_state.crtc[k_video_crtc_vst1] + half_line;
-    bool changed = m_line_changed;
-    m_line_changed = false;
 
     if (beam <= m_canvas_v_start)
         return;
 
     u32 lines = (beam - m_canvas_v_start) / 2;
-    u32 divider = m_canvas_v_divider;
-
-    // Rows are drawn at the end of their first line, so a change during a later one splits them from there on
-    if (changed && lines > 0 && ((lines - 1) % divider) != 0 && (lines - 1) / divider < (u32)m_rendered_rows)
-    {
-        m_canvas_split = true;
-        ResizeCanvas(m_canvas_zoom_x, m_canvas_zoom_y);
-        m_rendered_rows = (int)lines - 1;
-    }
-
     UpdateCanvasZoom();
 
     // HAJ is often set after VSYNC, so it is checked when the first row is drawn
@@ -1629,20 +1573,12 @@ void Video::RenderLineToBeam(u64 clocks)
         return;
 
     u32 line = (next - m_canvas_v_start) / 2 - 1;
-    int first = m_canvas_interlaced ? (int)line * 2 : (int)line;
+    int first = m_canvas_interlaced ? (int)line * 2 : (int)((line + m_canvas_v_divider - 1) / m_canvas_v_divider);
     int count = m_canvas_interlaced ? 2 : 1;
     u32 dot = GetBeamClock(clocks);
 
-    if (lead == 0 && (first >= m_canvas_height || dot <= m_canvas_h_start))
+    if (lead == 0 && (first >= m_render_height || dot <= m_canvas_h_start))
         return;
-
-    // Only this line of the row keeps the old colors
-    if (m_canvas_v_divider > 1)
-    {
-        m_canvas_split = true;
-        ResizeCanvas(m_canvas_zoom_x, m_canvas_zoom_y);
-        m_rendered_rows = line >= lead ? (int)(line - lead) : 0;
-    }
 
     // The Marty shows palette writes in VGA-clock modes further down than its counters, so the rows up to there keep
     // the old colors too
@@ -1655,7 +1591,8 @@ void Video::RenderLineToBeam(u64 clocks)
             return;
     }
 
-    if (m_rendered_rows != first || first + count > m_render_height)
+    // A row shows its first line, so a write during a later one waits for the next row
+    if ((line % m_canvas_v_divider) != 0 || m_rendered_rows != first || first + count > m_render_height)
         return;
 
     u32 divider = m_canvas_h_divider;
@@ -2071,7 +2008,6 @@ void Video::SanitizeState()
     // The rows drawn before saving are not part of the state, the rest of the frame redraws them
     m_rendered_rows = 0;
     m_partial_rows = 0;
-    m_canvas_split = false;
     UpdateColorCaches();
     UpdateGeometry();
     UpdateNextEvent();

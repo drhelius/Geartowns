@@ -2660,7 +2660,14 @@ bool I386::CheckCoprocessorOperand(u32 size, bool write)
         u32 linear = 0;
 
         if (!LogicalToLinear(segment, first, size, write, false, linear))
+        {
+            // An FLDENV the limit cuts loads part of the environment and leaves CW 007Fh (PRM486 §25.1)
+            if (m_instruction.opcode == 0xD9 && m_instruction.reg == 4 &&
+                IsValidSegmentOffset(m_state.segments[segment], first))
+                m_x87->GetState()->control = 0x007F;
+
             return false;
+        }
 
         // Environments and saves align to the operand size, the stack part of FSAVE and FRSTOR isn't checked
         u32 alignment = size >= 14 ? (m_instruction.operand_size == 4 ? 4 : 2) : size >= 8 ? 8 : size;
@@ -2696,7 +2703,8 @@ bool I386::CheckCoprocessorOperand(u32 size, bool write)
 
 bool I386::TransferCoprocessorOperand(u8* data, u32 size, bool write)
 {
-    int bits = m_instruction.address_size * 8;
+    // The 387's pieces wrap at the address size, the 486 reads its operand on like any other
+    int bits = m_i486 ? 32 : m_instruction.address_size * 8;
     u64 wrap = bits == 16 ? 0x10000ULL : 0x100000000ULL;
     u32 offset = m_instruction.effective_offset;
     u32 base = m_state.segments[m_instruction.segment].base;

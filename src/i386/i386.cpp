@@ -137,6 +137,7 @@ I386::I386()
     m_bus_table_valid = false;
     m_board_cache = true;
     m_486_bus_clocks = 0;
+    m_486_protected = false;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
     InitPointer(m_bus_decoded_ports);
     InitPointer(m_bus_page_class);

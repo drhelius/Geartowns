@@ -19,6 +19,7 @@
 
 #include "i386.h"
 #include "i386_opcodes_inline.h"
+#include "x87.h"
 
 bool I386::OPCode0F_0x08()
 {
@@ -250,6 +251,7 @@ NO_INLINE u32 I386::RunInstruction486(GT_Bus_Access_Context& context)
 void I386::Capture486Step()
 {
     m_486_continuation = m_state.repeat.active;
+    m_486_protected = m_state.execution_mode == I386_MODE_PROTECTED;
     m_486_extra = 0;
 
     for (int i = 0; i < I386_REG_COUNT; i++)
@@ -601,10 +603,9 @@ INLINE const I486_Form& I386::Get486Form(const InstructionContext& c, u8& flags)
     return member;
 }
 
-INLINE u32 I386::Get486FormClocks(const I486_Form& form, const InstructionContext& c) const
+// protected_mode: the mode the instruction started in, an IRET into VM86 has left it
+INLINE u32 I386::Get486FormClocks(const I486_Form& form, const InstructionContext& c, bool protected_mode) const
 {
-    bool protected_mode = m_state.execution_mode == I386_MODE_PROTECTED;
-
     switch (form.kind)
     {
         case I486_FIXED:
@@ -701,7 +702,7 @@ void I386::Apply486Clocks()
         clocks = port ? (u32)m_step.clocks : Get486StringClocks(c, true);
     else
     {
-        clocks = Get486FormClocks(form, c);
+        clocks = Get486FormClocks(form, c, m_486_protected);
 
         if (clocks == k_i486_keep)
             clocks = (u32)m_step.clocks;
@@ -721,9 +722,9 @@ void I386::Apply486Clocks()
             stalls++;
     }
 
-    // Only memory operands, the stack, MOV moffs and strings access data
+    // Only memory operands, the stack, MOV moffs, strings, ENTER and LEAVE access data
     if (!port && (c.memory_operand || (flags & k_i486_stack) != 0 || form.kind == I486_STRING ||
-        (!c.two_byte && (c.opcode & 0xFC) == 0xA0)))
+        (!c.two_byte && ((c.opcode & 0xFC) == 0xA0 || (c.opcode & 0xFE) == 0xC8))))
         stalls += Get486Misaligned();
 
     m_486_written = m_step.exception ? 0 : Get486FormWritten(form, flags, c);
@@ -741,7 +742,7 @@ u32 I386::Get486Clocks(const InstructionContext& c, bool taken) const
     if (form.kind == I486_JUMP)
         return taken ? form.memory : form.reg;
 
-    return Get486FormClocks(form, c);
+    return Get486FormClocks(form, c, m_state.execution_mode == I386_MODE_PROTECTED);
 }
 
 
@@ -1033,11 +1034,81 @@ u32 I386::Get486Misaligned() const
                 (uses_destination && (destination & mask) != 0 ? 1 : 0);
             break;
         }
+        case I386_BUS_NONE:
+        case I386_BUS_JUMP:
+        case I386_BUS_JCC:
+        case I386_BUS_LOOP:
+        case I386_BUS_FAR:
+        case I386_BUS_XLAT:
+            break;
         default:
+            count = Get486MisalignedOther(pattern, size, linear);
             break;
     }
 
     return count * 3;
+}
+
+// The rarer forms, with the pieces and addresses the bus model uses
+NO_INLINE u32 I386::Get486MisalignedOther(u8 pattern, u32 size, u32 linear) const
+{
+    const InstructionContext& c = m_instruction;
+    u32 stack_mask = m_stack32 ? 0xFFFFFFFFU : 0xFFFFU;
+    u32 stack = m_state.registers[I386_REG_ESP].value;
+    u32 stack_base = m_state.segments[I386_SEGMENT_SS].base;
+    u32 mask = size - 1;
+    u32 count = 0;
+
+    switch (pattern & k_i386_bus_pattern_mask)
+    {
+        case I386_BUS_CALL_RM:
+            count = (c.memory_operand && (linear & mask) != 0 ? 1 : 0) +
+                (((stack_base + (stack & stack_mask)) & mask) != 0 ? 1 : 0);
+            break;
+        case I386_BUS_JUMP_RM:
+            count = c.memory_operand && (linear & mask) != 0 ? 1 : 0;
+            break;
+        case I386_BUS_PUSHA:
+            for (u32 i = 0; i < 8; i++)
+                count += ((stack_base + ((stack + i * size) & stack_mask)) & mask) != 0 ? 1 : 0;
+            break;
+        case I386_BUS_POPA:
+            for (u32 i = 0; i < 8; i++)
+                count += ((stack_base + ((stack - (8 - i) * size) & stack_mask)) & mask) != 0 ? 1 : 0;
+            break;
+        case I386_BUS_ENTER:
+            count = ((stack_base + (m_state.registers[I386_REG_EBP].value & stack_mask)) & mask) != 0 ? 1 : 0;
+            break;
+        case I386_BUS_LEAVE:
+            count = ((stack_base + ((stack - size) & stack_mask)) & mask) != 0 ? 1 : 0;
+            break;
+        case I386_BUS_READ_FAR:
+            count = c.memory_operand ? ((linear & mask) != 0 ? 1 : 0) + (((linear + size) & 1) != 0 ? 1 : 0) : 0;
+            break;
+        case I386_BUS_BOUND:
+            count = c.memory_operand ? ((linear & mask) != 0 ? 1 : 0) + (((linear + size) & mask) != 0 ? 1 : 0) : 0;
+            break;
+        case I386_BUS_DESC_READ:
+        case I386_BUS_DESC_WRITE:
+            count = c.memory_operand ? ((linear & 1) != 0 ? 1 : 0) + (((linear + 2) & 3) != 0 ? 1 : 0) : 0;
+            break;
+        case I386_BUS_ESC:
+        {
+            if (!c.memory_operand || !IsValidPointer(m_x87))
+                break;
+
+            bool write = false;
+            u32 operand = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
+
+            for (u32 done = 0; done < operand; done += 4)
+                count += ((linear + done) & (MIN(operand - done, 4U) - 1)) != 0 ? 1 : 0;
+            break;
+        }
+        default:
+            break;
+    }
+
+    return count;
 }
 
 // The extras PRM486 Table 10.1 lists over the gate's clocks: page faults, BOUND out of range and the IOPL-sensitive

@@ -1026,7 +1026,7 @@ private:
     void Apply486Clocks();
     static void Init486Forms();
     static const I486_Form& Get486Form(const InstructionContext& c, u8& flags);
-    u32 Get486FormClocks(const I486_Form& form, const InstructionContext& c) const;
+    u32 Get486FormClocks(const I486_Form& form, const InstructionContext& c, bool protected_mode) const;
     static u8 Get486FormWritten(const I486_Form& form, u8 flags, const InstructionContext& c);
     static int Get486FormBase(u8 flags, const InstructionContext& c);
     u32 Get486Clocks(const InstructionContext& c, bool taken) const;
@@ -1041,6 +1041,7 @@ private:
     u32 Get486PrefixClocks(const InstructionContext& c) const;
     static u32 Count486Prefixes(const u8* bytes, u32 length);
     u32 Get486Misaligned() const;
+    u32 Get486MisalignedOther(u8 pattern, u32 size, u32 linear) const;
     u32 Get486ExceptionClocks(u8 vector, bool vm86) const;
     u32 GetPortMode() const;
 
@@ -1589,6 +1590,7 @@ private:
     bool m_bus_table_valid;
     bool m_board_cache;
     u32 m_486_bus_clocks;
+    bool m_486_protected;
 };
 
 static const u32 k_i386_poll_max_instructions = 16;

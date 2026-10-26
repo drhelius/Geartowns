@@ -130,6 +130,7 @@ public:
         u32 native_cycle;
         u64 elapsed_cycles;
         u32 busy_cycles;
+        u32 status_cycles;
         u8 status;
 
         s16 left_sample;
@@ -154,7 +155,7 @@ public:
     YM3438_State* GetState();
 
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
     u16 GetSelectedAddress() const;
     u8 GetRegister(u16 address) const;
@@ -209,7 +210,7 @@ private:
     void WriteTimerControl(u8 value);
     void UpdateChannelPan(int channel);
 
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:
@@ -221,6 +222,7 @@ private:
 
 static const int k_ym3438_native_sample_cycles = 144;
 static const int k_ym3438_busy_cycles = 192;
+static const u32 k_ym3438_status_hold_cycles = 240000000;
 static const u32 k_ym3438_phase_mask = 0xFFFFF;
 static const int k_ym3438_envelope_max = 0x3FF;
 static const int k_ym3438_ssg_envelope_max = 0x200;

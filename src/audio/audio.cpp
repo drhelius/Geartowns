@@ -585,7 +585,7 @@ void Audio::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
     Serialize(serializer, version);
-    m_ym3438->LoadState(stream);
+    m_ym3438->LoadState(stream, version);
     m_rf5c68->LoadState(stream);
     SanitizeState();
 }

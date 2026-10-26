@@ -199,6 +199,7 @@ void YM3438::Reset()
     m_state.native_cycle = 0;
     m_state.elapsed_cycles = 0;
     m_state.busy_cycles = 0;
+    m_state.status_cycles = 0;
     m_state.status = 0;
 
     m_state.left_sample = 0;
@@ -231,6 +232,11 @@ void YM3438::RunCycles(u64 cycles)
         m_state.busy_cycles -= (u32)cycles;
     else
         m_state.busy_cycles = 0;
+
+    if (m_state.status_cycles > cycles)
+        m_state.status_cycles -= (u32)cycles;
+    else
+        m_state.status_cycles = 0;
 
     while (cycles >= k_ym3438_native_sample_cycles - m_state.native_cycle)
     {
@@ -1014,23 +1020,23 @@ void YM3438::Write(u8 port, u8 value)
 
 u8 YM3438::Read(u8 port)
 {
-    // Address ports return live status, data ports return the last status latched
-    if ((port & 0x01) == 0)
-    {
-        Synchronize();
-        m_state.status = (m_state.busy_cycles ? 0x80 : 0) | (m_state.timer_b_flag << 1) | m_state.timer_a_flag;
-    }
+    // Port 0 returns live status and latches it, the other ports return the latch for about 30 s
+    if ((port & 0x03) != 0)
+        return Peek(port);
 
+    Synchronize();
+    m_state.status = (m_state.busy_cycles ? 0x80 : 0) | (m_state.timer_b_flag << 1) | m_state.timer_a_flag;
+    m_state.status_cycles = k_ym3438_status_hold_cycles;
     return m_state.status;
 }
 
 // Status as of the last catch-up, without latching it
 u8 YM3438::Peek(u8 port) const
 {
-    if ((port & 0x01) == 0)
+    if ((port & 0x03) == 0)
         return (m_state.busy_cycles ? 0x80 : 0) | (m_state.timer_b_flag << 1) | m_state.timer_a_flag;
 
-    return m_state.status;
+    return m_state.status_cycles > m_state.elapsed_cycles ? m_state.status : 0;
 }
 
 void YM3438::WriteRegister(u16 address, u8 value)
@@ -1273,17 +1279,17 @@ void YM3438::UpdateChannelPan(int channel)
 void YM3438::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void YM3438::LoadState(std::istream& stream)
+void YM3438::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void YM3438::Serialize(StateSerializer& serializer)
+void YM3438::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE_ARRAY(serializer, m_state.registers[0], sizeof(m_state.registers));
     G_SERIALIZE(serializer, m_state.address);
@@ -1362,6 +1368,11 @@ void YM3438::Serialize(StateSerializer& serializer)
             G_SERIALIZE(serializer, op.ssg_direction);
         }
     }
+
+    if (version >= 27)
+        G_SERIALIZE(serializer, m_state.status_cycles);
+    else
+        m_state.status_cycles = k_ym3438_status_hold_cycles;
 }
 
 void YM3438::SanitizeState()
@@ -1392,6 +1403,7 @@ void YM3438::SanitizeState()
     m_state.channels_silent = 0;
     m_state.native_cycle %= k_ym3438_native_sample_cycles;
     m_state.busy_cycles = MIN(m_state.busy_cycles, (u32)k_ym3438_busy_cycles);
+    m_state.status_cycles = MIN(m_state.status_cycles, k_ym3438_status_hold_cycles);
     m_state.status &= 0x83;
 
     for (int channel = 0; channel < YM3438_CHANNEL_COUNT; channel++)

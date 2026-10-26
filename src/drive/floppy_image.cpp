@@ -461,7 +461,7 @@ u8* FloppyImage::CreateBlank(FloppyImage_Blank type, bool formatted, u32* image_
     for (int fat = 0; fat < 2; fat++)
     {
         u8* table = raw + (1 + fat * format.fat_sectors) * sector_size;
-        memset(table, 0, format.fat_sectors * sector_size);
+        memset(table, 0, (size_t)format.fat_sectors * sector_size);
         table[0] = format.media_descriptor;
         table[1] = 0xFF;
         table[2] = 0xFF;
@@ -489,17 +489,17 @@ void FloppyImage::CopyBootLoader(u8* boot_sector)
 
 void FloppyImage::WriteVolumeLabel(u8* entry)
 {
-    time_t now = time(NULL);
-    struct tm* local = localtime(&now);
+    struct tm local;
+    bool valid = get_host_time(time(NULL), false, &local);
     memset(entry, 0, 32);
     memset(entry, ' ', 11);
     memcpy(entry, k_floppy_volume_label, strlen(k_floppy_volume_label));
     entry[11] = 0x28;
 
-    if (IsValidPointer(local) && (local->tm_year >= 80))
+    if (valid && (local.tm_year >= 80))
     {
-        write_u16_le(entry + 22, (u16)((local->tm_hour << 11) | (local->tm_min << 5) | (local->tm_sec / 2)));
-        write_u16_le(entry + 24, (u16)(((local->tm_year - 80) << 9) | ((local->tm_mon + 1) << 5) | local->tm_mday));
+        write_u16_le(entry + 22, (u16)((local.tm_hour << 11) | (local.tm_min << 5) | (local.tm_sec / 2)));
+        write_u16_le(entry + 24, (u16)(((local.tm_year - 80) << 9) | ((local.tm_mon + 1) << 5) | local.tm_mday));
     }
 }
 

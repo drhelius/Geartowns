@@ -344,7 +344,7 @@ void MB8877::RunPhase(u64 clocks)
                 const MB8877_Format& format = k_mb8877_formats[m_fdc->IsDoubleDensity() ? 1 : 0];
                 m_state.byte_index = 0;
                 m_state.phase = MB8877_PHASE_WRITE_DATA;
-                m_state.event_clocks += byte_clocks * (format.write_data - 10);
+                m_state.event_clocks += (u64)byte_clocks * (format.write_data - 10);
             }
             break;
         case MB8877_PHASE_WRITE_DATA:
@@ -748,7 +748,7 @@ void MB8877::FinishSearch(u64 clocks)
             if (m_state.sector_status == k_floppy_status_no_data)
             {
                 m_state.phase = MB8877_PHASE_NO_DATA;
-                m_state.event_clocks = clocks + byte_clocks * format.data_missing;
+                m_state.event_clocks = clocks + (u64)byte_clocks * format.data_missing;
                 break;
             }
 
@@ -761,7 +761,7 @@ void MB8877::FinishSearch(u64 clocks)
                 (m_state.weak_reads++ & 0x01) != 0;
 
             m_state.phase = MB8877_PHASE_READ_DATA;
-            m_state.event_clocks = clocks + byte_clocks * format.data;
+            m_state.event_clocks = clocks + (u64)byte_clocks * format.data;
             break;
         case 0xA:
         case 0xB:

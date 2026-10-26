@@ -5467,8 +5467,8 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
     result.frame = emu_frame_counter;
     result.generation = emu_machine_generation;
     result.estimated = false;
-    result.pixels.assign(pointer_width * pointer_height, 0);
-    result.mask.assign(pointer_width * pointer_height, 0);
+    result.pixels.assign((size_t)pointer_width * pointer_height, 0);
+    result.mask.assign((size_t)pointer_width * pointer_height, 0);
 
     for (size_t i = 0; i < pointer.size(); i++)
     {

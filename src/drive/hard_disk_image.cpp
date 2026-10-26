@@ -126,7 +126,7 @@ static bool FormatPartition(FILE* file, u32 start, u32 blocks)
     for (u32 fat = 0; fat < 2; fat++)
         memcpy(&sectors[(1 + (fat * format.fat_sectors)) * format.sector_size], fat_id, fat_id_size);
 
-    u8* root = &sectors[root_sector * format.sector_size];
+    u8* root = &sectors[(size_t)root_sector * format.sector_size];
     FloppyImage::WriteVolumeLabel(root);
 
     for (u32 i = 1; i < format.root_entries; i++)

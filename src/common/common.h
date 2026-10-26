@@ -24,6 +24,7 @@
 #include <cctype>
 #include <string>
 #include <string.h>
+#include <time.h>
 #if defined(_WIN32)
 #include <direct.h>
 #include <windows.h>
@@ -70,6 +71,15 @@ inline bool checked_multiply_u64(u64 value, u64 multiplier, u64* result)
 
     *result = value * multiplier;
     return true;
+}
+
+inline bool get_host_time(time_t timestamp, bool utc, struct tm* time_info)
+{
+#if defined(_WIN32)
+    return (utc ? gmtime_s(time_info, &timestamp) : localtime_s(time_info, &timestamp)) == 0;
+#else
+    return IsValidPointer(utc ? gmtime_r(&timestamp, time_info) : localtime_r(&timestamp, time_info));
+#endif
 }
 
 inline u16 read_u16_le(const u8* p)

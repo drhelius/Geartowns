@@ -52,22 +52,22 @@ void MSM58321::Reset(u64 clocks)
     m_state.update_clocks = clocks + k_msm58321_second_clocks;
 
     time_t now = m_start_time != 0 ? (time_t)m_start_time : time(NULL);
-    struct tm* local = m_start_time != 0 ? gmtime(&now) : localtime(&now);
+    struct tm local;
 
-    if (!IsValidPointer(local))
+    if (!get_host_time(now, m_start_time != 0, &local))
     {
         SetValue(k_msm58321_day, 0x03, 1);
         SetValue(k_msm58321_month, 0x01, 1);
         return;
     }
 
-    SetValue(k_msm58321_seconds, 0x07, MIN(local->tm_sec, 59));
-    SetValue(k_msm58321_minutes, 0x07, local->tm_min);
-    SetValue(k_msm58321_hours, 0x03, local->tm_hour);
-    m_state.registers[k_msm58321_weekday] = (u8)local->tm_wday;
-    SetValue(k_msm58321_day, 0x03, local->tm_mday);
-    SetValue(k_msm58321_month, 0x01, local->tm_mon + 1);
-    SetValue(k_msm58321_year, 0x0F, local->tm_year % 100);
+    SetValue(k_msm58321_seconds, 0x07, MIN(local.tm_sec, 59));
+    SetValue(k_msm58321_minutes, 0x07, local.tm_min);
+    SetValue(k_msm58321_hours, 0x03, local.tm_hour);
+    m_state.registers[k_msm58321_weekday] = (u8)local.tm_wday;
+    SetValue(k_msm58321_day, 0x03, local.tm_mday);
+    SetValue(k_msm58321_month, 0x01, local.tm_mon + 1);
+    SetValue(k_msm58321_year, 0x0F, local.tm_year % 100);
 }
 
 void MSM58321::SetStartTime(s64 start_time)

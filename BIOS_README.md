@@ -20,15 +20,16 @@ Each model runs on a set of these ROMs. Some models have a set of their own, oth
 | FM Towns II CX           | UX set                          | No dump of its own                        |
 | FM Towns II UX           | UX set                          |                                           |
 | FM Towns II UG           | UX set                          | No dump of its own                        |
-| FM Towns II HG           | HR set, or else the Fresh TV set | No dump of its own                       |
+| FM Towns II HG           | HR set, or else the V10 set     | No dump of its own                        |
 | FM Towns II HR           | HR set                          |                                           |
 | FM Towns Marty           | Marty set or Marty 2 set        |                                           |
 
-The other FM Towns II models (UR, ME, MA, MX, MF/Fresh and HC) are not emulated yet, so their sets are not used. The Fresh TV set only serves the HG.
+The other FM Towns II models (UR, ME, MA, MX, MF/Fresh and HC) are not emulated yet. The V10 set is MAME's FM Towns II FreshTV set, made for the MF/Fresh, and the HG runs on it. MAME's MX set is not recognized.
 
 **How a set is chosen:**
 
 - A set is recognized by its system ROM, whatever folder or zip it is in and whatever it is called.
+- A folder or zip with a required ROM missing or of the wrong size is skipped.
 - For each model, Geartowns takes the set made for it first, then a set it runs on (as in the table above), then unrecognized ROMs, and last a set made for another model. Those last two load with a warning.
 - **Model** on Auto doesn't pick a model whose only firmware is a set made for another model. When a game in the database needs a model with no firmware, Auto picks another one and warns that the game needs that model.
 - A folder set for one model alone (**Own Folder** in the desktop) is used as it is, even with unrecognized ROMs.
@@ -41,14 +42,14 @@ Open **Machine → Firmware...**:
 
 - **Model**: the model whose firmware the window shows. The list shows the status of each model.
 - **Default Folder**: searched for every model, together with its subfolders and the MAME zips in it.
-- **Own Folder**: a folder for the selected model only, used instead of the default folder.
+- **Own Folder**: a folder for the selected model only, used instead of the default folder. **Use Default** goes back to the default folder.
 - **Refresh**: search the folders again after adding or removing files.
 
-The status reads *Ready* with the set or folder in use. It is green for the model's own set or folder, amber for a sibling's set (*compatible*), unrecognized ROMs (*unknown ROMs*) or a set made for another model (*for another model*), and red when there is no firmware for the model (*Not found*). Content doesn't start without the required ROMs of the model.
+The status reads *Ready* with the set in use, or *Own folder*. It is green for the model's own set or folder, amber for a sibling's set (*compatible*), unrecognized ROMs (*unknown ROMs*) or a set made for another model (*for another model*), and red when there is no firmware for the model (*Not found*). Content doesn't start without the required ROMs of the model.
 
 ### Libretro
 
-Place the files in a `geartowns` folder inside the frontend's system directory, in a subfolder of it such as `geartowns/fmtowns/`, or as MAME zips such as `geartowns/fmtowns.zip`. The system directory itself is searched the same way when the `geartowns` folder has no set for a model. Content does not load if a required ROM is missing, and the message lists the missing files.
+Place the files in a `geartowns` folder inside the frontend's system directory, in a subfolder of it such as `geartowns/fmtowns/`, or as MAME zips such as `geartowns/fmtowns.zip`. The system directory itself is searched the same way when the `geartowns` folder only has a set made for another model, or none for the model a game in the database needs. Content does not load without firmware for the model, and the message names the model.
 
 ## Files
 
@@ -105,9 +106,9 @@ Also used by the HG.
 | fmt_dic.rom   | Dictionary ROM - Required | 512 KB   | 82D1DAA2 | 8fa4e553f28cfc0c30a0a1e589799942 |
 | mytownshr.rom | Serial ROM - Optional     | 32 bytes | C52F0E89 | 72a96dabf0f9e5fe0bb47b08fa456815 |
 
-### Fresh TV set (MAME `fmtownsftv`)
+### V10 set (MAME `fmtownsftv`)
 
-The HG's second choice, when there is no HR set.
+MAME's FM Towns II FreshTV set. The HG's second choice, when there is no HR set.
 
 | File           | Description                 | Size     | CRC32    | md5                              |
 |----------------|-----------------------------|----------|----------|----------------------------------|

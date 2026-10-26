@@ -100,17 +100,23 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 ## Features
 
 - Very accurate 80386 core that passes [test386](https://github.com/barotto/test386.asm) and [SingleStepTests/80386](https://github.com/singlesteptests/80386).
+- FM Towns (Model 1/2), 1F/2F, 10F/20F, FM Towns II CX, UX, UG, HG and HR, and FM Towns Marty emulation.
 - CD-ROM drive emulation with `cue/bin`, `iso` and `chd` images, `m3u` disc playlists and disc swapping, with optional compressed images (`zip`).
 - Physical CD-ROM discs on Windows, macOS and Linux.
 - Floppy disk emulation with two drives supporting `d77`, `d88`, `hdm`, `xdf`, `img` and HxC `mfm` images, `m3u` playlists, write protection and optional persistence of disk changes.
-- SCSI hard disks on IDs 0-6 with raw images (`hdd`, `h0`-`h6`, and `hdm` over 8 MB) and `chd` images, the built-in interface of the 1F and later models and the Model 1/2 SCSI card, blank image creation and Towns OS installation.
+- SCSI hard disks on IDs 0-6 with raw and `chd` images, blank disk creation and Towns OS installation.
 - Save states with 5 slots and rewind support.
 - Run-ahead support to reduce input latency.
 - Video recording to AVI and screenshots.
 - VGM recorder for the YM3438 and RF5C68 sound chips.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
 - Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation 3, Nintendo GameCube, Nintendo WiiU, Nintendo Switch, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
-- Full debugger with just-in-time disassembler, execute, data, I/O and interrupt breakpoints, code navigation, call stack, debug symbols, automatic labels, memory editor, trace logger, profiler, i386 registers, descriptor tables and paging inspectors, and viewers for CRTC, palettes, framebuffers, sprites, YM3438, RF5C68, CD-ROM, floppy controller and disks, SCSI controller and disks, interrupts, timers, DMA, RTC, keyboard and game ports.
+- Full debugger:
+  - Just-in-time disassembler, code navigation, call stack, debug symbols and automatic labels.
+  - Execute, data, I/O and interrupt breakpoints.
+  - Memory editor, trace logger and profiler.
+  - i386 registers, descriptor tables and paging inspectors.
+  - Viewers for CRTC, palettes, framebuffers, sprites, YM3438, RF5C68, CD-ROM, floppy controller and disks, SCSI controller and disks, interrupts, timers, DMA, RTC, keyboard and game ports.
 - MCP server for AI-assisted debugging with Claude Code, Codex and similar, exposing tools for execution control, memory inspection, hardware status, rewind and more.
 - Windows, Linux and macOS *Portable Mode*.
 - [Programmable Shader Chain](platforms/shared/desktop/shaders/README.md).
@@ -122,17 +128,71 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 
 ### Basic Usage
 - **Firmware**: Geartowns requires the FM Towns system ROMs to run. Use **Machine → Firmware...** to choose the folder that holds them, with one subfolder or MAME zip per set. See [BIOS_README.md](BIOS_README.md) for the sets each model needs, where to put them and their checksums.
-- **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from the `CD-ROM` menu.
-- **Floppy Images**: Insert floppy disks from the `Floppies` menu, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
-- **Hard Disks**: Attach raw images of 512-byte sectors to SCSI IDs 0-6 from the `Hard Disks` menu, with drag & drop or from the command line (`h0`-`h6` pick that ID, `hdd` the first free one, and so does an `hdm` over 8 MB, smaller ones being floppies). A MAME hard disk `chd` is read-only: its writes go to a raw working copy in the `Save Files` folder, made at the first write and used from then on. In libretro, load the image as content, alone or in an `m3u` playlist with the CD; changes go to a working copy in the save directory and the original is never written. On a running machine changes apply at the next reset, and writes are saved a few seconds after the machine stops writing. Save states, rewind and run-ahead hold no disk data: loading one undoes the disk writes made since (the last 32 MB of them per disk), and warns when it can't. SCSI is built into the 1F/2F and later, fitted as a card on the Model 1/2 while a disk is attached, and absent on the Marty. With `Formatted` checked, `New Blank Disk...` makes a disk partitioned and formatted like Towns OS does, an empty drive per 127 MB (up to ten), so games booted from their CD can install to it; it holds no system and doesn't boot. To install Towns OS, create a disk with `Formatted` unchecked, run HD Install from the Tools folder of TownsMENU V2.1, then eject the CD and reset. A bootable CD boots before the disk unless you pick the disk in `Reset and Boot From`, which holds the system ROM's boot keys (H and the ID) through the reset; the Model 1/2 and Marty ROMs don't read them. Towns OS V2.1 needs 4 MB to start from a disk, which `Main RAM` on Auto gives while one is attached. Towns OS only uses the partitions that have a drive letter in the model's CMOS. With `Assign Drive Letters` on, the default, each reset gives the partitions of an attached disk that have none the free letters from D:, so a disk installed on another model or emulator boots; letters already set are kept. With it off, assign them in Towns OS: boot the Towns OS V2.1 CD, open Settings → Drive Configuration, click the disk's SCSI ID, Add Drive, Execute, then eject the CD and reset.
-- **Machine**: The FM Towns (Model 1/2), 1F/2F, 10F/20F, FM Towns II CX, UX, UG, HG and HR, and the FM Towns Marty are emulated. `Machine → Model`, `CPU Speed` and `Main RAM` default to Auto, which picks the machine, CPU speed and RAM the game database names for the game, the FM Towns II HG for 1.44 MB floppy disks, or the FM Towns (Model 1/2) for other content.
+- **Machine**: **Machine → Model**, **CPU Speed** and **Main RAM** default to **Auto**, which picks:
+  - The model, CPU speed and RAM that the game database names for the game.
+  - The FM Towns II HG for 1.44 MB floppy disks.
+  - The FM Towns (Model 1/2) for other content.
+- **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from **Geartowns → CD-ROM**.
+- **Floppy Images**: Insert floppy disks from **Geartowns → Floppies**, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
+
+### Hard Disks
+
+Up to seven SCSI hard disks can be attached, on IDs 0-6:
+
+- **1F/2F and later**: built-in SCSI interface.
+- **FM Towns (Model 1/2)**: a SCSI card is fitted while a disk is attached.
+- **FM Towns Marty**: no SCSI.
+
+#### Image Formats
+- **Raw images** (`hdd`, `h0`-`h6`, and `hdm` over 8 MB): 512-byte sectors. Smaller `hdm` images are floppies.
+- **MAME hard disk `chd`**: read-only. At the first write, Geartowns makes a raw working copy in the `Save Files` folder and uses it from then on.
+
+#### Attaching Disks
+- **Desktop**: use **Geartowns → Hard Disks**, drag & drop or the command line. With drag & drop and the command line, the extension picks the ID:
+  - `h0`-`h6`: that SCSI ID.
+  - `hdd` and `hdm` over 8 MB: the first free ID.
+- **Libretro**: load the image as content, alone or in an `m3u` playlist with the CD. Changes go to a working copy in the save directory and the original is never written.
+- **Running machine**: attaching or detaching a disk takes effect at the next reset.
+
+#### Disk Writes and Save States
+- Writes are saved a few seconds after the machine stops writing.
+- Save states, rewind and run-ahead hold no disk data. Loading one undoes the disk writes made since then (the last 32 MB of them per disk), and warns when it can't.
+
+#### Installing Games
+With **Formatted** checked, **New Blank Disk...** makes a disk partitioned and formatted like Towns OS does, with one empty drive per 127 MB (up to ten). Games booted from their CD can install to it. It holds no system and doesn't boot.
+
+#### Installing Towns OS
+1. Create a disk with **New Blank Disk...** and **Formatted** unchecked.
+2. Boot the Towns OS V2.1 CD and run **HD Install** from the **Tools** folder of TownsMENU V2.1.
+3. Eject the CD and reset.
+
+Towns OS V2.1 needs 4 MB of RAM to start from a hard disk. **Main RAM** on Auto gives at least that while a disk is attached.
+
+#### Booting From the Hard Disk
+- A bootable CD boots before the disk.
+- To boot the disk with a CD inserted, pick it in **Geartowns → Reset and Boot From**. This holds the system ROM's boot keys (H and the SCSI ID) through the reset.
+- The Model 1/2 and Marty ROMs don't read these keys.
+
+#### Drive Letters
+Towns OS keeps hard disk drive letters in the model's CMOS, not on the disk, and only uses the partitions that have one.
+
+- **Assign Drive Letters** on (**Geartowns → Hard Disks**, the default): each reset gives the free letters from D: to the partitions of an attached disk that have none. Letters already set are kept. This lets a disk installed on another model or emulator boot.
+- **Assign Drive Letters** off: assign the letters yourself in Towns OS:
+  1. Boot the Towns OS V2.1 CD.
+  2. Open **Settings → Drive Configuration**.
+  3. Click the disk's SCSI ID, then **Add Drive** and **Execute**.
+  4. Eject the CD and reset.
 
 ### Debugging Features
 - **Docking Windows**: In debug mode, you can dock windows together by pressing SHIFT and dragging a window onto another.
 - **Multi-viewport**: In Windows or macOS, you can enable "multi-viewport" in the debug menu. You must restart the emulator for the change to take effect. Once enabled, you can drag debugger windows outside the main window.
 - **Single Instance**: You can enable "Single Instance" in the `Emulator` menu. When enabled, opening a file while another instance is running will send it to the running instance instead of starting a new one.
-- **Debug Symbols**: The emulator automatically tries to load a symbol file when loading a CD-ROM or floppy image. For example, for `path_to_image.cue` it tries to load `path_to_image.sym`. You can also load symbol files using the GUI or the CLI. Each line of a symbol file defines one symbol as `address name`, `name = address`, `name EQU address` or `address type name` (GNU `nm` output, for example `nm -n program.elf > program.sym`), where the address can be linear or `selector:offset`. Comments start with `;` or `#`. GNU ld and NASM map files can be loaded too.
+- **Debug Symbols**: The emulator automatically tries to load a symbol file when loading a CD-ROM or floppy image. For example, for `path_to_image.cue` it tries to load `path_to_image.sym`. You can also load symbol files using the GUI or the CLI.
+  - Each line defines one symbol as `address name`, `name = address`, `name EQU address` or `address type name`. The last one is GNU `nm` output, for example `nm -n program.elf > program.sym`.
+  - Addresses can be linear or `selector:offset`.
+  - Comments start with `;` or `#`.
+  - GNU ld and NASM map files can be loaded too.
 
 ### Command Line Usage
 ```
@@ -188,7 +248,7 @@ Geartowns provides [Agent Skills](https://agentskills.io/) that teach AI assista
 
 Install with `npx skills add drhelius/geartowns`. See the [skills README](skills/README.md) for details.
 
-## Hardware Accuracy 
+## Hardware Accuracy
 
 Geartowns is being developed based on the results of the [FM Towns Hardware Tests](https://github.com/drhelius/fmtowns-tests).
 

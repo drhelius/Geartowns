@@ -162,17 +162,17 @@ u8 FDC::Peek(u16 port, u64 clocks) const
 // Bit 0 is DSKCHG from the 1F on, one after a disk change until a step pulse with a disk in the drive, as the
 // disk BIOS reads it (the Data Book's 1F appendix says the opposite); the Model 1/2 has no such line and reads one
 // The drive type reads 3.5 inch, or 011b for a three-mode drive
-// Without an external drive port there are no type or DSKCHG lines
+// The Marty has DSKCHG but no type lines, and reads 00h with no drive selected
 u8 FDC::ReadDriveStatus(u64 clocks) const
 {
     u8 type = m_three_mode ? 0x0C : 0x04;
     bool extended = (m_features & GT_MACHINE_FEATURE_FDD_STATUS) != 0;
     u8 drives = extended && (m_internal_drives >= 2) ? 0x80 : 0x00;
-
-    if ((m_features & GT_MACHINE_FEATURE_FDD_READY_ONLY) != 0)
-        return (IsReady(clocks) ? 0x02 : 0x00) | drives;
-
     int drive = GetSelectedDrive();
+
+    if ((m_features & GT_MACHINE_FEATURE_FDD_NO_TYPE) != 0)
+        return (IsReady(clocks) ? 0x02 : 0x00) | ((drive >= 0) && m_state.disk_changed[drive] ? 0x01 : 0x00) | drives;
+
     u8 changed = !extended || (drive < 0) || m_state.disk_changed[drive] ? 0x01 : 0x00;
     return (IsReady(clocks) ? 0x02 : 0x00) | changed | type | drives;
 }

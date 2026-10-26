@@ -57,7 +57,7 @@ const u32 k_machine_features_ug = k_machine_features_10f | GT_MACHINE_FEATURE_SP
 const u32 k_machine_features_marty = (k_machine_features_ux & ~(GT_MACHINE_FEATURE_RAM_SIZE |
     GT_MACHINE_FEATURE_MEMORY_WAIT | GT_MACHINE_FEATURE_SCSI)) | GT_MACHINE_FEATURE_UG_REGISTERS |
     GT_MACHINE_FEATURE_FREE_RUN_TIMER | GT_MACHINE_FEATURE_RAM_CARD | GT_MACHINE_FEATURE_MARTY_PORTS |
-    GT_MACHINE_FEATURE_FDD_READY_ONLY | GT_MACHINE_FEATURE_TIMER1_LATCHED;
+    GT_MACHINE_FEATURE_FDD_NO_TYPE | GT_MACHINE_FEATURE_TIMER1_LATCHED;
 const u32 k_machine_features_hg = k_machine_features_cx | GT_MACHINE_FEATURE_UG_REGISTERS |
     GT_MACHINE_FEATURE_FREE_RUN_TIMER | GT_MACHINE_FEATURE_CRT_POWER_OFF | GT_MACHINE_FEATURE_SCSI_WORD_PORT;
 const u32 k_machine_features_hr = k_machine_features_hg | GT_MACHINE_FEATURE_CACHE_CONTROL |
@@ -190,7 +190,7 @@ const char* const k_machine_feature_names[GT_MACHINE_FEATURE_COUNT] =
     "CRT power off (0022h)",
     "RAM card size (05E8h)",
     "Marty ports (0486h-0496h)",
-    "Floppy status ready only (0208h)",
+    "Floppy status without drive type (0208h)",
     "Timer 1 latched at power-on (0060h)",
     "SCSI interface (0C30h)",
     "SCSI word DMA (0C32h W/B)",

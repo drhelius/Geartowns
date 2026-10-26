@@ -141,8 +141,9 @@ static const u8 k_fdc_slow_clock = 0x20;
 
 // A swapped disk leaves the drive not ready until a status read sees it, or for as long as a manual swap takes
 // The Model 1/2 has no disk change line, Towns OS spots a swap by polling the ready bit about every 2 s
+// Once seen, the drive spins the new disk up: ready 430-530 ms after an insert with the motor on, measured on a Marty
 static const u64 k_fdc_disk_swap_clocks = GT_MACHINE_CLOCK_RATE * 3;
-static const u64 k_fdc_disk_change_clocks = GT_MACHINE_CLOCK_RATE / 20;
+static const u64 k_fdc_disk_change_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 480) / 1000;
 
 // A drive reports ready and shows the index once its spin-up ends
 // The index hole passes the sensor in 2.9% of a turn

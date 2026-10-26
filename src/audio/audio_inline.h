@@ -217,6 +217,14 @@ INLINE void Audio::SampleSources()
         m_vgm_recorder.UpdateTiming();
 #endif
 
+    s16 buzzer = SampleBuzzer();
+
+    // The ADC samples the stereo mix summed to mono ahead of the output gate, as 80h plus the signal
+    s32 adc = (m_fm_gate ? fm_left + fm_right : 0) +
+        (m_pcm_gate ? (m_state.pcm_lowpass_left + m_state.pcm_lowpass_right) >> 1 : 0) +
+        ((cdda_left * m_cdda_gain_left) >> 15) + ((cdda_right * m_cdda_gain_right) >> 15) + 2 * buzzer;
+    m_state.adc_sample = (u8)(0x80 + CLAMP(adc >> 8, -127, 126));
+
     // Keep the samples already buffered for this frame and drop the excess
     if (m_buffer_index + 1 >= GT_AUDIO_BUFFER_SIZE)
     {
@@ -229,8 +237,6 @@ INLINE void Audio::SampleSources()
 
     if (m_channel_scopes)
         CaptureChannels(m_buffer_index >> 1);
-
-    s16 buzzer = SampleBuzzer();
 
     // Muted sources and a closed output reach the mixer as silence
     m_fm_buffer[m_buffer_index + 0] = m_fm_enabled ? fm_left : 0;

@@ -47,12 +47,15 @@ static const s32 k_audio_volume_gain_minus_32db = 823;
 static const u8 k_audio_volume_enable = 0x04;
 static const u8 k_audio_volume_0db = 0x08;
 static const u8 k_audio_volume_minus_32db = 0x10;
+static const u8 k_audio_volume_data_unused = 0xC0;
+static const u8 k_audio_volume_command_unused = 0xE0;
 static const int k_audio_volume_cdda = 1;
 static const int k_audio_volume_cdda_left = 0;
 static const int k_audio_volume_cdda_right = 1;
 static const u8 k_audio_gate_pcm = 0x01;
 static const u8 k_audio_gate_fm = 0x02;
 static const u8 k_audio_gate_output = 0x40;
+static const u8 k_audio_adc_ready = 0x01;
 static const u8 k_audio_vgm_fm_mode_registers[7] = { 0x22, 0x24, 0x25, 0x26, 0x27, 0x2A, 0x2B };
 
 Audio::Audio()
@@ -75,6 +78,8 @@ Audio::Audio()
     m_fm_enabled = false;
     m_pcm_enabled = false;
     m_cdda_enabled = false;
+    m_fm_gate = false;
+    m_pcm_gate = false;
     m_pcm_irq_clocks = GT_NO_EVENT;
     m_buffer_index = 0;
     m_buffer_overflow = false;
@@ -134,6 +139,7 @@ void Audio::Reset()
     m_state.pcm_lowpass_right = 0;
     m_state.output_dc_left = 0;
     m_state.output_dc_right = 0;
+    m_state.adc_sample = 0x80;
     m_state.clocks = m_scheduler->GetClocks();
 
     // Both MB87078 start with every channel enabled at 0 dB
@@ -176,9 +182,9 @@ u8 Audio::ReadVolume(u16 port) const
     int channel = m_state.volume_channel[chip];
 
     if ((port & 0x01) == 0)
-        return m_state.volume_data[chip][channel];
+        return k_audio_volume_data_unused | m_state.volume_data[chip][channel];
 
-    return (u8)(channel | m_state.volume_control[chip][channel]);
+    return (u8)(k_audio_volume_command_unused | channel | m_state.volume_control[chip][channel]);
 }
 
 void Audio::WriteVolume(u16 port, u8 value)
@@ -206,6 +212,11 @@ u8 Audio::ReadGate(u16 port) const
     return port == 0x04D5 ? m_state.mute_control : m_state.output_control;
 }
 
+u8 Audio::ReadADC(u16 port) const
+{
+    return port == 0x04E7 ? m_state.adc_sample : k_audio_adc_ready;
+}
+
 void Audio::WriteGate(u16 port, u8 value)
 {
     if (port == 0x04D5)
@@ -224,8 +235,10 @@ void Audio::WriteGate(u16 port, u8 value)
 void Audio::UpdateGates()
 {
     bool output = (m_state.output_control & k_audio_gate_output) != 0;
-    m_fm_enabled = output && (m_state.mute_control & k_audio_gate_fm) != 0;
-    m_pcm_enabled = output && (m_state.mute_control & k_audio_gate_pcm) != 0;
+    m_fm_gate = (m_state.mute_control & k_audio_gate_fm) != 0;
+    m_pcm_gate = (m_state.mute_control & k_audio_gate_pcm) != 0;
+    m_fm_enabled = output && m_fm_gate;
+    m_pcm_enabled = output && m_pcm_gate;
     m_cdda_enabled = output;
 }
 
@@ -684,7 +697,6 @@ bool Audio::IsVgmRecording() const
 
 void Audio::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     G_SERIALIZE(serializer, m_state.sound_clock_remainder);
     G_SERIALIZE(serializer, m_state.sample_clock_counter);
     G_SERIALIZE(serializer, m_state.pcm_lowpass_left);
@@ -697,6 +709,11 @@ void Audio::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.output_control);
     G_SERIALIZE(serializer, m_state.output_dc_left);
     G_SERIALIZE(serializer, m_state.output_dc_right);
+
+    if (version >= 28)
+        G_SERIALIZE(serializer, m_state.adc_sample);
+    else
+        m_state.adc_sample = 0x80;
 }
 
 void Audio::SanitizeState()

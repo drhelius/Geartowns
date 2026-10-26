@@ -62,6 +62,7 @@ public:
         u8 volume_control[AUDIO_VOLUME_CHIPS][AUDIO_VOLUME_CHANNELS];
         u8 mute_control;
         u8 output_control;
+        u8 adc_sample;
     };
 
 public:
@@ -87,6 +88,7 @@ public:
     void WriteVolume(u16 port, u8 value);
     u8 ReadGate(u16 port) const;
     void WriteGate(u16 port, u8 value);
+    u8 ReadADC(u16 port) const;
     void EndFrame(s16* sample_buffer, int* sample_count);
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
@@ -150,6 +152,8 @@ private:
     bool m_fm_enabled;
     bool m_pcm_enabled;
     bool m_cdda_enabled;
+    bool m_fm_gate;
+    bool m_pcm_gate;
     u64 m_pcm_irq_clocks;
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];

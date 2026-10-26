@@ -322,7 +322,8 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // ADC sample data
         case 0x04E8:
             // ADC sample ready
-            break;
+            m_audio->Synchronize(context.clocks);
+            return m_audio->ReadADC(port);
         case 0x04E9:
             // Sound interrupt reason
             m_audio->Synchronize(context.clocks);
@@ -636,13 +637,15 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x04EC:
             value = m_audio->ReadGate(port);
             break;
+        case 0x04E7:
+        case 0x04E8:
+            value = m_audio->ReadADC(port);
+            break;
         case 0x04D0:
         case 0x04D2:
             value = m_input->Peek(port);
             break;
         case 0x04D6:
-        case 0x04E7:
-        case 0x04E8:
         case 0x04F0:
         case 0x04F1:
         case 0x04F2:

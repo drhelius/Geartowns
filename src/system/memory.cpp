@@ -1032,17 +1032,17 @@ void Memory::SetBackupRAMProtect(u8 protect)
 u8 Memory::ReadBackupRAMCallback(void* device, u32 offset)
 {
     Memory* memory = (Memory*)device;
-    return (offset & 0x01) != 0 ? 0xFF : memory->m_state.backup_ram[offset >> 1];
+    return memory->m_state.backup_ram[offset];
 }
 
 void Memory::WriteBackupRAMCallback(void* device, u32 offset, u8 value)
 {
     Memory* memory = (Memory*)device;
 
-    if ((offset & 0x01) != 0 || (memory->m_backup_protect & (0x02 << (offset >> 13))) != 0)
+    if ((memory->m_backup_protect & (0x02 << (offset >> 13))) != 0)
         return;
 
-    memory->m_state.backup_ram[offset >> 1] = value;
+    memory->m_state.backup_ram[offset] = value;
 }
 
 u32 Memory::GetRegionGeneration() const
@@ -1603,7 +1603,6 @@ void Memory::LoadState(std::istream& stream, int version)
 
 void Memory::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     G_SERIALIZE_ARRAY(serializer, m_state.main_ram, m_main_ram_size);
     G_SERIALIZE_ARRAY(serializer, m_state.cmos, GT_CMOS_SIZE);
     G_SERIALIZE(serializer, m_state.main_memory);
@@ -1612,7 +1611,20 @@ void Memory::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.dictionary_bank);
     G_SERIALIZE(serializer, m_state.card_bank);
     G_SERIALIZE(serializer, m_state.card_attribute);
-    G_SERIALIZE_ARRAY(serializer, m_state.backup_ram, k_memory_backup_ram_size);
+
+    if (version >= 29)
+        G_SERIALIZE_ARRAY(serializer, m_state.backup_ram, k_memory_backup_ram_size);
+    else
+    {
+        u8 even[k_memory_backup_ram_size / 2];
+        G_SERIALIZE_ARRAY(serializer, even, k_memory_backup_ram_size / 2);
+
+        for (u32 i = 0; i < k_memory_backup_ram_size / 2; i++)
+        {
+            m_state.backup_ram[i * 2] = even[i];
+            m_state.backup_ram[(i * 2) + 1] = 0x00;
+        }
+    }
 }
 
 void Memory::SanitizeState()

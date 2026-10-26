@@ -560,6 +560,9 @@ void MB8877::FinishSeek(u64 clocks)
 
 void MB8877::StartTypeII(u64 clocks)
 {
+    m_state.status &= ~(k_mb8877_crc_error | k_mb8877_lost_data | k_mb8877_not_found | k_mb8877_record_type |
+        k_mb8877_write_protect);
+
     if (!m_fdc->IsReady(clocks))
     {
         End();
@@ -569,8 +572,6 @@ void MB8877::StartTypeII(u64 clocks)
     if ((m_state.command & 0xE0) == 0x80)
         m_fdc->NotifyRead();
 
-    m_state.status &= ~(k_mb8877_crc_error | k_mb8877_lost_data | k_mb8877_not_found | k_mb8877_record_type |
-        k_mb8877_write_protect);
     m_state.type1 = false;
     m_state.media_valid = true;
     LoadHead(clocks);
@@ -657,7 +658,7 @@ void MB8877::Search(u64 clocks, bool restart)
     u64 angle = (clocks * rpm) % k_mb8877_turn;
 
     if (restart)
-        m_state.deadline_clocks = clocks + (k_mb8877_turn - angle + k_mb8877_turn * 4 + rpm - 1) / rpm;
+        m_state.deadline_clocks = clocks + (k_mb8877_turn - angle + k_mb8877_turn * 5 + rpm - 1) / rpm;
 
     const MB8877_Format& format = k_mb8877_formats[m_fdc->IsDoubleDensity() ? 1 : 0];
     bool address = (m_state.command & 0xF0) == 0xC0;

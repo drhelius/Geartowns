@@ -508,7 +508,7 @@ enum GT_Bus_Class
     GT_BUS_CLASS_COUNT
 };
 
-#define GT_MACHINE_PORT_WAIT_BLOCKS 8
+#define GT_MACHINE_PORT_WAIT_BLOCKS 9
 
 struct GT_Machine_Port_Wait
 {

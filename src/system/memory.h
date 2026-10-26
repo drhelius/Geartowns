@@ -36,7 +36,7 @@ typedef void (*GT_Memory_Write32_Fn)(void* device, u32 offset, u32 value);
 typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size);
 
 static const u32 k_memory_dma_slots = 4096;
-static const u32 k_memory_backup_ram_size = 0x3000;
+static const u32 k_memory_backup_ram_size = 0x6000;
 
 class Memory
 {

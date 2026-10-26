@@ -283,10 +283,20 @@ u32 UPD71071::HandleEvent(u64 clocks)
     else
         m_state.active_channel = -1;
 
-    // The CPU gets the bus back between single transfers
-    m_state.next_clocks = clocks + (m_state.active_channel >= 0 ? unit : unit * 2);
+    if (m_state.active_channel >= 0)
+    {
+        m_state.next_clocks = clocks + unit;
+        UpdateNextEvent();
+        return (u32)unit;
+    }
+
+    // A single transfer gives the CPU the bus for a sixth of its unit, and a CPU that returns it late doesn't slow
+    // the pace, measured on a Marty with stores running during a sector's DMA
+    u64 start = ((clocks >= m_state.next_clocks) && ((clocks - m_state.next_clocks) < (unit * 16))) ?
+        m_state.next_clocks : clocks;
+    m_state.next_clocks = start + unit;
     UpdateNextEvent();
-    return (u32)unit;
+    return (u32)(unit - (unit / 6));
 }
 
 void UPD71071::WriteCount(int index, u8 value)

@@ -66,6 +66,7 @@ void CdRom::Init(PIC* pic, Scheduler* scheduler, UPD71071* dma, Audio* audio)
 void CdRom::Reset()
 {
     ResetController();
+    m_state.dei = false;
     m_state.enable_sirq = false;
     m_state.enable_dei = false;
     m_state.disc_changed = false;
@@ -172,7 +173,7 @@ void CdRom::DMAEndCallback(void* device, bool terminal_count)
 }
 
 // SRST restarts the sub-MPU interface
-// CD-DA keeps playing
+// CD-DA keeps playing, and DEI stays because the DMA side sets it
 void CdRom::ResetController()
 {
     AbortTransfer();
@@ -185,7 +186,6 @@ void CdRom::ResetController()
     m_state.status_count = 0;
     m_state.sirq = false;
     m_state.sirq_irq = false;
-    m_state.dei = false;
     m_state.dry = true;
     m_state.cdda_stopped = false;
     m_state.change_padding = false;
@@ -358,9 +358,12 @@ void CdRom::CheckCommand(u64 clocks)
     m_state.param_count = 0;
     m_state.dry = false;
 
-    // The sub-MPU answers 1 ms later
+    // The sub-MPU answers 80h, 81h, 85h and 87h 1.5 ms later and the rest 2 ms later, measured on a Marty
     // Fractal Engine Demo acknowledges SIRQ right after the command, and Lemmings 2 misses an answer that comes in 50 us
-    ScheduleEvent(CDROM_EVENT_EXECUTE, clocks + k_cdrom_command_clocks);
+    u8 code = m_state.command & k_cdrom_command_mask;
+    bool state = (code == CDROM_COMMAND_GET_STATE) || (code == CDROM_COMMAND_CDDA_SET) ||
+        (code == CDROM_COMMAND_CDDA_PAUSE) || (code == CDROM_COMMAND_CDDA_RESUME);
+    ScheduleEvent(CDROM_EVENT_EXECUTE, clocks + (state ? k_cdrom_state_command_clocks : k_cdrom_command_clocks));
 }
 
 void CdRom::RunEvent(u64 clocks)
@@ -523,7 +526,6 @@ void CdRom::CommandRead(u64 clocks)
     if (m_state.enable_sirq)
         RaiseSIRQ(true);
 
-    m_state.dry = false;
     ScheduleEvent(CDROM_EVENT_SECTOR, StartBuffer(clocks));
 }
 
@@ -796,18 +798,9 @@ void CdRom::SectorReady(u64 clocks)
         return;
     }
 
-    // Shadow of the Beast 2 expects Data Ready and DMA end interrupts to alternate
-    // The next sector waits while the previous DMA end interrupt is still asserted
-    if (m_state.dei && m_state.enable_dei)
-    {
-        ScheduleEvent(CDROM_EVENT_SECTOR, clocks + k_cdrom_notify_clocks);
-        return;
-    }
-
     if (!LoadSector())
         return;
 
-    m_state.dei = false;
     m_state.transfer = CDROM_TRANSFER_READY;
 
     if (unlikely(IsValidPointer(m_trace_logger) &&
@@ -820,7 +813,9 @@ void CdRom::SectorReady(u64 clocks)
     RaiseSIRQ(((m_state.active_command & k_cdrom_flag_status) != 0) &&
         ((m_state.active_command & k_cdrom_flag_irq) != 0));
 
-    ScheduleEvent(CDROM_EVENT_LOST_DATA, clocks + k_cdrom_lost_data_clocks);
+    // The last sector of a read waits until it is drained or another command replaces it
+    if (m_state.read_lba != m_state.read_end_lba)
+        ScheduleEvent(CDROM_EVENT_LOST_DATA, clocks + k_cdrom_lost_data_clocks);
 }
 
 // Shadow of the Beast 2 abandons a read by leaving its sector undrained
@@ -921,17 +916,20 @@ bool CdRom::LoadSector()
 }
 
 // A sector never comes before the pickup reads it
+// Only a DMA sets DEI when it ends
 void CdRom::FinishSector()
 {
     if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_SECTOR_END)))
         TraceEvent(TRACE_CDROM_SECTOR_END, 0);
 
     if (m_state.transfer == CDROM_TRANSFER_DMA)
+    {
         m_dma->SetRequest(k_cdrom_dma_channel, false);
+        m_state.dei = true;
+    }
 
     u64 clocks = m_scheduler->GetClocks();
     m_state.transfer = CDROM_TRANSFER_NONE;
-    m_state.dei = true;
     m_state.read_lba++;
     ReleaseBuffer(m_state.read_lba, clocks);
 

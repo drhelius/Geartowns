@@ -2226,7 +2226,7 @@ json McpServer::BuildToolList()
                 {"player", game_port},
                 {"button", {
                     {"type", "string"},
-                    {"enum", json::array({"up", "down", "left", "right", "select", "run", "A", "B", "C", "X", "Y", "Z"})}
+                    {"enum", json::array({"up", "down", "left", "right", "select", "run", "A", "B", "C", "X", "Y", "Z", "zoom"})}
                 }},
                 {"action", {
                     {"type", "string"},

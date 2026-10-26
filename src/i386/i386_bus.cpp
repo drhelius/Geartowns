@@ -130,7 +130,7 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
             bus.io_blocks[i].span = (u32)(block.last - block.first);
 
             for (int k = 0; k < 2; k++)
-                bus.io_blocks[i].wait[k] = ScaleBusWait((u32)timing->io[k] + block.extra[k], cpu, model);
+                bus.io_blocks[i].wait[k] = ScaleBusWait((u32)(timing->io[k] + block.extra[k]), cpu, model);
         }
 
         bus.cycle[GT_BUS_ROM][0] = ScaleBusWait(waits->rom_cycle, cpu, model);

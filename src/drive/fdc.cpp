@@ -196,6 +196,9 @@ void FDC::Write(u16 port, u8 value, u64 clocks)
             m_mb8877.WriteData(value);
             break;
         case 0x0208:
+            if ((value & k_fdc_motor) != 0 && (m_state.drive_control & k_fdc_motor) == 0)
+                m_state.spin_clocks = clocks + k_fdc_spin_up_clocks;
+
             m_state.drive_control = value;
             TraceDrive(TRACE_FDC_DRIVE_CONTROL, value);
             UpdateIRQ();
@@ -323,14 +326,19 @@ void FDC::UpdateReady(u64 clocks)
     m_mb8877.ReadyChanged(ready);
 }
 
-// Besides the controller events, the end of a disk change wakes the board to report the drive ready
+// Besides the controller events, the end of a disk change or a spin-up wakes the board to report the drive ready
 void FDC::UpdateNextEvent(u64 clocks)
 {
     u64 next = m_mb8877.GetEventClocks();
     int drive = GetSelectedDrive();
 
-    if (drive >= 0 && !m_state.ready && IsSpinning() && m_state.ready_clocks[drive] > clocks)
-        next = MIN(next, m_state.ready_clocks[drive]);
+    if (drive >= 0 && !m_state.ready && IsSpinning())
+    {
+        u64 ready = MAX(m_state.ready_clocks[drive], m_state.spin_clocks);
+
+        if (ready > clocks)
+            next = MIN(next, ready);
+    }
 
     m_scheduler->Schedule(SCHEDULER_EVENT_FDC, next);
 }
@@ -399,7 +407,6 @@ void FDC::LoadState(std::istream& stream, int version)
 
 void FDC::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     G_SERIALIZE(serializer, m_state.drive_control);
     G_SERIALIZE(serializer, m_state.drive_select);
     G_SERIALIZE(serializer, m_state.drive_switch);
@@ -411,6 +418,11 @@ void FDC::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE_ARRAY(serializer, m_state.cylinders, FDC_DRIVES);
     G_SERIALIZE_ARRAY(serializer, m_state.ready_clocks, FDC_DRIVES);
     G_SERIALIZE_ARRAY(serializer, m_state.disk_changed, FDC_DRIVES);
+
+    if (version >= 26)
+        G_SERIALIZE(serializer, m_state.spin_clocks);
+    else
+        m_state.spin_clocks = 0;
 }
 
 void FDC::SanitizeState()

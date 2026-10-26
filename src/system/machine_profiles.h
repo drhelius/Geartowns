@@ -83,11 +83,13 @@ const GT_Machine_Bus_Waits k_machine_bus_waits_dx = { { 0, 0 }, { 0, 0 }, { 0, 0
 const GT_Machine_Bus_Waits k_machine_bus_waits_dx_fast = { { 0, 0 }, { 0, 0 }, { 0, 0 }, 0, 0, { 0, 0 },
     { 768, 768 }, { 768, 768 }, 1384, 1250, { 1578, 1024 } };
 
-// Port blocks slower than the generic wait, extra 1/256 clocks to read and to write, measured on a Marty
+// Port blocks off the generic wait, extra 1/256 clocks to read and to write, measured on a Marty
 // A write to a port the board doesn't decode ends sooner, as the io_free_write wait of the bus timing below
 // Protected-mode segment loads read a descriptor: MOV and LxS, then POP, which overlaps it. DX takes half the cycles
 const GT_Machine_Port_Wait k_machine_port_waits[GT_MACHINE_PORT_WAIT_BLOCKS] = { { 0x0060, 0x0060, { 748, 748 } },
-    { 0x04C0, 0x04CC, { 2282, 2282 } }, { 0x04D8, 0x04DE, { 748, 811 } }, { 0xFD90, 0xFDA4, { 926, 994 } } };
+    { 0x0200, 0x020E, { 0, -212 } }, { 0x04C0, 0x04CC, { 2282, 2282 } }, { 0x04D0, 0x04D6, { 0, -212 } },
+    { 0x04D8, 0x04DE, { 748, 811 } }, { 0x0600, 0x0604, { 0, -212 } }, { 0x3000, 0x3FFE, { -503, 0 } },
+    { 0xFD90, 0xFDA4, { 926, 994 } } };
 
 const GT_Machine_Bus_Timing k_machine_bus_sx = { GT_MACHINE_BUS_FIXED, &k_machine_bus_waits_sx, NULL,
     17, 100, 830, 543, 289, { 1845, 1427 }, { 2872, 2470 }, { 14298, 14016 }, { 1536, 1024 }, { 1649, 1308 }, 1068,

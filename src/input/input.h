@@ -81,6 +81,7 @@ private:
 static const u8 k_input_output_reset = 0x0F;
 static const u8 k_input_com = 0x10;
 static const u8 k_input_com_return = 0x40;
+static const u8 k_input_marty_zoom = 0x40;
 static const u8 k_input_trig_lines = 0x30;
 static const u8 k_input_six_button_id = 0x80;
 static const u8 k_input_mouse_x_high = 0;

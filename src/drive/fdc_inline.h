@@ -91,7 +91,7 @@ INLINE int FDC::GetSelectedTrack() const
 }
 
 // The drive mode, data rate and rotation must match the ones the disk was written with
-// 2HD media needs HISPD, so a two-mode drive never reads a 1.44 MB disk
+// A two-mode drive turns 2HD media at 360 rpm, so it never reads a 1.44 MB disk
 INLINE bool FDC::IsSelectedReadable() const
 {
     int drive = GetSelectedDrive();
@@ -102,7 +102,7 @@ INLINE bool FDC::IsSelectedReadable() const
     bool slow = (m_state.drive_control & k_fdc_slow_clock) != 0;
 
     if (m_disks[drive].GetMedia() == FLOPPY_MEDIA_2HD)
-        return !slow && m_state.high_speed && GetRPM() == m_disks[drive].GetRPM();
+        return !slow && (m_state.high_speed || !m_three_mode) && GetRPM() == m_disks[drive].GetRPM();
 
     return slow && !m_state.high_speed && GetRPM() == m_disks[drive].GetRPM();
 }
@@ -118,7 +118,7 @@ INLINE bool FDC::IsSelectedFormattable() const
     bool slow = (m_state.drive_control & k_fdc_slow_clock) != 0;
 
     if (m_disks[drive].GetMedia() == FLOPPY_MEDIA_2HD)
-        return !slow && m_state.high_speed;
+        return !slow && (m_state.high_speed || !m_three_mode);
 
     return slow && !m_state.high_speed && !m_state.mode_b;
 }
@@ -131,13 +131,12 @@ INLINE bool FDC::IsSpinning() const
 
 INLINE bool FDC::IsReady(u64 clocks) const
 {
-    return IsSpinning() && clocks >= m_state.ready_clocks[GetSelectedDrive()];
+    return IsSpinning() && clocks >= m_state.ready_clocks[GetSelectedDrive()] && clocks >= m_state.spin_clocks;
 }
 
-// The index hole passes the sensor during the first 1% of each turn
 INLINE bool FDC::IsIndex(u64 clocks) const
 {
-    return IsSpinning() && ((clocks * GetRPM()) % k_mb8877_turn) < k_mb8877_turn / 100;
+    return IsReady(clocks) && ((clocks * GetRPM()) % k_mb8877_turn) < k_fdc_index_width;
 }
 
 INLINE bool FDC::IsTrackZero() const
@@ -170,10 +169,16 @@ INLINE u32 FDC::GetByteClocks() const
 }
 
 // MODE-B with HISPD is the 1.44 MB mode, without it the unsupported 2ED one
+// A two-mode drive turns 2HD media at 360 rpm whatever HISPD says
 INLINE u32 FDC::GetRPM() const
 {
     if (m_state.mode_b)
         return m_state.high_speed ? 300 : 180;
+
+    int drive = GetSelectedDrive();
+
+    if (!m_three_mode && drive >= 0 && m_disks[drive].IsInserted() && m_disks[drive].GetMedia() == FLOPPY_MEDIA_2HD)
+        return 360;
 
     return m_state.high_speed ? 360 : 300;
 }

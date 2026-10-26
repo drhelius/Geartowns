@@ -60,6 +60,8 @@ u8 I8259::Read(int a0)
 {
     // An armed poll turns the next read into an acknowledge of the frozen requests
     // The input changes held back since the poll command reach the requests after it
+    // Bits 3-5 of the answer read 1
+    // With no request it answers level 7
     if (m_state.poll_pending)
     {
         m_state.poll_pending = false;
@@ -67,7 +69,7 @@ u8 I8259::Read(int a0)
         m_state.irr = (m_state.irr | m_state.poll_edges) & m_state.input_levels;
         m_state.poll_edges = 0;
         UpdateOutput();
-        return line < 0 ? 0x00 : (u8)(0x80 | line);
+        return (u8)(k_i8259_poll_unused | (line < 0 ? 0x07 : 0x80 | line));
     }
 
     if (a0 != 0)

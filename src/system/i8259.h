@@ -103,6 +103,7 @@ static const u8 k_i8259_ocw3_poll = 0x04;
 static const u8 k_i8259_ocw3_select = 0x08;
 static const u8 k_i8259_ocw3_smm = 0x20;
 static const u8 k_i8259_ocw3_esmm = 0x40;
+static const u8 k_i8259_poll_unused = 0x38;
 
 #include "i8259_inline.h"
 

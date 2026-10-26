@@ -109,7 +109,7 @@ u8 MB8877::PeekStatus(u64 clocks) const
         if (m_fdc->IsTrackZero())
             value |= k_mb8877_track_zero;
 
-        if (m_state.head_loaded)
+        if (IsHeadLoaded(clocks) && clocks >= GetHeadEngagedClocks())
             value |= k_mb8877_head_loaded;
 
         if (m_fdc->IsWriteProtected())
@@ -156,6 +156,7 @@ void MB8877::WriteCommand(u8 value, u64 clocks)
     if ((m_state.status & k_mb8877_busy) != 0)
         return;
 
+    m_state.head_loaded = IsHeadLoaded(clocks);
     m_state.command = value;
     m_state.conditions = 0;
     m_state.index_clocks = GT_NO_EVENT;
@@ -163,6 +164,12 @@ void MB8877::WriteCommand(u8 value, u64 clocks)
     DropDRQ();
 
     u32 cycles = m_fdc->IsDoubleDensity() ? k_mb8877_command_cycles : k_mb8877_command_cycles * 2;
+
+    if ((value & 0xF0) == 0x00)
+        cycles += k_mb8877_type1_cycles + k_mb8877_restore_cycles;
+    else if ((value & 0x80) == 0)
+        cycles += k_mb8877_type1_cycles;
+
     m_state.phase = MB8877_PHASE_COMMAND;
     m_state.event_clocks = clocks + GetCycles(cycles);
 }
@@ -411,11 +418,14 @@ void MB8877::RunPhase(u64 clocks)
             m_state.event_clocks = GT_NO_EVENT;
             break;
     }
+
+    if ((m_state.status & k_mb8877_busy) == 0)
+        m_state.idle_clocks = clocks;
 }
 
 void MB8877::RunIndex(u64 clocks)
 {
-    if (!m_state.intrq && m_fdc->IsSpinning())
+    if (!m_state.intrq && m_fdc->IsReady(clocks))
         SetINTRQ(true);
 
     m_state.index_clocks = GetNextIndex(clocks);
@@ -445,8 +455,12 @@ void MB8877::StartTypeI(u64 clocks)
     u8 operation = m_state.command >> 4;
     m_state.status &= ~(k_mb8877_crc_error | k_mb8877_not_found);
     m_state.type1 = true;
-    m_state.head_loaded = (m_state.command & 0x08) != 0;
     m_state.steps = 0;
+
+    if ((m_state.command & 0x08) != 0)
+        LoadHead(clocks);
+    else
+        m_state.head_loaded = false;
 
     switch (operation)
     {
@@ -538,10 +552,10 @@ void MB8877::FinishSeek(u64 clocks)
         return;
     }
 
-    m_state.head_loaded = true;
+    LoadHead(clocks);
     m_state.media_valid = true;
     m_state.phase = MB8877_PHASE_SETTLE;
-    m_state.event_clocks = clocks + GetCycles(k_mb8877_settle_cycles);
+    m_state.event_clocks = MAX(clocks + GetCycles(k_mb8877_settle_cycles), GetHeadEngagedClocks());
 }
 
 void MB8877::StartTypeII(u64 clocks)
@@ -558,13 +572,18 @@ void MB8877::StartTypeII(u64 clocks)
     m_state.status &= ~(k_mb8877_crc_error | k_mb8877_lost_data | k_mb8877_not_found | k_mb8877_record_type |
         k_mb8877_write_protect);
     m_state.type1 = false;
-    m_state.head_loaded = true;
     m_state.media_valid = true;
+    LoadHead(clocks);
+
+    u64 start = MAX(clocks, GetHeadEngagedClocks());
 
     if ((m_state.command & 0x04) != 0)
+        start = MAX(start, clocks + GetCycles(k_mb8877_settle_cycles));
+
+    if (start > clocks)
     {
         m_state.phase = MB8877_PHASE_HEAD_LOAD;
-        m_state.event_clocks = clocks + GetCycles(k_mb8877_settle_cycles);
+        m_state.event_clocks = start;
     }
     else
         ContinueTypeII(clocks);
@@ -608,6 +627,8 @@ void MB8877::ForceInterrupt(u8 value, u64 clocks)
     }
 
     m_state.deferred = 0;
+    m_state.head_loaded = IsHeadLoaded(clocks);
+    m_state.idle_clocks = clocks;
 
     if ((m_state.status & k_mb8877_busy) != 0)
     {
@@ -906,6 +927,28 @@ void MB8877::End()
 
     if (!m_state.drq)
         SetINTRQ(true);
+}
+
+void MB8877::LoadHead(u64 clocks)
+{
+    if (m_state.head_loaded)
+        return;
+
+    m_state.head_loaded = true;
+    m_state.head_clocks = clocks;
+}
+
+bool MB8877::IsHeadLoaded(u64 clocks) const
+{
+    if (!m_state.head_loaded || (m_state.status & k_mb8877_busy) != 0)
+        return m_state.head_loaded;
+
+    return clocks - m_state.idle_clocks < k_mb8877_head_unload_turns * k_mb8877_turn / m_fdc->GetRPM();
+}
+
+u64 MB8877::GetHeadEngagedClocks() const
+{
+    return m_state.head_clocks + k_mb8877_head_engage_clocks;
 }
 
 void MB8877::TraceEvent(u8 event, u8 command)
@@ -1226,7 +1269,6 @@ void MB8877::LoadState(std::istream& stream, int version)
 
 void MB8877::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.track);
     G_SERIALIZE(serializer, m_state.sector);
@@ -1260,6 +1302,17 @@ void MB8877::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE_ARRAY(serializer, m_state.track_buffer, MB8877_TRACK_BUFFER_SIZE);
     G_SERIALIZE(serializer, m_state.sector_weak);
     G_SERIALIZE(serializer, m_state.weak_reads);
+
+    if (version >= 26)
+    {
+        G_SERIALIZE(serializer, m_state.head_clocks);
+        G_SERIALIZE(serializer, m_state.idle_clocks);
+    }
+    else
+    {
+        m_state.head_clocks = 0;
+        m_state.idle_clocks = 0;
+    }
 
     if (serializer.IsLoading())
         m_state.track_size = MIN(m_state.track_size, (u32)MB8877_TRACK_BUFFER_SIZE);

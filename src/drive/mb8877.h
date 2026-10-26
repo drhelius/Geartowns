@@ -92,6 +92,8 @@ public:
         u32 byte_count;
         u32 track_size;
         u8 track_buffer[MB8877_TRACK_BUFFER_SIZE];
+        u64 head_clocks;
+        u64 idle_clocks;
     };
 
 public:
@@ -141,6 +143,9 @@ private:
     void WriteTrackCell(u64 clocks);
     void FinishWriteTrack();
     void End();
+    void LoadHead(u64 clocks);
+    bool IsHeadLoaded(u64 clocks) const;
+    u64 GetHeadEngagedClocks() const;
     void TraceEvent(u8 event, u8 command);
     void SetDRQ();
     void DropDRQ();
@@ -181,10 +186,17 @@ static const u8 k_mb8877_interrupt_immediate = 0x08;
 static const u32 k_mb8877_step_cycles[4] = { 6000, 12000, 20000, 30000 };
 static const u32 k_mb8877_settle_cycles = 30000;
 static const u32 k_mb8877_command_cycles = 12;
+static const u32 k_mb8877_type1_cycles = 76;
+static const u32 k_mb8877_restore_cycles = 980;
 static const u32 k_mb8877_write_protect_cycles = 145;
 static const u32 k_mb8877_track_load_cycles = 192;
 
 static const u64 k_mb8877_turn = (u64)GT_MACHINE_CLOCK_RATE * 60;
+
+// HLT comes 55 ms after the head loads
+// An idle head unloads after 15 index pulses
+static const u64 k_mb8877_head_engage_clocks = ((u64)GT_MACHINE_CLOCK_RATE * 55) / 1000;
+static const u32 k_mb8877_head_unload_turns = 15;
 
 #include "mb8877_inline.h"
 

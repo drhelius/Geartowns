@@ -158,7 +158,7 @@ void gui_debug_window_game_ports(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(240, 179), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(221, 436), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(219, 472), ImGuiCond_FirstUseEver);
     ImGui::Begin("Game Ports", &config_debug.show_game_ports);
 
     ImGui::PushFont(gui_default_font);
@@ -233,8 +233,10 @@ static void draw_game_port(Input* input, int port)
         GT_GAMEPAD_RUN | GT_GAMEPAD_A | GT_GAMEPAD_B;
     u16 present = 0;
 
-    if (type == GT_CONTROLLER_ORIGINAL_GAMEPAD || type == GT_CONTROLLER_MARTY_GAMEPAD)
+    if (type == GT_CONTROLLER_ORIGINAL_GAMEPAD)
         present = pad;
+    else if (type == GT_CONTROLLER_MARTY_GAMEPAD)
+        present = pad | GT_GAMEPAD_ZOOM;
     else if (type == GT_CONTROLLER_6_BUTTON_GAMEPAD)
         present = pad | GT_GAMEPAD_C | GT_GAMEPAD_X | GT_GAMEPAD_Y | GT_GAMEPAD_Z;
     else if (mouse)
@@ -258,6 +260,11 @@ static void draw_game_port(Input* input, int port)
     draw_button("X", GT_GAMEPAD_X, buttons, present); ImGui::SameLine(0.0f, space);
     draw_button("Y", GT_GAMEPAD_Y, buttons, present); ImGui::SameLine(0.0f, space);
     draw_button("Z", GT_GAMEPAD_Z, buttons, present);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TableNextColumn();
+    draw_button("ZOOM", GT_GAMEPAD_ZOOM, buttons, present);
 
     ImGui::TableNextRow();
     draw_grid_label("PHASE");

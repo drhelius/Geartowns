@@ -5121,6 +5121,7 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     if (name == "x") return GT_GAMEPAD_X;
     if (name == "y") return GT_GAMEPAD_Y;
     if (name == "z") return GT_GAMEPAD_Z;
+    if (name == "zoom") return GT_GAMEPAD_ZOOM;
 
     return 0;
 }
@@ -5633,12 +5634,12 @@ json DebugAdapter::GetInputState()
 {
     static const char* names[] = {
         "up", "down", "left", "right", "select", "run",
-        "A", "B", "C", "X", "Y", "Z"
+        "A", "B", "C", "X", "Y", "Z", "zoom"
     };
     static const u16 masks[] = {
         GT_GAMEPAD_UP, GT_GAMEPAD_DOWN, GT_GAMEPAD_LEFT, GT_GAMEPAD_RIGHT,
         GT_GAMEPAD_SELECT, GT_GAMEPAD_RUN, GT_GAMEPAD_A, GT_GAMEPAD_B,
-        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z
+        GT_GAMEPAD_C, GT_GAMEPAD_X, GT_GAMEPAD_Y, GT_GAMEPAD_Z, GT_GAMEPAD_ZOOM
     };
 
     json players = json::array();

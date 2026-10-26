@@ -72,11 +72,17 @@ u8 Input::Peek(u16 port) const
 
     switch (m_controller_type[index])
     {
-        // Marty's Zoom is not decoded yet, its line and polarity are unknown
         case GT_CONTROLLER_ORIGINAL_GAMEPAD:
-        case GT_CONTROLLER_MARTY_GAMEPAD:
             value = ReadGamePad(index, false);
             break;
+        case GT_CONTROLLER_MARTY_GAMEPAD:
+            // No COM echo: Zoom takes bit 6 while COM is high
+            value = ReadGamePad(index, false);
+
+            if (com && (m_state.gamepads[index].buttons & GT_GAMEPAD_ZOOM) != 0)
+                value |= k_input_marty_zoom;
+
+            return value & (u8)(~k_input_trig_lines | (trig << 4));
         case GT_CONTROLLER_6_BUTTON_GAMEPAD:
             return (u8)(ReadGamePad(index, com) | (com ? k_input_com_return : 0) | k_input_six_button_id);
         case GT_CONTROLLER_MOUSE:

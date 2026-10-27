@@ -99,7 +99,6 @@ const GT_DB_Entry k_game_database[] =
     { 0xA4447E85, "Psychic Detective Series Vol. 5 - Nightmare (DCCS)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0x94AE5B03 },
     { 0x63849281, "Reijou Monogatari", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0x3E3898E5 },
     { 0xB2752ED3, "Return to Zork", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 6, 0, 0, 0, 0x4C81A24F },
-    { 0xEFF11460, "Samurai Spirits", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0x8D2C328C },
     { 0xB7932028, "SimCity 2000", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0x15C3A6B1 },
     { 0x8F3A1365, "Strike Commander Plus", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 6, 0, 0, 0, 0x248397BB },
     { 0x519B3DBB, "Super Street Fighter II - The New Challengers", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 66, GT_GAMEDB_PORT_6_BUTTON_PAD, GT_GAMEDB_PORT_6_BUTTON_PAD, 0 },
@@ -159,6 +158,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x6DAC7913, "Para Para Paradise (Disc B) (Kyouko Hisakawa)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HR, 8, 33, 0, 0, 0 }, // MA
     { 0xCD8B3F09, "Para Para Paradise (Disc C) (Makoto Siina)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486 | GT_GAMEDB_FPU, GT_MACHINE_HR, 8, 33, 0, 0, 0 }, // MA
     { 0x75236D99, "Ravenloft - Aku no Keshin", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0xBF2C9875 }, // HR
+    { 0xEFF11460, "Samurai Spirits", GT_GAMEDB_FLOPPY_BOOT | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 33, 0, 0, 0x8D2C328C }, // MA, too slow on a 386
     { 0x6BEA56A2, "Teo - Mou Hitotsu no Chikyuu (Version 1.0)", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
     { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 8, 66, 0, 0, 0 }, // MX, 2x CD-ROM
     { 0xADC925E6, "Theme Park", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0xC3C8B1CB }, // HR
@@ -398,7 +398,7 @@ const GT_DB_Entry k_floppy_database[] =
     { 0x086BD554, "Rance 2 - Hangyaku no Shoujo-tachi (Disk A)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0 },
     { 0xB0F49347, "Rance 2 Hint Disk", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0 },
     { 0x38A2C229, "Rumstorm", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 0, 33, 0, 0, 0 }, // MA, a 486 at 33 MHz or faster
-    { 0x7208C490, "Samurai Spirits (Boot Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0 },
+    { 0x7208C490, "Samurai Spirits (Boot Disk)", GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 33, 0, 0, 0 }, // MA, too slow on a 386
     { 0x3C43B7DA, "Shamhat - The Holy Circlet (User Disk) (FM Towns Marty)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MARTY, 0, 0, 0, 0, 0 },
     { 0xD58C19E0, "Uwaki na Anata - Switch o Irete (Boot Disk)", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0 },
 

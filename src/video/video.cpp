@@ -423,6 +423,14 @@ void Video::EndFrame()
         buffer[i] = black;
 }
 
+void Video::SetFrameSize(int frame_width, int frame_height, int display_width, int display_height)
+{
+    m_frame_width = frame_width;
+    m_frame_height = frame_height;
+    m_display_width = display_width;
+    m_display_height = display_height;
+}
+
 u8 Video::ReadVRAMTwoPageCallback(void* device, u32 offset)
 {
     Video* video = (Video*)device;

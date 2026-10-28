@@ -107,6 +107,62 @@ public:
     }
 };
 
+typedef bool (*callback_write)(const char* data, size_t size);
+
+class callback_buffer : public std::streambuf
+{
+private:
+    callback_write write;
+    size_t written;
+
+public:
+    callback_buffer(callback_write callback)
+    {
+        write = callback;
+        written = 0;
+    }
+
+protected:
+    std::streamsize xsputn(const char* s, std::streamsize n) override
+    {
+        if (!write(s, (size_t)n))
+            return 0;
+
+        written += (size_t)n;
+        return n;
+    }
+
+    int_type overflow(int_type c) override
+    {
+        if (traits_type::eq_int_type(c, traits_type::eof()))
+            return traits_type::not_eof(c);
+
+        char value = traits_type::to_char_type(c);
+        return (xsputn(&value, 1) == 1) ? c : traits_type::eof();
+    }
+
+    pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which = std::ios_base::out) override
+    {
+        if ((which & std::ios_base::out) && (dir == std::ios_base::cur) && (off == 0))
+            return pos_type((off_type)written);
+
+        return pos_type(off_type(-1));
+    }
+};
+
+class callback_stream : public std::ostream
+{
+private:
+    callback_buffer buf;
+
+public:
+    callback_stream(callback_write callback)
+        : std::ostream(NULL), buf(callback)
+    {
+        rdbuf(&buf);
+    }
+};
+
 class memory_input_buffer : public std::streambuf {
 private:
     const char* buffer_start;

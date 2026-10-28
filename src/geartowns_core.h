@@ -135,6 +135,7 @@ public:
 
     bool SaveState(const char* path = NULL, int index = -1, bool screenshot = false);
     bool SaveState(u8* buffer, size_t& size, bool screenshot = false, bool media = false);
+    bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
     bool GetMaxSaveStateSize(size_t& size);
     bool LoadState(const char* path = NULL, int index = -1);
     bool LoadState(const u8* buffer, size_t size, GT_SaveState_Media* media = NULL);
@@ -209,7 +210,6 @@ private:
     void ApplyBootDevice();
     void InitMemoryMap();
 
-    bool SaveState(std::ostream& stream, size_t& size, bool screenshot, bool media);
     bool LoadState(std::istream& stream, GT_SaveState_Media* media = NULL);
     void Serialize(StateSerializer& serializer, GT_Machine_Config& config, int version);
     void SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version);

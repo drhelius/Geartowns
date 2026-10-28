@@ -23,6 +23,8 @@
 #include "config.h"
 #include "events.h"
 #include "geartowns.h"
+#include "common/memory_stream.h"
+#include "video/video.h"
 
 #define REWIND_IMPORT
 #include "rewind.h"
@@ -33,14 +35,20 @@ struct Rewind_Snapshot
     u32 delta_size;
     u8* keyframe;
     u32 state_size;
+    int screen_width;
+    int screen_height;
+    int display_width;
+    int display_height;
 };
 
 static Rewind_Snapshot snapshots[REWIND_MAX_SNAPSHOTS];
 static std::vector<I386_CallStackEntry> call_stacks[REWIND_MAX_SNAPSHOTS];
+static u8* keyframe_pool[REWIND_KEYFRAME_POOL];
+static int keyframe_pool_count = 0;
 static u8* newest = NULL;
-static u8* capture = NULL;
 static u8* work = NULL;
 static u8* encode_buffer = NULL;
+static size_t encode_capacity = 0;
 static size_t state_capacity = 0;
 static size_t screenshot_size = 0;
 static size_t blob_size = 0;
@@ -52,6 +60,13 @@ static int frame_accum = 0;
 static int push_counter = 0;
 static bool active = false;
 static int seek_age = -1;
+static size_t delta_position = 0;
+static size_t delta_limit = 0;
+static size_t delta_size = 0;
+static size_t delta_last_header = 0;
+static size_t delta_last_end = 0;
+static bool delta_copy = false;
+static bool delta_failed = false;
 
 static int slot_at(int age);
 static int get_frames_per_snapshot(void);
@@ -59,14 +74,20 @@ static int get_target_capacity(void);
 static bool ensure_storage(void);
 static void release_storage(void);
 static void release_snapshot(Rewind_Snapshot* snapshot);
+static u8* acquire_keyframe(void);
+static void release_keyframe(u8* keyframe);
 static void enforce_limits(void);
 static void drop_oldest(void);
 static void drop_newest(void);
 static void decode_snapshot(int age, u8* target);
 static bool load_snapshot(const u8* blob, int index);
-static u32 encode_delta(const u8* older, const u8* newer, u8* out);
 static void apply_delta(u8* target, const u8* delta, u32 size);
 static void truncate_to_seek_position(void);
+static void delta_begin(bool copy);
+static void delta_set_region(size_t position, size_t limit);
+static bool delta_write(const char* data, size_t size);
+static bool delta_record(size_t offset, const u8* data, size_t length);
+static u64 read_word(const u8* p);
 
 bool rewind_init(void)
 {
@@ -120,50 +141,58 @@ void rewind_push(void)
 
     frame_accum = 0;
 
-    size_t size = state_capacity;
+    GT_Runtime_Info runtime;
+    emu_get_runtime(runtime);
+    size_t screen = MIN((size_t)runtime.screen_width * runtime.screen_height * 4, screenshot_size);
+    callback_stream stream(delta_write);
+    size_t size = 0;
+    delta_begin(count == 0);
+    delta_set_region(0, state_capacity);
+    bool saved = emu_get_core()->SaveState(stream, size, false, false);
 
-    if (!emu_get_core()->SaveState(capture, size, false))
+    if (saved)
+    {
+        delta_set_region(state_capacity, blob_size);
+        saved = delta_write((const char*)emu_frame_buffer, screen);
+    }
+
+    if (!saved || delta_failed)
+    {
+        apply_delta(newest, encode_buffer, (u32)delta_size);
         return;
-
-    memset(capture + size, 0, state_capacity - size);
-    memcpy(capture + state_capacity, emu_frame_buffer, screenshot_size);
+    }
 
     capacity = get_target_capacity();
 
     while (count >= capacity)
         drop_oldest();
 
-    if (count > 0)
+    if ((count > 0) && (delta_size > 0))
     {
         Rewind_Snapshot* previous = &snapshots[slot_at(0)];
-        u32 delta_size = encode_delta(newest, capture, encode_buffer);
+        previous->delta = new (std::nothrow) u8[delta_size];
 
-        if (delta_size > 0)
+        if (!IsValidPointer(previous->delta))
         {
-            previous->delta = new (std::nothrow) u8[delta_size];
+            Log("Rewind: failed to allocate a %zu byte delta", delta_size);
 
-            if (!IsValidPointer(previous->delta))
-            {
-                Log("Rewind: failed to allocate a %u byte delta", delta_size);
-
-                while (count > 0)
-                    drop_oldest();
-            }
-            else
-            {
-                memcpy(previous->delta, encode_buffer, delta_size);
-                previous->delta_size = delta_size;
-                stored_size += delta_size;
-            }
+            while (count > 0)
+                drop_oldest();
+        }
+        else
+        {
+            memcpy(previous->delta, encode_buffer, delta_size);
+            previous->delta_size = (u32)delta_size;
+            stored_size += delta_size;
         }
     }
 
-    u8* swap = newest;
-    newest = capture;
-    capture = swap;
-
     Rewind_Snapshot* snapshot = &snapshots[head];
     snapshot->state_size = (u32)size;
+    snapshot->screen_width = runtime.screen_width;
+    snapshot->screen_height = runtime.screen_height;
+    snapshot->display_width = runtime.display_width;
+    snapshot->display_height = runtime.display_height;
 
     if (config_debug.debug)
         call_stacks[head] = emu_get_core()->GetI386()->GetDisassemblerCallStack();
@@ -172,7 +201,7 @@ void rewind_push(void)
 
     if ((push_counter % REWIND_KEYFRAME_INTERVAL) == 0)
     {
-        snapshot->keyframe = new (std::nothrow) u8[blob_size];
+        snapshot->keyframe = acquire_keyframe();
 
         if (IsValidPointer(snapshot->keyframe))
         {
@@ -234,7 +263,7 @@ size_t rewind_get_memory_usage(void)
     if (!IsValidPointer(newest))
         return 0;
 
-    return stored_size + (blob_size * 4);
+    return stored_size + (blob_size * (2 + keyframe_pool_count)) + encode_capacity;
 }
 
 bool rewind_seek(int age)
@@ -310,13 +339,12 @@ static bool ensure_storage(void)
         return false;
     }
 
+    encode_capacity = blob_size + (blob_size / 32) + 65536;
     newest = new (std::nothrow) u8[blob_size];
-    capture = new (std::nothrow) u8[blob_size];
     work = new (std::nothrow) u8[blob_size];
-    encode_buffer = new (std::nothrow) u8[blob_size + 64];
+    encode_buffer = new (std::nothrow) u8[encode_capacity];
 
-    if (!IsValidPointer(newest) || !IsValidPointer(capture) || !IsValidPointer(work) ||
-        !IsValidPointer(encode_buffer))
+    if (!IsValidPointer(newest) || !IsValidPointer(work) || !IsValidPointer(encode_buffer))
     {
         Log("Rewind: failed to allocate %zu byte snapshot buffers", blob_size);
         release_storage();
@@ -324,7 +352,6 @@ static bool ensure_storage(void)
     }
 
     memset(newest, 0, blob_size);
-    memset(capture, 0, blob_size);
     memset(work, 0, blob_size);
 
     Log("Rewind: %.1f MB snapshots, up to %d", (double)blob_size / (1024.0 * 1024.0), capacity);
@@ -336,10 +363,14 @@ static void release_storage(void)
     for (int i = 0; i < REWIND_MAX_SNAPSHOTS; i++)
         release_snapshot(&snapshots[i]);
 
+    for (int i = 0; i < keyframe_pool_count; i++)
+        SafeDeleteArray(keyframe_pool[i]);
+
+    keyframe_pool_count = 0;
     SafeDeleteArray(newest);
-    SafeDeleteArray(capture);
     SafeDeleteArray(work);
     SafeDeleteArray(encode_buffer);
+    encode_capacity = 0;
     stored_size = 0;
     head = 0;
     count = 0;
@@ -354,16 +385,47 @@ static void release_snapshot(Rewind_Snapshot* snapshot)
         stored_size -= blob_size;
 
     SafeDeleteArray(snapshot->delta);
-    SafeDeleteArray(snapshot->keyframe);
+    release_keyframe(snapshot->keyframe);
+    snapshot->keyframe = NULL;
     snapshot->delta_size = 0;
     snapshot->state_size = 0;
     call_stacks[snapshot - snapshots].clear();
 }
 
+static u8* acquire_keyframe(void)
+{
+    if (keyframe_pool_count > 0)
+        return keyframe_pool[--keyframe_pool_count];
+
+    return new (std::nothrow) u8[blob_size];
+}
+
+static void release_keyframe(u8* keyframe)
+{
+    if (!IsValidPointer(keyframe))
+        return;
+
+    if (keyframe_pool_count < REWIND_KEYFRAME_POOL)
+        keyframe_pool[keyframe_pool_count++] = keyframe;
+    else
+        SafeDeleteArray(keyframe);
+}
+
 static void enforce_limits(void)
 {
-    while ((count > capacity) || ((count > 1) && (rewind_get_memory_usage() > REWIND_MAX_MEMORY_SIZE)))
+    while (count > capacity)
         drop_oldest();
+
+    while ((count > 1) && (rewind_get_memory_usage() > REWIND_MAX_MEMORY_SIZE))
+    {
+        if (keyframe_pool_count > 0)
+        {
+            keyframe_pool_count--;
+            SafeDeleteArray(keyframe_pool[keyframe_pool_count]);
+        }
+        else
+            drop_oldest();
+    }
 }
 
 static void drop_oldest(void)
@@ -406,85 +468,44 @@ static void decode_snapshot(int age, u8* target)
 
 static bool load_snapshot(const u8* blob, int index)
 {
-    bool ok = emu_get_core()->LoadState(blob, snapshots[index].state_size);
+    Rewind_Snapshot* snapshot = &snapshots[index];
+    bool ok = emu_get_core()->LoadState(blob, snapshot->state_size);
 
     if (ok)
     {
+        size_t screen = MIN((size_t)snapshot->screen_width * snapshot->screen_height * 4, screenshot_size);
         emu_debug_state_restored();
         emu_hard_disk_state_loaded(true);
         emu_memory_card_state_loaded(true);
         emu_get_core()->GetI386()->SetDisassemblerCallStack(call_stacks[index]);
-        memcpy(emu_frame_buffer, blob + state_capacity, screenshot_size);
+        emu_get_core()->GetVideo()->SetFrameSize(snapshot->screen_width, snapshot->screen_height,
+            snapshot->display_width, snapshot->display_height);
+        memcpy(emu_frame_buffer, blob + state_capacity, screen);
         events_sync_input();
     }
 
     return ok;
 }
 
-static u32 encode_delta(const u8* older, const u8* newer, u8* out)
-{
-    const u64* a = (const u64*)older;
-    const u64* b = (const u64*)newer;
-    size_t words = blob_size / 8;
-    size_t i = 0;
-    u8* p = out;
-
-    while (i < words)
-    {
-        size_t start = i;
-
-        while ((i < words) && (a[i] == b[i]))
-            i++;
-
-        u32 skipped = (u32)(i - start);
-        start = i;
-
-        while ((i < words) && (a[i] != b[i]))
-            i++;
-
-        u32 stored = (u32)(i - start);
-
-        if (stored == 0)
-            break;
-
-        memcpy(p, &skipped, 4);
-        memcpy(p + 4, &stored, 4);
-        p += 8;
-
-        u64* x = (u64*)p;
-
-        for (u32 j = 0; j < stored; j++)
-            x[j] = a[start + j] ^ b[start + j];
-
-        p += (size_t)stored * 8;
-    }
-
-    return (u32)(p - out);
-}
-
 static void apply_delta(u8* target, const u8* delta, u32 size)
 {
-    u64* t = (u64*)target;
     const u8* p = delta;
     const u8* end = delta + size;
-    size_t i = 0;
 
     while (p < end)
     {
-        u32 skipped = 0;
-        u32 stored = 0;
-        memcpy(&skipped, p, 4);
-        memcpy(&stored, p + 4, 4);
+        u32 offset = 0;
+        u32 length = 0;
+        memcpy(&offset, p, 4);
+        memcpy(&length, p + 4, 4);
         p += 8;
-        i += skipped;
 
-        const u64* x = (const u64*)p;
+        u8* t = target + offset;
 
-        for (u32 j = 0; j < stored; j++)
-            t[i + j] ^= x[j];
+        for (u32 i = 0; i < length; i++)
+            t[i] ^= p[i];
 
-        i += stored;
-        p += (size_t)stored * 8;
+        p += length;
     }
 }
 
@@ -500,4 +521,124 @@ static void truncate_to_seek_position(void)
         drop_newest();
 
     seek_age = -1;
+}
+
+static void delta_begin(bool copy)
+{
+    delta_position = 0;
+    delta_limit = 0;
+    delta_size = 0;
+    delta_last_header = 0;
+    delta_last_end = 0;
+    delta_copy = copy;
+    delta_failed = false;
+}
+
+static void delta_set_region(size_t position, size_t limit)
+{
+    delta_position = position;
+    delta_limit = limit;
+}
+
+static bool delta_write(const char* data, size_t size)
+{
+    const u8* source = (const u8*)data;
+
+    if (delta_failed || ((delta_position + size) > delta_limit))
+    {
+        delta_failed = true;
+        return false;
+    }
+
+    if (delta_copy)
+    {
+        memcpy(newest + delta_position, source, size);
+        delta_position += size;
+        return true;
+    }
+
+    for (size_t i = 0; i < size; i += REWIND_DIFF_CHUNK)
+    {
+        size_t length = MIN(size - i, (size_t)REWIND_DIFF_CHUNK);
+        const u8* reference = newest + delta_position + i;
+        const u8* chunk = source + i;
+
+        if (memcmp(reference, chunk, length) == 0)
+            continue;
+
+        size_t j = 0;
+
+        while (j < length)
+        {
+            while (((j + 8) <= length) && (read_word(reference + j) == read_word(chunk + j)))
+                j += 8;
+
+            while ((j < length) && (reference[j] == chunk[j]))
+                j++;
+
+            if (j == length)
+                break;
+
+            size_t first = j++;
+
+            while (((j + 8) <= length) && (read_word(reference + j) != read_word(chunk + j)))
+                j += 8;
+
+            if ((j + 8) > length)
+                j = length;
+
+            size_t last = j;
+
+            while (reference[last - 1] == chunk[last - 1])
+                last--;
+
+            if (!delta_record(delta_position + i + first, chunk + first, last - first))
+                return false;
+        }
+    }
+
+    delta_position += size;
+    return true;
+}
+
+static bool delta_record(size_t offset, const u8* data, size_t length)
+{
+    bool merge = (delta_size > 0) && (delta_last_end == offset);
+    size_t needed = length + (merge ? 0 : 8);
+
+    if ((delta_size + needed) > encode_capacity)
+    {
+        delta_failed = true;
+        return false;
+    }
+
+    if (!merge)
+    {
+        u32 start = (u32)offset;
+        delta_last_header = delta_size;
+        memcpy(encode_buffer + delta_size, &start, 4);
+        delta_size += 8;
+    }
+
+    u8* reference = newest + offset;
+    u8* out = encode_buffer + delta_size;
+
+    for (size_t i = 0; i < length; i++)
+    {
+        out[i] = reference[i] ^ data[i];
+        reference[i] = data[i];
+    }
+
+    delta_size += length;
+    delta_last_end = offset + length;
+    u32 record_length = (u32)(delta_size - delta_last_header - 8);
+    memcpy(encode_buffer + delta_last_header + 4, &record_length, 4);
+    return true;
+}
+
+static u64 read_word(const u8* p)
+{
+    u64 value;
+    memcpy(&value, p, 8);
+    return value;
 }

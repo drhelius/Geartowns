@@ -220,6 +220,14 @@ static void menu_geartowns(void)
                 rewind_reset();
             }
 
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Rewind uses save states while it runs, which costs performance.");
+                ImGui::Text("If you don't use rewind, keep it disabled.");
+                ImGui::EndTooltip();
+            }
+
             ImGui::PushItemWidth(140.0f);
             ImGui::SliderFloat("Speed", &config_rewind.speed, 1.0f, 8.0f, "%.0fx");
             ImGui::PopItemWidth();

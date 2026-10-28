@@ -111,6 +111,7 @@ public:
     int GetFrameHeight() const;
     int GetDisplayWidth() const;
     int GetDisplayHeight() const;
+    void SetFrameSize(int frame_width, int frame_height, int display_width, int display_height);
     float GetFrameTime() const;
     void EnableNativeResolution(bool enable);
     bool IsNativeResolutionEnabled() const;

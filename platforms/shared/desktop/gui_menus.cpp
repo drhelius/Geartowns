@@ -80,6 +80,7 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile);
 static bool menu_machine_fpu(const GT_Machine_Profile& profile);
 static const char* get_machine_fpu_text(const GT_Machine_Profile& profile);
 static void menu_machine_hardware(GT_Machine_Model model);
+static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size);
 static void menu_boot_device(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
@@ -1188,36 +1189,43 @@ static const char* get_machine_fpu_text(const GT_Machine_Profile& profile)
 
 static void menu_machine_hardware(GT_Machine_Model model)
 {
-    if (!ImGui::BeginMenu("Hardware"))
+    if (!ImGui::BeginMenu("Summary"))
         return;
 
+    char hardware[1024];
+    get_machine_hardware(model, hardware, sizeof(hardware));
+    ImVec2 size = ImGui::CalcTextSize(hardware);
+    ImVec2 padding = ImGui::GetStyle().FramePadding;
+
+    ImGui::InputTextMultiline("##hardware", hardware, sizeof(hardware),
+        ImVec2(size.x + (padding.x * 2.0f), size.y + (padding.y * 2.0f)), ImGuiInputTextFlags_ReadOnly);
+
+    ImGui::EndMenu();
+}
+
+static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size)
+{
     const GT_Machine_Profile& profile = k_machine_profiles[model];
     char firmware[GT_MAX_PATH];
     gui_get_firmware_status(model, firmware, sizeof(firmware));
-
-    ImGui::TextDisabled("CPU: %s at %d MHz", k_machine_cpus[profile.cpu].name, (int)(profile.cpu_clock_rate / 1000000));
-    ImGui::TextDisabled("FPU: %s", get_machine_fpu_text(profile));
-    ImGui::TextDisabled("Memory map: %s", k_machine_maps[profile.map].name);
-    ImGui::TextDisabled("Machine ID: %04Xh", profile.machine_id);
-    ImGui::TextDisabled("Floppy drives: %d%s", profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "");
-    ImGui::TextDisabled("SCSI: %s", (profile.features & GT_MACHINE_FEATURE_SCSI) != 0 ? "built in" :
-        (model == GT_MACHINE_MODEL1_2) ? "card, fitted while a hard disk is attached" : "none");
-    ImGui::TextDisabled("Firmware: %s", firmware);
-
     u32 registers = profile.features & ~(u32)GT_MACHINE_FEATURE_SCSI;
 
-    if (registers == 0)
-        ImGui::TextDisabled("Towns II registers: none");
-    else
-        ImGui::TextDisabled("Towns II registers:");
+    snprintf(text, text_size, "CPU: %s at %d MHz\nFPU: %s\nMemory map: %s\nMachine ID: %04Xh\nFloppy drives: %d%s\n"
+        "SCSI: %s\nFirmware: %s\nTowns II registers:%s", k_machine_cpus[profile.cpu].name,
+        (int)(profile.cpu_clock_rate / 1000000), get_machine_fpu_text(profile), k_machine_maps[profile.map].name,
+        profile.machine_id, profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "",
+        (profile.features & GT_MACHINE_FEATURE_SCSI) != 0 ? "built in" :
+        (model == GT_MACHINE_MODEL1_2) ? "card, fitted while a hard disk is attached" : "none", firmware,
+        registers == 0 ? " none" : "");
 
     for (int i = 0; i < GT_MACHINE_FEATURE_COUNT; i++)
     {
         if ((registers & (1u << i)) != 0)
-            ImGui::TextDisabled("  %s", k_machine_feature_names[i]);
+        {
+            strncat_fit(text, "\n  ", text_size);
+            strncat_fit(text, k_machine_feature_names[i], text_size);
+        }
     }
-
-    ImGui::EndMenu();
 }
 
 static void draw_machine_profile_tooltip(GT_Machine_Model model)

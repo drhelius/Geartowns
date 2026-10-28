@@ -6,7 +6,7 @@ Each model runs on a set of these ROMs. Some models have a set of their own, oth
 
 ## Quick Start
 
-- **Desktop**: put each set in its own subfolder or MAME zip inside one folder (for example `fmtowns/`, `fmtownsux.zip`, `fmtownshr/`, `fmtmarty.zip`), then choose that folder in **Machine → Firmware...** as the **Default Folder**.
+- **Desktop**: put each set in its own subfolder or MAME zip inside one folder (for example `fmtowns/`, `fmtownsux.zip`, `fmtownshr/`, `fmtmarty.zip`), then choose that folder in **Emulator → Firmware...** as the **Default Folder**.
 - **Libretro**: put the same subfolders or zips in a `geartowns` folder inside the frontend's system directory. See the [libretro documentation](https://docs.libretro.com/library/geartowns/).
 - **Only the Model 1/2**: the four files `FMT_SYS.ROM`, `FMT_DOS.ROM`, `FMT_FNT.ROM` and `FMT_DIC.ROM` directly in the folder are enough.
 
@@ -38,7 +38,7 @@ The other FM Towns II models (UR, ME, MA, MX, MF/Fresh and HC) are not emulated 
 
 ### Desktop
 
-Open **Machine → Firmware...**:
+Open **Emulator → Firmware...**:
 
 - **Model**: the model whose firmware the window shows. The list shows the status of each model.
 - **Default Folder**: searched for every model, together with its subfolders and the MAME zips in it.

@@ -129,7 +129,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 ## Tips
 
 ### Basic Usage
-- **Firmware**: Geartowns requires the FM Towns system ROMs to run. Use **Machine → Firmware...** to choose the folder that holds them, with one subfolder or MAME zip per set. See [BIOS_README.md](BIOS_README.md) for the sets each model needs, where to put them and their checksums.
+- **Firmware**: Geartowns requires the FM Towns system ROMs to run. Use **Emulator → Firmware...** to choose the folder that holds them, with one subfolder or MAME zip per set. See [BIOS_README.md](BIOS_README.md) for the sets each model needs, where to put them and their checksums.
 - **Machine**: **Machine → Model**, **CPU Speed** and **Main RAM** default to **Auto**, which picks:
   - The model, CPU speed and RAM that the game database names for the game.
   - The FM Towns II HG for 1.44 MB floppy disks.

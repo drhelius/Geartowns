@@ -548,6 +548,9 @@ static void menu_emulator(void)
 
         menu_machine();
 
+        if (ImGui::MenuItem("Firmware..."))
+            gui_firmware_open();
+
         ImGui::Separator();
 
         if (ImGui::BeginMenu("Directories"))
@@ -886,11 +889,6 @@ static void menu_machine(void)
         ImGui::EndTooltip();
     }
 #endif
-
-    ImGui::Separator();
-
-    if (ImGui::MenuItem("Firmware..."))
-        gui_firmware_open();
 
     if (changed)
         emu_apply_machine_settings();
@@ -1255,7 +1253,7 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
     else if (!emu_get_core()->HasFirmware(model))
     {
         ImGui::Separator();
-        ImGui::TextDisabled("No firmware found, see Machine > Firmware...");
+        ImGui::TextDisabled("No firmware found, see Emulator > Firmware...");
     }
 
     ImGui::EndTooltip();

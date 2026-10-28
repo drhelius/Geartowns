@@ -51,6 +51,7 @@ static u8* encode_buffer = NULL;
 static size_t encode_capacity = 0;
 static size_t state_capacity = 0;
 static size_t screenshot_size = 0;
+static size_t screenshot_used = 0;
 static size_t blob_size = 0;
 static size_t stored_size = 0;
 static int head = 0;
@@ -162,6 +163,7 @@ void rewind_push(void)
         return;
     }
 
+    screenshot_used = MAX(screenshot_used, screen);
     capacity = get_target_capacity();
 
     while (count >= capacity)
@@ -205,7 +207,7 @@ void rewind_push(void)
 
         if (IsValidPointer(snapshot->keyframe))
         {
-            memcpy(snapshot->keyframe, newest, blob_size);
+            memcpy(snapshot->keyframe, newest, state_capacity + screenshot_used);
             stored_size += blob_size;
         }
     }
@@ -372,6 +374,7 @@ static void release_storage(void)
     SafeDeleteArray(encode_buffer);
     encode_capacity = 0;
     stored_size = 0;
+    screenshot_used = 0;
     head = 0;
     count = 0;
 }
@@ -457,7 +460,7 @@ static void decode_snapshot(int age, u8* target)
     while ((source > 0) && !IsValidPointer(snapshots[slot_at(source)].keyframe))
         source--;
 
-    memcpy(target, source == 0 ? newest : snapshots[slot_at(source)].keyframe, blob_size);
+    memcpy(target, source == 0 ? newest : snapshots[slot_at(source)].keyframe, state_capacity + screenshot_used);
 
     for (int i = source + 1; i <= age; i++)
     {

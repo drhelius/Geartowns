@@ -673,6 +673,7 @@ private:
         u32 transfer_row;
         u32 store_load;
         u32 cycle[GT_BUS_CLASS_COUNT][2];
+        u32 access_wait[GT_BUS_CLASS_COUNT][2][4];
         u32 slow[GT_BUS_CLASS_COUNT][2];
         u32 fmr_word[2];
         u32 code_cost[GT_BUS_CLASS_COUNT];

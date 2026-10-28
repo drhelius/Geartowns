@@ -529,6 +529,7 @@ enum GT_Machine_Bus_Mode
 };
 
 // In 1/256 clocks at the model's clock, reads first
+// A follow adds to the wait of each later cycle of a read split in cycles, which overlaps the one before
 struct GT_Machine_Bus_Waits
 {
     u16 dram_far[2];
@@ -542,6 +543,9 @@ struct GT_Machine_Bus_Waits
     u16 rom_cycle;
     u16 rom_code;
     u16 cmos_cycle[2];
+    s16 vram_follow;
+    s16 sprite_follow;
+    s16 rom_follow;
 };
 
 struct GT_Machine_Bus_Timing

@@ -74,14 +74,16 @@ const GT_Machine_Video_Timing k_machine_video_marty = { 1888, 2193, true, 169, 7
 // 1/256 clocks. SX: fitted on a real Marty. DX: Data Book RAM 3 and VRAM 6 (0 and 3 high speed), the rest as SX
 // dram_transfer: a transfer that waited for its code, then accessed another row, reopens the target's row
 // dram_store_load: a load right after a 2-cycle store to its row overlaps the store's last clock
+// Follows: the Marty's second cycle of a dword read from video memory or ROM overlaps the first. The DX and the fast SX
+// have none and keep the ROM wait fitted without them
 const GT_Machine_Bus_Waits k_machine_bus_waits_sx = { { 954, 338 }, { 155, 0 }, { 284, 305 }, 954, 256, { 0, 0 },
-    { 1152, 868 }, { 1130, 840 }, 1384, 1250, { 1578, 1024 } };
+    { 1298, 868 }, { 1296, 840 }, 1568, 1250, { 1578, 1024 }, -458, -455, -447 };
 const GT_Machine_Bus_Waits k_machine_bus_waits_sx_fast = { { 0, 0 }, { 0, 0 }, { 0, 0 }, 0, 0, { 0, 0 },
-    { 768, 768 }, { 768, 768 }, 1384, 1250, { 1578, 1024 } };
+    { 768, 768 }, { 768, 768 }, 1384, 1250, { 1578, 1024 }, 0, 0, 0 };
 const GT_Machine_Bus_Waits k_machine_bus_waits_dx = { { 0, 0 }, { 0, 0 }, { 0, 0 }, 0, 0, { 768, 768 },
-    { 1536, 1536 }, { 1536, 1536 }, 1384, 1250, { 1578, 1024 } };
+    { 1536, 1536 }, { 1536, 1536 }, 1384, 1250, { 1578, 1024 }, 0, 0, 0 };
 const GT_Machine_Bus_Waits k_machine_bus_waits_dx_fast = { { 0, 0 }, { 0, 0 }, { 0, 0 }, 0, 0, { 0, 0 },
-    { 768, 768 }, { 768, 768 }, 1384, 1250, { 1578, 1024 } };
+    { 768, 768 }, { 768, 768 }, 1384, 1250, { 1578, 1024 }, 0, 0, 0 };
 
 // Port blocks off the generic wait, extra 1/256 clocks to read and to write, measured on a Marty
 // A write to a port the board doesn't decode ends sooner, as the io_free_write wait of the bus timing below

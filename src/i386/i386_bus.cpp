@@ -136,10 +136,31 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
         bus.cycle[GT_BUS_ROM][0] = ScaleBusWait(waits->rom_cycle, cpu, model);
         bus.cycle[GT_BUS_ROM][1] = bus.cycle[GT_BUS_ROM][0];
 
-        // Per code byte: 1/width of a fetch cycle plus refresh. A free clock prefetches the inverse
+        // The waits of an access in 1 to 3 cycles: a read's later cycles take the class's follow
+        u32 follow[GT_BUS_CLASS_COUNT];
+
+        for (int c = 0; c < GT_BUS_CLASS_COUNT; c++)
+            follow[c] = bus.cycle[c][0];
+
+        follow[GT_BUS_VRAM] = ScaleBusWait((u32)MAX(waits->vram_cycle[0] + waits->vram_follow, 0), cpu, model);
+        follow[GT_BUS_SPRITE] = ScaleBusWait((u32)MAX(waits->sprite_cycle[0] + waits->sprite_follow, 0), cpu, model);
+        follow[GT_BUS_ROM] = ScaleBusWait((u32)MAX(waits->rom_cycle + waits->rom_follow, 0), cpu, model);
+
         for (int c = 0; c < GT_BUS_CLASS_COUNT; c++)
         {
-            u32 wait = c == GT_BUS_ROM ? ScaleBusWait(waits->rom_code, cpu, model) : bus.cycle[c][0];
+            for (u32 n = 1; n < 4; n++)
+            {
+                bus.access_wait[c][0][n] = bus.cycle[c][0] + (n - 1) * follow[c];
+                bus.access_wait[c][1][n] = n * bus.cycle[c][1];
+            }
+        }
+
+        // Per code byte: 1/width of a fetch cycle plus refresh, a dword in two cycles on a 16-bit bus
+        // A free clock prefetches the inverse
+        for (int c = 0; c < GT_BUS_CLASS_COUNT; c++)
+        {
+            u32 fetch = bus.width == 2 ? (bus.cycle[c][0] + follow[c]) / 2 : bus.cycle[c][0];
+            u32 wait = c == GT_BUS_ROM ? ScaleBusWait(waits->rom_code, cpu, model) : fetch;
             u64 cycle = ((2ULL << 16) + wait) * (256 + timing->refresh);
             bus.code_cost[c] = (u32)((cycle + 32768 * bus.width) / (65536ULL * bus.width));
             bus.code_rate[c] = (u32)(((u64)bus.width << 32) / cycle);
@@ -525,7 +546,7 @@ u32 I386::AddBusStringAccess(u32 linear, u32 size, int write, bool load)
     }
 
     m_bus_cycle_counts[bus_class][write] += cycles;
-    m_bus_fraction += penalty + (s32)(cycles * m_bus.cycle[bus_class][write]);
+    m_bus_fraction += penalty + (s32)m_bus.access_wait[bus_class][write][cycles];
     return aligned;
 }
 
@@ -574,11 +595,11 @@ void I386::PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 
         u32 destination_cycles = 0;
         u32 source_cycles = 0;
         u64 element = base + GetBusRepeatSplit(destination + step, size, destination_cycles) +
-            (u64)destination_cycles * m_bus.cycle[repeat.destination_class][1];
+            m_bus.access_wait[repeat.destination_class][1][destination_cycles];
 
         if (move)
             element += GetBusRepeatSplit(source + step, size, source_cycles) +
-                (u64)source_cycles * m_bus.cycle[repeat.source_class][0];
+                m_bus.access_wait[repeat.source_class][0][source_cycles];
 
         repeat.element[i] = element;
     }

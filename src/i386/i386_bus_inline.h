@@ -142,7 +142,7 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
         penalty += (s32)k_i486_bus_read;
 
     m_bus_cycle_counts[bus_class][write] += cycles;
-    m_bus_fraction += penalty + (s32)(cycles * m_bus.cycle[bus_class][write]);
+    m_bus_fraction += penalty + (s32)m_bus.access_wait[bus_class][write][cycles];
     return (aligned << 8) | 1;
 }
 

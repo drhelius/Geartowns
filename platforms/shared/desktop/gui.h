@@ -36,6 +36,8 @@ enum gui_ShortCutEvent
     gui_ShortcutOpenROM = 0,
     gui_ShortcutReloadROM,
     gui_ShortcutReset,
+    gui_ShortcutPowerOn,
+    gui_ShortcutPowerOff,
     gui_ShortcutPause,
     gui_ShortcutFFWD,
     gui_ShortcutMute,
@@ -70,12 +72,14 @@ struct gui_HotkeyMapping
     bool allow_repeat;
 };
 
-#define GUI_HOTKEY_MAP_COUNT 28
+#define GUI_HOTKEY_MAP_COUNT 30
 
 const gui_HotkeyMapping gui_hotkey_map[GUI_HOTKEY_MAP_COUNT] = {
     {gui_ShortcutOpenROM, config_HotkeyIndex_OpenROM, false},
     {gui_ShortcutReloadROM, config_HotkeyIndex_ReloadROM, false},
     {gui_ShortcutReset, config_HotkeyIndex_Reset, false},
+    {gui_ShortcutPowerOn, config_HotkeyIndex_PowerOn, false},
+    {gui_ShortcutPowerOff, config_HotkeyIndex_PowerOff, false},
     {gui_ShortcutPause, config_HotkeyIndex_Pause, false},
     {gui_ShortcutFFWD, config_HotkeyIndex_FFWD, false},
     {gui_ShortcutMute, config_HotkeyIndex_Mute, false},

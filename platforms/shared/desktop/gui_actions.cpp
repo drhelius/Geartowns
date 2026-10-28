@@ -74,7 +74,7 @@ void gui_action_load_defaults(void)
 
 void gui_action_power_on(void)
 {
-    if (!emu_is_empty() || gui_is_rom_loading())
+    if (!emu_is_empty() || gui_is_rom_loading() || emu_is_media_loading())
         return;
 
     emu_resume();
@@ -93,7 +93,7 @@ void gui_action_power_on(void)
 
 void gui_action_power_off(void)
 {
-    if (emu_is_empty())
+    if (emu_is_empty() || gui_is_rom_loading() || emu_is_media_loading())
         return;
 
     emu_resume();

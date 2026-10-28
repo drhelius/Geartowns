@@ -245,6 +245,8 @@ enum config_HotkeyIndex
     config_HotkeyIndex_Mute,
     config_HotkeyIndex_VideoRecording,
     config_HotkeyIndex_CaptureKeyboard,
+    config_HotkeyIndex_PowerOn,
+    config_HotkeyIndex_PowerOff,
     config_HotkeyIndex_COUNT
 };
 

@@ -434,6 +434,10 @@ static inline void process(config_Operation operation)
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
     CONFIG_HOTKEY("CaptureKeyboard", config_hotkeys[config_HotkeyIndex_CaptureKeyboard], SDL_SCANCODE_K,
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
+    CONFIG_HOTKEY("PowerOn", config_hotkeys[config_HotkeyIndex_PowerOn], SDL_SCANCODE_O,
+        (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
+    CONFIG_HOTKEY("PowerOff", config_hotkeys[config_HotkeyIndex_PowerOff], SDL_SCANCODE_F,
+        (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
 }
 
 //**************************************

@@ -267,6 +267,12 @@ void gui_shortcut(gui_ShortCutEvent event)
     case gui_ShortcutReset:
         gui_action_reset();
         break;
+    case gui_ShortcutPowerOn:
+        gui_action_power_on();
+        break;
+    case gui_ShortcutPowerOff:
+        gui_action_power_off();
+        break;
     case gui_ShortcutPause:
         gui_action_pause();
         break;

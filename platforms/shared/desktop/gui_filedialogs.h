@@ -36,6 +36,8 @@ EXTERN void gui_file_dialog_save_floppy(int drive);
 EXTERN void gui_file_dialog_new_floppy(int drive);
 EXTERN void gui_file_dialog_attach_hard_disk(int id);
 EXTERN void gui_file_dialog_create_hard_disk(int id);
+EXTERN void gui_file_dialog_insert_memory_card(void);
+EXTERN void gui_file_dialog_create_memory_card(void);
 EXTERN void gui_file_dialog_choose_screenshot_path(void);
 EXTERN void gui_file_dialog_choose_video_recording_path(void);
 EXTERN void gui_file_dialog_load_bios(void);

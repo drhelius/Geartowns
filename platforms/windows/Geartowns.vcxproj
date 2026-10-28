@@ -76,6 +76,7 @@
     <ClCompile Include="..\..\src\drive\hard_disk_image.cpp" />
     <ClCompile Include="..\..\src\drive\floppy_disk.cpp" />
     <ClCompile Include="..\..\src\drive\floppy_image.cpp" />
+    <ClCompile Include="..\..\src\drive\memory_card.cpp" />
     <ClCompile Include="..\..\src\system\i8253.cpp" />
     <ClCompile Include="..\..\src\video\sprite.cpp" />
     <ClCompile Include="..\..\src\video\video.cpp" />
@@ -161,6 +162,7 @@
     <ClCompile Include="..\shared\desktop\emu.cpp" />
     <ClCompile Include="..\shared\desktop\emu_floppy.cpp" />
     <ClCompile Include="..\shared\desktop\emu_hard_disk.cpp" />
+    <ClCompile Include="..\shared\desktop\emu_memory_card.cpp" />
     <ClCompile Include="..\shared\desktop\single_instance.cpp" />
     <ClCompile Include="..\shared\desktop\shift_jis.cpp" />
     <ClCompile Include="..\shared\desktop\mcp\mcp_debug_adapter.cpp" />
@@ -197,6 +199,7 @@
     <ClCompile Include="..\shared\desktop\gui_floppy.cpp" />
     <ClCompile Include="..\shared\desktop\gui_firmware.cpp" />
     <ClCompile Include="..\shared\desktop\gui_hard_disks.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_memory_card.cpp" />
     <ClCompile Include="..\shared\desktop\gui_notifications.cpp" />
     <ClCompile Include="..\shared\desktop\gui_drive_activity.cpp" />
     <ClCompile Include="..\shared\desktop\gui.cpp" />
@@ -298,6 +301,8 @@
     <ClInclude Include="..\..\src\drive\floppy_disk.h" />
     <ClInclude Include="..\..\src\drive\floppy_disk_inline.h" />
     <ClInclude Include="..\..\src\drive\floppy_image.h" />
+    <ClInclude Include="..\..\src\drive\memory_card.h" />
+    <ClInclude Include="..\..\src\drive\memory_card_inline.h" />
     <ClInclude Include="..\..\src\system\i8253.h" />
     <ClInclude Include="..\..\src\system\i8253_inline.h" />
     <ClInclude Include="..\..\src\video\sprite.h" />
@@ -362,6 +367,7 @@
     <ClInclude Include="..\shared\desktop\emu.h" />
     <ClInclude Include="..\shared\desktop\emu_floppy.h" />
     <ClInclude Include="..\shared\desktop\emu_hard_disk.h" />
+    <ClInclude Include="..\shared\desktop\emu_memory_card.h" />
     <ClInclude Include="..\shared\dependencies\json\json.hpp" />
     <ClInclude Include="..\shared\desktop\mcp\mcp_debug_adapter.h" />
     <ClInclude Include="..\shared\desktop\mcp\mcp_manager.h" />
@@ -402,6 +408,7 @@
     <ClInclude Include="..\shared\desktop\gui_floppy.h" />
     <ClInclude Include="..\shared\desktop\gui_firmware.h" />
     <ClInclude Include="..\shared\desktop\gui_hard_disks.h" />
+    <ClInclude Include="..\shared\desktop\gui_memory_card.h" />
     <ClInclude Include="..\shared\desktop\gui_notifications.h" />
     <ClInclude Include="..\shared\desktop\gui_drive_activity.h" />
     <ClInclude Include="..\shared\desktop\gui.h" />

@@ -206,12 +206,14 @@ bool HardDiskImage::Open(const char* path, bool write_protected, const char* wor
         return false;
 
     bool copy_on_write = IsValidPointer(working_path) && (working_path[0] != 0);
+    bool working_copy = false;
 
     if (copy_on_write)
     {
         m_file = MediaFile::OpenFile(working_path, !write_protected);
+        working_copy = IsValidPointer(m_file);
 
-        if (IsValidPointer(m_file))
+        if (working_copy)
             Log("Hard disk working copy %s", working_path);
         else if (!write_protected)
             m_working_path = working_path;
@@ -256,6 +258,15 @@ bool HardDiskImage::Open(const char* path, bool write_protected, const char* wor
 
         u64 blocks = (u64)size / k_hard_disk_block_size;
         m_blocks = (u32)MIN(blocks, (u64)0xFFFFFFFF);
+    }
+
+    u32 source_blocks = 0;
+
+    if (working_copy && (!GetImageBlocks(path, &source_blocks) || (source_blocks != m_blocks)))
+    {
+        Error("Hard disk working copy %s doesn't match %s", working_path, path);
+        Close();
+        return false;
     }
 
     m_write_protected = write_protected;
@@ -423,7 +434,8 @@ bool HardDiskImage::Restore(u64 session, u64 write)
 
 bool HardDiskImage::CreateWorkingCopy()
 {
-    MediaFile* copy = MediaFile::OpenNewFile(m_working_path.c_str());
+    std::string temporary = m_working_path + ".tmp";
+    MediaFile* copy = MediaFile::OpenNewFile(temporary.c_str());
 
     if (!IsValidPointer(copy))
         return false;
@@ -441,7 +453,13 @@ bool HardDiskImage::CreateWorkingCopy()
 
     ok = copy->Flush() && ok;
     SafeDelete(copy);
+    MediaFile* existing = ok ? MediaFile::OpenFile(m_working_path.c_str()) : NULL;
+    ok = ok && !IsValidPointer(existing) && MediaFile::RenameFile(temporary.c_str(), m_working_path.c_str());
+    SafeDelete(existing);
     MediaFile* file = ok ? MediaFile::OpenFile(m_working_path.c_str(), true) : NULL;
+
+    if (!ok)
+        MediaFile::RemoveFile(temporary.c_str());
 
     if (!IsValidPointer(file))
         return false;
@@ -650,6 +668,32 @@ int HardDiskImage::GetImageId(const char* path)
         return path[length - 1] - '0';
 
     return -1;
+}
+
+bool HardDiskImage::GetImageBlocks(const char* path, u32* blocks)
+{
+    if (ends_with_no_case(path, ".chd"))
+    {
+        ChdFileAdapter adapter;
+        chd_error error = CHDERR_NONE;
+        chd_file* chd = OpenHardDiskChd(path, &adapter, blocks, &error);
+
+        if (!IsValidPointer(chd))
+            return false;
+
+        chd_close(chd);
+        return true;
+    }
+
+    MediaFile* file = MediaFile::OpenFile(path);
+    s64 size = IsValidPointer(file) ? file->GetSize() : -1;
+    SafeDelete(file);
+
+    if (size < (s64)k_hard_disk_block_size)
+        return false;
+
+    *blocks = (u32)MIN((u64)size / k_hard_disk_block_size, (u64)0xFFFFFFFF);
+    return true;
 }
 
 bool HardDiskImage::GetChdHash(const char* path, u32* hash)

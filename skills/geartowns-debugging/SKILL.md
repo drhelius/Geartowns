@@ -90,7 +90,7 @@ FM Towns hardware documentation is available in the [references/](references/) d
 load_bios → load_media → get_media_info → get_i386_status → get_screenshot
 ```
 
-Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. Titles installed to a hard disk run from a raw image on a SCSI ID: `attach_hard_disk` (or `load_media` with `.hdd`, `.h0`-`.h6`, `.hdm` over 8 MB), which a running machine takes at the next reset. `list_recent_media` shows recently opened images.
+Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. Titles installed to a hard disk run from a raw image on a SCSI ID: `attach_hard_disk` (or `load_media` with `.hdd`, `.h0`-`.h6`, `.hdm` over 8 MB), which a running machine takes at the next reset. Saves and Towns OS files on an IC memory card use `insert_memory_card` (or `load_media` with `.icm`). `list_recent_media` shows recently opened images.
 
 Load symbols with `load_symbols` (a text file with `ADDRESS NAME` or `NAME = ADDRESS` per line) or add individual labels with `add_symbol`.
 
@@ -220,6 +220,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `attach_hard_disk` / `detach_hard_disk` — change a SCSI ID's disk (at the next reset on a running machine); `create_size_mb` makes an image first, formatted unless `formatted` is false
 - `read_hard_disk_sector` — read a 512-byte sector by `id` and `lba` as the machine sees it, without bus traffic
 - `flush_hard_disks` — write pending changes to the image files now
+- `insert_memory_card` / `eject_memory_card` — change the IC memory card (`.icm`, raw bytes); `create_size_kb` makes a blank card first; `get_media_info` shows its 048Ah status, bank and windows
 
 ### Screenshots
 

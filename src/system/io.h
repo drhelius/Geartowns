@@ -33,6 +33,7 @@ class UPD71071;
 class YM3438;
 class RF5C68;
 class Memory;
+class MemoryCard;
 class PIC;
 class PIT;
 class SystemControl;
@@ -46,8 +47,7 @@ public:
     ~IO();
     void Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory,
         SystemControl* system_control, CdRom* cdrom, FDC* fdc, ScsiController* scsi, Keyboard* keyboard, Input* input,
-        MSM58321* rtc,
-        UPD71071* dma);
+        MSM58321* rtc, UPD71071* dma, MemoryCard* memory_card);
     void Reset();
     u8 Read8(u16 port, GT_Bus_Access_Context& context);
     u16 Read16(u16 port, GT_Bus_Access_Context& context);
@@ -80,6 +80,7 @@ private:
     Input* m_input;
     MSM58321* m_rtc;
     UPD71071* m_dma;
+    MemoryCard* m_memory_card;
     u8 m_decoded_ports[0x2000];
 };
 

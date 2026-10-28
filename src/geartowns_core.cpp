@@ -28,6 +28,7 @@
 #include "drive/fdc.h"
 #include "drive/scsi_controller.h"
 #include "drive/hard_disk_image.h"
+#include "drive/memory_card.h"
 #include "media/firmware.h"
 #include "input/input.h"
 #include "input/keyboard.h"
@@ -70,6 +71,7 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_cdrom);
     InitPointer(m_fdc);
     InitPointer(m_scsi);
+    InitPointer(m_memory_card);
     InitPointer(m_keyboard);
     InitPointer(m_trace_logger);
     InitPointer(m_profiler);
@@ -95,6 +97,7 @@ GeartownsCore::GeartownsCore()
     }
 
     m_hard_disk_state_changes = 0;
+    m_memory_card_state_changed = false;
     m_boot_device = GT_BOOT_DEVICE_AUTO;
     m_drive_letter_assignment = true;
     m_ram_size_locked = false;
@@ -125,6 +128,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_cdrom_audio);
     SafeDelete(m_fdc);
     SafeDelete(m_scsi);
+    SafeDelete(m_memory_card);
     SafeDelete(m_keyboard);
     SafeDelete(m_trace_logger);
     SafeDelete(m_profiler);
@@ -191,6 +195,9 @@ void GeartownsCore::Init()
     if (!IsValidPointer(m_scsi))
         m_scsi = new ScsiController();
 
+    if (!IsValidPointer(m_memory_card))
+        m_memory_card = new MemoryCard();
+
     if (!IsValidPointer(m_keyboard))
         m_keyboard = new Keyboard();
 
@@ -219,15 +226,17 @@ void GeartownsCore::Init()
     m_cdrom->SetReadCallback(this, BootReadCallback);
     m_fdc->SetReadCallback(this, BootReadCallback);
     m_scsi->SetReadCallback(this, BootReadCallback);
+    m_memory_card->SetReadCallback(this, BootReadCallback);
     m_video->Init(m_pic, m_pit, m_scheduler, m_memory, m_firmware->GetFontRom());
     m_dma->Init(m_memory, m_scheduler);
     m_cdrom->Init(m_pic, m_scheduler, m_dma, m_audio);
     m_fdc->Init(m_pic, m_scheduler, m_dma);
     m_scsi->Init(m_pic, m_scheduler, m_dma);
+    m_memory_card->Init(m_memory);
     m_keyboard->Init(m_pic, m_scheduler);
     m_rtc->Init();
     m_io->Init(m_scheduler, m_audio, m_pic, m_pit, m_video, m_memory, m_system_control, m_cdrom, m_fdc, m_scsi,
-        m_keyboard, m_input, m_rtc, m_dma);
+        m_keyboard, m_input, m_rtc, m_dma, m_memory_card);
     m_i386->Init(m_memory, m_io);
     m_i386->SetDecodedPorts(m_io->GetDecodedPorts());
     m_video->GetSprite()->SetBusCycleCounts(m_i386->GetBusCycleCounts());
@@ -247,6 +256,7 @@ void GeartownsCore::Init()
     m_cdrom->SetTraceLogger(m_trace_logger);
     m_fdc->SetTraceLogger(m_trace_logger);
     m_scsi->SetTraceLogger(m_trace_logger);
+    m_memory_card->SetTraceLogger(m_trace_logger);
     m_keyboard->SetTraceLogger(m_trace_logger);
     m_input->SetTraceLogger(m_trace_logger);
     m_media->Init();
@@ -1054,6 +1064,22 @@ u32 GeartownsCore::GetHardDiskStateChanges() const
     return m_hard_disk_state_changes;
 }
 
+bool GeartownsCore::InsertMemoryCard(const u8* data, u32 size, bool write_protected)
+{
+    return IsValidPointer(m_memory_card) && m_memory_card->Insert(data, size, write_protected);
+}
+
+void GeartownsCore::EjectMemoryCard()
+{
+    if (IsValidPointer(m_memory_card))
+        m_memory_card->Eject();
+}
+
+bool GeartownsCore::IsMemoryCardStateChanged() const
+{
+    return m_memory_card_state_changed;
+}
+
 void GeartownsCore::SetBootDevice(GT_Boot_Device device)
 {
     m_boot_device = ((device >= GT_BOOT_DEVICE_AUTO) && (device < GT_BOOT_DEVICE_COUNT)) ? device : GT_BOOT_DEVICE_AUTO;
@@ -1085,7 +1111,8 @@ void GeartownsCore::LockRAMSize(bool locked)
 void GeartownsCore::ApplyBootDevice()
 {
     static const GT_Keys k_digits[5] = { GT_KEY_0, GT_KEY_1, GT_KEY_2, GT_KEY_3, GT_KEY_4 };
-    GT_Keys keys[2] = { GT_KEY_NONE, GT_KEY_NONE };
+    GT_Keys keys[3] = { GT_KEY_NONE, GT_KEY_NONE, GT_KEY_NONE };
+    int count = m_boot_device != GT_BOOT_DEVICE_AUTO ? 2 : 0;
 
     if (m_boot_device == GT_BOOT_DEVICE_CDROM)
     {
@@ -1097,13 +1124,20 @@ void GeartownsCore::ApplyBootDevice()
         keys[0] = GT_KEY_F;
         keys[1] = k_digits[m_boot_device - GT_BOOT_DEVICE_FLOPPY_0];
     }
+    else if (m_boot_device == GT_BOOT_DEVICE_MEMORY_CARD)
+    {
+        keys[0] = GT_KEY_I;
+        keys[1] = GT_KEY_C;
+        keys[2] = GT_KEY_M;
+        count = 3;
+    }
     else if (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0)
     {
         keys[0] = GT_KEY_H;
         keys[1] = k_digits[m_boot_device - GT_BOOT_DEVICE_HARD_DISK_0];
     }
 
-    m_keyboard->SetBootKeys(keys, m_boot_device != GT_BOOT_DEVICE_AUTO ? 2 : 0);
+    m_keyboard->SetBootKeys(keys, count);
     m_boot_device = GT_BOOT_DEVICE_AUTO;
 }
 
@@ -1318,6 +1352,11 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
         state_media.hard_disk_write[i] = image->GetLastWrite();
     }
 
+    state_media.memory_card_inserted = m_memory_card->IsInserted();
+    state_media.memory_card_size = m_memory_card->GetSize();
+    state_media.memory_card_session = m_memory_card->GetSession();
+    state_media.memory_card_write = m_memory_card->GetLastWrite();
+
     SerializeMedia(serializer, state_media, GT_SAVESTATE_VERSION);
 
     m_scheduler->SaveState(stream);
@@ -1337,6 +1376,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     m_dma->SaveState(stream);
     m_scsi->SaveState(stream);
     m_x87->SaveState(stream);
+    m_memory_card->SaveState(stream);
 
     if (stream.fail())
     {
@@ -1574,31 +1614,6 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
     state_media.valid = true;
 
-    bool mount = IsValidPointer(media);
-
-    if (mount)
-        *media = state_media;
-
-    for (int i = 0; i < FDC_DRIVES; i++)
-    {
-        FloppyDisk* disk = m_fdc->GetDisk(i);
-        bool other_disk = disk->IsInserted() ? state_media.floppy_crc[i] != disk->GetBaseCRC() : mount;
-
-        if (state_media.floppy_inserted[i] && other_disk)
-        {
-            Error("Save state is for another disk in floppy drive %d", i + 1);
-            return false;
-        }
-    }
-
-    bool other_disc = m_media->IsReady() ? state_media.cdrom_crc != m_media->GetCRC() : mount;
-
-    if (state_media.cdrom_inserted && other_disc)
-    {
-        Error("Save state is for another CD-ROM disc");
-        return false;
-    }
-
     for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {
         ScsiDisk* disk = m_scsi->GetDisk(i);
@@ -1609,6 +1624,41 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
             Error("Save state is for another hard disk on SCSI ID %d", i);
             return false;
         }
+    }
+
+    if ((state_media.memory_card_inserted != m_memory_card->IsInserted()) ||
+        (m_memory_card->IsInserted() && (state_media.memory_card_size != m_memory_card->GetSize())))
+    {
+        Error("Save state is for another IC memory card");
+        return false;
+    }
+
+    bool mount = IsValidPointer(media);
+
+    if (mount)
+        *media = state_media;
+
+    for (int i = 0; i < FDC_DRIVES; i++)
+    {
+        FloppyDisk* disk = m_fdc->GetDisk(i);
+        bool other_disk = state_media.floppy_inserted[i] ?
+            (disk->IsInserted() ? state_media.floppy_crc[i] != disk->GetBaseCRC() : mount) :
+            (mount && disk->IsInserted());
+
+        if (other_disk)
+        {
+            Error("Save state is for another disk in floppy drive %d", i + 1);
+            return false;
+        }
+    }
+
+    bool other_disc = state_media.cdrom_inserted ?
+        (m_media->IsReady() ? state_media.cdrom_crc != m_media->GetCRC() : mount) : (mount && m_media->IsReady());
+
+    if (other_disc)
+    {
+        Error("Save state is for another CD-ROM disc");
+        return false;
     }
 
     m_scheduler->LoadState(stream);
@@ -1628,6 +1678,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_dma->LoadState(stream, header.version);
     m_scsi->LoadState(stream, header.version);
     m_x87->LoadState(stream);
+    m_memory_card->LoadState(stream, header.version);
 
     if (stream.fail())
     {
@@ -1645,6 +1696,9 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
             !image->Restore(state_media.hard_disk_session[i], state_media.hard_disk_write[i]))
             m_hard_disk_state_changes |= 1 << i;
     }
+
+    m_memory_card_state_changed = state_media.memory_card_inserted &&
+        !m_memory_card->Restore(state_media.memory_card_session, state_media.memory_card_write);
 
     ApplyBusTiming();
     return true;
@@ -1794,7 +1848,6 @@ void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& co
 
 void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version)
 {
-    UNUSED(version);
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         G_SERIALIZE(serializer, media.floppy_inserted[i]);
@@ -1811,6 +1864,14 @@ void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Med
         G_SERIALIZE(serializer, media.hard_disk_session[i]);
         G_SERIALIZE(serializer, media.hard_disk_write[i]);
     }
+
+    if (version < 30)
+        return;
+
+    G_SERIALIZE(serializer, media.memory_card_inserted);
+    G_SERIALIZE(serializer, media.memory_card_size);
+    G_SERIALIZE(serializer, media.memory_card_session);
+    G_SERIALIZE(serializer, media.memory_card_write);
 }
 
 void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
@@ -1948,6 +2009,9 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_scsi))
         m_scsi->Reset();
 
+    if (IsValidPointer(m_memory_card))
+        m_memory_card->Reset(!m_powered);
+
     if (IsValidPointer(m_keyboard))
     {
         m_keyboard->Reset();
@@ -2053,8 +2117,8 @@ void GeartownsCore::ResolveMachineConfig()
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "This machine has no socket for an FPU");
 
-    bool hard_disk_boot = (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) ||
-        (IsValidPointer(entry) && ((entry->flags & GT_GAMEDB_HDD) != 0));
+    bool hard_disk_device = (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) && (m_boot_device <= GT_BOOT_DEVICE_HARD_DISK_4);
+    bool hard_disk_boot = hard_disk_device || (IsValidPointer(entry) && ((entry->flags & GT_GAMEDB_HDD) != 0));
 
     if (auto_ram && config.scsi && HasHardDisks() && (!database || hard_disk_boot) && (config.ram_size < 4 * megabyte))
     {
@@ -2162,10 +2226,7 @@ void GeartownsCore::ApplyMachineConfig()
         m_profiler->SetCPUClockRate(m_machine_config.cpu_clock_rate);
 
     if (IsValidPointer(m_memory))
-    {
         m_memory->SetMainRAMSize(m_machine_config.ram_size);
-        m_memory->SetFeatures(profile.features);
-    }
 
     if (IsValidPointer(m_pit))
         m_pit->SetFeatures(profile.features);
@@ -2205,6 +2266,12 @@ void GeartownsCore::ApplyMachineConfig()
     {
         m_scsi->SetFitted(m_machine_config.scsi);
         m_scsi->SetFeatures(profile.features);
+    }
+
+    if (IsValidPointer(m_memory_card))
+    {
+        m_memory_card->SetFeatures(profile.features);
+        m_memory_card->SetWindowSize(k_machine_maps[profile.map].memory_card_size);
     }
 
     if (IsValidPointer(m_io))
@@ -2262,7 +2329,8 @@ void GeartownsCore::InitMemoryMap()
     u32 rom_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_EXECUTABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED;
     u32 ram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_EXECUTABLE |
         GT_DEBUG_REGION_MAPPED;
-    const GT_Machine_Memory_Map& map = k_machine_maps[k_machine_profiles[m_machine_config.model].map];
+    const GT_Machine_Profile& profile = k_machine_profiles[m_machine_config.model];
+    const GT_Machine_Memory_Map& map = k_machine_maps[profile.map];
     const u8* system_rom = m_firmware->GetSystemRom();
     const u8* boot_rom = system_rom + GT_FIRMWARE_SYSTEM_SIZE - GT_FIRMWARE_SYSTEM_BOOT_SIZE;
     u8* main_ram = m_memory->GetMainRAM();
@@ -2323,6 +2391,19 @@ void GeartownsCore::InitMemoryMap()
     if ((map.extension_rom != 0) && !m_memory->RegisterDebugRegion(GT_DEBUG_REGION_EXTENSION_ROM, "Extension ROM",
         m_firmware->GetExtensionRom(), NULL, GT_FIRMWARE_EXTENSION_MAP_SIZE, map.extension_rom, rom_flags))
         Error("Unable to map the extension ROM");
+
+    u32 card_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE;
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_MEMORY_CARD_WINDOW, "IC Memory Card Window",
+        map.memory_card_size, map.memory_card, card_flags, m_memory_card, MemoryCard::ReadWindowCallback,
+        MemoryCard::WriteWindowCallback, MemoryCard::ReadWindowCallback))
+        Error("Unable to register the memory card window");
+
+    if ((map.memory_card_bank != 0) && ((profile.features & GT_MACHINE_FEATURE_JEIDA4) != 0) &&
+        !m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_MEMORY_CARD_BANK_WINDOW, "IC Memory Card Bank Window",
+        map.memory_card_size, map.memory_card_bank, card_flags, m_memory_card, MemoryCard::ReadBankWindowCallback,
+        MemoryCard::WriteBankWindowCallback, MemoryCard::ReadBankWindowCallback))
+        Error("Unable to register the memory card bank window");
 
     // 24 KiB of byte RAM, 0486h bits 1-3 write-protect its 8 KiB blocks
     if ((map.backup_ram != 0) && !m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_BACKUP_RAM, "Backup RAM",
@@ -2392,5 +2473,6 @@ void GeartownsCore::InitMemoryMap()
         Error("Unable to register the FM-R view");
 
     m_memory->ResetMapping();
+    m_memory_card->UpdateWindows();
     m_video->UpdateVRAMMapping();
 }

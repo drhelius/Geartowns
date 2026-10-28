@@ -34,6 +34,7 @@
 #include "debug/gui_debug_trace_logger.h"
 #include "emu_floppy.h"
 #include "emu_hard_disk.h"
+#include "emu_memory_card.h"
 #include "events.h"
 #include "gui_notifications.h"
 #include "input_macro.h"
@@ -212,6 +213,10 @@ void emu_destroy(void)
 
     save_cmos();
     emu_hard_disk_flush();
+
+    if (!emu_memory_card_flush())
+        Error("Unable to save the IC memory card on exit");
+
     runahead_destroy();
     rewind_destroy();
     SafeDelete(mcp_manager);
@@ -352,6 +357,7 @@ void emu_update(void)
             emu_frame_stale = false;
             emu_floppy_update();
             emu_hard_disk_update();
+            emu_memory_card_update();
         }
 
         rewind_push();
@@ -391,6 +397,7 @@ void emu_update(void)
 
     if (!geartowns->IsPoweredOn())
     {
+        emu_memory_card_flush();
         reset_run_state();
         update_savestates_data();
         gui_notify(gui_NotificationInfo, ICON_MD_POWER_SETTINGS_NEW, "Powered off by software", NULL, "power");
@@ -580,6 +587,7 @@ void emu_power_off(void)
 
     gui_debug_trace_logger_reset("power");
     geartowns->PowerOff();
+    emu_memory_card_flush();
     save_cmos();
     reset_run_state();
     update_savestates_data();
@@ -898,6 +906,7 @@ bool emu_load_state_slot(int index)
     restore_state_frame(dir, index);
     emu_floppy_reconcile();
     emu_hard_disk_state_loaded(false);
+    emu_memory_card_state_loaded(false);
     emu_debug_state_restored();
     events_sync_input();
     rewind_reset();
@@ -920,6 +929,7 @@ bool emu_load_state_file(const char* file_path)
     restore_state_frame(file_path, -1);
     emu_floppy_reconcile();
     emu_hard_disk_state_loaded(false);
+    emu_memory_card_state_loaded(false);
     emu_debug_state_restored();
     events_sync_input();
     rewind_reset();

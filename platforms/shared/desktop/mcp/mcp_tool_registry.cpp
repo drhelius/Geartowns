@@ -207,7 +207,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"hardware_cdrom", "CD-ROM Hardware", "Inspect the CD-ROM controller, the disc TOC and CD audio playback, and read disc sectors."},
     {"hardware_floppy", "Floppy Hardware", "Inspect the MB8877 floppy controller and drives, list a track's sectors, and read sector data."},
     {"hardware_scsi", "SCSI Hardware", "Inspect the SCSI host interface, list the hard disks on IDs 0-6, and read their sectors."},
-    {"media", "Media", "Load firmware or CD images, insert, eject and swap floppies, attach, detach and flush hard disks, list recent media, and inspect loaded media, firmware and floppy drives."},
+    {"media", "Media", "Load firmware or CD images, insert, eject and swap floppies, attach, detach and flush hard disks, insert and eject the IC memory card, list recent media, and inspect loaded media, firmware and floppy drives."},
     {"capture", "Capture", "Capture current screenshots and record AVI video."},
     {"state", "Save States", "List save slots, and save or load emulator state in a slot or a file."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
@@ -288,7 +288,7 @@ static const char* const kMcpMediaTools[] =
 {
     "load_media", "eject_cdrom", "insert_playlist_disc", "get_media_info", "list_recent_media",
     "load_bios", "insert_floppy", "create_blank_floppy", "eject_floppy", "swap_floppies", "set_floppy_write_protect",
-    "attach_hard_disk", "detach_hard_disk", "flush_hard_disks"
+    "attach_hard_disk", "detach_hard_disk", "flush_hard_disks", "insert_memory_card", "eject_memory_card"
 };
 
 static const char* const kMcpCaptureTools[] =

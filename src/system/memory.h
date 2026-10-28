@@ -49,8 +49,6 @@ public:
         bool boot_ram;
         bool dictionary;
         u8 dictionary_bank;
-        u8 card_bank;
-        bool card_attribute;
         u8 backup_ram[k_memory_backup_ram_size];
     };
 
@@ -61,8 +59,6 @@ public:
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void ResetMapping();
-    void SetFeatures(u32 features);
-    bool Decodes(u16 port) const;
     u8 ReadMappingControl(u16 port) const;
     void WriteMappingControl(u16 port, u8 value);
 
@@ -194,7 +190,6 @@ private:
     DebugRegion m_debug_regions[GT_DEBUG_MEMORY_MAX_REGIONS];
     int m_debug_region_count;
     u32 m_physical_address_mask;
-    u32 m_features;
     u32 m_dma_map[k_memory_dma_slots];
     bool m_nmi_vector_protect;
     bool m_cmos_high_speed;

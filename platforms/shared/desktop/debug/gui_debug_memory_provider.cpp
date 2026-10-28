@@ -23,6 +23,7 @@
 #include "media/firmware.h"
 #include "drive/fdc.h"
 #include "drive/floppy_disk.h"
+#include "drive/memory_card.h"
 #include "geartowns.h"
 #include "system/io.h"
 #include "system/scheduler.h"
@@ -209,6 +210,9 @@ int DebugMemoryProvider::GetRegionCount() const
         if (core->GetFDC()->GetDisk(drive)->IsInserted())
             count++;
     }
+
+    if (core->GetMemoryCard()->IsInserted())
+        count++;
 
     return count;
 }
@@ -654,6 +658,18 @@ bool DebugMemoryProvider::GetExternalRegion(int index, GT_Debug_Memory_Region& r
         index--;
     }
 
+    MemoryCard* card = core->GetMemoryCard();
+
+    if (card->IsInserted() && (index == 0))
+    {
+        memset(&region, 0, sizeof(region));
+        region.id = GT_DEBUG_REGION_MEMORY_CARD_IMAGE;
+        strncpy_fit(region.name, "IC Memory Card Image", sizeof(region.name));
+        region.size = card->GetSize();
+        region.flags = GT_DEBUG_REGION_READABLE;
+        return true;
+    }
+
     return false;
 }
 
@@ -703,6 +719,12 @@ bool DebugMemoryProvider::ReadExternalRegion(int id, u32 offset, u8* data, GT_De
             source = disk->GetImage();
             source_size = disk->GetImageSize();
         }
+    }
+
+    if ((id == GT_DEBUG_REGION_MEMORY_CARD_IMAGE) && core->GetMemoryCard()->IsInserted())
+    {
+        source = core->GetMemoryCard()->GetImage();
+        source_size = core->GetMemoryCard()->GetSize();
     }
 
     for (u32 i = 0; i < size; i++)

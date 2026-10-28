@@ -32,6 +32,7 @@
 #include "emu.h"
 #include "emu_floppy.h"
 #include "emu_hard_disk.h"
+#include "emu_memory_card.h"
 #include "utils.h"
 
 static const int k_create_sizes_mb[5] = { 40, 100, 127, 250, 500 };
@@ -389,7 +390,7 @@ static void draw_quit_popup(void)
 
     if (ImGui::Button("Retry", ImVec2(100, 0)))
     {
-        if (emu_hard_disk_flush() && emu_floppy_flush())
+        if (emu_hard_disk_flush() && emu_floppy_flush() && emu_memory_card_flush())
         {
             ImGui::CloseCurrentPopup();
             gui_dialog_in_use = false;

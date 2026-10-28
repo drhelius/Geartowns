@@ -105,7 +105,8 @@ static const McpTraceFilter k_mcp_trace_filters[] =
     { "input.changes", TRACE_INPUT, TRACE_INPUT_EVENT_CHANGES },
     { "system.reset", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_RESET },
     { "system.memory_map", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_MEMORY },
-    { "system.rtc", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_RTC }
+    { "system.rtc", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_RTC },
+    { "system.memory_card", TRACE_SYSTEM, TRACE_SYSTEM_EVENT_MEMORY_CARD }
 };
 
 static const int k_mcp_trace_filter_count = sizeof(k_mcp_trace_filters) / sizeof(k_mcp_trace_filters[0]);
@@ -268,6 +269,8 @@ public:
     json FlushHardDisks();
     json ReadHardDiskSector(int id, s64 lba);
     json SetFloppyWriteProtect(int drive, bool write_protected);
+    json InsertMemoryCard(const std::string& file_path, const json& write_protected, const json& create_size_kb);
+    json EjectMemoryCard(bool discard_changes);
 
     // Trace and profiler
     json GetTraceLog(s64 start, int count);
@@ -337,7 +340,7 @@ private:
         std::string& error);
     const char* GetSymbolAt(u32 linear);
     std::string FormatLogical(u16 selector, u32 offset, u32 linear);
-    void AddHardDiskStateChanges(json& result);
+    void AddMediaStateChanges(json& result);
 
 private:
     GeartownsCore* m_core;

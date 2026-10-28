@@ -477,9 +477,10 @@ json McpServer::BuildToolList()
             {"properties", {
                 {"boot", {
                     {"type", "string"},
-                    {"description", "Boot device: C+D, F+0/1 or H+0-4 held until the first CD, floppy or SCSI read."},
+                    {"description", "Boot device: C+D, F+0/1, H+0-4 or I+C+M held until the first CD, floppy or SCSI "
+                        "read or IC memory card status read."},
                     {"enum", json::array({"cdrom", "floppy1", "floppy2", "hard_disk0", "hard_disk1", "hard_disk2",
-                        "hard_disk3", "hard_disk4"})}
+                        "hard_disk3", "hard_disk4", "memory_card"})}
                 }}
             }},
             {"additionalProperties", false}
@@ -1777,7 +1778,7 @@ json McpServer::BuildToolList()
         {"name", "get_media_info"},
         {"title", "Get Media Info"},
         {"description", "Read the loaded media, the firmware, where each model takes its firmware from, the floppy "
-            "drives and the hard disks."},
+            "drives, the hard disks and the IC memory card."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1789,7 +1790,8 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "list_recent_media"},
         {"title", "List Recent Media"},
-        {"description", "List recent CD images with file_path values for load_media, recent floppies and recent hard disks."},
+        {"description", "List recent CD images with file_path values for load_media, recent floppies, hard disks and IC "
+            "memory cards."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1802,7 +1804,7 @@ json McpServer::BuildToolList()
         {"name", "load_media"},
         {"title", "Load Media"},
         {"description", "Load FM Towns media from a local file; a hard disk image (.hdd, .h0-.h6, .hdm over 8 MB, hard disk .chd) attaches to its "
-            "ID or the first free one and powers on an empty machine."},
+            "ID or the first free one and an IC memory card (.icm) goes in the slot, both powering on an empty machine."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1988,6 +1990,51 @@ json McpServer::BuildToolList()
         {"inputSchema", {
             {"type", "object"},
             {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "insert_memory_card"},
+        {"title", "Insert IC Memory Card"},
+        {"description", "Insert a raw IC memory card image (whole KB, up to 64 MB), writing the previous card's changes "
+            "first; inserting sets CHANGE in 048Ah. create_size_kb first creates a blank card, never replacing a file."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"file_path", {
+                    {"type", "string"},
+                    {"description", "Absolute path, usually .icm."}
+                }},
+                {"write_protected", {
+                    {"type", "boolean"},
+                    {"description", "Default: the Write Protected setting; read-only files insert protected."}
+                }},
+                {"create_size_kb", {
+                    {"type", "integer"},
+                    {"minimum", 1},
+                    {"maximum", 65536}
+                }}
+            }},
+            {"required", json::array({"file_path"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "eject_memory_card"},
+        {"title", "Eject IC Memory Card"},
+        {"description", "Eject the IC memory card after writing its changes to the image file."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"discard_changes", {
+                    {"type", "boolean"},
+                    {"description", "true ejects even when the changes can't be written."}
+                }}
+            }},
             {"additionalProperties", false}
         }}
     });
@@ -3577,6 +3624,16 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "read_hard_disk_sector")
     {
         return m_debugAdapter.ReadHardDiskSector(arguments.value("id", -1), arguments.value("lba", (s64)-1));
+    }
+    else if (normalizedTool == "insert_memory_card")
+    {
+        json write_protected = arguments.contains("write_protected") ? arguments["write_protected"] : json();
+        json create_size_kb = arguments.contains("create_size_kb") ? arguments["create_size_kb"] : json();
+        return m_debugAdapter.InsertMemoryCard(arguments.value("file_path", ""), write_protected, create_size_kb);
+    }
+    else if (normalizedTool == "eject_memory_card")
+    {
+        return m_debugAdapter.EjectMemoryCard(arguments.value("discard_changes", false));
     }
     else if (normalizedTool == "set_floppy_write_protect")
     {

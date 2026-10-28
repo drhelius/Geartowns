@@ -27,6 +27,7 @@
 #include "gui_floppy.h"
 #include "gui_firmware.h"
 #include "gui_hard_disks.h"
+#include "gui_memory_card.h"
 #include "gui_notifications.h"
 #include "config.h"
 #include "application.h"
@@ -40,6 +41,7 @@
 #include "utils.h"
 #include "geartowns.h"
 #include "drive/hard_disk_image.h"
+#include "drive/memory_card.h"
 #include "rewind.h"
 #include "events.h"
 #include "input_macro.h"
@@ -68,6 +70,7 @@ static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
 
 static void menu_geartowns(void);
+static void menu_drives(void);
 static void menu_cdrom(void);
 static void menu_emulator(void);
 static void menu_machine(void);
@@ -134,6 +137,7 @@ void gui_main_menu(void)
     if (application_show_menu && ImGui::BeginMainMenuBar())
     {
         menu_geartowns();
+        menu_drives();
         menu_emulator();
         menu_video();
         menu_input();
@@ -160,8 +164,6 @@ static void menu_geartowns(void)
         bool loading = gui_is_rom_loading() || emu_is_media_loading();
         bool powered_on = !emu_is_empty();
         bool firmware_ready = core->GetFirmware()->IsReady();
-        int floppy_drives = powered_on ? core->GetMachineConfig().floppy_drives :
-            core->GetPendingMachineConfig().floppy_drives;
 
         if (ImGui::MenuItem("Power On", NULL, false, !loading && !powered_on && firmware_ready))
         {
@@ -188,15 +190,6 @@ static void menu_geartowns(void)
         {
             gui_action_pause();
         }
-
-        ImGui::Separator();
-
-        menu_cdrom();
-
-        if (floppy_drives > 0)
-            gui_floppy_menu(floppy_drives);
-
-        gui_hard_disks_menu();
 
         ImGui::Separator();
 
@@ -384,6 +377,27 @@ static void menu_geartowns(void)
         {
             application_trigger_quit();
         }
+
+        ImGui::EndMenu();
+    }
+}
+
+static void menu_drives(void)
+{
+    if (ImGui::BeginMenu("Drives"))
+    {
+        gui_in_use = true;
+        GeartownsCore* core = emu_get_core();
+        int floppy_drives = emu_is_empty() ? core->GetPendingMachineConfig().floppy_drives :
+            core->GetMachineConfig().floppy_drives;
+
+        menu_cdrom();
+
+        if (floppy_drives > 0)
+            gui_floppy_menu(floppy_drives);
+
+        gui_hard_disks_menu();
+        gui_memory_card_menu();
 
         ImGui::EndMenu();
     }
@@ -1250,9 +1264,9 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
 static void menu_boot_device(void)
 {
     static const char* const names[GT_BOOT_DEVICE_COUNT] = { "", "CD-ROM", "Floppy 1", "Floppy 2", "Hard Disk ID 0",
-        "Hard Disk ID 1", "Hard Disk ID 2", "Hard Disk ID 3", "Hard Disk ID 4" };
+        "Hard Disk ID 1", "Hard Disk ID 2", "Hard Disk ID 3", "Hard Disk ID 4", "IC Memory Card" };
     static const char* const keys[GT_BOOT_DEVICE_COUNT] = { "", "C and D", "F and 0", "F and 1", "H and 0", "H and 1",
-        "H and 2", "H and 3", "H and 4" };
+        "H and 2", "H and 3", "H and 4", "I, C and M" };
     GeartownsCore* core = emu_get_core();
     const GT_Machine_Config& config = core->GetPendingMachineConfig();
     bool supported = (config.model != GT_MACHINE_MODEL1_2) && (config.model != GT_MACHINE_MARTY);
@@ -1263,6 +1277,8 @@ static void menu_boot_device(void)
 
         if ((i == GT_BOOT_DEVICE_FLOPPY_0) || (i == GT_BOOT_DEVICE_FLOPPY_1))
             enabled = enabled && ((i - GT_BOOT_DEVICE_FLOPPY_0) < config.floppy_drives);
+        else if (i == GT_BOOT_DEVICE_MEMORY_CARD)
+            enabled = enabled && core->GetMemoryCard()->IsInserted();
         else if (i >= GT_BOOT_DEVICE_HARD_DISK_0)
         {
             int id = i - GT_BOOT_DEVICE_HARD_DISK_0;
@@ -1271,7 +1287,7 @@ static void menu_boot_device(void)
             enabled = enabled && attached;
         }
 
-        if (i == GT_BOOT_DEVICE_HARD_DISK_0)
+        if ((i == GT_BOOT_DEVICE_FLOPPY_0) || (i == GT_BOOT_DEVICE_HARD_DISK_0) || (i == GT_BOOT_DEVICE_MEMORY_CARD))
             ImGui::Separator();
 
         if (ImGui::MenuItem(names[i], NULL, false, enabled))
@@ -2496,6 +2512,7 @@ static void file_dialogs(void)
     gui_popup_modal_load_defaults();
     gui_floppy_popups();
     gui_hard_disks_popups();
+    gui_memory_card_popups();
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
     gui_popup_modal_physical_cdrom();
 #endif

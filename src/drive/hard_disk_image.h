@@ -59,6 +59,7 @@ public:
     static bool IsImage(const char* path);
     static int GetImageId(const char* path);
     static bool GetChdHash(const char* path, u32* hash);
+    static bool GetImageBlocks(const char* path, u32* blocks);
 
 private:
     bool OpenChd(const char* path);

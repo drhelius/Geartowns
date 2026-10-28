@@ -28,6 +28,7 @@
 #include "common/log.h"
 #include "drive/floppy_disk.h"
 #include "drive/hard_disk_image.h"
+#include "drive/memory_card.h"
 #include "input/keyboard.h"
 #include "system/msm58321.h"
 #include "system/pic.h"
@@ -52,6 +53,7 @@
 #include "../gui_actions.h"
 #include "../gui_floppy.h"
 #include "../emu_hard_disk.h"
+#include "../emu_memory_card.h"
 #include "../rewind.h"
 #include "../debug/gui_debug_cdrom.h"
 #include "../debug/gui_debug_constants.h"
@@ -266,7 +268,7 @@ void DebugAdapter::StepFrames(int frames)
 json DebugAdapter::Reset(const std::string& boot)
 {
     static const char* const devices[GT_BOOT_DEVICE_COUNT] = { "", "cdrom", "floppy1", "floppy2", "hard_disk0",
-        "hard_disk1", "hard_disk2", "hard_disk3", "hard_disk4" };
+        "hard_disk1", "hard_disk2", "hard_disk3", "hard_disk4", "memory_card" };
     int device = GT_BOOT_DEVICE_AUTO;
 
     for (int i = 1; boot.size() && (i < GT_BOOT_DEVICE_COUNT); i++)
@@ -4015,6 +4017,91 @@ json DebugAdapter::SetFloppyWriteProtect(int drive, bool write_protected)
     return {{"success", true}, {"drive", drive}, {"write_protected", disk->IsWriteProtected()}};
 }
 
+static json memory_card_json(GeartownsCore* core)
+{
+    Emu_MemoryCardInfo info;
+    emu_memory_card_get_info(&info);
+    MemoryCard* card = core->GetMemoryCard();
+    const GT_Machine_Profile& profile = k_machine_profiles[core->GetMachineConfig().model];
+    const GT_Machine_Memory_Map& map = k_machine_maps[profile.map];
+    bool jeida4 = (profile.features & GT_MACHINE_FEATURE_JEIDA4) != 0;
+    json result = {
+        {"inserted", info.inserted},
+        {"status", hex_text(card->Peek(0x048A), 2)},
+        {"jeida4", jeida4},
+        {"window", hex_text(map.memory_card, 8)},
+        {"window_size_kb", map.memory_card_size / 1024}
+    };
+
+    if (jeida4)
+    {
+        result["bank"] = card->GetState()->bank;
+        result["attribute"] = card->GetState()->attribute;
+        result["window_card_offset"] = hex_text(card->GetWindowBase(0), 8);
+
+        if (map.memory_card_bank != 0)
+        {
+            result["bank_window"] = hex_text(map.memory_card_bank, 8);
+            result["bank_window_card_offset"] = hex_text(card->GetWindowBase(1), 8);
+        }
+    }
+
+    if (info.inserted)
+    {
+        result["file_path"] = info.path;
+        result["size_kb"] = info.size / 1024;
+        result["write_protected"] = info.write_protected;
+        result["modified"] = info.dirty;
+    }
+
+    return result;
+}
+
+json DebugAdapter::InsertMemoryCard(const std::string& file_path, const json& write_protected,
+    const json& create_size_kb)
+{
+    const char* path = file_path.c_str();
+    bool protect = write_protected.is_boolean() ? write_protected.get<bool>() :
+        config_emulator.memory_card_write_protected;
+
+    if (!is_absolute_path(path))
+        return {{"error", "file_path must be an absolute path"}};
+
+    if (create_size_kb.is_number_integer())
+    {
+        int size_kb = create_size_kb.get<int>();
+
+        if ((size_kb < 1) || (size_kb > 65536))
+            return {{"error", "create_size_kb must be 1-65536"}};
+
+        if (path_exists(path))
+            return {{"error", "A file already exists at " + file_path}};
+
+        if (!emu_memory_card_create(path, (u32)size_kb * 1024, protect))
+            return {{"error", "Failed to create the IC memory card image"}};
+    }
+    else if (!emu_memory_card_insert(path, protect))
+        return {{"error", "Failed to insert the IC memory card image (whole KB up to 64 MB); "
+            "the current card stays inserted"}};
+
+    json result = memory_card_json(m_core);
+    result["success"] = true;
+    return result;
+}
+
+json DebugAdapter::EjectMemoryCard(bool discard_changes)
+{
+    if (!m_core->GetMemoryCard()->IsInserted())
+        return {{"error", "No IC memory card inserted"}};
+
+    if (!emu_memory_card_eject(discard_changes))
+        return {{"error", "Unable to write the card changes; the card stays inserted"}};
+
+    json result = memory_card_json(m_core);
+    result["success"] = true;
+    return result;
+}
+
 json DebugAdapter::GetTraceLog(s64 start, int count)
 {
     json result;
@@ -4716,6 +4803,7 @@ json DebugAdapter::GetMediaInfo()
 
     result["floppy_drives"] = drives;
     result["hard_disks"] = ListHardDisks()["disks"];
+    result["memory_card"] = memory_card_json(m_core);
     return result;
 }
 
@@ -4770,10 +4858,27 @@ json DebugAdapter::ListRecentMedia()
         });
     }
 
+    json recent_memory_cards = json::array();
+
+    for (int index = 0; index < config_max_recent_memory_cards; index++)
+    {
+        const std::string& path = config_emulator.recent_memory_cards[index];
+
+        if (path.empty())
+            continue;
+
+        recent_memory_cards.push_back({
+            {"index", index},
+            {"file_path", path},
+            {"file_name", get_filename(path.c_str())}
+        });
+    }
+
     result["count"] = recent_media.size();
     result["recent_media"] = recent_media;
     result["recent_floppies"] = recent_floppies;
     result["recent_hard_disks"] = recent_hard_disks;
+    result["recent_memory_cards"] = recent_memory_cards;
 
     return result;
 }
@@ -4891,6 +4996,16 @@ json DebugAdapter::FinishLoadMedia(const std::string& file_path)
         }
 
         return {{"error", "Failed to attach the hard disk image"}};
+    }
+
+    if (emu_memory_card_is_image(file_path.c_str()))
+    {
+        if (!m_core->GetMemoryCard()->IsInserted())
+            return {{"error", "Failed to insert the IC memory card image"}};
+
+        json result = memory_card_json(m_core);
+        result["success"] = true;
+        return result;
     }
 
     if (emu_floppy_is_image(file_path.c_str()))
@@ -5018,7 +5133,7 @@ json DebugAdapter::LoadState()
     result["success"] = true;
     result["slot"] = slot;
     result["frame_restored"] = !emu_frame_stale;
-    AddHardDiskStateChanges(result);
+    AddMediaStateChanges(result);
 
     return result;
 }
@@ -5082,14 +5197,17 @@ json DebugAdapter::LoadStateFile(const std::string& file_path)
     result["success"] = true;
     result["file_path"] = file_path;
     result["frame_restored"] = !emu_frame_stale;
-    AddHardDiskStateChanges(result);
+    AddMediaStateChanges(result);
 
     return result;
 }
 
-void DebugAdapter::AddHardDiskStateChanges(json& result)
+void DebugAdapter::AddMediaStateChanges(json& result)
 {
     u32 changes = m_core->GetHardDiskStateChanges();
+
+    if (m_core->IsMemoryCardStateChanged())
+        result["memory_card_changed"] = true;
 
     if (changes == 0)
         return;
@@ -5729,7 +5847,7 @@ json DebugAdapter::RewindSeek(int snapshot)
     result["cs"] = Hex(state.segment[I386_SEGMENT_CS].selector, 4);
     result["eip"] = Hex32(state.eip);
     result["linear_pc"] = Hex32(cpu->GetCurrentLinearPC());
-    AddHardDiskStateChanges(result);
+    AddMediaStateChanges(result);
     return result;
 }
 

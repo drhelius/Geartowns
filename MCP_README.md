@@ -364,7 +364,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `debug_step_out` - Run until the current subroutine or interrupt handler returns; with an empty call stack it steps one instruction and adds a `note`
 - `debug_step_frame` - Run complete frames with breakpoints active, then pause; `frames` sets how many (default 1). By default it answers when they finish or a breakpoint stops them, with the `debug_get_status` fields plus `frames` run, `requested_frames` and `breakpoint_hit`, for up to 1800 frames. `wait: false` answers at once and takes up to 216000 frames; poll `debug_get_status` or stop them with `debug_pause`. A reset, state load or rewind during a wait ends it with an error
 - `debug_run_to_cursor` - Continue execution until reaching specified address
-- `debug_reset` - Reset emulation; optional `boot` (`cdrom`, `floppy1`, `floppy2`, `hard_disk0`-`hard_disk4`) holds the system ROM's boot device keys through this reset, released at the first CD, floppy or SCSI read (1F/2F and later; the Model 1/2 and Marty ROMs ignore them)
+- `debug_reset` - Reset emulation; optional `boot` (`cdrom`, `floppy1`, `floppy2`, `hard_disk0`-`hard_disk4`, `memory_card`) holds the system ROM's boot device keys through this reset, released at the first CD, floppy or SCSI read or IC memory card status read (1F/2F and later; the Model 1/2 and Marty ROMs ignore them)
 - `debug_get_status` - Get debug status: `paused`, `at_breakpoint`, `pc` (linear), `logical_pc`, `mode`, `halted`, `breakpoint`, `media_loading`, `media_ready`, `powered_on`, `frame`
 - `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`; optional `speed` (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
 
@@ -492,6 +492,7 @@ input.changes
 system.reset
 system.memory_map
 system.rtc
+system.memory_card
 ```
 
 Hardware events are decoded as the guest sees them: register names and fields, IRQ lines and vectors, DMA channels with their device, CD-ROM commands with their MSF ranges, status packets and sector transfers, FDC commands and results, SCSI commands with their block ranges, bus phases, status, sense and data transfers, keyboard messages with the key name, and pad buttons. Video register writes carry the beam line and dot. I/O port writes are logged before the device acts on them, so the events they cause follow them.
@@ -569,15 +570,19 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `flush_hard_disks` - Write the changes to the image files now; otherwise they are written about 2 seconds after the machine stops writing, and on detach, power off and quit
 - `read_hard_disk_sector` - Read sector `lba` of the disk on SCSI `id` as hex, as the machine sees it, unwritten changes included, without bus traffic
 
+### IC Memory Card
+- `insert_memory_card` - Insert a raw IC memory card image (a whole number of KB up to 64 MB, usually `.icm`) after writing the previous card's changes; optional `write_protected`, by default the Write Protected setting, and read-only files insert protected. Inserting sets CHANGE in 048Ah. `create_size_kb` (1-65536) first creates a blank card (FFh) at `file_path`, never replacing an existing file
+- `eject_memory_card` - Eject the card after writing its changes to the image file, which otherwise happens about 3 seconds after the machine stops writing; `discard_changes` ejects even when they can't be written
+
 ### Screen Capture
 - `get_screenshot` - Capture current screen frame as base64 PNG. Right after a state load it is the frame saved in the state; when the state has none or the screen size changed, it returns an error until a frame runs
 - `start_video_recording` - Start recording video and audio to an AVI file (MJPEG, uncompressed or PNG compressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`), and `quality` (`low`, `medium`, `high`, `lossless`, `lossless_compressed`). `lossless` is uncompressed; `lossless_compressed` stores PNG frames, much smaller but playable only with FFmpeg based players. Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses the debug output screen aspect ratio while debugging. When a shader preset is active outside debug mode, the shader output is recorded at the output window size and `scale` and `aspect_ratio` are ignored. Frames are recorded only while the emulator runs, so continue or step execution before stopping
 - `stop_video_recording` - Stop the active recording and finalize the AVI file. Returns `file_path` and the number of recorded `frames`
 
 ### Media & State Management
-- `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, the floppy drives (image, disk name, media, write protect, modified) and the hard disks (as `list_hard_disks`)
-- `list_recent_media` - List the most recent CD images, floppies and hard disks opened by Geartowns
-- `load_media` - Load a CD image, a floppy image or a hard disk image (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd, .hdm over 8 MB and hard disk .chd to the first free one). A hard disk powers on an empty machine, or waits for the next reset on a running one
+- `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, the floppy drives (image, disk name, media, write protect, modified), the hard disks (as `list_hard_disks`) and the IC memory card (`memory_card`: inserted, image, size, write protect, modified, the 048Ah status, the window and, on JEIDA 4 models, the bank, attribute space and the card offset each window shows)
+- `list_recent_media` - List the most recent CD images, floppies, hard disks and IC memory cards opened by Geartowns
+- `load_media` - Load a CD image, a floppy image, a hard disk image or an IC memory card (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd, .hdm over 8 MB and hard disk .chd to the first free one; card: .icm). A hard disk powers on an empty machine, or waits for the next reset on a running one; a card goes in the slot at once and powers on an empty machine
 - `eject_cdrom` - Eject the CD as the CD-ROM menu does; the machine keeps running with an empty drive
 - `insert_playlist_disc` - Insert playlist disc `index` (from the `get_cdrom_status` playlist) into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector
@@ -587,7 +592,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`
 - `list_save_state_slots` - List all 5 save state slots with information (media name, timestamp, validity)
 - `save_state` - Save emulator state, with the current frame, to the selected slot, to `slot` (1-5, which becomes the selected one) or to an absolute `file_path`
-- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`. It puts the saved frame back on screen without running the machine; `frame_restored` is false when the state has no frame or the screen size changed. Hard disk writes made since the state are undone; `hard_disks_changed` lists the SCSI IDs where that wasn't possible
+- `load_state` - Load emulator state from the selected slot, from `slot` (1-5, which becomes the selected one) or from an absolute `file_path`. It puts the saved frame back on screen without running the machine; `frame_restored` is false when the state has no frame or the screen size changed. Hard disk and IC memory card writes made since the state are undone; `hard_disks_changed` lists the SCSI IDs where that wasn't possible and `memory_card_changed` is true when the card couldn't be put back
 - `get_rewind_status` - Get rewind buffer status (enabled, snapshots, capacity, buffered seconds)
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 

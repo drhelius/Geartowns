@@ -125,8 +125,8 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 0480h | SYS_ROM_MAP | Boot ROM and dictionary windows |
 | 0484h | DIC_ROM_BANK | Dictionary ROM bank |
 | 048Ah | MEMCARD_STATUS | Memory card status |
-| 0490h | MEMCARD_BANK | Memory card bank (UX) |
-| 0491h | MEMCARD_ATTRIBUTE | Memory card attribute space, JEIDA-4 capability (UX) |
+| 0490h | MEMCARD_BANK | Memory card bank (JEIDA 4 models) |
+| 0491h | MEMCARD_ATTRIBUTE | Memory card attribute space, JEIDA 4 capability (JEIDA 4 models) |
 
 ### CD-ROM Controller
 

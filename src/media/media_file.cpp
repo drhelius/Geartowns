@@ -95,6 +95,26 @@ bool MediaFile::ListDirectory(const char* path, std::vector<std::string>& folder
     return MediaFileNative::ListDirectory(path, folders, files);
 }
 
+bool MediaFile::RenameFile(const char* from, const char* to)
+{
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsInterface())
+        return MediaFileLibretro::RenameFile(from, to);
+#endif
+
+    return rename_file_utf8(from, to);
+}
+
+bool MediaFile::RemoveFile(const char* path)
+{
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsInterface())
+        return MediaFileLibretro::RemoveFile(path);
+#endif
+
+    return remove_file_utf8(path);
+}
+
 void MediaFile::SetVfsInterface(const retro_vfs_interface* iface, unsigned version)
 {
 #if defined(__LIBRETRO__)

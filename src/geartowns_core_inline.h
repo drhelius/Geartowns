@@ -157,6 +157,11 @@ INLINE ScsiController* GeartownsCore::GetSCSI()
     return m_scsi;
 }
 
+INLINE MemoryCard* GeartownsCore::GetMemoryCard()
+{
+    return m_memory_card;
+}
+
 INLINE Keyboard* GeartownsCore::GetKeyboard()
 {
     return m_keyboard;

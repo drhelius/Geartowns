@@ -43,8 +43,8 @@ Address spaces:
 | 80180000–80FFFFFF | — | Reserved |
 | 81000000–8101FFFF | 128 KB | Sprite RAM (entries, color tables, patterns) |
 | 81020000–BFFFFFFF | — | Reserved |
-| C0000000–C0FFFFFF | 16 MB | ROM card window |
-| C1000000–C1FFFFFF | — | Reserved |
+| C0000000–C0FFFFFF | 16 MB | IC memory card window, the card's first 16 MB (§2.2) |
+| C1000000–C1FFFFFF | 16 MB | CX, HG and HR: IC memory card bank window (§2.2); reserved on the others |
 | C2000000–C207FFFF | 512 KB | OS ROM (MS-DOS and the BIOS) |
 | C2080000–C20FFFFF | 512 KB | Dictionary ROM |
 | C2100000–C213FFFF | 256 KB | Font (kanji) ROM |
@@ -73,12 +73,29 @@ Marty, from address 0.
 | Font ROM | C2100000 | F00000 | F00000 |
 | CMOS RAM | C2140000 | F40000 | F40000 |
 | RF5C68 wave RAM window | C2200000 | F80000 | F80000 |
+| IC memory card window (1 MB) | C0000000 | D00000 | D00000 |
 | System ROM | FFFC0000 | FC0000 | FC0000 |
 
 DMA keeps the Model 1/2 addresses: the UX translates them in 1 MB steps, 800xxxxxh to A00000h, 801xxxxxh to B00000h,
 810xxxxxh to C00000h, C20xxxxxh to E00000h, C21xxxxxh to F00000h, C22xxxxxh to F80000h, FFFxxxxxh to F00000h,
 400xxxxxh to C80000h and C00xxxxxh-C0Fxxxxxh to the memory card window at D00000h. Other addresses lose their top
 8 bits.
+
+### 2.2 IC Memory Card
+
+The card slot maps the card's common memory, read and written a byte at a time like RAM. With no card the windows
+float high (FFh). Past the end of a smaller card they read FFh and drop writes.
+
+| Models | Window | Banking |
+|---|---|---|
+| Model 1/2, 1F/2F, 10F/20F | C0000000h, the first 16 MB | None, 0490h and 0491h read FFh |
+| CX, HG, HR | C0000000h, the first 16 MB; C1000000h, a 16 MB quarter | 0490h bits 5-4 pick the quarter at C1000000h |
+| UX, Marty | D00000h, 1 MB | 0490h bits 5-0 pick the 1 MB bank |
+| UG | D00000h, the first 1 MB | None |
+
+0491h bit 0 shows attribute space in the windows instead of common memory; it reads FFh, a card with no CIS. The status
+port is 048Ah (system resource). The system ROM's disk BIOS reaches the card as device 4Ah, and as device 42h when one
+is inserted, always in 1024-byte sectors of bank 0.
 
 ---
 
@@ -196,9 +213,10 @@ System ROM (FFFFF0h on the UX and the Marty). The boot ROM at F8000h–FFFFFh is
 2. The regions the machine maps: System ROM, System ROM (low boot window), Main RAM, VRAM (raw 512 KB, two-page
    order), VRAM (two-page view), VRAM (single-page view), Sprite RAM, OS ROM, Dictionary ROM, Font ROM, CMOS RAM,
    PCM wave RAM window, PCM wave RAM (raw 64 KB), Dictionary ROM (low window), CMOS RAM (low window), FM-R VRAM
-   planes, FM-R text RAM and ANK font, FM-R registers, FM-R view (unmapped)
-3. Firmware images that are loaded but not mapped on this machine, the CD-ROM media image and the inserted floppy
-   disk images
+   planes, FM-R text RAM and ANK font, FM-R registers, FM-R view (unmapped), IC Memory Card Window and, on the CX,
+   HG and HR, IC Memory Card Bank Window
+3. Firmware images that are loaded but not mapped on this machine, the CD-ROM media image, the inserted floppy
+   disk images and the inserted IC memory card (IC Memory Card Image, read-only)
 
 Region offsets are 0-based; `physical_base` gives the bus address of mapped regions. The LINEAR area also accepts
 logical addresses (`CS:1234`, `0008:00001234`). The CPU reaches the 64 KB wave RAM through the 4 KB PCM wave RAM

@@ -19,6 +19,7 @@
 
 #include "emu.h"
 #include "emu_hard_disk.h"
+#include "emu_memory_card.h"
 #include "config.h"
 #include "events.h"
 #include "geartowns.h"
@@ -411,6 +412,7 @@ static bool load_snapshot(const u8* blob, int index)
     {
         emu_debug_state_restored();
         emu_hard_disk_state_loaded(true);
+        emu_memory_card_state_loaded(true);
         emu_get_core()->GetI386()->SetDisassemblerCallStack(call_stacks[index]);
         memcpy(emu_frame_buffer, blob + state_capacity, screenshot_size);
         events_sync_input();

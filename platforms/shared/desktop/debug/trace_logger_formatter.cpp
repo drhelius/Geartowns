@@ -1238,6 +1238,18 @@ static void format_system(const GT_Trace_Entry& entry, char* buffer, size_t size
             format_event(buffer, size, "SYSTEM", "RTC READ", "%-5s -> $%X",
                 k_debug_rtc_register_names[entry.system.address & 0x0F], value);
             break;
+        case TRACE_SYSTEM_MEMORY_CARD:
+            if (entry.system.port == 0x0490)
+                format_event(buffer, size, "SYSTEM", "IC CARD", "$0490 <- $%02X  Bank:%u", value, entry.system.address);
+            else if (entry.system.port == 0x0491)
+                format_event(buffer, size, "SYSTEM", "IC CARD", "$0491 <- $%02X  Space:%s", value,
+                    (flags & 0x04) != 0 ? "ATTRIBUTE" : "COMMON");
+            else if ((flags & 0x03) != 0)
+                format_event(buffer, size, "SYSTEM", "IC CARD", "%s  $048A:$%02X",
+                    (flags & 0x01) != 0 ? "INSERTED" : "EJECTED", value);
+            else
+                format_event(buffer, size, "SYSTEM", "IC CARD", "$048A -> $%02X  CHANGE", value);
+            break;
         default:
             format_event(buffer, size, "SYSTEM", "RTC WRITE", "%-5s <- $%X",
                 k_debug_rtc_register_names[entry.system.address & 0x0F], value);

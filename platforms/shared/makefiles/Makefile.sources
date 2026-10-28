@@ -46,6 +46,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_floppy.cpp \
     $(DESKTOP_SRC_DIR)/gui_firmware.cpp \
     $(DESKTOP_SRC_DIR)/gui_hard_disks.cpp \
+    $(DESKTOP_SRC_DIR)/gui_memory_card.cpp \
     $(DESKTOP_SRC_DIR)/gui_notifications.cpp \
     $(DESKTOP_SRC_DIR)/gui_drive_activity.cpp \
     $(DESKTOP_SRC_DIR)/gui_actions.cpp \
@@ -63,6 +64,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/emu.cpp \
     $(DESKTOP_SRC_DIR)/emu_floppy.cpp \
     $(DESKTOP_SRC_DIR)/emu_hard_disk.cpp \
+    $(DESKTOP_SRC_DIR)/emu_memory_card.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
     $(DESKTOP_SRC_DIR)/shift_jis.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
@@ -109,6 +111,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/drive/hard_disk_image.cpp \
     $(SRC_DIR)/drive/floppy_disk.cpp \
     $(SRC_DIR)/drive/floppy_image.cpp \
+    $(SRC_DIR)/drive/memory_card.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_486.cpp \
     $(SRC_DIR)/i386/i386_bus.cpp \

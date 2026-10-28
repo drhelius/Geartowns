@@ -229,11 +229,16 @@ static inline void process(config_Operation operation)
     CONFIG_STRING_ARRAY("HardDisk", "Recent%d", config_emulator.recent_hard_disks, config_max_recent_hard_disks, "");
     CONFIG_BOOL("HardDisk", "AssignDriveLetters", config_emulator.hard_disk_drive_letters, true);
 
+    // IC memory card
+    CONFIG_BOOL("MemoryCard", "WriteProtected", config_emulator.memory_card_write_protected, false);
+    CONFIG_STRING_ARRAY("MemoryCard", "Recent%d", config_emulator.recent_memory_cards, config_max_recent_memory_cards, "");
+
     // File dialogs
     CONFIG_STRING("FileDialogs", "ROM", config_file_dialogs.rom, "");
     CONFIG_STRING("FileDialogs", "States", config_file_dialogs.states, "");
     CONFIG_STRING("FileDialogs", "Floppies", config_file_dialogs.floppies, "");
     CONFIG_STRING("FileDialogs", "HardDisks", config_file_dialogs.hard_disks, "");
+    CONFIG_STRING("FileDialogs", "MemoryCards", config_file_dialogs.memory_cards, "");
     CONFIG_STRING("FileDialogs", "Screenshots", config_file_dialogs.screenshots, "");
     CONFIG_STRING("FileDialogs", "Recordings", config_file_dialogs.recordings, "");
     CONFIG_STRING("FileDialogs", "Debug", config_file_dialogs.debug, "");

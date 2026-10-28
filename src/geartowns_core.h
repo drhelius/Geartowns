@@ -30,6 +30,7 @@ class CdRomMedia;
 class FDC;
 class FloppyDisk;
 class HardDiskImage;
+class MemoryCard;
 class ScsiController;
 class Keyboard;
 class MSM58321;
@@ -118,6 +119,9 @@ public:
     const char* GetPendingHardDiskPath(int id) const;
     bool IsPendingHardDiskWriteProtected(int id) const;
     u32 GetHardDiskStateChanges() const;
+    bool InsertMemoryCard(const u8* data, u32 size, bool write_protected);
+    void EjectMemoryCard();
+    bool IsMemoryCardStateChanged() const;
     void SetBootDevice(GT_Boot_Device device);
     GT_Boot_Device GetBootDevice() const;
     void EnableDriveLetterAssignment(bool enabled);
@@ -159,6 +163,7 @@ public:
     FloppyDisk* GetFloppy(int drive);
     ScsiController* GetSCSI();
     HardDiskImage* GetHardDisk(int id);
+    MemoryCard* GetMemoryCard();
     Keyboard* GetKeyboard();
     TraceLogger* GetTraceLogger();
     Profiler* GetProfiler();
@@ -230,6 +235,7 @@ private:
     CdRom* m_cdrom;
     FDC* m_fdc;
     ScsiController* m_scsi;
+    MemoryCard* m_memory_card;
     Keyboard* m_keyboard;
     TraceLogger* m_trace_logger;
     Profiler* m_profiler;
@@ -251,6 +257,7 @@ private:
     bool m_hard_disk_write_protected[GT_MAX_HARD_DISKS];
     bool m_hard_disk_pending[GT_MAX_HARD_DISKS];
     u32 m_hard_disk_state_changes;
+    bool m_memory_card_state_changed;
     GT_Boot_Device m_boot_device;
     bool m_drive_letter_assignment;
     bool m_ram_size_locked;

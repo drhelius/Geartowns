@@ -21,6 +21,9 @@
     <ClCompile Include="..\shared\desktop\emu_hard_disk.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\emu_memory_card.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui.cpp">
       <Filter>desktop</Filter>
@@ -109,6 +112,9 @@
     <ClCompile Include="..\shared\desktop\gui_firmware.cpp">
       <Filter>desktop</Filter>
     <ClCompile Include="..\shared\desktop\gui_hard_disks.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_memory_card.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     </ClCompile>
@@ -316,6 +322,9 @@
     <ClCompile Include="..\..\src\drive\floppy_image.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\drive\memory_card.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\system\i8253.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -496,6 +505,8 @@
     <ClInclude Include="..\..\src\drive\floppy_disk.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\floppy_disk_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\drive\floppy_image.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\memory_card.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\drive\memory_card_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\i8253_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\video\sprite.h"><Filter>src</Filter></ClInclude>
@@ -560,6 +571,9 @@
     <ClInclude Include="..\shared\desktop\emu_floppy.h">
       <Filter>desktop</Filter>
     <ClInclude Include="..\shared\desktop\emu_hard_disk.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\emu_memory_card.h">
       <Filter>desktop</Filter>
     </ClInclude>
     </ClInclude>
@@ -659,6 +673,9 @@
     <ClInclude Include="..\shared\desktop\gui_firmware.h">
       <Filter>desktop</Filter>
     <ClInclude Include="..\shared\desktop\gui_hard_disks.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_memory_card.h">
       <Filter>desktop</Filter>
     </ClInclude>
     </ClInclude>

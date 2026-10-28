@@ -427,7 +427,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_boot_device",
         "Boot Device (restart)",
         NULL,
-        "Holds the system ROM's boot keys at power-on and on every restart: C+D for the CD-ROM, F+0 or F+1 for a floppy drive, H+0 to H+4 for a SCSI hard disk, released at the first read from a disk. The 1F/2F and later models read them; the Model 1/2 and Marty ROMs don't. Auto boots as usual, the CD first, so a hard disk boots with a bootable CD in the drive only when it is chosen here.",
+        "Holds the system ROM's boot keys at power-on and on every restart: C+D for the CD-ROM, F+0 or F+1 for a floppy drive, H+0 to H+4 for a SCSI hard disk, I+C+M for the IC memory card, released at the first read from a disk. The 1F/2F and later models read them; the Model 1/2 and Marty ROMs don't. Auto boots as usual, the CD first, so a hard disk boots with a bootable CD in the drive only when it is chosen here. A memory card that starts with a boot sector boots ahead of the CD on every model.",
         NULL,
         "system",
         {
@@ -440,6 +440,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "hdd2",    "Hard Disk ID 2" },
             { "hdd3",    "Hard Disk ID 3" },
             { "hdd4",    "Hard Disk ID 4" },
+            { "card",    "IC Memory Card" },
             { NULL, NULL },
         },
         "auto"
@@ -457,6 +458,44 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { NULL, NULL },
         },
         "Enabled"
+    },
+    {
+        "geartowns_memory_card",
+        "IC Memory Card (restart)",
+        NULL,
+        "Puts an IC memory card in the slot, kept in the save directory. 'Per Game' uses a card named after the content, 'Shared' one card for all content. A missing card is created blank with the size below; Towns OS formats it with TICMFMT once CONFIG.SYS loads TICM.SYS.",
+        NULL,
+        "system",
+        {
+            { "Off",      NULL },
+            { "Per Game", NULL },
+            { "Shared",   NULL },
+            { NULL, NULL },
+        },
+        "Off"
+    },
+    {
+        "geartowns_memory_card_size",
+        "IC Memory Card Size (restart)",
+        NULL,
+        "Size of a new blank IC memory card. An existing card keeps its size. The UG reaches the first 1 MB of a card, the Model 1/2, 1F/2F and 10F/20F the first 16 MB.",
+        NULL,
+        "system",
+        {
+            { "64",    "64 KB" },
+            { "128",   "128 KB" },
+            { "256",   "256 KB" },
+            { "512",   "512 KB" },
+            { "1024",  "1 MB" },
+            { "2048",  "2 MB" },
+            { "4096",  "4 MB" },
+            { "8192",  "8 MB" },
+            { "16384", "16 MB" },
+            { "32768", "32 MB" },
+            { "65536", "64 MB" },
+            { NULL, NULL },
+        },
+        "1024"
     },
     {
         "geartowns_rtc",

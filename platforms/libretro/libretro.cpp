@@ -33,6 +33,7 @@
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
 #include "drive/hard_disk_image.h"
+#include "drive/memory_card.h"
 #include "system/msm58321.h"
 #include "video/video.h"
 #include "libretro_core_options.h"
@@ -54,6 +55,7 @@
 #define DISK_DRIVE_COUNT (1 + FDC_DRIVES)
 #define FLOPPY_IDLE_FRAMES 180
 #define HARD_DISK_IDLE_FRAMES 120
+#define MEMORY_CARD_IDLE_FRAMES 180
 #define CMOS_SAVE_FRAMES 180
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
@@ -67,6 +69,7 @@ static retro_input_state_t input_state_cb;
 static struct retro_log_callback logging;
 retro_log_printf_t log_cb;
 static const retro_vfs_interface* vfs_interface = NULL;
+static unsigned vfs_version = 0;
 static unsigned message_interface_version = 0;
 static bool libretro_supports_bitmasks = false;
 static bool libretro_supports_dupe = false;
@@ -139,6 +142,7 @@ struct DiskSetImage
 {
     std::string path;
     std::string label;
+    std::string label_suffix;
     int image;
     int disk;
     u32 crc;
@@ -163,6 +167,14 @@ static u32 hard_disk_write_count = 0;
 static int hard_disk_idle_frames = 0;
 static bool hard_disk_flush_failed = false;
 static bool hard_disk_state_warned = false;
+static std::string hard_disk_working_path[GT_MAX_HARD_DISKS];
+static int memory_card_mode = 0;
+static u32 memory_card_size = 1024 * 1024;
+static std::string memory_card_path;
+static u32 memory_card_write_count = 0;
+static int memory_card_idle_frames = 0;
+static bool memory_card_flush_failed = false;
+static bool memory_card_state_warned = false;
 static int floppy_drive = 0;
 static bool floppy_multidrive = false;
 static bool save_disk = false;
@@ -231,6 +243,7 @@ static void disk_sync(void);
 static void disk_clear(void);
 static void disk_shift_entry(int& entry, unsigned index, int delta);
 static bool mount_state_media(const GT_SaveState_Media& media);
+static bool mount_entries(const int* entries);
 static int find_floppy_entry(u32 crc);
 static int find_cdrom_entry(u32 crc);
 static bool get_cdrom_crc(const char* path, u32* crc);
@@ -248,6 +261,7 @@ static bool disk_get_image_label(unsigned index, char* label, size_t len);
 static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_size);
 static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
 static bool write_content_file(const char* path, const u8* data, u32 size);
+static bool content_file_exists(const char* path);
 static bool rename_file(const char* from, const char* to, bool vfs);
 static void remove_file(const char* path, bool vfs);
 static bool floppy_load_image(unsigned index, int floppy);
@@ -255,6 +269,9 @@ static bool floppy_flush(int floppy);
 static void floppy_update(void);
 static bool hard_disk_attach(const char* path);
 static void hard_disk_update(void);
+static void memory_card_load(void);
+static bool memory_card_flush(void);
+static void memory_card_update(void);
 static void cmos_load(void);
 static void cmos_save(void);
 static void cmos_update(void);
@@ -363,6 +380,8 @@ void retro_init(void)
     else
         vfs_interface = NULL;
 
+    vfs_version = IsValidPointer(vfs_interface) ? vfs_interface_info.required_interface_version : 0;
+
     MediaFile::SetVfsInterface(vfs_interface, vfs_interface_info.required_interface_version);
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &logging))
@@ -418,6 +437,7 @@ void retro_deinit(void)
     SafeDeleteArray(frame_buffer);
     SafeDelete(core);
     vfs_interface = NULL;
+    vfs_version = 0;
     MediaFile::SetVfsInterface(NULL);
 
     message_interface_version = 0;
@@ -557,6 +577,7 @@ void retro_run(void)
     core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
     floppy_update();
     hard_disk_update();
+    memory_card_update();
     cmos_update();
 
     if (powered && !core->IsPoweredOn())
@@ -652,10 +673,24 @@ bool retro_unserialize(const void *data, size_t size)
     GT_SaveState_Media media = {};
     bool loaded = core->LoadState(buffer, savestate_size, &media);
 
-    if (!loaded && media.valid && mount_state_media(media))
+    if (!loaded && media.valid)
     {
-        loaded = core->LoadState(buffer, savestate_size);
-        disk_sync();
+        int entries[DISK_DRIVE_COUNT];
+        bool ejected = disk_ejected;
+        int drive = open_drive;
+        int entry = open_entry;
+        memcpy(entries, drive_entry, sizeof(entries));
+        loaded = mount_state_media(media) && core->LoadState(buffer, savestate_size);
+
+        if (loaded)
+            disk_sync();
+        else
+        {
+            mount_entries(entries);
+            disk_ejected = ejected;
+            open_drive = drive;
+            open_entry = entry;
+        }
     }
 
     if (loaded)
@@ -671,6 +706,15 @@ bool retro_unserialize(const void *data, size_t size)
         }
 
         hard_disk_state_warned = changed;
+        bool card_changed = core->IsMemoryCardStateChanged();
+
+        if (card_changed && !memory_card_state_warned)
+        {
+            log_cb(RETRO_LOG_WARN, "The IC memory card changed since this state was saved\n");
+            show_message("The IC memory card changed since this state was saved", 3, RETRO_LOG_WARN);
+        }
+
+        memory_card_state_warned = card_changed;
     }
 
     return loaded;
@@ -754,6 +798,7 @@ static bool load_content(const char* path)
 
     core->LatchAutoMedia();
     cmos_load();
+    memory_card_load();
     core->SetBootDevice(boot_device);
 
     if (!core->PowerOn())
@@ -819,18 +864,29 @@ static void unload_content(void)
     if (!core->FlushHardDisks())
         log_cb(RETRO_LOG_ERROR, "Unable to save the hard disk changes\n");
 
+    if (!memory_card_flush())
+        log_cb(RETRO_LOG_ERROR, "Unable to save the IC memory card changes\n");
+
+    core->EjectMemoryCard();
     cmos_save();
     cmos_shared_active = false;
     core->EjectMedia();
     core->PowerOff();
 
     for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
         core->DetachHardDisk(i);
+        hard_disk_working_path[i].clear();
+    }
 
     hard_disk_write_count = 0;
     hard_disk_idle_frames = 0;
     hard_disk_flush_failed = false;
     hard_disk_state_warned = false;
+    memory_card_path.clear();
+    memory_card_idle_frames = 0;
+    memory_card_flush_failed = false;
+    memory_card_state_warned = false;
     disk_clear();
     clear_input_state();
 
@@ -1916,7 +1972,7 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         static const char* const devices[GT_BOOT_DEVICE_COUNT] = { "auto", "cdrom", "floppy1", "floppy2", "hdd0",
-            "hdd1", "hdd2", "hdd3", "hdd4" };
+            "hdd1", "hdd2", "hdd3", "hdd4", "card" };
         boot_device = GT_BOOT_DEVICE_AUTO;
 
         for (int i = 0; i < GT_BOOT_DEVICE_COUNT; i++)
@@ -1932,6 +1988,23 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->EnableDriveLetterAssignment(strcmp(var.value, "Enabled") == 0);
+    }
+
+    var.key = "geartowns_memory_card";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        memory_card_mode = strcmp(var.value, "Per Game") == 0 ? 1 : strcmp(var.value, "Shared") == 0 ? 2 : 0;
+    }
+
+    var.key = "geartowns_memory_card_size";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        u32 size = (u32)strtoul(var.value, NULL, 10) * 1024;
+        memory_card_size = MemoryCard::IsValidSize(size) ? size : 1024 * 1024;
     }
 
     var.key = "geartowns_rtc";
@@ -2158,10 +2231,8 @@ static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& image
             return false;
         }
 
-        size_t name_length = get_file_name(entry.path.c_str(), false).length();
-
         for (size_t j = first; entry.has_label && j < images.size(); j++)
-            images[j].label = entry.label.empty() ? "" : entry.label + images[j].label.substr(name_length);
+            images[j].label = entry.label.empty() ? "" : entry.label + images[j].label_suffix;
     }
 
     return true;
@@ -2201,6 +2272,7 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
             DiskSetImage image;
             image.path = path;
             image.label = file_name;
+            image.label_suffix = members > 1 ? ": " + file_name : "";
             image.image = member;
             image.disk = i;
             image.crc = CalculateCRC32(0, data.data() + offset, (int)size);
@@ -2215,6 +2287,7 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
                 FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
                 snprintf(suffix, sizeof(suffix), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
                 image.label += suffix;
+                image.label_suffix += suffix;
             }
 
             images.push_back(image);
@@ -2229,11 +2302,8 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
 {
     std::string path(retro_save_directory);
     append_path_component(path, name.c_str());
-    MediaFile* file = MediaFile::OpenFile(path.c_str());
-    bool exists = IsValidPointer(file);
-    SafeDelete(file);
 
-    if (!exists)
+    if (!content_file_exists(path.c_str()))
     {
         u32 size = 0;
         u8* blank = FloppyImage::CreateBlank(FLOPPY_BLANK_2HD_1232, true, &size);
@@ -2426,10 +2496,11 @@ static bool mount_state_media(const GT_SaveState_Media& media)
     for (int i = 0; i < DISK_DRIVE_COUNT; i++)
         entries[i] = drive_entry[i];
 
-    if (media.cdrom_inserted && (!core->GetMedia()->IsReady() || core->GetMedia()->GetCRC() != media.cdrom_crc))
+    if (!media.cdrom_inserted)
+        entries[DISK_DRIVE_CDROM] = -1;
+    else if (!core->GetMedia()->IsReady() || core->GetMedia()->GetCRC() != media.cdrom_crc)
     {
         entries[DISK_DRIVE_CDROM] = find_cdrom_entry(media.cdrom_crc);
-        changed = true;
 
         if (entries[DISK_DRIVE_CDROM] < 0)
             return false;
@@ -2438,31 +2509,24 @@ static bool mount_state_media(const GT_SaveState_Media& media)
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         FloppyDisk* disk = core->GetFloppy(i);
+        int drive = DISK_DRIVE_FLOPPY_1 + i;
 
-        if (!media.floppy_inserted[i] || (disk->IsInserted() && disk->GetBaseCRC() == media.floppy_crc[i]))
-            continue;
+        if (!media.floppy_inserted[i])
+            entries[drive] = -1;
+        else if (!disk->IsInserted() || disk->GetBaseCRC() != media.floppy_crc[i])
+        {
+            entries[drive] = find_floppy_entry(media.floppy_crc[i]);
 
-        entries[DISK_DRIVE_FLOPPY_1 + i] = find_floppy_entry(media.floppy_crc[i]);
-        changed = true;
-
-        if (entries[DISK_DRIVE_FLOPPY_1 + i] < 0)
-            return false;
-    }
-
-    if (!changed)
-        return false;
-
-    for (int i = DISK_DRIVE_FLOPPY_1; i < DISK_DRIVE_COUNT; i++)
-    {
-        if (entries[i] != drive_entry[i] && drive_entry[i] >= 0 && !disk_eject(i))
-            return false;
+            if (entries[drive] < 0)
+                return false;
+        }
     }
 
     for (int i = 0; i < DISK_DRIVE_COUNT; i++)
-    {
-        if (entries[i] != drive_entry[i] && !disk_insert((unsigned)entries[i], i))
-            return false;
-    }
+        changed = changed || entries[i] != drive_entry[i];
+
+    if (!changed || !mount_entries(entries))
+        return false;
 
     if (disk_ejected && disk_index < disk_images.size() && drive_entry[get_entry_drive(disk_index)] >= 0)
     {
@@ -2472,6 +2536,24 @@ static bool mount_state_media(const GT_SaveState_Media& media)
     }
 
     log_cb(RETRO_LOG_INFO, "Disks changed to match the save state\n");
+    return true;
+}
+
+static bool mount_entries(const int* entries)
+{
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
+    {
+        if (entries[i] != drive_entry[i] && drive_entry[i] >= 0 && (i != DISK_DRIVE_CDROM || entries[i] < 0) &&
+            !disk_eject(i))
+            return false;
+    }
+
+    for (int i = 0; i < DISK_DRIVE_COUNT; i++)
+    {
+        if (entries[i] != drive_entry[i] && entries[i] >= 0 && !disk_insert((unsigned)entries[i], i))
+            return false;
+    }
+
     return true;
 }
 
@@ -2809,6 +2891,23 @@ static bool write_content_file(const char* path, const u8* data, u32 size)
     return true;
 }
 
+static bool content_file_exists(const char* path)
+{
+    MediaFile* file = MediaFile::OpenFile(path);
+
+    if (IsValidPointer(file))
+    {
+        SafeDelete(file);
+        return true;
+    }
+
+    if ((vfs_version >= 3) && IsValidPointer(vfs_interface->stat))
+        return (vfs_interface->stat(path, NULL) & RETRO_VFS_STAT_IS_VALID) != 0;
+
+    struct stat info;
+    return stat(path, &info) == 0;
+}
+
 static bool rename_file(const char* from, const char* to, bool vfs)
 {
     return vfs ? vfs_interface->rename(from, to) == 0 : rename(from, to) == 0;
@@ -2851,8 +2950,18 @@ static bool floppy_load_image(unsigned index, int floppy)
             return false;
 
         char suffix[64];
+        bool earlier_member = false;
 
-        if (FloppyImage::HasEarlierCopy(file.data(), (u32)file.size(), image.disk))
+        for (size_t i = 0; !earlier_member && i < disk_images.size(); i++)
+        {
+            const DiskSetImage& other = disk_images[i];
+            earlier_member = !other.cdrom && !other.save_disk && other.path == image.path &&
+                other.image < image.image && other.crc == image.crc;
+        }
+
+        if (earlier_member)
+            snprintf(suffix, sizeof(suffix), ".%08X.%d.%d.geartowns.d77", image.crc, image.image + 1, image.disk + 1);
+        else if (FloppyImage::HasEarlierCopy(file.data(), (u32)file.size(), image.disk))
             snprintf(suffix, sizeof(suffix), ".%08X.%d.geartowns.d77", image.crc, image.disk + 1);
         else
             snprintf(suffix, sizeof(suffix), ".%08X.geartowns.d77", image.crc);
@@ -2968,11 +3077,26 @@ static bool hard_disk_attach(const char* path)
     std::string extension = ends_with_no_case(path, ".chd") ? ".hdd" : name.substr(dot);
     append_path_component(working, (get_save_disk_name(name.substr(0, dot)) + ".save" + extension).c_str());
 
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        const std::string& other = hard_disk_working_path[i];
+
+        if (core->GetHardDisk(i)->IsOpen() && (other.length() == working.length()) &&
+            ends_with_no_case(other.c_str(), working.c_str()))
+        {
+            log_cb(RETRO_LOG_ERROR, "The hard disk on SCSI ID %d already uses the working copy %s: %s\n", i,
+                working.c_str(), path);
+            return false;
+        }
+    }
+
     if (!core->AttachHardDisk(id, path, false, working.c_str()))
     {
         log_cb(RETRO_LOG_ERROR, "Unable to attach the hard disk image %s\n", path);
         return false;
     }
+
+    hard_disk_working_path[id] = working;
 
     log_cb(RETRO_LOG_INFO, "Hard disk on SCSI ID %d: %s\n", id, path);
     return true;
@@ -3010,6 +3134,97 @@ static void hard_disk_update(void)
     }
 
     hard_disk_flush_failed = !saved;
+}
+
+static void memory_card_load(void)
+{
+    memory_card_path.clear();
+    memory_card_idle_frames = 0;
+    memory_card_flush_failed = false;
+    core->EjectMemoryCard();
+
+    if (memory_card_mode == 0)
+        return;
+
+    std::string name = memory_card_mode == 1 ? get_save_disk_name(get_file_name(retro_game_path, true)) : "geartowns";
+    std::string path = retro_save_directory;
+    append_path_component(path, (name + ".icm").c_str());
+    std::vector<u8> data;
+    bool loaded = read_content_file(path.c_str(), data, k_memory_card_max_size);
+
+    if (loaded || content_file_exists(path.c_str()))
+    {
+        if (!loaded || !core->InsertMemoryCard(data.data(), (u32)data.size(), false))
+        {
+            log_cb(RETRO_LOG_ERROR, "Unable to load the IC memory card, a whole number of KB up to 64 MB: %s\n",
+                path.c_str());
+            show_message("Unable to load the IC memory card", 3, RETRO_LOG_ERROR);
+            return;
+        }
+    }
+    else
+    {
+        data.assign(memory_card_size, 0xFF);
+
+        if (!write_content_file(path.c_str(), data.data(), memory_card_size) ||
+            !core->InsertMemoryCard(data.data(), memory_card_size, false))
+        {
+            log_cb(RETRO_LOG_ERROR, "Unable to create the IC memory card %s\n", path.c_str());
+            return;
+        }
+
+        log_cb(RETRO_LOG_INFO, "Created a blank IC memory card\n");
+    }
+
+    memory_card_path = path;
+    memory_card_write_count = core->GetMemoryCard()->GetWriteCount();
+    log_cb(RETRO_LOG_INFO, "IC memory card: %s\n", path.c_str());
+}
+
+static bool memory_card_flush(void)
+{
+    MemoryCard* card = core->GetMemoryCard();
+
+    if (!card->IsInserted() || !card->IsDirty())
+        return true;
+
+    if (memory_card_path.empty() || !write_content_file(memory_card_path.c_str(), card->GetImage(), card->GetSize()))
+        return false;
+
+    card->ClearDirty();
+    log_cb(RETRO_LOG_INFO, "IC memory card changes saved to %s\n", memory_card_path.c_str());
+    return true;
+}
+
+static void memory_card_update(void)
+{
+    MemoryCard* card = core->GetMemoryCard();
+
+    if (!card->IsInserted() || !card->IsDirty())
+        return;
+
+    if (card->GetWriteCount() != memory_card_write_count)
+    {
+        memory_card_write_count = card->GetWriteCount();
+        memory_card_idle_frames = 0;
+        return;
+    }
+
+    if (++memory_card_idle_frames != MEMORY_CARD_IDLE_FRAMES)
+        return;
+
+    bool saved = memory_card_flush();
+
+    if (!saved && !memory_card_flush_failed)
+    {
+        log_cb(RETRO_LOG_ERROR, "Unable to save the IC memory card changes\n");
+        show_message("Unable to save the IC memory card changes", 3, RETRO_LOG_ERROR);
+    }
+
+    if (!saved)
+        memory_card_idle_frames = 0;
+
+    memory_card_flush_failed = !saved;
 }
 
 static void cmos_load(void)

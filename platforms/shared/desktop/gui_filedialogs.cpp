@@ -36,6 +36,7 @@
 #include "gui_menus.h"
 #include "gui_floppy.h"
 #include "gui_hard_disks.h"
+#include "gui_memory_card.h"
 #include "utils.h"
 
 enum FileDialogID
@@ -51,6 +52,8 @@ enum FileDialogID
     FileDialog_NewFloppy,
     FileDialog_AttachHardDisk,
     FileDialog_CreateHardDisk,
+    FileDialog_InsertMemoryCard,
+    FileDialog_CreateMemoryCard,
     FileDialog_ChooseScreenshotPath,
     FileDialog_ChooseVideoRecordingPath,
     FileDialog_SaveScreenshot,
@@ -312,6 +315,29 @@ void gui_file_dialog_create_hard_disk(int id)
     show_save_file_dialog(FileDialog_CreateHardDisk, filters, 1);
 }
 
+void gui_file_dialog_insert_memory_card(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = {
+        { "IC Memory Card Images", "icm" },
+        { "All Files", "*" }
+    };
+    show_open_file_dialog(FileDialog_InsertMemoryCard, filters, 2);
+}
+
+void gui_file_dialog_create_memory_card(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = {
+        { "IC Memory Card Images", "icm" }
+    };
+    show_save_file_dialog(FileDialog_CreateMemoryCard, filters, 1);
+}
+
 void gui_file_dialog_load_bios(void)
 {
     if (!begin_dialog())
@@ -439,6 +465,9 @@ static std::string* get_dialog_folder(FileDialogID id)
         case FileDialog_AttachHardDisk:
         case FileDialog_CreateHardDisk:
             return &config_file_dialogs.hard_disks;
+        case FileDialog_InsertMemoryCard:
+        case FileDialog_CreateMemoryCard:
+            return &config_file_dialogs.memory_cards;
         case FileDialog_SaveScreenshot:
             return &config_file_dialogs.screenshots;
         case FileDialog_SaveVGM:
@@ -550,6 +579,8 @@ static void SDLCALL file_dialog_callback(void* userdata, const char* const* file
         if ((dot == std::string::npos) || ((separator != std::string::npos) && (dot < separator)))
             pending_dialog_path += ".hdd";
     }
+    else if (id == FileDialog_CreateMemoryCard)
+        append_extension_if_missing(pending_dialog_path, ".icm");
     else if (id == FileDialog_SaveFloppy || id == FileDialog_NewFloppy)
     {
         const char* path = pending_dialog_path.c_str();
@@ -606,6 +637,12 @@ static void process_dialog_result(FileDialogID id, const char* path)
             break;
         case FileDialog_CreateHardDisk:
             gui_hard_disks_dialog_create(dialog_hard_disk_id, path);
+            break;
+        case FileDialog_InsertMemoryCard:
+            gui_memory_card_dialog_insert(path);
+            break;
+        case FileDialog_CreateMemoryCard:
+            gui_memory_card_dialog_create(path);
             break;
         case FileDialog_SaveScreenshot:
             gui_action_save_screenshot(path);

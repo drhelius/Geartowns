@@ -79,6 +79,22 @@ bool MediaFileLibretro::ListDirectory(const char* path, std::vector<std::string>
     return true;
 }
 
+bool MediaFileLibretro::RenameFile(const char* from, const char* to)
+{
+    if (IsValidPointer(s_vfs_interface->rename))
+        return s_vfs_interface->rename(from, to) == 0;
+
+    return rename_file_utf8(from, to);
+}
+
+bool MediaFileLibretro::RemoveFile(const char* path)
+{
+    if (IsValidPointer(s_vfs_interface->remove))
+        return s_vfs_interface->remove(path) == 0;
+
+    return remove_file_utf8(path);
+}
+
 bool MediaFileLibretro::IsCdRomUriPath(const char* path)
 {
     static const char* kCdRomUriPrefix = "cdrom://";

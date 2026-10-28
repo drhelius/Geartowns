@@ -131,6 +131,11 @@ int main(int argc, char* argv[])
                 if (!(app_params.floppy_files[drive] = option_value(argc, argv, &i)))
                     return -1;
             }
+            else if (strcmp(argv[i], "--card") == 0)
+            {
+                if (!(app_params.memory_card_file = option_value(argc, argv, &i)))
+                    return -1;
+            }
             else if (strcmp(argv[i], "--load-state") == 0)
             {
                 const char* value = option_value(argc, argv, &i);
@@ -302,8 +307,10 @@ int main(int argc, char* argv[])
         return ret;
     }
 
-    if (!application_check_single_instance(app_params.rom_file ? app_params.rom_file : app_params.cd_file,
-        app_params.symbol_file))
+    const char* forward_file = app_params.rom_file ? app_params.rom_file :
+        app_params.cd_file ? app_params.cd_file : app_params.memory_card_file;
+
+    if (!application_check_single_instance(forward_file, app_params.symbol_file))
     {
         config_destroy();
         return 0;
@@ -326,7 +333,7 @@ int main(int argc, char* argv[])
 static bool option_has_value(const char* option)
 {
     static const char* const k_options[] = { "--mcp-http-port", "--mcp-http-address", "--cd", "--fd1", "--fd2",
-        "--load-state", "--model", "--cpu-mhz", "--ram", "--fpu" };
+        "--card", "--load-state", "--model", "--cpu-mhz", "--ram", "--fpu" };
 
     for (size_t i = 0; i < sizeof(k_options) / sizeof(k_options[0]); i++)
     {
@@ -504,12 +511,13 @@ static void print_usage(const char* program)
     printf("Usage: %s [options] [media_file] [symbol_file]\n", name ? name + 1 : program);
     printf("\nArguments:\n");
     print_wrapped("  media_file", "CD-ROM (.cue .chd .iso), floppy (.d77 .d88 .hdm .xdf .img .mfm), .m3u playlist, "
-        ".zip, or hard disk (.hdd .h0-.h6, hard disk .chd, .hdm over 8 MB)");
+        ".zip, hard disk (.hdd .h0-.h6, hard disk .chd, .hdm over 8 MB), or IC memory card (.icm)");
     print_wrapped("  symbol_file", "Symbol file for debugging");
     printf("\nMedia:\n");
     print_wrapped("      --cd FILE", "CD-ROM image or .m3u playlist");
     print_wrapped("      --fd1 FILE", "Floppy image in drive 1");
     print_wrapped("      --fd2 FILE", "Floppy image in drive 2");
+    print_wrapped("      --card FILE", "IC memory card image");
     print_wrapped("      --load-state SLOT", "Load save state slot 1-5, or a state file, once the media is loaded");
     printf("\nMachine (for this run only, the saved settings stay):\n");
     print_wrapped("      --model MODEL", models);

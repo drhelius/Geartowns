@@ -203,8 +203,8 @@ there is no century rule. A write to register 13 resets the divider and READY st
 | 05ECh | CX: bit 7 = 0 means speed control exists, bit 0 the mode | CX: bit 0 high speed (1) or compatible (0) |
 | 05EDh | UG, HG and HR: bit 7 = 0, bits 6-0 the maximum CPU clock in MHz | |
 | 05EEh | HR: bit 7 = 0 (VRAM cache present), bit 0 as written | HR: bit 0 VCMEN admits VRAM to the cache in high speed mode |
-| 0490h | UX: memory card bank | Bits 5-0: the 1 MB bank of the card at D00000h |
-| 0491h | UX: bit 0 attribute space, bit 7 = 0 means JEIDA-4 capable | Bit 0: 0 card memory, 1 attribute space |
+| 0490h | JEIDA 4 models (CX, UX, HG, HR, Marty): the bank as written, bits 5-0 | UX, Marty: bits 5-0 the 1 MB bank of the card at D00000h; CX, HG, HR: bits 5-4 the 16 MB quarter at C1000000h |
+| 0491h | JEIDA 4 models: bit 0 attribute space, bit 7 = 0 means JEIDA 4 capable | Bit 0: 0 card memory, 1 attribute space |
 
 Both reset cause bits read 0 after power-on. Software masks the PICs before a software reset, never resets during
 a DMA transfer, and executes HLT right after the reset write. The ports marked with a model read FFh and ignore

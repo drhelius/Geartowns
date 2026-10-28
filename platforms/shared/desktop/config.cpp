@@ -205,6 +205,29 @@ void config_push_recent_hard_disk(const std::string& path)
     recent[0] = path;
 }
 
+void config_push_recent_memory_card(const std::string& path)
+{
+    if (path.empty())
+        return;
+
+    std::string* recent = config_emulator.recent_memory_cards;
+    int slot = 0;
+
+    for (slot = 0; slot < config_max_recent_memory_cards; slot++)
+    {
+        if (recent[slot].compare(path) == 0)
+            break;
+    }
+
+    if (slot >= config_max_recent_memory_cards)
+        slot = config_max_recent_memory_cards - 1;
+
+    for (int index = slot; index > 0; index--)
+        recent[index] = recent[index - 1];
+
+    recent[0] = path;
+}
+
 void config_read(void)
 {
     if (!config_ini_file->read(config_ini_data))

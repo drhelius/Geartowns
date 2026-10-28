@@ -30,6 +30,7 @@ struct ApplicationParams
     const char* symbol_file = NULL;
     const char* cd_file = NULL;
     const char* floppy_files[2] = { NULL, NULL };
+    const char* memory_card_file = NULL;
     const char* state_file = NULL;
     int state_slot = 0;
     bool force_fullscreen = false;

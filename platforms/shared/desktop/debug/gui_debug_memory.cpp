@@ -186,7 +186,11 @@ static const MemorySourceInfo k_memory_sources[] =
         "FM-R text RAM and ANK font, when port 0404 maps the FM-R devices" },
     { GT_DEBUG_REGION_FMR_REGISTERS, MEMORY_GROUP_CPU_WINDOW, false,
         "FM-R video registers as memory, when port 0404 maps the FM-R devices" },
-    { GT_DEBUG_REGION_FMR_VIEW, MEMORY_GROUP_CPU_WINDOW, true, "The rest of the FM-R area, with nothing mapped" }
+    { GT_DEBUG_REGION_FMR_VIEW, MEMORY_GROUP_CPU_WINDOW, true, "The rest of the FM-R area, with nothing mapped" },
+    { GT_DEBUG_REGION_MEMORY_CARD_WINDOW, MEMORY_GROUP_CPU_WINDOW, false,
+        "The IC memory card, banked by port 0490 on the JEIDA 4 386SX models, attribute space with 0491" },
+    { GT_DEBUG_REGION_MEMORY_CARD_BANK_WINDOW, MEMORY_GROUP_CPU_WINDOW, false,
+        "The 16 MB quarter of the IC memory card selected by port 0490 bits 5-4" }
 };
 
 static DebugMemoryProvider memory_provider;
@@ -2379,6 +2383,9 @@ const char* gui_debug_memory_region_description(int region_id)
 {
     if (region_id == GT_DEBUG_REGION_MEDIA_IMAGE)
         return "The loaded media image, as stored in the file";
+
+    if (region_id == GT_DEBUG_REGION_MEMORY_CARD_IMAGE)
+        return "The whole IC memory card, as stored in its image file";
 
     if (region_id >= GT_DEBUG_REGION_FLOPPY_IMAGE)
         return "The floppy disk image in the drive, in D77 layout";

@@ -432,6 +432,7 @@ enum GT_Boot_Device
     GT_BOOT_DEVICE_HARD_DISK_2,
     GT_BOOT_DEVICE_HARD_DISK_3,
     GT_BOOT_DEVICE_HARD_DISK_4,
+    GT_BOOT_DEVICE_MEMORY_CARD,
     GT_BOOT_DEVICE_COUNT
 };
 
@@ -480,6 +481,9 @@ struct GT_Machine_Memory_Map
     u32 system_rom;
     u32 extension_rom;
     u32 backup_ram;
+    u32 memory_card;
+    u32 memory_card_size;
+    u32 memory_card_bank;
     const GT_Machine_DMA_Window* dma_windows;
 };
 
@@ -651,6 +655,10 @@ struct GT_SaveState_Media
     u32 hard_disk_blocks[GT_MAX_HARD_DISKS];
     u64 hard_disk_session[GT_MAX_HARD_DISKS];
     u64 hard_disk_write[GT_MAX_HARD_DISKS];
+    bool memory_card_inserted;
+    u32 memory_card_size;
+    u64 memory_card_session;
+    u64 memory_card_write;
 };
 
 struct GT_SaveState_Screenshot

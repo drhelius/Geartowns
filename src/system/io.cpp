@@ -23,6 +23,7 @@
 #include "../audio/rf5c68.h"
 #include "../cdrom/cdrom.h"
 #include "../drive/fdc.h"
+#include "../drive/memory_card.h"
 #include "../drive/scsi_controller.h"
 #include "../input/input.h"
 #include "../input/keyboard.h"
@@ -62,7 +63,7 @@ IO::~IO()
 
 void IO::Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* video, Memory* memory,
     SystemControl* system_control, CdRom* cdrom, FDC* fdc, ScsiController* scsi, Keyboard* keyboard, Input* input,
-    MSM58321* rtc, UPD71071* dma)
+    MSM58321* rtc, UPD71071* dma, MemoryCard* memory_card)
 {
     m_scheduler = scheduler;
     m_audio = audio;
@@ -80,6 +81,7 @@ void IO::Init(Scheduler* scheduler, Audio* audio, PIC* pic, PIT* pit, Video* vid
     m_input = input;
     m_rtc = rtc;
     m_dma = dma;
+    m_memory_card = memory_card;
     Reset();
 }
 
@@ -257,11 +259,14 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
             // System ROM mapping
         case 0x0484:
             // Dictionary ROM bank
+            return m_memory->ReadMappingControl(port);
+        case 0x048A:
+            // Memory card status
         case 0x0490:
             // Memory card bank
         case 0x0491:
             // Memory card attribute
-            return m_memory->ReadMappingControl(port);
+            return m_memory_card->Read(port);
         case 0x0486:
         case 0x0487:
         case 0x0488:
@@ -269,9 +274,6 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0496:
             // Marty latches
             return m_system_control->Read(port, context.clocks);
-        case 0x048A:
-            // Memory card status, no card and its write protect line high
-            return 0x07;
         case 0x04C0:
             // CD-ROM master status
         case 0x04C2:
@@ -602,7 +604,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             value = m_system_control->Peek(port, clocks);
             break;
         case 0x048A:
-            value = 0x07;
+            value = m_memory_card->Peek(port);
             break;
         case 0x04C0:
         case 0x04C2:
@@ -711,10 +713,10 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             break;
         case 0x0490:
         case 0x0491:
-            if (!m_memory->Decodes(port))
+            if (!m_memory_card->Decodes(port))
                 return false;
 
-            value = m_memory->ReadMappingControl(port);
+            value = m_memory_card->Peek(port);
             break;
         case 0x0600:
         case 0x0602:
@@ -951,11 +953,15 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // System ROM mapping
         case 0x0484:
             // Dictionary ROM bank
+            m_memory->WriteMappingControl(port, value);
+            break;
+        case 0x048A:
+            // Memory card status
         case 0x0490:
             // Memory card bank
         case 0x0491:
             // Memory card attribute
-            m_memory->WriteMappingControl(port, value);
+            m_memory_card->Write(port, value);
             break;
         case 0x0486:
         case 0x0487:
@@ -964,9 +970,6 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x0496:
             // Marty latches
             m_system_control->Write(port, value);
-            break;
-        case 0x048A:
-            // Memory card status
             break;
         case 0x04C0:
             // CD-ROM master control

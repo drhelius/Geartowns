@@ -105,10 +105,12 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Physical CD-ROM discs on Windows, macOS and Linux.
 - Floppy disk emulation with two drives supporting `d77`, `d88`, `hdm`, `xdf`, `img` and HxC `mfm` images, `m3u` playlists, write protection and optional persistence of disk changes.
 - SCSI hard disks on IDs 0-6 with raw and `chd` images, blank disk creation and Towns OS installation.
+- IC memory card slot with raw card images, the JEIDA 4 banked windows, blank card creation and booting from the card.
 - Save states with 5 slots and rewind support.
 - Run-ahead support to reduce input latency.
 - Video recording to AVI and screenshots.
 - VGM recorder for the YM3438 and RF5C68 sound chips.
+- Internal database for automatic media detection and hardware selection if `Auto` options are selected.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
 - Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation 3, Nintendo GameCube, Nintendo WiiU, Nintendo Switch, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
 - Full debugger:
@@ -120,7 +122,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - MCP server for AI-assisted debugging with Claude Code, Codex and similar, exposing tools for execution control, memory inspection, hardware status, rewind and more.
 - Windows, Linux and macOS *Portable Mode*.
 - [Programmable Shader Chain](platforms/shared/desktop/shaders/README.md).
-- Media loading from the command line by adding the CD-ROM, floppy or hard disk image path as an argument.
+- Media loading from the command line by adding the CD-ROM, floppy, hard disk or IC memory card image path as an argument.
 - Media loading using drag & drop.
 - Support for modern game controllers through [gamecontrollerdb.txt](https://github.com/mdqinc/SDL_GameControllerDB) file located in the same directory as the application binary.
 
@@ -132,8 +134,8 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
   - The model, CPU speed and RAM that the game database names for the game.
   - The FM Towns II HG for 1.44 MB floppy disks.
   - The FM Towns (Model 1/2) for other content.
-- **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from **Geartowns → CD-ROM**.
-- **Floppy Images**: Insert floppy disks from **Geartowns → Floppies**, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
+- **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from **Drives → CD-ROM**.
+- **Floppy Images**: Insert floppy disks from **Drives → Floppies**, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
 
 ### Hard Disks
@@ -149,7 +151,7 @@ Up to seven SCSI hard disks can be attached, on IDs 0-6:
 - **MAME hard disk `chd`**: read-only. At the first write, Geartowns makes a raw working copy in the `Save Files` folder and uses it from then on.
 
 #### Attaching Disks
-- **Desktop**: use **Geartowns → Hard Disks**, drag & drop or the command line. With drag & drop and the command line, the extension picks the ID:
+- **Desktop**: use **Drives → Hard Disks**, drag & drop or the command line. With drag & drop and the command line, the extension picks the ID:
   - `h0`-`h6`: that SCSI ID.
   - `hdd` and `hdm` over 8 MB: the first free ID.
 - **Libretro**: load the image as content, alone or in an `m3u` playlist with the CD. Changes go to a working copy in the save directory and the original is never written.
@@ -177,12 +179,34 @@ Towns OS V2.1 needs 4 MB of RAM to start from a hard disk. **Main RAM** on Auto 
 #### Drive Letters
 Towns OS keeps hard disk drive letters in the model's CMOS, not on the disk, and only uses the partitions that have one.
 
-- **Assign Drive Letters** on (**Geartowns → Hard Disks**, the default): each reset gives the free letters from D: to the partitions of an attached disk that have none. Letters already set are kept. This lets a disk installed on another model or emulator boot.
+- **Assign Drive Letters** on (**Drives → Hard Disks**, the default): each reset gives the free letters from D: to the partitions of an attached disk that have none. Letters already set are kept. This lets a disk installed on another model or emulator boot.
 - **Assign Drive Letters** off: assign the letters yourself in Towns OS:
   1. Boot the Towns OS V2.1 CD.
   2. Open **Settings → Drive Configuration**.
   3. Click the disk's SCSI ID, then **Add Drive** and **Execute**.
   4. Eject the CD and reset.
+
+### IC Memory Card
+
+Every model has one slot for a battery-backed SRAM card. Towns OS uses the card as a drive.
+
+#### Images
+- **Raw images** (`icm`): the card's bytes, a whole number of KB up to 64 MB. The file is the card: writes are saved a few seconds after the machine stops writing, and when the card is ejected.
+- **Desktop**: use **Drives → IC Memory Card** to insert a card, create a blank one, eject it or write protect it. Drag & drop and `--card` insert one too.
+- **Libretro**: set **IC Memory Card** to **Per Game** (a card named after the content) or **Shared** (one card for all content). The card is kept in the save directory and created blank with **IC Memory Card Size** when missing.
+
+#### Using the Card in Towns OS
+1. Add `DEVICE=\SYS\TICM.SYS /U0` to `CONFIG.SYS`. At boot the driver shows the card's drive letter, for example E:.
+2. Format the card with `TICMFMT E: /S1024`, the size in KB.
+
+Towns OS V2.1's `TICM.SYS` uses at most 8 MB of a card. On the UX and the Marty it also misplaces transfers that cross from the second 1 MB bank of a card into the third, so keep cards there to 2 MB. The UG reaches 1 MB.
+
+#### Booting From the Card
+- A card that starts with an `IPL4` boot sector boots before the CD, on every model.
+- **Geartowns → Reset and Boot From → IC Memory Card** holds I, C and M through the reset, which the UX and HR system ROMs read to boot the card before any device they remember.
+
+#### Save States
+Save states, rewind and run-ahead hold no card data. Loading one undoes the card writes made since then, and warns when it can't. A state loads only with a card of the same size in the slot, or with the slot empty if it was empty.
 
 ### Debugging Features
 - **Docking Windows**: In debug mode, you can dock windows together by pressing SHIFT and dragging a window onto another.
@@ -200,14 +224,16 @@ geartowns [options] [media_file] [symbol_file]
 
 Arguments:
   media_file                CD-ROM (.cue .chd .iso), floppy (.d77 .d88 .hdm
-                            .xdf .img .mfm), .m3u playlist, .zip, or hard disk
-                            (.hdd .h0-.h6, hard disk .chd, .hdm over 8 MB)
+                            .xdf .img .mfm), .m3u playlist, .zip, hard disk
+                            (.hdd .h0-.h6, hard disk .chd, .hdm over 8 MB), or
+                            IC memory card (.icm)
   symbol_file               Symbol file for debugging
 
 Media:
       --cd FILE             CD-ROM image or .m3u playlist
       --fd1 FILE            Floppy image in drive 1
       --fd2 FILE            Floppy image in drive 2
+      --card FILE           IC memory card image
       --load-state SLOT     Load save state slot 1-5, or a state file, once the
                             media is loaded
 

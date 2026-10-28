@@ -3,7 +3,7 @@
     {
       "uri": "memory_map",
       "title": "FM Towns Memory Map",
-      "description": "Physical map, low memory banking, FM-R compatible windows, VRAM views, CMOS and PCM windows, reset, debugger memory areas",
+      "description": "Physical map, low memory banking, FM-R compatible windows, VRAM views, CMOS and PCM windows, IC memory card windows, reset, debugger memory areas",
       "mimeType": "text/markdown"
     },
     {

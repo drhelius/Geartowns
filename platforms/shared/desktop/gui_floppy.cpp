@@ -30,6 +30,7 @@
 #include "config.h"
 #include "emu.h"
 #include "emu_floppy.h"
+#include "emu_memory_card.h"
 #include "utils.h"
 #include "debug/gui_debug.h"
 
@@ -621,7 +622,7 @@ static void draw_quit_popup(void)
 
     if (ImGui::Button("Retry", ImVec2(100, 0)))
     {
-        if (emu_floppy_flush())
+        if (emu_floppy_flush() && emu_memory_card_flush())
         {
             ImGui::CloseCurrentPopup();
             gui_dialog_in_use = false;

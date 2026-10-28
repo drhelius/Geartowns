@@ -818,6 +818,7 @@ static void trace_logger_menu_filters(void)
         trace_logger_menu_event_filter("Reset / Power", &config_debug.trace_system_events, TRACE_SYSTEM_EVENT_RESET);
         trace_logger_menu_event_filter("Memory Mapping", &config_debug.trace_system_events, TRACE_SYSTEM_EVENT_MEMORY);
         trace_logger_menu_event_filter("RTC", &config_debug.trace_system_events, TRACE_SYSTEM_EVENT_RTC);
+        trace_logger_menu_event_filter("IC Memory Card", &config_debug.trace_system_events, TRACE_SYSTEM_EVENT_MEMORY_CARD);
         ImGui::EndDisabled();
         ImGui::EndMenu();
     }

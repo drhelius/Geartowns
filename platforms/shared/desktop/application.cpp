@@ -30,7 +30,9 @@
 #include "emu.h"
 #include "emu_floppy.h"
 #include "emu_hard_disk.h"
+#include "emu_memory_card.h"
 #include "gui_hard_disks.h"
+#include "gui_memory_card.h"
 #include "display.h"
 #include "utils.h"
 #include "single_instance.h"
@@ -317,6 +319,16 @@ void application_load_media(const ApplicationParams& params)
 
         Log("Floppy drive %d argument: %s", i + 1, params.floppy_files[i]);
         gui_floppy_insert(i, params.floppy_files[i]);
+    }
+
+    if (IsValidPointer(params.memory_card_file))
+    {
+        Log("IC memory card argument: %s", params.memory_card_file);
+
+        if (IsValidPointer(params.rom_file) || IsValidPointer(params.cd_file))
+            gui_memory_card_insert(params.memory_card_file);
+        else
+            gui_memory_card_load(params.memory_card_file);
     }
 
     bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
@@ -619,11 +631,14 @@ static void request_quit(void)
 {
     bool floppies = emu_floppy_flush();
     bool hard_disks = emu_hard_disk_flush();
+    bool memory_card = emu_memory_card_flush();
 
-    if (floppies && hard_disks)
+    if (floppies && hard_disks && memory_card)
         running = false;
     else if (!hard_disks)
         gui_hard_disks_open_quit_confirmation();
+    else if (!memory_card)
+        gui_memory_card_open_quit_confirmation();
     else
         gui_floppy_open_quit_confirmation();
 }

@@ -31,8 +31,9 @@
 #include "emu.h"
 #include "geartowns.h"
 #include "drive/fdc.h"
+#include "drive/memory_card.h"
 
-#define GUI_DRIVE_ACTIVITY_SLOTS (1 + GT_MAX_FLOPPY_DRIVES)
+#define GUI_DRIVE_ACTIVITY_SLOTS (2 + GT_MAX_FLOPPY_DRIVES)
 
 struct Drive_Slot
 {
@@ -56,8 +57,9 @@ static const float k_drive_activity_icon_size = 16.0f;
 static const float k_drive_activity_label_size = 11.0f;
 static const float k_drive_activity_label_spacing = 1.0f;
 static const float k_drive_activity_background = 0.85f;
-static const char* const k_drive_activity_icons[GUI_DRIVE_ACTIVITY_SLOTS] = { ICON_MD_ALBUM, ICON_MD_SAVE, ICON_MD_SAVE };
-static const char* const k_drive_activity_labels[GUI_DRIVE_ACTIVITY_SLOTS] = { NULL, "1", "2" };
+static const char* const k_drive_activity_icons[GUI_DRIVE_ACTIVITY_SLOTS] = { ICON_MD_ALBUM, ICON_MD_SAVE, ICON_MD_SAVE,
+    ICON_MD_SD_CARD };
+static const char* const k_drive_activity_labels[GUI_DRIVE_ACTIVITY_SLOTS] = { NULL, "1", "2", NULL };
 
 static Drive_Slot slots[GUI_DRIVE_ACTIVITY_SLOTS];
 static int sample_frame = -1;
@@ -128,6 +130,9 @@ static void sample(Uint64 now, bool resync)
 
     for (int i = 0; i < GT_MAX_FLOPPY_DRIVES; i++)
         update_slot(&slots[1 + i], fdc->GetAccessCount(i), fdc->GetWriteCount(i), false, now, resync);
+
+    u32 card_writes = core->GetMemoryCard()->GetWriteCount();
+    update_slot(&slots[1 + GT_MAX_FLOPPY_DRIVES], card_writes, card_writes, false, now, resync);
 }
 
 static void update_slot(Drive_Slot* slot, u32 access_count, u32 write_count, bool busy, Uint64 now, bool resync)

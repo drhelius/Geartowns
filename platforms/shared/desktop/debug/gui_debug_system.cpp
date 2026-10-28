@@ -22,6 +22,7 @@
 
 #include "imgui.h"
 #include "geartowns.h"
+#include "drive/memory_card.h"
 #include "system/io.h"
 #include "system/msm58321.h"
 #include "system/pic.h"
@@ -617,7 +618,7 @@ void gui_debug_window_system_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(176, 112), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(236, 682), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(247, 447), ImGuiCond_FirstUseEver);
     ImGui::Begin("System Control", &config_debug.show_system_control);
 
     ImGui::PushFont(gui_default_font);
@@ -828,6 +829,17 @@ void gui_debug_window_system_control(void)
 
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(05E2/6)");
+
+        u8 card_status = core->GetMemoryCard()->Peek(0x048A);
+
+        ImGui::TableNextRow();
+        draw_grid_label("IC CARD");
+        ImGui::TextColored((card_status & 0x06) == 0 ? green : gray, "%s", (card_status & 0x06) == 0 ? "IN " : "OUT");
+        ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((card_status & 0x01) ? yellow : gray, "WP"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((card_status & 0x80) ? yellow : gray, "CHG");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(048A)");
 
         ImGui::TableNextRow();
         draw_grid_label("CARD BANK");

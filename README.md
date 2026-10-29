@@ -278,6 +278,11 @@ Install with `npx skills add drhelius/geartowns`. See the [skills README](skills
 
 Geartowns is being developed based on the results of the [FM Towns Hardware Tests](https://github.com/drhelius/fmtowns-tests).
 
+<img width="400" src="https://github.com/user-attachments/assets/0e295f32-7df9-4f71-ae65-a69321159bae" />
+<img width="400" src="https://github.com/user-attachments/assets/0f7ad0ac-13eb-4c86-b476-efd4e040757b" />
+<img width="400" src="https://github.com/user-attachments/assets/727a61f3-7596-4867-8685-e443cbcdc17b" />
+<img width="400" src="https://github.com/user-attachments/assets/092a80ad-49ca-4874-94a6-114578828182" />
+
 ## Build Instructions
 
 ### Windows

@@ -2374,6 +2374,8 @@ json DebugAdapter::GetSystemStatus()
     json cpu_setting = settings.cpu_mhz <= 0 ? json("auto") : json(settings.cpu_mhz);
     json ram_setting = settings.ram_mb <= 0 ? json("auto") : json(settings.ram_mb);
     json fpu_setting = settings.fpu < 0 ? json("auto") : settings.fpu == 0 ? json("none") : json("80387");
+    json speed_mode_setting = settings.speed_mode < 0 ? json("auto") : settings.speed_mode == 0 ?
+        json("compatible") : json("high");
     json warnings = json::array();
     json registers = json::object();
     u64 clocks = m_core->GetScheduler()->GetClocks();
@@ -2436,10 +2438,10 @@ json DebugAdapter::GetSystemStatus()
             {"memory_map", k_machine_maps[profile.map].name},
             {"firmware_set", IsValidPointer(profile.firmware_set) ? profile.firmware_set : ""},
             {"settings", {{"model", model_setting}, {"cpu_speed_mhz", cpu_setting}, {"ram_mb", ram_setting},
-                {"fpu", fpu_setting}}},
+                {"fpu", fpu_setting}, {"speed_mode", speed_mode_setting}}},
             {"source", {{"model", k_mcp_machine_sources[report.model]},
                 {"cpu_clock", k_mcp_machine_sources[report.cpu_clock]}, {"ram", k_mcp_machine_sources[report.ram]},
-                {"fpu", k_mcp_machine_sources[report.fpu]}}},
+                {"fpu", k_mcp_machine_sources[report.fpu]}, {"speed_mode", k_mcp_machine_sources[report.speed_mode]}}},
             {"game_database", IsValidPointer(report.title) ? json(report.title) : json()},
             {"warnings", warnings},
             {"reset_pending", m_core->IsMachineConfigPending()}
@@ -3149,6 +3151,76 @@ json DebugAdapter::GetRF5C68Status()
     };
 }
 
+json DebugAdapter::GetPCM16Status()
+{
+    static const char* const formats[5] = { "wav8_mono", "wav8_stereo", "wav16_mono", "wav16_stereo", "snd" };
+    Audio* audio = m_core->GetAudio();
+    PCM16* pcm16 = audio->GetPCM16();
+    PCM16::PCM16_State* state = pcm16->GetState();
+    u64 clocks = audio->GetState()->clocks;
+    u8 transfer = audio->PeekPCM16(0x051C, clocks);
+    u8 causes = pcm16->GetIRQCauses();
+    int line = pcm16->GetIRQLine();
+    json registers = json::object();
+
+    for (u16 port = 0x0510; port <= 0x051F; port++)
+        registers[hex_text(port, 4)] = hex_text(audio->PeekPCM16(port, clocks), 2);
+
+    json volume = json::array();
+
+    for (int channel = 2; channel < 4; channel++)
+    {
+        s32 gain = audio->GetVolumeGain(0, channel);
+        volume.push_back(gain > 0 ? json(20.0 * log10((double)gain / 32768.0)) : json());
+    }
+
+    return {
+        {"fitted", pcm16->IsFitted()},
+        {"muted", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM16)},
+        {"direction", pcm16->IsRecording() ? "record" : "play"},
+        {"format", formats[pcm16->GetFormat()]},
+        {"conversion_lsb_bit", (state->mode & 0x07) + 1},
+        {"sample_rate_hz", k_pcm16_rates[state->clock] / 2.0},
+        {"transfer", (state->transfer_control & 0x01) != 0 ? "stopped" :
+            (state->transfer_control & 0x02) != 0 ? "software" : "dma"},
+        {"data_port", pcm16->IsSoftwareTransfer() ? "transfer" : "level_monitor"},
+        {"ad_ready", (transfer & 0x80) == 0},
+        {"da_ready", (transfer & 0x40) == 0},
+        {"irq", line >= 0 ? json(line) : json()},
+        {"causes", {{"dma_end", (causes & 0x10) != 0}, {"buffer_error", (causes & 0x20) != 0},
+            {"input", (causes & 0x40) != 0}}},
+        {"dma", {
+            {"access", state->bank != 0 ? "base" : "current"},
+            {"base_address", hex_text(state->base_address, 8)},
+            {"current_address", hex_text(state->current_address, 8)},
+            {"base_count", hex_text(state->base_count, 4)},
+            {"current_count", hex_text(state->current_count, 4)},
+            {"autoinit", (state->dma_control & 0x10) != 0},
+            {"end_irq", (state->dma_control & 0x02) != 0},
+            {"end", state->terminal_count}
+        }},
+        {"buffer", {
+            {"stages", state->buffer_count},
+            {"size", PCM16_BUFFER_SIZE},
+            {"overrun", state->overrun},
+            {"underrun", state->underrun},
+            {"error_irq", (state->buffer_control & 0x80) != 0},
+            {"dreq_mask", (state->transfer_control & 0x02) != 0},
+            {"buffer_mask", (state->transfer_control & 0x01) != 0}
+        }},
+        {"monitors", {
+            {"level_left", hex_text(state->level_left, 2)},
+            {"level_right", hex_text(state->level_right, 2)},
+            {"peak", hex_text(state->peak, 2)},
+            {"trigger", hex_text(state->threshold, 2)},
+            {"input_flag", state->input_flag},
+            {"input_irq", (state->transfer_control & 0x20) != 0}
+        }},
+        {"volume_db", volume},
+        {"registers", registers}
+    };
+}
+
 json DebugAdapter::GetSoundStatus()
 {
     Audio* audio = m_core->GetAudio();
@@ -3180,6 +3252,8 @@ json DebugAdapter::GetSoundStatus()
 
             if (chip == 1 && channel < 2)
                 entry["use"] = channel == 0 ? "cdda_left" : "cdda_right";
+            else if (chip == 0 && channel >= 2 && audio->GetPCM16()->IsFitted())
+                entry["use"] = channel == 2 ? "pcm16_left" : "pcm16_right";
 
             channels.push_back(entry);
         }
@@ -3210,7 +3284,8 @@ json DebugAdapter::GetSoundStatus()
             {"fm", audio->IsSourceMuted(Audio::AUDIO_SOURCE_FM)},
             {"pcm", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM)},
             {"cdda", audio->IsSourceMuted(Audio::AUDIO_SOURCE_CDDA)},
-            {"buzzer", audio->IsSourceMuted(Audio::AUDIO_SOURCE_BUZZER)}
+            {"buzzer", audio->IsSourceMuted(Audio::AUDIO_SOURCE_BUZZER)},
+            {"pcm16", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM16)}
         }}
     };
 }
@@ -3251,8 +3326,15 @@ json DebugAdapter::SetAudioMute(const std::string& source, int channel, bool mut
 
         audio->SetSourceMute(Audio::AUDIO_SOURCE_BUZZER, mute);
     }
+    else if (source == "pcm16")
+    {
+        if (channel != 0)
+            return {{"error", "16-bit PCM has no channels"}};
+
+        audio->SetSourceMute(Audio::AUDIO_SOURCE_PCM16, mute);
+    }
     else
-        return {{"error", "source must be fm, pcm, cdda or buzzer"}};
+        return {{"error", "source must be fm, pcm, cdda, buzzer or pcm16"}};
 
     json result = {{"success", true}, {"source", source}, {"muted", mute}};
 

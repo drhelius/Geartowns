@@ -58,6 +58,7 @@ public:
         u8 port_00c2;
         u8 port_05ee;
         u8 port_04c8;
+        u8 port_0a0c;
     };
 
 public:

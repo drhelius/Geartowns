@@ -274,6 +274,9 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0496:
             // Marty latches
             return m_system_control->Read(port, context.clocks);
+        case 0x04B0:
+            // CD-ROM drive features
+            return m_system_control->Read(port, context.clocks);
         case 0x04C0:
             // CD-ROM master status
         case 0x04C2:
@@ -359,6 +362,43 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x04F8:
             // PCM channel enable
             break;
+        case 0x0510:
+            // 16-bit PCM bank and causes
+        case 0x0511:
+            // 16-bit PCM DMA status
+        case 0x0512:
+            // 16-bit PCM DMA count low
+        case 0x0513:
+            // 16-bit PCM DMA count high
+        case 0x0514:
+            // 16-bit PCM DMA address low
+        case 0x0515:
+            // 16-bit PCM DMA address mid low
+        case 0x0516:
+            // 16-bit PCM DMA address mid high
+        case 0x0517:
+            // 16-bit PCM DMA address high
+        case 0x0518:
+            // 16-bit PCM sample clock
+        case 0x0519:
+            // 16-bit PCM mode
+        case 0x051A:
+            // 16-bit PCM system control
+        case 0x051B:
+            // 16-bit PCM buffer control
+        case 0x051C:
+            // 16-bit PCM record and play control
+        case 0x051D:
+            // 16-bit PCM peak monitor
+        case 0x051E:
+            // 16-bit PCM left level or data low
+        case 0x051F:
+            // 16-bit PCM right level or data high
+            if (!m_audio->GetPCM16()->IsFitted())
+                break;
+
+            m_audio->Synchronize(context.clocks);
+            return m_audio->ReadPCM16(port);
         case 0x05C0:
             // Expansion NMI mask
         case 0x05C2:
@@ -412,6 +452,13 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x0A0A:
             // Serial modem control
             break;
+        case 0x0A0C:
+            // Serial FIFO mode
+        case 0x0A0D:
+            // Serial FIFO presence
+        case 0x0A0E:
+            // Serial FIFO status
+            return m_system_control->Read(port, context.clocks);
         case 0x0C30:
             // SCSI data
         case 0x0C32:
@@ -688,6 +735,7 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x006C:
         case 0x00C0:
         case 0x00C2:
+        case 0x04B0:
         case 0x04C8:
         case 0x05E0:
         case 0x05E2:
@@ -696,10 +744,34 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
         case 0x05EC:
         case 0x05ED:
         case 0x05EE:
+        case 0x0A0C:
+        case 0x0A0D:
+        case 0x0A0E:
             if (!m_system_control->Decodes(port))
                 return false;
 
             value = m_system_control->Peek(port, clocks);
+            break;
+        case 0x0510:
+        case 0x0511:
+        case 0x0512:
+        case 0x0513:
+        case 0x0514:
+        case 0x0515:
+        case 0x0516:
+        case 0x0517:
+        case 0x0518:
+        case 0x0519:
+        case 0x051A:
+        case 0x051B:
+        case 0x051C:
+        case 0x051D:
+        case 0x051E:
+        case 0x051F:
+            if (!m_audio->GetPCM16()->IsFitted())
+                return false;
+
+            value = m_audio->PeekPCM16(port, clocks);
             break;
         case 0x0026:
         case 0x0027:
@@ -1067,6 +1139,44 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             m_audio->Synchronize(context.clocks);
             m_audio->WritePCM((u16)(port - 0x04F0), value);
             break;
+        case 0x0510:
+            // 16-bit PCM bank
+        case 0x0511:
+            // 16-bit PCM DMA control
+        case 0x0512:
+            // 16-bit PCM DMA count low
+        case 0x0513:
+            // 16-bit PCM DMA count high
+        case 0x0514:
+            // 16-bit PCM DMA address low
+        case 0x0515:
+            // 16-bit PCM DMA address mid low
+        case 0x0516:
+            // 16-bit PCM DMA address mid high
+        case 0x0517:
+            // 16-bit PCM DMA address high
+        case 0x0518:
+            // 16-bit PCM sample clock
+        case 0x0519:
+            // 16-bit PCM mode
+        case 0x051A:
+            // 16-bit PCM system control
+        case 0x051B:
+            // 16-bit PCM buffer control
+        case 0x051C:
+            // 16-bit PCM record and play control
+        case 0x051D:
+            // 16-bit PCM trigger level
+        case 0x051E:
+            // 16-bit PCM data low
+        case 0x051F:
+            // 16-bit PCM data high
+            if (!m_audio->GetPCM16()->IsFitted())
+                break;
+
+            m_audio->Synchronize(context.clocks);
+            m_audio->WritePCM16(port, value);
+            break;
         case 0x05C0:
             // Expansion NMI mask
             m_system_control->Write(port, value);
@@ -1120,6 +1230,12 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
             // Serial interrupt control
         case 0x0A0A:
             // Serial modem control
+            break;
+        case 0x0A0C:
+            // Serial FIFO mode
+        case 0x0A0E:
+            // Serial FIFO clear
+            m_system_control->Write(port, value);
             break;
         case 0x0C30:
             // SCSI data

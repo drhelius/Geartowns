@@ -50,6 +50,7 @@
     <ClCompile Include="..\..\src\input\input.cpp" />
     <ClCompile Include="..\..\src\input\keyboard.cpp" />
     <ClCompile Include="..\..\src\system\memory.cpp" />
+    <ClCompile Include="..\..\src\audio\pcm16.cpp" />
     <ClCompile Include="..\..\src\audio\rf5c68.cpp" />
     <ClCompile Include="..\..\src\system\io.cpp" />
     <ClCompile Include="..\..\src\system\pic.cpp" />
@@ -320,6 +321,8 @@
     <ClInclude Include="..\..\src\input\keyboard_inline.h" />
     <ClInclude Include="..\..\src\system\memory.h" />
     <ClInclude Include="..\..\src\system\memory_inline.h" />
+    <ClInclude Include="..\..\src\audio\pcm16.h" />
+    <ClInclude Include="..\..\src\audio\pcm16_inline.h" />
     <ClInclude Include="..\..\src\audio\rf5c68.h" />
     <ClInclude Include="..\..\src\audio\rf5c68_inline.h" />
     <ClInclude Include="..\..\src\audio\ym3438.h" />

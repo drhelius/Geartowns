@@ -36,6 +36,7 @@ enum GT_Trace_Type : u8
     TRACE_SPRITE,
     TRACE_FM,
     TRACE_PCM,
+    TRACE_PCM16,
     TRACE_MIXER,
     TRACE_CDROM,
     TRACE_FDC,
@@ -58,6 +59,7 @@ static_assert(TRACE_TYPE_COUNT < 32, "Trace category flags exceed 32 bits");
 #define TRACE_FLAG_SPRITE           (1U << TRACE_SPRITE)
 #define TRACE_FLAG_FM               (1U << TRACE_FM)
 #define TRACE_FLAG_PCM              (1U << TRACE_PCM)
+#define TRACE_FLAG_PCM16            (1U << TRACE_PCM16)
 #define TRACE_FLAG_MIXER            (1U << TRACE_MIXER)
 #define TRACE_FLAG_CDROM            (1U << TRACE_CDROM)
 #define TRACE_FLAG_FDC              (1U << TRACE_FDC)
@@ -209,6 +211,24 @@ enum GT_Trace_PCM_Event : u8
 #define TRACE_PCM_EVENT_IRQS     ((1U << TRACE_PCM_IRQ_MASK) | (1U << TRACE_PCM_IRQ) | (1U << TRACE_PCM_IRQ_READ))
 #define TRACE_PCM_EVENT_ALL      (TRACE_PCM_EVENT_CHANNELS | TRACE_PCM_EVENT_KEY | TRACE_PCM_EVENT_CONTROL | \
     TRACE_PCM_EVENT_IRQS)
+
+enum GT_Trace_PCM16_Event : u8
+{
+    TRACE_PCM16_REGISTER = 0,
+    TRACE_PCM16_DATA,
+    TRACE_PCM16_DMA_END,
+    TRACE_PCM16_BUFFER_ERROR,
+    TRACE_PCM16_IRQ
+};
+
+#define TRACE_PCM16_EVENT_REGISTERS (1U << TRACE_PCM16_REGISTER)
+#define TRACE_PCM16_EVENT_DATA      (1U << TRACE_PCM16_DATA)
+#define TRACE_PCM16_EVENT_DMA       (1U << TRACE_PCM16_DMA_END)
+#define TRACE_PCM16_EVENT_BUFFER    (1U << TRACE_PCM16_BUFFER_ERROR)
+#define TRACE_PCM16_EVENT_IRQS      (1U << TRACE_PCM16_IRQ)
+#define TRACE_PCM16_EVENT_DEFAULT   (TRACE_PCM16_EVENT_REGISTERS | TRACE_PCM16_EVENT_DMA | TRACE_PCM16_EVENT_BUFFER | \
+    TRACE_PCM16_EVENT_IRQS)
+#define TRACE_PCM16_EVENT_ALL       (TRACE_PCM16_EVENT_DEFAULT | TRACE_PCM16_EVENT_DATA)
 
 enum GT_Trace_Mixer_Event : u8
 {
@@ -460,6 +480,20 @@ struct GT_Trace_Entry
             u8 flags;
             u8 mask;
         } pcm;
+
+        struct
+        {
+            u32 address;
+            u16 count;
+            u16 port;
+            u16 data;
+            u8 value;
+            u8 causes;
+            u8 line;
+            u8 fifo;
+            u8 read;
+            u8 autoinit;
+        } pcm16;
 
         struct
         {

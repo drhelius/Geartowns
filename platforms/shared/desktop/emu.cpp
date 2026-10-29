@@ -770,6 +770,7 @@ void emu_apply_machine_settings(void)
     settings.cpu_mhz = config_machine.cpu_mhz;
     settings.ram_mb = config_machine.ram_mb;
     settings.fpu = config_machine.fpu;
+    settings.speed_mode = config_machine.speed_mode;
     geartowns->SetMachineSettings(settings);
 }
 
@@ -827,6 +828,9 @@ void emu_audio_set_source_volume(int source, float volume)
             break;
         case Audio::AUDIO_SOURCE_BUZZER:
             audio->SetBuzzerVolume(volume);
+            break;
+        case Audio::AUDIO_SOURCE_PCM16:
+            audio->SetPCM16Volume(volume);
             break;
         default:
             break;

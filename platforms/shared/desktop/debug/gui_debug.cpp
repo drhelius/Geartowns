@@ -182,6 +182,9 @@ void gui_debug_windows(void)
         if (config_debug.show_rf5c68)
             gui_debug_window_rf5c68();
 
+        if (config_debug.show_pcm16)
+            gui_debug_window_pcm16();
+
         if (config_debug.show_sound_control)
             gui_debug_window_sound_control();
 

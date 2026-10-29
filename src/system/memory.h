@@ -52,6 +52,7 @@ public:
         bool dictionary;
         u8 dictionary_bank;
         u8 backup_ram[k_memory_backup_ram_size];
+        s8 cmos_speed_mode;
     };
 
 public:
@@ -131,7 +132,7 @@ public:
     bool AssignCMOSDriveLetters(int unit, u16 partitions);
     u8 ReadCMOS(u32 index) const;
     void WriteCMOS(u32 index, u8 value);
-    void SetCMOSHighSpeed(bool enable);
+    void SetCMOSSpeedMode(int mode);
     u8* GetVideoRAM();
     size_t GetVideoRAMSize() const;
     Memory_State* GetState();
@@ -200,7 +201,6 @@ private:
     u32 m_physical_address_mask;
     u32 m_dma_map[k_memory_dma_slots];
     bool m_nmi_vector_protect;
-    bool m_cmos_high_speed;
     u8 m_backup_protect;
     u32 m_map_generation;
     u32 m_region_generation;

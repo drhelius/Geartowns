@@ -53,9 +53,9 @@ These MCP Bundles (`.mcpb`) package Geartowns with its MCP server configuration 
 - **i386 Addressing**: Every address takes linear, `SR:offset` or `selector:offset` forms, translated through segmentation and paging
 - **Multiple Memory Areas**: Linear and physical spaces, side-effect free I/O port reads, Main RAM, VRAM, Sprite RAM, CMOS, ROMs, PCM wave RAM, media images and inserted floppy images
 - **Disassembly**: Intel-syntax 80386 disassembly from current memory, with control flow, targets, I/O port and interrupt vector names
-- **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control, keyboard, CRTC, output controller, YM3438, RF5C68, CD-ROM controller, MB8877 floppy controller and SCSI host interface
+- **Hardware Inspection**: 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control, keyboard, CRTC, output controller, YM3438, RF5C68, 16-bit PCM, CD-ROM controller, MB8877 floppy controller and SCSI host interface
 - **Sprite Viewer**: Inspect the sprite engine, list sprite entries and get sprite patterns and VRAM layers as images
-- **Audio Inspection**: YM3438 FM channels, operators and registers, RF5C68 PCM channels, electronic volumes and sound interrupts, debugger mutes per source and channel
+- **Audio Inspection**: YM3438 FM channels, operators and registers, RF5C68 PCM channels, the 16-bit PCM of the later models, electronic volumes and sound interrupts, debugger mutes per source and channel
 - **Storage Inspection**: CD-ROM TOC, CD audio and disc sectors; floppy drives, track sector lists and sector data; SCSI hard disks and their sectors
 - **Symbol Support**: Add, remove, load, list, and look up user symbols, plus automatic labels
 - **Input State**: Inspect effective pressed buttons, held keyboard keys and pending tap releases
@@ -464,6 +464,11 @@ pcm.channels
 pcm.key
 pcm.control
 pcm.irqs
+pcm16.registers
+pcm16.data
+pcm16.dma
+pcm16.buffer
+pcm16.irqs
 mixer.volume
 mixer.mute
 cdrom.commands
@@ -549,8 +554,9 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_ym3438_status` - Get the YM3438: LFO, channel 3 mode, DAC, timers, status, and per channel frequency and note, algorithm, feedback, pan, AMS, PMS and the four operators with envelope state and level; optional `channel` (1-6)
 - `get_ym3438_registers` - Get one part's register file as last written with register names, and the address latch; `part` (0 or 1)
 - `get_rf5c68_status` - Get the RF5C68: sound enable, channel and wave banks, IRQ mask and flags, and each channel's envelope, pan, step and playback rate, loop start, start and play address
+- `get_pcm16_status` - Get the 16-bit AD/DA PCM of the ME and MF/Fresh (0510-051F): direction, format, sample rate, transfer mode, A/D and D/A ready, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level and peak monitors, trigger level, volume 1 channel 2 and 3 gains and the raw registers
 - `get_sound_status` - Get both electronic volumes with gain, the 04D5 FM and PCM mutes and the 04EC output gate, the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes
-- `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`) or one `channel` of it in the debugger; emulated state is unchanged
+- `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`, `pcm16`) or one `channel` of it in the debugger; emulated state is unchanged
 
 ### CD-ROM Hardware
 - `get_cdrom_status` - Get the CD-ROM controller: 04C0 master status bits, last command with flags and parameters, status queue, transfer mode, SIRQ/DEI and IRQ9, drive state, head position and track, read range, and the disc; `audio` with CD audio playback (state, end action, track, start, stop and current position, track position and CD-DA volume); and `playlist` with the discs of the loaded `.m3u` (`index`, current disc) and whether the drive is empty

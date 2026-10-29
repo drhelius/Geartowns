@@ -26,6 +26,7 @@ SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
                 $(SOURCE_DIR)/common/profiler.cpp \
                 $(SOURCE_DIR)/common/trace_logger.cpp \
                 $(SOURCE_DIR)/audio/audio.cpp \
+                $(SOURCE_DIR)/audio/pcm16.cpp \
                 $(SOURCE_DIR)/audio/rf5c68.cpp \
                 $(SOURCE_DIR)/audio/ym3438.cpp \
                 $(SOURCE_DIR)/audio/vgm_recorder.cpp \

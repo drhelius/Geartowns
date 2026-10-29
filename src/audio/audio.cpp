@@ -21,6 +21,7 @@
 #include "audio.h"
 #include "ym3438.h"
 #include "rf5c68.h"
+#include "pcm16.h"
 #include "../cdrom/cdrom_audio.h"
 #include "../system/memory.h"
 #include "../system/pic.h"
@@ -53,6 +54,9 @@ static const u8 k_audio_volume_command_unused = 0xE0;
 static const int k_audio_volume_cdda = 1;
 static const int k_audio_volume_cdda_left = 0;
 static const int k_audio_volume_cdda_right = 1;
+static const int k_audio_volume_pcm16 = 0;
+static const int k_audio_volume_pcm16_left = 2;
+static const int k_audio_volume_pcm16_right = 3;
 static const u8 k_audio_gate_pcm = 0x01;
 static const u8 k_audio_gate_fm = 0x02;
 static const u8 k_audio_gate_output = 0x40;
@@ -63,6 +67,7 @@ Audio::Audio()
 {
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
+    InitPointer(m_pcm16);
     InitPointer(m_cdrom_audio);
     InitPointer(m_scheduler);
     InitPointer(m_pic);
@@ -75,14 +80,20 @@ Audio::Audio()
     m_pcm_volume = 1.0f;
     m_cdda_volume = 1.0f;
     m_buzzer_volume = 1.0f;
+    m_pcm16_volume = 1.0f;
     m_cdda_gain_left = 0;
     m_cdda_gain_right = 0;
+    m_pcm16_gain_left = 0;
+    m_pcm16_gain_right = 0;
     m_fm_enabled = false;
     m_pcm_enabled = false;
     m_cdda_enabled = false;
+    m_pcm16_enabled = false;
+    m_pcm16_fitted = false;
     m_fm_gate = false;
     m_pcm_gate = false;
     m_pcm_irq_clocks = GT_NO_EVENT;
+    m_pcm16_event_clocks = GT_NO_EVENT;
     m_buffer_index = 0;
     m_buffer_overflow = false;
     m_frame_samples = 0;
@@ -96,6 +107,7 @@ Audio::Audio()
     memset(m_pcm_buffer, 0, sizeof(m_pcm_buffer));
     memset(m_cdda_buffer, 0, sizeof(m_cdda_buffer));
     memset(m_buzzer_buffer, 0, sizeof(m_buzzer_buffer));
+    memset(m_pcm16_buffer, 0, sizeof(m_pcm16_buffer));
     memset(m_fm_channel_buffer, 0, sizeof(m_fm_channel_buffer));
     memset(m_pcm_channel_buffer, 0, sizeof(m_pcm_channel_buffer));
     SetPCMLowpassCutoff(k_audio_pcm_lowpass_cutoff);
@@ -103,6 +115,7 @@ Audio::Audio()
 
 Audio::~Audio()
 {
+    SafeDelete(m_pcm16);
     SafeDelete(m_rf5c68);
     SafeDelete(m_ym3438);
 }
@@ -121,20 +134,33 @@ void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* p
     if (!IsValidPointer(m_rf5c68))
         m_rf5c68 = new RF5C68();
 
+    if (!IsValidPointer(m_pcm16))
+        m_pcm16 = new PCM16();
+
     m_ym3438->Init();
     m_rf5c68->Init();
+    m_pcm16->Init(pic, memory);
     Reset();
 }
 
 void Audio::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
+    m_pcm16->SetTraceLogger(trace_logger);
+}
+
+void Audio::SetFeatures(u32 features)
+{
+    m_pcm16_fitted = (features & GT_MACHINE_FEATURE_PCM16) != 0;
+    m_pcm16->SetFitted(m_pcm16_fitted);
+    UpdateGates();
 }
 
 void Audio::Reset()
 {
     m_ym3438->Reset();
     m_rf5c68->Reset();
+    m_pcm16->Reset(m_scheduler->GetClocks());
 
     m_state.sound_clock_remainder = 0;
     m_state.sample_clock_counter = 0;
@@ -161,7 +187,9 @@ void Audio::Reset()
     m_state.output_control = 0;
 
     UpdateCDDAGain();
+    UpdatePCM16Gain();
     UpdateGates();
+    PredictPCM16Event();
     UpdatePCMIRQ();
     m_buffer_index = 0;
     m_buffer_overflow = false;
@@ -175,7 +203,7 @@ void Audio::SetPCMLowpassCutoff(float cutoff)
     m_pcm_lowpass_alpha_q15 = (u16)(alpha * 32768.0f + 0.5f);
 }
 
-// Volume 1 at 04E0h attenuates line in
+// Volume 1 at 04E0h attenuates line in, and the 16-bit PCM on the later models
 // Volume 2 at 04E2h attenuates the CD-DA left and right channels, the mic and the modem
 // COM selects the channel that DATA writes
 // EN, C0 and C32 are in bits 2-4 as on the chip pins
@@ -203,6 +231,7 @@ void Audio::WriteVolume(u16 port, u8 value)
     }
 
     UpdateCDDAGain();
+    UpdatePCM16Gain();
 
     if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_MIXER, TRACE_MIXER_VOLUME)))
         TraceMixer(TRACE_MIXER_VOLUME, port, value);
@@ -243,6 +272,7 @@ void Audio::UpdateGates()
     m_fm_enabled = output && m_fm_gate;
     m_pcm_enabled = output && m_pcm_gate;
     m_cdda_enabled = output;
+    m_pcm16_enabled = output && m_pcm16_fitted;
 }
 
 // Every write that can move an FM timer or a PCM pointer looks again at IRQ13
@@ -291,6 +321,27 @@ void Audio::WritePCMIRQMask(u8 value)
     UpdatePCMIRQ();
 }
 
+u8 Audio::ReadPCM16(u16 port)
+{
+    u8 value = m_pcm16->Read(port, m_state.clocks);
+
+    if (port == 0x051E)
+        UpdatePCM16Event();
+
+    return value;
+}
+
+u8 Audio::PeekPCM16(u16 port, u64 clocks) const
+{
+    return m_pcm16->Peek(port, clocks);
+}
+
+void Audio::WritePCM16(u16 port, u8 value)
+{
+    m_pcm16->Write(port, value, m_state.clocks);
+    UpdatePCM16Event();
+}
+
 u8 Audio::ReadPCMIRQFlags()
 {
     u8 flags = m_rf5c68->ReadIRQFlags();
@@ -303,11 +354,11 @@ u8 Audio::ReadPCMIRQFlags()
 }
 
 // IRQ13 combines the FM timer flags and the PCM boundary causes
-// While it is low, the first clock either chip can raise it is scheduled
+// While it is low, the first clock either chip can raise it is scheduled, and always the 16-bit PCM's next event
 void Audio::UpdateIRQ()
 {
     bool asserted = m_ym3438->IsIRQAsserted() || m_rf5c68->IsIRQAsserted();
-    u64 next = GT_NO_EVENT;
+    u64 next = m_pcm16_event_clocks;
 
     if (unlikely(asserted && IsValidPointer(m_trace_logger) &&
         (m_trace_logger->IsEventEnabled(TRACE_FM, TRACE_FM_IRQ) ||
@@ -321,7 +372,7 @@ void Audio::UpdateIRQ()
         u64 fm_cycles = m_ym3438->GetCyclesToTimerFlag();
 
         if (fm_cycles != GT_NO_EVENT)
-            next = GetEventClocks(fm_cycles - m_ym3438->GetState()->elapsed_cycles);
+            next = MIN(next, GetEventClocks(fm_cycles - m_ym3438->GetState()->elapsed_cycles));
 
         next = MIN(next, m_pcm_irq_clocks);
     }
@@ -335,6 +386,24 @@ void Audio::UpdatePCMIRQ()
     m_rf5c68->Synchronize();
     u64 cycles = m_rf5c68->GetCyclesToBlockIRQ();
     m_pcm_irq_clocks = cycles == GT_NO_EVENT ? GT_NO_EVENT : GetEventClocks(cycles);
+    UpdateIRQ();
+}
+
+void Audio::PredictPCM16Event()
+{
+    u64 clocks = m_pcm16->GetClocksToEvent();
+
+    // The input level meets the threshold on an output sample, each one is checked while its interrupt waits for it
+    if (m_pcm16->IsInputIRQArmed())
+        clocks = MIN(clocks, (GT_MACHINE_CLOCK_RATE - m_state.sample_clock_counter + GT_AUDIO_SAMPLE_RATE - 1) /
+            GT_AUDIO_SAMPLE_RATE);
+
+    m_pcm16_event_clocks = clocks == GT_NO_EVENT ? GT_NO_EVENT : m_state.clocks + clocks;
+}
+
+void Audio::UpdatePCM16Event()
+{
+    PredictPCM16Event();
     UpdateIRQ();
 }
 
@@ -459,6 +528,12 @@ void Audio::UpdateCDDAGain()
 {
     m_cdda_gain_left = GetVolumeGain(k_audio_volume_cdda, k_audio_volume_cdda_left);
     m_cdda_gain_right = GetVolumeGain(k_audio_volume_cdda, k_audio_volume_cdda_right);
+}
+
+void Audio::UpdatePCM16Gain()
+{
+    m_pcm16_gain_left = GetVolumeGain(k_audio_volume_pcm16, k_audio_volume_pcm16_left);
+    m_pcm16_gain_right = GetVolumeGain(k_audio_volume_pcm16, k_audio_volume_pcm16_right);
 }
 
 // Per the MB87078 truth table EN = 0 mutes and C32 forces -32 dB even with C0 set
@@ -598,20 +673,20 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     float pcm_volume = m_source_mute[AUDIO_SOURCE_PCM] ? 0.0f : m_pcm_volume;
     float cdda_volume = m_source_mute[AUDIO_SOURCE_CDDA] ? 0.0f : m_cdda_volume;
     float buzzer_volume = m_source_mute[AUDIO_SOURCE_BUZZER] ? 0.0f : m_buzzer_volume;
+    float pcm16_volume = m_source_mute[AUDIO_SOURCE_PCM16] ? 0.0f : m_pcm16_volume;
 
     s32 dc_left = m_state.output_dc_left;
     s32 dc_right = m_state.output_dc_right;
 
     // Relative FM/PCM/CD-DA levels are unmeasured: 
-    // FM enters at its full DAC sum, PCM at half scale and CD-DA at full scale
+    // FM enters at its full DAC sum, PCM at half scale, CD-DA and the 16-bit PCM at full scale
     if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f) &&
-        (buzzer_volume == 1.0f))
+        (buzzer_volume == 1.0f) && (pcm16_volume == 1.0f))
     {
         for (int i = 0; i < samples; i += 2)
         {
-            s32 left = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i] + m_buzzer_buffer[i];
-            s32 right = (s32)m_fm_buffer[i + 1] + (m_pcm_buffer[i + 1] >> 1) + m_cdda_buffer[i + 1] +
-                m_buzzer_buffer[i + 1];
+            s32 left = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i] + m_buzzer_buffer[i] + m_pcm16_buffer[i];
+            s32 right = (s32)m_fm_buffer[i + 1] + (m_pcm_buffer[i + 1] >> 1) + m_cdda_buffer[i + 1] + m_buzzer_buffer[i + 1] + m_pcm16_buffer[i + 1];
             left = HighPass(dc_left, left);
             right = HighPass(dc_right, right);
             sample_buffer[i] = (s16)CLAMP(left, -32768, 32767);
@@ -623,9 +698,11 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
         for (int i = 0; i < samples; i += 2)
         {
             float left = (float)m_fm_buffer[i] * fm_volume + (float)(m_pcm_buffer[i] >> 1) * pcm_volume +
-                (float)m_cdda_buffer[i] * cdda_volume + (float)m_buzzer_buffer[i] * buzzer_volume;
+                (float)m_cdda_buffer[i] * cdda_volume + (float)m_buzzer_buffer[i] * buzzer_volume +
+                (float)m_pcm16_buffer[i] * pcm16_volume;
             float right = (float)m_fm_buffer[i + 1] * fm_volume + (float)(m_pcm_buffer[i + 1] >> 1) * pcm_volume +
-                (float)m_cdda_buffer[i + 1] * cdda_volume + (float)m_buzzer_buffer[i + 1] * buzzer_volume;
+                (float)m_cdda_buffer[i + 1] * cdda_volume + (float)m_buzzer_buffer[i + 1] * buzzer_volume +
+                (float)m_pcm16_buffer[i + 1] * pcm16_volume;
             s32 out_left = (s32)((float)HighPass(dc_left, (s32)left) * m_master_volume);
             s32 out_right = (s32)((float)HighPass(dc_right, (s32)right) * m_master_volume);
             sample_buffer[i] = (s16)CLAMP(out_left, -32768, 32767);
@@ -643,6 +720,7 @@ void Audio::SaveState(std::ostream& stream)
     Serialize(serializer, GT_SAVESTATE_VERSION);
     m_ym3438->SaveState(stream);
     m_rf5c68->SaveState(stream);
+    m_pcm16->SaveState(stream);
 }
 
 void Audio::LoadState(std::istream& stream, int version)
@@ -651,6 +729,12 @@ void Audio::LoadState(std::istream& stream, int version)
     Serialize(serializer, version);
     m_ym3438->LoadState(stream, version);
     m_rf5c68->LoadState(stream);
+
+    if (version >= 31)
+        m_pcm16->LoadState(stream);
+    else
+        m_pcm16->Reset(m_state.clocks);
+
     SanitizeState();
 }
 
@@ -789,6 +873,8 @@ void Audio::SanitizeState()
 
     m_state.mute_control &= k_audio_gate_fm | k_audio_gate_pcm;
     UpdateCDDAGain();
+    UpdatePCM16Gain();
     UpdateGates();
+    PredictPCM16Event();
     UpdatePCMIRQ();
 }

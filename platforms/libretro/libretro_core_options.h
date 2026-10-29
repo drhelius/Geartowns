@@ -198,6 +198,22 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         },
         "100"
     },
+    {
+        "geartowns_pcm16_volume",
+        "16-bit PCM Volume",
+        NULL,
+        "Volume of the 16-bit PCM of the FM Towns II ME and MF/Fresh, as a percentage where 100 is the default.",
+        NULL,
+        "audio",
+        {
+            { "0",   NULL }, { "10",  NULL }, { "20",  NULL }, { "30",  NULL }, { "40",  NULL },
+            { "50",  NULL }, { "60",  NULL }, { "70",  NULL }, { "80",  NULL }, { "90",  NULL },
+            { "100", NULL }, { "110", NULL }, { "120", NULL }, { "130", NULL }, { "140", NULL },
+            { "150", NULL }, { "160", NULL }, { "170", NULL }, { "180", NULL }, { "190", NULL },
+            { "200", NULL }, { NULL, NULL }
+        },
+        "100"
+    },
 
     /* Input */
 
@@ -280,17 +296,18 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_cdrom_speed",
         "CD-ROM Read Speed",
         NULL,
-        "Speed up how fast the drive reads sectors. Some software may not expect a faster drive.",
+        "How fast the drive reads sectors. Auto reads at the speed of the model's drive: 2x on the FM Towns II ME and MF/Fresh in high-speed mode, 1x on the rest. Some software may not expect a faster drive.",
         NULL,
         "cdrom",
         {
-            { "1x", "1x (Original)" },
+            { "auto", "Auto" },
+            { "1x", NULL },
             { "2x", NULL },
             { "4x", NULL },
             { "8x", NULL },
             { NULL, NULL },
         },
-        "1x"
+        "auto"
     },
 
     /* Floppy */
@@ -357,6 +374,9 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "ug",       "FM Towns II UG (80386SX 20 MHz)" },
             { "hg",       "FM Towns II HG (80386DX 20 MHz)" },
             { "hr",       "FM Towns II HR (80486SX 20 MHz)" },
+            { "ur",       "FM Towns II UR (80486SX 20 MHz)" },
+            { "me",       "FM Towns II ME (80486SX 25 MHz)" },
+            { "mf_fresh", "FM Towns II MF / Fresh (80486SX 33 MHz)" },
             { "marty",    "FM Towns Marty (80386SX 16 MHz)" },
             { NULL, NULL },
         },
@@ -404,6 +424,10 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "24",   "24 MB" },
             { "26",   "26 MB" },
             { "28",   "28 MB" },
+            { "32",   "32 MB" },
+            { "48",   "48 MB" },
+            { "64",   "64 MB" },
+            { "68",   "68 MB" },
             { NULL, NULL },
         },
         "auto"
@@ -412,13 +436,28 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_fpu",
         "FPU (restart)",
         NULL,
-        "The math coprocessor: an 80387 card on the 386 models, a 487SX card on the HR. Auto fits one when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model. The UX, UG and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
+        "The math coprocessor: an 80387 card on the 386 models, a 487SX card on the HR, ME and MF/Fresh. Auto fits one when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model. The UX, UG, UR and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
         NULL,
         "system",
         {
             { "auto",  "Auto" },
             { "none",  "None" },
             { "80387", "80387 or 487SX" },
+            { NULL, NULL },
+        },
+        "auto"
+    },
+    {
+        "geartowns_speed_mode",
+        "Speed Mode (restart)",
+        NULL,
+        "The FM Towns II models, except the UX, run in compatible or high-speed mode. High speed cuts memory waits and turns on the 486 cache and the 2x CD-ROM where fitted. The system ROM sets the mode at reset from the CMOS, where TownsMENU saves it. Auto uses high speed when Model is on Auto and the game database picks a 486 model, otherwise it keeps the CMOS setting, compatible on a new CMOS. Some software misbehaves in high-speed mode.",
+        NULL,
+        "system",
+        {
+            { "auto",       "Auto" },
+            { "compatible", "Compatible" },
+            { "high",       "High Speed" },
             { NULL, NULL },
         },
         "auto"

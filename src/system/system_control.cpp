@@ -69,6 +69,7 @@ SystemControl::SystemControl()
     m_state.port_00c2 = 0;
     m_state.port_05ee = 0;
     m_state.port_04c8 = 0;
+    m_state.port_0a0c = 0;
 }
 
 SystemControl::~SystemControl()
@@ -116,7 +117,7 @@ void SystemControl::SetWriteWait(u32 cycles)
     m_write_wait_cycles = cycles;
 }
 
-// Writes that change the bus waits or the 486's cache: 05E2h, 05E6h, 05ECh and 00C0h
+// Writes that change the bus waits, the 486's cache or the CD-ROM speed: 05E2h, 05E6h, 05ECh, 00C0h and 04C8h
 void SystemControl::SetBusModeCallback(void* context, GT_Bus_Mode_Callback callback)
 {
     m_bus_mode_context = context;
@@ -152,6 +153,12 @@ bool SystemControl::Decodes(u16 port) const
             return (m_features & GT_MACHINE_FEATURE_CACHE_CONTROL) != 0;
         case 0x04C8:
             return (m_features & GT_MACHINE_FEATURE_CD_CACHE) != 0;
+        case 0x04B0:
+            return (m_features & GT_MACHINE_FEATURE_CD_DOUBLE_SPEED) != 0;
+        case 0x0A0C:
+        case 0x0A0D:
+        case 0x0A0E:
+            return (m_features & GT_MACHINE_FEATURE_SERIAL_FIFO) != 0;
         // The first-generation wait register, gone since the 10F brought 006Ch and 05E2h/05E6h
         case 0x05E0:
             return (m_features & GT_MACHINE_FEATURE_WAIT_1US) == 0;
@@ -196,6 +203,7 @@ void SystemControl::Reset()
     m_state.port_00c2 = 0;
     m_state.port_05ee = 0;
     m_state.port_04c8 = 0;
+    m_state.port_0a0c = 0;
     m_memory->SetNMIVectorProtect(false);
     m_memory->SetBackupRAMProtect(0);
 }
@@ -236,6 +244,7 @@ u8 SystemControl::Read(u16 port, u64 clocks)
         case 0x0488:
         case 0x0494:
         case 0x0496:
+        case 0x04B0:
         case 0x04C8:
         case 0x05E0:
         case 0x05E2:
@@ -244,6 +253,9 @@ u8 SystemControl::Read(u16 port, u64 clocks)
         case 0x05EC:
         case 0x05ED:
         case 0x05EE:
+        case 0x0A0C:
+        case 0x0A0D:
+        case 0x0A0E:
             return Peek(port, clocks);
         default:
             return 0xFF;
@@ -292,6 +304,16 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
             return Decodes(port) ? m_state.port_00c2 : 0xFF;
         case 0x04C8:
             return Decodes(port) ? m_state.port_04c8 : 0xFF;
+        // Double speed, multisession and software eject present, no ADPCM playback
+        case 0x04B0:
+            return Decodes(port) ? 0x8F : 0xFF;
+        // The FIFOs never fill: nothing transmits and nothing is received
+        case 0x0A0C:
+            return Decodes(port) ? m_state.port_0a0c : 0xFF;
+        case 0x0A0D:
+            return Decodes(port) ? 0x7F : 0xFF;
+        case 0x0A0E:
+            return Decodes(port) ? 0xA4 : 0xFF;
         case 0x05EE:
             return Decodes(port) ? m_state.port_05ee : 0xFF;
         case 0x0486:
@@ -309,7 +331,8 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
         case 0x05E6:
             return Decodes(port) ? m_state.port_05e6 : 0xFF;
         case 0x05E8:
-            return Decodes(port) ? (u8)((m_memory->GetMainRAMSize() >> 20) & 0x1F) : 0xFF;
+            return Decodes(port) ? (u8)((m_memory->GetMainRAMSize() >> 20) &
+                ((m_features & GT_MACHINE_FEATURE_RAM_SIZE_127MB) != 0 ? 0x7F : 0x1F)) : 0xFF;
         case 0x05EC:
             return Decodes(port) ? (m_state.high_speed ? 0x01 : 0x00) : 0xFF;
         case 0x05ED:
@@ -322,7 +345,7 @@ u8 SystemControl::Peek(u16 port, u64 clocks) const
 // Active-low capabilities: the HG chassis can power off its CRT and itself, the UG neither
 u8 SystemControl::GetCPUMisc3() const
 {
-    u8 value = 0x07;
+    u8 value = (m_features & GT_MACHINE_FEATURE_DMA_CARRY) != 0 ? 0x03 : 0x07;
 
     if ((m_features & GT_MACHINE_FEATURE_FREE_RUN_TIMER) == 0)
         value |= 0x10;
@@ -395,8 +418,8 @@ void SystemControl::Write(u16 port, u8 value)
             if (Decodes(port))
                 m_state.port_0496 = value & 0xF0;
             break;
-        // Board cache controls: CMEN lets the 486 cache in high-speed mode. RPINH, SDMOD, the CD cache and VCMEN are
-        // stored without effect. HSPEED sets and clears CMEN, VCMEN and the CD cache too
+        // Board cache controls: CMEN lets the 486 cache in high-speed mode. RPINH, SDMOD and VCMEN are stored without
+        // effect, the CD cache only switches the double-speed drive. HSPEED sets and clears CMEN, VCMEN and the CD cache
         case 0x00C0:
             if (Decodes(port) && m_state.port_00c0 != (value & 0x03))
             {
@@ -412,8 +435,15 @@ void SystemControl::Write(u16 port, u8 value)
                 m_state.port_00c2 = value & 0x08;
             break;
         case 0x04C8:
-            if (Decodes(port))
+            if (Decodes(port) && m_state.port_04c8 != (value & 0x01))
+            {
                 m_state.port_04c8 = value & 0x01;
+                NotifyBusMode();
+            }
+            break;
+        case 0x0A0C:
+            if (Decodes(port))
+                m_state.port_0a0c = value & 0x80;
             break;
         case 0x05EE:
             if (Decodes(port))
@@ -514,7 +544,6 @@ void SystemControl::LoadState(std::istream& stream, int version)
 
 void SystemControl::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     G_SERIALIZE(serializer, m_state.reset_cause);
     G_SERIALIZE(serializer, m_state.reset_pending);
     G_SERIALIZE(serializer, m_state.write_protect);
@@ -537,6 +566,11 @@ void SystemControl::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.port_00c2);
     G_SERIALIZE(serializer, m_state.port_05ee);
     G_SERIALIZE(serializer, m_state.port_04c8);
+
+    if (version >= 31)
+        G_SERIALIZE(serializer, m_state.port_0a0c);
+    else
+        m_state.port_0a0c = 0;
 }
 
 void SystemControl::SanitizeState()
@@ -547,6 +581,7 @@ void SystemControl::SanitizeState()
     m_state.port_00c2 &= 0x08;
     m_state.port_05ee &= 0x01;
     m_state.port_04c8 &= 0x01;
+    m_state.port_0a0c &= 0x80;
     m_memory->SetNMIVectorProtect(m_state.write_protect);
     m_memory->SetBackupRAMProtect(m_state.port_0486);
 }

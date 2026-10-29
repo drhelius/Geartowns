@@ -33,6 +33,9 @@ static const double k_trace_fm_sample_rate = (double)GT_SOUND_CLOCK_RATE / k_ym3
 static const char* const k_trace_pit_names[6] = { "CH0", "CH1", "CH2", "CH3", "CH4", "CH5" };
 static const char* const k_trace_palette_components[3] = { "BLUE", "RED", "GREEN" };
 static const char* const k_trace_pcm_registers[7] = { "ENV", "PAN", "FD LSB", "FD MSB", "LS LSB", "LS MSB", "ST" };
+static const char* const k_trace_pcm16_registers[14] = { "BANK", "DMA CONTROL", "COUNT LOW", "COUNT HIGH", "ADDRESS 0",
+    "ADDRESS 1", "ADDRESS 2", "ADDRESS 3", "CLOCK", "MODE", "SYSTEM", "BUFFER", "REC/PLAY", "TRIGGER" };
+static const char* const k_trace_pcm16_formats[5] = { "WAV8 MONO", "WAV8 STEREO", "WAV16 MONO", "WAV16 STEREO", "SND" };
 static const char* const k_trace_controller_names[5] = { "NONE", "PAD", "MARTY PAD", "6B PAD", "MOUSE" };
 
 static void format_event(char* buffer, size_t size, const char* tag, const char* name, const char* format, ...);
@@ -46,6 +49,7 @@ static void format_video(const GT_Trace_Entry& entry, char* buffer, size_t size)
 static void format_sprite(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_fm(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_pcm(const GT_Trace_Entry& entry, char* buffer, size_t size);
+static void format_pcm16(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_mixer(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_cdrom(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_fdc(const GT_Trace_Entry& entry, char* buffer, size_t size);
@@ -154,6 +158,9 @@ void trace_logger_format_entry(const GT_Trace_Entry& entry,
             break;
         case TRACE_PCM:
             format_pcm(entry, buffer, buffer_size);
+            break;
+        case TRACE_PCM16:
+            format_pcm16(entry, buffer, buffer_size);
             break;
         case TRACE_MIXER:
             format_mixer(entry, buffer, buffer_size);
@@ -824,6 +831,68 @@ static void format_pcm(const GT_Trace_Entry& entry, char* buffer, size_t size)
             break;
         default:
             format_event(buffer, size, "PCM", "IRQ READ", "Causes:$%02X read and cleared", value);
+            break;
+    }
+}
+
+static void format_pcm16(const GT_Trace_Entry& entry, char* buffer, size_t size)
+{
+    u8 value = entry.pcm16.value;
+
+    switch (entry.event)
+    {
+        case TRACE_PCM16_REGISTER:
+        {
+            u16 port = entry.pcm16.port;
+            u8 index = MIN((u8)(port & 0x0F), (u8)13);
+            const char* name = k_trace_pcm16_registers[index];
+
+            if (index == 0x08)
+                format_event(buffer, size, "PCM16", "REGISTER", "$%04X %s <- $%02X  %.4f kHz", port, name, value,
+                    k_pcm16_rates[value & 0x0F] / 2000.0);
+            else if (index == 0x09)
+            {
+                int format = (value & 0x20) != 0 ? 4 : ((value >> 2) & 0x02) | ((value >> 4) & 0x01);
+                format_event(buffer, size, "PCM16", "REGISTER", "$%04X %s <- $%02X  %s  Level:bit %u", port, name,
+                    value, k_trace_pcm16_formats[format], (value & 0x07) + 1);
+            }
+            else if ((index == 0x0A) && ((value & 0x80) != 0))
+                format_event(buffer, size, "PCM16", "REGISTER", "$%04X %s <- $%02X  AD/DA RESET", port, name, value);
+            else if (index == 0x0A)
+            {
+                char irq[8];
+
+                if ((value & 0x07) < PCM16_IRQ_ROUTES)
+                    snprintf(irq, sizeof(irq), "IRQ%d", k_pcm16_irq_lines[value & 0x07]);
+                else
+                    snprintf(irq, sizeof(irq), "OFF");
+
+                format_event(buffer, size, "PCM16", "REGISTER", "$%04X %s <- $%02X  %s  Port:%s  Interrupt:%s", port,
+                    name, value, (value & 0x10) != 0 ? "REC " : "PLAY", (value & 0x20) != 0 ? "DATA   " : "MONITOR",
+                    irq);
+            }
+            else if (index == 0x0C)
+                format_event(buffer, size, "PCM16", "REGISTER", "$%04X %s <- $%02X  DREQ:%s  Buffer:%s", port, name,
+                    value, (value & 0x02) != 0 ? "MASKED" : "ON    ", (value & 0x01) != 0 ? "MASKED" : "ON");
+            else
+                format_event(buffer, size, "PCM16", "REGISTER", "$%04X %s <- $%02X", port, name, value);
+            break;
+        }
+        case TRACE_PCM16_DATA:
+            format_event(buffer, size, "PCM16", "DATA", "%s $%04X  Buffer:%u",
+                entry.pcm16.read != 0 ? "Read " : "Write", entry.pcm16.data, entry.pcm16.fifo);
+            break;
+        case TRACE_PCM16_DMA_END:
+            format_event(buffer, size, "PCM16", "DMA END", "%s  End:$%08X  %s",
+                entry.pcm16.read != 0 ? "Play  " : "Record", entry.pcm16.address,
+                entry.pcm16.autoinit != 0 ? "Reload" : "Stop");
+            break;
+        case TRACE_PCM16_BUFFER_ERROR:
+            format_event(buffer, size, "PCM16", "BUFFER", "%s  Buffer:%u",
+                entry.pcm16.read != 0 ? "UNDERRUN" : "OVERRUN", entry.pcm16.fifo);
+            break;
+        default:
+            format_event(buffer, size, "PCM16", "IRQ", "IRQ%u  Causes:$%02X", entry.pcm16.line, entry.pcm16.causes);
             break;
     }
 }

@@ -27,7 +27,7 @@
 class MediaFile;
 
 #define FIRMWARE_SET_COUNT 6
-#define FIRMWARE_FILE_NAMES 5
+#define FIRMWARE_FILE_NAMES 6
 #define FIRMWARE_EXTENSION_PARTS 4
 #define FIRMWARE_PACKED_SIZE (2 * 1024 * 1024)
 
@@ -119,8 +119,9 @@ static const GT_Firmware_Set k_firmware_sets[FIRMWARE_SET_COUNT] =
     { "fmtownsux", "UX set", 0x92F3FA67, 1 << GT_MACHINE_UX,
         (1 << GT_MACHINE_1F_2F) | (1 << GT_MACHINE_10F_20F) | (1 << GT_MACHINE_CX) | (1 << GT_MACHINE_UG) },
     { "fmtmarty", "Marty set", 0x937311F6, 1 << GT_MACHINE_MARTY, 0 },
-    { "fmtownshr", "HR set", 0x8AEFF982, 1 << GT_MACHINE_HR, 1 << GT_MACHINE_HG },
-    { "fmtownsftv", "V10 set", 0xAFE4EBCF, 1 << GT_MACHINE_MF_FRESH, 1 << GT_MACHINE_HG }
+    { "fmtownshr", "HR set", 0x8AEFF982, 1 << GT_MACHINE_HR, (1 << GT_MACHINE_HG) | (1 << GT_MACHINE_UR) },
+    { "fmtownsftv", "V10 set", 0xAFE4EBCF, (1 << GT_MACHINE_MF_FRESH) | (1 << GT_MACHINE_MX),
+        (1 << GT_MACHINE_HG) | (1 << GT_MACHINE_UR) | (1 << GT_MACHINE_ME) | (1 << GT_MACHINE_MA) }
 };
 
 #include "firmware_inline.h"

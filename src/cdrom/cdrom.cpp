@@ -41,7 +41,8 @@ CdRom::CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio)
     m_cdrom_audio = cdrom_audio;
     memset(&m_state, 0, sizeof(m_state));
     m_access_count = 0;
-    m_read_speed = 1;
+    m_read_speed = 0;
+    m_double_speed = false;
     m_sector_clocks = k_cdrom_sector_clocks;
     m_seek_scale = 1.0;
 }
@@ -1021,18 +1022,33 @@ void CdRom::InvalidateBuffer()
     m_state.buffer_valid = false;
 }
 
-// Faster drives read at the full multiple but seek only by its square root, as drives of the time did roughly
 void CdRom::SetReadSpeed(int speed)
 {
-    m_read_speed = CLAMP(speed, 1, 8);
-    m_sector_clocks = k_cdrom_sector_clocks / (u64)m_read_speed;
-    m_seek_scale = 1.0 / sqrt((double)m_read_speed);
-    m_cdrom_audio->SetSeekScale(m_seek_scale);
+    m_read_speed = CLAMP(speed, 0, 8);
+    UpdateReadSpeed();
+}
+
+void CdRom::SetDoubleSpeed(bool enabled)
+{
+    if (m_double_speed == enabled)
+        return;
+
+    m_double_speed = enabled;
+    UpdateReadSpeed();
 }
 
 int CdRom::GetReadSpeed() const
 {
-    return m_read_speed;
+    return m_read_speed > 0 ? m_read_speed : (m_double_speed ? 2 : 1);
+}
+
+// Faster drives read at the full multiple but seek only by its square root, as drives of the time did roughly
+void CdRom::UpdateReadSpeed()
+{
+    int speed = GetReadSpeed();
+    m_sector_clocks = k_cdrom_sector_clocks / (u64)speed;
+    m_seek_scale = 1.0 / sqrt((double)speed);
+    m_cdrom_audio->SetSeekScale(m_seek_scale);
 }
 
 void CdRom::AbortTransfer()

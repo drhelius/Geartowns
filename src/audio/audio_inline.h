@@ -23,6 +23,7 @@
 #include "audio.h"
 #include "ym3438.h"
 #include "rf5c68.h"
+#include "pcm16.h"
 #include "../cdrom/cdrom_audio.h"
 #include "../system/pit.h"
 #include "../system/scheduler.h"
@@ -71,6 +72,11 @@ INLINE void Audio::SetBuzzerVolume(float volume)
     m_buzzer_volume = volume;
 }
 
+INLINE void Audio::SetPCM16Volume(float volume)
+{
+    m_pcm16_volume = volume;
+}
+
 INLINE YM3438* Audio::GetYM3438()
 {
     return m_ym3438;
@@ -79,6 +85,11 @@ INLINE YM3438* Audio::GetYM3438()
 INLINE RF5C68* Audio::GetRF5C68()
 {
     return m_rf5c68;
+}
+
+INLINE PCM16* Audio::GetPCM16()
+{
+    return m_pcm16;
 }
 
 INLINE Audio::Audio_State* Audio::GetState()
@@ -117,6 +128,8 @@ INLINE const s16* Audio::GetSourceBuffer(int source) const
             return m_pcm_buffer;
         case AUDIO_SOURCE_CDDA:
             return m_cdda_buffer;
+        case AUDIO_SOURCE_PCM16:
+            return m_pcm16_buffer;
         default:
             return m_buzzer_buffer;
     }
@@ -141,6 +154,7 @@ INLINE void Audio::Synchronize(u64 clocks)
 INLINE void Audio::HandleEvent(u64 clocks)
 {
     Synchronize(clocks);
+    PredictPCM16Event();
     UpdatePCMIRQ();
 }
 
@@ -190,6 +204,7 @@ INLINE void Audio::ClockSources(u32 clocks)
 
     m_ym3438->Clock(sound_clocks);
     m_rf5c68->Clock(sound_clocks);
+    m_pcm16->Clock(clocks, m_state.clocks);
 }
 
 INLINE void Audio::SampleSources()
@@ -200,6 +215,10 @@ INLINE void Audio::SampleSources()
     s16 pcm_right = 0;
     s16 cdda_left = 0;
     s16 cdda_right = 0;
+    s16 pcm16_left = 0;
+    s16 pcm16_right = 0;
+    s32 pcm16_mix_left = 0;
+    s32 pcm16_mix_right = 0;
 
     m_ym3438->Sample(fm_left, fm_right);
     m_rf5c68->Sample(pcm_left, pcm_right);
@@ -219,10 +238,24 @@ INLINE void Audio::SampleSources()
 
     s16 buzzer = SampleBuzzer();
 
+    // The 16-bit PCM records the same mix the ADC samples, each side on its own
+    if (m_pcm16_fitted)
+    {
+        m_pcm16->Sample(pcm16_left, pcm16_right);
+        pcm16_mix_left = (pcm16_left * m_pcm16_gain_left) >> 15;
+        pcm16_mix_right = (pcm16_right * m_pcm16_gain_right) >> 15;
+        s32 input_left = (m_fm_gate ? fm_left : 0) + (m_pcm_gate ? m_state.pcm_lowpass_left >> 1 : 0) +
+            ((cdda_left * m_cdda_gain_left) >> 15) + buzzer + pcm16_mix_left;
+        s32 input_right = (m_fm_gate ? fm_right : 0) + (m_pcm_gate ? m_state.pcm_lowpass_right >> 1 : 0) +
+            ((cdda_right * m_cdda_gain_right) >> 15) + buzzer + pcm16_mix_right;
+        m_pcm16->Input(input_left, input_right);
+    }
+
     // The ADC samples the stereo mix summed to mono ahead of the output gate, as 80h plus the signal
     s32 adc = (m_fm_gate ? fm_left + fm_right : 0) +
         (m_pcm_gate ? (m_state.pcm_lowpass_left + m_state.pcm_lowpass_right) >> 1 : 0) +
-        ((cdda_left * m_cdda_gain_left) >> 15) + ((cdda_right * m_cdda_gain_right) >> 15) + 2 * buzzer;
+        ((cdda_left * m_cdda_gain_left) >> 15) + ((cdda_right * m_cdda_gain_right) >> 15) + 2 * buzzer +
+        pcm16_mix_left + pcm16_mix_right;
     m_state.adc_sample = (u8)(0x80 + CLAMP(adc >> 8, -127, 126));
 
     // Keep the samples already buffered for this frame and drop the excess
@@ -247,6 +280,8 @@ INLINE void Audio::SampleSources()
     m_cdda_buffer[m_buffer_index + 1] = m_cdda_enabled ? (s16)((cdda_right * m_cdda_gain_right) >> 15) : 0;
     m_buzzer_buffer[m_buffer_index + 0] = buzzer;
     m_buzzer_buffer[m_buffer_index + 1] = buzzer;
+    m_pcm16_buffer[m_buffer_index + 0] = m_pcm16_enabled ? (s16)pcm16_mix_left : 0;
+    m_pcm16_buffer[m_buffer_index + 1] = m_pcm16_enabled ? (s16)pcm16_mix_right : 0;
     m_buffer_index += 2;
 }
 

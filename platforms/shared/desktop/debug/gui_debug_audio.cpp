@@ -61,6 +61,8 @@ static const AlgorithmLayout k_algorithm_layouts[8] =
     { { 0, 1, 2, 3 }, { 0, 0, 0, 0 }, { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } }, 0, 0x0F }
 };
 
+static const char* const k_pcm16_format_names[5] = { "WAV8 MONO", "WAV8 STEREO", "WAV16 MONO", "WAV16 STEREO", "SND" };
+
 static float* scope_buffer = NULL;
 
 static void draw_scope(const char* id, const s16* data, int stride, int count, float scale, ImVec2 size,
@@ -83,9 +85,15 @@ static void draw_pcm_global(RF5C68::RF5C68_State* state);
 static void draw_rf5c68_channels(RF5C68* rf5c68, const s16* const* buffers, int count);
 static void center_row_text(float height);
 static void draw_wave_ram(RF5C68* rf5c68);
+static void draw_pcm16_control(Audio* audio);
+static void draw_pcm16_dma(PCM16::PCM16_State* state);
+static void draw_pcm16_buffer(PCM16::PCM16_State* state);
+static void draw_pcm16_monitors(Audio* audio);
 static void draw_volume_chip(Audio* audio, int chip);
 static void setup_control_columns(void);
+static void setup_pcm16_columns(void);
 static void goto_pcm_ram(u32 offset);
+static void goto_physical(u32 address);
 static void draw_position(u32 lba, u32 pregap, bool valid);
 
 void gui_debug_audio_init(void)
@@ -258,6 +266,42 @@ void gui_debug_window_rf5c68(void)
     ImGui::PopStyleVar();
 }
 
+void gui_debug_window_pcm16(void)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::SetNextWindowPos(ImVec2(310, 128), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(306, 673), ImGuiCond_FirstUseEver);
+    ImGui::Begin("16-bit PCM", &config_debug.show_pcm16);
+
+    Audio* audio = emu_get_core()->GetAudio();
+    PCM16::PCM16_State* state = audio->GetPCM16()->GetState();
+    bool muted = audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM16);
+
+    if (draw_mute_button("##pcm16_mute", muted, "Mute 16-bit PCM"))
+        audio->SetSourceMute(Audio::AUDIO_SOURCE_PCM16, !muted);
+
+    ImGui::SameLine();
+    draw_stereo_scope("##pcm16_mix", Audio::AUDIO_SOURCE_PCM16, 1.0f / 32768.0f, ImVec2(125, 50));
+
+    ImGui::PushFont(gui_default_font);
+
+    draw_pcm16_control(audio);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "DMA"); ImGui::Separator();
+    draw_pcm16_dma(state);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "BUFFER"); ImGui::Separator();
+    draw_pcm16_buffer(state);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "MONITORS"); ImGui::Separator();
+    draw_pcm16_monitors(audio);
+
+    ImGui::PopFont();
+
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void gui_debug_window_sound_control(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -347,7 +391,7 @@ void gui_debug_window_sound_control(void)
 
     ImGui::PopFont();
 
-    static const char* sources[Audio::AUDIO_SOURCE_COUNT] = { "FM", "PCM", "CD-DA", "Buzzer" };
+    static const char* sources[Audio::AUDIO_SOURCE_COUNT] = { "FM", "PCM", "CD-DA", "Buzzer", "16-bit PCM" };
 
     if (ImGui::BeginTable("##debugger_mutes", 2, flags))
     {
@@ -1185,6 +1229,11 @@ static void draw_volume_chip(Audio* audio, int chip)
             ImGui::SameLine(0.0f, character);
             ImGui::TextColored(gray, "%s", channel == 0 ? "CD L" : "CD R");
         }
+        else if (chip == 0 && channel >= 2 && audio->GetPCM16()->IsFitted())
+        {
+            ImGui::SameLine(0.0f, character);
+            ImGui::TextColored(gray, "%s", channel == 2 ? "AD L" : "AD R");
+        }
 
         ImGui::TableNextColumn();
         ImGui::TextColored(white, "$%02X", state->volume_data[chip][channel]);
@@ -1205,6 +1254,249 @@ static void draw_volume_chip(Audio* audio, int chip)
             ImGui::TextColored(white, "%.1f dB", 20.0 * log10((double)gain / 32768.0));
         else
             ImGui::TextColored(gray, "MUTE");
+    }
+
+    ImGui::EndTable();
+}
+
+static void draw_pcm16_control(Audio* audio)
+{
+    PCM16* pcm16 = audio->GetPCM16();
+    PCM16::PCM16_State* state = pcm16->GetState();
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float space = ImGui::CalcTextSize(" ").x;
+    bool fitted = pcm16->IsFitted();
+    u8 transfer = audio->PeekPCM16(0x051C, audio->GetState()->clocks);
+    u8 causes = pcm16->GetIRQCauses();
+    int line = pcm16->GetIRQLine();
+
+    ImGui::TextColored(cyan, "CONTROL"); ImGui::Separator();
+
+    if (!ImGui::BeginTable("##pcm16_control", 3, flags))
+        return;
+
+    setup_pcm16_columns();
+
+    ImGui::TableNextRow();
+    draw_grid_label("DEVICE");
+    ImGui::TextColored(fitted ? green : gray, "%s", fitted ? "FITTED" : "NOT FITTED");
+
+    ImGui::TableNextRow();
+    draw_grid_label("DIRECTION");
+    ImGui::TextColored(white, "%s", pcm16->IsRecording() ? "RECORD" : "PLAY");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(051A)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("FORMAT");
+    ImGui::TextColored(white, "%s", k_pcm16_format_names[pcm16->GetFormat()]);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0519)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("LEVEL LSB");
+    ImGui::TextColored(white, "BIT %d", (state->mode & 0x07) + 1);
+
+    ImGui::TableNextRow();
+    draw_grid_label("RATE");
+
+    if (k_pcm16_rates[state->clock] != 0)
+        ImGui::TextColored(white, "%.4f kHz", k_pcm16_rates[state->clock] / 2000.0);
+    else
+        ImGui::TextColored(red, "INVALID");
+
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0518)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("TRANSFER");
+
+    if ((state->transfer_control & 0x01) != 0)
+        ImGui::TextColored(gray, "STOPPED");
+    else
+        ImGui::TextColored(green, "%s", (state->transfer_control & 0x02) != 0 ? "SOFTWARE" : "DMA");
+
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(051C)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("DATA PORT");
+    ImGui::TextColored(white, "%s", pcm16->IsSoftwareTransfer() ? "TRANSFER" : "LEVEL MONITOR");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(051A)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("READY");
+    ImGui::TextColored((transfer & 0x80) ? gray : green, "A/D"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((transfer & 0x40) ? gray : green, "D/A");
+
+    ImGui::TableNextRow();
+    draw_grid_label("INTERRUPT");
+
+    if (line >= 0)
+        ImGui::TextColored(orange, "IRQ%d", line);
+    else
+        ImGui::TextColored(gray, "OFF");
+
+    ImGui::TableNextRow();
+    draw_grid_label("CAUSES");
+    ImGui::TextColored((causes & 0x10) ? yellow : gray, "DMA"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((causes & 0x20) ? yellow : gray, "BUFFER"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((causes & 0x40) ? yellow : gray, "INPUT");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0510)");
+
+    ImGui::EndTable();
+}
+
+static void draw_pcm16_dma(PCM16::PCM16_State* state)
+{
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float character = ImGui::CalcTextSize("0").x;
+    float space = ImGui::CalcTextSize(" ").x;
+
+    if (ImGui::BeginTable("##pcm16_dma", 4, flags))
+    {
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 10);
+        ImGui::TableSetupColumn("BASE", ImGuiTableColumnFlags_WidthFixed, character * 10);
+        ImGui::TableSetupColumn("CURRENT", ImGuiTableColumnFlags_WidthFixed, character * 10);
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 6);
+        ImGui::TableHeadersRow();
+
+        ImGui::TableNextRow();
+        draw_grid_label("ADDRESS");
+        ImGui::TextColored(cyan, "$%08X", state->base_address);
+
+        if (ImGui::IsItemClicked())
+            goto_physical(state->base_address);
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(cyan, "$%08X", state->current_address);
+
+        if (ImGui::IsItemClicked())
+            goto_physical(state->current_address);
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0514)");
+
+        ImGui::TableNextRow();
+        draw_grid_label("COUNT");
+        ImGui::TextColored(white, "$%04X", state->base_count);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(white, "$%04X", state->current_count);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(0512)");
+
+        ImGui::EndTable();
+    }
+
+    if (!ImGui::BeginTable("##pcm16_dma_control", 3, flags))
+        return;
+
+    setup_pcm16_columns();
+
+    ImGui::TableNextRow();
+    draw_grid_label("ACCESS");
+    ImGui::TextColored(blue, "%s", state->bank != 0 ? "BASE" : "CURRENT");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0510)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("CONTROL");
+    ImGui::TextColored((state->dma_control & 0x10) ? green : gray, "AUTOINIT"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((state->dma_control & 0x02) ? green : gray, "IRQ"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(state->terminal_count ? yellow : gray, "END");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0511)");
+
+    ImGui::EndTable();
+}
+
+static void draw_pcm16_buffer(PCM16::PCM16_State* state)
+{
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float space = ImGui::CalcTextSize(" ").x;
+
+    if (!ImGui::BeginTable("##pcm16_buffer", 3, flags))
+        return;
+
+    setup_pcm16_columns();
+
+    ImGui::TableNextRow();
+    draw_grid_label("STAGES");
+    ImGui::TextColored(white, "%2d", state->buffer_count); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(gray, "/ %d", PCM16_BUFFER_SIZE);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(051B)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("ERRORS");
+    ImGui::TextColored(state->overrun ? red : gray, "OVERRUN"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(state->underrun ? red : gray, "UNDERRUN");
+
+    ImGui::TableNextRow();
+    draw_grid_label("ERROR IRQ");
+    ImGui::TextColored((state->buffer_control & 0x80) ? green : gray, "%s", (state->buffer_control & 0x80) ? "ON" : "OFF");
+
+    ImGui::TableNextRow();
+    draw_grid_label("MASKS");
+    ImGui::TextColored((state->transfer_control & 0x02) ? orange : gray, "DREQ"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((state->transfer_control & 0x01) ? orange : gray, "BUFFER");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(051C)");
+
+    ImGui::EndTable();
+}
+
+static void draw_pcm16_monitors(Audio* audio)
+{
+    PCM16::PCM16_State* state = audio->GetPCM16()->GetState();
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float space = ImGui::CalcTextSize(" ").x;
+    u8 levels[2] = { state->level_left, state->level_right };
+
+    if (!ImGui::BeginTable("##pcm16_monitors", 3, flags))
+        return;
+
+    setup_pcm16_columns();
+
+    for (int i = 0; i < 2; i++)
+    {
+        ImGui::TableNextRow();
+        draw_grid_label(i == 0 ? "LEVEL L" : "LEVEL R");
+        ImGui::TextColored(white, "$%02X", levels[i] & 0x7F); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((levels[i] & 0x80) ? red : gray, "OVER");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(%04X)", 0x051E + i);
+    }
+
+    ImGui::TableNextRow();
+    draw_grid_label("PEAK");
+    ImGui::TextColored(white, "$%02X", state->peak & 0x7F); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((state->peak & 0x80) ? red : gray, "OVER");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(051D)");
+
+    ImGui::TableNextRow();
+    draw_grid_label("TRIGGER");
+    ImGui::TextColored(white, "$%02X", state->threshold); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(state->input_flag ? yellow : gray, "INPUT"); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored((state->transfer_control & 0x20) ? green : gray, "IRQ");
+
+    for (int i = 0; i < 2; i++)
+    {
+        s32 gain = audio->GetVolumeGain(0, 2 + i);
+
+        ImGui::TableNextRow();
+        draw_grid_label(i == 0 ? "VOLUME L" : "VOLUME R");
+
+        if (gain > 0)
+            ImGui::TextColored(white, "%.1f dB", 20.0 * log10((double)gain / 32768.0));
+        else
+            ImGui::TextColored(gray, "MUTE");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "(04E0)");
     }
 
     ImGui::EndTable();
@@ -1235,6 +1527,26 @@ static void draw_position(u32 lba, u32 pregap, bool valid)
     ImGui::TextColored(white, "%u", lba);
     ImGui::TableNextColumn();
     ImGui::TextColored(orange, "%02u:%02u:%02u", msf.minutes, msf.seconds, msf.frames);
+}
+
+// The value column spans the DMA table's base and current columns and the gap between them, 2 cell paddings
+// without borders, so every port column starts where the DMA table's does
+static void setup_pcm16_columns(void)
+{
+    float character = ImGui::CalcTextSize("0").x;
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 10);
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed,
+        (character * 20) + (ImGui::GetStyle().CellPadding.x * 2.0f));
+    ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
+}
+
+static void goto_physical(u32 address)
+{
+    GT_Debug_Memory_Address target = { };
+    target.space = GT_DEBUG_MEMORY_PHYSICAL;
+    target.address = address;
+    target.segment_register = -1;
+    gui_debug_memory_goto(target);
 }
 
 static void goto_pcm_ram(u32 offset)

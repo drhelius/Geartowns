@@ -24,6 +24,7 @@
 #include "../common/common.h"
 #include "ym3438.h"
 #include "rf5c68.h"
+#include "pcm16.h"
 #include "vgm_recorder.h"
 
 #define AUDIO_VOLUME_CHIPS 2
@@ -46,6 +47,7 @@ public:
         AUDIO_SOURCE_PCM,
         AUDIO_SOURCE_CDDA,
         AUDIO_SOURCE_BUZZER,
+        AUDIO_SOURCE_PCM16,
         AUDIO_SOURCE_COUNT
     };
 
@@ -71,6 +73,7 @@ public:
     ~Audio();
     void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit, Memory* memory);
     void SetTraceLogger(TraceLogger* trace_logger);
+    void SetFeatures(u32 features);
     void Reset();
     void Mute(bool mute);
     void SetMasterVolume(float volume);
@@ -78,6 +81,7 @@ public:
     void SetPCMVolume(float volume);
     void SetCDDAVolume(float volume);
     void SetBuzzerVolume(float volume);
+    void SetPCM16Volume(float volume);
     void SetPCMLowpassCutoff(float cutoff);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
@@ -85,6 +89,9 @@ public:
     void WritePCM(u16 address, u8 value);
     void WritePCMIRQMask(u8 value);
     u8 ReadPCMIRQFlags();
+    u8 ReadPCM16(u16 port);
+    u8 PeekPCM16(u16 port, u64 clocks) const;
+    void WritePCM16(u16 port, u8 value);
     u8 ReadVolume(u16 port) const;
     void WriteVolume(u16 port, u8 value);
     u8 ReadGate(u16 port) const;
@@ -93,6 +100,7 @@ public:
     void EndFrame(s16* sample_buffer, int* sample_count);
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
+    PCM16* GetPCM16();
     Audio_State* GetState();
     void SetSourceMute(int source, bool mute);
     bool IsSourceMuted(int source) const;
@@ -124,9 +132,12 @@ private:
     s32 HighPass(s32& dc, s32 sample);
     void CaptureChannels(int index);
     void UpdateCDDAGain();
+    void UpdatePCM16Gain();
     void UpdateGates();
     void UpdateIRQ();
     void UpdatePCMIRQ();
+    void PredictPCM16Event();
+    void UpdatePCM16Event();
     u64 GetEventClocks(u64 cycles) const;
     void TraceFM(u8 value);
     void TracePCM(u8 event, u8 reg, u8 value, u8 channel);
@@ -139,6 +150,7 @@ private:
 private:
     YM3438* m_ym3438;
     RF5C68* m_rf5c68;
+    PCM16* m_pcm16;
     CdRomAudio* m_cdrom_audio;
     Scheduler* m_scheduler;
     PIC* m_pic;
@@ -151,20 +163,27 @@ private:
     float m_pcm_volume;
     float m_cdda_volume;
     float m_buzzer_volume;
+    float m_pcm16_volume;
     Audio_State m_state;
     u16 m_pcm_lowpass_alpha_q15;
     s32 m_cdda_gain_left;
     s32 m_cdda_gain_right;
+    s32 m_pcm16_gain_left;
+    s32 m_pcm16_gain_right;
     bool m_fm_enabled;
     bool m_pcm_enabled;
     bool m_cdda_enabled;
+    bool m_pcm16_enabled;
+    bool m_pcm16_fitted;
     bool m_fm_gate;
     bool m_pcm_gate;
     u64 m_pcm_irq_clocks;
+    u64 m_pcm16_event_clocks;
     s16 m_fm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_buzzer_buffer[GT_AUDIO_BUFFER_SIZE];
+    s16 m_pcm16_buffer[GT_AUDIO_BUFFER_SIZE];
     int m_buffer_index;
     bool m_buffer_overflow;
     int m_frame_samples;

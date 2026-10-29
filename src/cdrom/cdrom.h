@@ -125,6 +125,7 @@ public:
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
     void SetReadSpeed(int speed);
+    void SetDoubleSpeed(bool enabled);
     int GetReadSpeed() const;
     u32 GetAccessCount() const;
     void SetReadCallback(void* context, GT_Read_Callback callback);
@@ -173,6 +174,7 @@ private:
     void ReleaseBuffer(u32 lba, u64 clocks);
     u64 GetArrivalClocks(u32 lba, u64 clocks) const;
     void InvalidateBuffer();
+    void UpdateReadSpeed();
     void AbortTransfer();
     bool PushErrorStatus();
     void PushStatus(u8 status0, u8 status1, u8 status2 = 0x00, u8 status3 = 0x00);
@@ -200,6 +202,7 @@ private:
     void* m_read_context;
     GT_Read_Callback m_read_callback;
     int m_read_speed;
+    bool m_double_speed;
     u64 m_sector_clocks;
     double m_seek_scale;
 };

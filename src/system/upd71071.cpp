@@ -35,6 +35,7 @@ UPD71071::UPD71071()
     for (int i = 0; i < UPD71071_CHANNELS; i++)
         m_unit_fifths[i] = k_upd71071_unit_fifths;
 
+    m_address_carry = false;
     m_unsupported_logged = false;
     memset(&m_state, 0, sizeof(m_state));
     m_state.active_channel = -1;
@@ -49,6 +50,11 @@ void UPD71071::Init(Memory* memory, Scheduler* scheduler)
     m_memory = memory;
     m_scheduler = scheduler;
     Reset();
+}
+
+void UPD71071::SetFeatures(u32 features)
+{
+    m_address_carry = (features & GT_MACHINE_FEATURE_DMA_CARRY) != 0;
 }
 
 // A hardware reset selects the 8 bit bus, power on also clears what a software initialization keeps
@@ -391,11 +397,13 @@ bool UPD71071::TransferUnit(int channel, u64 clocks, bool& terminal)
 #endif
 
     int step = word ? 2 : 1;
+    bool decrement = (state.mode & k_upd71071_mode_decrement) != 0;
+    u32 next_address = decrement ? state.current_address - step : state.current_address + step;
 
-    if ((state.mode & k_upd71071_mode_decrement) != 0)
-        state.current_address = (state.current_address - step) & 0x00FFFFFF;
-    else
-        state.current_address = (state.current_address + step) & 0x00FFFFFF;
+    if (((next_address >> 24) != 0) && m_address_carry)
+        state.high_address += decrement ? 0xFF : 0x01;
+
+    state.current_address = next_address & 0x00FFFFFF;
 
     terminal = state.current_count == 0;
     state.current_count--;

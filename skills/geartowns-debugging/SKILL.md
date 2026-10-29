@@ -199,13 +199,14 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `list_sprites` — sprite engine state and entries with position, pattern, colors and flags (`start`, `count`, `filter`: `all`, `drawn`, `visible`)
 - `get_sprite` — one sprite entry as an 8x PNG (`format`: `image`) or its details (`info`)
 
-### Audio (YM3438, RF5C68)
+### Audio (YM3438, RF5C68, 16-bit PCM)
 
 - `get_ym3438_status` — YM3438 FM: LFO, channel 3 mode, DAC, timers, per channel frequency, algorithm, feedback, pan and the four operators (optional `channel` 1-6)
 - `get_ym3438_registers` — the register file of one part (`part` 0 or 1)
 - `get_rf5c68_status` — RF5C68 PCM: sound enable, banks, IRQ mask, and each channel's envelope, pan, step, loop and play address
+- `get_pcm16_status` — 16-bit AD/DA PCM of the ME and MF/Fresh: direction, format, rate, DMA addresses and counts, buffer, IRQ route and causes, monitors
 - `get_sound_status` — electronic volumes, FM and PCM mutes, output gate, sound interrupt causes and mask
-- `set_audio_mute` — mute `fm`, `pcm`, `cdda` or `buzzer` (or one `channel`) in the debugger without changing emulated state; useful to isolate a sound source
+- `set_audio_mute` — mute `fm`, `pcm`, `cdda`, `buzzer` or `pcm16` (or one `channel`) in the debugger without changing emulated state; useful to isolate a sound source
 
 ### CD-ROM, Floppy and Hard Disks
 

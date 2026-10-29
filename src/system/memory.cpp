@@ -106,7 +106,6 @@ Memory::Memory()
     m_physical_address_mask = 0xFFFFFFFF;
     SetDMAWindows(NULL);
     m_nmi_vector_protect = false;
-    m_cmos_high_speed = false;
     m_backup_protect = 0;
     m_map_generation = 1;
     m_region_generation = 1;
@@ -121,6 +120,7 @@ Memory::Memory()
     m_state.dictionary = false;
     m_state.dictionary_bank = 0;
     memset(m_state.backup_ram, 0, sizeof(m_state.backup_ram));
+    m_state.cmos_speed_mode = GT_MACHINE_AUTO;
     InitPointer(m_video_ram);
     m_video_ram_size = 0;
     InitPointer(m_trace_logger);
@@ -1664,11 +1664,20 @@ void Memory::Serialize(StateSerializer& serializer, int version)
             m_state.backup_ram[(i * 2) + 1] = 0x00;
         }
     }
+
+    if (version >= 31)
+        G_SERIALIZE(serializer, m_state.cmos_speed_mode);
+    else
+        m_state.cmos_speed_mode = GT_MACHINE_AUTO;
 }
 
 void Memory::SanitizeState()
 {
     m_state.dictionary_bank &= 0x0F;
+
+    if ((m_state.cmos_speed_mode < 0) || (m_state.cmos_speed_mode > 1))
+        m_state.cmos_speed_mode = GT_MACHINE_AUTO;
+
     ApplyMapping();
     m_debug_snapshot_id++;
 }

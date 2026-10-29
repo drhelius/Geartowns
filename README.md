@@ -100,7 +100,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 ## Features
 
 - Very accurate 80386 core that passes [test386](https://github.com/barotto/test386.asm) and [SingleStepTests/80386](https://github.com/singlesteptests/80386).
-- FM Towns (Model 1/2), 1F/2F, 10F/20F, FM Towns II CX, UX, UG, HG and HR, and FM Towns Marty emulation.
+- FM Towns (Model 1/2), 1F/2F, 10F/20F, FM Towns II CX, UX, UG, HG, HR, UR, ME and MF/Fresh, and FM Towns Marty emulation.
 - CD-ROM drive emulation with `cue/bin`, `iso` and `chd` images, `m3u` disc playlists and disc swapping, with optional compressed images (`zip`).
 - Physical CD-ROM discs on Windows, macOS and Linux.
 - Floppy disk emulation with two drives supporting `d77`, `d88`, `hdm`, `xdf`, `img` and HxC `mfm` images, `m3u` playlists, write protection and optional persistence of disk changes.
@@ -239,10 +239,12 @@ Media:
 
 Machine (for this run only, the saved settings stay):
       --model MODEL         auto, model1_2, 1f_2f, 10f_20f, cx, ux, ug, hg, hr,
-                            marty
+                            ur, me, mf_fresh, marty
       --cpu-mhz MHZ         auto, 16, 20, 25, 33, 40, 50, 66, 100
-      --ram MB              auto, 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 28
-      --fpu FPU             auto, none, 80387 (a 487SX on the HR)
+      --ram MB              auto, 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 28,
+                            32, 48, 64, 68
+      --fpu FPU             auto, none, 80387 (a 487SX on the 486 models)
+      --speed-mode MODE     auto, compatible, high
 
 Options:
   -f, --fullscreen          Start in fullscreen mode

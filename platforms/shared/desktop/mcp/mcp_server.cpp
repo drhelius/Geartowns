@@ -1605,6 +1605,20 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "get_pcm16_status"},
+        {"title", "Get 16-bit PCM Status"},
+        {"description", "Read the 16-bit AD/DA PCM of the later models (0510-051F): direction, format, rate, transfer "
+            "mode, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level "
+            "monitors and volume."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "get_sound_status"},
         {"title", "Get Sound Status"},
         {"description", "Read the sound board: MB87078 volumes (04E0/04E2), FM and PCM mutes (04D5), output gate (04EC), "
@@ -1627,7 +1641,7 @@ json McpServer::BuildToolList()
             {"properties", {
                 {"source", {
                     {"type", "string"},
-                    {"enum", json::array({"fm", "pcm", "cdda", "buzzer"})}
+                    {"enum", json::array({"fm", "pcm", "cdda", "buzzer", "pcm16"})}
                 }},
                 {"channel", {
                     {"type", "integer"},
@@ -3532,6 +3546,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         return m_debugAdapter.GetRF5C68Status();
     }
+    else if (normalizedTool == "get_pcm16_status")
+    {
+        return m_debugAdapter.GetPCM16Status();
+    }
     else if (normalizedTool == "get_sound_status")
     {
         return m_debugAdapter.GetSoundStatus();
@@ -3686,6 +3704,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         event_filters[TRACE_SPRITE] = TRACE_SPRITE_EVENT_ALL;
         event_filters[TRACE_FM] = TRACE_FM_EVENT_DEFAULT;
         event_filters[TRACE_PCM] = TRACE_PCM_EVENT_ALL;
+        event_filters[TRACE_PCM16] = TRACE_PCM16_EVENT_ALL;
         event_filters[TRACE_MIXER] = TRACE_MIXER_EVENT_ALL;
         event_filters[TRACE_CDROM] = TRACE_CDROM_EVENT_ALL;
         event_filters[TRACE_FDC] = TRACE_FDC_EVENT_ALL;

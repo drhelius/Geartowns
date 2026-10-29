@@ -238,6 +238,9 @@
     <ClCompile Include="..\..\src\system\memory.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\audio\pcm16.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\audio\rf5c68.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -515,6 +518,8 @@
     <ClInclude Include="..\..\src\video\video_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\pcm16.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\pcm16_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\rf5c68.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\rf5c68_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\ym3438.h"><Filter>src</Filter></ClInclude>

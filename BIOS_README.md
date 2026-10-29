@@ -22,9 +22,12 @@ Each model runs on a set of these ROMs. Some models have a set of their own, oth
 | FM Towns II UG           | UX set                          | No dump of its own                        |
 | FM Towns II HG           | HR set, or else the V10 set     | No dump of its own                        |
 | FM Towns II HR           | HR set                          |                                           |
+| FM Towns II UR           | HR set, or else the V10 set     | No dump of its own                        |
+| FM Towns II ME           | V10 set                         | No dump of its own                        |
+| FM Towns II MF / Fresh   | V10 set                         |                                           |
 | FM Towns Marty           | Marty set or Marty 2 set        |                                           |
 
-The other FM Towns II models (UR, ME, MA, MX, MF/Fresh and HC) are not emulated yet. The V10 set is MAME's FM Towns II FreshTV set, made for the MF/Fresh, and the HG runs on it. MAME's MX set is not recognized.
+The MA, MX and HC are not emulated yet. The V10 set is the firmware of the last generation: MAME's FM Towns II FreshTV set and MAME's MX set hold the same ROMs.
 
 **How a set is chosen:**
 
@@ -64,7 +67,7 @@ Place the files in a `geartowns` folder inside the frontend's system directory, 
 | `MAR_EX0.ROM` to `MAR_EX3.ROM`          | Marty extension ROM                          | 4 x 512 KB     | Marty only, needed to boot               |
 
 - File names are accepted in any case.
-- MAME's names are accepted too: `fmt_sys_a.rom` and `fmthr_sys.rom` for the system ROM, `fmt_dos_a.rom` for the OS ROM, `fmt_f20_a.rom` for the 20-dot font, and `mytownsux.rom`, `mytownsm2.rom`, `mytownsftv.rom` or `mytownshr.rom` for the serial ROM. MAME's Marty `mrom.m36` and `mrom.m37` hold the whole Marty firmware in two files.
+- MAME's names are accepted too: `fmt_sys_a.rom` and `fmthr_sys.rom` for the system ROM, `fmt_dos_a.rom` for the OS ROM, `fmt_f20_a.rom` for the 20-dot font, and `mytownsux.rom`, `mytownsm2.rom`, `mytownsftv.rom`, `mytownshr.rom` or `mytownsmx.rom` for the serial ROM. MAME's Marty `mrom.m36` and `mrom.m37` hold the whole Marty firmware in two files, and MAME's MX `fmtownsiimxbios.m79` the whole V10 firmware in one.
 - Without its extension ROM the Marty stops at its logo, although the firmware loads.
 
 ## Sets
@@ -108,7 +111,7 @@ Also used by the HG.
 
 ### V10 set (MAME `fmtownsftv`)
 
-MAME's FM Towns II FreshTV set. The HG's second choice, when there is no HR set.
+MAME's FM Towns II FreshTV set. Also used by the ME, and by the HG and UR when there is no HR set.
 
 | File           | Description                 | Size     | CRC32    | md5                              |
 |----------------|-----------------------------|----------|----------|----------------------------------|
@@ -118,6 +121,15 @@ MAME's FM Towns II FreshTV set. The HG's second choice, when there is no HR set.
 | fmt_dic.rom    | Dictionary ROM - Required   | 512 KB   | 82D1DAA2 | 8fa4e553f28cfc0c30a0a1e589799942 |
 | fmt_f20.rom    | 20-dot Font ROM - Optional  | 512 KB   | 9F55A20C | ac0c7021e9bf48ca84b51ab651169a88 |
 | mytownsftv.rom | Serial ROM - Optional       | 32 bytes | A961AAE7 |                                  |
+
+### V10 set (MAME `fmtownsmx`)
+
+MAME's FM Towns II MX set: the same ROMs in one file, with the MX's serial ROM.
+
+| File                | Description                                              | Size     | CRC32    | md5                              |
+|---------------------|----------------------------------------------------------|----------|----------|----------------------------------|
+| fmtownsiimxbios.m79 | OS, font, system, 20-dot font and dictionary ROMs - Required | 2 MB | F3FC636E | 2f7d2e474054889bd1e7524f06dd0467 |
+| mytownsmx.rom       | Serial ROM - Optional                                    | 32 bytes | 16E78766 | b49dbab8ab2bfa387bf81ad519ea0cdf |
 
 ### Marty set (MAME `fmtmarty`)
 

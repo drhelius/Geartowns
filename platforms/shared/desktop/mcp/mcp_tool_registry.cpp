@@ -203,7 +203,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"symbols", "Symbols", "Add, remove, load, list and look up user symbols and automatic labels."},
     {"hardware_system", "System Hardware", "Inspect the 8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control and keyboard interface."},
     {"hardware_video", "Video Hardware", "Inspect the CRTC, output controller, palettes, VRAM layers and sprite engine, write CRTC registers, and capture layers and sprites as PNG."},
-    {"hardware_audio", "Audio Hardware", "Inspect the YM3438 FM chip and its registers, the RF5C68 PCM chip, electronic volumes and sound interrupts, and mute sources or channels in the debugger."},
+    {"hardware_audio", "Audio Hardware", "Inspect the YM3438 FM chip and its registers, the RF5C68 PCM chip, the 16-bit PCM of the later models, electronic volumes and sound interrupts, and mute sources or channels in the debugger."},
     {"hardware_cdrom", "CD-ROM Hardware", "Inspect the CD-ROM controller, the disc TOC and CD audio playback, and read disc sectors."},
     {"hardware_floppy", "Floppy Hardware", "Inspect the MB8877 floppy controller and drives, list a track's sectors, and read sector data."},
     {"hardware_scsi", "SCSI Hardware", "Inspect the SCSI host interface, list the hard disks on IDs 0-6, and read their sectors."},
@@ -266,7 +266,8 @@ static const char* const kMcpVideoTools[] =
 
 static const char* const kMcpAudioTools[] =
 {
-    "get_ym3438_status", "get_ym3438_registers", "get_rf5c68_status", "get_sound_status", "set_audio_mute"
+    "get_ym3438_status", "get_ym3438_registers", "get_rf5c68_status", "get_pcm16_status", "get_sound_status",
+    "set_audio_mute"
 };
 
 static const char* const kMcpCdromTools[] =

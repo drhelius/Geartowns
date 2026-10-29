@@ -83,6 +83,7 @@ GeartownsCore::GeartownsCore()
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     m_machine_settings.ram_mb = GT_MACHINE_AUTO;
     m_machine_settings.fpu = GT_MACHINE_AUTO;
+    m_machine_settings.speed_mode = GT_MACHINE_AUTO;
     InitPointer(m_auto_entry);
     m_auto_three_mode = false;
     memset(m_firmware_sources, 0, sizeof(m_firmware_sources));
@@ -805,7 +806,8 @@ bool GeartownsCore::IsMachineConfigPending()
         (m_pending_machine_config.floppy_drives != m_machine_config.floppy_drives) ||
         (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate) ||
         (m_pending_machine_config.scsi != m_machine_config.scsi) ||
-        (m_pending_machine_config.fpu != m_machine_config.fpu);
+        (m_pending_machine_config.fpu != m_machine_config.fpu) ||
+        (m_pending_machine_config.speed_mode != m_machine_config.speed_mode);
 }
 
 bool GeartownsCore::GetFloppyNotice(GT_Floppy_Notice& notice)
@@ -1701,6 +1703,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
         !m_memory_card->Restore(state_media.memory_card_session, state_media.memory_card_write);
 
     ApplyBusTiming();
+    ApplyCdRomSpeed();
     return true;
 }
 
@@ -1897,6 +1900,9 @@ void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
     config.scsi = ((profile.features & GT_MACHINE_FEATURE_SCSI) != 0) ||
         (config.scsi && (config.model == GT_MACHINE_MODEL1_2));
 
+    if ((profile.features & GT_MACHINE_FEATURE_SPEED_CONTROL) == 0)
+        config.speed_mode = GT_MACHINE_AUTO;
+
     if (config.cpu_clock_rate == 0)
         config.cpu_clock_rate = profile.cpu_clock_rate;
 }
@@ -1978,8 +1984,7 @@ void GeartownsCore::Reset()
     if (IsValidPointer(m_memory))
     {
         m_memory->Reset();
-        m_memory->SetCMOSHighSpeed((m_machine_report.model == GT_MACHINE_SOURCE_DATABASE) &&
-            (k_machine_cpus[m_machine_config.cpu].family >= 4));
+        m_memory->SetCMOSSpeedMode(m_machine_config.speed_mode);
     }
 
     if (IsValidPointer(m_io))
@@ -2036,6 +2041,7 @@ void GeartownsCore::Reset()
         m_input->Reset();
 
     ApplyBusTiming();
+    ApplyCdRomSpeed();
 }
 
 // Only the CPU restarts and the low memory view returns to its boot setup, memory and devices keep their state
@@ -2056,8 +2062,20 @@ void GeartownsCore::ResolveMachineConfig()
     bool auto_cpu = m_machine_settings.cpu_mhz <= 0;
     bool auto_ram = m_machine_settings.ram_mb <= 0;
     bool auto_fpu = m_machine_settings.fpu < 0;
+    bool auto_speed = m_machine_settings.speed_mode < 0;
     bool database = auto_model && IsValidPointer(entry);
+    bool prefer_pcm16 = database && ((entry->flags & GT_GAMEDB_PREFER_PCM16) != 0);
     GT_Machine_Model named = database ? (GT_Machine_Model)entry->model : GT_MACHINE_MODEL1_2;
+
+    for (int i = 0; prefer_pcm16 && (i < GT_MACHINE_RELEASE_ORDER_COUNT); i++)
+    {
+        GT_Machine_Model model = k_machine_release_order[i];
+
+        if (((k_machine_profiles[named].features & GT_MACHINE_FEATURE_PCM16) == 0) &&
+            ((k_machine_profiles[model].features & GT_MACHINE_FEATURE_PCM16) != 0) && CanAutoSelect(model))
+            named = model;
+    }
+
     bool three_mode = auto_model && m_auto_three_mode && !k_machine_profiles[named].three_mode_floppy;
     GT_Machine_Model fallback = GT_MACHINE_MODEL1_2;
     u32 megabyte = 1024 * 1024;
@@ -2079,10 +2097,12 @@ void GeartownsCore::ResolveMachineConfig()
     config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * megabyte;
     config.scsi = HasHardDisks();
     config.fpu = !auto_fpu && (m_machine_settings.fpu != 0);
+    config.speed_mode = auto_speed ? GT_MACHINE_AUTO : m_machine_settings.speed_mode != 0 ? 1 : 0;
     report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
     report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.fpu = auto_fpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    report.speed_mode = auto_speed ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.fallback = auto_model && (config.model != named);
     report.title = IsValidPointer(entry) ? entry->title : NULL;
     report.warning_count = 0;
@@ -2111,11 +2131,23 @@ void GeartownsCore::ResolveMachineConfig()
         report.fpu = GT_MACHINE_SOURCE_DATABASE;
     }
 
+    if ((report.model == GT_MACHINE_SOURCE_DATABASE) && auto_speed &&
+        (k_machine_cpus[k_machine_profiles[config.model].cpu].family >= 4))
+    {
+        config.speed_mode = 1;
+        report.speed_mode = GT_MACHINE_SOURCE_DATABASE;
+    }
+
     SanitizeMachineConfig(config);
 
     if (!auto_fpu && (m_machine_settings.fpu != 0) && !config.fpu)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "This machine has no socket for an FPU");
+
+    if ((m_machine_settings.speed_mode > 0) &&
+        ((k_machine_profiles[config.model].features & GT_MACHINE_FEATURE_SPEED_CONTROL) == 0))
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "This machine has no high-speed mode");
 
     bool hard_disk_device = (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) && (m_boot_device <= GT_BOOT_DEVICE_HARD_DISK_4);
     bool hard_disk_boot = hard_disk_device || (IsValidPointer(entry) && ((entry->flags & GT_GAMEDB_HDD) != 0));
@@ -2274,6 +2306,12 @@ void GeartownsCore::ApplyMachineConfig()
         m_memory_card->SetWindowSize(k_machine_maps[profile.map].memory_card_size);
     }
 
+    if (IsValidPointer(m_dma))
+        m_dma->SetFeatures(profile.features);
+
+    if (IsValidPointer(m_audio))
+        m_audio->SetFeatures(profile.features);
+
     if (IsValidPointer(m_io))
         m_io->UpdateDecodedPorts();
 }
@@ -2316,9 +2354,21 @@ void GeartownsCore::ApplyBusTiming()
     m_system_control->SetWriteWait(!m_i386->IsBusTimed() ? microsecond : microsecond > cycle ? microsecond - cycle : 0);
 }
 
+void GeartownsCore::ApplyCdRomSpeed()
+{
+    if (!IsValidPointer(m_cdrom) || !IsValidPointer(m_system_control))
+        return;
+
+    const SystemControl::SystemControl_State* state = m_system_control->GetState();
+    bool drive = (k_machine_profiles[m_machine_config.model].features & GT_MACHINE_FEATURE_CD_DOUBLE_SPEED) != 0;
+    m_cdrom->SetDoubleSpeed(drive && state->high_speed && ((state->port_04c8 & 0x01) != 0));
+}
+
 void GeartownsCore::BusModeCallback(void* context)
 {
-    static_cast<GeartownsCore*>(context)->ApplyBusTiming();
+    GeartownsCore* core = static_cast<GeartownsCore*>(context);
+    core->ApplyBusTiming();
+    core->ApplyCdRomSpeed();
 }
 
 void GeartownsCore::InitMemoryMap()

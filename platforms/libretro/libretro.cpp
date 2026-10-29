@@ -91,7 +91,8 @@ static u8* frame_buffer;
 static s16 audio_buf[GT_AUDIO_BUFFER_SIZE];
 static int audio_sample_count = 0;
 static size_t savestate_size = 0;
-static GT_Machine_Settings machine_settings = { GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
+static GT_Machine_Settings machine_settings = { GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO,
+    GT_MACHINE_AUTO };
 #if !defined(GT_DISABLE_DYNAREC)
 static int dynarec_option = -1;
 #endif
@@ -450,6 +451,7 @@ void retro_deinit(void)
     machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     machine_settings.ram_mb = GT_MACHINE_AUTO;
     machine_settings.fpu = GT_MACHINE_AUTO;
+    machine_settings.speed_mode = GT_MACHINE_AUTO;
 #if !defined(GT_DISABLE_DYNAREC)
     dynarec_option = -1;
 #endif
@@ -1895,12 +1897,20 @@ static void check_variables(void)
         core->GetAudio()->SetBuzzerVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
     }
 
+    var.key = "geartowns_pcm16_volume";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->GetAudio()->SetPCM16Volume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
+    }
+
     var.key = "geartowns_cdrom_speed";
     var.value = NULL;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
-        core->GetCDROM()->SetReadSpeed(CLAMP(atoi(var.value), 1, 8));
+        core->GetCDROM()->SetReadSpeed(strcmp(var.value, "auto") == 0 ? 0 : CLAMP(atoi(var.value), 1, 8));
     }
 
     var.key = "geartowns_cdrom_preload";
@@ -1965,6 +1975,15 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         machine_settings.fpu = strcmp(var.value, "none") == 0 ? 0 : strcmp(var.value, "80387") == 0 ? 1 : GT_MACHINE_AUTO;
+    }
+
+    var.key = "geartowns_speed_mode";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        machine_settings.speed_mode = strcmp(var.value, "compatible") == 0 ? 0 : strcmp(var.value, "high") == 0 ? 1 :
+            GT_MACHINE_AUTO;
     }
 
     var.key = "geartowns_boot_device";

@@ -79,6 +79,7 @@ public:
     void Init(Memory* memory, Scheduler* scheduler);
     void SetTraceLogger(TraceLogger* trace_logger);
     void SetDebugCallback(GT_DMA_Debug_Fn callback, void* debugger);
+    void SetFeatures(u32 features);
     void Reset();
     u8 Read(u16 port);
     void Write(u16 port, u8 value);
@@ -111,6 +112,7 @@ private:
     Scheduler* m_scheduler;
     GT_DMA_Endpoint m_endpoints[UPD71071_CHANNELS];
     u32 m_unit_fifths[UPD71071_CHANNELS];
+    bool m_address_carry;
     bool m_unsupported_logged;
     TraceLogger* m_trace_logger;
     GT_DMA_Debug_Fn m_debug_callback;

@@ -78,6 +78,7 @@ static bool menu_machine_model(void);
 static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile);
 static bool menu_machine_ram(const GT_Machine_Profile& profile);
 static bool menu_machine_fpu(const GT_Machine_Profile& profile);
+static bool menu_machine_speed_mode(const GT_Machine_Profile& profile);
 static const char* get_machine_fpu_text(const GT_Machine_Profile& profile);
 static void menu_machine_hardware(GT_Machine_Model model);
 static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size);
@@ -476,16 +477,17 @@ static void menu_cdrom(void)
     {
         ImGui::PushItemWidth(140.0f);
 
-        if (ImGui::Combo("##cdrom_speed", &config_emulator.cdrom_speed, "1x (Original)\0" "2x\0" "4x\0" "8x\0\0"))
-            emu_set_cdrom_speed(1 << config_emulator.cdrom_speed);
+        if (ImGui::Combo("##cdrom_speed", &config_emulator.cdrom_speed, "Auto\0" "1x\0" "2x\0" "4x\0" "8x\0\0"))
+            emu_set_cdrom_speed(config_emulator.cdrom_speed > 0 ? 1 << (config_emulator.cdrom_speed - 1) : 0);
 
         ImGui::PopItemWidth();
 
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
-            ImGui::Text("Speeds up how fast the drive reads sectors.");
-            ImGui::Text("Some software may not expect a faster drive.");
+            ImGui::Text("Auto reads at the speed of the model's drive: 2x on");
+            ImGui::Text("the ME and MF/Fresh in high-speed mode, 1x on the rest.");
+            ImGui::Text("Faster speeds may break software that doesn't expect them.");
             ImGui::EndTooltip();
         }
 
@@ -848,8 +850,11 @@ static void menu_machine(void)
 
     if (running && core->IsMachineConfigPending())
     {
-        get_machine_summary(core->GetPendingMachineConfig(), summary, sizeof(summary));
-        ImGui::TextDisabled("After reset: %s", summary);
+        char pending[128];
+        get_machine_summary(core->GetPendingMachineConfig(), pending, sizeof(pending));
+
+        if (strcmp(pending, summary) != 0)
+            ImGui::TextDisabled("After reset: %s", pending);
     }
 
     if (report.model == GT_MACHINE_SOURCE_DATABASE)
@@ -877,6 +882,9 @@ static void menu_machine(void)
         changed = true;
 
     if (menu_machine_fpu(profile))
+        changed = true;
+
+    if (menu_machine_speed_mode(profile))
         changed = true;
 
     menu_machine_hardware(core->GetPendingMachineConfig().model);
@@ -1178,6 +1186,72 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
         ImGui::Text("It is recommended to leave this option on Auto.");
         ImGui::Text("Auto fits an 80387 or a 487SX if the game database asks for one");
         ImGui::Text("or keeps the model's original, with no FPU.");
+        ImGui::Text("Reset the emulator to apply changes.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+    return changed;
+}
+
+static bool menu_machine_speed_mode(const GT_Machine_Profile& profile)
+{
+    if (!ImGui::BeginMenu("Speed Mode"))
+        return false;
+
+    bool changed = false;
+    bool speed_control = (profile.features & GT_MACHINE_FEATURE_SPEED_CONTROL) != 0;
+    bool database = emu_get_core()->GetPendingMachineReport().speed_mode == GT_MACHINE_SOURCE_DATABASE;
+    const char* labels[2] = { "Compatible", "High Speed" };
+    const char* auto_label = !speed_control ? "Auto (Compatible)" : database ? "Auto (High Speed)" : "Auto (CMOS)";
+    char preview[96];
+    snprintf(preview, sizeof(preview), "%s", config_machine.speed_mode == GT_MACHINE_AUTO ? auto_label :
+        labels[config_machine.speed_mode != 0 ? 1 : 0]);
+
+    if ((config_machine.speed_mode > 0) && !speed_control)
+        snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
+
+    float text_width = MAX(ImGui::CalcTextSize(auto_label).x, ImGui::CalcTextSize(preview).x);
+    ImGui::PushItemWidth(get_combo_width(text_width));
+
+    if (ImGui::BeginCombo("##machine_speed_mode", preview))
+    {
+        if (ImGui::Selectable(auto_label, config_machine.speed_mode == GT_MACHINE_AUTO))
+        {
+            config_machine.speed_mode = GT_MACHINE_AUTO;
+            changed = true;
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Selectable(labels[0], config_machine.speed_mode == 0))
+        {
+            config_machine.speed_mode = 0;
+            changed = true;
+        }
+
+        ImGui::BeginDisabled(!speed_control);
+
+        if (ImGui::Selectable(labels[1], config_machine.speed_mode > 0))
+        {
+            config_machine.speed_mode = 1;
+            changed = true;
+        }
+
+        ImGui::EndDisabled();
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("The FM Towns II models, except the UX, run in compatible or high-speed mode.");
+        ImGui::Text("High speed cuts memory waits and turns on the 486 cache and the 2x CD-ROM where fitted.");
+        ImGui::Text("The system ROM sets the mode at reset from the CMOS, where TownsMENU saves it.");
+        ImGui::Text("Auto uses high speed when Model is on Auto and the game database picks a 486 model,");
+        ImGui::Text("otherwise it keeps the CMOS setting, compatible on a new CMOS.");
+        ImGui::Text("Some software misbehaves in high-speed mode.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }
@@ -2049,6 +2123,7 @@ static void menu_audio(void)
         menu_audio_source_mute("Mute PCM", Audio::AUDIO_SOURCE_PCM);
         menu_audio_source_mute("Mute CD-DA", Audio::AUDIO_SOURCE_CDDA);
         menu_audio_source_mute("Mute Buzzer", Audio::AUDIO_SOURCE_BUZZER);
+        menu_audio_source_mute("Mute 16-bit PCM", Audio::AUDIO_SOURCE_PCM16);
 
         ImGui::Separator();
 
@@ -2056,6 +2131,7 @@ static void menu_audio(void)
         menu_audio_source_volume("PCM Volume", "##pcm_volume", Audio::AUDIO_SOURCE_PCM, &config_audio.pcm_volume);
         menu_audio_source_volume("CD-DA Volume", "##cdda_volume", Audio::AUDIO_SOURCE_CDDA, &config_audio.cdda_volume);
         menu_audio_source_volume("Buzzer Volume", "##buzzer_volume", Audio::AUDIO_SOURCE_BUZZER, &config_audio.buzzer_volume);
+        menu_audio_source_volume("16-bit PCM Volume", "##pcm16_volume", Audio::AUDIO_SOURCE_PCM16, &config_audio.pcm16_volume);
 
         ImGui::Separator();
 
@@ -2299,6 +2375,7 @@ static void menu_debug(void)
             ImGui::MenuItem("Show YM3438 FM", "", &config_debug.show_ym3438);
             ImGui::MenuItem("Show YM3438 Registers", "", &config_debug.show_ym3438_registers);
             ImGui::MenuItem("Show RF5C68 PCM", "", &config_debug.show_rf5c68);
+            ImGui::MenuItem("Show 16-bit PCM", "", &config_debug.show_pcm16);
             ImGui::MenuItem("Show Sound Control", "", &config_debug.show_sound_control);
             ImGui::EndMenu();
         }

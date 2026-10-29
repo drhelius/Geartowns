@@ -419,7 +419,12 @@ enum GT_Machine_Feature
     GT_MACHINE_FEATURE_SCSI_WORD_PORT  = 0x80000,
     GT_MACHINE_FEATURE_CACHE_CONTROL   = 0x100000,
     GT_MACHINE_FEATURE_CD_CACHE        = 0x200000,
-    GT_MACHINE_FEATURE_PCM_BYTE_LANE   = 0x400000
+    GT_MACHINE_FEATURE_PCM_BYTE_LANE   = 0x400000,
+    GT_MACHINE_FEATURE_DMA_CARRY       = 0x800000,
+    GT_MACHINE_FEATURE_RAM_SIZE_127MB  = 0x1000000,
+    GT_MACHINE_FEATURE_CD_DOUBLE_SPEED = 0x2000000,
+    GT_MACHINE_FEATURE_SERIAL_FIFO     = 0x4000000,
+    GT_MACHINE_FEATURE_PCM16           = 0x8000000
 };
 
 enum GT_Boot_Device
@@ -600,6 +605,7 @@ struct GT_Machine_Config
     u32 cpu_clock_rate;
     bool scsi;
     bool fpu;
+    int speed_mode;
 };
 
 struct GT_Machine_Settings
@@ -608,6 +614,7 @@ struct GT_Machine_Settings
     int cpu_mhz;
     int ram_mb;
     int fpu;
+    int speed_mode;
 };
 
 struct GT_Machine_Report
@@ -616,6 +623,7 @@ struct GT_Machine_Report
     GT_Machine_Source cpu_clock;
     GT_Machine_Source ram;
     GT_Machine_Source fpu;
+    GT_Machine_Source speed_mode;
     bool fallback;
     const char* title;
     int warning_count;

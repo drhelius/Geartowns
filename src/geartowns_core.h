@@ -205,6 +205,7 @@ private:
     bool LoadMachineFirmware(bool force, bool report);
     void ApplyMachineConfig();
     void ApplyBusTiming();
+    void ApplyCdRomSpeed();
     static void BusModeCallback(void* context);
     static void BootReadCallback(void* context);
     void ApplyBootDevice();

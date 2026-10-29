@@ -42,11 +42,13 @@ static Machine_Override model_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AU
 static Machine_Override cpu_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
 static Machine_Override ram_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
 static Machine_Override fpu_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
+static Machine_Override speed_mode_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
 
 static bool option_has_value(const char* option);
 static const char* option_value(int argc, char* argv[], int* i);
 static bool parse_model(const char* text, int* model);
 static bool parse_fpu(const char* text, int* fpu);
+static bool parse_speed_mode(const char* text, int* speed_mode);
 static bool parse_number(const char* text, const int* values, int count, int* value);
 static void apply_override(Machine_Override& override, int* setting);
 static void restore_override(const Machine_Override& override, int* setting);
@@ -149,7 +151,8 @@ int main(int argc, char* argv[])
                     app_params.state_file = value;
             }
             else if ((strcmp(argv[i], "--model") == 0) || (strcmp(argv[i], "--cpu-mhz") == 0) ||
-                (strcmp(argv[i], "--ram") == 0) || (strcmp(argv[i], "--fpu") == 0))
+                (strcmp(argv[i], "--ram") == 0) || (strcmp(argv[i], "--fpu") == 0) ||
+                (strcmp(argv[i], "--speed-mode") == 0))
             {
                 const char* option = argv[i];
                 const char* value = option_value(argc, argv, &i);
@@ -173,6 +176,11 @@ int main(int argc, char* argv[])
                 {
                     override = &fpu_override;
                     valid = parse_fpu(value, &override->value);
+                }
+                else if (strcmp(option, "--speed-mode") == 0)
+                {
+                    override = &speed_mode_override;
+                    valid = parse_speed_mode(value, &override->value);
                 }
                 else
                     valid = parse_number(value, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT, &override->value);
@@ -333,7 +341,7 @@ int main(int argc, char* argv[])
 static bool option_has_value(const char* option)
 {
     static const char* const k_options[] = { "--mcp-http-port", "--mcp-http-address", "--cd", "--fd1", "--fd2",
-        "--card", "--load-state", "--model", "--cpu-mhz", "--ram", "--fpu" };
+        "--card", "--load-state", "--model", "--cpu-mhz", "--ram", "--fpu", "--speed-mode" };
 
     for (size_t i = 0; i < sizeof(k_options) / sizeof(k_options[0]); i++)
     {
@@ -417,6 +425,20 @@ static bool parse_fpu(const char* text, int* fpu)
     return true;
 }
 
+static bool parse_speed_mode(const char* text, int* speed_mode)
+{
+    if (strcmp(text, "auto") == 0)
+        *speed_mode = GT_MACHINE_AUTO;
+    else if (strcmp(text, "compatible") == 0)
+        *speed_mode = 0;
+    else if (strcmp(text, "high") == 0)
+        *speed_mode = 1;
+    else
+        return false;
+
+    return true;
+}
+
 static void apply_override(Machine_Override& override, int* setting)
 {
     if (!override.set)
@@ -438,6 +460,7 @@ static void apply_machine_overrides(void)
     apply_override(cpu_override, &config_machine.cpu_mhz);
     apply_override(ram_override, &config_machine.ram_mb);
     apply_override(fpu_override, &config_machine.fpu);
+    apply_override(speed_mode_override, &config_machine.speed_mode);
 }
 
 static void restore_machine_settings(void)
@@ -446,6 +469,7 @@ static void restore_machine_settings(void)
     restore_override(cpu_override, &config_machine.cpu_mhz);
     restore_override(ram_override, &config_machine.ram_mb);
     restore_override(fpu_override, &config_machine.fpu);
+    restore_override(speed_mode_override, &config_machine.speed_mode);
 }
 
 static void print_wrapped(const char* label, const std::string& text)
@@ -523,7 +547,8 @@ static void print_usage(const char* program)
     print_wrapped("      --model MODEL", models);
     print_wrapped("      --cpu-mhz MHZ", speeds);
     print_wrapped("      --ram MB", sizes);
-    print_wrapped("      --fpu FPU", "auto, none, 80387 (a 487SX on the HR)");
+    print_wrapped("      --fpu FPU", "auto, none, 80387 (a 487SX on the 486 models)");
+    print_wrapped("      --speed-mode MODE", "auto, compatible, high");
     printf("\nOptions:\n");
     print_wrapped("  -f, --fullscreen", "Start in fullscreen mode");
     print_wrapped("  -w, --windowed", "Start in windowed mode with menu visible");

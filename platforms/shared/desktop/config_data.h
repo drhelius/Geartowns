@@ -24,7 +24,7 @@
 #include <string>
 #include "geartowns.h"
 
-static const int config_version = 7;
+static const int config_version = 8;
 static const int config_minimum_version = 5;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;
@@ -127,6 +127,7 @@ struct config_Machine
     int cpu_mhz;
     int ram_mb;
     int fpu;
+    int speed_mode;
     std::string firmware_paths[GT_MACHINE_COUNT];
 };
 
@@ -156,6 +157,7 @@ struct config_Audio
     float pcm_volume;
     float cdda_volume;
     float buzzer_volume;
+    float pcm16_volume;
     int buffer_count;
 };
 
@@ -293,6 +295,7 @@ struct config_Debug
     bool trace_sprite;
     bool trace_fm;
     bool trace_pcm;
+    bool trace_pcm16;
     bool trace_mixer;
     bool trace_cdrom;
     bool trace_fdc;
@@ -309,6 +312,7 @@ struct config_Debug
     int trace_sprite_events;
     int trace_fm_events;
     int trace_pcm_events;
+    int trace_pcm16_events;
     int trace_mixer_events;
     int trace_cdrom_events;
     int trace_fdc_events;
@@ -352,6 +356,7 @@ struct config_Debug
     bool show_ym3438;
     bool show_ym3438_registers;
     bool show_rf5c68;
+    bool show_pcm16;
     bool show_sound_control;
     int rf5c68_wave_bank;
     bool show_cdrom;

@@ -23,6 +23,7 @@
 static void process_machine_model(config_Operation operation, int* model);
 static void process_machine_value(config_Operation operation, const char* key, int* value, const int* values, int count);
 static void process_machine_fpu(config_Operation operation, int* fpu);
+static void process_machine_speed_mode(config_Operation operation, int* speed_mode);
 
 static inline void process(config_Operation operation)
 {
@@ -72,6 +73,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "YM3438", config_debug.show_ym3438, false);
     CONFIG_BOOL("Debug", "YM3438Registers", config_debug.show_ym3438_registers, false);
     CONFIG_BOOL("Debug", "RF5C68", config_debug.show_rf5c68, false);
+    CONFIG_BOOL("Debug", "PCM16", config_debug.show_pcm16, false);
     CONFIG_BOOL("Debug", "SoundControl", config_debug.show_sound_control, false);
     CONFIG_INT_RANGE("Debug", "RF5C68WaveBank", config_debug.rf5c68_wave_bank, 0, 0, 15);
     CONFIG_BOOL("Debug", "CDROM", config_debug.show_cdrom, false);
@@ -105,6 +107,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "TraceSprite", config_debug.trace_sprite, false);
     CONFIG_BOOL("Debug", "TraceFm", config_debug.trace_fm, false);
     CONFIG_BOOL("Debug", "TracePcm", config_debug.trace_pcm, false);
+    CONFIG_BOOL("Debug", "TracePcm16", config_debug.trace_pcm16, false);
     CONFIG_BOOL("Debug", "TraceMixer", config_debug.trace_mixer, false);
     CONFIG_BOOL("Debug", "TraceCdrom", config_debug.trace_cdrom, false);
     CONFIG_BOOL("Debug", "TraceFdc", config_debug.trace_fdc, false);
@@ -129,6 +132,8 @@ static inline void process(config_Operation operation)
         TRACE_FM_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TracePcmEvents", config_debug.trace_pcm_events, TRACE_PCM_EVENT_ALL, 0,
         TRACE_PCM_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TracePcm16Events", config_debug.trace_pcm16_events, TRACE_PCM16_EVENT_DEFAULT, 0,
+        TRACE_PCM16_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceMixerEvents", config_debug.trace_mixer_events, TRACE_MIXER_EVENT_ALL, 0,
         TRACE_MIXER_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceCdromEvents", config_debug.trace_cdrom_events, TRACE_CDROM_EVENT_ALL, 0,
@@ -195,7 +200,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Emulator", "PowerOnAtStartup", config_emulator.power_on_startup, true);
     CONFIG_BOOL("Emulator", "PauseWhenInactive", config_emulator.pause_when_inactive, true);
     CONFIG_BOOL("Emulator", "PreloadCDROM", config_emulator.preload_cdrom, false);
-    CONFIG_INT_RANGE("Emulator", "CDROMSpeed", config_emulator.cdrom_speed, 0, 0, 3);
+    CONFIG_INT_RANGE("Emulator", "CDROMSpeed", config_emulator.cdrom_speed, 0, 0, 4);
     CONFIG_BOOL("Emulator", "Dynarec", config_emulator.dynarec, true);
 
     // Files and paths
@@ -252,6 +257,7 @@ static inline void process(config_Operation operation)
     process_machine_value(operation, "CPUSpeed", &config_machine.cpu_mhz, k_machine_cpu_speeds_mhz, GT_MACHINE_CPU_SPEED_COUNT);
     process_machine_value(operation, "RAM", &config_machine.ram_mb, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT);
     process_machine_fpu(operation, &config_machine.fpu);
+    process_machine_speed_mode(operation, &config_machine.speed_mode);
 
     //**************************************
     // Video
@@ -311,6 +317,7 @@ static inline void process(config_Operation operation)
     CONFIG_FLOAT_RANGE("Audio", "PCMVolume", config_audio.pcm_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_FLOAT_RANGE("Audio", "CDDAVolume", config_audio.cdda_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_FLOAT_RANGE("Audio", "BuzzerVolume", config_audio.buzzer_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "PCM16Volume", config_audio.pcm16_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_INT("Audio", "BufferCount", config_audio.buffer_count, 3);
 
     //**************************************
@@ -511,6 +518,9 @@ static void migrate(int file_version)
 
         config_ini_data["Emulator"].remove("LastOpenPath");
     }
+
+    if ((file_version < 8) && get_setting("Emulator", "CDROMSpeed", &stored) && (atoi(stored.c_str()) > 0))
+        write_int("Emulator", "CDROMSpeed", atoi(stored.c_str()) + 1);
 }
 
 static void process_machine_model(config_Operation operation, int* model)
@@ -549,6 +559,13 @@ static void process_machine_fpu(config_Operation operation, int* fpu)
     std::string text = *fpu < 0 ? "auto" : *fpu == 0 ? "none" : "80387";
     process_string(operation, "Machine", "FPU", &text, "auto", false);
     *fpu = text == "none" ? 0 : text == "80387" ? 1 : GT_MACHINE_AUTO;
+}
+
+static void process_machine_speed_mode(config_Operation operation, int* speed_mode)
+{
+    std::string text = *speed_mode < 0 ? "auto" : *speed_mode == 0 ? "compatible" : "high";
+    process_string(operation, "Machine", "SpeedMode", &text, "auto", false);
+    *speed_mode = text == "compatible" ? 0 : text == "high" ? 1 : GT_MACHINE_AUTO;
 }
 
 static void sync_shader_preset_parameter_defaults(void)

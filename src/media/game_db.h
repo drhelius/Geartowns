@@ -39,6 +39,7 @@ struct GT_DB_Entry
 #define GT_GAMEDB_HDD                      0x0001
 #define GT_GAMEDB_CPU_486                  0x0002
 #define GT_GAMEDB_FPU                      0x0004
+#define GT_GAMEDB_PREFER_PCM16             0x0008
 #define GT_GAMEDB_FLOPPY_BOOT              0x0010
 #define GT_GAMEDB_FLOPPY_REQUIRED          0x0020
 #define GT_GAMEDB_FLOPPY_OPTIONAL          0x0040
@@ -83,7 +84,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x5104D6F4, "LiveAnimation V1.1 L10", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0xFC9425BC },
     { 0x55A9DB0A, "LiveMovie V1.1 L10", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0xD1A0C713 },
     { 0x899BD732, "Lunatic Dawn II", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0xEEAB5AD7 },
-    { 0xE23DB546, "Mahou Daisakusen", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 4, 33, 0, 0, 0x35A275FE },
+    { 0xE23DB546, "Mahou Daisakusen", GT_GAMEDB_PREFER_PCM16, GT_MACHINE_MODEL1_2, 4, 33, 0, 0, 0x35A275FE },
     { 0x8F2CE450, "Menzoberranzan - Yami no Monshou", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0xF5625E86 },
     { 0xA4D8170D, "Microsoft Windows Version 3.1 L10 Operating System (Setup CD-ROM)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0 },
     { 0xC09847CD, "Microsoft Windows Version 3.1 L11 Operating System (Setup CD-ROM)", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 4, 0, 0, 0, 0 },
@@ -368,6 +369,9 @@ const GT_DB_Entry k_game_database[] =
     { 0xAFE4EBCF, "FM Towns II Fresh TV System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0, 0, 0, 0, 0 },
     { 0x9F55A20C, "FM Towns II Fresh TV 20-dot Font ROM", GT_GAMEDB_FIRMWARE_FONT20, 0, 0, 0, 0, 0, 0 },
     { 0xA961AAE7, "FM Towns II Fresh TV Serial ROM", GT_GAMEDB_FIRMWARE_SERIAL, 0, 0, 0, 0, 0, 0 },
+
+    // FM Towns II MX firmware (V10)
+    { 0x16E78766, "FM Towns II MX Serial ROM", GT_GAMEDB_FIRMWARE_SERIAL, 0, 0, 0, 0, 0, 0 },
 
     // Free FM Towns Project firmware
     { 0x65DC3B1F, "Free FM Towns System ROM", GT_GAMEDB_FIRMWARE_SYSTEM, 0, 0, 0, 0, 0, 0 },

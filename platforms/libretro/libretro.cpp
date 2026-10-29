@@ -23,6 +23,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include <sys/stat.h>
 #include <string>
 #include <vector>
 #include "libretro.h"

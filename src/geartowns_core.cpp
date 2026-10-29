@@ -219,7 +219,7 @@ void GeartownsCore::Init()
     m_cdrom_media->Init();
     m_cdrom_audio->Init();
     m_pic->Init();
-    m_audio->Init(m_scheduler, m_cdrom_audio, m_pic, m_pit);
+    m_audio->Init(m_scheduler, m_cdrom_audio, m_pic, m_pit, m_memory);
     m_pit->Init(m_pic, m_scheduler, m_audio);
     m_system_control->Init(m_memory);
     m_system_control->SetBusModeCallback(this, BusModeCallback);
@@ -2431,6 +2431,13 @@ void GeartownsCore::InitMemoryMap()
         GT_DEBUG_REGION_AUDIO, m_audio, Audio::ReadWaveWindowCallback, Audio::WriteWaveWindowCallback,
         Audio::PeekWaveWindowCallback))
         Error("Unable to map the PCM wave RAM window");
+
+    // On the Marty a 16-bit cycle to the window reaches only its even byte
+    if (((profile.features & GT_MACHINE_FEATURE_PCM_BYTE_LANE) != 0) &&
+        (!m_memory->SetRegionWideReadHandlers(GT_DEBUG_REGION_PCM_WINDOW, Audio::ReadWaveWindow16Callback,
+        Audio::ReadWaveWindow32Callback) || !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_PCM_WINDOW,
+        Audio::WriteWaveWindow16Callback, Audio::WriteWaveWindow32Callback)))
+        Error("Unable to set the PCM wave RAM window's 16-bit cycles");
 
     u8* wave_ram = m_audio->GetRF5C68()->GetState()->wave_ram;
 

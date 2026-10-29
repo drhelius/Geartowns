@@ -30,6 +30,7 @@
 #define AUDIO_VOLUME_CHANNELS 4
 
 class CdRomAudio;
+class Memory;
 class PIC;
 class PIT;
 class Scheduler;
@@ -68,7 +69,7 @@ public:
 public:
     Audio();
     ~Audio();
-    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit);
+    void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit, Memory* memory);
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
     void Mute(bool mute);
@@ -110,6 +111,10 @@ public:
     static u8 ReadWaveWindowCallback(void* device, u32 offset);
     static u8 PeekWaveWindowCallback(void* device, u32 offset);
     static void WriteWaveWindowCallback(void* device, u32 offset, u8 value);
+    static u16 ReadWaveWindow16Callback(void* device, u32 offset);
+    static u32 ReadWaveWindow32Callback(void* device, u32 offset);
+    static void WriteWaveWindow16Callback(void* device, u32 offset, u16 value);
+    static void WriteWaveWindow32Callback(void* device, u32 offset, u32 value);
 
 private:
     void Clock(u32 clocks);
@@ -138,6 +143,7 @@ private:
     Scheduler* m_scheduler;
     PIC* m_pic;
     PIT* m_pit;
+    Memory* m_memory;
     TraceLogger* m_trace_logger;
     bool m_mute;
     float m_master_volume;

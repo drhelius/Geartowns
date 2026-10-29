@@ -30,6 +30,8 @@ class StateSerializer;
 class TraceLogger;
 
 typedef u8 (*GT_Memory_Read8_Fn)(void* device, u32 offset);
+typedef u16 (*GT_Memory_Read16_Fn)(void* device, u32 offset);
+typedef u32 (*GT_Memory_Read32_Fn)(void* device, u32 offset);
 typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
 typedef void (*GT_Memory_Write16_Fn)(void* device, u32 offset, u16 value);
 typedef void (*GT_Memory_Write32_Fn)(void* device, u32 offset, u32 value);
@@ -74,10 +76,12 @@ public:
     bool RegisterHandlerRegion(int id, const char* name, u32 size, u32 physical_base, u32 flags, void* device,
         GT_Memory_Read8_Fn read8, GT_Memory_Write8_Fn write8, GT_Memory_Read8_Fn peek8);
     bool SetRegionWideHandlers(int id, GT_Memory_Write16_Fn write16, GT_Memory_Write32_Fn write32);
+    bool SetRegionWideReadHandlers(int id, GT_Memory_Read16_Fn read16, GT_Memory_Read32_Fn read32);
     bool SetRegionMapped(int id, bool mapped);
     bool SetRegionData(int id, const u8* read_data, u8* write_data);
     bool SetRegionHandlerRange(int id, u32 offset, u32 size, bool reads);
     void SynchronizeAccess();
+    void SynchronizeRegisterAccess();
     int GetDebugRegionCount() const;
     bool GetDebugRegion(int index, GT_Debug_Memory_Region& region) const;
     void DebugReadRegionBlock(int id, u32 offset, u8* data, GT_Debug_Memory_Status* status, u32 size) const;
@@ -144,6 +148,8 @@ private:
         GT_Memory_Read8_Fn read8;
         GT_Memory_Write8_Fn write8;
         GT_Memory_Read8_Fn peek8;
+        GT_Memory_Read16_Fn read16;
+        GT_Memory_Read32_Fn read32;
         GT_Memory_Write16_Fn write16;
         GT_Memory_Write32_Fn write32;
         u32 handler_offset;
@@ -157,12 +163,14 @@ private:
     DebugRegion* FindMappedRegion(u32 bus_address);
     const DebugRegion* FindMappedSpan(u32 physical, u32 size) const;
     const DebugRegion* FindPageSpan(u32 physical, u32 size) const;
+    const u8* FindReadSpan(u32 physical, u32 size, const DebugRegion*& region) const;
     bool IsHandlerSpan(const DebugRegion* region, u32 offset, u32 size) const;
     bool IsProtectedSpan(const DebugRegion* region, u32 offset, u32 size) const;
     GT_Debug_Memory_Status DebugReadRegion(int id, u32 offset, u8& value) const;
     GT_Debug_Memory_Status DebugReadBus(u32 bus_address, u8& value) const;
     GT_Debug_Memory_Status ReadRegion(const DebugRegion& region, u32 offset, u8& value) const;
     u8 ReadBus(u32 bus_address, GT_Bus_Access_Context& context);
+    u8 ReadRegionBus(const DebugRegion& region, u32 offset, GT_Bus_Access_Context& context);
     void WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context);
     void SynchronizeRegister(GT_Bus_Access_Context& context);
     u32 NormalizePhysicalAddress(u32 physical) const;

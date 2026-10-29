@@ -22,6 +22,7 @@
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "../cdrom/cdrom_audio.h"
+#include "../system/memory.h"
 #include "../system/pic.h"
 #include "../system/scheduler.h"
 #include "../common/trace_logger.h"
@@ -66,6 +67,7 @@ Audio::Audio()
     InitPointer(m_scheduler);
     InitPointer(m_pic);
     InitPointer(m_pit);
+    InitPointer(m_memory);
     InitPointer(m_trace_logger);
     m_mute = false;
     m_master_volume = 1.0f;
@@ -105,12 +107,13 @@ Audio::~Audio()
     SafeDelete(m_ym3438);
 }
 
-void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit)
+void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit, Memory* memory)
 {
     m_scheduler = scheduler;
     m_cdrom_audio = cdrom_audio;
     m_pic = pic;
     m_pit = pit;
+    m_memory = memory;
 
     if (!IsValidPointer(m_ym3438))
         m_ym3438 = new YM3438();
@@ -505,6 +508,54 @@ void Audio::WriteWaveWindowCallback(void* device, u32 offset, u8 value)
     // Adding or removing a loop marker can change where a playing channel crosses its next block
     if (marker != (value == 0xFF))
         audio->UpdatePCMIRQ();
+}
+
+// The Marty's window sits on the low byte lane: a 16-bit cycle at an even address reads the even byte with 00h above
+// it and writes only the even byte. An odd address takes byte cycles, and an odd dword a byte, a word and a byte
+u16 Audio::ReadWaveWindow16Callback(void* device, u32 offset)
+{
+    ((Audio*)device)->m_memory->SynchronizeRegisterAccess();
+    u16 value = ReadWaveWindowCallback(device, offset);
+
+    if ((offset & 1) != 0)
+        value |= (u16)(ReadWaveWindowCallback(device, offset + 1) << 8);
+
+    return value;
+}
+
+u32 Audio::ReadWaveWindow32Callback(void* device, u32 offset)
+{
+    ((Audio*)device)->m_memory->SynchronizeRegisterAccess();
+    u32 value = ReadWaveWindowCallback(device, offset);
+
+    if ((offset & 1) != 0)
+        return value | ((u32)ReadWaveWindowCallback(device, offset + 1) << 8) |
+            ((u32)ReadWaveWindowCallback(device, offset + 3) << 24);
+
+    return value | ((u32)ReadWaveWindowCallback(device, offset + 2) << 16);
+}
+
+void Audio::WriteWaveWindow16Callback(void* device, u32 offset, u16 value)
+{
+    ((Audio*)device)->m_memory->SynchronizeRegisterAccess();
+    WriteWaveWindowCallback(device, offset, (u8)value);
+
+    if ((offset & 1) != 0)
+        WriteWaveWindowCallback(device, offset + 1, (u8)(value >> 8));
+}
+
+void Audio::WriteWaveWindow32Callback(void* device, u32 offset, u32 value)
+{
+    ((Audio*)device)->m_memory->SynchronizeRegisterAccess();
+    WriteWaveWindowCallback(device, offset, (u8)value);
+
+    if ((offset & 1) != 0)
+    {
+        WriteWaveWindowCallback(device, offset + 1, (u8)(value >> 8));
+        WriteWaveWindowCallback(device, offset + 3, (u8)(value >> 24));
+    }
+    else
+        WriteWaveWindowCallback(device, offset + 2, (u8)(value >> 16));
 }
 
 // One value per channel and output sample for the debugger scopes, only while they are enabled

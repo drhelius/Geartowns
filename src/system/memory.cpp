@@ -379,6 +379,52 @@ INLINE bool Memory::IsHandlerSpan(const DebugRegion* region, u32 offset, u32 siz
     return offset < region->handler_offset + region->handler_size && offset + size > region->handler_offset;
 }
 
+// Host data under a read, or NULL and the region holding all of it, if there is one
+INLINE const u8* Memory::FindReadSpan(u32 physical, u32 size, const DebugRegion*& region) const
+{
+    if (size != 0 && (u64)(physical & 0xFFF) + size <= 0x1000 && m_cpu_map_generation == m_map_generation &&
+        IsValidPointer(m_cpu_read_pages[physical >> 12]))
+        return m_cpu_read_pages[physical >> 12] + (physical & 0xFFF);
+
+    region = FindPageSpan(physical, size);
+
+    if (!IsValidPointer(region) || !IsValidPointer(region->read_data) ||
+        (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
+        return NULL;
+
+    u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+
+    if (region->handler_reads && IsHandlerSpan(region, offset, size))
+        return NULL;
+
+    return region->read_data + offset;
+}
+
+// Unmapped and unreadable addresses float high like the I/O space
+// Registers move machine time up to the start of their instruction and end the CPU batch
+INLINE u8 Memory::ReadRegionBus(const DebugRegion& region, u32 offset, GT_Bus_Access_Context& context)
+{
+    if ((region.info.flags & GT_DEBUG_REGION_READABLE) == 0)
+        return 0xFF;
+
+    if ((region.info.flags & GT_DEBUG_REGION_MMIO) != 0)
+        SynchronizeRegister(context);
+
+    if (IsValidPointer(region.read8))
+    {
+        GT_Bus_Access_Context* outer = m_access_context;
+        m_access_context = &context;
+        u8 value = region.read8(region.device, offset);
+        m_access_context = outer;
+        return value;
+    }
+
+    if (IsValidPointer(region.read_data))
+        return region.read_data[offset];
+
+    return 0xFF;
+}
+
 // WRPROT keeps every bus master from writing the NMI vector in main RAM
 INLINE bool Memory::IsProtectedSpan(const DebugRegion* region, u32 offset, u32 size) const
 {
@@ -415,12 +461,36 @@ u8 Memory::Read8Physical(u32 physical, GT_Bus_Access_Context& context)
     return ReadBus(NormalizePhysicalAddress(physical), context);
 }
 
+// Both bytes in one region: its 16-bit handler, or its byte accesses without looking it up again
 u16 Memory::Read16Physical(u32 physical, GT_Bus_Access_Context& context)
 {
-    const u8* data = GetPhysicalReadSpan(physical, 2);
+    const DebugRegion* region = NULL;
+    const u8* data = FindReadSpan(physical, 2, region);
 
     if (IsValidPointer(data))
         return read_u16_le(data);
+
+    if (IsValidPointer(region))
+    {
+        u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
+
+        if (IsValidPointer(region->read16) && (region->info.flags & GT_DEBUG_REGION_READABLE) != 0)
+        {
+            GT_Bus_Access_Context* outer = m_access_context;
+            m_access_context = &context;
+            u16 value = region->read16(region->device, offset);
+            m_access_context = outer;
+            return value;
+        }
+
+        // A span across pages may have host data on one of them
+        if ((physical & 0xFFF) != 0xFFF)
+        {
+            u16 value = ReadRegionBus(*region, offset, context);
+            value |= (u16)ReadRegionBus(*region, offset + 1, context) << 8;
+            return value;
+        }
+    }
 
     u16 value = Read8Physical(physical, context);
     value |= (u16)Read8Physical(physical + 1, context) << 8;
@@ -429,10 +499,21 @@ u16 Memory::Read16Physical(u32 physical, GT_Bus_Access_Context& context)
 
 u32 Memory::Read32Physical(u32 physical, GT_Bus_Access_Context& context)
 {
-    const u8* data = GetPhysicalReadSpan(physical, 4);
+    const DebugRegion* region = NULL;
+    const u8* data = FindReadSpan(physical, 4, region);
 
     if (IsValidPointer(data))
         return read_u32_le(data);
+
+    if (IsValidPointer(region) && IsValidPointer(region->read32) &&
+        (region->info.flags & GT_DEBUG_REGION_READABLE) != 0)
+    {
+        GT_Bus_Access_Context* outer = m_access_context;
+        m_access_context = &context;
+        u32 value = region->read32(region->device, NormalizePhysicalAddress(physical) - region->info.physical_base);
+        m_access_context = outer;
+        return value;
+    }
 
     u32 value = Read16Physical(physical, context);
     value |= (u32)Read16Physical(physical + 2, context) << 16;
@@ -621,6 +702,18 @@ bool Memory::SetRegionWideHandlers(int id, GT_Memory_Write16_Fn write16, GT_Memo
     return true;
 }
 
+bool Memory::SetRegionWideReadHandlers(int id, GT_Memory_Read16_Fn read16, GT_Memory_Read32_Fn read32)
+{
+    DebugRegion* region = FindRegion(id);
+
+    if (!IsValidPointer(region) || !IsValidPointer(region->read8))
+        return false;
+
+    region->read16 = read16;
+    region->read32 = read32;
+    return true;
+}
+
 // A banked view switches on or off, only the host pages it covers are rebuilt
 bool Memory::SetRegionMapped(int id, bool mapped)
 {
@@ -715,6 +808,13 @@ void Memory::SynchronizeAccess()
         context->synchronize_memory(context->synchronize_context, *context);
 }
 
+// A wide handler of a register region does what its byte accesses would
+void Memory::SynchronizeRegisterAccess()
+{
+    if (IsValidPointer(m_access_context))
+        SynchronizeRegister(*m_access_context);
+}
+
 void Memory::SynchronizeRegister(GT_Bus_Access_Context& context)
 {
     context.end_batch = true;
@@ -790,22 +890,8 @@ bool Memory::TryPeekPhysical(u32 physical, u8& value) const
 
 const u8* Memory::GetPhysicalReadSpan(u32 physical, u32 size) const
 {
-    if (size != 0 && (u64)(physical & 0xFFF) + size <= 0x1000 && m_cpu_map_generation == m_map_generation &&
-        IsValidPointer(m_cpu_read_pages[physical >> 12]))
-        return m_cpu_read_pages[physical >> 12] + (physical & 0xFFF);
-
-    const DebugRegion* region = FindPageSpan(physical, size);
-
-    if (!IsValidPointer(region) || !IsValidPointer(region->read_data) ||
-        (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
-        return NULL;
-
-    u32 offset = NormalizePhysicalAddress(physical) - region->info.physical_base;
-
-    if (region->handler_reads && IsHandlerSpan(region, offset, size))
-        return NULL;
-
-    return region->read_data + offset;
+    const DebugRegion* region = NULL;
+    return FindReadSpan(physical, size, region);
 }
 
 bool Memory::TryPeekPhysicalBlock(u32 physical, u8* data, u32 size) const
@@ -1246,31 +1332,12 @@ GT_Debug_Memory_Status Memory::ReadRegion(const DebugRegion& region, u32 offset,
     return (region.info.flags & GT_DEBUG_REGION_WRITABLE) != 0 ? GT_DEBUG_MEMORY_VALID : GT_DEBUG_MEMORY_READ_ONLY;
 }
 
-// Unmapped and unreadable addresses float high like the I/O space
-// Registers move machine time up to the start of their instruction and end the CPU batch
 u8 Memory::ReadBus(u32 bus_address, GT_Bus_Access_Context& context)
 {
     const DebugRegion* region = FindPageSpan(bus_address, 1);
 
-    if (!IsValidPointer(region) || (region->info.flags & GT_DEBUG_REGION_READABLE) == 0)
-        return 0xFF;
-
-    u32 offset = bus_address - region->info.physical_base;
-
-    if ((region->info.flags & GT_DEBUG_REGION_MMIO) != 0)
-        SynchronizeRegister(context);
-
-    if (IsValidPointer(region->read8))
-    {
-        GT_Bus_Access_Context* outer = m_access_context;
-        m_access_context = &context;
-        u8 value = region->read8(region->device, offset);
-        m_access_context = outer;
-        return value;
-    }
-
-    if (IsValidPointer(region->read_data))
-        return region->read_data[offset];
+    if (IsValidPointer(region))
+        return ReadRegionBus(*region, bus_address - region->info.physical_base, context);
 
     return 0xFF;
 }

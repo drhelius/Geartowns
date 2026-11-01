@@ -117,6 +117,8 @@ I386::I386()
     m_reset_edx = 0x00000300;
     m_cr0_fixed = 0x7FFFFFE0;
     InitPointer(m_x87);
+    InitPointer(m_fpu_error_context);
+    InitPointer(m_fpu_error_callback);
     m_i486 = false;
     m_write_protect = false;
     m_alignment_check = false;
@@ -1331,6 +1333,13 @@ void I386::SetCPU(const GT_Machine_CPU_Info& info)
 void I386::SetFPU(X87* fpu)
 {
     m_x87 = fpu;
+}
+
+// A board that takes ERROR# to an IRQ, as the AT does, keeps it from the CPU unless a 486 sets CR0.NE
+void I386::SetFPUErrorCallback(void* context, I386_FPU_Error_Fn callback)
+{
+    m_fpu_error_context = context;
+    m_fpu_error_callback = callback;
 }
 
 void I386::SetTraceLogger(TraceLogger* trace_logger)

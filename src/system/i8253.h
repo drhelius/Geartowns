@@ -51,6 +51,11 @@ public:
         u64 pending_load;
         u32 pending_count;
         u32 pending_phase;
+        bool gate;
+        u64 hold;
+        u64 null_until;
+        u8 status_latch;
+        bool status_latched;
     };
 
     struct I8253_State
@@ -62,32 +67,38 @@ public:
     I8253();
     ~I8253();
     void Init();
+    void SetReadBack(bool enabled);
     void Reset();
     u8 ReadCounter(int index, u64 tick);
     u8 PeekCounter(int index, u64 tick) const;
     u16 PeekCount(int index, u64 tick) const;
     void WriteCounter(int index, u8 value, u64 tick);
     void WriteControl(u8 value, u64 tick);
+    void SetGate(int index, bool gate, u64 tick);
     bool GetOutput(int index, u64 tick);
     bool PeekOutput(int index, u64 tick) const;
     u64 GetNextRisingEdge(int index, u64 tick) const;
     I8253_State* GetState();
+    const I8253_State* GetState() const;
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void LoadCount(I8253_Counter& counter, u16 raw, u64 tick);
+    void ReadBack(u8 value, u64 tick);
+    u64 GetGateTick(const I8253_Counter& counter, u64 tick) const;
     void CommitReload(I8253_Counter& counter, u64 tick) const;
     bool GetCounterOutput(I8253_Counter& counter, u64 tick) const;
     u16 GetCount(I8253_Counter& counter, u64 tick) const;
     u32 GetEffectiveCount(u16 raw, bool bcd) const;
     u16 EncodeBCD(u32 value) const;
     u64 GetEdgeAfter(u8 mode, u64 load, u32 count, u32 phase, u64 tick) const;
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:
     I8253_State m_state;
+    bool m_read_back;
 };
 
 static const u64 k_i8253_no_edge = 0xFFFFFFFFFFFFFFFFULL;

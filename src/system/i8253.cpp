@@ -22,6 +22,7 @@
 
 I8253::I8253()
 {
+    m_read_back = false;
     Reset();
 }
 
@@ -34,6 +35,12 @@ void I8253::Init()
     Reset();
 }
 
+// The 8254 adds the read-back command to the 8253
+void I8253::SetReadBack(bool enabled)
+{
+    m_read_back = enabled;
+}
+
 void I8253::Reset()
 {
     memset(m_state.counters, 0, sizeof(m_state.counters));
@@ -42,6 +49,8 @@ void I8253::Reset()
     {
         m_state.counters[i].count = 1;
         m_state.counters[i].pending_count = 1;
+        m_state.counters[i].gate = true;
+        m_state.counters[i].null_until = k_i8253_no_edge;
     }
 }
 
@@ -51,6 +60,12 @@ u8 I8253::ReadCounter(int index, u64 tick)
 
     if (!counter.programmed)
         return 0x00;
+
+    if (counter.status_latched)
+    {
+        counter.status_latched = false;
+        return counter.status_latch;
+    }
 
     u16 value = 0;
     bool high = counter.access == 2;
@@ -88,6 +103,9 @@ u8 I8253::PeekCounter(int index, u64 tick) const
 
     if (!counter.programmed)
         return 0x00;
+
+    if (counter.status_latched)
+        return counter.status_latch;
 
     u16 value = 0;
     bool high = counter.access == 2;
@@ -159,7 +177,12 @@ void I8253::WriteControl(u8 value, u64 tick)
 
     // SC=3 is the 8254 read-back command, not present on the 8253
     if (index >= I8253_COUNTER_COUNT)
+    {
+        if (m_read_back)
+            ReadBack(value, tick);
+
         return;
+    }
 
     I8253_Counter& counter = m_state.counters[index];
     u8 access = (value >> 4) & 0x03;
@@ -189,6 +212,82 @@ void I8253::WriteControl(u8 value, u64 tick)
     counter.write_high = false;
     counter.latch_high = false;
     counter.reload_pending = false;
+    counter.status_latched = false;
+    counter.null_until = k_i8253_no_edge;
+}
+
+// Bit 5 low latches the counts, bit 4 low the status bytes, of the counters in bits 1 to 3
+void I8253::ReadBack(u8 value, u64 tick)
+{
+    for (int i = 0; i < I8253_COUNTER_COUNT; i++)
+    {
+        I8253_Counter& counter = m_state.counters[i];
+
+        if ((value & (2 << i)) == 0 || !counter.programmed)
+            continue;
+
+        if ((value & 0x10) == 0 && !counter.status_latched)
+        {
+            counter.status_latch = (u8)((GetCounterOutput(counter, tick) ? 0x80 : 0x00) |
+                (tick < counter.null_until ? 0x40 : 0x00) | (counter.access << 4) | (counter.mode << 1) |
+                (counter.bcd ? 0x01 : 0x00));
+            counter.status_latched = true;
+        }
+
+        if ((value & 0x20) == 0 && !counter.count_latched)
+        {
+            counter.count_latch = GetCount(counter, tick);
+            counter.count_latched = true;
+            counter.latch_high = false;
+        }
+    }
+}
+
+// A low gate holds modes 0, 2, 3 and 4, a rising gate reloads modes 2 and 3 and triggers modes 1 and 5
+void I8253::SetGate(int index, bool gate, u64 tick)
+{
+    I8253_Counter& counter = m_state.counters[index];
+
+    if (counter.gate == gate)
+        return;
+
+    CommitReload(counter, GetGateTick(counter, tick));
+    counter.gate = gate;
+
+    if (!gate)
+    {
+        counter.hold = tick;
+        return;
+    }
+
+    if (!counter.programmed)
+        return;
+
+    switch (counter.mode)
+    {
+        case 0:
+        case 4:
+            if (counter.counting && tick > counter.hold)
+            {
+                counter.load += tick - counter.hold;
+
+                if (counter.reload_pending)
+                    counter.pending_load += tick - counter.hold;
+            }
+
+            break;
+        default:
+            if (!counter.counting && (counter.mode == 2 || counter.mode == 3))
+                break;
+
+            counter.counting = true;
+            counter.load = tick + 1;
+            counter.count = GetEffectiveCount(counter.reload, counter.bcd);
+            counter.phase = 0;
+            counter.reload_pending = false;
+            counter.null_until = tick + 1;
+            break;
+    }
 }
 
 void I8253::LoadCount(I8253_Counter& counter, u16 raw, u64 tick)
@@ -196,9 +295,22 @@ void I8253::LoadCount(I8253_Counter& counter, u16 raw, u64 tick)
     u32 count = GetEffectiveCount(raw, counter.bcd);
     counter.reload = raw;
 
-    // Modes 1 and 5 wait for a gate trigger that never comes on this board
+    // Modes 1 and 5 wait for a gate trigger
     if (counter.mode == 1 || counter.mode == 5)
         return;
+
+    // A held rate or square wave counter starts with the gate
+    if (!counter.gate && (counter.mode == 2 || counter.mode == 3))
+    {
+        counter.counting = true;
+        counter.load = tick + 1;
+        counter.count = count;
+        counter.phase = 0;
+        counter.reload_pending = false;
+        counter.hold = tick + 1;
+        counter.null_until = k_i8253_no_edge;
+        return;
+    }
 
     // Rate and square wave counters take a new count at their next reload
     if (counter.counting && tick >= counter.load && (counter.mode == 2 || counter.mode == 3))
@@ -220,6 +332,7 @@ void I8253::LoadCount(I8253_Counter& counter, u16 raw, u64 tick)
         counter.pending_load = counter.load + boundary - counter.phase;
         counter.pending_count = count;
         counter.pending_phase = phase;
+        counter.null_until = counter.pending_load;
         return;
     }
 
@@ -229,6 +342,10 @@ void I8253::LoadCount(I8253_Counter& counter, u16 raw, u64 tick)
     counter.count = count;
     counter.phase = 0;
     counter.reload_pending = false;
+    counter.null_until = tick + 1;
+
+    if (!counter.gate)
+        counter.hold = tick + 1;
 }
 
 u16 I8253::GetCount(I8253_Counter& counter, u64 tick) const
@@ -236,6 +353,7 @@ u16 I8253::GetCount(I8253_Counter& counter, u64 tick) const
     if (!counter.counting)
         return counter.reload;
 
+    tick = GetGateTick(counter, tick);
     CommitReload(counter, tick);
 
     u32 count = counter.count;
@@ -268,7 +386,7 @@ u16 I8253::GetCount(I8253_Counter& counter, u64 tick) const
             }
             default:
             {
-                // Modes 0 and 4 keep wrapping after the terminal count
+                // Modes 0, 1, 4 and 5 keep wrapping after the terminal count
                 u32 modulus = counter.bcd ? 10000 : 0x10000;
                 value = (count + modulus - (u32)(elapsed % modulus)) % modulus;
                 break;
@@ -277,6 +395,15 @@ u16 I8253::GetCount(I8253_Counter& counter, u64 tick) const
     }
 
     return counter.bcd ? EncodeBCD(value) : (u16)value;
+}
+
+// Counting stops at the falling gate in the modes a low gate holds
+u64 I8253::GetGateTick(const I8253_Counter& counter, u64 tick) const
+{
+    if (counter.gate || counter.mode == 1 || counter.mode == 5)
+        return tick;
+
+    return MIN(tick, counter.hold);
 }
 
 u32 I8253::GetEffectiveCount(u16 raw, bool bcd) const
@@ -297,17 +424,18 @@ u16 I8253::EncodeBCD(u32 value) const
 void I8253::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void I8253::LoadState(std::istream& stream)
+void I8253::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void I8253::Serialize(StateSerializer& serializer)
+// States from before the gates and read-back load with the gates high and no count or status pending
+void I8253::Serialize(StateSerializer& serializer, int version)
 {
     for (int i = 0; i < I8253_COUNTER_COUNT; i++)
     {
@@ -330,6 +458,22 @@ void I8253::Serialize(StateSerializer& serializer)
         G_SERIALIZE(serializer, m_state.counters[i].pending_load);
         G_SERIALIZE(serializer, m_state.counters[i].pending_count);
         G_SERIALIZE(serializer, m_state.counters[i].pending_phase);
+
+        if (version < GT_SAVESTATE_8254_VERSION)
+        {
+            m_state.counters[i].gate = true;
+            m_state.counters[i].hold = 0;
+            m_state.counters[i].null_until = 0;
+            m_state.counters[i].status_latch = 0;
+            m_state.counters[i].status_latched = false;
+            continue;
+        }
+
+        G_SERIALIZE(serializer, m_state.counters[i].gate);
+        G_SERIALIZE(serializer, m_state.counters[i].hold);
+        G_SERIALIZE(serializer, m_state.counters[i].null_until);
+        G_SERIALIZE(serializer, m_state.counters[i].status_latch);
+        G_SERIALIZE(serializer, m_state.counters[i].status_latched);
     }
 }
 

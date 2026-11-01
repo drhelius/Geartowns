@@ -2056,7 +2056,8 @@ bool I386::OPCodes_WAIT()
     if ((m_state.cr0 & 0x0A) == 0x0A)
         return RaiseException(7, I386_EXCEPTION_FAULT);
 
-    if (IsValidPointer(m_x87) && m_x87->IsErrorPending())
+    if (IsValidPointer(m_x87) && m_x87->IsErrorPending() &&
+        (!IsValidPointer(m_fpu_error_callback) || (m_i486 && (m_state.cr0 & 0x20) != 0)))
         return RaiseException(16, I386_EXCEPTION_FAULT);
 
     CommitEIP(m_instruction);
@@ -2607,7 +2608,8 @@ bool I386::EscapeCoprocessor()
     u8 modrm = m_instruction.modrm;
 
     // ERROR# is sampled at every ESC but the no-wait control forms
-    if (X87::IsWaiting(opcode, modrm) && m_x87->IsErrorPending())
+    if (X87::IsWaiting(opcode, modrm) && m_x87->IsErrorPending() &&
+        (!IsValidPointer(m_fpu_error_callback) || (m_i486 && (m_state.cr0 & 0x20) != 0)))
         return RaiseException(16, I386_EXCEPTION_FAULT);
 
     X87_Operation operation;
@@ -2636,7 +2638,16 @@ bool I386::EscapeCoprocessor()
 
     m_step.clocks = m_x87->GetClocks(operation, operand) + (m_i486 ? 0 : m_address_clocks);
 
-    if (m_x87->Execute(operation, operand) && !TransferCoprocessorOperand(operand, size, true))
+    bool error = m_x87->IsErrorPending();
+    bool store = m_x87->Execute(operation, operand);
+
+    if (!error && m_x87->IsErrorPending() && IsValidPointer(m_fpu_error_callback))
+    {
+        m_fpu_error_callback(m_fpu_error_context);
+        m_step.end_batch = true;
+    }
+
+    if (store && !TransferCoprocessorOperand(operand, size, true))
         return false;
 
     // FNSTSW AX

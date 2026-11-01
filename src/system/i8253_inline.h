@@ -38,6 +38,11 @@ INLINE bool I8253::GetCounterOutput(I8253_Counter& counter, u64 tick) const
     if (!counter.counting)
         return !counter.programmed || counter.mode != 0;
 
+    // A low gate forces OUT high in modes 2 and 3
+    if (!counter.gate && (counter.mode == 2 || counter.mode == 3))
+        return true;
+
+    tick = GetGateTick(counter, tick);
     CommitReload(counter, tick);
 
     if (tick < counter.load)
@@ -48,12 +53,14 @@ INLINE bool I8253::GetCounterOutput(I8253_Counter& counter, u64 tick) const
     switch (counter.mode)
     {
         case 0:
+        case 1:
             return elapsed >= counter.count;
         case 2:
             return elapsed % counter.count != counter.count - 1;
         case 3:
             return elapsed % counter.count < (counter.count + 1) / 2;
         case 4:
+        case 5:
             return elapsed != counter.count;
         default:
             return true;
@@ -64,7 +71,7 @@ INLINE u64 I8253::GetNextRisingEdge(int index, u64 tick) const
 {
     const I8253_Counter& counter = m_state.counters[index];
 
-    if (!counter.counting)
+    if (!counter.counting || (!counter.gate && counter.mode != 1 && counter.mode != 5))
         return k_i8253_no_edge;
 
     u64 edge = GetEdgeAfter(counter.mode, counter.load, counter.count, counter.phase, tick);
@@ -78,6 +85,11 @@ INLINE u64 I8253::GetNextRisingEdge(int index, u64 tick) const
 }
 
 INLINE I8253::I8253_State* I8253::GetState()
+{
+    return &m_state;
+}
+
+INLINE const I8253::I8253_State* I8253::GetState() const
 {
     return &m_state;
 }
@@ -98,8 +110,10 @@ INLINE u64 I8253::GetEdgeAfter(u8 mode, u64 load, u32 count, u32 phase, u64 tick
     switch (mode)
     {
         case 0:
+        case 1:
             return load + count > tick ? load + count : k_i8253_no_edge;
         case 4:
+        case 5:
             return load + count + 1 > tick ? load + count + 1 : k_i8253_no_edge;
         case 2:
         case 3:

@@ -447,6 +447,8 @@ struct I386_CallStackEntry
 
 class StateSerializer;
 
+typedef void (*I386_FPU_Error_Fn)(void* context);
+
 class I386
 {
 public:
@@ -457,6 +459,7 @@ public:
     void SetCPU(const GT_Machine_CPU_Info& info);
     bool IsI486() const;
     void SetFPU(X87* fpu);
+    void SetFPUErrorCallback(void* context, I386_FPU_Error_Fn callback);
     void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
         u32 cpu_clock_rate, u32 model_clock_rate);
     void SetBoardCache(bool enabled);
@@ -1574,6 +1577,8 @@ private:
     bool m_poll_enabled;
     u32 m_cr0_fixed;
     X87* m_x87;
+    void* m_fpu_error_context;
+    I386_FPU_Error_Fn m_fpu_error_callback;
     bool m_i486;
     bool m_write_protect;
     bool m_alignment_check;

@@ -113,8 +113,8 @@ bool MediaFileLibretro::IsCdRomUriPath(const char* path)
 
 unsigned MediaFileLibretro::GetOpenHints(const char* path)
 {
-    return IsCdRomUriPath(path) ?
-        RETRO_VFS_FILE_ACCESS_HINT_NONE : RETRO_VFS_FILE_ACCESS_HINT_FREQUENT_ACCESS;
+    return ((s_vfs_version >= 4) && !IsCdRomUriPath(path)) ?
+        RETRO_VFS_FILE_ACCESS_HINT_FREQUENT_ACCESS : RETRO_VFS_FILE_ACCESS_HINT_NONE;
 }
 
 unsigned MediaFileLibretro::GetOpenMode() const

@@ -172,7 +172,7 @@ private:
     s32 m_pcm16_gain_right;
     bool m_fm_enabled;
     bool m_pcm_enabled;
-    bool m_cdda_enabled;
+    bool m_output_enabled;
     bool m_pcm16_enabled;
     bool m_pcm16_fitted;
     bool m_fm_gate;

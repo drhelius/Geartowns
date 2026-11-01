@@ -35,6 +35,10 @@ static const u32 k_audio_clocks_per_sound_clock = GT_MACHINE_CLOCK_RATE / GT_SOU
 static const int k_audio_buzzer_ticks = 7;
 static const s32 k_audio_buzzer_level = 4096;
 
+// Against FM, a Marty 2 plays CD-DA and the buzzer about 12 dB under their full scale; the ADC sample keeps them whole
+static const int k_audio_cdda_output_shift = 2;
+static const int k_audio_buzzer_output_shift = 2;
+
 // The analog output is AC coupled
 // One pole at 44.1 kHz / (2 * pi * 2^10), about 6.9 Hz
 static const int k_audio_dc_shift = 10;
@@ -271,17 +275,21 @@ INLINE void Audio::SampleSources()
     if (m_channel_scopes)
         CaptureChannels(m_buffer_index >> 1);
 
-    // Muted sources and a closed output reach the mixer as silence
     m_fm_buffer[m_buffer_index + 0] = m_fm_enabled ? fm_left : 0;
     m_fm_buffer[m_buffer_index + 1] = m_fm_enabled ? fm_right : 0;
+
     m_pcm_buffer[m_buffer_index + 0] = m_pcm_enabled ? (s16)m_state.pcm_lowpass_left : 0;
     m_pcm_buffer[m_buffer_index + 1] = m_pcm_enabled ? (s16)m_state.pcm_lowpass_right : 0;
-    m_cdda_buffer[m_buffer_index + 0] = m_cdda_enabled ? (s16)((cdda_left * m_cdda_gain_left) >> 15) : 0;
-    m_cdda_buffer[m_buffer_index + 1] = m_cdda_enabled ? (s16)((cdda_right * m_cdda_gain_right) >> 15) : 0;
-    m_buzzer_buffer[m_buffer_index + 0] = buzzer;
-    m_buzzer_buffer[m_buffer_index + 1] = buzzer;
+
+    m_cdda_buffer[m_buffer_index + 0] = m_output_enabled ? (s16)((cdda_left * m_cdda_gain_left) >> (15 + k_audio_cdda_output_shift)) : 0;
+    m_cdda_buffer[m_buffer_index + 1] = m_output_enabled ? (s16)((cdda_right * m_cdda_gain_right) >> (15 + k_audio_cdda_output_shift)) : 0;
+
+    m_buzzer_buffer[m_buffer_index + 0] = m_output_enabled ? (s16)(buzzer >> k_audio_buzzer_output_shift) : 0;
+    m_buzzer_buffer[m_buffer_index + 1] = m_output_enabled ? (s16)(buzzer >> k_audio_buzzer_output_shift) : 0;
+
     m_pcm16_buffer[m_buffer_index + 0] = m_pcm16_enabled ? (s16)pcm16_mix_left : 0;
     m_pcm16_buffer[m_buffer_index + 1] = m_pcm16_enabled ? (s16)pcm16_mix_right : 0;
+
     m_buffer_index += 2;
 }
 

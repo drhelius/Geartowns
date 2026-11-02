@@ -31,6 +31,8 @@
 
 // Data Book 5.1 puts an approximately 4 kHz reconstruction filter after the PCM DACs
 static const float k_audio_pcm_lowpass_cutoff = 4000.0f;
+static const s32 k_audio_pcm_output_gain = 5;
+static const int k_audio_pcm_output_shift = 3;
 
 // MB87078 attenuation in Q15: round(32768 * 10^((data - 63) * 0.5 / 20))
 static const s32 k_audio_volume_gain[64] =
@@ -678,15 +680,16 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     s32 dc_left = m_state.output_dc_left;
     s32 dc_right = m_state.output_dc_right;
 
-    // FM enters at its full DAC sum and PCM at half scale
+    // FM enters at its full DAC sum and PCM at 5/8 of its scale
     if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f) &&
         (buzzer_volume == 1.0f) && (pcm16_volume == 1.0f))
     {
         for (int i = 0; i < samples; i += 2)
         {
-            s32 left = (s32)m_fm_buffer[i] + (m_pcm_buffer[i] >> 1) + m_cdda_buffer[i] + m_buzzer_buffer[i] +
-                m_pcm16_buffer[i];
-            s32 right = (s32)m_fm_buffer[i + 1] + (m_pcm_buffer[i + 1] >> 1) + m_cdda_buffer[i + 1] +
+            s32 left = (s32)m_fm_buffer[i] + ((m_pcm_buffer[i] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) +
+                m_cdda_buffer[i] + m_buzzer_buffer[i] + m_pcm16_buffer[i];
+            s32 right = (s32)m_fm_buffer[i + 1] +
+                ((m_pcm_buffer[i + 1] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) + m_cdda_buffer[i + 1] +
                 m_buzzer_buffer[i + 1] + m_pcm16_buffer[i + 1];
             left = HighPass(dc_left, left);
             right = HighPass(dc_right, right);
@@ -698,10 +701,12 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     {
         for (int i = 0; i < samples; i += 2)
         {
-            float left = (float)m_fm_buffer[i] * fm_volume + (float)(m_pcm_buffer[i] >> 1) * pcm_volume +
+            float left = (float)m_fm_buffer[i] * fm_volume +
+                (float)((m_pcm_buffer[i] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) * pcm_volume +
                 (float)m_cdda_buffer[i] * cdda_volume + (float)m_buzzer_buffer[i] * buzzer_volume +
                 (float)m_pcm16_buffer[i] * pcm16_volume;
-            float right = (float)m_fm_buffer[i + 1] * fm_volume + (float)(m_pcm_buffer[i + 1] >> 1) * pcm_volume +
+            float right = (float)m_fm_buffer[i + 1] * fm_volume +
+                (float)((m_pcm_buffer[i + 1] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) * pcm_volume +
                 (float)m_cdda_buffer[i + 1] * cdda_volume + (float)m_buzzer_buffer[i + 1] * buzzer_volume +
                 (float)m_pcm16_buffer[i + 1] * pcm16_volume;
             s32 out_left = (s32)((float)HighPass(dc_left, (s32)left) * m_master_volume);

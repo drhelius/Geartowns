@@ -35,6 +35,7 @@
 #define GUI_IMPORT
 #include "gui.h"
 #include "gui_menus.h"
+#include "gui_shader.h"
 #include "gui_popups.h"
 #include "gui_floppy.h"
 #include "gui_firmware.h"
@@ -225,6 +226,7 @@ void gui_render(void)
         main_window();
 
     gui_debug_windows();
+    gui_shader_parameters_window();
 
     if (config_emulator.show_info)
         gui_show_info();

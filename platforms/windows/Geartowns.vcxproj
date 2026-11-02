@@ -197,6 +197,7 @@
     <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp" />
     <ClCompile Include="..\shared\desktop\gui_menus.cpp" />
     <ClCompile Include="..\shared\desktop\gui_popups.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_shader.cpp" />
     <ClCompile Include="..\shared\desktop\gui_floppy.cpp" />
     <ClCompile Include="..\shared\desktop\gui_firmware.cpp" />
     <ClCompile Include="..\shared\desktop\gui_hard_disks.cpp" />
@@ -408,6 +409,7 @@
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />
     <ClInclude Include="..\shared\desktop\gui_popups.h" />
+    <ClInclude Include="..\shared\desktop\gui_shader.h" />
     <ClInclude Include="..\shared\desktop\gui_floppy.h" />
     <ClInclude Include="..\shared\desktop\gui_firmware.h" />
     <ClInclude Include="..\shared\desktop\gui_hard_disks.h" />

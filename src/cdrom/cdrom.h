@@ -173,6 +173,10 @@ private:
     void UpdateBuffer(u64 clocks);
     void ReleaseBuffer(u32 lba, u64 clocks);
     u64 GetArrivalClocks(u32 lba, u64 clocks) const;
+    u64 GetPassClocks(u32 lba, u64 earliest) const;
+    u64 GetTurnClocks(u32 lba) const;
+    u64 GetSeekClocks(u32 from, u32 to) const;
+    double GetRadius(u32 lba) const;
     void InvalidateBuffer();
     void UpdateReadSpeed();
     void AbortTransfer();
@@ -216,10 +220,19 @@ static const u64 k_cdrom_command_clocks = GT_MACHINE_CLOCK_RATE / 500;
 static const u64 k_cdrom_state_command_clocks = (GT_MACHINE_CLOCK_RATE * 3) / 2000;
 static const u64 k_cdrom_sector_clocks = GT_MACHINE_CLOCK_RATE / 75;
 static const u64 k_cdrom_notify_clocks = GT_MACHINE_CLOCK_RATE / 1000;
-static const u64 k_cdrom_seek_clocks = GT_MACHINE_CLOCK_RATE / 10;
+static const u64 k_cdrom_access_clocks = (GT_MACHINE_CLOCK_RATE * 96) / 1000;
+static const u64 k_cdrom_seek_read_clocks = (GT_MACHINE_CLOCK_RATE * 53) / 1000;
 static const u64 k_cdrom_lost_data_clocks = GT_MACHINE_CLOCK_RATE / 10;
 static const u64 k_cdrom_cdda_stop_clocks = GT_MACHINE_CLOCK_RATE / 1000;
 static const u32 k_cdrom_buffer_size = 8192;
+static const double k_cdrom_disc_speed = 1.218;
+static const double k_cdrom_disc_radius = 0.025;
+static const double k_cdrom_track_pitch = 1.6e-6;
+static const double k_cdrom_pi = 3.14159265358979323846;
+static const double k_cdrom_seek_near_tracks = 2.0;
+static const double k_cdrom_seek_near_ms = 25.0;
+static const double k_cdrom_seek_base_ms = 38.0;
+static const double k_cdrom_seek_track_ms = 7.05;
 
 #include "cdrom_inline.h"
 

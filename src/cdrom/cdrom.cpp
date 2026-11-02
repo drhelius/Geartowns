@@ -473,9 +473,17 @@ void CdRom::ExecuteCommand(u64 clocks)
 // The 2F ROM waits for 00h and then for 04h
 void CdRom::CommandSeek(u64 clocks)
 {
+    u32 start = 0;
+    u32 end = 0;
+    u32 head = m_cdrom_media->GetCurrentSector();
+    u32 lba = head;
+
     ClearStatus();
     InvalidateBuffer();
     m_access_count++;
+
+    if (GetRange(start, end) && (start >= 150) && ((start - 150) < m_cdrom_media->GetSectorCount()))
+        lba = start - 150;
 
     if (((m_state.active_command & k_cdrom_flag_status) != 0) && !PushErrorStatus())
     {
@@ -485,7 +493,13 @@ void CdRom::CommandSeek(u64 clocks)
             RaiseSIRQ(true);
     }
 
-    ScheduleEvent(CDROM_EVENT_SEEK_DONE, clocks + k_cdrom_seek_clocks);
+    u64 seek = GetSeekClocks(head, lba);
+    u64 done = clocks + ((seek > k_cdrom_command_clocks) ? seek - k_cdrom_command_clocks : 0);
+
+    m_cdrom_media->SetCurrentSector(lba);
+    m_state.prefetch_clocks = GetPassClocks(lba, done);
+    m_state.prefetch_lba = lba;
+    ScheduleEvent(CDROM_EVENT_SEEK_DONE, done);
 }
 
 void CdRom::CommandRead(u64 clocks)
@@ -946,36 +960,38 @@ void CdRom::FinishSector()
     UpdateIRQ();
 }
 
-// The drive's 8 KiB buffer holds 4 sectors of 2048 bytes or 3 raw ones
-// A read already buffered answers right away, one the pickup is about to reach comes when it arrives
-// Any other read seeks and starts a new stream
+// The drive's 8 KiB buffer holds 3 whole sectors and never answers a new command, measured on a Marty
+// The later models' CD cache does, with 4 sectors of 2048 bytes or 3 raw ones
+// Any other read gets its first sector on its next pass, at least 98 ms after the command and 55 ms after a seek
 u64 CdRom::StartBuffer(u64 clocks)
 {
-    bool cooked = (m_state.active_command & k_cdrom_command_mask) == CDROM_COMMAND_MODE1_READ;
-    u8 capacity = (u8)(k_cdrom_buffer_size / (cooked ? 2048 : 2340));
     u32 lba = m_state.read_lba;
-    UpdateBuffer(clocks);
+    bool cooked = (m_state.active_command & k_cdrom_command_mask) == CDROM_COMMAND_MODE1_READ;
+    u8 capacity = (u8)(k_cdrom_buffer_size / (m_double_speed ? (cooked ? 2048 : 2340) : CDROM_SECTOR_SIZE));
 
-    if (m_state.buffer_valid && (m_state.buffer_capacity == capacity) && (lba >= m_state.buffer_lba) &&
-        (lba <= m_state.prefetch_lba))
+    if (m_double_speed)
     {
-        ReleaseBuffer(lba, clocks);
-        return MAX(clocks + k_cdrom_notify_clocks, GetArrivalClocks(lba, clocks));
+        UpdateBuffer(clocks);
+
+        if (m_state.buffer_valid && (m_state.buffer_capacity == capacity) && (lba >= m_state.buffer_lba) &&
+            (lba <= m_state.prefetch_lba))
+        {
+            ReleaseBuffer(lba, clocks);
+            return MAX(clocks + k_cdrom_notify_clocks, GetArrivalClocks(lba, clocks));
+        }
     }
 
-    // Seeks keep the old model, measured from the last sector handed out
-    u32 head = m_cdrom_media->GetCurrentSector();
-    u64 delay = m_sector_clocks;
-
-    if (lba != head)
-        delay = (u64)((((double)m_cdrom_media->SeekTime(head, lba) * GT_MACHINE_CLOCK_RATE) / 1000.0) * m_seek_scale);
+    u64 seek = GetSeekClocks(m_cdrom_media->GetCurrentSector(), lba);
+    u64 access = (u64)((double)k_cdrom_access_clocks * m_seek_scale);
+    u64 settle = seek + (u64)((double)k_cdrom_seek_read_clocks * m_seek_scale);
+    u64 first = GetPassClocks(lba, clocks + MAX(access, settle));
 
     m_state.buffer_valid = true;
     m_state.buffer_capacity = capacity;
     m_state.buffer_lba = lba;
     m_state.prefetch_lba = lba;
-    m_state.prefetch_clocks = clocks + delay;
-    return m_state.prefetch_clocks;
+    m_state.prefetch_clocks = first;
+    return first;
 }
 
 // The pickup keeps filling the buffer one sector per period and stops when it is full
@@ -1015,6 +1031,43 @@ u64 CdRom::GetArrivalClocks(u32 lba, u64 clocks) const
         return clocks;
 
     return m_state.prefetch_clocks + ((u64)(lba - m_state.prefetch_lba) * m_sector_clocks);
+}
+
+u64 CdRom::GetPassClocks(u32 lba, u64 earliest) const
+{
+    s64 turn = (s64)GetTurnClocks(lba);
+    s64 pass = (s64)m_state.prefetch_clocks + (((s64)lba - (s64)m_state.prefetch_lba) * (s64)m_sector_clocks);
+    s64 target = (s64)earliest;
+
+    if (pass < target)
+        pass += ((target - pass + turn - 1) / turn) * turn;
+    else
+        pass -= ((pass - target) / turn) * turn;
+
+    return (u64)pass;
+}
+
+u64 CdRom::GetTurnClocks(u32 lba) const
+{
+    double sectors = (2.0 * k_cdrom_pi * GetRadius(lba) * 75.0) / k_cdrom_disc_speed;
+    return (u64)(sectors * (double)m_sector_clocks);
+}
+
+u64 CdRom::GetSeekClocks(u32 from, u32 to) const
+{
+    double tracks = fabs(GetRadius(to) - GetRadius(from)) / k_cdrom_track_pitch;
+    double ms = k_cdrom_seek_near_ms;
+
+    if (tracks >= k_cdrom_seek_near_tracks)
+        ms = k_cdrom_seek_base_ms + (k_cdrom_seek_track_ms * sqrt(tracks));
+
+    return (u64)(((ms * GT_MACHINE_CLOCK_RATE) / 1000.0) * m_seek_scale);
+}
+
+double CdRom::GetRadius(u32 lba) const
+{
+    double area = (k_cdrom_disc_speed * k_cdrom_track_pitch * (double)lba) / (75.0 * k_cdrom_pi);
+    return sqrt((k_cdrom_disc_radius * k_cdrom_disc_radius) + area);
 }
 
 void CdRom::InvalidateBuffer()

@@ -331,8 +331,8 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         NULL,
         "cdrom",
         {
-            { "Disabled", NULL },
             { "Enabled",  NULL },
+            { "Disabled", NULL },
             { NULL, NULL },
         },
         "Enabled"

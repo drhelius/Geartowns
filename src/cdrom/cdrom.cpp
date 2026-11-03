@@ -45,6 +45,7 @@ CdRom::CdRom(CdRomMedia* cdrom_media, CdRomAudio* cdrom_audio)
     m_double_speed = false;
     m_sector_clocks = k_cdrom_sector_clocks;
     m_seek_scale = 1.0;
+    m_features = 0;
 }
 
 CdRom::~CdRom()
@@ -71,6 +72,8 @@ void CdRom::Reset()
     m_state.enable_sirq = false;
     m_state.enable_dei = false;
     m_state.disc_changed = false;
+    m_state.drive_state = 0x00;
+    m_state.cdda_start_clocks = 0;
     m_state.active_command = 0;
     memset(m_state.active_params, 0, sizeof(m_state.active_params));
     UpdateIRQ();
@@ -80,6 +83,7 @@ void CdRom::Reset()
 void CdRom::NotifyMediaChanged()
 {
     m_state.disc_changed = true;
+    m_state.drive_state = 0x00;
     m_cdrom_audio->Stop();
     InvalidateBuffer();
 
@@ -177,6 +181,9 @@ void CdRom::DMAEndCallback(void* device, bool terminal_count)
 // CD-DA keeps playing, and DEI stays because the DMA side sets it
 void CdRom::ResetController()
 {
+    if (m_state.done_clocks != 0)
+        EndCDDACommand();
+
     AbortTransfer();
     InvalidateBuffer();
     m_state.command = 0;
@@ -188,7 +195,6 @@ void CdRom::ResetController()
     m_state.sirq = false;
     m_state.sirq_irq = false;
     m_state.dry = true;
-    m_state.cdda_stopped = false;
     m_state.change_padding = false;
     m_state.event = CDROM_EVENT_NONE;
     m_state.event_clocks = 0;
@@ -364,7 +370,16 @@ void CdRom::CheckCommand(u64 clocks)
     u8 code = m_state.command & k_cdrom_command_mask;
     bool state = (code == CDROM_COMMAND_GET_STATE) || (code == CDROM_COMMAND_CDDA_SET) ||
         (code == CDROM_COMMAND_CDDA_PAUSE) || (code == CDROM_COMMAND_CDDA_RESUME);
-    ScheduleEvent(CDROM_EVENT_EXECUTE, clocks + (state ? k_cdrom_state_command_clocks : k_cdrom_command_clocks));
+    u64 execute = clocks + (state ? k_cdrom_state_command_clocks : k_cdrom_command_clocks);
+
+    // Nothing new is taken while a stop or a pause runs, or before a play's sound starts, measured on a Marty
+    if (m_state.done_clocks != 0)
+        execute = MAX(execute, m_state.done_clocks);
+
+    if ((m_cdrom_audio->IsPlaying() || m_cdrom_audio->IsPaused()) && (execute < m_state.cdda_start_clocks))
+        execute = m_state.cdda_start_clocks;
+
+    ScheduleEvent(CDROM_EVENT_EXECUTE, execute);
 }
 
 void CdRom::RunEvent(u64 clocks)
@@ -389,8 +404,8 @@ void CdRom::RunEvent(u64 clocks)
         case CDROM_EVENT_LOST_DATA:
             LostData();
             break;
-        case CDROM_EVENT_CDDA_STOP:
-            StopCDDA();
+        case CDROM_EVENT_CDDA_DONE:
+            PushDoneStatus(EndCDDACommand());
             break;
         default:
             break;
@@ -420,8 +435,11 @@ void CdRom::ExecuteCommand(u64 clocks)
     // A new command takes over from a read that was still running
     AbortTransfer();
     m_state.dry = true;
-    bool cdda_stopped = m_state.cdda_stopped;
-    m_state.cdda_stopped = false;
+    u8 done = 0x00;
+
+    // A command that waited for a stop or a pause answers before the packet that ends it, as a Marty orders them
+    if ((m_state.done_clocks != 0) && (clocks >= m_state.done_clocks))
+        done = EndCDDACommand();
 
     switch (m_state.active_command & k_cdrom_command_mask)
     {
@@ -434,7 +452,7 @@ void CdRom::ExecuteCommand(u64 clocks)
             CommandRead(clocks);
             break;
         case CDROM_COMMAND_CDDA_PLAY:
-            CommandCDDAPlay();
+            CommandCDDAPlay(clocks);
             break;
         case CDROM_COMMAND_TOC_READ:
             CommandTOCRead();
@@ -446,7 +464,7 @@ void CdRom::ExecuteCommand(u64 clocks)
             CommandUnknown1F();
             break;
         case CDROM_COMMAND_GET_STATE:
-            CommandGetState(cdda_stopped);
+            CommandGetState();
             break;
         case CDROM_COMMAND_CDDA_SET:
             CommandCDDASet();
@@ -455,7 +473,7 @@ void CdRom::ExecuteCommand(u64 clocks)
             CommandCDDAStop(clocks);
             break;
         case CDROM_COMMAND_CDDA_PAUSE:
-            CommandCDDAPause();
+            CommandCDDAPause(clocks);
             break;
         case CDROM_COMMAND_CDDA_RESUME:
             CommandCDDAResume();
@@ -467,6 +485,9 @@ void CdRom::ExecuteCommand(u64 clocks)
             Debug("CDROM: unsupported command %02X", m_state.active_command);
             break;
     }
+
+    if (done != 0x00)
+        PushDoneStatus(done);
 }
 
 // DRY stays set while the head moves
@@ -494,11 +515,16 @@ void CdRom::CommandSeek(u64 clocks)
     }
 
     u64 seek = GetSeekClocks(head, lba);
+
+    if (m_state.drive_state == k_cdrom_state_stopped)
+        seek = MAX(seek, k_cdrom_spin_up_clocks);
+
     u64 done = clocks + ((seek > k_cdrom_command_clocks) ? seek - k_cdrom_command_clocks : 0);
 
     m_cdrom_media->SetCurrentSector(lba);
     m_state.prefetch_clocks = GetPassClocks(lba, done);
     m_state.prefetch_lba = lba;
+    m_state.drive_state = k_cdrom_state_data;
     ScheduleEvent(CDROM_EVENT_SEEK_DONE, done);
 }
 
@@ -506,6 +532,7 @@ void CdRom::CommandRead(u64 clocks)
 {
     u32 start = 0;
     u32 end = 0;
+    u8 state = GetStatusSecondByte();
 
     if (IsValidPointer(m_read_callback))
         m_read_callback(m_read_context);
@@ -536,34 +563,59 @@ void CdRom::CommandRead(u64 clocks)
 
     // The acceptance comes with or without STATUS
     // The 2F ROM checks it before Data Ready
-    PushStatus(0x00, GetStatusSecondByte());
+    PushStatus(0x00, state);
 
     if (m_state.enable_sirq)
         RaiseSIRQ(true);
 
     ScheduleEvent(CDROM_EVENT_SECTOR, StartBuffer(clocks));
+    m_state.drive_state = k_cdrom_state_data;
 }
 
 // P6 = 1 loops the range
 // The end is exclusive
-void CdRom::CommandCDDAPlay()
+// The pickup reaches the start as it does for a read, and the sound begins as that sector passes under it
+// Each loop jumps back the same way
+void CdRom::CommandCDDAPlay(u64 clocks)
 {
     u32 start = 0;
     u32 end = 0;
+    u8 state = GetStatusSecondByte();
 
     // Chase HQ loops unless old responses are dropped when playback starts
     ClearStatus();
     InvalidateBuffer();
 
     if (m_cdrom_media->IsReady() && GetRange(start, end))
-        m_cdrom_audio->Play((start >= 150) ? start - 150 : 0, (end >= 150) ? end - 150 : 0,
-            m_state.active_params[6] == 0x01);
+    {
+        u32 lba = (start >= 150) ? start - 150 : 0;
+        u32 last = MIN((end >= 150) ? end - 150 : 0, m_cdrom_media->GetSectorCount());
+        bool repeat = m_state.active_params[6] == 0x01;
+        u64 spin = (m_state.drive_state == k_cdrom_state_stopped) ? k_cdrom_cdda_spin_up_clocks : 0;
+        u64 first = GetFirstSectorClocks(m_cdrom_media->GetCurrentSector(), lba, clocks, spin);
+        u64 sound = first - m_sector_clocks;
+        u64 loop = 0;
+
+        m_state.prefetch_lba = lba;
+        m_state.prefetch_clocks = first;
+        m_state.cdda_start_clocks = sound;
+        m_state.drive_state = 0x00;
+
+        if (repeat && (last > lba))
+        {
+            u64 range_end = sound + ((u64)(last - lba) * k_cdrom_sector_clocks);
+            loop = GetFirstSectorClocks(last, lba, range_end, 0) - m_sector_clocks - range_end;
+        }
+
+        m_cdrom_audio->Play(lba, last, repeat, sound - clocks, loop);
+    }
 
     if ((m_state.active_command & k_cdrom_flag_status) == 0)
         return;
 
+    // A Marty answers with the state it found, measured; Beast II and Chase H.Q. play again unless it says playing
     if (!PushErrorStatus())
-        PushStatus(0x00, GetStatusSecondByte());
+        PushStatus(0x00, ((m_features & GT_MACHINE_FEATURE_CD_PLAY_FOUND) != 0) ? state : GetStatusSecondByte());
 
     RaiseSIRQ((m_state.active_command & k_cdrom_flag_irq) != 0);
 }
@@ -632,13 +684,14 @@ void CdRom::CommandSubQRead()
         }
 
         u32 track_lba = tracks[track].start_lba;
+        u8 control = tracks[track].control_flags | ((tracks[track].type == GT_CDROM_AUDIO_TRACK) ? 0 : k_cdrom_control_data);
         GT_CdRomMSF relative;
         GT_CdRomMSF absolute;
         LbaToMsf((lba >= track_lba) ? lba - track_lba : track_lba - lba, &relative);
         LbaToMsf(lba + 150, &absolute);
 
-        PushStatus(0x00, 0x00);
-        PushStatus(0x18, 0x00, DecToBcd((u8)(track + 1)), 0x00);
+        PushStatus(0x00, GetStatusSecondByte());
+        PushStatus(0x18, (u8)((control << 4) | 0x01), DecToBcd((u8)(track + 1)), (lba >= track_lba) ? 0x01 : 0x00);
         PushStatus(0x19, DecToBcd(relative.minutes), DecToBcd(relative.seconds), DecToBcd(relative.frames));
         PushStatus(0x19, 0x00, DecToBcd(absolute.minutes), DecToBcd(absolute.seconds));
         PushStatus(0x20, DecToBcd(absolute.frames), 0x00, 0x00);
@@ -696,7 +749,7 @@ void CdRom::CommandUnknown1F()
         RaiseSIRQ(true);
 }
 
-void CdRom::CommandGetState(bool cdda_stopped)
+void CdRom::CommandGetState()
 {
     if ((m_state.active_command & k_cdrom_flag_status) == 0)
         return;
@@ -716,7 +769,7 @@ void CdRom::CommandGetState(bool cdda_stopped)
         }
     }
     else
-        PushStatus(0x00, cdda_stopped ? 0x0D : GetStatusSecondByte());
+        PushStatus(0x00, GetStatusSecondByte());
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
         RaiseSIRQ(true);
@@ -736,17 +789,39 @@ void CdRom::CommandCDDASet()
         RaiseSIRQ(true);
 }
 
+// The stop answers without looking at STATUS
+// The disc runs down for 850 ms before 11h, and the next access spins it up, measured on a Marty
 void CdRom::CommandCDDAStop(u64 clocks)
 {
-    if (m_cdrom_audio->IsPlaying())
-        ScheduleEvent(CDROM_EVENT_CDDA_STOP, clocks + k_cdrom_cdda_stop_clocks);
-    else
-        StopCDDA();
+    u8 state = GetStatusSecondByte();
+
+    ClearStatus();
+    InvalidateBuffer();
+    m_cdrom_audio->Stop();
+
+    if (!PushErrorStatus())
+    {
+        PushStatus(0x00, state);
+
+        if (m_state.drive_state == k_cdrom_state_stopped)
+            PushStatus(0x11, k_cdrom_state_stopped);
+        else
+        {
+            m_state.done_status = 0x11;
+            m_state.done_clocks = clocks + k_cdrom_stop_clocks;
+            ScheduleEvent(CDROM_EVENT_CDDA_DONE, m_state.done_clocks);
+        }
+    }
+
+    if ((m_state.active_command & k_cdrom_flag_irq) != 0)
+        RaiseSIRQ(true);
 }
 
 // Chase HQ needs the pause to take effect without STATUS
-void CdRom::CommandCDDAPause()
+// 12h comes 77 ms later, measured on a Marty
+void CdRom::CommandCDDAPause(u64 clocks)
 {
+    u8 state = GetStatusSecondByte();
     m_cdrom_audio->Pause();
 
     if ((m_state.active_command & k_cdrom_flag_status) == 0)
@@ -754,26 +829,27 @@ void CdRom::CommandCDDAPause()
 
     if (!PushErrorStatus())
     {
-        PushStatus(0x00, 0x01);
-        PushStatus(0x12, 0x00);
+        PushStatus(0x00, state);
+        m_state.done_status = 0x12;
+        m_state.done_clocks = clocks + k_cdrom_cdda_pause_clocks;
+        ScheduleEvent(CDROM_EVENT_CDDA_DONE, m_state.done_clocks);
     }
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
         RaiseSIRQ(true);
 }
 
+// A single packet, measured on a Marty, and the BIOS reads no more
 void CdRom::CommandCDDAResume()
 {
+    u8 state = GetStatusSecondByte();
     m_cdrom_audio->Resume();
 
     if ((m_state.active_command & k_cdrom_flag_status) == 0)
         return;
 
     if (!PushErrorStatus())
-    {
-        PushStatus(0x00, 0x00);
-        PushStatus(0x13, 0x00);
-    }
+        PushStatus(0x00, state);
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
         RaiseSIRQ(true);
@@ -822,7 +898,7 @@ void CdRom::SectorReady(u64 clocks)
         m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_SECTOR_READY)))
         TraceEvent(TRACE_CDROM_SECTOR_READY, 0);
 
-    PushStatus(0x22, 0x00);
+    PushStatus(0x22, k_cdrom_state_data);
 
     // Shadow of the Beast waits for Data Ready without asking for STATUS
     RaiseSIRQ(((m_state.active_command & k_cdrom_flag_status) != 0) &&
@@ -859,7 +935,7 @@ void CdRom::ReadDone()
 {
     m_state.dry = true;
     ClearStatus();
-    PushStatus(0x06, 0x00);
+    PushStatus(0x06, k_cdrom_state_data);
 
     if ((m_state.active_command & k_cdrom_flag_status) != 0)
         RaiseSIRQ((m_state.active_command & k_cdrom_flag_irq) != 0);
@@ -870,19 +946,20 @@ void CdRom::ReadDone()
     }
 }
 
-// The stop answers without looking at STATUS
-// The BIOS then polls the state until one answer carries 0Dh, the next state command gives it once
-void CdRom::StopCDDA()
+// The BIOS then polls the state until one has a bit of 0Dh, which the stopped state 05h has
+u8 CdRom::EndCDDACommand()
 {
-    ClearStatus();
-    m_cdrom_audio->Stop();
+    m_state.done_clocks = 0;
 
-    if (!PushErrorStatus())
-    {
-        PushStatus(0x00, GetStatusSecondByte());
-        PushStatus(0x11, 0x00);
-        m_state.cdda_stopped = true;
-    }
+    if (m_state.done_status == 0x11)
+        m_state.drive_state = k_cdrom_state_stopped;
+
+    return m_state.done_status;
+}
+
+void CdRom::PushDoneStatus(u8 code)
+{
+    PushStatus(code, (code == 0x11) ? k_cdrom_state_stopped : 0x01);
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
         RaiseSIRQ(true);
@@ -981,10 +1058,8 @@ u64 CdRom::StartBuffer(u64 clocks)
         }
     }
 
-    u64 seek = GetSeekClocks(m_cdrom_media->GetCurrentSector(), lba);
-    u64 access = (u64)((double)k_cdrom_access_clocks * m_seek_scale);
-    u64 settle = seek + (u64)((double)k_cdrom_seek_read_clocks * m_seek_scale);
-    u64 first = GetPassClocks(lba, clocks + MAX(access, settle));
+    u64 spin = (m_state.drive_state == k_cdrom_state_stopped) ? k_cdrom_spin_up_clocks : 0;
+    u64 first = GetFirstSectorClocks(m_cdrom_media->GetCurrentSector(), lba, clocks, spin);
 
     m_state.buffer_valid = true;
     m_state.buffer_capacity = capacity;
@@ -1031,6 +1106,15 @@ u64 CdRom::GetArrivalClocks(u32 lba, u64 clocks) const
         return clocks;
 
     return m_state.prefetch_clocks + ((u64)(lba - m_state.prefetch_lba) * m_sector_clocks);
+}
+
+// The head moves while a stopped disc spins up
+u64 CdRom::GetFirstSectorClocks(u32 from, u32 lba, u64 clocks, u64 spin) const
+{
+    u64 seek = GetSeekClocks(from, lba);
+    u64 access = (u64)((double)k_cdrom_access_clocks * m_seek_scale);
+    u64 settle = seek + (u64)((double)k_cdrom_seek_read_clocks * m_seek_scale);
+    return GetPassClocks(lba, clocks + MAX(MAX(access, settle), spin));
 }
 
 u64 CdRom::GetPassClocks(u32 lba, u64 earliest) const
@@ -1090,6 +1174,11 @@ void CdRom::SetDoubleSpeed(bool enabled)
     UpdateReadSpeed();
 }
 
+void CdRom::SetFeatures(u32 features)
+{
+    m_features = features;
+}
+
 int CdRom::GetReadSpeed() const
 {
     return m_read_speed > 0 ? m_read_speed : (m_double_speed ? 2 : 1);
@@ -1101,7 +1190,6 @@ void CdRom::UpdateReadSpeed()
     int speed = GetReadSpeed();
     m_sector_clocks = k_cdrom_sector_clocks / (u64)speed;
     m_seek_scale = 1.0 / sqrt((double)speed);
-    m_cdrom_audio->SetSeekScale(m_seek_scale);
 }
 
 void CdRom::AbortTransfer()
@@ -1169,7 +1257,7 @@ u8 CdRom::GetStatusSecondByte()
     if (m_cdrom_audio->IsPlaying())
         return 0x03;
 
-    return 0x00;
+    return m_state.drive_state;
 }
 
 // Absolute frames of the BCD start in P0-P2 and the BCD end in P3-P5
@@ -1275,7 +1363,6 @@ void CdRom::LoadState(std::istream& stream, int version)
 
 void CdRom::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     G_SERIALIZE(serializer, m_state.command);
     G_SERIALIZE(serializer, m_state.command_received);
     G_SERIALIZE_ARRAY(serializer, m_state.params, CDROM_PARAM_COUNT);
@@ -1306,8 +1393,30 @@ void CdRom::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.sector_position);
     G_SERIALIZE(serializer, m_state.sector_end);
     G_SERIALIZE_ARRAY(serializer, m_state.sector, CDROM_SECTOR_SIZE);
-    G_SERIALIZE(serializer, m_state.cdda_stopped);
+
+    if (version >= 33)
+        G_SERIALIZE(serializer, m_state.drive_state);
+    else
+    {
+        bool cdda_stopped = false;
+        G_SERIALIZE(serializer, cdda_stopped);
+        m_state.drive_state = cdda_stopped ? k_cdrom_state_stopped : 0x00;
+    }
+
     G_SERIALIZE(serializer, m_state.change_padding);
+
+    if (version >= 33)
+    {
+        G_SERIALIZE(serializer, m_state.done_status);
+        G_SERIALIZE(serializer, m_state.done_clocks);
+        G_SERIALIZE(serializer, m_state.cdda_start_clocks);
+    }
+    else
+    {
+        m_state.done_status = 0x11;
+        m_state.done_clocks = (m_state.event == CDROM_EVENT_CDDA_DONE) ? m_state.event_clocks : 0;
+        m_state.cdda_start_clocks = 0;
+    }
 }
 
 void CdRom::SanitizeState()
@@ -1325,8 +1434,11 @@ void CdRom::SanitizeState()
     m_state.sector_end = MIN(m_state.sector_end, CDROM_SECTOR_SIZE);
     m_state.sector_position = MIN(m_state.sector_position, m_state.sector_end);
 
-    if (m_state.event > CDROM_EVENT_CDDA_STOP)
+    if (m_state.event > CDROM_EVENT_CDDA_DONE)
         m_state.event = CDROM_EVENT_NONE;
+
+    if ((m_state.done_status != 0x11) && (m_state.done_status != 0x12))
+        m_state.done_clocks = 0;
 
     if (m_state.transfer > CDROM_TRANSFER_CPU)
         m_state.transfer = CDROM_TRANSFER_NONE;

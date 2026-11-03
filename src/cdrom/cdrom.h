@@ -65,7 +65,7 @@ public:
         CDROM_EVENT_SEEK_DONE,
         CDROM_EVENT_SECTOR,
         CDROM_EVENT_LOST_DATA,
-        CDROM_EVENT_CDDA_STOP
+        CDROM_EVENT_CDDA_DONE
     };
 
     enum CdRom_Transfer
@@ -94,8 +94,11 @@ public:
         bool enable_dei;
         bool dry;
         bool disc_changed;
-        bool cdda_stopped;
+        u8 drive_state;
         bool change_padding;
+        u8 done_status;
+        u64 done_clocks;
+        u64 cdda_start_clocks;
         CdRom_Event event;
         u64 event_clocks;
         CdRom_Transfer transfer;
@@ -126,6 +129,7 @@ public:
     void HandleEvent(u64 clocks);
     void SetReadSpeed(int speed);
     void SetDoubleSpeed(bool enabled);
+    void SetFeatures(u32 features);
     int GetReadSpeed() const;
     u32 GetAccessCount() const;
     void SetReadCallback(void* context, GT_Read_Callback callback);
@@ -152,27 +156,29 @@ private:
     void ExecuteCommand(u64 clocks);
     void CommandSeek(u64 clocks);
     void CommandRead(u64 clocks);
-    void CommandCDDAPlay();
+    void CommandCDDAPlay(u64 clocks);
     void CommandTOCRead();
     void CommandSubQRead();
     void CommandUnknown1F();
-    void CommandGetState(bool cdda_stopped);
+    void CommandGetState();
     void CommandCDDASet();
     void CommandCDDAStop(u64 clocks);
-    void CommandCDDAPause();
+    void CommandCDDAPause(u64 clocks);
     void CommandCDDAResume();
     void CommandUnknown9F();
     void SeekDone();
     void SectorReady(u64 clocks);
     void LostData();
     void ReadDone();
-    void StopCDDA();
+    u8 EndCDDACommand();
+    void PushDoneStatus(u8 code);
     bool LoadSector();
     void FinishSector();
     u64 StartBuffer(u64 clocks);
     void UpdateBuffer(u64 clocks);
     void ReleaseBuffer(u32 lba, u64 clocks);
     u64 GetArrivalClocks(u32 lba, u64 clocks) const;
+    u64 GetFirstSectorClocks(u32 from, u32 lba, u64 clocks, u64 spin) const;
     u64 GetPassClocks(u32 lba, u64 earliest) const;
     u64 GetTurnClocks(u32 lba) const;
     u64 GetSeekClocks(u32 from, u32 to) const;
@@ -209,6 +215,7 @@ private:
     bool m_double_speed;
     u64 m_sector_clocks;
     double m_seek_scale;
+    u32 m_features;
 };
 
 static const int k_cdrom_irq = 9;
@@ -223,7 +230,12 @@ static const u64 k_cdrom_notify_clocks = GT_MACHINE_CLOCK_RATE / 1000;
 static const u64 k_cdrom_access_clocks = (GT_MACHINE_CLOCK_RATE * 96) / 1000;
 static const u64 k_cdrom_seek_read_clocks = (GT_MACHINE_CLOCK_RATE * 53) / 1000;
 static const u64 k_cdrom_lost_data_clocks = GT_MACHINE_CLOCK_RATE / 10;
-static const u64 k_cdrom_cdda_stop_clocks = GT_MACHINE_CLOCK_RATE / 1000;
+static const u64 k_cdrom_stop_clocks = (GT_MACHINE_CLOCK_RATE * 85) / 100;
+static const u64 k_cdrom_cdda_pause_clocks = (GT_MACHINE_CLOCK_RATE * 77) / 1000;
+static const u64 k_cdrom_spin_up_clocks = (GT_MACHINE_CLOCK_RATE * 19) / 10;
+static const u64 k_cdrom_cdda_spin_up_clocks = (GT_MACHINE_CLOCK_RATE * 22) / 10;
+static const u8 k_cdrom_state_data = 0x02;
+static const u8 k_cdrom_state_stopped = 0x05;
 static const u32 k_cdrom_buffer_size = 8192;
 static const double k_cdrom_disc_speed = 1.218;
 static const double k_cdrom_disc_radius = 0.025;

@@ -35,7 +35,6 @@ CdRomAudio::CdRomAudio(CdRomMedia* cdrom_media)
     memset(m_sector_cache, 0, sizeof(m_sector_cache));
     m_sector_cache_lba = 0;
     m_sector_cache_valid = false;
-    m_seek_scale = 1.0;
     m_deemphasis_end_valid = false;
     memset(m_deemphasis_end_input, 0, sizeof(m_deemphasis_end_input));
     memset(m_deemphasis_end_output, 0, sizeof(m_deemphasis_end_output));
@@ -63,6 +62,7 @@ void CdRomAudio::Reset()
     m_state.current_lba = 0;
     m_state.current_sample = 0;
     m_state.seek_samples = 0;
+    m_state.loop_samples = 0;
     m_state.repeat = false;
     m_state.deemphasis_primed = false;
     memset(m_state.deemphasis_input, 0, sizeof(m_state.deemphasis_input));
@@ -73,18 +73,19 @@ void CdRomAudio::Reset()
 
 // The range is half open
 // Playback stops with the position resting on its end
-void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
+void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat, u64 seek_clocks, u64 loop_clocks)
 {
     u32 sector_count = m_cdrom_media->GetSectorCount();
     end_lba = MIN(end_lba, sector_count);
 
-    u32 seek_ms = (u32)(m_cdrom_media->SeekTime(m_cdrom_media->GetCurrentSector(), start_lba) * m_seek_scale);
+    u32 seek_ms = (u32)(seek_clocks / (GT_MACHINE_CLOCK_RATE / 1000));
 
     m_state.start_lba = start_lba;
     m_state.end_lba = end_lba;
     m_state.current_lba = start_lba;
     m_state.current_sample = 0;
-    m_state.seek_samples = (seek_ms * GT_AUDIO_SAMPLE_RATE) / 1000;
+    m_state.seek_samples = (u32)((seek_clocks * GT_AUDIO_SAMPLE_RATE) / GT_MACHINE_CLOCK_RATE);
+    m_state.loop_samples = (u32)((loop_clocks * GT_AUDIO_SAMPLE_RATE) / GT_MACHINE_CLOCK_RATE);
     m_state.repeat = repeat;
     m_state.deemphasis_primed = false;
     m_sector_cache_valid = false;
@@ -105,11 +106,6 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat)
         m_cdrom_media->PreloadTrack((u32)track, start_lba);
 
     Debug("CD AUDIO: Play LBA %u to %u, repeat %d, seek %u ms", start_lba, end_lba, repeat, seek_ms);
-}
-
-void CdRomAudio::SetSeekScale(double scale)
-{
-    m_seek_scale = scale;
 }
 
 void CdRomAudio::Pause()
@@ -217,7 +213,10 @@ void CdRomAudio::NextSector()
     if (m_state.current_lba >= m_state.end_lba)
     {
         if (m_state.repeat)
+        {
             m_state.current_lba = m_state.start_lba;
+            m_state.seek_samples = m_state.loop_samples;
+        }
         else
             m_state.play_state = CDROM_AUDIO_IDLE;
 
@@ -247,17 +246,17 @@ void CdRomAudio::TraceEvent(u8 event, u32 seek_ms)
 void CdRomAudio::SaveState(std::ostream& stream)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, GT_SAVESTATE_VERSION);
 }
 
-void CdRomAudio::LoadState(std::istream& stream)
+void CdRomAudio::LoadState(std::istream& stream, int version)
 {
     StateSerializer serializer(stream);
-    Serialize(serializer);
+    Serialize(serializer, version);
     SanitizeState();
 }
 
-void CdRomAudio::Serialize(StateSerializer& serializer)
+void CdRomAudio::Serialize(StateSerializer& serializer, int version)
 {
     G_SERIALIZE(serializer, m_state.play_state);
     G_SERIALIZE(serializer, m_state.start_lba);
@@ -269,6 +268,11 @@ void CdRomAudio::Serialize(StateSerializer& serializer)
     G_SERIALIZE(serializer, m_state.deemphasis_primed);
     G_SERIALIZE_ARRAY(serializer, m_state.deemphasis_input, 2);
     G_SERIALIZE_ARRAY(serializer, m_state.deemphasis_output, 2);
+
+    if (version >= 33)
+        G_SERIALIZE(serializer, m_state.loop_samples);
+    else
+        m_state.loop_samples = 0;
 }
 
 void CdRomAudio::SanitizeState()

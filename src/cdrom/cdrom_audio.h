@@ -47,6 +47,7 @@ public:
         u32 current_lba;
         u32 current_sample;
         u32 seek_samples;
+        u32 loop_samples;
         bool repeat;
         bool deemphasis_primed;
         s32 deemphasis_input[2];
@@ -59,8 +60,7 @@ public:
     void Init();
     void SetTraceLogger(TraceLogger* trace_logger);
     void Reset();
-    void Play(u32 start_lba, u32 end_lba, bool repeat);
-    void SetSeekScale(double scale);
+    void Play(u32 start_lba, u32 end_lba, bool repeat, u64 seek_clocks, u64 loop_clocks);
     void Pause();
     void Resume();
     void Stop();
@@ -70,14 +70,14 @@ public:
     void Sample(s16& left, s16& right);
     CdRomAudio_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void LoadSector();
     void Deemphasize();
     void NextSector();
     void TraceEvent(u8 event, u32 seek_ms);
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:
@@ -87,7 +87,6 @@ private:
     s16 m_sector_cache[CDROM_AUDIO_SECTOR_SAMPLES * 2];
     u32 m_sector_cache_lba;
     bool m_sector_cache_valid;
-    double m_seek_scale;
     bool m_deemphasis_end_valid;
     s32 m_deemphasis_end_input[2];
     s64 m_deemphasis_end_output[2];

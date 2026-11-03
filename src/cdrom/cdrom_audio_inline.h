@@ -43,8 +43,14 @@ INLINE void CdRomAudio::Sample(s16& left, s16& right)
     left = 0;
     right = 0;
 
+    // A pause doesn't stop the pickup on its way to the start of the range
     if (m_state.play_state != CDROM_AUDIO_PLAYING)
+    {
+        if ((m_state.play_state == CDROM_AUDIO_PAUSED) && (m_state.seek_samples > 0))
+            m_state.seek_samples--;
+
         return;
+    }
 
     // The pickup is still moving to the start of the range
     if (m_state.seek_samples > 0)

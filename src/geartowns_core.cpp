@@ -1673,7 +1673,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     m_system_control->LoadState(stream, header.version);
     m_video->LoadState(stream, header.version);
     m_cdrom->LoadState(stream, header.version);
-    m_cdrom_audio->LoadState(stream);
+    m_cdrom_audio->LoadState(stream, header.version);
     m_fdc->LoadState(stream, header.version);
     m_keyboard->LoadState(stream, header.version);
     m_rtc->LoadState(stream);
@@ -2308,6 +2308,9 @@ void GeartownsCore::ApplyMachineConfig()
 
     if (IsValidPointer(m_dma))
         m_dma->SetFeatures(profile.features);
+
+    if (IsValidPointer(m_cdrom))
+        m_cdrom->SetFeatures(profile.features);
 
     if (IsValidPointer(m_audio))
         m_audio->SetFeatures(profile.features);

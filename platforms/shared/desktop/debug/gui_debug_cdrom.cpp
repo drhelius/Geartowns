@@ -313,7 +313,7 @@ void gui_debug_window_cdrom_toc(void)
 bool gui_debug_cdrom_reading(void)
 {
     CdRom::CdRom_State* state = emu_get_core()->GetCDROM()->GetState();
-    u8 active = state->active_command & k_cdrom_command_mask;
+    u8 active = state->drive_command & k_cdrom_command_mask;
     bool read_command = active == CdRom::CDROM_COMMAND_MODE1_READ || active == CdRom::CDROM_COMMAND_MODE2_READ ||
         active == CdRom::CDROM_COMMAND_RAW_READ;
     bool transferring = state->transfer != CdRom::CDROM_TRANSFER_NONE;

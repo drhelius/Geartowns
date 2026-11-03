@@ -24,8 +24,21 @@
 
 INLINE void CdRom::Synchronize(u64 clocks)
 {
-    if ((m_state.event != CDROM_EVENT_NONE) && (clocks >= m_state.event_clocks))
-        RunEvent(clocks);
+    if (clocks >= GetNextClocks())
+        RunEvents(clocks);
+}
+
+INLINE u64 CdRom::GetNextClocks() const
+{
+    u64 next = (m_state.event != CDROM_EVENT_NONE) ? m_state.event_clocks : GT_NO_EVENT;
+
+    if ((m_state.execute_clocks != 0) && (m_state.execute_clocks < next))
+        next = m_state.execute_clocks;
+
+    if ((m_state.cdda_end_clocks != 0) && (m_state.cdda_end_clocks < next))
+        next = m_state.cdda_end_clocks;
+
+    return next;
 }
 
 INLINE void CdRom::HandleEvent(u64 clocks)
@@ -41,7 +54,8 @@ INLINE u32 CdRom::GetAccessCount() const
 
 INLINE bool CdRom::IsBusy() const
 {
-    return (m_state.event == CDROM_EVENT_SEEK_DONE) || (m_state.event == CDROM_EVENT_SECTOR);
+    return (m_state.event == CDROM_EVENT_SEEK_DONE) || (m_state.event == CDROM_EVENT_SECTOR) ||
+        (m_state.event == CDROM_EVENT_READ_ERROR) || (m_state.event == CDROM_EVENT_TOC_ENTRY);
 }
 
 INLINE CdRom::CdRom_State* CdRom::GetState()

@@ -25,6 +25,7 @@
 Input::Input()
 {
     InitPointer(m_trace_logger);
+    m_activity_count = 0;
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
         m_controller_type[i] = GT_CONTROLLER_ORIGINAL_GAMEPAD;

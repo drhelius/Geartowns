@@ -33,6 +33,11 @@ INLINE bool Keyboard::IsKeyPressed(GT_Keys key) const
     return IsValidKey(key) && m_state.keys[key];
 }
 
+INLINE u32 Keyboard::GetActivityCount() const
+{
+    return m_activity_count;
+}
+
 // Code 7Fh only appears in reset responses
 INLINE bool Keyboard::IsValidKey(GT_Keys key) const
 {

@@ -488,6 +488,30 @@ static void menu_cdrom(void)
 
     ImGui::Separator();
 
+    if (ImGui::MenuItem("Fast Forward Loads", "", &config_emulator.ffwd_loads))
+    {
+        emu_set_ffwd_loads(config_emulator.ffwd_loads);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Run at maximum speed while the drive reads data and");
+        ImGui::Text("the game shows a still, silent screen.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::MenuItem("Show Fast Forward Notification", "", &config_emulator.ffwd_loads_notification, config_emulator.ffwd_loads);
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Show an icon while a CD-ROM load runs at maximum speed.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::Separator();
+
     if (loading)
         ImGui::TextDisabled("Loading...");
     else if (!inserted)

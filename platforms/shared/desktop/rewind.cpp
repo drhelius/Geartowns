@@ -485,6 +485,7 @@ static bool load_snapshot(const u8* blob, int index)
             snapshot->display_width, snapshot->display_height);
         memcpy(emu_frame_buffer, blob + state_capacity, screen);
         events_sync_input();
+        emu_reset_load_ffwd();
     }
 
     return ok;

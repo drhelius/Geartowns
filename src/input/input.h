@@ -55,6 +55,7 @@ public:
     void SetGamePadState(int port, const GT_GamePad_State& state);
     void SetInjectedGamePadState(int port, const GT_GamePad_State& state);
     const GT_GamePad_State& GetGamePadState(int port) const;
+    u32 GetActivityCount() const;
     void SetControllerType(int port, GT_Controller_Type type);
     GT_Controller_Type GetControllerType(int port) const;
     Input_State* GetState();
@@ -76,6 +77,7 @@ private:
     GT_GamePad_State m_injected_gamepads[GT_MAX_GAMEPADS];
     GT_Controller_Type m_controller_type[GT_MAX_GAMEPADS];
     TraceLogger* m_trace_logger;
+    u32 m_activity_count;
 };
 
 static const u8 k_input_output_reset = 0x0F;

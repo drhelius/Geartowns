@@ -23,6 +23,9 @@ INLINE void Input::SetMouseDelta(int port, s32 x, s32 y)
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return;
 
+    if ((x != 0) || (y != 0))
+        m_activity_count++;
+
     m_state.mouse_x[port] = (s32)CLAMP((s64)m_state.mouse_x[port] - x, -k_input_mouse_limit, k_input_mouse_limit);
     m_state.mouse_y[port] = (s32)CLAMP((s64)m_state.mouse_y[port] - y, -k_input_mouse_limit, k_input_mouse_limit);
 }
@@ -32,6 +35,9 @@ INLINE void Input::SetGamePadState(int port, const GT_GamePad_State& state)
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return;
 
+    if (m_physical_gamepads[port].buttons != state.buttons)
+        m_activity_count++;
+
     m_physical_gamepads[port] = state;
     UpdateGamePadState(port);
 }
@@ -40,6 +46,9 @@ INLINE void Input::SetInjectedGamePadState(int port, const GT_GamePad_State& sta
 {
     if (port < 0 || port >= GT_MAX_GAMEPADS)
         return;
+
+    if (m_injected_gamepads[port].buttons != state.buttons)
+        m_activity_count++;
 
     m_injected_gamepads[port] = state;
     UpdateGamePadState(port);
@@ -53,6 +62,11 @@ INLINE const GT_GamePad_State& Input::GetGamePadState(int port) const
         return empty;
 
     return m_state.gamepads[port];
+}
+
+INLINE u32 Input::GetActivityCount() const
+{
+    return m_activity_count;
 }
 
 INLINE void Input::SetControllerType(int port, GT_Controller_Type type)

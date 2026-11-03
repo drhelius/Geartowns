@@ -277,6 +277,9 @@
     <ClCompile Include="..\..\src\system\scheduler.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\system\load_detector.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\cdrom\cdrom.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -487,6 +490,7 @@
     <ClInclude Include="..\..\src\system\machine_profiles.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\scheduler_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\load_detector.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\cdrom\cdrom_audio.h"><Filter>src</Filter></ClInclude>

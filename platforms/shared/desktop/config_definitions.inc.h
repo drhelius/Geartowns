@@ -194,6 +194,8 @@ static inline void process(config_Operation operation)
 
     // Emulation
     CONFIG_INT("Emulator", "FFWD", config_emulator.ffwd_speed, 1);
+    CONFIG_BOOL("Emulator", "FFWDLoads", config_emulator.ffwd_loads, false);
+    CONFIG_BOOL("Emulator", "FFWDLoadsNotification", config_emulator.ffwd_loads_notification, true);
     CONFIG_INT_RANGE("Emulator", "RunAhead", config_emulator.runahead, 0, 0, 3);
     CONFIG_INT_RANGE("Emulator", "SaveSlot", config_emulator.save_slot, 0, 0, 4);
     CONFIG_BOOL("Emulator", "StartPaused", config_emulator.start_paused, false);

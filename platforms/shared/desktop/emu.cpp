@@ -79,6 +79,8 @@ static Uint64 rewind_last_counter = 0;
 static double rewind_pop_accumulator = 0.0;
 static bool video_recording_output = false;
 static bool emu_debug_step_start = false;
+static bool ffwd_loads = false;
+static bool load_ffwd = false;
 
 static std::atomic<int> loading_state(Loading_State_None);
 static std::thread loading_thread;
@@ -343,7 +345,10 @@ void emu_update(void)
             result = GT_RUN_FRAME_READY;
         }
         else
+        {
             result = geartowns->RunToFrame(emu_frame_buffer, audio_buffer, &sample_count);
+            emu_update_load_ffwd(result);
+        }
 
         frame_executed = result != GT_RUN_NOT_READY;
         frame_completed = result == GT_RUN_FRAME_READY;
@@ -731,6 +736,39 @@ void emu_set_cdrom_speed(int speed)
         geartowns->GetCDROM()->SetReadSpeed(speed);
 }
 
+void emu_set_ffwd_loads(bool enabled)
+{
+    ffwd_loads = enabled;
+    emu_reset_load_ffwd();
+}
+
+void emu_reset_load_ffwd(void)
+{
+    load_ffwd = false;
+
+    if (IsValidPointer(geartowns))
+        geartowns->ResetLoadDetection();
+}
+
+void emu_update_load_ffwd(GT_Run_Result result)
+{
+    bool active = emu_is_load_ffwd();
+    load_ffwd = ffwd_loads && (result == GT_RUN_FRAME_READY) && geartowns->UpdateLoadDetection();
+
+    if (active && !load_ffwd && !config_emulator.ffwd)
+        emu_audio_reset();
+}
+
+bool emu_is_load_ffwd(void)
+{
+    return load_ffwd && !config_debug.debug && !rewind_is_active() && !emu_is_paused();
+}
+
+bool emu_is_ffwd(void)
+{
+    return config_emulator.ffwd || emu_is_load_ffwd();
+}
+
 // The dynarec runs while the debugger is off, the debugger always steps the interpreter
 void emu_set_dynarec(bool enabled)
 {
@@ -913,6 +951,7 @@ bool emu_load_state_slot(int index)
     emu_memory_card_state_loaded(false);
     emu_debug_state_restored();
     events_sync_input();
+    emu_reset_load_ffwd();
     rewind_reset();
     return true;
 }
@@ -936,6 +975,7 @@ bool emu_load_state_file(const char* file_path)
     emu_memory_card_state_loaded(false);
     emu_debug_state_restored();
     events_sync_input();
+    emu_reset_load_ffwd();
     rewind_reset();
     return true;
 }
@@ -1846,6 +1886,7 @@ static void reset_run_state(void)
     emu_debug_pc_changed = true;
     emu_frame_counter = 0;
     emu_machine_generation++;
+    load_ffwd = false;
     reset_buffers();
     emu_audio_reset();
     rewind_reset();

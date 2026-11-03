@@ -48,7 +48,7 @@ int runahead_get_frames(void)
 {
     int frames = config_emulator.runahead;
 
-    if ((frames <= 0) || config_emulator.ffwd || config_debug.debug || emu_is_vgm_recording())
+    if ((frames <= 0) || emu_is_ffwd() || config_debug.debug || emu_is_vgm_recording())
         return 0;
 
     return frames;
@@ -59,7 +59,8 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
     GeartownsCore* core = emu_get_core();
 
     // Run the authoritative frame, keeping its audio while the real state advances.
-    core->RunToFrame(frame_buffer, sample_buffer, sample_count);
+    GT_Run_Result result = core->RunToFrame(frame_buffer, sample_buffer, sample_count);
+    emu_update_load_ffwd(result);
 
     // Allocate the reusable snapshot buffer on first use.
     if (!IsValidPointer(runahead_buffer) && !ensure_buffer())

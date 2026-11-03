@@ -69,6 +69,7 @@ public:
     void KeyReleased(GT_Keys key);
     void ReleaseAllKeys();
     bool IsKeyPressed(GT_Keys key) const;
+    u32 GetActivityCount() const;
     void SetBootKeys(const GT_Keys* keys, int count);
     void ClearBootKeys();
     int GetBootKeys(GT_Keys* keys) const;
@@ -95,6 +96,7 @@ private:
     Scheduler* m_scheduler;
     TraceLogger* m_trace_logger;
     Keyboard_State m_state;
+    u32 m_activity_count;
 };
 
 static const int k_keyboard_irq = 1;

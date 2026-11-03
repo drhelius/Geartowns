@@ -32,6 +32,7 @@ Keyboard::Keyboard()
     InitPointer(m_scheduler);
     InitPointer(m_trace_logger);
     memset(&m_state, 0, sizeof(m_state));
+    m_activity_count = 0;
 }
 
 Keyboard::~Keyboard()
@@ -174,6 +175,7 @@ void Keyboard::KeyPressed(GT_Keys key)
     if (!IsValidKey(key) || m_state.keys[key])
         return;
 
+    m_activity_count++;
     Synchronize(m_scheduler->GetClocks());
 
     if (!HasRoom(2))
@@ -196,6 +198,7 @@ void Keyboard::KeyReleased(GT_Keys key)
     if (!IsValidKey(key) || !m_state.keys[key])
         return;
 
+    m_activity_count++;
     Synchronize(m_scheduler->GetClocks());
     m_state.keys[key] = false;
     PushEvent((u8)key, k_keyboard_break);

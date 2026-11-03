@@ -33,7 +33,8 @@
 #include "drive/fdc.h"
 #include "drive/memory_card.h"
 
-#define GUI_DRIVE_ACTIVITY_SLOTS (2 + GT_MAX_FLOPPY_DRIVES)
+#define GUI_DRIVE_ACTIVITY_SLOTS (3 + GT_MAX_FLOPPY_DRIVES)
+#define GUI_DRIVE_ACTIVITY_FFWD_SLOT (2 + GT_MAX_FLOPPY_DRIVES)
 
 struct Drive_Slot
 {
@@ -58,8 +59,8 @@ static const float k_drive_activity_label_size = 11.0f;
 static const float k_drive_activity_label_spacing = 1.0f;
 static const float k_drive_activity_background = 0.85f;
 static const char* const k_drive_activity_icons[GUI_DRIVE_ACTIVITY_SLOTS] = { ICON_MD_ALBUM, ICON_MD_SAVE, ICON_MD_SAVE,
-    ICON_MD_SD_CARD };
-static const char* const k_drive_activity_labels[GUI_DRIVE_ACTIVITY_SLOTS] = { NULL, "1", "2", NULL };
+    ICON_MD_SD_CARD, ICON_MD_FAST_FORWARD };
+static const char* const k_drive_activity_labels[GUI_DRIVE_ACTIVITY_SLOTS] = { NULL, "1", "2", NULL, NULL };
 
 static Drive_Slot slots[GUI_DRIVE_ACTIVITY_SLOTS];
 static int sample_frame = -1;
@@ -71,9 +72,6 @@ static void draw_slot(ImDrawList* draw_list, ImFont* font, int index, const ImVe
 
 void gui_drive_activity_render_output(const ImVec2& min, const ImVec2& max)
 {
-    if (!config_emulator.show_drive_activity)
-        return;
-
     Uint64 now = SDL_GetTicks();
     int frame = ImGui::GetFrameCount();
     sample(now, frame != sample_frame + 1);
@@ -87,7 +85,10 @@ void gui_drive_activity_render_output(const ImVec2& min, const ImVec2& max)
 
     draw_list->PushClipRect(min, max, true);
 
-    for (int i = 0; i < GUI_DRIVE_ACTIVITY_SLOTS; i++)
+    int first = config_emulator.show_drive_activity ? 0 : GUI_DRIVE_ACTIVITY_FFWD_SLOT;
+    int last = config_emulator.ffwd_loads_notification ? GUI_DRIVE_ACTIVITY_SLOTS : GUI_DRIVE_ACTIVITY_FFWD_SLOT;
+
+    for (int i = first; i < last; i++)
     {
         Drive_Slot* slot = &slots[i];
 
@@ -133,6 +134,7 @@ static void sample(Uint64 now, bool resync)
 
     u32 card_writes = core->GetMemoryCard()->GetWriteCount();
     update_slot(&slots[1 + GT_MAX_FLOPPY_DRIVES], card_writes, card_writes, false, now, resync);
+    update_slot(&slots[GUI_DRIVE_ACTIVITY_FFWD_SLOT], 0, 0, emu_is_load_ffwd(), now, resync);
 }
 
 static void update_slot(Drive_Slot* slot, u32 access_count, u32 write_count, bool busy, Uint64 now, bool resync)
@@ -181,7 +183,8 @@ static void draw_slot(ImDrawList* draw_list, ImFont* font, int index, const ImVe
     const char* label = k_drive_activity_labels[index];
     ImVec4 background = ImGui::GetStyle().Colors[ImGuiCol_PopupBg];
     background.w = k_drive_activity_background;
-    ImU32 color = ImGui::ColorConvertFloat4ToU32(write ? amber : green);
+    bool ffwd = index == GUI_DRIVE_ACTIVITY_FFWD_SLOT;
+    ImU32 color = ImGui::ColorConvertFloat4ToU32(ffwd ? violet : (write ? amber : green));
 
     draw_list->AddRectFilled(pos, pos + size, ImGui::ColorConvertFloat4ToU32(background), k_drive_activity_rounding);
 

@@ -49,6 +49,7 @@
 #include "system/scheduler.h"
 #include "system/machine_profiles.h"
 #include "system/upd71071.h"
+#include "system/load_detector.h"
 #include "video/video.h"
 
 GeartownsCore::GeartownsCore()
@@ -77,7 +78,9 @@ GeartownsCore::GeartownsCore()
     InitPointer(m_profiler);
     InitPointer(m_rtc);
     InitPointer(m_dma);
+    InitPointer(m_load_detector);
     InitPointer(m_frame_buffer);
+    m_frame_rendered = false;
 
     m_machine_settings.model = GT_MACHINE_MODEL1_2;
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
@@ -135,6 +138,7 @@ GeartownsCore::~GeartownsCore()
     SafeDelete(m_profiler);
     SafeDelete(m_rtc);
     SafeDelete(m_dma);
+    SafeDelete(m_load_detector);
     SafeDelete(m_memory);
     SafeDelete(m_firmware);
     SafeDelete(m_cdrom_media);
@@ -214,6 +218,9 @@ void GeartownsCore::Init()
     if (!IsValidPointer(m_dma))
         m_dma = new UPD71071();
 
+    if (!IsValidPointer(m_load_detector))
+        m_load_detector = new LoadDetector();
+
     m_firmware->Init();
     m_scheduler->Init();
     m_memory->Init();
@@ -260,6 +267,7 @@ void GeartownsCore::Init()
     m_memory_card->SetTraceLogger(m_trace_logger);
     m_keyboard->SetTraceLogger(m_trace_logger);
     m_input->SetTraceLogger(m_trace_logger);
+    m_load_detector->Init(m_cdrom, m_cdrom_audio, m_audio, m_input, m_keyboard);
     m_media->Init();
     Reset();
 }
@@ -284,6 +292,7 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
     GT_Debug_Run* debug, bool render)
 {
     m_frame_buffer = frame_buffer;
+    m_frame_rendered = render;
 
     if (sample_count != NULL)
         *sample_count = 0;
@@ -1964,6 +1973,19 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
     runtime_info.paused = m_paused;
 }
 
+bool GeartownsCore::UpdateLoadDetection()
+{
+    if (!m_powered)
+        return false;
+
+    return m_load_detector->Update(m_frame_buffer, m_video->GetFrameWidth(), m_video->GetFrameHeight(), m_frame_rendered);
+}
+
+void GeartownsCore::ResetLoadDetection()
+{
+    m_load_detector->Reset();
+}
+
 void GeartownsCore::Reset()
 {
     m_paused = false;
@@ -2039,6 +2061,9 @@ void GeartownsCore::Reset()
 
     if (IsValidPointer(m_input))
         m_input->Reset();
+
+    if (IsValidPointer(m_load_detector))
+        m_load_detector->Reset();
 
     ApplyBusTiming();
     ApplyCdRomSpeed();

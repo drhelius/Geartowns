@@ -58,6 +58,7 @@
 #define HARD_DISK_IDLE_FRAMES 120
 #define MEMORY_CARD_IDLE_FRAMES 180
 #define CMOS_SAVE_FRAMES 180
+#define FFWD_MESSAGE_FRAMES 120
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
 #define INPUT_STATE_SIZE ((sizeof(float) * 2) + (sizeof(u16) * MAX_PADS))
@@ -109,6 +110,11 @@ static bool frameskip_changed = false;
 static bool audio_buffer_active = false;
 static unsigned audio_buffer_occupancy = 0;
 static bool audio_buffer_underrun = false;
+static bool ffwd_loads = false;
+static bool ffwd_notification = true;
+static bool ffwd_override_supported = false;
+static bool ffwd_override_active = false;
+static int ffwd_message_frames = FFWD_MESSAGE_FRAMES;
 
 static bool allow_up_down = false;
 static int mouse_sensitivity = 5;
@@ -197,10 +203,13 @@ static void set_machine_config(void);
 static void report_machine(void);
 static void report_controllers(void);
 static const char* get_controller_type_name(GT_Controller_Type type);
-static void show_message(const char* message, unsigned priority, enum retro_log_level level);
+static void show_message(const char* message, unsigned priority, enum retro_log_level level, unsigned duration = 0);
 static void get_system_av_info(struct retro_system_av_info* info);
 static void audio_buffer_status(bool active, unsigned occupancy, bool underrun_likely);
 static void update_frameskip(void);
+static void update_load_ffwd(bool visible, GT_Run_Result result);
+static void set_ffwd_override(bool enabled);
+static bool is_normal_state_load(void);
 static void set_controller_info(void);
 static void set_input_descriptors(void);
 static int add_input_descriptors(struct retro_input_descriptor* descriptors, int count, unsigned port, const struct retro_input_descriptor* source, int source_count);
@@ -370,6 +379,16 @@ void retro_set_environment(retro_environment_t cb)
     struct retro_core_options_update_display_callback display_callback = { update_core_options_display };
     environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK, &display_callback);
     update_core_options_display();
+
+    ffwd_override_supported = environ_cb(RETRO_ENVIRONMENT_SET_FASTFORWARDING_OVERRIDE, NULL);
+
+    if (!ffwd_override_supported)
+    {
+        struct retro_core_option_display display = { "geartowns_cdrom_fast_forward", false };
+        environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &display);
+        display.key = "geartowns_cdrom_fast_forward_notification";
+        environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &display);
+    }
 }
 
 void retro_init(void)
@@ -465,6 +484,10 @@ void retro_deinit(void)
     frameskip_counter = 0;
     frameskip_changed = false;
     audio_buffer_active = false;
+    ffwd_loads = false;
+    ffwd_notification = true;
+    ffwd_override_active = false;
+    ffwd_message_frames = FFWD_MESSAGE_FRAMES;
     allow_up_down = false;
     mouse_sensitivity = 5;
     analog_mouse = 0;
@@ -562,6 +585,8 @@ void retro_run(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av_enable))
         render = (av_enable & 1) != 0;
 
+    bool visible = render;
+
     if (render && frameskip_type > 0 && audio_buffer_active)
     {
         bool skip = frameskip_type == 1 ? audio_buffer_underrun : audio_buffer_occupancy < frameskip_threshold;
@@ -577,7 +602,8 @@ void retro_run(void)
 
     audio_sample_count = 0;
     bool powered = core->IsPoweredOn();
-    core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
+    GT_Run_Result result = core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
+    update_load_ffwd(visible, result);
     floppy_update();
     hard_disk_update();
     memory_card_update();
@@ -700,6 +726,13 @@ bool retro_unserialize(const void *data, size_t size)
     {
         load_input_state(buffer + savestate_size);
         sync_keyboard_state();
+
+        if (is_normal_state_load())
+        {
+            core->ResetLoadDetection();
+            set_ffwd_override(false);
+        }
+
         bool changed = core->GetHardDiskStateChanges() != 0;
 
         if (changed && !hard_disk_state_warned)
@@ -873,6 +906,7 @@ static void unload_content(void)
     core->EjectMemoryCard();
     cmos_save();
     cmos_shared_active = false;
+    set_ffwd_override(false);
     core->EjectMedia();
     core->PowerOff();
 
@@ -1105,13 +1139,13 @@ static const char* get_controller_type_name(GT_Controller_Type type)
     }
 }
 
-static void show_message(const char* message, unsigned priority, enum retro_log_level level)
+static void show_message(const char* message, unsigned priority, enum retro_log_level level, unsigned duration)
 {
     if (message_interface_version >= 1)
     {
         struct retro_message_ext msg = {};
         msg.msg = message;
-        msg.duration = level == RETRO_LOG_INFO ? 4000 : 7000;
+        msg.duration = duration > 0 ? duration : (level == RETRO_LOG_INFO ? 4000 : 7000);
         msg.priority = priority;
         msg.level = level;
         msg.target = RETRO_MESSAGE_TARGET_OSD;
@@ -1123,7 +1157,7 @@ static void show_message(const char* message, unsigned priority, enum retro_log_
 
     struct retro_message msg = {};
     msg.msg = message;
-    msg.frames = 360;
+    msg.frames = duration > 0 ? (duration * 60) / 1000 : 360;
     environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
 }
 
@@ -1165,6 +1199,57 @@ static void update_frameskip(void)
         environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK, NULL);
 
     environ_cb(RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY, &latency);
+}
+
+static void update_load_ffwd(bool visible, GT_Run_Result result)
+{
+    if (!ffwd_loads || !visible)
+        return;
+
+    bool loading = (result == GT_RUN_FRAME_READY) && core->UpdateLoadDetection();
+
+    if (!ffwd_override_active && (ffwd_message_frames < FFWD_MESSAGE_FRAMES))
+        ffwd_message_frames++;
+
+    if (loading == ffwd_override_active)
+        return;
+
+    bool fastforwarding = false;
+
+    if (loading && environ_cb(RETRO_ENVIRONMENT_GET_FASTFORWARDING, &fastforwarding) && fastforwarding)
+        return;
+
+    set_ffwd_override(loading);
+
+    if (loading && ffwd_notification && (ffwd_message_frames >= FFWD_MESSAGE_FRAMES))
+        show_message("Fast forwarding CD-ROM load", 1, RETRO_LOG_INFO, 2000);
+
+    ffwd_message_frames = 0;
+}
+
+static void set_ffwd_override(bool enabled)
+{
+    if (enabled == ffwd_override_active)
+        return;
+
+    struct retro_fastforwarding_override ffwd = { 0.0f, enabled, false, false };
+    environ_cb(RETRO_ENVIRONMENT_SET_FASTFORWARDING_OVERRIDE, &ffwd);
+    ffwd_override_active = enabled;
+}
+
+static bool is_normal_state_load(void)
+{
+    enum retro_savestate_context context = RETRO_SAVESTATE_CONTEXT_UNKNOWN;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_SAVESTATE_CONTEXT, &context))
+        return context == RETRO_SAVESTATE_CONTEXT_NORMAL;
+
+    int av_enable = 0;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av_enable))
+        return (av_enable & RETRO_AV_ENABLE_FAST_SAVESTATES) == 0;
+
+    return true;
 }
 
 static void set_controller_info(void)
@@ -1911,6 +1996,32 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         core->GetCDROM()->SetReadSpeed(strcmp(var.value, "auto") == 0 ? 0 : CLAMP(atoi(var.value), 1, 8));
+    }
+
+    var.key = "geartowns_cdrom_fast_forward";
+    var.value = NULL;
+
+    bool loads = false;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        loads = ffwd_override_supported && (strcmp(var.value, "Enabled") == 0);
+    }
+
+    if (loads != ffwd_loads)
+    {
+        ffwd_loads = loads;
+        ffwd_message_frames = FFWD_MESSAGE_FRAMES;
+        core->ResetLoadDetection();
+        set_ffwd_override(false);
+    }
+
+    var.key = "geartowns_cdrom_fast_forward_notification";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        ffwd_notification = (strcmp(var.value, "Enabled") == 0);
     }
 
     var.key = "geartowns_cdrom_preload";

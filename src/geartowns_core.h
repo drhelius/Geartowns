@@ -33,6 +33,7 @@ class HardDiskImage;
 class MemoryCard;
 class ScsiController;
 class Keyboard;
+class LoadDetector;
 class MSM58321;
 class UPD71071;
 class Firmware;
@@ -143,6 +144,8 @@ public:
     bool GetSaveStateScreenshot(int index, const char* path, GT_SaveState_Screenshot* screenshot);
 
     void GetRuntimeInfo(GT_Runtime_Info& runtime_info);
+    bool UpdateLoadDetection();
+    void ResetLoadDetection();
 
     Firmware* GetFirmware();
     Media* GetMedia();
@@ -242,6 +245,7 @@ private:
     Profiler* m_profiler;
     MSM58321* m_rtc;
     UPD71071* m_dma;
+    LoadDetector* m_load_detector;
 
     GT_Machine_Settings m_machine_settings;
     const GT_DB_Entry* m_auto_entry;
@@ -269,6 +273,7 @@ private:
     bool m_debug_interrupt_deferred;
 
     u8* m_frame_buffer;
+    bool m_frame_rendered;
 };
 
 #include "geartowns_core_inline.h"

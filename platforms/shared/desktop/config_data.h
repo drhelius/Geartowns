@@ -76,6 +76,8 @@ struct config_Emulator
     bool dynarec;
     bool ffwd;
     int ffwd_speed;
+    bool ffwd_loads;
+    bool ffwd_loads_notification;
     int runahead;
     bool show_info;
     bool show_firmware;

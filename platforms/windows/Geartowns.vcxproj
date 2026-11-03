@@ -60,6 +60,7 @@
     <ClCompile Include="..\..\src\system\upd71071.cpp" />
     <ClCompile Include="..\..\src\system\system_control.cpp" />
     <ClCompile Include="..\..\src\system\scheduler.cpp" />
+    <ClCompile Include="..\..\src\system\load_detector.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom.cpp" />
     <ClCompile Include="..\..\src\cdrom\cdrom_audio.cpp" />
     <ClCompile Include="..\..\src\media\chd_file_adapter.cpp" />
@@ -279,6 +280,7 @@
     <ClInclude Include="..\..\src\system\machine_profiles.h" />
     <ClInclude Include="..\..\src\system\scheduler.h" />
     <ClInclude Include="..\..\src\system\scheduler_inline.h" />
+    <ClInclude Include="..\..\src\system\load_detector.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_inline.h" />
     <ClInclude Include="..\..\src\cdrom\cdrom_audio.h" />

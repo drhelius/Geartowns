@@ -309,6 +309,34 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         },
         "auto"
     },
+    {
+        "geartowns_cdrom_fast_forward",
+        "Fast Forward CD-ROM Loads",
+        NULL,
+        "Run at maximum speed while the drive reads data and the game shows a still, silent screen. Normal speed returns as soon as the picture changes or sound plays. Needs a frontend that supports fast-forward override.",
+        NULL,
+        "cdrom",
+        {
+            { "Disabled", NULL },
+            { "Enabled",  NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+    {
+        "geartowns_cdrom_fast_forward_notification",
+        "Fast Forward CD-ROM Loads Notification",
+        NULL,
+        "Show a message when a CD-ROM load starts running at maximum speed.",
+        NULL,
+        "cdrom",
+        {
+            { "Disabled", NULL },
+            { "Enabled",  NULL },
+            { NULL, NULL },
+        },
+        "Enabled"
+    },
 
     /* Floppy */
 

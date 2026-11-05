@@ -24,10 +24,12 @@ Each model runs on a set of these ROMs. Some models have a set of their own, oth
 | FM Towns II HR           | HR set                          |                                           |
 | FM Towns II UR           | HR set, or else the V10 set     | No dump of its own                        |
 | FM Towns II ME           | V10 set                         | No dump of its own                        |
+| FM Towns II MA           | V10 set                         | No dump of its own                        |
+| FM Towns II MX           | V10 set                         |                                           |
 | FM Towns II MF / Fresh   | V10 set                         |                                           |
 | FM Towns Marty           | Marty set or Marty 2 set        |                                           |
 
-The MA, MX and HC are not emulated yet. The V10 set is the firmware of the last generation: MAME's FM Towns II FreshTV set and MAME's MX set hold the same ROMs.
+The V10 set is the firmware of the last generation: MAME's FM Towns II FreshTV set and MAME's MX set hold the same ROMs.
 
 **How a set is chosen:**
 
@@ -111,7 +113,7 @@ Also used by the HG.
 
 ### V10 set (MAME `fmtownsftv`)
 
-MAME's FM Towns II FreshTV set. Also used by the ME, and by the HG and UR when there is no HR set.
+MAME's FM Towns II FreshTV set. Also used by the ME, MA and MX, and by the HG and UR when there is no HR set.
 
 | File           | Description                 | Size     | CRC32    | md5                              |
 |----------------|-----------------------------|----------|----------|----------------------------------|

@@ -41,6 +41,12 @@ Standard formats and the line pitch the BIOS modes use:
 | 0450h/0452h | Sprite register index and data |
 | 0458h | VRAM write mask register index (bits 1-0) |
 | 045Ah/045Bh | VRAM write mask, low and high byte of the selected register |
+| 0470h | MA and MX: bit 7 clear means the high-resolution CRTC is built in, bits 6-0 read 1 (section 9) |
+| 0471h | MA and MX: VRAM in MiB, 1 |
+| 0472h/0473h | MA and MX: high-resolution CRTC register address, reads back |
+| 0474h-0477h | MA and MX: register data, by byte (section 9) |
+| 047Ah/047Bh | MA and MX: second gateway address |
+| 047Ch-047Fh | MA and MX: second gateway data, only register 0 exists: bit 2 is pack mode |
 | 05C8h | Read: bit 7 text VRAM written (the read clears it) |
 | 05CAh | Write: clears the VSYNC interrupt (IRQ11) |
 | FD90h | Palette index |
@@ -166,3 +172,38 @@ CFF96h/CFF97h. With it off they read FFh, as on earlier models.
 
 The Model 1/2 BIOS also reaches CFF81h through the I/O alias FF81h. FM-R text output is software drawn into the
 layers; the text RAM at C8000h is held in Sprite RAM. See the memory_map resource.
+
+---
+
+## 9. High-Resolution CRTC (MA and MX)
+
+A second CRTC with 1 MiB of VRAM, reached through 0472h and 0474h. It's on while register 000h bit 0 and 004h bit 0 are both
+set: frames, VSYNC, the interrupt and the sync status then follow it, and the compatibility output stops. The ROM selects and
+programs it, then stops it, so a machine boots to the compatibility CRTC.
+
+| Register | Meaning |
+|---|---|
+| 000h | Bit 0 selects this CRTC |
+| 001h | Bits 7-4 clock, 0 = 25.175 MHz, 2 = 65 MHz. Bit 1 set: two pages |
+| 004h | Write 1 starts, 2 stops. Reads 1 running, 0 stopped |
+| 005h | Bit 0 the page in front. Bit 8 shows page 0, bit 9 shows page 1 |
+| 006h | Read: bit 1 VSYNC |
+| 100h-103h | HSYNC clocks, line clocks - 1, VSYNC lines, frame lines - 1 |
+| 104h-107h | Display window: H start and end in clocks, V start and end in lines, all from the start of VSYNC |
+| 110h-113h | Page 0 window inside the display: X, width, Y, height, in screen pixels |
+| 114h, 115h | Page width and height in page pixels, the stride follows from them |
+| 116h, 117h | Display start X and Y |
+| 118h | Bits 2-0 format: 1 = 4 bpp, 2 = 8 bpp, 3 = 16 bpp, 4 = 24 bpp |
+| 119h | Low byte H zoom - 1, high byte V zoom - 1 |
+| 11Bh, 11Ch | Key: the front page lets through a pixel when pixel AND 11Bh equals 11Ch |
+| 120h-12Ch | The same for page 1 |
+| 130h, 132h, 133h | Palette select (0 and 1 the 16 colors of pages 0 and 1, 2 and 3 their 256 colors), index, data: bits 7-0 blue, 15-8 red, 23-16 green |
+| 200h-203h | Cursor X and Y in zoomed pixels, pattern pixels hidden at the left and top |
+| 204h, 205h | Cursor back and front colors, as the palette |
+| 206h | Cursor on |
+| 208h, 209h | Pattern address and data, 1024 bytes: 64 rows of 8 bytes of mask (1 = transparent), then the pattern |
+| 20Ah | Cursor zoom, as 119h |
+
+Memory: 82000000h is page 0 and 82800000h page 1, 512 KiB each, for two-page modes. 83000000h is the whole VRAM as one
+page. With pack mode on, a 32-bit pixel at 83000000h is 3 bytes of VRAM, for EGB's mode 27. C2180000h is the 20-dot font.
+Pixels are linear: 4 bpp starts in the low nibble, 16 bpp is GRB 5:5:5, 24 bpp is blue, green, red.

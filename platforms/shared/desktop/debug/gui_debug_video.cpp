@@ -24,6 +24,7 @@
 #include "geartowns.h"
 #include "system/memory.h"
 #include "system/scheduler.h"
+#include "video/hires_crtc.h"
 #include "video/sprite.h"
 #include "video/video.h"
 #include "../config.h"
@@ -35,9 +36,17 @@
 #include "gui_debug_memory.h"
 #include "gui_debug_widgets.h"
 
+static const char k_hires_palette_items[] = "16 COLORS, PAGE 0\0" "16 COLORS, PAGE 1\0" "256 COLORS, PAGE 0\0"
+    "256 COLORS, PAGE 1\0";
+
+static int hires_palette_bank = 0;
+
 static void crtc_write_callback(u16 index, u16 value, void* user_data);
 static void setup_grid_columns(bool layers);
 static void draw_grid_label(const char* label);
+static bool hires_page_shown(HiresCRTC* crtc, int page);
+static void draw_hires_page_row(const char* label, const u32* registers, u16 offset, bool hex, const bool* used);
+static void draw_hires_palette(HiresCRTC* crtc);
 static void draw_layer_column(int layer, int row);
 static void draw_palette_title(const char* title, bool in_use);
 static void setup_palette_columns(void);
@@ -258,6 +267,179 @@ void gui_debug_window_crtc_registers(void)
     ImGui::PopStyleVar();
 }
 
+void gui_debug_window_hires_crtc(void)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::SetNextWindowPos(ImVec2(178, 150), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(345, 557), ImGuiCond_FirstUseEver);
+    ImGui::Begin("High-Res CRTC", &config_debug.show_hires_crtc);
+
+    ImGui::PushFont(gui_default_font);
+
+    HiresCRTC* crtc = emu_get_core()->GetVideo()->GetHiresCRTC();
+    const u32* registers = crtc->GetState()->registers;
+    double clock = crtc->PeekClockRate() / 1000000.0;
+    u32 line_clocks = crtc->GetWord(k_hires_crtc_hst) + 1;
+    u32 lines = crtc->GetWord(k_hires_crtc_vst) + 1;
+    u32 pages = registers[k_hires_crtc_priority];
+    bool selected = (registers[k_hires_crtc_select] & 0x01) != 0;
+    bool running = (registers[k_hires_crtc_control] & 0x01) != 0;
+    bool active = crtc->IsActive();
+    bool two_page = crtc->IsTwoPage();
+    ImVec4 color = active ? white : gray;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+
+    ImGui::TextColored(cyan, "DISPLAY"); ImGui::Separator();
+
+    if (ImGui::BeginTable("##hires_display", 4, flags))
+    {
+        setup_grid_columns(false);
+
+        ImGui::TableNextRow();
+        draw_grid_label("SELECTED");
+        ImGui::TextColored(selected ? green : gray, "%s", selected ? "ON" : "OFF");
+        draw_grid_label("RUNNING");
+        ImGui::TextColored(running ? green : gray, "%s", running ? "ON" : "OFF");
+
+        ImGui::TableNextRow();
+        draw_grid_label("DOT CLOCK");
+        ImGui::TextColored(active ? orange : gray, "%.3f MHz", clock);
+        draw_grid_label("LAYOUT");
+        ImGui::TextColored(color, "%s", two_page ? "2 PAGES" : "1 PAGE");
+
+        ImGui::TableNextRow();
+        draw_grid_label("LINE");
+        ImGui::TextColored(color, "%u DOTS", line_clocks);
+        draw_grid_label("LINE RATE");
+
+        if (active)
+            ImGui::TextColored(orange, "%.2f kHz", clock * 1000.0 / line_clocks);
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextRow();
+        draw_grid_label("FRAME");
+        ImGui::TextColored(color, "%u LINES", lines);
+        draw_grid_label("REFRESH");
+
+        if (active)
+            ImGui::TextColored(orange, "%.2f Hz", (clock * 1000000.0) / ((double)lines * line_clocks));
+        else
+            ImGui::TextColored(gray, "--");
+
+        ImGui::TableNextRow();
+        draw_grid_label("HSYNC");
+        ImGui::TextColored(color, "%u DOTS", crtc->GetWord(k_hires_crtc_hsw1));
+        draw_grid_label("VSYNC");
+        ImGui::TextColored(color, "%u LINES", crtc->GetWord(k_hires_crtc_vsw1));
+
+        ImGui::TableNextRow();
+        draw_grid_label("H WINDOW");
+        ImGui::TextColored(color, "%u-%u", crtc->GetWord(k_hires_crtc_hds), crtc->GetWord(k_hires_crtc_hde));
+        draw_grid_label("V WINDOW");
+        ImGui::TextColored(color, "%u-%u", crtc->GetWord(k_hires_crtc_vds), crtc->GetWord(k_hires_crtc_vde));
+
+        ImGui::TableNextRow();
+        draw_grid_label("FRONT PAGE");
+
+        if (active && two_page)
+            ImGui::TextColored(white, "%u", pages & 0x01);
+        else
+            ImGui::TextColored(gray, "--");
+
+        draw_grid_label("PACK MODE");
+        ImGui::TextColored(crtc->IsPackMode() ? green : gray, "%s", crtc->IsPackMode() ? "ON" : "OFF");
+
+        ImGui::EndTable();
+    }
+
+    ImGui::NewLine();
+    ImGui::TextColored(cyan, "PAGES"); ImGui::Separator();
+
+    if (ImGui::BeginTable("##hires_pages", 3, flags))
+    {
+        float character = ImGui::CalcTextSize("0").x;
+        float spacing = ImGui::GetStyle().CellPadding.x * 2.0f;
+        bool shown[2] = { hires_page_shown(crtc, 0), hires_page_shown(crtc, 1) };
+        bool keyed[2] = { shown[0] && two_page && (pages & 0x01) == 0, shown[1] && two_page && (pages & 0x01) == 1 };
+
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, character * 12);
+        ImGui::TableSetupColumn("PAGE 0", ImGuiTableColumnFlags_WidthFixed, character * 14);
+        ImGui::TableSetupColumn("PAGE 1", ImGuiTableColumnFlags_WidthFixed, character * 23 + spacing);
+        ImGui::TableHeadersRow();
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextColored(violet, "SHOWN");
+
+        for (int page = 0; page < 2; page++)
+        {
+            ImGui::TableNextColumn();
+            ImGui::TextColored(shown[page] ? green : gray, "%s", shown[page] ? "ON" : "OFF");
+        }
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextColored(violet, "FORMAT");
+
+        for (int page = 0; page < 2; page++)
+        {
+            u32 format = registers[(page == 0 ? k_hires_crtc_page0 : k_hires_crtc_page1) + 8] & 0x07;
+            ImGui::TableNextColumn();
+            ImGui::TextColored(shown[page] && format >= 1 && format <= 4 ? blue : gray, "%s",
+                k_debug_layer_format_names[format <= 4 ? format : 0]);
+        }
+
+        draw_hires_page_row("HAJ", registers, 0, false, shown);
+        draw_hires_page_row("VAJ", registers, 2, false, shown);
+        draw_hires_page_row("W", registers, 1, false, shown);
+        draw_hires_page_row("H", registers, 3, false, shown);
+        draw_hires_page_row("VRAM W", registers, 4, false, shown);
+        draw_hires_page_row("VRAM H", registers, 5, false, shown);
+        draw_hires_page_row("X OFFSET", registers, 6, false, shown);
+        draw_hires_page_row("Y OFFSET", registers, 7, false, shown);
+        draw_hires_page_row("ZOOM", registers, 9, true, shown);
+        draw_hires_page_row("KEY MASK", registers, 11, true, keyed);
+        draw_hires_page_row("KEY", registers, 12, true, keyed);
+        ImGui::EndTable();
+    }
+
+    ImGui::NewLine();
+    ImGui::TextColored(cyan, "CURSOR"); ImGui::Separator();
+
+    if (ImGui::BeginTable("##hires_cursor", 4, flags))
+    {
+        bool on = active && (registers[k_hires_crtc_cursor_on] & 0x01) != 0;
+        ImVec4 cursor = on ? white : gray;
+        setup_grid_columns(false);
+
+        ImGui::TableNextRow();
+        draw_grid_label("ON");
+        ImGui::TextColored(on ? green : gray, "%s", on ? "ON" : "OFF");
+        draw_grid_label("ZOOM");
+        ImGui::TextColored(cursor, "$%04X", crtc->GetWord(k_hires_crtc_cursor_zoom));
+
+        ImGui::TableNextRow();
+        draw_grid_label("POSITION");
+        ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_x), crtc->GetWord(k_hires_crtc_cursor_y));
+        draw_grid_label("HIDDEN");
+        ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_hidden_x),
+            crtc->GetWord(k_hires_crtc_cursor_hidden_y));
+
+        ImGui::TableNextRow();
+        draw_grid_label("BACK");
+        ImGui::TextColored(cursor, "$%06X", registers[k_hires_crtc_cursor_back] & 0xFFFFFF);
+        draw_grid_label("FRONT");
+        ImGui::TextColored(cursor, "$%06X", registers[k_hires_crtc_cursor_front] & 0xFFFFFF);
+
+        ImGui::EndTable();
+    }
+
+    ImGui::PopFont();
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void gui_debug_window_video_output(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -293,9 +475,9 @@ void gui_debug_window_video_output(void)
     ImGui::TextColored(violet, "MODE       "); ImGui::SameLine();
     ImGui::TextColored(blue, "%s", two_page ? "TWO PAGE   " : "SINGLE PAGE");
     ImGui::TextColored(violet, "LAYER 0    "); ImGui::SameLine();
-    ImGui::TextColored(layer0.format ? white : gray, "%-10s", k_debug_layer_format_names[layer0.format & 3]);
+    ImGui::TextColored(layer0.format ? white : gray, "%-10s", k_debug_layer_format_names[layer0.format]);
     ImGui::TextColored(violet, "LAYER 1    "); ImGui::SameLine();
-    ImGui::TextColored(layer1.format ? white : gray, "%-10s", k_debug_layer_format_names[layer1.format & 3]);
+    ImGui::TextColored(layer1.format ? white : gray, "%-10s", k_debug_layer_format_names[layer1.format]);
     ImGui::TextColored(violet, "FRONT      "); ImGui::SameLine();
     ImGui::TextColored(two_page ? white : gray, "LAYER %d", state->output[1] & 0x01);
     ImGui::TextColored(violet, "PALETTE    "); ImGui::SameLine();
@@ -447,6 +629,14 @@ void gui_debug_window_palettes(void)
             ImGui::EndTabItem();
         }
 
+        if (ImGui::BeginTabItem("HIGH-RES"))
+        {
+            ImGui::PushFont(gui_default_font);
+            draw_hires_palette(video->GetHiresCRTC());
+            ImGui::PopFont();
+            ImGui::EndTabItem();
+        }
+
         if (ImGui::BeginTabItem("DIGITAL"))
         {
             ImGui::PushFont(gui_default_font);
@@ -549,6 +739,72 @@ static void setup_grid_columns(bool layers)
     }
 }
 
+static bool hires_page_shown(HiresCRTC* crtc, int page)
+{
+    u32 pages = crtc->GetState()->registers[k_hires_crtc_priority];
+    return crtc->IsActive() && (pages & (0x100U << page)) != 0 && (page == 0 || crtc->IsTwoPage());
+}
+
+static void draw_hires_page_row(const char* label, const u32* registers, u16 offset, bool hex, const bool* used)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+
+    for (int page = 0; page < 2; page++)
+    {
+        u32 value = registers[(page == 0 ? k_hires_crtc_page0 : k_hires_crtc_page1) + offset];
+        ImGui::TableNextColumn();
+        ImGui::TextColored(used[page] ? white : gray, hex ? "$%X" : "%u", value);
+    }
+}
+
+// Entries hold blue, red and green from the low byte up, the order of the compatibility palettes
+// A 16 color page only reaches the first row, the others stay in place so every bank keeps the same layout
+static void draw_hires_palette(HiresCRTC* crtc)
+{
+    HiresCRTC::HiresCRTC_State* state = crtc->GetState();
+    int page = hires_palette_bank & 1;
+    int format = hires_palette_bank >> 1;
+    u32 mode = state->registers[(page == 0 ? k_hires_crtc_page0 : k_hires_crtc_page1) + 8] & 0x07;
+    bool in_use = hires_page_shown(crtc, page) && mode == (u32)format + 1;
+    const u32* palette = state->palette[hires_palette_bank];
+    u8 colors[256][3];
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+
+    for (int i = 0; i < 256; i++)
+    {
+        colors[i][0] = (u8)palette[i];
+        colors[i][1] = (u8)(palette[i] >> 8);
+        colors[i][2] = (u8)(palette[i] >> 16);
+    }
+
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("256 COLORS, PAGE 0").x + ImGui::GetStyle().FramePadding.x * 2.0f +
+        ImGui::GetFrameHeight());
+    ImGui::Combo("##hires_palette_bank", &hires_palette_bank, k_hires_palette_items);
+    ImGui::SameLine();
+    ImGui::TextColored(in_use ? green : gray, "%s", in_use ? "IN USE" : "UNUSED");
+
+    if (ImGui::BeginTable("##hires_palette", 17, flags))
+    {
+        setup_palette_columns();
+        draw_palette_indices(16);
+
+        for (int row = 0; row < 16; row++)
+        {
+            ImGui::BeginDisabled(format == 0 && row > 0);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(orange, "%02X", row * 16);
+            draw_palette_swatches(colors, row * 16, false);
+            ImGui::EndDisabled();
+        }
+
+        ImGui::EndTable();
+    }
+}
+
 static void draw_grid_label(const char* label)
 {
     ImGui::TableNextColumn();
@@ -573,7 +829,7 @@ static void draw_layer_column(int layer, int row)
     switch (row)
     {
         case 0:
-            ImGui::TextColored(active && info.format ? blue : gray, "%s", k_debug_layer_format_names[info.format & 3]);
+            ImGui::TextColored(active && info.format ? blue : gray, "%s", k_debug_layer_format_names[info.format]);
             break;
         case 1:
             ImGui::TextColored(color, "%u-%u", hds, hde); ImGui::SameLine();

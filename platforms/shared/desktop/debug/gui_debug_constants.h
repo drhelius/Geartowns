@@ -98,6 +98,20 @@ static const stDebugPortLabel k_debug_port_labels[] =
     { 0x0458, "VRAM_MASK_ADDRESS", "VRAM write mask register index" },
     { 0x045A, "VRAM_MASK_LO", "VRAM write mask low" },
     { 0x045B, "VRAM_MASK_HI", "VRAM write mask high" },
+    { 0x0470, "HIRES_PRESENT", "High-res CRTC present, bit 7 clear, MA and MX" },
+    { 0x0471, "HIRES_VRAM", "High-res VRAM size in MiB, MA and MX" },
+    { 0x0472, "HIRES_ADDRESS_LO", "High-res indirect register address low" },
+    { 0x0473, "HIRES_ADDRESS_HI", "High-res indirect register address high" },
+    { 0x0474, "HIRES_DATA0", "High-res indirect register data, bits 7-0" },
+    { 0x0475, "HIRES_DATA1", "High-res indirect register data, bits 15-8" },
+    { 0x0476, "HIRES_DATA2", "High-res indirect register data, bits 23-16" },
+    { 0x0477, "HIRES_DATA3", "High-res indirect register data, bits 31-24" },
+    { 0x047A, "HIRES_GATE_LO", "Second gateway address low" },
+    { 0x047B, "HIRES_GATE_HI", "Second gateway address high" },
+    { 0x047C, "HIRES_GATE_DATA0", "Second gateway data, register 0 bit 2 is pack mode" },
+    { 0x047D, "HIRES_GATE_DATA1", "Second gateway data, bits 15-8" },
+    { 0x047E, "HIRES_GATE_DATA2", "Second gateway data, bits 23-16" },
+    { 0x047F, "HIRES_GATE_DATA3", "Second gateway data, bits 31-24" },
     { 0x0480, "SYS_ROM_MAP", "Boot ROM and dictionary windows" },
     { 0x0484, "DIC_ROM_BANK", "Dictionary ROM bank" },
     { 0x048A, "MEMCARD_STATUS", "Memory card status" },
@@ -523,9 +537,9 @@ static const char* const k_debug_crtc_register_names[32] =
     "VDE1", "FA0", "HAJ0", "FO0", "LO0", "FA1", "HAJ1", "FO1", "LO1", "EHAJ", "EVAJ", "ZOOM", "CR0", "CR1", "FR", "CR2"
 };
 
-static const char* const k_debug_layer_format_names[4] =
+static const char* const k_debug_layer_format_names[5] =
 {
-    "OFF", "16 COLORS", "256 COLORS", "32K COLORS"
+    "OFF", "16 COLORS", "256 COLORS", "32K COLORS", "16M COLORS"
 };
 
 static const double k_debug_crtc_clocks[4] = { 28.636364, 24.545455, 25.175, 21.0525 };

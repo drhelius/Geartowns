@@ -41,7 +41,7 @@
 static const float k_framebuffer_zoom[3] = { 1.0f, 2.0f, 3.0f };
 static const char k_framebuffer_zoom_items[] = "1x\0" "2x\0" "3x\0";
 static const char k_framebuffer_page_items[] = "DISPLAY\0DRAW\0";
-static const char k_framebuffer_format_items[] = "16 COLORS\0" "256 COLORS\0" "32K COLORS\0";
+static const char k_framebuffer_format_items[] = "16 COLORS\0" "256 COLORS\0" "32K COLORS\0" "16M COLORS\0";
 static const char k_framebuffer_palette_items[] = "LAYER 0\0LAYER 1\0" "256\0";
 static const char k_sprite_filter_items[] = "ALL\0DRAWN\0VISIBLE\0";
 
@@ -279,8 +279,23 @@ static void draw_buffer_controls(int tab)
         float steps = (ImGui::GetFrameHeight() + style.ItemInnerSpacing.x) * 2.0f;
 
         draw_control_label("Format", true);
+        bool hires = emu_get_core()->GetVideo()->HasHiresCRTC();
+        config_debug.framebuffer_custom_format = MIN(config_debug.framebuffer_custom_format, hires ? 3 : 2);
         ImGui::SetNextItemWidth(combo_width(k_framebuffer_format_items));
-        ImGui::Combo("##custom_format", &config_debug.framebuffer_custom_format, k_framebuffer_format_items);
+
+        if (ImGui::BeginCombo("##custom_format", k_debug_layer_format_names[config_debug.framebuffer_custom_format + 1]))
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                ImGuiSelectableFlags item_flags = (i == 3 && !hires) ? ImGuiSelectableFlags_Disabled : 0;
+
+                if (ImGui::Selectable(k_debug_layer_format_names[i + 1], config_debug.framebuffer_custom_format == i,
+                    item_flags))
+                    config_debug.framebuffer_custom_format = i;
+            }
+
+            ImGui::EndCombo();
+        }
 
         ImGui::BeginDisabled(config_debug.framebuffer_custom_format != 0);
         draw_control_label("Palette", true);
@@ -293,7 +308,7 @@ static void draw_buffer_controls(int tab)
         ImGui::SetNextItemWidth(ImGui::CalcTextSize("00000").x + style.FramePadding.x * 2.0f);
         ImGui::InputScalar("##custom_offset", ImGuiDataType_S32, &config_debug.framebuffer_custom_offset, NULL, NULL,
             "%05X", ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
-        config_debug.framebuffer_custom_offset &= 0x7FFFF;
+        config_debug.framebuffer_custom_offset &= (int)(emu_get_core()->GetVideo()->GetVRAMSize() - 1);
 
         draw_control_label("Width", true);
         ImGui::SetNextItemWidth(number + steps);
@@ -338,7 +353,7 @@ static void draw_buffer_header(const Emu_Debug_Buffer_Info& info)
         return;
 
     float character = ImGui::CalcTextSize("0").x;
-    u32 start = (info.page_base + info.start) & 0x7FFFF;
+    u32 start = (info.page_base + info.start) & (emu_get_core()->GetVideo()->GetVRAMSize() - 1);
 
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 6);
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 14);
@@ -349,7 +364,7 @@ static void draw_buffer_header(const Emu_Debug_Buffer_Info& info)
 
     ImGui::TableNextRow();
     draw_info_label("FORMAT");
-    ImGui::TextColored(info.format ? blue : gray, "%s", k_debug_layer_format_names[info.format & 3]);
+    ImGui::TextColored(info.format ? blue : gray, "%s", k_debug_layer_format_names[info.format]);
     draw_info_label("START");
     ImGui::TextColored(cyan, "$%05X", start);
 
@@ -444,7 +459,16 @@ static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
         else
         {
             ImGui::TextColored(violet, "VALUE"); ImGui::SameLine();
-            ImGui::TextColored(white, "$%04X", vram[offset] | (vram[(offset + 1) & 0x7FFFF] << 8));
+            u32 vram_mask = emu_get_core()->GetVideo()->GetVRAMSize() - 1;
+            u32 page_mask = info.page_size - 1;
+            u32 second = info.single_page ? (offset + 1) & vram_mask :
+                info.page_base + ((offset - info.page_base + 1) & page_mask);
+            u32 third = info.page_base + ((offset - info.page_base + 2) & page_mask);
+
+            if (info.format == Video::VIDEO_LAYER_24BPP)
+                ImGui::TextColored(white, "$%06X", vram[offset] | (vram[second] << 8) | (vram[third] << 16));
+            else
+                ImGui::TextColored(white, "$%04X", vram[offset] | (vram[second] << 8));
         }
 
         ImGui::TextColored(violet, "COLOR"); ImGui::SameLine();
@@ -462,7 +486,7 @@ static void draw_buffer_image(const Emu_Debug_Buffer_Info& info, bool custom)
 
 static void draw_visible_area(const Emu_Debug_Buffer_Info& info, ImVec2 position, float zoom)
 {
-    int bits = info.format == Video::VIDEO_LAYER_4BPP ? 4 : info.format == Video::VIDEO_LAYER_8BPP ? 8 : 16;
+    int bits = emu_debug_format_bits(info.format);
     int row_width = (int)(info.stride * 8 / bits);
     int rows = (int)(info.page_size / info.stride);
 
@@ -517,14 +541,12 @@ static void draw_visible_rect(ImDrawList* draw_list, ImVec2 position, float zoom
 
 static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, int y)
 {
-    u32 offset = (custom ? info.start : 0) + (u32)y * info.stride;
+    u32 offset = (custom || emu_get_core()->GetVideo()->IsHiresActive() ? info.start : 0) + (u32)y * info.stride;
 
     if (info.format == Video::VIDEO_LAYER_4BPP)
         offset += (u32)x >> 1;
-    else if (info.format == Video::VIDEO_LAYER_8BPP)
-        offset += (u32)x;
     else
-        offset += (u32)x * 2;
+        offset += (u32)x * (u32)(emu_debug_format_bits(info.format) / 8);
 
     offset &= info.page_size - 1;
 

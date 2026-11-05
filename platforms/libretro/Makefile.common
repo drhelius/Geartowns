@@ -83,5 +83,6 @@ SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
                 $(SOURCE_DIR)/system/system_control.cpp \
                 $(SOURCE_DIR)/system/upd71071.cpp \
                 $(SOURCE_DIR)/system/load_detector.cpp \
+                $(SOURCE_DIR)/video/hires_crtc.cpp \
                 $(SOURCE_DIR)/video/sprite.cpp \
                 $(SOURCE_DIR)/video/video.cpp

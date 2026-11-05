@@ -18,6 +18,7 @@
  */
 
 #include "video.h"
+#include "hires_crtc.h"
 #include "../common/trace_logger.h"
 #include "../system/pic.h"
 #include "../system/pit.h"
@@ -29,6 +30,9 @@
 Video::Video()
 {
     InitPointer(m_sprite);
+    InitPointer(m_hires_crtc);
+    m_hires_active = false;
+    m_hires_blank = false;
     InitPointer(m_pic);
     InitPointer(m_trace_logger);
     InitPointer(m_pit);
@@ -76,6 +80,7 @@ Video::Video()
 Video::~Video()
 {
     SafeDelete(m_sprite);
+    SafeDelete(m_hires_crtc);
 }
 
 void Video::SetTraceLogger(TraceLogger* trace_logger)
@@ -99,6 +104,11 @@ void Video::Init(PIC* pic, PIT* pit, Scheduler* scheduler, Memory* memory, const
 
     m_sprite->Init(m_state.vram, m_state.sprite_ram, &m_timing);
 
+    if (!IsValidPointer(m_hires_crtc))
+        m_hires_crtc = new HiresCRTC();
+
+    m_hires_crtc->Init(m_state.vram, m_direct_colors);
+
     Reset();
 }
 
@@ -108,6 +118,8 @@ void Video::Reset()
     memset(m_state.mask, 0xFF, sizeof(m_state.mask));
     m_state.fmr_display_planes = 0x0F;
     m_sprite->Reset();
+    m_hires_crtc->Reset();
+    m_hires_active = false;
     ResetFMRView();
     m_frame_ready = false;
     m_rendered_rows = 0;
@@ -136,6 +148,21 @@ bool Video::Decodes(u16 port) const
     {
         case 0x0022:
             return (m_features & GT_MACHINE_FEATURE_CRT_POWER_OFF) != 0;
+        case 0x0470:
+        case 0x0471:
+        case 0x0472:
+        case 0x0473:
+        case 0x0474:
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+        case 0x047B:
+        case 0x047C:
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
+            return (m_features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0;
         case 0xFDA2:
         case 0xFDA4:
             return (m_features & GT_MACHINE_FEATURE_UG_REGISTERS) != 0;
@@ -211,6 +238,20 @@ u8 Video::Read(u16 port, u64 clocks)
             u8 status = GetSyncStatus(clocks);
             return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x00 : 0x02);
         }
+        case 0x0470:
+        case 0x0471:
+        case 0x0472:
+        case 0x0473:
+        case 0x0474:
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+        case 0x047B:
+        case 0x047C:
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
         case 0xFDA2:
         case 0xFDA4:
             return Peek(port, clocks);
@@ -268,6 +309,23 @@ u8 Video::Peek(u16 port, u64 clocks) const
             u8 status = GetSyncStatus(clocks);
             return ((status & 0x04) != 0 ? 0x01 : 0x00) | ((status & 0x02) != 0 ? 0x00 : 0x02);
         }
+        case 0x0470:
+            return Decodes(port) ? 0x7F : 0xFF;
+        case 0x0471:
+            return Decodes(port) ? (u8)(VIDEO_HIRES_VRAM_SIZE >> 20) : 0xFF;
+        case 0x0472:
+        case 0x0473:
+        case 0x0474:
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+        case 0x047B:
+        case 0x047C:
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
+            return Decodes(port) ? m_hires_crtc->Read(port, (GetSyncStatus(clocks) & 0x04) != 0) : 0xFF;
         case 0xFDA2:
             return (Decodes(port) && m_state.crt_readback) ? (m_state.display_enable & 0x0F) : 0xFF;
         case 0xFDA4:
@@ -289,6 +347,9 @@ u64 Video::GetStatusStableUntil() const
 // FDA0 changes at the next HSYNC edge or at the half-line that ends VSYNC, new frames start at events
 u64 Video::GetSyncStableUntil(u64 clocks) const
 {
+    if (m_hires_active)
+        return 0;
+
     if (m_timing.ntsc_field)
         return GetNTSCSyncStableUntil(clocks);
 
@@ -382,6 +443,25 @@ void Video::Write(u16 port, u8 value, u64 clocks)
         case 0xFDA4:
             if (Decodes(port))
                 m_state.crt_readback = (value & 0x01) != 0;
+            break;
+        case 0x0472:
+        case 0x0473:
+        case 0x0474:
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+        case 0x047B:
+        case 0x047C:
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
+            if (Decodes(port))
+            {
+                m_hires_crtc->Write(port, value);
+                UpdateHiresActive(clocks);
+                UpdatePackMapping();
+            }
             break;
         case 0x0022:
             if (Decodes(port))
@@ -590,11 +670,48 @@ void Video::WriteFMRRegisterCallback(void* device, u32 offset, u8 value)
     video->WriteFMRRegister(offset, value);
 }
 
+u8 Video::ReadHiresOnePageCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
+    return video->m_hires_crtc->ReadOnePage(offset);
+}
+
+void Video::WriteHiresOnePageCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    video->m_hires_crtc->WriteOnePage(offset, value);
+}
+
+u8 Video::ReadHiresPackCallback(void* device, u32 offset)
+{
+    const Video* video = (const Video*)device;
+    return video->m_hires_crtc->ReadOnePage(offset + VIDEO_HIRES_VRAM_SIZE);
+}
+
+void Video::WriteHiresPackCallback(void* device, u32 offset, u8 value)
+{
+    Video* video = (Video*)device;
+    video->m_hires_crtc->WriteOnePage(offset + VIDEO_HIRES_VRAM_SIZE, value);
+}
+
 void Video::UpdateVRAMMapping()
 {
     u8* write_data = read_u32_le(m_state.mask) == 0xFFFFFFFF ? m_state.vram : NULL;
     m_memory->SetRegionData(GT_DEBUG_REGION_VRAM_TWO_PAGE, m_state.vram, write_data);
     UpdateSpriteMapping();
+    UpdatePackMapping();
+}
+
+// Pack mode's view is 4/3 the size of the VRAM, so it takes the handlers alone and a region past the 1 MiB
+void Video::UpdatePackMapping()
+{
+    if ((m_features & GT_MACHINE_FEATURE_HIRES_CRTC) == 0)
+        return;
+
+    bool pack = m_hires_crtc->IsPackMode();
+    u8* data = pack ? NULL : m_state.vram;
+    m_memory->SetRegionData(GT_DEBUG_REGION_VRAM_HIRES_ONE_PAGE, data, data);
+    m_memory->SetRegionMapped(GT_DEBUG_REGION_VRAM_HIRES_PACK, pack);
 }
 
 // While a transfer runs, CPU writes to sprite RAM and accesses to the half being drawn reach the handlers
@@ -992,6 +1109,16 @@ void Video::RunNextEvent()
 // The Marty's 15 kHz modes count 525 whatever VST says, and its 24 and 31 kHz ones run two CRTC lines a TV line
 void Video::LatchFrameTiming()
 {
+    // VST + 1 lines, not VST: EGB_HR.BIN and the Windows drivers program VGA's 525 and VESA XGA's 806 that way
+    if (m_hires_active)
+    {
+        m_state.frame_line_clocks = MAX(m_hires_crtc->GetWord(k_hires_crtc_hst) + 1, k_video_min_line_clocks);
+        m_state.frame_half_lines = MAX((m_hires_crtc->GetWord(k_hires_crtc_vst) + 1) * 2, k_video_min_half_lines);
+        m_state.frame_clock_rate = m_hires_crtc->GetClockRate();
+        m_hires_crtc->LatchWindow();
+        return;
+    }
+
     m_state.frame_line_clocks = MAX((u32)m_state.crtc[k_video_crtc_hst] + 1, k_video_min_line_clocks);
     m_state.frame_half_lines = MAX((u32)m_state.crtc[k_video_crtc_vst] + 1, k_video_min_half_lines);
     m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
@@ -1004,6 +1131,19 @@ void Video::LatchFrameTiming()
             k_video_ntsc_line_dots);
     else
         m_state.frame_half_lines = k_video_ntsc_field_half_lines;
+}
+
+// Both CRTCs share one timeline, restarted at the switch as nothing says they run in step
+void Video::UpdateHiresActive(u64 clocks)
+{
+    bool active = m_hires_crtc->IsActive();
+
+    if (active == m_hires_active)
+        return;
+
+    m_hires_active = active;
+    m_state.running = true;
+    StartFrame(clocks);
 }
 
 // The layers' fetch of the line just scanned holds the sprite engine back, by the bytes they read whatever FDA0 says
@@ -1126,6 +1266,19 @@ void Video::TraceWrite(u16 port, u8 value, u64 clocks)
 {
     switch (port)
     {
+        case 0x0474:
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        {
+            const HiresCRTC::HiresCRTC_State* hires = m_hires_crtc->GetState();
+            u16 address = hires->address;
+            u32 stored = address == k_hires_crtc_palette_data ? hires->palette_latch :
+                address == k_hires_crtc_cursor_data ? value :
+                address < HIRES_CRTC_REGISTER_COUNT ? hires->registers[address] : 0;
+            TraceEvent(TRACE_VIDEO_HIRES, (u8)(port - 0x0474), address, value, 0, stored, clocks);
+            break;
+        }
         case 0x0442:
         case 0x0443:
         {
@@ -1202,8 +1355,35 @@ void Video::TraceEvent(u8 event, u8 reg, u16 value, u8 raw, u8 bank, u32 param, 
     m_trace_logger->TraceLog(entry);
 }
 
+// One clock a pixel, with the zoom in the layers. Past the frame buffer the picture is clipped, which only Linux's 1152x864
+// can ask for
+void Video::UpdateHiresGeometry()
+{
+    const u16* window = m_hires_crtc->GetState()->window;
+    u32 hds = window[0];
+    u32 hde = window[1];
+    u32 vds = window[2];
+    u32 vde = window[3];
+    bool empty = hde <= hds || vde <= vds;
+
+    m_hires_blank = empty;
+    m_canvas_interlaced = false;
+    m_canvas_h_start = empty ? 0 : hds;
+    m_canvas_v_start = empty ? 0 : vds * 2;
+    m_canvas_clocks = empty ? GT_FRAME_BUFFER_WIDTH : MIN(hde - hds, (u32)GT_MAX_FRAME_BUFFER_WIDTH);
+    m_canvas_height = empty ? GT_FRAME_BUFFER_HEIGHT : (int)MIN(vde - vds, (u32)GT_MAX_FRAME_BUFFER_HEIGHT);
+    SetCanvasZoom(1, 1);
+    m_canvas_width = m_render_width;
+}
+
 void Video::UpdateGeometry()
 {
+    if (m_hires_active)
+    {
+        UpdateHiresGeometry();
+        return;
+    }
+
     m_canvas_interlaced = (m_state.frame_half_lines & 0x01) != 0;
 
     u32 h_start = 0xFFFFFFFF;
@@ -1268,7 +1448,7 @@ void Video::UpdateGeometry()
 // The finest one stays until the zoom, formats or enables change, so scrolling doesn't flip the size
 void Video::UpdateCanvasOffset()
 {
-    if (!m_native_resolution)
+    if (!m_native_resolution || m_hires_active)
         return;
 
     if (m_canvas_zoom_key != m_canvas_offset_key)
@@ -1283,7 +1463,7 @@ void Video::UpdateCanvasOffset()
 
 void Video::UpdateCanvasZoom()
 {
-    if (!m_native_resolution)
+    if (!m_native_resolution || m_hires_active)
         return;
 
     u32 key = GetLayerZoomKey();
@@ -1464,12 +1644,15 @@ void Video::UpdateIRQ()
 // The Marty's VSYNC comes from its field, so it never stops
 bool Video::HasVSync() const
 {
-    return m_timing.ntsc_field || m_state.crtc[k_video_crtc_vst1] <= m_state.crtc[k_video_crtc_vst];
+    return m_timing.ntsc_field || m_hires_active || m_state.crtc[k_video_crtc_vst1] <= m_state.crtc[k_video_crtc_vst];
 }
 
 // Same bit layout as the FR status byte
 u8 Video::GetSyncStatus(u64 clocks) const
 {
+    if (m_hires_active)
+        return GetHiresSyncStatus(clocks);
+
     u8 status = m_timing.ntsc_field ? GetNTSCSyncStatus(clocks) : 0x00;
 
     if (!m_state.running || clocks < m_state.frame_start_clocks)
@@ -1518,6 +1701,29 @@ u8 Video::GetSyncStatus(u64 clocks) const
     return status;
 }
 
+// In lines and clocks from the start of VSYNC, with one display window for both pages
+u8 Video::GetHiresSyncStatus(u64 clocks) const
+{
+    u64 crtc_clocks = GetElapsedCRTCClocks(clocks);
+    u32 line = (u32)(crtc_clocks / m_state.frame_line_clocks);
+    u32 clock = (u32)(crtc_clocks % m_state.frame_line_clocks);
+    u8 status = 0x00;
+
+    if (clock < m_hires_crtc->GetWord(k_hires_crtc_hsw1))
+        status |= 0x02;
+
+    if (line < m_hires_crtc->GetWord(k_hires_crtc_vsw1))
+        status |= 0x04;
+
+    if (clock >= m_hires_crtc->GetWord(k_hires_crtc_hds) && clock < m_hires_crtc->GetWord(k_hires_crtc_hde))
+        status |= 0x30;
+
+    if (line >= m_hires_crtc->GetWord(k_hires_crtc_vds) && line < m_hires_crtc->GetWord(k_hires_crtc_vde))
+        status |= 0xC0;
+
+    return status;
+}
+
 // VSYNC is the field's first 3 lines and HSYNC the first 4.7 us of each line
 // Fields last 262.5 lines and HSYNC runs on, so every other field starts halfway through a line
 u8 Video::GetNTSCSyncStatus(u64 clocks) const
@@ -1553,7 +1759,7 @@ u64 Video::GetNTSCSyncStableUntil(u64 clocks) const
 
 void Video::RenderRows(u32 half_line)
 {
-    u32 beam = m_state.crtc[k_video_crtc_vst1] + half_line;
+    u32 beam = GetBeamOrigin() + half_line;
 
     if (beam <= m_canvas_v_start)
         return;
@@ -1574,6 +1780,9 @@ void Video::RenderRows(u32 half_line)
 
 void Video::RenderLineToBeam(u64 clocks)
 {
+    if (m_hires_active)
+        return;
+
     u32 lead = GetPaletteLeadLines();
     u32 next = m_state.crtc[k_video_crtc_vst1] + m_next_event_half_line + lead * 2;
 
@@ -1630,7 +1839,18 @@ void Video::RenderRowPart(int row, int x, int end)
     for (int i = x; i < end; i++)
         destination[i] = black;
 
-    if (unlikely(m_state.crt_power_off || (m_state.crtc[k_video_crtc_cr0] & 0x8000) == 0))
+    if (unlikely(m_state.crt_power_off))
+        return;
+
+    if (m_hires_active)
+    {
+        if (!m_hires_blank)
+            m_hires_crtc->RenderRow(destination, row, m_render_width);
+
+        return;
+    }
+
+    if (unlikely((m_state.crtc[k_video_crtc_cr0] & 0x8000) == 0))
         return;
 
     if (IsTwoPage())
@@ -1940,6 +2160,9 @@ void Video::SaveState(std::ostream& stream)
     StateSerializer serializer(stream);
     Serialize(serializer, GT_SAVESTATE_VERSION);
     m_sprite->SaveState(stream);
+
+    if ((m_features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0)
+        m_hires_crtc->SaveState(stream);
 }
 
 void Video::LoadState(std::istream& stream, int version)
@@ -1947,13 +2170,20 @@ void Video::LoadState(std::istream& stream, int version)
     StateSerializer serializer(stream);
     Serialize(serializer, version);
     m_sprite->LoadState(stream, version);
+
+    if ((m_features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0)
+    {
+        m_hires_crtc->LoadState(stream, version);
+        m_hires_active = m_hires_crtc->IsActive();
+    }
+
     SanitizeState();
 }
 
 void Video::Serialize(StateSerializer& serializer, int version)
 {
     UNUSED(version);
-    G_SERIALIZE_ARRAY(serializer, m_state.vram, VIDEO_VRAM_SIZE);
+    G_SERIALIZE_ARRAY(serializer, m_state.vram, GetVRAMSize());
     G_SERIALIZE_ARRAY(serializer, m_state.sprite_ram, VIDEO_SPRITE_RAM_SIZE);
     G_SERIALIZE_ARRAY(serializer, m_state.crtc, VIDEO_CRTC_REGISTER_COUNT);
     G_SERIALIZE(serializer, m_state.crtc_index);

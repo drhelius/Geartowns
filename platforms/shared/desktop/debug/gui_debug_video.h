@@ -28,6 +28,7 @@
 
 EXTERN void gui_debug_window_crtc(void);
 EXTERN void gui_debug_window_crtc_registers(void);
+EXTERN void gui_debug_window_hires_crtc(void);
 EXTERN void gui_debug_window_video_output(void);
 EXTERN void gui_debug_window_palettes(void);
 

@@ -652,6 +652,7 @@ static void trace_logger_menu_filters(void)
         trace_logger_menu_event_filter("VRAM Mask", &config_debug.trace_video_events, TRACE_VIDEO_EVENT_MASK);
         trace_logger_menu_event_filter("VSYNC IRQ", &config_debug.trace_video_events, TRACE_VIDEO_EVENT_VSYNC);
         trace_logger_menu_event_filter("FM-R Registers", &config_debug.trace_video_events, TRACE_VIDEO_EVENT_FMR);
+        trace_logger_menu_event_filter("High-Res CRTC", &config_debug.trace_video_events, TRACE_VIDEO_EVENT_HIRES);
 
         if (ImGui::BeginMenu("Missed VBlank"))
         {

@@ -541,6 +541,8 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Video Hardware
 - `get_crtc_status` - Get the CRTC: dot clock, line and frame timing (rates are null while the CRTC is stopped), interlace, sync widths, beam line, dot, field and H/V state, the VSYNC IRQ, and per layer format, H/V windows, VRAM start (with the FA register), stride, HAJ, field offset, zoom and visible size
 - `get_crtc_registers` - Get the 32 CRTC registers R00-R1F with names and the selected index
+- `get_hires_crtc_status` - Get the high-resolution CRTC of the MA and MX: selected and running, clock, timing, display window, beam position, both pages, the palette select, the hardware cursor and the second gateway
+- `write_hires_crtc_register` - Write an indirect register of the high-resolution CRTC through 0472/0474 like the CPU, byte by byte
 - `write_crtc_register` - Write a CRTC register (0-31) through the port path like a CPU write, so timing updates and the trace logger records it, restoring the index
 - `get_video_output_status` - Get the output controller (mode, layer formats, front layer, palette select), FDA0 layer enables, 044C status, the VRAM write mask and the FM-R display state
 - `get_palettes` - Get the palettes: `layer0` and `layer1` (16 colors, 4-bit B, R, G), `256` (8-bit B, R, G), `digital` (FM-R, with the DPMD flag), or `all`, plus which palettes the display layers use
@@ -554,7 +556,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_ym3438_status` - Get the YM3438: LFO, channel 3 mode, DAC, timers, status, and per channel frequency and note, algorithm, feedback, pan, AMS, PMS and the four operators with envelope state and level; optional `channel` (1-6)
 - `get_ym3438_registers` - Get one part's register file as last written with register names, and the address latch; `part` (0 or 1)
 - `get_rf5c68_status` - Get the RF5C68: sound enable, channel and wave banks, IRQ mask and flags, and each channel's envelope, pan, step and playback rate, loop start, start and play address
-- `get_pcm16_status` - Get the 16-bit AD/DA PCM of the ME and MF/Fresh (0510-051F): direction, format, sample rate, transfer mode, A/D and D/A ready, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level and peak monitors, trigger level, volume 1 channel 2 and 3 gains and the raw registers
+- `get_pcm16_status` - Get the 16-bit AD/DA PCM of the ME, MA, MX and MF/Fresh (0510-051F): direction, format, sample rate, transfer mode, A/D and D/A ready, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level and peak monitors, trigger level, volume 1 channel 2 and 3 gains and the raw registers
 - `get_sound_status` - Get both electronic volumes with gain, the 04D5 FM and PCM mutes and the 04EC output gate, the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes
 - `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`, `pcm16`) or one `channel` of it in the debugger; emulated state is unchanged
 

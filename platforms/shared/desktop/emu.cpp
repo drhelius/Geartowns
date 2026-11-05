@@ -45,6 +45,7 @@
 #include "utils.h"
 #include "video_recorder.h"
 #include "ogl_renderer.h"
+#include "video/hires_crtc.h"
 #include "video/sprite.h"
 #include "video/video.h"
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
@@ -119,6 +120,7 @@ static u32 debug_single_to_canonical(u32 offset);
 static int debug_layer_format(const Video::Video_State* state, int layer);
 static u64 debug_video_key(void);
 static void debug_palette(const Video::Video_State* state, int palette, u32* colors);
+static void debug_hires_buffer_info(int page, Emu_Debug_Buffer_Info& info);
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 static void stop_physical_cdrom_after_error(void);
 #endif
@@ -1252,6 +1254,20 @@ static u64 debug_video_key(void)
     for (int i = 0; i < VIDEO_CRTC_REGISTER_COUNT; i++)
         key = (key ^ state->crtc[i]) * 1099511628211ULL;
 
+    if (geartowns->GetVideo()->HasHiresCRTC())
+    {
+        const HiresCRTC::HiresCRTC_State* hires = geartowns->GetVideo()->GetHiresCRTC()->GetState();
+
+        for (int i = 0; i < HIRES_CRTC_REGISTER_COUNT; i++)
+            key = (key ^ hires->registers[i]) * 1099511628211ULL;
+
+        for (int i = 0; i < HIRES_CRTC_PALETTE_COUNT; i++)
+        {
+            for (int j = 0; j < HIRES_CRTC_PALETTE_SIZE; j++)
+                key = (key ^ hires->palette[i][j]) * 1099511628211ULL;
+        }
+    }
+
     return key | 1;
 }
 
@@ -1308,7 +1324,7 @@ void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* reque
 
         if (hde > hds && vde > vds)
         {
-            u32 bits = info.format == Video::VIDEO_LAYER_4BPP ? 4 : info.format == Video::VIDEO_LAYER_8BPP ? 8 : 16;
+            u32 bits = (u32)emu_debug_format_bits(info.format);
             u32 first = info.start * 8 / bits;
             u32 skip = (hds - haj) / zoom_x;
 
@@ -1351,14 +1367,29 @@ void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* reque
     if (!IsValidPointer(request))
         return;
 
-    info.format = CLAMP(request->format, 1, 3);
+    info.format = CLAMP(request->format, 1, video->HasHiresCRTC() ? 4 : 3);
     info.page_base = 0;
-    info.page_size = VIDEO_VRAM_SIZE;
-    info.start = request->offset & (VIDEO_VRAM_SIZE - 1);
+    info.page_size = video->GetVRAMSize();
+    info.start = request->offset & (info.page_size - 1);
     info.width = CLAMP(request->width, 1, EMU_DEBUG_FRAMEBUFFER_WIDTH);
     info.height = CLAMP(request->height, 1, EMU_DEBUG_FRAMEBUFFER_HEIGHT);
     info.stride = info.format == Video::VIDEO_LAYER_4BPP ? (u32)(info.width + 1) / 2 :
-        info.format == Video::VIDEO_LAYER_8BPP ? (u32)info.width : (u32)info.width * 2;
+        (u32)info.width * (u32)(emu_debug_format_bits(info.format) / 8);
+}
+
+// What the viewers show: the compatibility CRTC's view of the layers has no use while the high-res CRTC runs
+void emu_debug_get_view_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info)
+{
+    bool layer = buffer == Emu_Debug_Buffer_Layer0 || buffer == Emu_Debug_Buffer_Layer1;
+
+    if (!layer || !IsValidPointer(geartowns) || !geartowns->GetVideo()->IsHiresActive())
+    {
+        emu_debug_get_buffer_info(buffer, request, info);
+        return;
+    }
+
+    memset(&info, 0, sizeof(info));
+    debug_hires_buffer_info(buffer, info);
 }
 
 void emu_debug_decode_buffer(int buffer, const Emu_Debug_Buffer_Request* request, u8* output,
@@ -2299,6 +2330,38 @@ static int debug_layer_format(const Video::Video_State* state, int layer)
 }
 
 // Palettes 0 and 1 are the 16 color banks, 2 the 256 color one, components in port order blue, red, green
+// The page from its display start, with the window the CRTC shows of it
+static void debug_hires_buffer_info(int page, Emu_Debug_Buffer_Info& info)
+{
+    HiresCRTC* crtc = geartowns->GetVideo()->GetHiresCRTC();
+    const u32* registers = &crtc->GetState()->registers[page == 0 ? k_hires_crtc_page0 : k_hires_crtc_page1];
+    u32 format = registers[8] & 0x07;
+    bool two_page = crtc->IsTwoPage();
+
+    if (format < 1 || format > 4 || (page == 1 && !two_page))
+        return;
+
+    info.format = (int)format;
+    info.page_base = two_page ? (u32)page * k_hires_crtc_page_size : 0;
+    info.page_size = two_page ? k_hires_crtc_page_size : k_hires_crtc_vram_size;
+
+    u32 vram_width = MAX(registers[4] & 0xFFFF, 1U);
+    u32 vram_height = MAX(registers[5] & 0xFFFF, 1U);
+    u32 stride = MAX((vram_width * (u32)emu_debug_format_bits(info.format)) / 8, 1U);
+    u32 zoom = registers[9];
+
+    info.stride = stride;
+    info.start = (((registers[7] & 0xFFFF) % vram_height) * stride) & (info.page_size - 1);
+    info.width = (int)MIN(vram_width, (u32)EMU_DEBUG_FRAMEBUFFER_WIDTH);
+    info.height = (int)CLAMP(info.page_size / stride, 1U, (u32)EMU_DEBUG_FRAMEBUFFER_HEIGHT);
+    info.window = true;
+    info.window_x = (int)((registers[6] & 0xFFFF) % vram_width);
+    info.window_y = 0;
+    info.window_wrap = (int)vram_width;
+    info.window_width = (int)((registers[1] & 0xFFFF) / ((zoom & 0xFF) + 1));
+    info.window_height = (int)((registers[3] & 0xFFFF) / (((zoom >> 8) & 0xFF) + 1));
+}
+
 static void debug_palette(const Video::Video_State* state, int palette, u32* colors)
 {
     if (palette == 2)
@@ -2322,7 +2385,7 @@ static void debug_palette(const Video::Video_State* state, int palette, u32* col
 static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8* output, int stride,
     Emu_Debug_Buffer_Info& info)
 {
-    emu_debug_get_buffer_info(buffer, request, info);
+    emu_debug_get_view_info(buffer, request, info);
 
     if (!IsValidPointer(output) || !IsValidPointer(geartowns))
         return;
@@ -2333,11 +2396,20 @@ static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8
     u32 colors[256];
     int palette = buffer == Emu_Debug_Buffer_Custom && IsValidPointer(request) ? request->palette : buffer == 1 ? 1 : 0;
 
-    debug_palette(state, info.format == Video::VIDEO_LAYER_8BPP ? 2 : palette, colors);
-
     bool custom = buffer == Emu_Debug_Buffer_Custom;
     bool sprites = buffer == Emu_Debug_Buffer_SpriteDisplay || buffer == Emu_Debug_Buffer_SpriteDraw;
-    u32 base = custom ? info.start : 0;
+    bool hires = !custom && !sprites && geartowns->GetVideo()->IsHiresActive();
+    u32 base = custom || hires ? info.start : 0;
+
+    if (hires && (info.format == Video::VIDEO_LAYER_4BPP || info.format == Video::VIDEO_LAYER_8BPP))
+    {
+        const u32* entries = geartowns->GetVideo()->GetHiresCRTC()->GetState()->palette[(info.format - 1) * 2 + buffer];
+
+        for (int i = 0; i < 256; i++)
+            colors[i] = debug_rgba((entries[i] >> 8) & 0xFF, (entries[i] >> 16) & 0xFF, entries[i] & 0xFF);
+    }
+    else
+        debug_palette(state, info.format == Video::VIDEO_LAYER_8BPP ? 2 : palette, colors);
 
     for (int y = 0; y < info.height; y++)
     {
@@ -2351,6 +2423,8 @@ static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8
                 offset += (u32)x >> 1;
             else if (info.format == Video::VIDEO_LAYER_8BPP)
                 offset += (u32)x;
+            else if (info.format == Video::VIDEO_LAYER_24BPP)
+                offset += (u32)x * 3;
             else
                 offset += (u32)x * 2;
 
@@ -2364,6 +2438,13 @@ static void debug_decode(int buffer, const Emu_Debug_Buffer_Request* request, u8
             }
             else if (info.format == Video::VIDEO_LAYER_8BPP)
                 line[x] = colors[vram[canonical]];
+            else if (info.format == Video::VIDEO_LAYER_24BPP)
+            {
+                u32 mask = info.page_size - 1;
+                u8 green = vram[info.page_base + ((offset + 1) & mask)];
+                u8 red = vram[info.page_base + ((offset + 2) & mask)];
+                line[x] = debug_rgba(red, green, vram[canonical]);
+            }
             else
             {
                 u32 next = info.single_page ? debug_single_to_canonical((offset + 1) & (info.page_size - 1)) :

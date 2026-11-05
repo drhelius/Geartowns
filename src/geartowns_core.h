@@ -212,6 +212,7 @@ private:
     static void BusModeCallback(void* context);
     static void BootReadCallback(void* context);
     void ApplyBootDevice();
+    void InitHiResMemoryMap(const GT_Machine_Memory_Map& map);
     void InitMemoryMap();
 
     bool LoadState(std::istream& stream, GT_SaveState_Media* media = NULL);

@@ -255,6 +255,30 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
         case 0x045B:
             // VRAM mask high
             return m_video->Read(port, context.clocks);
+        case 0x0470:
+            // High-res CRTC presence
+        case 0x0471:
+            // High-res VRAM size
+        case 0x0472:
+            // High-res register address
+        case 0x0473:
+        case 0x0474:
+            // High-res register data
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+            // High-res second gateway address
+        case 0x047B:
+        case 0x047C:
+            // High-res second gateway data
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
+            if (!m_video->Decodes(port))
+                break;
+
+            return m_video->Read(port, context.clocks);
         case 0x0480:
             // System ROM mapping
         case 0x0484:
@@ -600,6 +624,25 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
             break;
         case 0x0400:
             value = 0xFE;
+            break;
+        case 0x0470:
+        case 0x0471:
+        case 0x0472:
+        case 0x0473:
+        case 0x0474:
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+        case 0x047B:
+        case 0x047C:
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
+            if (!m_video->Decodes(port))
+                return false;
+
+            value = m_video->Peek(port, clocks);
             break;
         case 0x0404:
         case 0x0480:
@@ -1020,6 +1063,25 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x045B:
             // VRAM mask high
             m_video->Write(port, value, context.clocks);
+            break;
+        case 0x0472:
+            // High-res register address
+        case 0x0473:
+        case 0x0474:
+            // High-res register data
+        case 0x0475:
+        case 0x0476:
+        case 0x0477:
+        case 0x047A:
+            // High-res second gateway address
+        case 0x047B:
+        case 0x047C:
+            // High-res second gateway data
+        case 0x047D:
+        case 0x047E:
+        case 0x047F:
+            if (m_video->Decodes(port))
+                m_video->Write(port, value, context.clocks);
             break;
         case 0x0480:
             // System ROM mapping

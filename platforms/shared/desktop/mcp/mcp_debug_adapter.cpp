@@ -45,6 +45,7 @@
 #include "drive/floppy_image.h"
 #include "drive/mb8877.h"
 #include "drive/scsi_controller.h"
+#include "video/hires_crtc.h"
 #include "video/sprite.h"
 #include "video/video.h"
 #include "../config.h"
@@ -2514,7 +2515,7 @@ json DebugAdapter::GetKeyboardStatus()
     };
 }
 
-static const char* const k_mcp_layer_formats[4] = { "off", "16_colors", "256_colors", "32k_colors" };
+static const char* const k_mcp_layer_formats[5] = { "off", "16_colors", "256_colors", "32k_colors", "16m_colors" };
 static const char* const k_mcp_framebuffers[Emu_Debug_Buffer_Count] =
 {
     "layer0", "layer1", "sprite_display", "sprite_draw", "custom"
@@ -2631,6 +2632,119 @@ json DebugAdapter::WriteCRTCRegister(int reg, u16 value)
     };
 }
 
+static json hires_page_json(const u32* registers, bool shown)
+{
+    static const char* const k_formats[8] = { "off", "16_colors", "256_colors", "32k_colors", "16m_colors", "off", "off", "off" };
+    u32 zoom = registers[9];
+
+    return {
+        {"shown", shown},
+        {"format", k_formats[registers[8] & 0x07]},
+        {"window", {{"x", registers[0] & 0xFFFF}, {"y", registers[2] & 0xFFFF}, {"width", registers[1] & 0xFFFF},
+            {"height", registers[3] & 0xFFFF}}},
+        {"vram_width", registers[4] & 0xFFFF},
+        {"vram_height", registers[5] & 0xFFFF},
+        {"display_start", {{"x", registers[6] & 0xFFFF}, {"y", registers[7] & 0xFFFF}}},
+        {"zoom", {{"x", (zoom & 0xFF) + 1}, {"y", ((zoom >> 8) & 0xFF) + 1}}},
+        {"key_mask", hex_text(registers[11], 8)},
+        {"key", hex_text(registers[12], 8)}
+    };
+}
+
+json DebugAdapter::GetHiresCRTCStatus()
+{
+    Video* video = m_core->GetVideo();
+
+    if (!video->HasHiresCRTC())
+        return {{"error", "This machine has no high-resolution CRTC, only the MA and MX do"}};
+
+    HiresCRTC* crtc = video->GetHiresCRTC();
+    const HiresCRTC::HiresCRTC_State* state = crtc->GetState();
+    const u32* registers = state->registers;
+    u32 line_clocks = crtc->GetWord(k_hires_crtc_hst) + 1;
+    u32 lines = crtc->GetWord(k_hires_crtc_vst) + 1;
+    double clock = crtc->PeekClockRate();
+    u32 priority = registers[k_hires_crtc_priority];
+    bool two_page = crtc->IsTwoPage();
+    u32 cursor_zoom = registers[k_hires_crtc_cursor_zoom];
+    u64 clocks = m_core->GetScheduler()->GetClocks();
+    json raster;
+
+    if (video->IsHiresActive())
+        raster = {{"line", video->GetBeamHalfLine(clocks) / 2}, {"dot", video->GetBeamClock(clocks)}};
+
+    return {
+        {"selected", (registers[k_hires_crtc_select] & 0x01) != 0},
+        {"running", (registers[k_hires_crtc_control] & 0x01) != 0},
+        {"active", video->IsHiresActive()},
+        {"clock_hz", crtc->PeekClockRate()},
+        {"line_clocks", line_clocks},
+        {"frame_lines", lines},
+        {"line_rate_hz", clock / line_clocks},
+        {"refresh_hz", clock / ((double)line_clocks * lines)},
+        {"hsync_clocks", crtc->GetWord(k_hires_crtc_hsw1)},
+        {"vsync_lines", crtc->GetWord(k_hires_crtc_vsw1)},
+        {"display", {{"h_start", crtc->GetWord(k_hires_crtc_hds)}, {"h_end", crtc->GetWord(k_hires_crtc_hde)},
+            {"v_start", crtc->GetWord(k_hires_crtc_vds)}, {"v_end", crtc->GetWord(k_hires_crtc_vde)}}},
+        {"raster", raster},
+        {"layout", two_page ? "two_pages" : "one_page"},
+        {"front_page", priority & 0x01},
+        {"pack_mode", crtc->IsPackMode()},
+        {"page0", hires_page_json(&registers[k_hires_crtc_page0], (priority & 0x100) != 0)},
+        {"page1", hires_page_json(&registers[k_hires_crtc_page1], two_page && (priority & 0x200) != 0)},
+        {"palette", {{"select", registers[k_hires_crtc_palette_select] & 0x03},
+            {"index", registers[k_hires_crtc_palette_index] & 0xFF}}},
+        {"cursor", {
+            {"on", (registers[k_hires_crtc_cursor_on] & 0x01) != 0},
+            {"x", crtc->GetWord(k_hires_crtc_cursor_x)},
+            {"y", crtc->GetWord(k_hires_crtc_cursor_y)},
+            {"hidden_x", crtc->GetWord(k_hires_crtc_cursor_hidden_x)},
+            {"hidden_y", crtc->GetWord(k_hires_crtc_cursor_hidden_y)},
+            {"zoom", {{"x", (cursor_zoom & 0xFF) + 1}, {"y", ((cursor_zoom >> 8) & 0xFF) + 1}}},
+            {"back", Hex(registers[k_hires_crtc_cursor_back] & 0xFFFFFF, 6)},
+            {"front", Hex(registers[k_hires_crtc_cursor_front] & 0xFFFFFF, 6)}
+        }},
+        {"address", Hex(state->address, 3)},
+        {"gateway_address", Hex(state->gateway_address, 4)},
+        {"gateway_register0", Hex(state->gateway_register0, 8)}
+    };
+}
+
+json DebugAdapter::WriteHiresCRTCRegister(int reg, u32 value)
+{
+    Video* video = m_core->GetVideo();
+
+    if (!video->HasHiresCRTC())
+        return {{"error", "This machine has no high-resolution CRTC, only the MA and MX do"}};
+
+    if (reg < 0 || reg >= HIRES_CRTC_REGISTER_COUNT)
+        return {{"error", "Register must be 0-2FF"}};
+
+    HiresCRTC* crtc = video->GetHiresCRTC();
+    u64 clocks = m_core->GetScheduler()->GetClocks();
+    u16 saved = crtc->GetState()->address;
+
+    video->Write(0x0472, (u8)reg, clocks);
+    video->Write(0x0473, (u8)(reg >> 8), clocks);
+
+    for (int i = 0; i < 4; i++)
+        video->Write((u16)(0x0474 + i), (u8)(value >> (i * 8)), clocks);
+
+    u32 stored = reg == k_hires_crtc_palette_data ? value & 0xFFFFFF : reg == k_hires_crtc_cursor_data ? value & 0xFF : 0;
+
+    for (int i = 0; (i < 4) && (reg != k_hires_crtc_palette_data) && (reg != k_hires_crtc_cursor_data); i++)
+        stored |= (u32)video->Peek((u16)(0x0474 + i), clocks) << (i * 8);
+
+    video->Write(0x0472, (u8)saved, clocks);
+    video->Write(0x0473, (u8)(saved >> 8), clocks);
+
+    return {
+        {"success", true},
+        {"register", Hex(reg, 3)},
+        {"value", Hex(stored, 8)}
+    };
+}
+
 json DebugAdapter::GetVideoOutputStatus()
 {
     Video* video = m_core->GetVideo();
@@ -2726,8 +2840,9 @@ json DebugAdapter::GetPalettes(const std::string& palette)
     };
     bool all = palette.empty() || palette == "all";
 
-    if (!all && palette != "layer0" && palette != "layer1" && palette != "256" && palette != "digital")
-        return {{"error", "palette must be layer0, layer1, 256, digital or all"}};
+    if (!all && palette != "layer0" && palette != "layer1" && palette != "256" && palette != "digital" &&
+        palette != "hires")
+        return {{"error", "palette must be layer0, layer1, 256, digital, hires or all"}};
 
     if (all || palette == "layer0")
         result["layer0"] = palette_entries(state->palette16[0], 16, true);
@@ -2737,6 +2852,29 @@ json DebugAdapter::GetPalettes(const std::string& palette)
 
     if (all || palette == "256")
         result["256"] = palette_entries(state->palette256, 256, false);
+
+    if ((all || palette == "hires") && video->HasHiresCRTC())
+    {
+        const HiresCRTC::HiresCRTC_State* hires = video->GetHiresCRTC()->GetState();
+        json banks = json::array();
+
+        for (int bank = 0; bank < HIRES_CRTC_PALETTE_COUNT; bank++)
+        {
+            u8 colors[256][3];
+            int count = bank < 2 ? 16 : 256;
+
+            for (int i = 0; i < count; i++)
+            {
+                colors[i][0] = (u8)hires->palette[bank][i];
+                colors[i][1] = (u8)(hires->palette[bank][i] >> 8);
+                colors[i][2] = (u8)(hires->palette[bank][i] >> 16);
+            }
+
+            banks.push_back(palette_entries(colors, count, false));
+        }
+
+        result["hires"] = {{"page0_16", banks[0]}, {"page1_16", banks[1]}, {"page0_256", banks[2]}, {"page1_256", banks[3]}};
+    }
 
     if (all || palette == "digital")
     {
@@ -2789,17 +2927,19 @@ json DebugAdapter::GetFrameBuffer(const std::string& buffer, const json& argumen
             !parse_hex_with_prefix(arguments["offset"].get<std::string>(), &offset)))
             return {{"error", "Invalid offset format"}};
 
-        if (offset >= VIDEO_VRAM_SIZE)
-            return {{"error", "offset must be below 80000"}};
+        if (offset >= m_core->GetVideo()->GetVRAMSize())
+            return {{"error", m_core->GetVideo()->HasHiresCRTC() ? "offset must be below 100000" :
+                "offset must be below 80000"}};
 
         request.offset = offset;
-        request.format = format == "16_colors" ? 1 : format == "256_colors" ? 2 : format == "32k_colors" ? 3 : 0;
+        request.format = format == "16_colors" ? 1 : format == "256_colors" ? 2 : format == "32k_colors" ? 3 :
+            format == "16m_colors" && m_core->GetVideo()->HasHiresCRTC() ? 4 : 0;
         request.palette = palette == "layer0" ? 0 : palette == "layer1" ? 1 : palette == "256" ? 2 : -1;
         request.width = arguments.value("width", 512);
         request.height = arguments.value("height", 256);
 
         if (request.format == 0)
-            return {{"error", "format must be 16_colors, 256_colors or 32k_colors"}};
+            return {{"error", "format must be 16_colors, 256_colors, 32k_colors, or 16m_colors on the MA and MX"}};
 
         if (request.palette < 0)
             return {{"error", "palette must be layer0, layer1 or 256"}};
@@ -2810,10 +2950,10 @@ json DebugAdapter::GetFrameBuffer(const std::string& buffer, const json& argumen
     }
 
     Emu_Debug_Buffer_Info info;
-    emu_debug_get_buffer_info(index, &request, info);
+    emu_debug_get_view_info(index, &request, info);
 
     if (info.width <= 0 || info.height <= 0)
-        return {{"error", "The layer is off"}, {"format", k_mcp_layer_formats[info.format & 3]}};
+        return {{"error", "The layer is off"}, {"format", k_mcp_layer_formats[info.format]}};
 
     unsigned char* png = NULL;
     int size = emu_get_debug_buffer_png(index, &request, &png);

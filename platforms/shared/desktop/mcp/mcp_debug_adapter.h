@@ -62,6 +62,7 @@ static const McpTraceFilter k_mcp_trace_filters[] =
     { "video.vram_mask", TRACE_VIDEO, TRACE_VIDEO_EVENT_MASK },
     { "video.vsync", TRACE_VIDEO, TRACE_VIDEO_EVENT_VSYNC },
     { "video.fmr", TRACE_VIDEO, TRACE_VIDEO_EVENT_FMR },
+    { "video.hires", TRACE_VIDEO, TRACE_VIDEO_EVENT_HIRES },
     { "video.missed_vblank", TRACE_VIDEO, TRACE_VIDEO_EVENT_MISSED_VBLANK },
     { "sprite.registers", TRACE_SPRITE, TRACE_SPRITE_EVENT_REGISTERS },
     { "sprite.transfers", TRACE_SPRITE, TRACE_SPRITE_EVENT_TRANSFERS },
@@ -240,6 +241,8 @@ public:
     json GetCRTCStatus();
     json GetCRTCRegisters();
     json WriteCRTCRegister(int reg, u16 value);
+    json GetHiresCRTCStatus();
+    json WriteHiresCRTCRegister(int reg, u32 value);
     json GetVideoOutputStatus();
     json GetPalettes(const std::string& palette);
     json GetFrameBuffer(const std::string& buffer, const json& arguments);

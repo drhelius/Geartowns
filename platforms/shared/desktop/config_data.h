@@ -341,6 +341,7 @@ struct config_Debug
     bool show_game_ports;
     bool show_crtc;
     bool show_crtc_registers;
+    bool show_hires_crtc;
     bool show_video_output;
     bool show_palettes;
     bool show_framebuffers;

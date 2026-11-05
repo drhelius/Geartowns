@@ -591,6 +591,10 @@ static void format_video(const GT_Trace_Entry& entry, char* buffer, size_t size)
                 k_trace_palette_components[MIN(entry.video.value, (u16)2)], raw, entry.video.param, beam);
             break;
         }
+        case TRACE_VIDEO_HIRES:
+            format_event(buffer, size, "VIDEO", "HI-RES", "REG $%03X byte %u <- $%02X  Now:$%08X  %s", entry.video.value,
+                entry.video.reg, raw, entry.video.param, beam);
+            break;
         case TRACE_VIDEO_DIGITAL_PALETTE:
             format_event(buffer, size, "VIDEO", "DPALETTE", "[%u] <- $%X  %s", entry.video.reg, raw & 0x0F, beam);
             break;

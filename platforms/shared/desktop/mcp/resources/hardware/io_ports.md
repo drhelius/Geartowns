@@ -122,6 +122,12 @@ Names below are the ones the debugger uses in the disassembler, the Memory Works
 | 0458h | VRAM_MASK_ADDRESS | VRAM write mask register index |
 | 045Ah | VRAM_MASK_LO | VRAM write mask low |
 | 045Bh | VRAM_MASK_HI | VRAM write mask high |
+| 0470h | HIRES_PRESENT | High-res CRTC present, bit 7 clear (MA, MX) |
+| 0471h | HIRES_VRAM | High-res VRAM size in MiB (MA, MX) |
+| 0472h-0473h | HIRES_ADDRESS | High-res indirect register address (MA, MX) |
+| 0474h-0477h | HIRES_DATA | High-res indirect register data (MA, MX) |
+| 047Ah-047Bh | HIRES_GATE | Second gateway address (MA, MX) |
+| 047Ch-047Fh | HIRES_GATE_DATA | Second gateway data, register 0 bit 2 pack mode (MA, MX) |
 | 0480h | SYS_ROM_MAP | Boot ROM and dictionary windows |
 | 0484h | DIC_ROM_BANK | Dictionary ROM bank |
 | 048Ah | MEMCARD_STATUS | Memory card status |

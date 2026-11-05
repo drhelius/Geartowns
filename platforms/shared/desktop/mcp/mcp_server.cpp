@@ -1427,6 +1427,42 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "get_hires_crtc_status"},
+        {"title", "Get High-Res CRTC Status"},
+        {"description", "Read the high-resolution CRTC of the MA and MX: selected and running, clock, timing, display window, "
+            "beam position, layout, both pages' window, format, display start, zoom and key, the palette select, the hardware "
+            "cursor and the second gateway."},
+        {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", json::object()},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "write_hires_crtc_register"},
+        {"title", "Write High-Res CRTC Register"},
+        {"description", "Write an indirect register of the high-resolution CRTC of the MA and MX through 0472/0474 like the CPU, "
+            "byte by byte, so 004h starts and stops it, 133h writes a color and 209h a pattern byte. Keeps the address selected."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"register", {
+                    {"type", "string"},
+                    {"description", "Hex register, 0-2FF."}
+                }},
+                {"value", {
+                    {"type", "string"},
+                    {"description", "32-bit hex value."}
+                }}
+            }},
+            {"required", json::array({"register", "value"})}
+        }}
+    });
+
+    tools.push_back({
         {"name", "get_video_output_status"},
         {"title", "Get Video Output Status"},
         {"description", "Read the output controller (0448/044A): mode, layer formats, front layer, palette select, FDA0 "
@@ -1450,7 +1486,7 @@ json McpServer::BuildToolList()
             {"properties", {
                 {"palette", {
                     {"type", "string"},
-                    {"enum", json::array({"all", "layer0", "layer1", "256", "digital"})},
+                    {"enum", json::array({"all", "layer0", "layer1", "256", "digital", "hires"})},
                     {"description", "Default all."}
                 }}
             }}
@@ -1471,12 +1507,12 @@ json McpServer::BuildToolList()
                 }},
                 {"offset", {
                     {"type", "string"},
-                    {"description", "custom: hex offset in the two-page VRAM, 0-7FFFF."}
+                    {"description", "custom: hex offset in the VRAM as stored, 0-7FFFF, 0-FFFFF on the MA and MX."}
                 }},
                 {"format", {
                     {"type", "string"},
-                    {"enum", json::array({"16_colors", "256_colors", "32k_colors"})},
-                    {"description", "custom: default 16_colors."}
+                    {"enum", json::array({"16_colors", "256_colors", "32k_colors", "16m_colors"})},
+                    {"description", "custom: default 16_colors. 16m_colors only on the MA and MX."}
                 }},
                 {"width", {
                     {"type", "integer"},
@@ -3508,6 +3544,25 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
             return {{"error", "Invalid value format"}};
 
         return m_debugAdapter.WriteCRTCRegister(arguments["register"].get<int>(), value);
+    }
+    else if (normalizedTool == "get_hires_crtc_status")
+    {
+        return m_debugAdapter.GetHiresCRTCStatus();
+    }
+    else if (normalizedTool == "write_hires_crtc_register")
+    {
+        u32 reg = 0;
+        u32 value = 0;
+
+        if (!arguments.contains("register") || !arguments["register"].is_string() ||
+            !parse_hex_with_prefix(arguments["register"].get<std::string>(), &reg))
+            return {{"error", "Invalid register format"}};
+
+        if (!arguments.contains("value") || !arguments["value"].is_string() ||
+            !parse_hex_with_prefix(arguments["value"].get<std::string>(), &value))
+            return {{"error", "Invalid value format"}};
+
+        return m_debugAdapter.WriteHiresCRTCRegister((int)reg, value);
     }
     else if (normalizedTool == "get_video_output_status")
     {

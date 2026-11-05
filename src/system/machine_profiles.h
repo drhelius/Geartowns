@@ -22,10 +22,10 @@
 
 #include "../common/common.h"
 
-#define GT_MACHINE_RELEASE_ORDER_COUNT 12
-#define GT_MACHINE_FEATURE_COUNT 28
+#define GT_MACHINE_RELEASE_ORDER_COUNT 14
+#define GT_MACHINE_FEATURE_COUNT 30
 #define GT_MACHINE_CPU_SPEED_COUNT 8
-#define GT_MACHINE_RAM_SIZE_COUNT 16
+#define GT_MACHINE_RAM_SIZE_COUNT 18
 
 const u8 k_machine_ram_model1_2[] = { 1, 2, 4, 6, 0 };
 const u8 k_machine_ram_1f_2f[] = { 1, 2, 4, 6, 8, 0 };
@@ -67,6 +67,7 @@ const u32 k_machine_features_ur = k_machine_features_ug | GT_MACHINE_FEATURE_CAC
 const u32 k_machine_features_me = k_machine_features_hr | GT_MACHINE_FEATURE_DMA_CARRY |
     GT_MACHINE_FEATURE_RAM_SIZE_127MB | GT_MACHINE_FEATURE_CD_DOUBLE_SPEED | GT_MACHINE_FEATURE_SERIAL_FIFO |
     GT_MACHINE_FEATURE_PCM16;
+const u32 k_machine_features_ma_mx = k_machine_features_me | GT_MACHINE_FEATURE_HIRES_CRTC;
 
 // Sprite times in half machine clocks. Other bus users delay the engine: CPU cycles to VRAM and sprite RAM in 1/256
 // machine clocks, display fetch bytes in 1/65536 machine clocks at 15 kHz and at 24 and 31 kHz
@@ -126,8 +127,8 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
     { "FM Towns II HR", "hr", "HR20, HR100, HR200", "November 1992", true, 0x0702, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_hr, k_machine_ram_hr, 4, 2, true, "fmtownshr", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II UR", "ur", "UR20, UR40, UR80", "February 1993", true, 0x0902, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_NONE, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_ur, k_machine_ram_ur, 2, 2, false, "fmtownshr", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II ME", "me", "ME20, ME170", "November 1993", true, 0x0D02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 25000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_me, 2, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
-    { "FM Towns II MA", "ma", "MA170, MA340, MA170W, MA340W", "November 1993", false, 0x0B02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_ma, 4, 2, true, NULL, &k_machine_video_mx, NULL },
-    { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", false, 0x0C02, GT_MACHINE_CPU_80486DX2, GT_MACHINE_FPU_INTEGRATED, 66000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_mx, 4, 2, true, "fmtownsmx", &k_machine_video_mx, NULL },
+    { "FM Towns II MA", "ma", "MA170, MA340, MA170W, MA340W", "November 1993", true, 0x0B02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_ma, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
+    { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", true, 0x0C02, GT_MACHINE_CPU_80486DX2, GT_MACHINE_FPU_INTEGRATED, 66000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_mx, 4, 2, true, "fmtownsmx", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II MF / Fresh", "mf_fresh", "MF20, MF170W, Fresh", "February 1994", true, 0x0F02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II HC", "hc", "HC53, HC53M", "February 1995", false, 0x1102, GT_MACHINE_CPU_PENTIUM, GT_MACHINE_FPU_INTEGRATED, 90000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_hc, 8, 1, true, NULL, &k_machine_video_mx, NULL },
     { "FM Towns Marty", "marty", "Marty, Marty 2, TC Marty", "February 1993", true, 0x4A03, GT_MACHINE_CPU_80386SX, GT_MACHINE_FPU_NONE, 16000000, GT_MACHINE_MAP_MARTY, k_machine_features_marty, k_machine_ram_marty, 2, 1, false, "fmtmarty", &k_machine_video_marty, &k_machine_bus_sx }
@@ -136,20 +137,20 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
 const GT_Machine_Model k_machine_release_order[GT_MACHINE_RELEASE_ORDER_COUNT] =
 {
     GT_MACHINE_MODEL1_2, GT_MACHINE_1F_2F, GT_MACHINE_10F_20F, GT_MACHINE_CX, GT_MACHINE_UX, GT_MACHINE_UG, GT_MACHINE_HG,
-    GT_MACHINE_HR, GT_MACHINE_UR, GT_MACHINE_ME, GT_MACHINE_MF_FRESH, GT_MACHINE_MARTY
+    GT_MACHINE_HR, GT_MACHINE_UR, GT_MACHINE_ME, GT_MACHINE_MA, GT_MACHINE_MX, GT_MACHINE_MF_FRESH, GT_MACHINE_MARTY
 };
 
 const int k_machine_cpu_speeds_mhz[GT_MACHINE_CPU_SPEED_COUNT] = { 16, 20, 25, 33, 40, 50, 66, 100 };
 const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 28, 32, 48, 64,
-    68 };
+    68, 96, 100 };
 
 const GT_Machine_CPU_Info k_machine_cpus[GT_MACHINE_CPU_COUNT] =
 {
-    { "80386DX", true, 3, false, 0x00000300, 0x7FFFFFE0, 32 },
-    { "80386SX", true, 3, false, 0x00002308, 0x7FFFFFF0, 16 },
-    { "80486SX", true, 4, false, 0x00000420, 0x00000010, 32 },
-    { "80486DX2", true, 4, true, 0x00000430, 0x00000010, 32 },
-    { "Pentium", false, 5, true, 0x00000520, 0x00000010, 64 }
+    { "80386DX", true, 3, false, 0x00000300, 0x7FFFFFE0, 32, 1 },
+    { "80386SX", true, 3, false, 0x00002308, 0x7FFFFFF0, 16, 1 },
+    { "80486SX", true, 4, false, 0x00000420, 0x00000010, 32, 1 },
+    { "80486DX2", true, 4, true, 0x00000430, 0x00000010, 32, 2 },
+    { "Pentium", false, 5, true, 0x00000520, 0x00000010, 64, 1 }
 };
 
 static inline const char* get_machine_fpu_name(GT_Machine_CPU cpu)
@@ -176,9 +177,9 @@ const GT_Machine_DMA_Window k_machine_dma_windows_24bit[] =
 
 const GT_Machine_Memory_Map k_machine_maps[GT_MACHINE_MAP_COUNT] =
 {
-    { "32-bit", 0xFFFFFFFFU, 0x80000000U, 0x80100000U, 0x81000000U, 0xC2000000U, 0xC2080000U, 0xC2100000U, 0xC2140000U, 0xC2200000U, 0xFFFC0000U, 0, 0, 0xC0000000U, 0x01000000U, 0xC1000000U, NULL },
-    { "24-bit", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0x00C00000U, 0x00E00000U, 0x00E80000U, 0x00F00000U, 0x00F40000U, 0x00F80000U, 0x00FC0000U, 0, 0, 0x00D00000U, 0x00100000U, 0, k_machine_dma_windows_24bit },
-    { "Marty", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0x00C00000U, 0x00600000U, 0x00E80000U, 0x00F00000U, 0x00F40000U, 0x00F80000U, 0x00FC0000U, 0x00680000U, 0x00F42000U, 0x00D00000U, 0x00100000U, 0, k_machine_dma_windows_24bit }
+    { "32-bit", 0xFFFFFFFFU, 0x80000000U, 0x80100000U, 0x82000000U, 0x82800000U, 0x83000000U, 0x81000000U, 0xC2000000U, 0xC2080000U, 0xC2100000U, 0xC2180000U, 0xC2140000U, 0xC2200000U, 0xFFFC0000U, 0, 0, 0xC0000000U, 0x01000000U, 0xC1000000U, NULL },
+    { "24-bit", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0, 0, 0, 0x00C00000U, 0x00E00000U, 0x00E80000U, 0x00F00000U, 0, 0x00F40000U, 0x00F80000U, 0x00FC0000U, 0, 0, 0x00D00000U, 0x00100000U, 0, k_machine_dma_windows_24bit },
+    { "Marty", 0x00FFFFFFU, 0x00A00000U, 0x00B00000U, 0, 0, 0, 0x00C00000U, 0x00600000U, 0x00E80000U, 0x00F00000U, 0, 0x00F40000U, 0x00F80000U, 0x00FC0000U, 0x00680000U, 0x00F42000U, 0x00D00000U, 0x00100000U, 0, k_machine_dma_windows_24bit }
 };
 
 const char* const k_machine_feature_names[GT_MACHINE_FEATURE_COUNT] =
@@ -210,7 +211,9 @@ const char* const k_machine_feature_names[GT_MACHINE_FEATURE_COUNT] =
     "RAM size up to 127 MB (05E8h)",
     "Double-speed CD-ROM (04B0h)",
     "Serial FIFO (0A0Ch)",
-    "16-bit PCM (0510h)"
+    "16-bit PCM (0510h)",
+    "CD-ROM play status (04C0h)",
+    "High-resolution CRTC (0470h)"
 };
 
 #endif /* MACHINE_PROFILES_H */

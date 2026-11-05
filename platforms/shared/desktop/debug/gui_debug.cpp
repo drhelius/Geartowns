@@ -25,6 +25,7 @@
 #include <vector>
 #include "../config.h"
 #include "../emu.h"
+#include "video/video.h"
 #include "../emu_floppy.h"
 #include "gui_debug_audio.h"
 #include "gui_debug_cdrom.h"
@@ -160,6 +161,9 @@ void gui_debug_windows(void)
 
         if (config_debug.show_crtc_registers)
             gui_debug_window_crtc_registers();
+
+        if (config_debug.show_hires_crtc)
+            gui_debug_window_hires_crtc();
 
         if (config_debug.show_video_output)
             gui_debug_window_video_output();

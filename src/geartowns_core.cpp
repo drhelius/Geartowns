@@ -50,6 +50,7 @@
 #include "system/machine_profiles.h"
 #include "system/upd71071.h"
 #include "system/load_detector.h"
+#include "video/hires_crtc.h"
 #include "video/video.h"
 
 GeartownsCore::GeartownsCore()
@@ -2101,6 +2102,10 @@ void GeartownsCore::ResolveMachineConfig()
             named = model;
     }
 
+    // A 486 title without its machine's firmware stays on a 486
+    if (database && ((entry->flags & GT_GAMEDB_CPU_486) != 0) && !CanAutoSelect(named) && CanAutoSelect(GT_MACHINE_HR))
+        named = GT_MACHINE_HR;
+
     bool three_mode = auto_model && m_auto_three_mode && !k_machine_profiles[named].three_mode_floppy;
     GT_Machine_Model fallback = GT_MACHINE_MODEL1_2;
     u32 megabyte = 1024 * 1024;
@@ -2374,8 +2379,8 @@ void GeartownsCore::ApplyBusTiming()
     // The HR's board lets the 486 cache only in high-speed mode with CMEN set
     bool cache_control = (profile.features & GT_MACHINE_FEATURE_CACHE_CONTROL) != 0;
     m_i386->SetBoardCache(!cache_control || (state->high_speed && (state->port_00c0 & 0x01) != 0));
-    m_i386->SetBusTiming(timing, waits, k_machine_cpus[m_machine_config.cpu].bus_width, cpu_clock_rate,
-        profile.cpu_clock_rate);
+    const GT_Machine_CPU_Info& cpu = k_machine_cpus[m_machine_config.cpu];
+    m_i386->SetBusTiming(timing, waits, cpu.bus_width, cpu_clock_rate, profile.cpu_clock_rate / cpu.bus_ratio);
 
     u32 microsecond = cpu_clock_rate / 1000000;
     u32 cycle = 2 + m_i386->GetBusPortWait(true);
@@ -2397,6 +2402,38 @@ void GeartownsCore::BusModeCallback(void* context)
     GeartownsCore* core = static_cast<GeartownsCore*>(context);
     core->ApplyBusTiming();
     core->ApplyCdRomSpeed();
+}
+
+void GeartownsCore::InitHiResMemoryMap(const GT_Machine_Memory_Map& map)
+{
+    u32 vram_flags = GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_WRITABLE | GT_DEBUG_REGION_VIDEO | GT_DEBUG_REGION_MAPPED;
+    u8* vram = m_video->GetVRAM();
+    u8* upper_vram = vram + VIDEO_VRAM_SIZE;
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_VRAM_HIRES_LAYER0, "VRAM High-Res Layer 0", vram, vram,
+        VIDEO_VRAM_SIZE, map.vram_hires_layer0, vram_flags))
+        Error("Unable to map the high-res VRAM layer 0");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_VRAM_HIRES_LAYER1, "VRAM High-Res Layer 1", upper_vram, upper_vram,
+        VIDEO_VRAM_SIZE, map.vram_hires_layer1, vram_flags))
+        Error("Unable to map the high-res VRAM layer 1");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_HIRES_ONE_PAGE, "VRAM High-Res One-Page",
+        VIDEO_HIRES_VRAM_SIZE, map.vram_hires_one_page, vram_flags, m_video, Video::ReadHiresOnePageCallback,
+        Video::WriteHiresOnePageCallback, Video::ReadHiresOnePageCallback) ||
+        !m_memory->SetRegionData(GT_DEBUG_REGION_VRAM_HIRES_ONE_PAGE, vram, vram))
+        Error("Unable to map the high-res one-page VRAM");
+
+    if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_HIRES_PACK, "VRAM High-Res Pack View",
+        k_hires_crtc_pack_view_size - VIDEO_HIRES_VRAM_SIZE, map.vram_hires_one_page + VIDEO_HIRES_VRAM_SIZE,
+        vram_flags & ~(u32)GT_DEBUG_REGION_MAPPED, m_video, Video::ReadHiresPackCallback, Video::WriteHiresPackCallback,
+        Video::ReadHiresPackCallback))
+        Error("Unable to register the high-res pack view");
+
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_FONT20_ROM, "20-Dot Font ROM", m_firmware->GetFont20Rom(), NULL,
+        GT_FIRMWARE_FONT20_SIZE, map.font20_rom,
+        GT_DEBUG_REGION_READABLE | GT_DEBUG_REGION_ROM | GT_DEBUG_REGION_MAPPED))
+        Error("Unable to map the 20-dot font ROM");
 }
 
 void GeartownsCore::InitMemoryMap()
@@ -2436,7 +2473,7 @@ void GeartownsCore::InitMemoryMap()
     u8* sprite_ram = m_video->GetSpriteRAM();
 
     // Canonical VRAM for raw debugger access, the bus reaches it through the two views
-    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_VRAM, "VRAM", vram, vram, VIDEO_VRAM_SIZE, 0, vram_flags))
+    if (!m_memory->RegisterDebugRegion(GT_DEBUG_REGION_VRAM, "VRAM", vram, vram, m_video->GetVRAMSize(), 0, vram_flags))
         Error("Unable to register VRAM");
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_VRAM_TWO_PAGE, "VRAM Two-Page", VIDEO_VRAM_SIZE,
@@ -2452,6 +2489,9 @@ void GeartownsCore::InitMemoryMap()
         !m_memory->SetRegionWideHandlers(GT_DEBUG_REGION_VRAM_SINGLE_PAGE, Video::WriteVRAMSinglePage16Callback,
         Video::WriteVRAMSinglePage32Callback))
         Error("Unable to map the single-page VRAM view");
+
+    if ((profile.features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0)
+        InitHiResMemoryMap(map);
 
     if (!m_memory->RegisterHandlerRegion(GT_DEBUG_REGION_SPRITE_RAM, "Sprite RAM", VIDEO_SPRITE_RAM_SIZE, map.sprite_ram,
         sprite_ram_flags, m_video, Video::ReadSpriteRAMCallback, Video::WriteSpriteRAMCallback, NULL) ||

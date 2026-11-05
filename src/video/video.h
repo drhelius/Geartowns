@@ -24,9 +24,11 @@
 #include "../common/common.h"
 
 #define VIDEO_VRAM_SIZE 0x80000
+#define VIDEO_HIRES_VRAM_SIZE 0x100000
 #define VIDEO_SPRITE_RAM_SIZE 0x20000
 #define VIDEO_CRTC_REGISTER_COUNT 32
 
+class HiresCRTC;
 class Memory;
 class PIC;
 class TraceLogger;
@@ -43,12 +45,13 @@ public:
         VIDEO_LAYER_OFF = 0,
         VIDEO_LAYER_4BPP,
         VIDEO_LAYER_8BPP,
-        VIDEO_LAYER_16BPP
+        VIDEO_LAYER_16BPP,
+        VIDEO_LAYER_24BPP
     };
 
     struct Video_State
     {
-        u8 vram[VIDEO_VRAM_SIZE];
+        u8 vram[VIDEO_HIRES_VRAM_SIZE];
         u8 sprite_ram[VIDEO_SPRITE_RAM_SIZE];
         u16 crtc[VIDEO_CRTC_REGISTER_COUNT];
         u8 crtc_index;
@@ -116,8 +119,12 @@ public:
     void EnableNativeResolution(bool enable);
     bool IsNativeResolutionEnabled() const;
     u8* GetVRAM();
+    u32 GetVRAMSize() const;
     u8* GetSpriteRAM();
     Sprite* GetSprite();
+    HiresCRTC* GetHiresCRTC();
+    bool HasHiresCRTC() const;
+    bool IsHiresActive() const;
     Video_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
@@ -130,6 +137,8 @@ public:
     void UpdateVRAMMapping();
     void UpdateSpriteMapping();
     u8 GetSyncStatus(u64 clocks) const;
+    u8 GetHiresSyncStatus(u64 clocks) const;
+    u32 GetBeamOrigin() const;
     u32 GetBeamHalfLine(u64 clocks) const;
     u32 GetBeamClock(u64 clocks) const;
 
@@ -156,6 +165,10 @@ public:
     static u8 ReadFMRRegisterCallback(void* device, u32 offset);
     static u8 PeekFMRRegisterCallback(void* device, u32 offset);
     static void WriteFMRRegisterCallback(void* device, u32 offset, u8 value);
+    static u8 ReadHiresOnePageCallback(void* device, u32 offset);
+    static void WriteHiresOnePageCallback(void* device, u32 offset, u8 value);
+    static u8 ReadHiresPackCallback(void* device, u32 offset);
+    static void WriteHiresPackCallback(void* device, u32 offset, u8 value);
 
 private:
     void WriteCRTC(u8 value, bool high, u64 clocks);
@@ -165,6 +178,9 @@ private:
     u8 ReadPalette(int component) const;
     void RunNextEvent();
     void LatchFrameTiming();
+    void UpdateHiresActive(u64 clocks);
+    void UpdateHiresGeometry();
+    void UpdatePackMapping();
     void StartFrame(u64 clocks);
     void JoinField(u64 clocks);
     void DelaySpriteByFetch(u32 half_line);
@@ -235,6 +251,9 @@ private:
 private:
     Video_State m_state;
     Sprite* m_sprite;
+    HiresCRTC* m_hires_crtc;
+    bool m_hires_active;
+    bool m_hires_blank;
     PIC* m_pic;
     TraceLogger* m_trace_logger;
     PIT* m_pit;

@@ -43,6 +43,7 @@
 #include "geartowns.h"
 #include "drive/hard_disk_image.h"
 #include "drive/memory_card.h"
+#include "video/video.h"
 #include "rewind.h"
 #include "events.h"
 #include "input_macro.h"
@@ -478,7 +479,7 @@ static void menu_cdrom(void)
         {
             ImGui::BeginTooltip();
             ImGui::Text("Auto reads at the speed of the model's drive: 2x on");
-            ImGui::Text("the ME and MF/Fresh in high-speed mode, 1x on the rest.");
+            ImGui::Text("the ME, MA, MX and MF/Fresh in high-speed mode, 1x on the rest.");
             ImGui::Text("Faster speeds may break software that doesn't expect them.");
             ImGui::EndTooltip();
         }
@@ -1156,7 +1157,8 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
 
     bool changed = false;
     bool in_use = emu_get_core()->GetPendingMachineConfig().fpu;
-    const char* labels[2] = { "None (Original)", get_machine_fpu_name(profile.cpu) };
+    bool integrated = profile.fpu == GT_MACHINE_FPU_INTEGRATED;
+    const char* labels[2] = { integrated ? "None" : "None (Original)", get_machine_fpu_name(profile.cpu) };
     char auto_label[32];
     char preview[96];
     snprintf(auto_label, sizeof(auto_label), "Auto (%s)", in_use ? labels[1] : "None");
@@ -1165,6 +1167,9 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
 
     if ((config_machine.fpu > 0) && !in_use)
         snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
+
+    if ((config_machine.fpu == 0) && integrated)
+        snprintf(preview, sizeof(preview), "None, built into the %s", profile.name);
 
     float text_width = MAX(ImGui::CalcTextSize(labels[0]).x, ImGui::CalcTextSize(preview).x);
     ImGui::PushItemWidth(get_combo_width(text_width));
@@ -1179,12 +1184,15 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
 
         ImGui::Separator();
 
+        ImGui::BeginDisabled(integrated);
+
         if (ImGui::Selectable(labels[0], config_machine.fpu == 0))
         {
             config_machine.fpu = 0;
             changed = true;
         }
 
+        ImGui::EndDisabled();
         ImGui::BeginDisabled(profile.fpu == GT_MACHINE_FPU_NONE);
 
         if (ImGui::Selectable(labels[1], config_machine.fpu > 0))
@@ -1201,7 +1209,7 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
         ImGui::BeginTooltip();
         ImGui::Text("It is recommended to leave this option on Auto.");
         ImGui::Text("Auto fits an 80387 or a 487SX if the game database asks for one");
-        ImGui::Text("or keeps the model's original, with no FPU.");
+        ImGui::Text("or keeps the model's original: none, or the MX's built-in one.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }
@@ -2197,6 +2205,7 @@ static void menu_debug(void)
         {
             ImGui::MenuItem("Show CRTC", "", &config_debug.show_crtc);
             ImGui::MenuItem("Show CRTC Registers", "", &config_debug.show_crtc_registers);
+            ImGui::MenuItem("Show High-Res CRTC", "", &config_debug.show_hires_crtc);
             ImGui::MenuItem("Show Output Control", "", &config_debug.show_video_output);
             ImGui::MenuItem("Show Palettes", "", &config_debug.show_palettes);
             ImGui::MenuItem("Show Framebuffers", "", &config_debug.show_framebuffers);

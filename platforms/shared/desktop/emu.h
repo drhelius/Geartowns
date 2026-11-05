@@ -39,6 +39,11 @@ enum Debug_Command
 
 #define EMU_DEBUG_FRAMEBUFFER_WIDTH 1024
 #define EMU_DEBUG_FRAMEBUFFER_HEIGHT 512
+
+static inline int emu_debug_format_bits(int format)
+{
+    return format == 1 ? 4 : format == 2 ? 8 : format == 4 ? 24 : 16;
+}
 #define EMU_DEBUG_SPRITE_ATLAS_SIZE 512
 #define EMU_DEBUG_SPRITE_PAGE_SIZE 256
 
@@ -221,6 +226,7 @@ EXTERN void emu_debug_state_restored(void);
 
 EXTERN void emu_debug_update(void);
 EXTERN void emu_debug_get_buffer_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info);
+EXTERN void emu_debug_get_view_info(int buffer, const Emu_Debug_Buffer_Request* request, Emu_Debug_Buffer_Info& info);
 EXTERN void emu_debug_decode_buffer(int buffer, const Emu_Debug_Buffer_Request* request, u8* output,
     Emu_Debug_Buffer_Info& info);
 EXTERN void emu_debug_get_sprite(int index, Emu_Debug_Sprite& sprite);

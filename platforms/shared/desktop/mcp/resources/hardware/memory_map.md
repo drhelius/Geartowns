@@ -56,6 +56,17 @@ Address spaces:
 
 Only one 512 KB VRAM exists; both VRAM ranges are views of it.
 
+The MA and MX have 1 MiB of VRAM for the high-resolution CRTC, and these on top. The compatibility views above keep reaching
+the first 512 KB:
+
+| Range | Size | Use |
+|---|---|---|
+| 82000000–8207FFFF | 512 KB | High-res page 0, the lower half of the VRAM |
+| 82800000–8287FFFF | 512 KB | High-res page 1, the upper half of the VRAM |
+| 83000000–830FFFFF | 1 MB | The whole VRAM as one linear page |
+| 83100000–83155FFF | 344 KB | The rest of that view while pack mode is on, 3 bytes of VRAM as 4 |
+| C2180000–C21FFFFF | 512 KB | 20-dot font ROM |
+
 ### 2.1 FM Towns II UX and FM Towns Marty
 
 Their bus has 24 address lines: the CPU and DMA see every address modulo 16 MB, so FFFFFFF0h reaches FFFFF0h in

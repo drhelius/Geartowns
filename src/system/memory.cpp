@@ -1487,6 +1487,10 @@ u8 Memory::GetBusClass(const GT_Debug_Memory_Region& info)
         case GT_DEBUG_REGION_VRAM:
         case GT_DEBUG_REGION_VRAM_TWO_PAGE:
         case GT_DEBUG_REGION_VRAM_SINGLE_PAGE:
+        case GT_DEBUG_REGION_VRAM_HIRES_LAYER0:
+        case GT_DEBUG_REGION_VRAM_HIRES_LAYER1:
+        case GT_DEBUG_REGION_VRAM_HIRES_ONE_PAGE:
+        case GT_DEBUG_REGION_VRAM_HIRES_PACK:
             return GT_BUS_VRAM;
         case GT_DEBUG_REGION_SPRITE_RAM:
             return GT_BUS_SPRITE;

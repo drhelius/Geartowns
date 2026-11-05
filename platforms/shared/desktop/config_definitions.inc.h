@@ -56,6 +56,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "GamePorts", config_debug.show_game_ports, false);
     CONFIG_BOOL("Debug", "CRTC", config_debug.show_crtc, false);
     CONFIG_BOOL("Debug", "CRTCRegisters", config_debug.show_crtc_registers, false);
+    CONFIG_BOOL("Debug", "HiResCRTC", config_debug.show_hires_crtc, false);
     CONFIG_BOOL("Debug", "VideoOutput", config_debug.show_video_output, false);
     CONFIG_BOOL("Debug", "Palettes", config_debug.show_palettes, false);
     CONFIG_BOOL("Debug", "Framebuffers", config_debug.show_framebuffers, false);
@@ -64,8 +65,8 @@ static inline void process(config_Operation operation)
     CONFIG_INT_RANGE("Debug", "FramebufferZoom", config_debug.framebuffer_zoom, 0, 0, 2);
     CONFIG_BOOL("Debug", "FramebufferShowWindow", config_debug.framebuffer_show_window, true);
     CONFIG_INT_RANGE("Debug", "FramebufferSpritePage", config_debug.framebuffer_sprite_page, 0, 0, 1);
-    CONFIG_INT_RANGE("Debug", "FramebufferCustomOffset", config_debug.framebuffer_custom_offset, 0, 0, 0x7FFFF);
-    CONFIG_INT_RANGE("Debug", "FramebufferCustomFormat", config_debug.framebuffer_custom_format, 0, 0, 2);
+    CONFIG_INT_RANGE("Debug", "FramebufferCustomOffset", config_debug.framebuffer_custom_offset, 0, 0, 0xFFFFF);
+    CONFIG_INT_RANGE("Debug", "FramebufferCustomFormat", config_debug.framebuffer_custom_format, 0, 0, 3);
     CONFIG_INT_RANGE("Debug", "FramebufferCustomWidth", config_debug.framebuffer_custom_width, 512, 1, 1024);
     CONFIG_INT_RANGE("Debug", "FramebufferCustomHeight", config_debug.framebuffer_custom_height, 256, 1, 512);
     CONFIG_INT_RANGE("Debug", "FramebufferCustomPalette", config_debug.framebuffer_custom_palette, 0, 0, 2);

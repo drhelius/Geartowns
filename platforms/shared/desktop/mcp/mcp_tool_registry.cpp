@@ -260,7 +260,8 @@ static const char* const kMcpSystemTools[] =
 
 static const char* const kMcpVideoTools[] =
 {
-    "get_crtc_status", "get_crtc_registers", "write_crtc_register", "get_video_output_status", "get_palettes",
+    "get_crtc_status", "get_crtc_registers", "write_crtc_register", "get_hires_crtc_status", "write_hires_crtc_register",
+    "get_video_output_status", "get_palettes",
     "get_frame_buffer", "list_sprites", "get_sprite"
 };
 

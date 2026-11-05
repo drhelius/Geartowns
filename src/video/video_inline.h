@@ -93,6 +93,11 @@ INLINE u8* Video::GetVRAM()
     return m_state.vram;
 }
 
+INLINE u32 Video::GetVRAMSize() const
+{
+    return (m_features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0 ? VIDEO_HIRES_VRAM_SIZE : VIDEO_VRAM_SIZE;
+}
+
 INLINE u8* Video::GetSpriteRAM()
 {
     return m_state.sprite_ram;
@@ -101,6 +106,21 @@ INLINE u8* Video::GetSpriteRAM()
 INLINE Sprite* Video::GetSprite()
 {
     return m_sprite;
+}
+
+INLINE HiresCRTC* Video::GetHiresCRTC()
+{
+    return m_hires_crtc;
+}
+
+INLINE bool Video::HasHiresCRTC() const
+{
+    return (m_features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0;
+}
+
+INLINE bool Video::IsHiresActive() const
+{
+    return m_hires_active;
 }
 
 INLINE Video::Video_State* Video::GetState()
@@ -282,12 +302,18 @@ INLINE u64 Video::GetFrameEndClocks() const
     return GetHalfLineClocks(m_state.frame_half_lines);
 }
 
+// Frames start at VST1 on the compatibility CRTC and at line 0 on the high-res one
+INLINE u32 Video::GetBeamOrigin() const
+{
+    return m_hires_active ? 0 : m_state.crtc[k_video_crtc_vst1];
+}
+
 // The CRTC's counters wait at the top until the frame start, which on the Marty can come after the field's
 INLINE u32 Video::GetBeamHalfLine(u64 clocks) const
 {
     u64 elapsed = clocks > m_state.frame_start_clocks ? clocks - m_state.frame_start_clocks : 0;
     elapsed *= (u64)m_state.frame_clock_rate * 2;
-    return m_state.crtc[k_video_crtc_vst1] + (u32)(elapsed / ((u64)GT_MACHINE_CLOCK_RATE * m_state.frame_line_clocks));
+    return GetBeamOrigin() + (u32)(elapsed / ((u64)GT_MACHINE_CLOCK_RATE * m_state.frame_line_clocks));
 }
 
 INLINE u64 Video::GetElapsedCRTCClocks(u64 clocks) const
@@ -299,7 +325,7 @@ INLINE u64 Video::GetElapsedCRTCClocks(u64 clocks) const
 INLINE u32 Video::GetBeamClock(u64 clocks) const
 {
     u64 line = m_state.frame_line_clocks;
-    u64 position = (m_state.crtc[k_video_crtc_vst1] * line) / 2 + GetElapsedCRTCClocks(clocks);
+    u64 position = (GetBeamOrigin() * line) / 2 + GetElapsedCRTCClocks(clocks);
 
     if (IsFieldInterlaced())
         return (u32)((position % (line * 2)) / 2);

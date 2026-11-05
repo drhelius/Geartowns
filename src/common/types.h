@@ -425,7 +425,8 @@ enum GT_Machine_Feature
     GT_MACHINE_FEATURE_CD_DOUBLE_SPEED = 0x2000000,
     GT_MACHINE_FEATURE_SERIAL_FIFO     = 0x4000000,
     GT_MACHINE_FEATURE_PCM16           = 0x8000000,
-    GT_MACHINE_FEATURE_CD_PLAY_FOUND   = 0x10000000
+    GT_MACHINE_FEATURE_CD_PLAY_FOUND   = 0x10000000,
+    GT_MACHINE_FEATURE_HIRES_CRTC      = 0x20000000
 };
 
 enum GT_Boot_Device
@@ -464,6 +465,7 @@ struct GT_Machine_CPU_Info
     u32 reset_edx;
     u32 cr0_fixed;
     int bus_width;
+    u8 bus_ratio;
 };
 
 struct GT_Machine_DMA_Window
@@ -479,10 +481,14 @@ struct GT_Machine_Memory_Map
     u32 address_mask;
     u32 vram_two_page;
     u32 vram_single_page;
+    u32 vram_hires_layer0;
+    u32 vram_hires_layer1;
+    u32 vram_hires_one_page;
     u32 sprite_ram;
     u32 os_rom;
     u32 dictionary_rom;
     u32 font_rom;
+    u32 font20_rom;
     u32 cmos;
     u32 pcm_window;
     u32 system_rom;

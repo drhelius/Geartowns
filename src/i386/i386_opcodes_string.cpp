@@ -27,6 +27,10 @@ INLINE bool I386::OPCodes_INS(int width, u32 destination_offset)
     u16 port = m_state.registers[I386_REG_EDX].low;
     u32 value = width == 8 ? 0xFF : width == 16 ? 0xFFFF : 0xFFFFFFFFU;
 
+    // A port read can't be undone: a fault after it would lose the value when the instruction restarts
+    if (!CheckMemoryAccess(I386_SEGMENT_ES, destination_offset, (u32)width >> 3, true, *m_bus_context))
+        return false;
+
     if (IsValidPointer(m_io))
     {
         if (width == 8)

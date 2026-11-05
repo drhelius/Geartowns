@@ -198,7 +198,7 @@ programs it, then stops it, so a machine boots to the compatibility CRTC.
 | 11Bh, 11Ch | Key: the front page lets through a pixel when pixel AND 11Bh equals 11Ch |
 | 120h-12Ch | The same for page 1 |
 | 130h, 132h, 133h | Palette select (0 and 1 the 16 colors of pages 0 and 1, 2 and 3 their 256 colors), index, data: bits 7-0 blue, 15-8 red, 23-16 green |
-| 200h-203h | Cursor X and Y in zoomed pixels, pattern pixels hidden at the left and top |
+| 200h-203h | Cursor X and Y in zoomed pixels, then the pattern pixel placed there: the hot spot, or the pixels past the left and top edges |
 | 204h, 205h | Cursor back and front colors, as the palette |
 | 206h | Cursor on |
 | 208h, 209h | Pattern address and data, 1024 bytes: 64 rows of 8 bytes of mask (1 = transparent), then the pattern |

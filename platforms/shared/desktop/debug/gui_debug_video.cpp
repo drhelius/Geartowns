@@ -422,9 +422,9 @@ void gui_debug_window_hires_crtc(void)
         ImGui::TableNextRow();
         draw_grid_label("POSITION");
         ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_x), crtc->GetWord(k_hires_crtc_cursor_y));
-        draw_grid_label("HIDDEN");
-        ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_hidden_x),
-            crtc->GetWord(k_hires_crtc_cursor_hidden_y));
+        draw_grid_label("HOT SPOT");
+        ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_hot_x),
+            crtc->GetWord(k_hires_crtc_cursor_hot_y));
 
         ImGui::TableNextRow();
         draw_grid_label("BACK");

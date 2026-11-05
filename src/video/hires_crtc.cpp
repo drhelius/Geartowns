@@ -332,18 +332,19 @@ void HiresCRTC::RenderRow(u32* destination, int row, int width) const
 
 // 64 by 64 with 8 bytes a row, the leftmost pixel in the top bit, as DISPT8.DRV sends a Windows cursor unchanged: its AND
 // mask first, where 1 is transparent, then its XOR mask, 0 for the back color and 1 for the front one
-// The position counts zoomed pixels from the display window's corner, and the pixels hidden come out of the pattern
+// Both set inverts the screen: the driver doesn't convert them and Windows's I-beam is made of them, nothing else shows it
+// The position counts zoomed pixels from the display window's corner, and 202h and 203h name the pattern pixel shown there
 void HiresCRTC::RenderCursor(u32* destination, int row, int width) const
 {
     u32 zoom = m_state.registers[k_hires_crtc_cursor_zoom];
-    u32 zoom_x = (zoom & 0xFF) + 1;
-    u32 zoom_y = ((zoom >> 8) & 0xFF) + 1;
-    u32 top = GetWord(k_hires_crtc_cursor_y) * zoom_y;
+    int zoom_x = (int)(zoom & 0xFF) + 1;
+    int zoom_y = (int)((zoom >> 8) & 0xFF) + 1;
+    int top = ((int)GetWord(k_hires_crtc_cursor_y) - (int)GetWord(k_hires_crtc_cursor_hot_y)) * zoom_y;
 
-    if ((u32)row < top)
+    if (row < top)
         return;
 
-    u32 y = GetWord(k_hires_crtc_cursor_hidden_y) + ((u32)row - top) / zoom_y;
+    int y = (row - top) / zoom_y;
 
     if (y >= 64)
         return;
@@ -352,20 +353,21 @@ void HiresCRTC::RenderCursor(u32* destination, int row, int width) const
     const u8* pattern = mask + (HIRES_CRTC_CURSOR_PATTERN_SIZE / 2);
     u32 colors[2] = { ToXRGB(m_state.registers[k_hires_crtc_cursor_back]),
         ToXRGB(m_state.registers[k_hires_crtc_cursor_front]) };
-    u32 start = GetWord(k_hires_crtc_cursor_x) * zoom_x;
+    int start = ((int)GetWord(k_hires_crtc_cursor_x) - (int)GetWord(k_hires_crtc_cursor_hot_x)) * zoom_x;
 
-    for (u32 x = GetWord(k_hires_crtc_cursor_hidden_x); (x < 64) && (start < (u32)width); x++, start += zoom_x)
+    for (int x = 0; (x < 64) && (start < width); x++, start += zoom_x)
     {
         u32 bit = 0x80U >> (x & 0x07);
+        bool clear = (mask[x >> 3] & bit) != 0;
+        bool set = (pattern[x >> 3] & bit) != 0;
 
-        if ((mask[x >> 3] & bit) != 0)
+        if (clear && !set)
             continue;
 
-        u32 color = colors[(pattern[x >> 3] & bit) != 0 ? 1 : 0];
-        u32 end = MIN(start + zoom_x, (u32)width);
+        int end = MIN(start + zoom_x, width);
 
-        for (u32 i = start; i < end; i++)
-            destination[i] = color;
+        for (int i = MAX(start, 0); i < end; i++)
+            destination[i] = clear ? destination[i] ^ 0x00FFFFFF : colors[set ? 1 : 0];
     }
 }
 

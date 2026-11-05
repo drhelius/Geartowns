@@ -2698,8 +2698,8 @@ json DebugAdapter::GetHiresCRTCStatus()
             {"on", (registers[k_hires_crtc_cursor_on] & 0x01) != 0},
             {"x", crtc->GetWord(k_hires_crtc_cursor_x)},
             {"y", crtc->GetWord(k_hires_crtc_cursor_y)},
-            {"hidden_x", crtc->GetWord(k_hires_crtc_cursor_hidden_x)},
-            {"hidden_y", crtc->GetWord(k_hires_crtc_cursor_hidden_y)},
+            {"hot_x", crtc->GetWord(k_hires_crtc_cursor_hot_x)},
+            {"hot_y", crtc->GetWord(k_hires_crtc_cursor_hot_y)},
             {"zoom", {{"x", (cursor_zoom & 0xFF) + 1}, {"y", ((cursor_zoom >> 8) & 0xFF) + 1}}},
             {"back", Hex(registers[k_hires_crtc_cursor_back] & 0xFFFFFF, 6)},
             {"front", Hex(registers[k_hires_crtc_cursor_front] & 0xFFFFFF, 6)}

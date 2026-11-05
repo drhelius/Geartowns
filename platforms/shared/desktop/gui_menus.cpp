@@ -918,7 +918,7 @@ static void menu_machine(void)
         ImGui::BeginTooltip();
         ImGui::Text("Use dynamic recompilation.");
         ImGui::Text("Most games will run faster but some games may run slower.");
-        ImGui::Text("The debugger always runs the interpreter.");
+        ImGui::Text("The debugger runs the interpreter while a breakpoint, trace or profile is on.");
 
         if (config_emulator.dynarec && !emu_is_dynarec_enabled())
             ImGui::TextColored(red, "Not available on this system, the interpreter is running.");

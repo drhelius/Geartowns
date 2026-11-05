@@ -40,7 +40,7 @@
 
 struct DisassemblerLine
 {
-    const I386_Disassembler_Record* record;
+    u32 linear;
     bool breakpoint;
     bool symbol;
 };
@@ -55,6 +55,8 @@ struct SymbolRow
 static std::vector<DisassemblerLine> disassembler_lines;
 static bool lines_valid = false;
 static u32 lines_generation = 0;
+static double lines_time = 0.0;
+static const double k_lines_refresh_seconds = 0.25;
 static u32 lines_symbols_version = 0;
 static bool lines_show_symbols = false;
 static bool lines_show_auto_symbols = false;
@@ -110,7 +112,7 @@ static void draw_breakpoints_content(void);
 static void prepare_drawable_lines(void);
 static void draw_disassembly(void);
 static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc, bool stale);
-static void draw_context_menu(DisassemblerLine* line);
+static void draw_context_menu(DisassemblerLine* line, const I386_Disassembler_Record* record);
 static void split_instruction(const char* instruction, char* prefixes, size_t prefixes_size, char* mnemonic,
     size_t mnemonic_size, char* operands, size_t operands_size);
 static void draw_operands(const char* operands, bool address_operand, bool override_color, const ImVec4& color,
@@ -1283,12 +1285,16 @@ static void prepare_drawable_lines(void)
     }
 
     // The line list only changes with the records, the symbols and the view options
-    bool rebuild = !lines_valid || (lines_generation != cpu->GetDisassemblerGeneration()) ||
+    // Walking the records costs more the more code has run, so new ones wait a little while the machine runs
+    double now = ImGui::GetTime();
+    bool due = emu_is_debug_idle() || goto_address_requested || ((now - lines_time) >= k_lines_refresh_seconds);
+    bool rebuild = !lines_valid || (due && (lines_generation != cpu->GetDisassemblerGeneration())) ||
         (lines_symbols_version != user_symbols_version) || (lines_show_symbols != config_debug.dis_show_symbols) ||
         (lines_show_auto_symbols != config_debug.dis_show_auto_symbols);
 
     if (rebuild)
     {
+        lines_time = now;
         const std::map<u32, I386_Disassembler_Record>& records = cpu->GetDisassemblerRecords();
         std::map<u32, I386_Disassembler_Record>::const_iterator record;
 
@@ -1311,7 +1317,7 @@ static void prepare_drawable_lines(void)
             {
                 DisassemblerLine symbol_line;
 
-                symbol_line.record = &record->second;
+                symbol_line.linear = record->first;
                 symbol_line.breakpoint = false;
                 symbol_line.symbol = true;
                 disassembler_lines.push_back(symbol_line);
@@ -1319,7 +1325,7 @@ static void prepare_drawable_lines(void)
 
             DisassemblerLine line;
 
-            line.record = &record->second;
+            line.linear = record->first;
             line.breakpoint = false;
             line.symbol = false;
             disassembler_lines.push_back(line);
@@ -1329,10 +1335,10 @@ static void prepare_drawable_lines(void)
     int count = (int)disassembler_lines.size();
     int line = find_line(pc);
 
-    if (line < count && disassembler_lines[line].symbol && disassembler_lines[line].record->linear == pc)
+    if (line < count && disassembler_lines[line].symbol && disassembler_lines[line].linear == pc)
         line++;
 
-    pc_position = (line < count && disassembler_lines[line].record->linear == pc) ? line : 0;
+    pc_position = (line < count && disassembler_lines[line].linear == pc) ? line : 0;
     goto_position = -1;
     goto_missing = false;
 
@@ -1379,7 +1385,7 @@ static int find_line(u32 address)
     {
         int middle = low + ((high - low) / 2);
 
-        if (disassembler_lines[middle].record->linear < address)
+        if (disassembler_lines[middle].linear < address)
             low = middle + 1;
         else
             high = middle;
@@ -1473,7 +1479,14 @@ static void draw_disassembly(void)
             for (int item = clipper.DisplayStart; item < clipper.DisplayEnd; item++)
             {
                 DisassemblerLine& line = disassembler_lines[item];
-                const I386_Disassembler_Record* record = line.record;
+                const I386_Disassembler_Record* record = cpu->GetDisassemblerRecord(line.linear);
+
+                // While the machine runs the list can be behind the records
+                if (!IsValidPointer(record) || (!line.symbol && (record->name[0] == 0)))
+                {
+                    ImGui::TextUnformatted(" ");
+                    continue;
+                }
 
                 if (line.symbol)
                 {
@@ -1528,7 +1541,7 @@ static void draw_disassembly(void)
                     draw_list->AddRectFilled(row_min, row_max, ImGui::GetColorU32(subroutine_color));
                 }
 
-                draw_context_menu(&line);
+                draw_context_menu(&line, record);
 
                 // A disabled breakpoint only marks the address
                 bool marked = breakpoint_state != I386_BREAKPOINT_STATE_NONE;
@@ -1950,37 +1963,37 @@ static bool replace_jump_target(const I386_Disassembler_Record* record, char* op
     return true;
 }
 
-static void draw_context_menu(DisassemblerLine* line)
+static void draw_context_menu(DisassemblerLine* line, const I386_Disassembler_Record* record)
 {
     if (!ImGui::BeginPopupContextItem())
         return;
 
     selected_address_valid = true;
-    selected_address = line->record->linear;
+    selected_address = record->linear;
 
     I386* cpu = emu_get_core()->GetI386();
 
     if (ImGui::Selectable(line->breakpoint ? "Remove Breakpoint" : "Add Breakpoint"))
     {
         if (line->breakpoint)
-            cpu->RemoveBreakpoint(line->record->linear);
+            cpu->RemoveBreakpoint(record->linear);
         else
-            cpu->AddBreakpoint(line->record->linear);
+            cpu->AddBreakpoint(record->linear);
     }
 
     if (line->breakpoint)
     {
-        bool enabled = cpu->GetBreakpointState(line->record->linear) == I386_BREAKPOINT_STATE_ENABLED;
+        bool enabled = cpu->GetBreakpointState(record->linear) == I386_BREAKPOINT_STATE_ENABLED;
 
         if (ImGui::Selectable(enabled ? "Disable Breakpoint" : "Enable Breakpoint"))
-            set_breakpoint_enabled(line->record->linear, !enabled);
+            set_breakpoint_enabled(record->linear, !enabled);
     }
 
     if (ImGui::Selectable("Run to Cursor"))
-        gui_debug_runto_address(line->record->linear);
+        gui_debug_runto_address(record->linear);
 
-    if (line->record->jump && line->record->jump_target_known && ImGui::Selectable("Go to Target"))
-        request_goto_address(line->record->jump_linear);
+    if (record->jump && record->jump_target_known && ImGui::Selectable("Go to Target"))
+        request_goto_address(record->jump_linear);
 
     ImGui::Separator();
 
@@ -2293,20 +2306,24 @@ static void save_full_disassembler(FILE* file)
 
 static void save_current_disassembler(FILE* file)
 {
+    lines_valid = false;
     prepare_drawable_lines();
+
+    I386* cpu = emu_get_core()->GetI386();
 
     for (size_t i = 0; i < disassembler_lines.size(); i++)
     {
         const DisassemblerLine& line = disassembler_lines[i];
+        const I386_Disassembler_Record* record = cpu->GetDisassemblerRecord(line.linear);
 
         if (line.symbol)
         {
-            const char* user = gui_debug_get_user_symbol(line.record->linear);
-            fprintf(file, "%s:\n", IsValidPointer(user) ? user : line.record->auto_symbol);
+            const char* user = gui_debug_get_user_symbol(line.linear);
+            fprintf(file, "%s:\n", IsValidPointer(user) ? user : record->auto_symbol);
             continue;
         }
 
-        save_instruction(file, line.record, config_debug.dis_show_segment, config_debug.dis_show_bytes, true);
+        save_instruction(file, record, config_debug.dis_show_segment, config_debug.dis_show_bytes, true);
     }
 }
 

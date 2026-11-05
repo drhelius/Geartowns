@@ -585,6 +585,7 @@ public:
     bool SetCapacity(u32 capacity);
     void SetActive(bool active);
     INLINE bool IsEnabled(GT_Trace_Type type) const;
+    INLINE bool IsAnyEnabled() const;
     INLINE bool IsEventEnabled(GT_Trace_Type type, u8 event) const;
     INLINE void TraceLog(const GT_Trace_Entry& entry);
     void SetEnabledFlags(u32 flags);
@@ -621,6 +622,15 @@ INLINE bool TraceLogger::IsEnabled(GT_Trace_Type type) const
     return (m_active_flags & (1U << type)) != 0;
 #else
     UNUSED(type);
+    return false;
+#endif
+}
+
+INLINE bool TraceLogger::IsAnyEnabled() const
+{
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    return m_active_flags != 0;
+#else
     return false;
 #endif
 }

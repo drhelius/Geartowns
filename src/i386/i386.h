@@ -555,6 +555,7 @@ public:
     void EnableDebuggerChecks(bool enable);
     bool CheckDebuggerBreakpoints(bool regular, bool run_to);
     bool IsDebuggerHitPending() const;
+    bool NeedsDebuggerSteps() const;
     bool AcceptDebuggerHit();
     void DiscardDebuggerHit();
     bool GetBreakpointHitAddress(u32& address) const;

@@ -1720,6 +1720,14 @@ bool I386::CheckExecuteBreakpoints(bool regular, bool run_to)
 
 // The low byte of each enabled execute breakpoint and of the run-to, so most instructions skip the check
 // Physical breakpoints and long ranges match any address
+// Everything that stops or records between instructions, with none of it a debugger frame runs like any other
+bool I386::NeedsDebuggerSteps() const
+{
+    return m_breakpoint_hit || m_debugger_hit_pending || m_debugger_exec_checks || m_debugger_memory_checks ||
+        m_debugger_io_checks || m_debugger_interrupt_checks || m_trace_enabled || m_profiler_active ||
+        (IsValidPointer(m_trace_logger) && m_trace_logger->IsAnyEnabled());
+}
+
 void I386::UpdateExecuteFilter()
 {
     memset(m_execute_filter, 0, sizeof(m_execute_filter));

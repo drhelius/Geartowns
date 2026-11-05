@@ -771,7 +771,7 @@ bool emu_is_ffwd(void)
     return config_emulator.ffwd || emu_is_load_ffwd();
 }
 
-// The dynarec runs while the debugger is off, the debugger always steps the interpreter
+// The debugger only steps the interpreter while a breakpoint, a trace, the profiler or a step needs it
 void emu_set_dynarec(bool enabled)
 {
     if (!IsValidPointer(geartowns))

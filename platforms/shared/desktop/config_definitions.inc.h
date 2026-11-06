@@ -438,7 +438,8 @@ static inline void process(config_Operation operation)
     CONFIG_HOTKEY("SelectSlot3", config_hotkeys[config_HotkeyIndex_SelectSlot3], SDL_SCANCODE_3, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("SelectSlot4", config_hotkeys[config_HotkeyIndex_SelectSlot4], SDL_SCANCODE_4, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("SelectSlot5", config_hotkeys[config_HotkeyIndex_SelectSlot5], SDL_SCANCODE_5, SDL_KMOD_CTRL);
-    CONFIG_HOTKEY("CaptureMouse", config_hotkeys[config_HotkeyIndex_CaptureMouse], SDL_SCANCODE_F1, SDL_KMOD_NONE);
+    CONFIG_HOTKEY("CaptureMouse", config_hotkeys[config_HotkeyIndex_CaptureMouse], SDL_SCANCODE_M,
+        (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
     CONFIG_HOTKEY("Mute", config_hotkeys[config_HotkeyIndex_Mute], SDL_SCANCODE_U, SDL_KMOD_CTRL);
     CONFIG_HOTKEY("VideoRecording", config_hotkeys[config_HotkeyIndex_VideoRecording], SDL_SCANCODE_R,
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
@@ -524,6 +525,13 @@ static void migrate(int file_version)
 
     if ((file_version < 8) && get_setting("Emulator", "CDROMSpeed", &stored) && (atoi(stored.c_str()) > 0))
         write_int("Emulator", "CDROMSpeed", atoi(stored.c_str()) + 1);
+
+    if ((file_version < 9) && (read_int("Hotkeys", "CaptureMouseScancode", SDL_SCANCODE_F1) == SDL_SCANCODE_F1) &&
+        (read_int("Hotkeys", "CaptureMouseMod", SDL_KMOD_NONE) == SDL_KMOD_NONE))
+    {
+        write_int("Hotkeys", "CaptureMouseScancode", SDL_SCANCODE_M);
+        write_int("Hotkeys", "CaptureMouseMod", SDL_KMOD_CTRL | SDL_KMOD_SHIFT);
+    }
 }
 
 static void process_machine_model(config_Operation operation, int* model)

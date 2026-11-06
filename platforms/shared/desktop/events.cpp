@@ -87,6 +87,12 @@ bool events_shortcuts(const SDL_Event* event)
             return true;
         }
 
+        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_CaptureMouse], false))
+        {
+            gui_shortcut(gui_ShortcutCaptureMouse);
+            return true;
+        }
+
         if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_CaptureKeyboard], false))
         {
             gui_shortcut(gui_ShortcutCaptureKeyboard);

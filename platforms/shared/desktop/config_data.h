@@ -24,7 +24,7 @@
 #include <string>
 #include "geartowns.h"
 
-static const int config_version = 8;
+static const int config_version = 9;
 static const int config_minimum_version = 5;
 static const int config_max_recent_roms = 15;
 static const int config_max_recent_floppies = 5;

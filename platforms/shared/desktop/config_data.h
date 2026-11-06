@@ -174,6 +174,7 @@ struct config_Rewind
 struct config_Input
 {
     bool allow_up_down;
+    bool allow_shared_gamepads;
     int controller_type[GT_MAX_GAMEPADS];
     int keyboard_mode[GT_MAX_GAMEPADS];
 };

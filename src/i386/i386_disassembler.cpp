@@ -210,8 +210,7 @@ static void format_memory(const I386_Decode_State& state, int width, bool pointe
             append_memory_term(expression, sizeof(expression), expression_length, register_name(32, state.rm));
     }
 
-    append_displacement(expression, sizeof(expression), expression_length, state.displacement, direct,
-        state.address_size);
+    append_displacement(expression, sizeof(expression), expression_length, state.displacement, direct, state.address_size);
 
     size_t length = 0;
 
@@ -741,8 +740,7 @@ static bool valid_encoding(const I386_Decode_State& state, bool i486)
 static void format_instruction(I386_Disassembly_Context& context, char* output, size_t output_size)
 {
     const I386_Decode_State& state = *context.state;
-    const char* format = state.two_byte ? extended_format(state.opcode2, context.i486) :
-        k_i386_opcode_names[state.opcode];
+    const char* format = state.two_byte ? extended_format(state.opcode2, context.i486) : k_i386_opcode_names[state.opcode];
     char selected[96];
 
     format = select_group_format(state, format, selected, sizeof(selected), context.i486);
@@ -936,8 +934,7 @@ I386_Disassembler_Record* I386::Disassemble(const I386_Segment& code_segment, u3
 
     if (record.jump && record.jump_target_known)
     {
-        I386_Disassembler_Record& target = GetOrCreateDisassemblerRecord(record.jump_linear, record.jump_cs,
-            record.jump_eip);
+        I386_Disassembler_Record& target = GetOrCreateDisassemblerRecord(record.jump_linear, record.jump_cs, record.jump_eip);
 
         set_auto_symbol(target, record.subroutine);
     }
@@ -1365,8 +1362,7 @@ void I386::ClearRunToBreakpoint()
 
 void I386::RemoveBreakpoint(u32 address, u32 end_address)
 {
-    RemoveBreakpoint(address, end_address == 0 ? address : end_address, I386_BREAKPOINT_EXECUTE,
-        I386_BREAKPOINT_LINEAR);
+    RemoveBreakpoint(address, end_address == 0 ? address : end_address, I386_BREAKPOINT_EXECUTE, I386_BREAKPOINT_LINEAR);
 }
 
 bool I386::RemoveBreakpoint(u32 start_address, u32 end_address, u8 type, u8 space)
@@ -1576,8 +1572,7 @@ void I386::UpdateVBlankWatch()
     m_vblank_watch_hit = false;
     m_vblank_watch_misses = missed ? m_vblank_watch_misses + 1 : 0;
 
-    if (!missed || !IsValidPointer(m_trace_logger) ||
-        !m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_MISSED_VBLANK))
+    if (!missed || !IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_MISSED_VBLANK))
         return;
 
     GT_Trace_Entry entry = {};
@@ -1826,8 +1821,7 @@ void I386::ClearBreakpointHit()
     m_run_to_hit = false;
 }
 
-void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source, u8 line,
-    bool dma)
+void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source, u8 line, bool dma)
 {
     if (m_debugger_hit_pending)
         return;
@@ -1953,8 +1947,7 @@ void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 
     u8 source = software ? I386_INTERRUPT_SOFTWARE : external ? I386_INTERRUPT_HARDWARE : I386_INTERRUPT_EXCEPTION;
     u8 line = external && m_external_line >= 0 ? (u8)m_external_line : 0xFF;
 
-    u8 event = software ? TRACE_CPU_INTERRUPT_SOFTWARE : external ? TRACE_CPU_INTERRUPT_HARDWARE :
-        TRACE_CPU_INTERRUPT_EXCEPTION;
+    u8 event = software ? TRACE_CPU_INTERRUPT_SOFTWARE : external ? TRACE_CPU_INTERRUPT_HARDWARE : TRACE_CPU_INTERRUPT_EXCEPTION;
 
     if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, event))
     {

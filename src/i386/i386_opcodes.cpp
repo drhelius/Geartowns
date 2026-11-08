@@ -412,113 +412,97 @@ bool I386::OPCode0x3F()
 bool I386::OPCode0x40()
 {
     // INC AX/EAX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x41()
 {
     // INC CX/ECX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x42()
 {
     // INC DX/EDX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x43()
 {
     // INC BX/EBX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x44()
 {
     // INC SP/ESP
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x45()
 {
     // INC BP/EBP
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x46()
 {
     // INC SI/ESI
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x47()
 {
     // INC DI/EDI
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, false>() : OPCodes_INC_DEC_Register<16, false>();
 }
 
 bool I386::OPCode0x48()
 {
     // DEC AX/EAX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x49()
 {
     // DEC CX/ECX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x4A()
 {
     // DEC DX/EDX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x4B()
 {
     // DEC BX/EBX
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x4C()
 {
     // DEC SP/ESP
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x4D()
 {
     // DEC BP/EBP
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x4E()
 {
     // DEC SI/ESI
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x4F()
 {
     // DEC DI/EDI
-    return m_instruction.operand_size == 4 ?
-        OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
+    return m_instruction.operand_size == 4 ? OPCodes_INC_DEC_Register<32, true>() : OPCodes_INC_DEC_Register<16, true>();
 }
 
 bool I386::OPCode0x50()
@@ -1823,8 +1807,7 @@ bool I386::OPCodes_BOUND()
 
     u32 lower = 0;
     u32 upper = 0;
-    u32 upper_offset =
-        Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
+    u32 upper_offset = Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
 
     if (!ReadMemory(m_instruction.segment, m_instruction.effective_offset, operand_width, *m_bus_context, lower))
         return false;
@@ -1852,8 +1835,7 @@ bool I386::OPCodes_IMUL_Immediate()
     // The immediate is the multiplier
     // 6B sign-extends it to the operand size first
     int multiplier_width = m_instruction.operand_size * 8;
-    u32 multiplier = m_instruction.opcode == 0x6B ? (u32)SignExtend(m_instruction.immediate, 8) :
-        m_instruction.immediate;
+    u32 multiplier = m_instruction.opcode == 0x6B ? (u32)SignExtend(m_instruction.immediate, 8) : m_instruction.immediate;
     u32 steps = GetMultiplySteps(multiplier, multiplier_width, true);
     u32 clocks = GetMultiplyClocks(steps, m_instruction.memory_operand);
 
@@ -2146,8 +2128,7 @@ bool I386::OPCodes_LES_LDS()
 
     u32 offset = 0;
     u32 selector = 0;
-    u32 selector_offset =
-        Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
+    u32 selector_offset = Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
 
     if (!ReadMemory(m_instruction.segment, m_instruction.effective_offset, operand_width, *m_bus_context, offset))
         return false;
@@ -2279,7 +2260,7 @@ bool I386::OPCodes_IN()
 
     // The access lands on the last clock, after the 486's prefix clocks
     if (m_i486_timing)
-        m_step.clocks += Get486PrefixClocks(m_instruction);
+        m_step.clocks += m_486_prefixes;
 
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -2341,7 +2322,7 @@ bool I386::OPCodes_OUT()
         m_step.clocks = port_clocks[GetPortMode()];
 
     if (m_i486_timing)
-        m_step.clocks += Get486PrefixClocks(m_instruction);
+        m_step.clocks += m_486_prefixes;
 
     if (!allowed)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -2673,8 +2654,7 @@ bool I386::CheckCoprocessorOperand(u32 size, bool write)
         if (!LogicalToLinear(segment, first, size, write, false, linear))
         {
             // An FLDENV the limit cuts loads part of the environment and leaves CW 007Fh (PRM486 §25.1)
-            if (m_instruction.opcode == 0xD9 && m_instruction.reg == 4 &&
-                IsValidSegmentOffset(m_state.segments[segment], first))
+            if (m_instruction.opcode == 0xD9 && m_instruction.reg == 4 && IsValidSegmentOffset(m_state.segments[segment], first))
                 m_x87->GetState()->control = 0x007F;
 
             return false;

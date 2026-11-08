@@ -51,8 +51,7 @@ public:
     DynarecEmitter(I386* cpu);
     static void InitLightning();
     bool EmitEntry(u8* code, u32 capacity, u32& code_size, u32& exit_offset, u32& link_offset);
-    bool Compile(I386::DynarecBlock& block, u32 available, u32 instruction_limit, u8* code, u32 capacity,
-        u32& code_size);
+    bool Compile(I386::DynarecBlock& block, u32 available, u32 instruction_limit, u8* code, u32 capacity, u32& code_size);
     int GetInstructionCount() const;
     u32 GetInstructionEIP(int index) const;
 
@@ -124,6 +123,7 @@ private:
     void EmitBusRun(const BusRun& run, int carry);
     void EmitBusTransferRow(const BusRun& run);
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access);
+    void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access);
     void Emit486Misaligned(int linear, int t, u32 size, int access);
     void Emit486FirstAGI(int t);
     void Store486Written(int written);
@@ -147,8 +147,7 @@ private:
     void LoadHost(int r, int host, int width);
     void StoreHost(int host, int r, int width, int scratch);
     u8 EmitEffectiveOffset(int r, int t, const I386::InstructionContext& c);
-    void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback,
-        bool bus = true);
+    void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback, bool bus = true);
     void EmitOperandAddress(Instruction& instruction, int width, int access);
     void EmitSZP(int f, int t, int u, int result, int width, u16 needed);
     void EmitArithmeticFlags(bool subtract, int result, int left, int right, int f, int t, int width, u16 needed,

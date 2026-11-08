@@ -466,8 +466,7 @@ INLINE bool I386::OPCodes_STR()
     return StoreSystemSelector(m_instruction, *m_bus_context, m_state.task_register.selector);
 }
 
-INLINE bool I386::LoadSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context,
-    bool load_task_register)
+INLINE bool I386::LoadSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context, bool load_task_register)
 {
     if (m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
@@ -580,8 +579,7 @@ INLINE bool I386::OPCodes_VERW()
     return VerifySegmentPermission(m_instruction, *m_bus_context, true);
 }
 
-INLINE bool I386::StoreDescriptorTable(InstructionContext& instruction, GT_Bus_Access_Context& context,
-    bool interrupt_table)
+INLINE bool I386::StoreDescriptorTable(InstructionContext& instruction, GT_Bus_Access_Context& context, bool interrupt_table)
 {
     if (!instruction.memory_operand)
         return RaiseException(6, I386_EXCEPTION_FAULT);
@@ -605,8 +603,7 @@ INLINE bool I386::StoreDescriptorTable(InstructionContext& instruction, GT_Bus_A
     return true;
 }
 
-INLINE bool I386::LoadDescriptorTable(InstructionContext& instruction, GT_Bus_Access_Context& context,
-    bool interrupt_table)
+INLINE bool I386::LoadDescriptorTable(InstructionContext& instruction, GT_Bus_Access_Context& context, bool interrupt_table)
 {
     if (!instruction.memory_operand)
         return RaiseException(6, I386_EXCEPTION_FAULT);
@@ -1229,15 +1226,13 @@ bool I386::OPCodes0F_DoubleShift()
 
         if (count <= 16)
         {
-            value = right ?
-                (destination >> count) | (source << (16 - count)) : (destination << count) | (source >> (16 - count));
+            value = right ? (destination >> count) | (source << (16 - count)) : (destination << count) | (source >> (16 - count));
             carry = right ? ((destination >> (count - 1)) & 1) != 0 : ((destination >> (16 - count)) & 1) != 0;
         }
         else
         {
             u32 rotate = count - 16;
-            value = right ?
-                (source >> rotate) | (source << (16 - rotate)) : (source << rotate) | (source >> (16 - rotate));
+            value = right ? (source >> rotate) | (source << (16 - rotate)) : (source << rotate) | (source >> (16 - rotate));
             carry = right ? (value & 0x8000) != 0 : (value & 1) != 0;
         }
 
@@ -1330,8 +1325,7 @@ bool I386::OPCodes0F_LoadFarPointer()
 
     u32 offset = 0;
     u32 selector = 0;
-    u32 selector_offset =
-        Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
+    u32 selector_offset = Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
 
     if (!ReadMemory(m_instruction.segment, m_instruction.effective_offset, width, *m_bus_context, offset))
         return false;

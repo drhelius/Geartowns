@@ -312,8 +312,7 @@ INLINE u32 I386::RunRepeatAccesses(const u8* input, u8* output, u32 source, u32 
         m_io_start_cycles = start_cycles + i * iteration_clocks;
 
         if (move)
-            value = IsValidPointer(input) ? LoadHost(input + offset, width) :
-                ReadPhysical(source + (u32)offset, size, context);
+            value = IsValidPointer(input) ? LoadHost(input + offset, width) : ReadPhysical(source + (u32)offset, size, context);
 
         if (IsValidPointer(output))
             StoreHost(output + offset, value, width);
@@ -432,8 +431,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
         u8* output_start = reverse ? output - (elements - 1) * size : output;
         uintptr_t input_address = (uintptr_t)input_start;
         uintptr_t output_address = (uintptr_t)output_start;
-        uintptr_t distance = input_address < output_address ?
-            output_address - input_address : input_address - output_address;
+        uintptr_t distance = input_address < output_address ? output_address - input_address : input_address - output_address;
 
         if (distance >= bytes)
             memcpy(output_start, input_start, bytes);
@@ -575,7 +573,7 @@ u32 I386::GetStringClocks(bool continuation) const
 
     int port = opcode <= 0x6D ? 0 : 1;
     u32 mode = GetPortMode();
-    u32 prefix = m_i486_timing && !continuation ? Get486PrefixClocks(m_instruction) : 0;
+    u32 prefix = m_i486_timing && !continuation ? m_486_prefixes : 0;
 
     if (!m_string.repeated)
         return m_port_clocks->single[port][mode] + prefix;

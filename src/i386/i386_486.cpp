@@ -251,6 +251,7 @@ NO_INLINE u32 I386::RunInstruction486(GT_Bus_Access_Context& context)
 void I386::Capture486Step()
 {
     m_486_continuation = m_state.repeat.active;
+    m_486_prefixes = 0;
     m_486_protected = m_state.execution_mode == I386_MODE_PROTECTED;
     m_486_extra = 0;
 
@@ -714,7 +715,7 @@ void I386::Apply486Clocks()
             clocks += c.opcode == 0xCE ? 2 : c.opcode == 0xCD && m_state.execution_mode != I386_MODE_PROTECTED ? 4 : 0;
 
         if (!port)
-            clocks += Get486PrefixClocks(c);
+            clocks += m_486_prefixes;
 
         int base = Get486FormBase(flags, c);
 
@@ -923,29 +924,6 @@ u8 I386::Get486Written(const InstructionContext& c)
     return Get486FormWritten(form, flags, c);
 }
 
-// One clock per segment, operand size, address size and LOCK prefix byte
-u32 I386::Get486PrefixClocks(const InstructionContext& c) const
-{
-    if (c.segment_override == 0xFF && c.operand_size == m_default_size && c.address_size == m_default_size && !c.lock)
-        return 0;
-
-    u32 length = MIN(c.next_eip - c.start_eip, (u32)GT_I386_MAX_INSTRUCTION_LENGTH);
-    u32 offset = c.start_eip - m_code_window_eip;
-
-    if (offset < m_code_window_size && length <= m_code_window_size - offset)
-        return Count486Prefixes(m_code_window + offset, length);
-
-    u8 bytes[GT_I386_MAX_INSTRUCTION_LENGTH];
-
-    for (u32 i = 0; i < length; i++)
-    {
-        bytes[i] = 0;
-        TryPeekLinear(m_state.segments[I386_SEGMENT_CS].base + c.start_eip + i, bytes[i]);
-    }
-
-    return Count486Prefixes(bytes, length);
-}
-
 // 1 for the prefixes that take a clock, 2 for REP and REPNE, which belong to their string instruction
 static u8 k_i486_prefixes[256];
 
@@ -1000,8 +978,7 @@ u32 I386::Get486Misaligned() const
             count = ((stack_base + ((stack - size) & stack_mask)) & mask) != 0 ? 1 : 0;
             break;
         case I386_BUS_RET:
-            count = ((stack_base + ((stack - size - (c.opcode == 0xC2 ? c.immediate : 0)) & stack_mask)) & mask) != 0 ?
-                1 : 0;
+            count = ((stack_base + ((stack - size - (c.opcode == 0xC2 ? c.immediate : 0)) & stack_mask)) & mask) != 0 ? 1 : 0;
             break;
         case I386_BUS_PUSH_READ:
             count = (c.memory_operand && (linear & mask) != 0 ? 1 : 0) +
@@ -1030,8 +1007,7 @@ u32 I386::Get486Misaligned() const
             bool uses_source = opcode == 0xA4 || opcode == 0xA6 || opcode == 0xAC;
             bool uses_destination = opcode != 0xAC;
 
-            count = (uses_source && (source & mask) != 0 ? 1 : 0) +
-                (uses_destination && (destination & mask) != 0 ? 1 : 0);
+            count = (uses_source && (source & mask) != 0 ? 1 : 0) + (uses_destination && (destination & mask) != 0 ? 1 : 0);
             break;
         }
         case I386_BUS_NONE:

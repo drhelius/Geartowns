@@ -418,8 +418,9 @@ void SystemControl::Write(u16 port, u8 value)
             if (Decodes(port))
                 m_state.port_0496 = value & 0xF0;
             break;
-        // Board cache controls: CMEN lets the 486 cache in high-speed mode. RPINH, SDMOD and VCMEN are stored without
-        // effect, the CD cache only switches the double-speed drive. HSPEED sets and clears CMEN, VCMEN and the CD cache
+        // Board cache controls: CMEN lets the 486 cache in high-speed mode, VCMEN lets it cache VRAM. RPINH and SDMOD
+        // are stored without effect, the CD cache only switches the double-speed drive. HSPEED sets and clears CMEN,
+        // VCMEN and the CD cache
         case 0x00C0:
             if (Decodes(port) && m_state.port_00c0 != (value & 0x03))
             {
@@ -446,8 +447,11 @@ void SystemControl::Write(u16 port, u8 value)
                 m_state.port_0a0c = value & 0x80;
             break;
         case 0x05EE:
-            if (Decodes(port))
+            if (Decodes(port) && m_state.port_05ee != (value & 0x01))
+            {
                 m_state.port_05ee = value & 0x01;
+                NotifyBusMode();
+            }
             break;
         case 0x05E0:
             if (Decodes(port))

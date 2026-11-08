@@ -466,26 +466,31 @@ INLINE bool I386::DispatchOPCode0F()
     return k_opcodes_0f[m_instruction.opcode2](this);
 }
 
+// The 486 takes a clock for each segment, operand size, address size and LOCK prefix byte
 INLINE bool I386::PrefixSegment(u8 segment)
 {
+    m_486_prefixes++;
     m_instruction.segment_override = segment;
     return DispatchOPCode();
 }
 
 INLINE bool I386::PrefixOperandSize()
 {
+    m_486_prefixes++;
     m_instruction.operand_size = m_default_size == 4 ? 2 : 4;
     return DispatchOPCode();
 }
 
 INLINE bool I386::PrefixAddressSize()
 {
+    m_486_prefixes++;
     m_instruction.address_size = m_default_size == 4 ? 2 : 4;
     return DispatchOPCode();
 }
 
 INLINE bool I386::PrefixLock()
 {
+    m_486_prefixes++;
     m_instruction.lock = true;
     return DispatchOPCode();
 }

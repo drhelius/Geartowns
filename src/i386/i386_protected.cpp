@@ -513,8 +513,7 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
         if (!SetDescriptorAccessed(stack_descriptor, context))
             return false;
 
-        if (!CheckStackFrame(stack_descriptor.base, stack_descriptor.attributes, new_stack, frame_items, width, true,
-            context))
+        if (!CheckStackFrame(stack_descriptor.base, stack_descriptor.attributes, new_stack, frame_items, width, true, context))
             return false;
 
         LoadDescriptorCache((new_ss & 0xFFFC) | new_privilege, stack_descriptor, m_state.segments[I386_SEGMENT_SS]);
@@ -563,8 +562,7 @@ bool I386::EnterProtectedInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Cont
         if (!SetDescriptorAccessed(code, context))
             return false;
 
-        if (!CheckStackFrame(stack_segment.base, stack_segment.attributes, old_stack, frame_items, width, false,
-            context))
+        if (!CheckStackFrame(stack_segment.base, stack_segment.attributes, old_stack, frame_items, width, false, context))
             return false;
     }
 

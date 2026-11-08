@@ -51,7 +51,7 @@ INLINE u32 I386::GetBusDramFold(u32 size, bool read, bool write, u32 code_row, b
 
     if (read)
         fold += (far_row ? m_bus.dram_far[0] >> shift : m_bus.dram_near[0]) + cycles * m_bus.cycle[GT_BUS_DRAM][0] +
-            (i486 ? k_i486_bus_read : 0);
+            (i486 ? m_bus.read486[GT_BUS_DRAM] : 0);
 
     if (write)
         fold += (far_row ? m_bus.dram_far[1] >> shift : m_bus.dram_near[1]) + cycles * m_bus.cycle[GT_BUS_DRAM][1];
@@ -102,12 +102,17 @@ INLINE u8 I386::GetBusPhysical(u32 linear, u32& physical) const
     return m_bus_page_class[physical >> 12];
 }
 
-// Returns (cycles as if aligned << 8) + 1. A 486 read waits for its bus cycle, which its cache-hit table leaves out
+// Returns (cycles as if aligned << 8) + 1, or 0 for a 486 cache hit. A 486 read waits for its bus cycle, which its
+// cache-hit table leaves out
 template<bool i486>
 INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
 {
     u32 physical = 0;
     u8 bus_class = GetBusPhysical(linear, physical);
+
+    if (i486 && m_bus.busy[bus_class] == 0)
+        return 0;
+
     u32 aligned = GetBusCycles(size);
     u32 cycles = aligned;
     s32 penalty = 0;
@@ -116,7 +121,7 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
     {
         u32 offset = linear & 3;
         cycles = m_bus.width == 2 ? aligned + (linear & 1) : (offset + size > 4 ? 2 : 1);
-        penalty = (s32)((cycles - aligned) * ((2U << 16) + m_bus.cycle_refresh));
+        penalty = (s32)((cycles - aligned) * m_bus.split[bus_class]);
 
         if (offset + size > 4)
             penalty += (s32)m_bus.misalign;
@@ -139,7 +144,7 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
     }
 
     if (i486 && write == 0)
-        penalty += (s32)k_i486_bus_read;
+        penalty += (s32)m_bus.read486[bus_class];
 
     m_bus_cycle_counts[bus_class][write] += cycles;
     m_bus_fraction += penalty + (s32)m_bus.access_wait[bus_class][write][cycles];
@@ -190,7 +195,7 @@ INLINE void I386::AddBusTime()
 
     if (kind == I386_BUS_NONE)
     {
-        AddBusQueue(0, false, i486 ? m_486_bus_clocks : (u32)m_step.clocks);
+        AddBusQueue<i486>(0, false, i486 ? m_486_bus_clocks : (u32)m_step.clocks);
         return;
     }
 
@@ -246,20 +251,35 @@ INLINE void I386::AddBusTime()
             break;
     }
 
-    AddBusQueue(data, transfer, i486 ? m_486_bus_clocks : (u32)m_step.clocks);
+    AddBusQueue<i486>(data, transfer, i486 ? m_486_bus_clocks : (u32)m_step.clocks);
 }
 
 // clocks: the instruction's, where the 486 leaves out its AGI and misalignment clocks, which compiled blocks add at
-// run time
+// run time. Code the 486's cache serves never waits, and its queue level isn't kept
+template<bool i486>
 INLINE void I386::AddBusQueue(u32 data, bool transfer, u32 clocks)
 {
     const InstructionContext& c = m_instruction;
     u32 accesses = data & 0xFF;
     u32 cycles = data >> 8;
+    s32 add = (s32)(cycles * m_bus.cycle_refresh + ((cycles - accesses) << 17));
+
+    if (i486 && m_bus_code_cost == 0)
+    {
+        m_bus_fraction += add;
+
+        if (transfer)
+        {
+            m_bus_components = 0;
+            m_step.clocks += CarryBusTime();
+        }
+
+        return;
+    }
+
     u32 length = c.next_eip - c.start_eip;
     u32 need = GetBusCodeNeed(c.next_eip, length);
     u32 free = clocks > accesses * 2 ? clocks - accesses * 2 : 0;
-    s32 add = (s32)(cycles * m_bus.cycle_refresh + ((cycles - accesses) << 17));
 
     u32 queue = m_bus_queue;
     u32 stall = need > queue ? need - queue : 0;

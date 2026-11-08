@@ -462,8 +462,9 @@ public:
     void SetFPUErrorCallback(void* context, I386_FPU_Error_Fn callback);
     void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
         u32 cpu_clock_rate, u32 model_clock_rate);
-    void SetBoardCache(bool enabled);
+    void SetBoardCache(bool enabled, u32 cacheable);
     bool IsBusTimed() const;
+    bool IsBusCached() const;
     u32 GetBusPortWait(bool write) const;
     void SetDecodedPorts(const u8* ports);
     const u32* GetBusCycleCounts() const;
@@ -502,8 +503,7 @@ public:
     bool TryPeekLogical(u16 selector, u32 offset, u8& value) const;
     bool TryPeekLinear(u32 linear, u8& value) const;
     bool TryTranslateLinear(u32 linear, u32& physical) const;
-    bool DebugTranslateLogical(I386_Segment_Register segment, u32 offset,
-        GT_Debug_Memory_Translation& translation) const;
+    bool DebugTranslateLogical(I386_Segment_Register segment, u32 offset, GT_Debug_Memory_Translation& translation) const;
     bool DebugTranslateLogical(u16 selector, u32 offset, GT_Debug_Memory_Translation& translation) const;
     bool DebugTranslateLinear(u32 linear, GT_Debug_Memory_Translation& translation) const;
 
@@ -682,6 +682,10 @@ private:
         u32 fmr_word[2];
         u32 code_cost[GT_BUS_CLASS_COUNT];
         u32 code_rate[GT_BUS_CLASS_COUNT];
+        u32 read486[GT_BUS_CLASS_COUNT];
+        u32 split[GT_BUS_CLASS_COUNT];
+        u32 busy[GT_BUS_CLASS_COUNT];
+        bool dram_free;
         u32 string_row;
         u32 string_read;
         u32 io[2];
@@ -948,8 +952,7 @@ private:
     static int GetEncodedImmediateSize(u8 encoding, u8 opcode, u8 reg, int operand_size, int address_size);
     int GetImmediateSize(bool two_byte, u8 opcode, u8 reg, int operand_size, int address_size) const;
     bool DecodeInstructionPassive(InstructionContext& instruction, u32 eip, bool default32);
-    void FillDecodeState(const InstructionContext& instruction, const u8* bytes, u32 length,
-        I386_Decode_State& state) const;
+    void FillDecodeState(const InstructionContext& instruction, const u8* bytes, u32 length, I386_Decode_State& state) const;
 
     u32 GetMultiplySteps(u32 multiplier, int width, bool signed_multiplier) const;
     u32 GetMultiplyClocks(u32 steps, bool memory_operand) const;
@@ -1003,8 +1006,7 @@ private:
     bool CheckLinearAccess(u32 linear, u32 size, bool write, GT_Bus_Access_Context& context, bool supervisor = false);
     bool LogicalToLinear(int segment, u32 offset, u32 size, bool write, bool stack, u32& linear, bool execute = false);
     bool LogicalToLinearProtected(int segment, u32 offset, u32 size, bool write, bool stack, bool execute, u32& linear);
-    bool TranslateLinear(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical,
-        bool supervisor = false);
+    bool TranslateLinear(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor = false);
     bool TranslateLinearPaged(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor);
     bool TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor,
         u32 set, int way);
@@ -1043,7 +1045,6 @@ private:
     static bool Has486Index(const InstructionContext& c);
     static int Get486Base(const InstructionContext& c);
     static u8 Get486Written(const InstructionContext& c);
-    u32 Get486PrefixClocks(const InstructionContext& c) const;
     static u32 Count486Prefixes(const u8* bytes, u32 length);
     u32 Get486Misaligned() const;
     u32 Get486MisalignedOther(u8 pattern, u32 size, u32 linear) const;
@@ -1072,8 +1073,10 @@ private:
     u32 GetBusTransferLevel(u32 linear, u32 components, u32& add) const;
     u32 GetBusTransferRow(u32 eip) const;
     void UpdateBusTiming();
+    void ApplyBusCache(BusTiming& bus) const;
     template<bool i486>
     void AddBusTime();
+    template<bool i486>
     void AddBusQueue(u32 data, bool transfer, u32 clocks);
     void AddBusTransfer(bool access);
     template<bool i486>
@@ -1084,21 +1087,17 @@ private:
     u32 AddBusStringAccess(u32 linear, u32 size, int write, bool load);
     void AddBusTransferAccesses(u32 reads, u32 writes, u32 size);
     void AddBusInterrupt(u64& clocks, bool error_code);
-    void PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse,
-        u32 iteration) const;
-    u64 GetBusRepeatSplit(u32 linear, u32 size, u32& cycles) const;
+    void PrepareBusRepeat(BusRepeat& repeat, u32 source, u32 destination, u32 size, bool move, bool reverse, u32 iteration) const;
+    u64 GetBusRepeatSplit(u32 linear, u32 size, u32& cycles, u8 bus_class) const;
     u64 GetBusRepeatTime(const BusRepeat& repeat, u32 elements) const;
-    u32 CountBusRepeatChanges(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse,
-        u32& row) const;
-    u32 LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget,
-        u32 iteration) const;
+    u32 CountBusRepeatChanges(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32& row) const;
+    u32 LimitBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse, u32 budget, u32 iteration) const;
     u32 AddBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool move, bool reverse);
     void AddBusSlowAccess(u32 physical, u32 size, bool write);
     u32 CarryBusTime();
     u32 GetBusPending() const;
     void AddBusPortWait(u16 port, int write);
-    bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
-        GT_Bus_Access_Context& context);
+    bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor, GT_Bus_Access_Context& context);
 
     bool LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context, bool pop = false);
     bool LoadRealSegment(int segment, u16 selector);
@@ -1598,6 +1597,8 @@ private:
     bool m_board_cache;
     u32 m_486_bus_clocks;
     bool m_486_protected;
+    u8 m_486_prefixes;
+    u32 m_board_cacheable;
 };
 
 static const u32 k_i386_poll_max_instructions = 16;

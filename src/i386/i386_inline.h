@@ -161,8 +161,7 @@ INLINE bool I386::LogicalToLinear(int segment, u32 offset, u32 size, bool write,
     {
         if (segment >= 0 && segment < I386_SEGMENT_COUNT && size != 0)
         {
-            u8 required = execute ? k_i386_segment_fast_execute :
-                write ? k_i386_segment_fast_write : k_i386_segment_fast_read;
+            u8 required = execute ? k_i386_segment_fast_execute : write ? k_i386_segment_fast_write : k_i386_segment_fast_read;
 
             if ((m_segment_access_flags[segment] & required) != 0 && (u64)offset + size - 1 <= 0xFFFFFFFFULL)
             {
@@ -341,8 +340,7 @@ INLINE int I386::GetEncodedImmediateSize(u8 encoding, u8 opcode, u8 reg, int ope
 
 INLINE int I386::GetImmediateSize(bool two_byte, u8 opcode, u8 reg, int operand_size, int address_size) const
 {
-    return GetEncodedImmediateSize(k_opcode_encoding[two_byte ? 256 + opcode : opcode], opcode, reg, operand_size,
-        address_size);
+    return GetEncodedImmediateSize(k_opcode_encoding[two_byte ? 256 + opcode : opcode], opcode, reg, operand_size, address_size);
 }
 
 INLINE bool I386::TryTranslateLinear(u32 linear, u32& physical) const

@@ -103,8 +103,7 @@ void I386::EnableDynarec(bool enable)
     u32 link_offset = 0;
 
     m_dynarec_memory->BeginWrite();
-    bool emitted = emitter.EmitEntry(m_dynarec_memory->GetWriteView(), k_dynarec_block_code, size, exit_offset,
-        link_offset);
+    bool emitted = emitter.EmitEntry(m_dynarec_memory->GetWriteView(), k_dynarec_block_code, size, exit_offset, link_offset);
     m_dynarec_memory->EndWrite(0, size);
 
     if (!emitted)
@@ -209,8 +208,7 @@ void I386::CheckDynarecMemory()
 // RunFor with translated blocks: the interpreter steps whatever no block covers, with the same loop condition,
 // step epilogue and interrupt checks, so the slice ends at the same instruction as in RunFor
 template<int timing>
-I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending,
-    bool intr_pending)
+I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending)
 {
     I386_Run_Result total = {};
     total.instruction_completed = true;
@@ -286,7 +284,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
 
                     if ((timing & I386_TIMING_BUS) != 0 && (exit & k_dynarec_exit_prefetch) != 0)
                         m_bus_queue = MIN(m_bus_queue + components * m_bus_code_rate, k_i386_bus_queue);
-                    else if ((timing & I386_TIMING_BUS) != 0)
+                    else if ((timing & I386_TIMING_BUS) != 0 && ((timing & I386_TIMING_486) == 0 || m_bus_code_cost != 0))
                     {
                         // A taken transfer whose target the block couldn't see, as AddBusTransfer sets the queue
                         u32 add = 0;
@@ -317,8 +315,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 continue;
             }
 
-            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
-                intr_pending))
+            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
                 break;
 
             // Instructions that follow an interpreted one in sequence belong to the block that starts before them.
@@ -516,8 +513,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     block.epoch = m_dynarec_epoch;
     block.copy = m_dynarec_bytes_used;
     block.page = page;
-    memcpy(m_dynarec_bytes + block.copy, GetDynarecWatchHost(block.host, block.eip, block.watch_eip),
-        block.watch_length);
+    memcpy(m_dynarec_bytes + block.copy, GetDynarecWatchHost(block.host, block.eip, block.watch_eip), block.watch_length);
     m_dynarec_bytes_used += (block.watch_length + 3) & ~3U;
     m_dynarec_code_used += (code_size + 15) & ~15U;
 
@@ -665,8 +661,7 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
         {
             DynarecBlock& block = m_dynarec_blocks[index];
             u32 next = block.page_next;
-            u32 block_first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) &
-                0xFFF;
+            u32 block_first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) & 0xFFF;
             u32 block_last = block_first + block.watch_length - 1;
 
             if (block_first <= last && first <= block_last)

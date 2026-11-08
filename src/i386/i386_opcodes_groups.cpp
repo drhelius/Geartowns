@@ -301,8 +301,7 @@ INLINE bool I386::OPCodes_IDIV_RM(int width, u32 operand)
     }
     else
     {
-        s64 dividend = (s64)(((u64)m_state.registers[I386_REG_EDX].value << 32) |
-            m_state.registers[I386_REG_EAX].value);
+        s64 dividend = (s64)(((u64)m_state.registers[I386_REG_EDX].value << 32) | m_state.registers[I386_REG_EAX].value);
         s64 divisor = (s32)operand;
         bool overflow = divisor == 0 || (dividend == (s64)0x8000000000000000ULL && divisor == -1);
         s64 quotient = overflow ? 0 : dividend / divisor;
@@ -475,8 +474,7 @@ INLINE bool I386::OPCodes_Far_Transfer_Memory(int width, bool call)
 
     u32 target = 0;
     u32 selector = 0;
-    u32 selector_offset =
-        Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
+    u32 selector_offset = Truncate(m_instruction.effective_offset + m_instruction.operand_size, m_instruction.address_size * 8);
 
     if (!ReadMemory(m_instruction.segment, m_instruction.effective_offset, width, *m_bus_context, target))
         return false;

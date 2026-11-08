@@ -30,8 +30,7 @@ bool I386::OPCodes_PUSH_Segment()
     int segment = opcode == 0x06 ? I386_SEGMENT_ES : opcode == 0x0E ? I386_SEGMENT_CS :
         opcode == 0x16 ? I386_SEGMENT_SS : I386_SEGMENT_DS;
 
-    if (!StackPushSized(m_state.segments[segment].selector, operand_width, *m_bus_context,
-        operand_width == 32 ? 16 : 0))
+    if (!StackPushSized(m_state.segments[segment].selector, operand_width, *m_bus_context, operand_width == 32 ? 16 : 0))
         return false;
 
     CommitEIP(m_instruction);

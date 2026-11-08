@@ -62,8 +62,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
 
         if (call)
         {
-            if (!CheckStackFrame(stack_segment.base, stack_segment.attributes, GetStackPointer(), 2, width, false,
-                context))
+            if (!CheckStackFrame(stack_segment.base, stack_segment.attributes, GetStackPointer(), 2, width, false, context))
                 return false;
 
             if (!StackPushSized(m_state.segments[I386_SEGMENT_CS].selector, width, context))
@@ -73,8 +72,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
                 return false;
         }
 
-        LoadDescriptorCache((selector & 0xFFFC) | m_state.current_privilege_level, descriptor,
-            m_state.segments[I386_SEGMENT_CS]);
+        LoadDescriptorCache((selector & 0xFFFC) | m_state.current_privilege_level, descriptor, m_state.segments[I386_SEGMENT_CS]);
 
         m_state.segments[I386_SEGMENT_CS].dpl = m_state.current_privilege_level;
         m_state.eip = target;
@@ -244,8 +242,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
                 return false;
         }
 
-        if (!CheckStackFrame(stack_descriptor.base, stack_descriptor.attributes, new_stack, count + 4, gate_width, true,
-            context))
+        if (!CheckStackFrame(stack_descriptor.base, stack_descriptor.attributes, new_stack, count + 4, gate_width, true, context))
             return false;
 
         LoadDescriptorCache((new_ss & 0xFFFC) | code.dpl, stack_descriptor, m_state.segments[I386_SEGMENT_SS]);
@@ -287,8 +284,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
         if (!SetDescriptorAccessed(code, context))
             return false;
 
-        if (!CheckStackFrame(stack_segment.base, stack_segment.attributes, GetStackPointer(), 2, gate_width, false,
-            context))
+        if (!CheckStackFrame(stack_segment.base, stack_segment.attributes, GetStackPointer(), 2, gate_width, false, context))
             return false;
 
         if (!StackPushSized(m_state.segments[I386_SEGMENT_CS].selector, gate_width, context))
@@ -308,8 +304,7 @@ bool I386::ProtectedFarTransfer(u16 selector, u32 offset, int width, bool call, 
             return false;
     }
 
-    LoadDescriptorCache((target_selector & 0xFFFC) | m_state.current_privilege_level, code,
-        m_state.segments[I386_SEGMENT_CS]);
+    LoadDescriptorCache((target_selector & 0xFFFC) | m_state.current_privilege_level, code, m_state.segments[I386_SEGMENT_CS]);
 
     m_state.segments[I386_SEGMENT_CS].dpl = m_state.current_privilege_level;
     m_state.eip = gate32 ? target : (u16)target;
@@ -373,8 +368,7 @@ bool I386::ProtectedFarReturn(int width, u16 adjustment, GT_Bus_Access_Context& 
     bool same_privilege = return_privilege == m_state.current_privilege_level;
 
     // RET imm16 takes one more on the 486
-    clocks = m_i486_timing ? (same_privilege ? 17 : 35) + (m_instruction.opcode == 0xCA ? 1 : 0) :
-        same_privilege ? 32 : 68;
+    clocks = m_i486_timing ? (same_privilege ? 17 : 35) + (m_instruction.opcode == 0xCA ? 1 : 0) : same_privilege ? 32 : 68;
 
     if (!executable || (!conforming && code.dpl != return_privilege) || (conforming && code.dpl > return_privilege))
         return RaiseException(13, I386_EXCEPTION_FAULT, true, selector & 0xFFFC);
@@ -541,8 +535,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
 
     u8 old_privilege = m_state.current_privilege_level;
 
-    clocks = m_i486_timing ? (return_privilege == old_privilege ? 20 : 36) :
-        return_privilege == old_privilege ? 38 : 82;
+    clocks = m_i486_timing ? (return_privilege == old_privilege ? 20 : 36) : return_privilege == old_privilege ? 38 : 82;
 
     if (return_privilege == old_privilege)
     {

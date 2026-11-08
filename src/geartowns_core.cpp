@@ -2382,9 +2382,11 @@ void GeartownsCore::ApplyBusTiming()
         waits = &ports;
     }
 
-    // The HR's board lets the 486 cache only in high-speed mode with CMEN set
+    // The HR's board lets the 486 cache only in high-speed mode with CMEN set: main memory and the ROMs, and VRAM with
+    // VCMEN. Sprite RAM, the FM-R planes, wave RAM, the CMOS and the ports always take the bus
     bool cache_control = (profile.features & GT_MACHINE_FEATURE_CACHE_CONTROL) != 0;
-    m_i386->SetBoardCache(!cache_control || (state->high_speed && (state->port_00c0 & 0x01) != 0));
+    u32 cacheable = (1U << GT_BUS_DRAM) | (1U << GT_BUS_ROM) | (!cache_control || (state->port_05ee & 0x01) != 0 ? 1U << GT_BUS_VRAM : 0);
+    m_i386->SetBoardCache(!cache_control || (state->high_speed && (state->port_00c0 & 0x01) != 0), cacheable);
     const GT_Machine_CPU_Info& cpu = k_machine_cpus[m_machine_config.cpu];
     m_i386->SetBusTiming(timing, waits, cpu.bus_width, cpu_clock_rate, profile.cpu_clock_rate / cpu.bus_ratio);
 

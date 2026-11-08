@@ -68,6 +68,16 @@ static const I386_Port_Clocks k_i486_port_clocks =
     { { 8, 8, 8, 8 }, { 5, 5, 5, 5 } }
 };
 
+// Intel486 DX2 data book Table 10.2, core clocks: the I/O cycle runs on the bus at half the core clock
+static const I386_Port_Clocks k_i486dx2_port_clocks =
+{
+    { { 17, 12, 32, 30 }, { 17, 11, 31, 30 } },
+    { { 19, 14, 34, 32 }, { 19, 13, 33, 32 } },
+    { { 20, 13, 35, 33 }, { 20, 13, 35, 33 } },
+    { { 19, 13, 33, 32 }, { 20, 14, 34, 33 } },
+    { { 11, 11, 11, 11 }, { 8, 8, 8, 8 } }
+};
+
 I386::I386()
 {
     InitPointer(m_memory);
@@ -138,6 +148,8 @@ I386::I386()
     memset(&m_bus_table, 0, sizeof(m_bus_table));
     m_bus_table_valid = false;
     m_board_cache = true;
+    m_board_cacheable = 1U << GT_BUS_DRAM;
+    m_486_prefixes = 0;
     m_486_bus_clocks = 0;
     m_486_protected = false;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
@@ -512,8 +524,7 @@ I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context,
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
-            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending,
-                intr_pending))
+            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
                 break;
         }
         else
@@ -1323,7 +1334,7 @@ void I386::SetCPU(const GT_Machine_CPU_Info& info)
 
     m_i486 = i486;
     m_i486_timing = i486;
-    m_port_clocks = m_i486_timing ? &k_i486_port_clocks : &k_i386_port_clocks;
+    m_port_clocks = !m_i486_timing ? &k_i386_port_clocks : info.bus_ratio > 1 ? &k_i486dx2_port_clocks : &k_i486_port_clocks;
     m_reset_edx = info.reset_edx;
     m_cr0_fixed = info.cr0_fixed;
     m_cr0_writable = i486 ? 0xE005002FU : 0x8000001FU;
@@ -1504,8 +1515,7 @@ bool I386::RaiseException(u8 vector, u8 exception_class, bool has_error_code, u3
     m_exception.has_double_fault_eip = false;
     m_exception.vector = vector;
     m_exception.exception_class = exception_class;
-    m_exception.error_code = (m_external_event && has_error_code && vector >= 10 && vector <= 13) ?
-        error_code | 1 : error_code;
+    m_exception.error_code = (m_external_event && has_error_code && vector >= 10 && vector <= 13) ? error_code | 1 : error_code;
     m_exception.return_eip = 0;
     m_state.last_exception_vector = vector;
     return false;

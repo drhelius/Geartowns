@@ -238,8 +238,7 @@ INLINE bool I386::TrackCall(bool completed, u16 cs, u32 base)
 
     if (entered)
     {
-        int return_size = m_instruction.call_return_size != 0 ? m_instruction.call_return_size :
-            m_instruction.operand_size;
+        int return_size = m_instruction.call_return_size != 0 ? m_instruction.call_return_size : m_instruction.operand_size;
         PushCallStack(cs, base, m_instruction.start_eip, Truncate(m_instruction.next_eip, return_size * 8), I386_CALL, 0);
     }
 #else

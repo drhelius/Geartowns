@@ -31,6 +31,7 @@
 #define I386_TLB_WAYS 4
 #define I386_TLB_SIZE (I386_TLB_SETS * I386_TLB_WAYS)
 #define I386_POLL_CODE_SIZE 48
+#define I386_BUS_LINES 512
 
 class Memory;
 class Profiler;
@@ -686,6 +687,8 @@ private:
         u32 split[GT_BUS_CLASS_COUNT];
         u32 busy[GT_BUS_CLASS_COUNT];
         bool dram_free;
+        u32 cache[3];
+        u32 line_fill;
         u32 string_row;
         u32 string_read;
         u32 io[2];
@@ -1069,6 +1072,8 @@ private:
     void UpdateBusCode(u8 bus_class, u32 code_base);
     u32 GetBusCodeRow(u32 eip, u32 length) const;
     u32 GetBusCodeNeed(u32 next_eip, u32 length) const;
+    void AddBusCodeLines(u32 start_eip, u32 next_eip);
+    void AddBusCodeLine(u32 line);
     u32 GetTransferComponents();
     u32 GetBusTransferLevel(u32 linear, u32 components, u32& add) const;
     u32 GetBusTransferRow(u32 eip) const;
@@ -1097,7 +1102,8 @@ private:
     u32 CarryBusTime();
     u32 GetBusPending() const;
     void AddBusPortWait(u16 port, int write);
-    bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor, GT_Bus_Access_Context& context);
+    bool CheckStackFrame(u32 base, u16 attributes, u32 stack, u32 items, int width, bool supervisor,
+        GT_Bus_Access_Context& context);
 
     bool LoadSegment(int segment, u16 selector, GT_Bus_Access_Context& context, bool pop = false);
     bool LoadRealSegment(int segment, u16 selector);
@@ -1599,6 +1605,7 @@ private:
     bool m_486_protected;
     u8 m_486_prefixes;
     u32 m_board_cacheable;
+    u32 m_bus_lines[I386_BUS_LINES];
 };
 
 static const u32 k_i386_poll_max_instructions = 16;

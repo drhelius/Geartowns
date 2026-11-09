@@ -114,6 +114,9 @@ void I386::SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bu
             bus.io[k] = ScaleBusWait(timing->io[k], cpu, model);
         }
 
+        bus.cache[0] = ScaleBusWait(waits->cache_read, cpu, model);
+        bus.cache[1] = ScaleBusWait(waits->cache_write, cpu, model);
+        bus.cache[2] = ScaleBusWait(waits->cache_fill, cpu, model);
         bus.transfer_row = ScaleBusWait(waits->dram_transfer, cpu, model);
         bus.store_load = ScaleBusWait(waits->dram_store_load, cpu, model);
         bus.io_free_write = ScaleBusWait(timing->io_free_write, cpu, model);
@@ -227,7 +230,8 @@ void I386::UpdateBusTiming()
 #endif
 }
 
-// Cache hits take no bus time: their classes cost nothing, and code from them never waits for the queue
+// What the cache serves takes no bus cycle, only the profile's average waits of its misses and write buffers
+// Its code never waits for the queue, only for the fill of each line the cache misses
 // Refresh and the refill after a transfer only delay what the cache serves
 void I386::ApplyBusCache(BusTiming& bus) const
 {
@@ -236,8 +240,14 @@ void I386::ApplyBusCache(BusTiming& bus) const
         if ((m_board_cacheable & (1U << c)) == 0)
             continue;
 
-        memset(bus.cycle[c], 0, sizeof(bus.cycle[c]));
-        memset(bus.access_wait[c], 0, sizeof(bus.access_wait[c]));
+        for (int k = 0; k < 2; k++)
+        {
+            bus.cycle[c][k] = bus.cache[k];
+
+            for (u32 n = 0; n < 4; n++)
+                bus.access_wait[c][k][n] = n * bus.cache[k];
+        }
+
         memset(bus.slow[c], 0, sizeof(bus.slow[c]));
         bus.code_cost[c] = 0;
         bus.code_rate[c] = k_i386_bus_queue;
@@ -259,6 +269,7 @@ void I386::ApplyBusCache(BusTiming& bus) const
         bus.dram_free = true;
     }
 
+    bus.line_fill = bus.cache[2];
     bus.cycle_refresh = 0;
     bus.refill = 0;
 }

@@ -150,6 +150,7 @@ I386::I386()
     m_board_cache = true;
     m_board_cacheable = 1U << GT_BUS_DRAM;
     m_486_prefixes = 0;
+    memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
     m_486_bus_clocks = 0;
     m_486_protected = false;
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
@@ -305,6 +306,7 @@ void I386::Reset()
     m_bus_row = k_i386_bus_no_row;
     m_bus_components = 0;
     m_bus_fraction = 0;
+    memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
     UpdateBusCode(GT_BUS_NONE, 0);
 
     m_checked_eip = 0;
@@ -1078,7 +1080,6 @@ void I386::SerializeDescriptorTable(StateSerializer& serializer, I386_Descriptor
 
 void I386::Serialize(StateSerializer& serializer, int version)
 {
-    UNUSED(version);
     for (int i = 0; i < I386_REG_COUNT; i++)
         G_SERIALIZE(serializer, m_state.registers[i].value);
 
@@ -1126,6 +1127,11 @@ void I386::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_bus_fraction);
     G_SERIALIZE_ARRAY(serializer, m_cache_test_registers, 3);
     G_SERIALIZE(serializer, m_486_written);
+
+    if (version >= GT_SAVESTATE_LINES_VERSION)
+        G_SERIALIZE_ARRAY(serializer, m_bus_lines, I386_BUS_LINES);
+    else
+        memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
 }
 
 void I386::SanitizeState()

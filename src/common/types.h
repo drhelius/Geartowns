@@ -543,6 +543,7 @@ enum GT_Machine_Bus_Mode
 
 // In 1/256 clocks at the model's clock, reads first
 // A follow adds to the wait of each later cycle of a read split in cycles, which overlaps the one before
+// The 486's cache: the average wait of a read and of a write it serves, and the fill of a code line it misses
 struct GT_Machine_Bus_Waits
 {
     u16 dram_far[2];
@@ -559,6 +560,9 @@ struct GT_Machine_Bus_Waits
     s16 vram_follow;
     s16 sprite_follow;
     s16 rom_follow;
+    u16 cache_read;
+    u16 cache_write;
+    u16 cache_fill;
 };
 
 struct GT_Machine_Bus_Timing

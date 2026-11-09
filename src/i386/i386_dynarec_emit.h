@@ -127,6 +127,8 @@ private:
     void Emit486Misaligned(int linear, int t, u32 size, int access);
     void Emit486FirstAGI(int t);
     void Store486Written(int written);
+    void SetBusLines(const I386::InstructionContext& c);
+    void EmitBusLines();
 
     void EmitBlock();
     void EmitLink(jit_node* exit);
@@ -190,6 +192,10 @@ private:
     int m_exit_written;
     int m_first_base;
     u32 m_bus_code_row;
+    bool m_bus_line_check;
+    u32 m_bus_line_next;
+    u32 m_bus_line_first;
+    u32 m_bus_line_count;
     Instruction m_instructions[64];
 };
 

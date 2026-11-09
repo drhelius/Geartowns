@@ -102,8 +102,8 @@ INLINE u8 I386::GetBusPhysical(u32 linear, u32& physical) const
     return m_bus_page_class[physical >> 12];
 }
 
-// Returns (cycles as if aligned << 8) + 1, or 0 for a 486 cache hit. A 486 read waits for its bus cycle, which its
-// cache-hit table leaves out
+// Returns (cycles as if aligned << 8) + 1, or 0 for what the 486's cache serves. A 486 read waits for its bus cycle,
+// which its cache-hit table leaves out
 template<bool i486>
 INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
 {
@@ -111,7 +111,10 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
     u8 bus_class = GetBusPhysical(linear, physical);
 
     if (i486 && m_bus.busy[bus_class] == 0)
+    {
+        m_bus_fraction += (s32)m_bus.cycle[bus_class][write];
         return 0;
+    }
 
     u32 aligned = GetBusCycles(size);
     u32 cycles = aligned;
@@ -165,6 +168,28 @@ INLINE u32 I386::GetBusCodeNeed(u32 next_eip, u32 length) const
     u32 last = next_eip - 1 + m_bus_code_base;
     u32 decode = MIN(length, (last & 3) + 1) - 1;
     return ((length + (~last & 3)) << 8) + decode * m_bus_code_rate;
+}
+
+// The cache's code lines, 16 bytes direct-mapped over 8 KB, with no data evicting them. An instruction spans one or two
+INLINE void I386::AddBusCodeLines(u32 start_eip, u32 next_eip)
+{
+    u32 first = (start_eip + m_bus_code_base) >> 4;
+    u32 last = (next_eip - 1 + m_bus_code_base) >> 4;
+    AddBusCodeLine(first);
+
+    if (last != first)
+        AddBusCodeLine(last);
+}
+
+INLINE void I386::AddBusCodeLine(u32 line)
+{
+    u32& tag = m_bus_lines[line & (I386_BUS_LINES - 1)];
+
+    if (tag == line)
+        return;
+
+    tag = line;
+    m_bus_fraction += (s32)m_bus.line_fill;
 }
 
 INLINE u32 I386::GetTransferComponents()
@@ -255,7 +280,7 @@ INLINE void I386::AddBusTime()
 }
 
 // clocks: the instruction's, where the 486 leaves out its AGI and misalignment clocks, which compiled blocks add at
-// run time. Code the 486's cache serves never waits, and its queue level isn't kept
+// run time. Code the 486's cache serves waits only for the lines it misses, and its queue level isn't kept
 template<bool i486>
 INLINE void I386::AddBusQueue(u32 data, bool transfer, u32 clocks)
 {
@@ -266,6 +291,9 @@ INLINE void I386::AddBusQueue(u32 data, bool transfer, u32 clocks)
 
     if (i486 && m_bus_code_cost == 0)
     {
+        if (unlikely(m_bus.line_fill != 0))
+            AddBusCodeLines(c.start_eip, c.next_eip);
+
         m_bus_fraction += add;
 
         if (transfer)

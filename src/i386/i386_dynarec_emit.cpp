@@ -97,6 +97,10 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_timed = false;
     m_first_base = -1;
     m_bus_code_row = 0;
+    m_bus_line_check = false;
+    m_bus_line_next = 0;
+    m_bus_line_first = 0;
+    m_bus_line_count = 0;
 }
 
 // Decodes the block at the code window and translates it into code
@@ -1186,11 +1190,14 @@ void DynarecEmitter::EmitBlock()
 
     // The AGI clock of the first instruction against the one before the block, counted past its last fallback
     m_first_base = m_i486 && m_instructions[0].kind == DYNAREC_NATIVE ? I386::Get486Base(m_instructions[0].context) : -1;
+    m_bus_line_check = m_timed && m_cpu->m_bus_code_cost == 0 && m_cpu->m_bus.line_fill != 0;
+    m_bus_line_next = 0;
 
     for (int i = 0; i < m_count; i++)
     {
         Instruction& instruction = m_instructions[i];
         m_bus_code_row = instruction.bus_code_row;
+        SetBusLines(instruction.context);
 
         if (instruction.kind == DYNAREC_NATIVE)
         {
@@ -1206,6 +1213,11 @@ void DynarecEmitter::EmitBlock()
             EmitNative(instruction, i);
             m_exit_written = -1;
 
+            if (!instruction.ends_block)
+                EmitBusLines();
+
+            m_bus_line_count = 0;
+
             if (instruction.memory && k_dynarec_near_fallbacks)
             {
                 if (!instruction.ends_block)
@@ -1219,6 +1231,8 @@ void DynarecEmitter::EmitBlock()
         }
         else
         {
+            m_bus_line_count = 0;
+
             if (m_i486 && i > 0)
                 Store486Written(m_instructions[i - 1].written);
 
@@ -1290,7 +1304,10 @@ void DynarecEmitter::Exit(int steps, u32 clocks, u32 flags, const BusRun* run)
         Store486Written(m_exit_written);
 
     if (IsValidPointer(run))
+    {
+        EmitBusLines();
         EmitBusRun(*run, DR_T3);
+    }
 
     jit_movi(JIT_R0, (jit_word_t)flags);
     jit_movi(JIT_R1, (jit_word_t)steps);
@@ -1310,7 +1327,10 @@ void DynarecEmitter::ExitLinked(int steps, u32 clocks, u32 flags, int slot, cons
         Store486Written(m_exit_written);
 
     if (IsValidPointer(run))
+    {
+        EmitBusLines();
         EmitBusRun(*run, DR_T3);
+    }
 
     jit_movi(JIT_R0, (jit_word_t)(flags | k_dynarec_exit_link | (slot != 0 ? k_dynarec_exit_slot : 0)));
     jit_movi(JIT_R1, (jit_word_t)steps);
@@ -1340,7 +1360,10 @@ void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot, const B
         Store486Written(m_exit_written);
 
     if (IsValidPointer(run))
+    {
+        EmitBusLines();
         EmitBusRun(*run, DR_T3);
+    }
 
     LoadU32(DR_T0, DR_CPU, step_total);
     jit_addi(DR_T0, DR_T0, (jit_word_t)steps);
@@ -1823,6 +1846,39 @@ void DynarecEmitter::Store486Written(int written)
 {
     jit_movi(DR_T0, (jit_word_t)written);
     jit_stxi_c(Offset(&m_cpu->m_486_written), DR_CPU, DR_T0);
+}
+
+// The instruction's lines that no earlier instruction of the block brought into the 486's cache. Those still hit: a
+// block spans far less than the cache
+void DynarecEmitter::SetBusLines(const I386::InstructionContext& c)
+{
+    u32 base = m_cpu->m_bus_code_base;
+    u32 first = MAX((c.start_eip + base) >> 4, m_bus_line_next);
+    u32 last = (c.next_eip - 1 + base) >> 4;
+
+    m_bus_line_first = first;
+    m_bus_line_count = m_bus_line_check && last >= first ? last - first + 1 : 0;
+    m_bus_line_next = MAX(m_bus_line_next, last + 1);
+}
+
+// As AddBusCodeLines, once the instruction can't fall back: where it goes on, or before the bus run of its exits
+void DynarecEmitter::EmitBusLines()
+{
+    intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
+
+    for (u32 i = 0; i < m_bus_line_count; i++)
+    {
+        u32 line = m_bus_line_first + i;
+        intptr_t tag = Offset(&m_cpu->m_bus_lines[line & (I386_BUS_LINES - 1)]);
+        LoadU32(DR_T0, DR_CPU, tag);
+        jit_node_t* hit = jit_beqi(DR_T0, (jit_word_t)line);
+        jit_movi(DR_T0, (jit_word_t)line);
+        jit_stxi_i(tag, DR_CPU, DR_T0);
+        jit_ldxi_i(DR_T0, DR_CPU, fraction);
+        jit_addi(DR_T0, DR_T0, (jit_word_t)m_cpu->m_bus.line_fill);
+        jit_stxi_i(fraction, DR_CPU, DR_T0);
+        jit_patch(hit);
+    }
 }
 
 // SZP of a masked result ORed into f, for the flags in needed. t and u are scratch

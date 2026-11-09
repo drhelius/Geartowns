@@ -205,7 +205,7 @@ INLINE u32 I386::CarryBusTime()
     return carry;
 }
 
-// Pending until a taken transfer carries it into clocks, where blocks end too: no bound in their budget checks
+// Pending until a taken transfer carries it into clocks, where blocks end too. Budget checks count it
 template<bool i486>
 INLINE void I386::AddBusTime()
 {

@@ -143,11 +143,15 @@ INLINE bool I386::IsInterruptReady(bool nmi_pending, bool intr_pending) const
 }
 
 // One step of the fast loop, shared by RunFor and RunDynarec. Returns false when the batch must end
+// The bus time still pending counts against the budget, so no instruction starts past it
 template<int timing>
 INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
-    bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending)
+    bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending, u32 cycle_budget)
 {
     m_io_start_cycles = (u32)clocks + context.wait_cycles + ((timing & I386_TIMING_BUS) != 0 ? GetBusPending() : 0);
+
+    if ((timing & I386_TIMING_BUS) != 0 && m_io_start_cycles >= cycle_budget)
+        return false;
 #if !defined(GT_DISABLE_DISASSEMBLER)
     DisassembleNextInstruction();
 #endif

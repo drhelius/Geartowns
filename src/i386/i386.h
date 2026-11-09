@@ -779,6 +779,19 @@ private:
 #if !defined(GT_DISABLE_DYNAREC)
     typedef u32 (*DynarecEntry)(I386* cpu, const u8* code);
 
+    // A block's next check: its clocks with the most bus time that can be pending there, and the run, queue cost and
+    // code lines that give that time from the current queue level and line tags
+    struct DynarecCheck
+    {
+        u32 clocks;
+        u32 exec;
+        s32 knee;
+        u32 cost;
+        u32 add;
+        u32 line;
+        u32 lines;
+    };
+
     // Blocks are found by the host address of their first byte, their EIP and a key with the decoding state they
     // assume in the low byte and the CS limit they were decoded for above it
     // Translated blocks are listed in their RAM page, the others are only counted until they get hot
@@ -792,6 +805,7 @@ private:
         u32 watch_eip;
         u32 hits;
         u32 fit_clocks;
+        const DynarecCheck* fit;
         u32 eip_limit;
         u32 epoch;
         u32 copy;
@@ -845,7 +859,7 @@ private:
     bool RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bool nmi_pending, bool intr_pending);
     template<int timing>
     bool RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& context, u64& clocks, u32& steps,
-        bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending);
+        bool& completed, bool interrupt_pending, bool nmi_pending, bool intr_pending, u32 cycle_budget);
     bool IsInterruptReady(bool nmi_pending, bool intr_pending) const;
     void DisassembleNextInstruction();
     void DisassembleInstruction(u32 eip);
@@ -879,12 +893,17 @@ private:
     void CoolDynarecPages();
     void CheckDynarecMemory();
     static void DynarecCodeWrite(void* context, u32 offset, u32 size);
+    s64 GetDynarecFit(const DynarecCheck& check) const;
+    template<int timing>
+    bool FitsDynarecBlock(const DynarecBlock& block, u64 used, u32 budget) const;
+    static uintptr_t DynarecFits(I386* cpu, uintptr_t block);
     template<bool i486>
-    static uintptr_t DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+    static uintptr_t DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
         uintptr_t settle, uintptr_t revert);
     s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
     template<bool i486>
-    static void DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access);
+    static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
+        uintptr_t first_base);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     static void DynarecCall(I386* cpu);
 #endif
@@ -1487,6 +1506,8 @@ private:
     u32 m_dynarec_bytes_used;
     DynarecBusRun* m_dynarec_bus_runs;
     u32 m_dynarec_bus_runs_used;
+    DynarecCheck* m_dynarec_checks;
+    u32 m_dynarec_checks_used;
     u32* m_dynarec_page_blocks;
     u64* m_dynarec_page_granules;
     u8* m_dynarec_page_heat;

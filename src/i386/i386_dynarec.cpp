@@ -43,6 +43,8 @@ static const u32 k_dynarec_block_code = 64 * 1024;
 static const u32 k_dynarec_bus_runs = GT_DYNAREC_MAX_BLOCKS * 4;
 // Two per instruction of the longest block
 static const u32 k_dynarec_max_bus_runs = 128;
+static const u32 k_dynarec_checks = GT_DYNAREC_MAX_BLOCKS * 4;
+static const u32 k_dynarec_max_checks = 64;
 static const u32 k_dynarec_default_threshold = 8;
 static const u32 k_dynarec_default_block_limit = 64;
 
@@ -94,6 +96,7 @@ void I386::EnableDynarec(bool enable)
     m_dynarec_hash = new u32[GT_DYNAREC_MAX_BLOCKS];
     m_dynarec_bytes = new u8[GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes];
     m_dynarec_bus_runs = new DynarecBusRun[k_dynarec_bus_runs];
+    m_dynarec_checks = new DynarecCheck[k_dynarec_checks];
     m_dynarec_region_generation = 0;
 
     // The entry function stays at the start of the code memory, flushes start after it
@@ -165,6 +168,7 @@ void I386::FlushDynarec()
     m_dynarec_block_count = 0;
     m_dynarec_bytes_used = 0;
     m_dynarec_bus_runs_used = 0;
+    m_dynarec_checks_used = 0;
     m_dynarec_code_used = m_dynarec_code_start;
     m_dynarec_link_block = k_dynarec_none;
     m_dynarec_flushes++;
@@ -203,6 +207,16 @@ void I386::CheckDynarecMemory()
     memset(m_dynarec_page_writes, 0, m_dynarec_page_count * sizeof(u16));
     memset(m_dynarec_page_cool, 0, m_dynarec_page_count);
     memset(m_dynarec_page_backoff, 0, m_dynarec_page_count);
+}
+
+// The block's compiled bound first, then near the end of the slice its exact time
+template<int timing>
+INLINE bool I386::FitsDynarecBlock(const DynarecBlock& block, u64 used, u32 budget) const
+{
+    if ((timing & I386_TIMING_BUS) == 0)
+        return used + block.fit_clocks < budget;
+
+    return used + block.fit_clocks + GetBusPending() < budget || (s64)used + GetDynarecFit(*block.fit) < (s64)budget;
 }
 
 // RunFor with translated blocks: the interpreter steps whatever no block covers, with the same loop condition,
@@ -246,7 +260,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
             if (link != k_dynarec_none && IsValidPointer(block) && m_code_window_eip == m_dynarec_link_window)
                 LinkDynarecBlock(link, m_dynarec_link_slot, (u32)(block - m_dynarec_blocks));
 
-            if (IsValidPointer(block) && clocks + context.wait_cycles + block->fit_clocks < cycle_budget)
+            if (IsValidPointer(block) && FitsDynarecBlock<timing>(*block, clocks + context.wait_cycles, cycle_budget))
             {
                 m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_cycles);
                 m_dynarec_wait = context.wait_cycles;
@@ -315,7 +329,8 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 continue;
             }
 
-            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
+            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending,
+                cycle_budget))
                 break;
 
             // Instructions that follow an interpreted one in sequence belong to the block that starts before them.
@@ -486,7 +501,8 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
 
     if (m_dynarec_code_used + k_dynarec_block_code > m_dynarec_memory->GetSize() ||
         m_dynarec_bytes_used + k_dynarec_max_watch_bytes > GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes ||
-        m_dynarec_bus_runs_used + k_dynarec_max_bus_runs > k_dynarec_bus_runs)
+        m_dynarec_bus_runs_used + k_dynarec_max_bus_runs > k_dynarec_bus_runs ||
+        m_dynarec_checks_used + k_dynarec_max_checks > k_dynarec_checks)
     {
         FlushDynarec();
         return;
@@ -495,6 +511,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     DynarecEmitter emitter(this);
     u32 code_size = 0;
     u32 bus_runs = m_dynarec_bus_runs_used;
+    u32 checks = m_dynarec_checks_used;
 
     m_dynarec_memory->BeginWrite();
     bool compiled = emitter.Compile(block, available, m_dynarec_block_limit,
@@ -504,6 +521,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     if (!compiled)
     {
         m_dynarec_bus_runs_used = bus_runs;
+        m_dynarec_checks_used = checks;
         block.state = k_dynarec_interpret;
         return;
     }
@@ -714,7 +732,7 @@ void I386::CoolDynarecPages()
 // Returns zero while the block can go on: nothing ended the batch, the code window and the block are still valid
 // and the slice budget covers every instruction up to the next check
 template<bool i486>
-uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
     uintptr_t settle, uintptr_t revert)
 {
     StepState& step = cpu->m_step;
@@ -761,12 +779,19 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
     cpu->m_dynarec_clocks += (u32)step.clocks - (u32)native_clocks;
 
     const GT_Bus_Access_Context& context = *cpu->m_bus_context;
+    const DynarecCheck* next = (const DynarecCheck*)check;
+    s64 used = (s64)(s32)cpu->m_dynarec_clocks;
+    s64 pending = cpu->m_bus_timed ? (s64)(cpu->m_bus_fraction >> 16) : 0;
+    s64 remaining = (s64)cpu->m_dynarec_remaining;
+
+    // After a helper the next run starts, so the exact time holds. A native's settled run is in the fraction already
+    bool fits = used + (IsValidPointer(next) ? (s64)next->clocks : 0) + pending < remaining ||
+        (IsValidPointer(next) && revert == 0 && cpu->m_bus_timed && used + cpu->GetDynarecFit(*next) < remaining);
 
     // A real mode load of a data segment register starts an interrupt shadow, which the dispatcher counts down
     if (step.end_batch || context.end_batch || cpu->m_state.halted || cpu->m_state.shutdown ||
         !step.instruction_completed || cpu->m_state.repeat.active || cpu->m_state.interrupt_shadow_steps != 0 ||
-        cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait ||
-        (s64)next_check + (s32)cpu->m_dynarec_clocks >= (s64)cpu->m_dynarec_remaining)
+        cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait || !fits)
         return 1;
 
     // Any TLB way change closes the code window. The next instruction opens it again as StartInstruction would, and
@@ -791,10 +816,35 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t next_check, uintptr_t native_cl
     return 0;
 }
 
-template uintptr_t I386::DynarecStep<false>(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+template uintptr_t I386::DynarecStep<false>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
     uintptr_t settle, uintptr_t revert);
-template uintptr_t I386::DynarecStep<true>(I386* cpu, uintptr_t next_check, uintptr_t native_clocks, uintptr_t before,
+template uintptr_t I386::DynarecStep<true>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
     uintptr_t settle, uintptr_t revert);
+
+// The clocks to a check with the bus time pending there, as the run before it reaches it from the current queue level,
+// with the code lines it misses now. The check's clocks bound this for any level and line, and are tried first
+s64 I386::GetDynarecFit(const DynarecCheck& check) const
+{
+    s32 stall = check.knee - (s32)m_bus_queue;
+    s64 fraction = (s64)m_bus_fraction + (s64)(stall > 0 ? stall : 0) * check.cost + check.add;
+
+    for (u32 i = 0; i < check.lines; i++)
+    {
+        u32 line = check.line + i;
+
+        if (m_bus_lines[line & (I386_BUS_LINES - 1)] != line)
+            fraction += m_bus.line_fill;
+    }
+
+    return (s64)check.exec + (fraction >> 16);
+}
+
+// For the link code and loops of blocks once the compiled bound doesn't fit
+uintptr_t I386::DynarecFits(I386* cpu, uintptr_t block)
+{
+    const DynarecBlock& target = *(const DynarecBlock*)block;
+    return (s64)(s32)cpu->m_dynarec_clocks + cpu->GetDynarecFit(*target.fit) < (s64)cpu->m_dynarec_remaining ? 1 : 0;
+}
 
 s32 I386::GetDynarecBusTime(const DynarecBusRun& run, u32 level) const
 {

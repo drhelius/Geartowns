@@ -97,6 +97,7 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_timed = false;
     m_first_base = -1;
     m_bus_code_row = 0;
+    InitPointer(m_bus_next_check);
     m_bus_line_check = false;
     m_bus_line_next = 0;
     m_bus_line_first = 0;
@@ -732,6 +733,75 @@ void DynarecEmitter::ComputeBus()
     }
 }
 
+// The most bus time a run leaves pending at each instruction's start, in whole clocks: its stall from an empty queue,
+// and what its natives' accesses and new code lines can add at run time. A helper leaves the run's time counted
+void DynarecEmitter::ComputeBusBounds()
+{
+    const I386::BusTiming& bus = m_cpu->m_bus;
+    u32 cost = m_cpu->m_bus_code_cost;
+    bool lines = m_timed && cost == 0 && bus.line_fill != 0;
+    u32 change = MAX(bus.dram_change[0], bus.dram_change[1]);
+    u32 base = m_cpu->m_bus_code_base;
+    u32 line_next = 0;
+    u32 run_change = 0;
+    u32 run_line = 0;
+    u32 run_lines = 0;
+
+    for (int i = 0; i < m_count; i++)
+    {
+        Instruction& instruction = m_instructions[i];
+        const I386::InstructionContext& c = instruction.context;
+        const BusRun& run = instruction.bus_before;
+        u64 worst = (u64)GetBusStall(run, 0) * cost + run.add + run_change + (u64)run_lines * bus.line_fill;
+        u32 first = MAX((c.start_eip + base) >> 4, line_next);
+        u32 end = (c.next_eip - 1 + base) >> 4;
+
+        instruction.bus_bound = m_timed ? (u32)((worst + 0xFFFF) >> 16) : 0;
+        instruction.bus_change = run_change;
+        instruction.bus_line = run_line;
+        instruction.bus_lines = run_lines;
+        line_next = MAX(line_next, end + 1);
+
+        if (instruction.kind != DYNAREC_NATIVE)
+        {
+            run_change = 0;
+            run_lines = 0;
+            continue;
+        }
+
+        run_change += instruction.memory ? 2 * change : 0;
+
+        if (lines && end >= first)
+        {
+            run_line = run_lines == 0 ? first : run_line;
+            run_lines += end - first + 1;
+        }
+    }
+}
+
+u32 DynarecEmitter::GetCheckClocks(int index) const
+{
+    const Instruction& instruction = m_instructions[index];
+    return instruction.before + instruction.extra_before + instruction.bus_bound;
+}
+
+// From the pool CompileDynarecBlock reserved
+const I386::DynarecCheck* DynarecEmitter::AddCheck(int index)
+{
+    const Instruction& instruction = m_instructions[index];
+    const BusRun& run = instruction.bus_before;
+    u32 cost = m_timed ? m_cpu->m_bus_code_cost : 0;
+    I386::DynarecCheck& check = m_cpu->m_dynarec_checks[m_cpu->m_dynarec_checks_used++];
+    check.clocks = GetCheckClocks(index);
+    check.exec = instruction.before + instruction.extra_before;
+    check.knee = m_timed ? run.knee : 0;
+    check.cost = cost;
+    check.add = m_timed ? run.floor * cost + run.add + instruction.bus_change : 0;
+    check.line = instruction.bus_line;
+    check.lines = m_timed ? instruction.bus_lines : 0;
+    return &check;
+}
+
 void DynarecEmitter::ComputeBusTransfer(Instruction& instruction)
 {
     u32 target = 0;
@@ -1043,7 +1113,8 @@ void DynarecEmitter::EmitBusTransferRow(const BusRun& run)
 }
 
 // Aligned DRAM adds only near-row or row-change time, the rest calls DynarecBusAccess. Clobbers linear, t1, t2
-void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access)
+void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback,
+    int first_base)
 {
     const I386::BusTiming& bus = m_cpu->m_bus;
     intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
@@ -1066,7 +1137,7 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
         jit_ldxi(t1, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
         jit_subr(t1, host, t1);
         done = jit_blti_u(t1, (jit_word_t)ram_size);
-        EmitBusAccessCall(host, linear, t2, size, access);
+        EmitBusAccessCall(host, linear, t2, size, access, fallback, first_base);
         jit_patch(done);
         return;
     }
@@ -1140,17 +1211,20 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
     if (IsValidPointer(misaligned))
         jit_patch(misaligned);
 
-    EmitBusAccessCall(host, linear, t2, size, access);
+    EmitBusAccessCall(host, linear, t2, size, access, fallback, first_base);
     jit_patch(done);
 }
 
-// The access the run couldn't fold: DynarecBusAccess counts it as the interpreter does
-void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, int access)
+// The access the run couldn't fold: DynarecBusAccess counts it as the interpreter does. While more of the block runs
+// before its next check, an access that leaves the slice budget short of it falls back instead
+void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback,
+    int first_base)
 {
     u32 code = m_bus_code_row & k_i386_bus_code_row;
     u32 shift = m_bus_code_row >> 31;
     uintptr_t flags = size | (access == DYNAREC_WRITE ? 0x08 : 0) | (access == DYNAREC_READ_WRITE ? 0x10 : 0) |
         (code != k_i386_bus_code_row ? 0x20 | ((uintptr_t)code << 8) : 0) | (shift != 0 ? 0x40 : 0);
+    const I386::DynarecCheck* check = IsValidPointer(fallback) ? m_bus_next_check : NULL;
     jit_stxi(Offset(&m_cpu->m_dynarec_spill), DR_CPU, host);
     jit_movi(t2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<true> :
         (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<false>);
@@ -1158,8 +1232,17 @@ void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, i
     jit_pushargr(DR_CPU);
     jit_pushargr(linear);
     jit_pushargi((jit_word_t)flags);
+    jit_pushargi((jit_word_t)(uintptr_t)check);
+    jit_pushargi((jit_word_t)(first_base + 1));
     jit_finishr(t2);
+
+    if (IsValidPointer(check))
+        jit_retval(t2);
+
     jit_ldxi(host, DR_CPU, Offset(&m_cpu->m_dynarec_spill));
+
+    if (IsValidPointer(check))
+        jit_patch_at(jit_bnei(t2, 0), fallback);
 }
 
 // Checks run before anything is written. A native instruction whose checks fail runs in the interpreter
@@ -1167,19 +1250,23 @@ void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, i
 void DynarecEmitter::EmitBlock()
 {
     int last = m_count - 1;
-    int next_check = last;
 
-    // Checks bound the 486's run time extras by their maximum
+    ComputeBusBounds();
+
+    // Checks bound the 486's run time extras and the run's pending bus time by their maximum
+    const I386::DynarecCheck* next = AddCheck(last);
+
     for (int i = last; i >= 0; i--)
     {
         Instruction& instruction = m_instructions[i];
-        instruction.next_check = i == last ? 0 : m_instructions[next_check].before + m_instructions[next_check].extra_before;
+        instruction.next_check = i == last ? NULL : next;
 
-        if (instruction.kind != DYNAREC_NATIVE)
-            next_check = i;
+        if (instruction.kind != DYNAREC_NATIVE && i != last)
+            next = AddCheck(i);
     }
 
-    m_block->fit_clocks = m_instructions[next_check].before + m_instructions[next_check].extra_before;
+    m_block->fit = next;
+    m_block->fit_clocks = next->clocks;
     m_block->link[0] = 0xFFFFFFFFU;
     m_block->link[1] = 0xFFFFFFFFU;
 
@@ -1197,6 +1284,7 @@ void DynarecEmitter::EmitBlock()
     {
         Instruction& instruction = m_instructions[i];
         m_bus_code_row = instruction.bus_code_row;
+        m_bus_next_check = instruction.next_check;
         SetBusLines(instruction.context);
 
         if (instruction.kind == DYNAREC_NATIVE)
@@ -1320,7 +1408,8 @@ void DynarecEmitter::Exit(int steps, u32 clocks, u32 flags, const BusRun* run)
     jit_jmpr(DR_T3);
 }
 
-// A static exit to the block at the EIP just stored, through the link code shared by every block
+// A static exit to the block at the EIP just stored, through the link code shared by every block. Without a transfer
+// the pending bus time is carried here too, so the link code finds none to count
 void DynarecEmitter::ExitLinked(int steps, u32 clocks, u32 flags, int slot, const BusRun* run)
 {
     if (m_exit_written >= 0)
@@ -1338,13 +1427,23 @@ void DynarecEmitter::ExitLinked(int steps, u32 clocks, u32 flags, int slot, cons
 
     if (IsValidPointer(run) && run->transfer)
         jit_addr(JIT_R2, JIT_R2, DR_T3);
+    else if (m_timed)
+    {
+        intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
+        jit_ldxi_i(DR_T3, DR_CPU, fraction);
+        jit_rshi(DR_T4, DR_T3, 16);
+        jit_andi(DR_T3, DR_T3, 0xFFFF);
+        jit_stxi_i(fraction, DR_CPU, DR_T3);
+        jit_addr(JIT_R2, JIT_R2, DR_T4);
+    }
 
     jit_movi(DR_T3, (jit_word_t)(uintptr_t)&m_block->link[slot]);
     jit_movi(DR_T4, (jit_word_t)(uintptr_t)m_cpu->m_dynarec_link);
     jit_jmpr(DR_T4);
 }
 
-// A jump to its own block start loops while the budget fits, writes to its code leave through a helper first
+// A jump to its own block start loops while the budget fits, writes to its code leave through a helper first. The loop
+// just brought its code lines in, and a static jump leaves a known queue level, so its run to the first check is exact
 void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot, const BusRun* run)
 {
     if (target != m_block->eip)
@@ -1374,12 +1473,38 @@ void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot, const B
     if (IsValidPointer(run) && run->transfer)
         jit_addr(DR_T0, DR_T0, DR_T3);
 
+    const I386::DynarecCheck* fit = m_block->fit;
+    u32 level = IsValidPointer(run) && run->low == run->high ? run->low : 0;
+    s32 stall = fit->knee - (s32)level;
+    u64 bus = (u64)(stall > 0 ? stall : 0) * fit->cost + fit->add;
+    u32 loop = MIN(fit->exec + (u32)((bus + 0xFFFF) >> 16), m_block->fit_clocks);
+
     jit_stxi_i(clock_total, DR_CPU, DR_T0);
-    jit_addi(DR_T0, DR_T0, (jit_word_t)m_block->fit_clocks);
+    jit_addi(DR_T0, DR_T0, (jit_word_t)loop);
+
+    if (m_timed && !(IsValidPointer(run) && run->transfer))
+    {
+        jit_ldxi_i(DR_T1, DR_CPU, Offset(&m_cpu->m_bus_fraction));
+        jit_rshi(DR_T1, DR_T1, 16);
+        jit_addr(DR_T0, DR_T0, DR_T1);
+    }
+
     LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_dynarec_remaining));
     jit_node_t* full = jit_bger_u(DR_T0, DR_T1);
     jit_patch_at(jit_jmpi(), m_block_start);
     jit_patch(full);
+
+    if (m_timed)
+    {
+        jit_movi(DR_T3, (jit_word_t)(uintptr_t)&I386::DynarecFits);
+        jit_prepare();
+        jit_pushargr(DR_CPU);
+        jit_pushargi((jit_word_t)(uintptr_t)m_block);
+        jit_finishr(DR_T3);
+        jit_retval(JIT_R0);
+        jit_patch_at(jit_bnei(JIT_R0, 0), m_block_start);
+    }
+
     Exit(0, 0, k_dynarec_exit_end | k_dynarec_exit_link | (slot != 0 ? k_dynarec_exit_slot : 0));
 }
 
@@ -1417,14 +1542,31 @@ void DynarecEmitter::EmitLink(jit_node* exit)
     jit_addr(DR_T3, DR_T3, JIT_R1);
     LoadU32(JIT_R1, DR_CPU, Offset(&m_cpu->m_dynarec_remaining));
     jit_node_t* full = jit_bger_u(DR_T3, JIT_R1);
+    jit_node_t* enter = jit_label();
     jit_stxi_i(Offset(&m_cpu->m_dynarec_current), DR_CPU, DR_T4);
     jit_ldxi(JIT_R2, JIT_R2, (jit_word_t)offsetof(I386::DynarecBlock, code));
     jit_jmpr(JIT_R2);
 
+    // Past the compiled bound, the run from the current queue level and the lines it misses decide
+    jit_patch(full);
+    jit_stxi(Offset(&m_cpu->m_dynarec_spill), DR_CPU, JIT_R0);
+    jit_movi(DR_T3, (jit_word_t)(uintptr_t)&I386::DynarecFits);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(JIT_R2);
+    jit_finishr(DR_T3);
+    jit_retval(JIT_R1);
+    jit_ldxi(JIT_R0, DR_CPU, Offset(&m_cpu->m_dynarec_spill));
+    jit_node_t* short_budget = jit_beqi(JIT_R1, 0);
+    jit_muli(JIT_R2, DR_T4, (jit_word_t)sizeof(I386::DynarecBlock));
+    jit_movi(DR_T3, (jit_word_t)(uintptr_t)m_cpu->m_dynarec_blocks);
+    jit_addr(JIT_R2, JIT_R2, DR_T3);
+    jit_patch_at(jit_jmpi(), enter);
+
     jit_patch(unlinked);
     jit_patch(dead);
     jit_patch(stale);
-    jit_patch(full);
+    jit_patch(short_budget);
     jit_movi(JIT_R1, 0);
     jit_movi(JIT_R2, 0);
     jit_patch_at(jit_jmpi(), exit);
@@ -1437,14 +1579,14 @@ void DynarecEmitter::StoreEIP(u32 eip)
 }
 
 // Helpers are reached through a register, so the code runs from any executable view
-void DynarecEmitter::CallStep(u32 next_check, u32 native_clocks, u32 before, const I386::DynarecBusRun* settle,
-    const I386::DynarecBusRun* revert)
+void DynarecEmitter::CallStep(const I386::DynarecCheck* check, u32 native_clocks, u32 before,
+    const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert)
 {
     jit_movi(DR_T3, m_cpu->m_i486_timing ? (jit_word_t)(uintptr_t)&I386::DynarecStep<true> :
         (jit_word_t)(uintptr_t)&I386::DynarecStep<false>);
     jit_prepare();
     jit_pushargr(DR_CPU);
-    jit_pushargi((jit_word_t)next_check);
+    jit_pushargi((jit_word_t)(uintptr_t)check);
     jit_pushargi((jit_word_t)native_clocks);
     jit_pushargi((jit_word_t)before);
     jit_pushargi((jit_word_t)(uintptr_t)settle);
@@ -1799,6 +1941,8 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     jit_andi(r, t1, 0xFFF);
     jit_addr(r, r, t3);
 
+    int first_base = bus && m_i486 ? m_first_base : -1;
+
     if (bus && m_i486)
     {
         Emit486FirstAGI(t2);
@@ -1806,7 +1950,7 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     }
 
     if (bus && m_timed)
-        EmitBusAccess(r, t1, t2, t3, size, access);
+        EmitBusAccess(r, t1, t2, t3, size, access, fallback, first_base);
 }
 
 // 3 clocks for each access of a misaligned 486 operand, past the last check that can fall back to the interpreter

@@ -786,14 +786,23 @@ void I386::AddBusSlowAccess(u32 physical, u32 size, bool write)
 
 #if !defined(GT_DISABLE_DYNAREC)
 // access: size, 08h write, 10h RMW, 20h code in DRAM with its row from bit 8, 40h one-byte instruction
+// check: the block's next check while more of it runs before that, as DynarecStep takes it. An access that leaves the
+// slice budget short of it isn't counted, the 486 clocks the instruction added so far are taken back, and it returns 1
+// for the instruction to fall back. first_base: Emit486FirstAGI's base plus one, or zero
 template<bool i486>
-void I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access)
+uintptr_t I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
+    uintptr_t first_base)
 {
     u32 size = (u32)(access & 7);
     u32 code_row = ((access & 0x20) != 0 ? (u32)(access >> 8) & k_i386_bus_code_row : k_i386_bus_code_row) |
         ((access & 0x40) != 0 ? 0x80000000U : 0);
     bool both = (access & 0x10) != 0;
     bool write = (access & 0x08) != 0;
+    s32 fraction = cpu->m_bus_fraction;
+    u32 row = cpu->m_bus_row;
+    u32 physical = 0;
+    u8 bus_class = check != 0 ? cpu->GetBusPhysical((u32)linear, physical) : (u8)GT_BUS_NONE;
+    u32 counts[2] = { cpu->m_bus_cycle_counts[bus_class][0], cpu->m_bus_cycle_counts[bus_class][1] };
 
     cpu->m_bus_fraction -= (s32)cpu->GetBusDramFold(size, both || !write, both || write, code_row, i486);
 
@@ -804,8 +813,37 @@ void I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access)
     }
     else
         cpu->AddBusAccess<i486>((u32)linear, size, write ? 1 : 0, code_row);
+
+    if (check == 0)
+        return 0;
+
+    const DynarecCheck& next = *(const DynarecCheck*)check;
+    s64 used = (s64)(s32)cpu->m_dynarec_clocks;
+    s64 remaining = (s64)cpu->m_dynarec_remaining;
+
+    if (used + (s64)next.clocks + (s64)(cpu->m_bus_fraction >> 16) < remaining ||
+        used + cpu->GetDynarecFit(next) < remaining)
+        return 0;
+
+    cpu->m_bus_fraction = fraction;
+    cpu->m_bus_row = row;
+    cpu->m_bus_cycle_counts[bus_class][0] = counts[0];
+    cpu->m_bus_cycle_counts[bus_class][1] = counts[1];
+
+    if (i486)
+    {
+        if (size > 1 && (linear & (size - 1)) != 0)
+            cpu->m_dynarec_clocks -= both ? 6 : 3;
+
+        if (first_base != 0 && (cpu->m_486_written & (1 << (first_base - 1))) != 0)
+            cpu->m_dynarec_clocks -= 1;
+    }
+
+    return 1;
 }
 
-template void I386::DynarecBusAccess<false>(I386* cpu, uintptr_t linear, uintptr_t access);
-template void I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uintptr_t access);
+template uintptr_t I386::DynarecBusAccess<false>(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
+    uintptr_t first_base);
+template uintptr_t I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
+    uintptr_t first_base);
 #endif

@@ -182,6 +182,8 @@ I386::I386()
     m_dynarec_bytes_used = 0;
     InitPointer(m_dynarec_bus_runs);
     m_dynarec_bus_runs_used = 0;
+    InitPointer(m_dynarec_checks);
+    m_dynarec_checks_used = 0;
     InitPointer(m_dynarec_page_blocks);
     InitPointer(m_dynarec_page_granules);
     InitPointer(m_dynarec_page_heat);
@@ -226,6 +228,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_hash);
     SafeDeleteArray(m_dynarec_bytes);
     SafeDeleteArray(m_dynarec_bus_runs);
+    SafeDeleteArray(m_dynarec_checks);
     SafeDeleteArray(m_dynarec_page_blocks);
     SafeDeleteArray(m_dynarec_page_granules);
     SafeDeleteArray(m_dynarec_page_heat);
@@ -526,7 +529,8 @@ I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context,
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
         {
-            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending))
+            if (!RunFastStep<timing>(total, context, clocks, steps, completed, interrupt_pending, nmi_pending, intr_pending,
+                cycle_budget))
                 break;
         }
         else
@@ -560,6 +564,9 @@ NO_INLINE bool I386::RunForSlowStep(I386_Run_Result& total, u32 cycle_budget, bo
 {
     GT_Bus_Access_Context& context = *m_bus_context;
     m_io_start_cycles = (u32)total.cycles + context.wait_cycles + (m_bus_timed ? GetBusPending() : 0);
+
+    if (m_bus_timed && m_io_start_cycles >= cycle_budget)
+        return false;
 
     if (m_state.repeat.active && !IsInterruptReady(nmi_pending, intr_pending) && !m_state.halted && !m_state.shutdown)
     {

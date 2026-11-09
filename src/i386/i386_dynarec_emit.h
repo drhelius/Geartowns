@@ -87,7 +87,11 @@ private:
         u32 bus_clocks;
         u32 before;
         u32 extra_before;
-        u32 next_check;
+        const I386::DynarecCheck* next_check;
+        u32 bus_bound;
+        u32 bus_change;
+        u32 bus_line;
+        u32 bus_lines;
         u8 written;
         u32 bus_code_row;
         u32 transfer_target;
@@ -114,6 +118,9 @@ private:
     void ComputeLiveness();
 
     void ComputeBus();
+    void ComputeBusBounds();
+    u32 GetCheckClocks(int index) const;
+    const I386::DynarecCheck* AddCheck(int index);
     void ComputeBusTransfer(Instruction& instruction);
     bool GetStaticTarget(const I386::InstructionContext& c, u32& target) const;
     BusRun AppendBus(const BusRun& run, const Instruction& instruction, bool transfer) const;
@@ -122,8 +129,9 @@ private:
     static u32 GetBusLevel(const BusRun& run, u32 level);
     void EmitBusRun(const BusRun& run, int carry);
     void EmitBusTransferRow(const BusRun& run);
-    void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access);
-    void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access);
+    void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback = NULL,
+        int first_base = -1);
+    void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback, int first_base);
     void Emit486Misaligned(int linear, int t, u32 size, int access);
     void Emit486FirstAGI(int t);
     void Store486Written(int written);
@@ -137,8 +145,8 @@ private:
     void ExitLinked(int steps, u32 clocks, u32 flags, int slot, const BusRun* run);
     void ExitTo(u32 target, int steps, u32 clocks, int slot, const BusRun* run);
     void StoreEIP(u32 eip);
-    void CallStep(u32 next_check, u32 native_clocks, u32 before, const I386::DynarecBusRun* settle,
-        const I386::DynarecBusRun* revert);
+    void CallStep(const I386::DynarecCheck* check, u32 native_clocks, u32 before,
+        const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert);
     const I386::DynarecBusRun* AddBusRun(const BusRun& run);
     intptr_t Offset(const void* member) const;
     intptr_t RegisterOffset(int index, int width) const;
@@ -192,6 +200,7 @@ private:
     int m_exit_written;
     int m_first_base;
     u32 m_bus_code_row;
+    const I386::DynarecCheck* m_bus_next_check;
     bool m_bus_line_check;
     u32 m_bus_line_next;
     u32 m_bus_line_first;

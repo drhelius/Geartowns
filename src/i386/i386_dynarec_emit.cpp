@@ -254,6 +254,9 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         if (position + length > k_dynarec_max_bytes)
             break;
 
+        // The disassembler may decode again from its own copy of the bytes, so the instruction keeps where they are
+        instruction.host = block.host + position;
+        GetOperandBytes(instruction, instruction.host);
         Classify(instruction);
 
         // A native that leaves the block through its own exits can't end a shadow that a fallback still needs
@@ -307,30 +310,22 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 // of them keeps the block, any other rewrite of its bytes removes it
 void DynarecEmitter::SetLiveOperands(Instruction& instruction)
 {
-    const u8* bytes = m_cpu->m_passive_bytes;
+    const u8* bytes = instruction.host;
     const u8* ram = m_cpu->m_dynarec_ram;
 
     instruction.live_operands = 0;
-    instruction.host = bytes;
 
     if (bytes < ram || bytes >= ram + ((size_t)m_cpu->m_dynarec_page_count << 12))
         return;
 
     u32 page = (u32)((bytes - ram) >> 12);
     u32 offset = (u32)(bytes - ram) & 0xFFF;
-    bool native = instruction.kind == DYNAREC_NATIVE;
-
-    GetOperandBytes(instruction, bytes);
-
-    u32 immediate = offset + instruction.immediate_position;
     u32 displacement = offset + instruction.displacement_position;
 
-    if (instruction.immediate_size != 0 && (!native || CanLiveImmediate(instruction)) &&
-        immediate + instruction.immediate_size <= 0x1000 &&
-        m_cpu->FindDynarecLive(page, immediate, instruction.immediate_size))
+    if ((instruction.kind != DYNAREC_NATIVE || CanLiveImmediate(instruction)) && IsLiveImmediate(instruction))
     {
         instruction.live_operands |= k_live_immediate;
-        AddLiveOperand(immediate, instruction.immediate_size);
+        AddLiveOperand(offset + instruction.immediate_position, instruction.immediate_size);
     }
 
     if (instruction.displacement_size != 0 && displacement + instruction.displacement_size <= 0x1000 &&
@@ -339,6 +334,21 @@ void DynarecEmitter::SetLiveOperands(Instruction& instruction)
         instruction.live_operands |= k_live_displacement;
         AddLiveOperand(displacement, instruction.displacement_size);
     }
+}
+
+// An immediate in RAM with a byte a rewrite of the page touched
+bool DynarecEmitter::IsLiveImmediate(const Instruction& instruction) const
+{
+    const u8* bytes = instruction.host;
+    const u8* ram = m_cpu->m_dynarec_ram;
+
+    if (instruction.immediate_size == 0 || bytes < ram || bytes >= ram + ((size_t)m_cpu->m_dynarec_page_count << 12))
+        return false;
+
+    u32 immediate = ((u32)(bytes - ram) & 0xFFF) + instruction.immediate_position;
+
+    return immediate + instruction.immediate_size <= 0x1000 &&
+        m_cpu->FindDynarecLive((u32)((bytes - ram) >> 12), immediate, instruction.immediate_size);
 }
 
 // Page offset in the low 12 bits, length - 1 above
@@ -394,7 +404,8 @@ void DynarecEmitter::GetOperandBytes(Instruction& instruction, const u8* bytes) 
     instruction.immediate_size = (u8)(position + displacement < length ? length - position - displacement : 0);
 }
 
-// The natives whose immediate EmitImmediate loads: ALU and TEST with one, MOV of one and PUSH of one
+// The natives whose immediate EmitImmediate loads: ALU and TEST with one, MOV of one, PUSH of one and the shift counts
+// EmitShiftCount reads
 bool DynarecEmitter::CanLiveImmediate(const Instruction& instruction) const
 {
     const I386::InstructionContext& c = instruction.context;
@@ -405,6 +416,9 @@ bool DynarecEmitter::CanLiveImmediate(const Instruction& instruction) const
 
     if (opcode < 0x40)
         return (opcode & 7) == 4 || (opcode & 7) == 5;
+
+    if (opcode == 0xC0 || opcode == 0xC1)
+        return c.reg != 2 && c.reg != 3;
 
     return (opcode >= 0x80 && opcode <= 0x83) || (opcode >= 0xB0 && opcode <= 0xBF) || opcode == 0xC6 ||
         opcode == 0xC7 || opcode == 0x68 || opcode == 0x6A || opcode == 0xA8 || opcode == 0xA9 ||
@@ -686,9 +700,10 @@ void DynarecEmitter::Classify(Instruction& instruction)
         else if (opcode2 == 0xB6 || opcode2 == 0xB7 || opcode2 == 0xBE || opcode2 == 0xBF)
             SetNative(instruction, memory ? 6 : 3, memory);
         else if ((opcode2 == 0xA4 || opcode2 == 0xAC) && (c.immediate & 0x1F) != 0 &&
-            (width == 32 || (c.immediate & 0x1F) <= 16))
+            (width == 32 || (c.immediate & 0x1F) <= 16) && !IsLiveImmediate(instruction))
         {
-            // SHLD and SHRD by a constant count. A 16-bit count above 16 rotates and stays in the interpreter
+            // SHLD and SHRD by a constant count. A 16-bit count above 16 rotates and stays in the interpreter, and so
+            // does a live count, which the interpreter reads
             SetNative(instruction, memory ? 7 : 3, memory);
             instruction.defs = k_flags_all;
         }
@@ -782,8 +797,16 @@ void DynarecEmitter::Classify(Instruction& instruction)
             break;
         case 0x69: case 0x6B:
         {
-            // IMUL r,r/m,imm: the immediate is the multiplier, so its clocks are known
+            // IMUL r,r/m,imm: the immediate is the multiplier, so its clocks are known. A live one runs in the
+            // interpreter, which reads it
             u32 multiplier = opcode == 0x6B ? (u32)SignExtend(c.immediate, 8) : c.immediate;
+
+            if (IsLiveImmediate(instruction))
+            {
+                instruction.kind = DYNAREC_HELPER;
+                break;
+            }
+
             SetNative(instruction, m_cpu->GetMultiplyClocks(m_cpu->GetMultiplySteps(multiplier, width, true), memory),
                 memory);
             instruction.defs = k_flags_all;
@@ -965,11 +988,17 @@ void DynarecEmitter::Classify(Instruction& instruction)
             break;
         case 0xC0: case 0xC1: case 0xD0: case 0xD1:
         {
-            // Rotates and shifts by a constant, the rotates through carry run in the interpreter
+            // Rotates and shifts by a constant, the rotates through carry run in the interpreter. A live count is read
+            // when the instruction runs, as D2 and D3 read CL
             int shift_width = opcode == 0xC0 || opcode == 0xD0 ? 8 : width;
             u32 count = opcode >= 0xD0 ? 1 : (c.immediate & 0x1F);
 
-            if (count != 0 && (c.reg <= 1 || (c.reg >= 4 && count <= (u32)shift_width)))
+            if (opcode <= 0xC1 && c.reg != 2 && c.reg != 3 && IsLiveImmediate(instruction))
+            {
+                SetNative(instruction, memory ? 7 : 3, true);
+                instruction.defs = c.reg <= 1 ? (u16)(I386_FLAG_CF | I386_FLAG_OF) : k_flags_all;
+            }
+            else if (count != 0 && (c.reg <= 1 || (c.reg >= 4 && count <= (u32)shift_width)))
             {
                 SetNative(instruction, memory ? 7 : 3, memory);
                 instruction.defs = c.reg <= 1 ? (u16)(I386_FLAG_CF | I386_FLAG_OF) : k_flags_all;
@@ -3096,10 +3125,16 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             StoreRegister(opcode & 7, width, DR_T0);
             break;
         case 0xC0: case 0xD0:
-            EmitShift(instruction, 8, opcode == 0xD0 ? 1 : c.immediate & 0x1F);
+            if ((instruction.live_operands & k_live_immediate) != 0)
+                EmitShiftCount(instruction, 8);
+            else
+                EmitShift(instruction, 8, opcode == 0xD0 ? 1 : c.immediate & 0x1F);
             break;
         case 0xC1: case 0xD1:
-            EmitShift(instruction, width, opcode == 0xD1 ? 1 : c.immediate & 0x1F);
+            if ((instruction.live_operands & k_live_immediate) != 0)
+                EmitShiftCount(instruction, width);
+            else
+                EmitShift(instruction, width, opcode == 0xD1 ? 1 : c.immediate & 0x1F);
             break;
         case 0xC2: case 0xC3:
             EmitReturn(instruction, index, width, opcode == 0xC2 ? (u16)c.immediate : 0);
@@ -3114,10 +3149,10 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitLeave(instruction, width);
             break;
         case 0xD2:
-            EmitShiftCL(instruction, 8);
+            EmitShiftCount(instruction, 8);
             break;
         case 0xD3:
-            EmitShiftCL(instruction, width);
+            EmitShiftCount(instruction, width);
             break;
         case 0xE0: case 0xE1: case 0xE2: case 0xE3:
             EmitLoop(instruction, index, SignExtend(c.immediate, 8));
@@ -3496,14 +3531,13 @@ void DynarecEmitter::EmitLeave(Instruction& instruction, int width)
     StoreRegister(I386_REG_EBP, width, DR_T1);
 }
 
-// Shifts and rotates by CL through RotateShift, as OPCodes_Group2 runs them. A count of zero leaves the operand and the
-// flags and falls back before anything is counted
-void DynarecEmitter::EmitShiftCL(Instruction& instruction, int width)
+// Shifts and rotates by CL or by a live count through RotateShift, as OPCodes_Group2 runs them. A count of zero leaves
+// the operand and the flags and falls back before anything is counted
+void DynarecEmitter::EmitShiftCount(Instruction& instruction, int width)
 {
     const I386::InstructionContext& c = instruction.context;
 
-    LoadRegister(DR_T1, I386_REG_ECX, 8);
-    jit_andi(DR_T1, DR_T1, 0x1F);
+    LoadShiftCount(DR_T1, instruction);
     jit_patch_at(jit_beqi(DR_T1, 0), instruction.fallback);
 
     if (c.memory_operand)
@@ -3518,10 +3552,12 @@ void DynarecEmitter::EmitShiftCL(Instruction& instruction, int width)
         LoadRegister(DR_T1, c.rm, width);
     }
 
+    LoadShiftCount(DR_T3, instruction);
     jit_movi(DR_T2, (jit_word_t)(uintptr_t)&I386::DynarecShift);
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_pushargr(DR_T1);
+    jit_pushargr(DR_T3);
     jit_pushargi((jit_word_t)(width | (c.reg << 8)));
     jit_finishr(DR_T2);
     jit_retval(DR_T1);
@@ -3530,6 +3566,19 @@ void DynarecEmitter::EmitShiftCL(Instruction& instruction, int width)
         StoreHost(DR_T4, DR_T1, width, DR_T2);
     else
         StoreRegister(c.rm, width, DR_T1);
+}
+
+// CL for D2 and D3, the live immediate for C0 and C1, masked to 5 bits
+void DynarecEmitter::LoadShiftCount(int r, const Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+
+    if (c.opcode == 0xD2 || c.opcode == 0xD3)
+        LoadRegister(r, I386_REG_ECX, 8);
+    else
+        EmitImmediate(r, instruction, c.immediate & 0xFF, 8, false);
+
+    jit_andi(r, r, 0x1F);
 }
 
 // MUL, IMUL r/m, IMUL r,r/m and IMUL r,r/m,imm through DynarecMultiply, form as it takes it

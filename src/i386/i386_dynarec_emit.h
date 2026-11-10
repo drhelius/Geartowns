@@ -203,6 +203,7 @@ private:
     void AddLiveOperand(u32 first, u32 length);
     void GetOperandBytes(Instruction& instruction, const u8* bytes) const;
     bool CanLiveImmediate(const Instruction& instruction) const;
+    bool IsLiveImmediate(const Instruction& instruction) const;
     void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback, bool bus = true);
     void EmitOperandAddress(Instruction& instruction, int width, int access);
     void EmitSZP(int f, int t, int u, int result, int width, u16 needed);
@@ -219,7 +220,8 @@ private:
     void EmitIncDecRM(Instruction& instruction, int width, bool decrement);
     void EmitGroup3(Instruction& instruction, int width);
     void EmitLeave(Instruction& instruction, int width);
-    void EmitShiftCL(Instruction& instruction, int width);
+    void EmitShiftCount(Instruction& instruction, int width);
+    void LoadShiftCount(int r, const Instruction& instruction);
     void EmitMultiply(Instruction& instruction, int width, u32 form, u32 multiplier);
     void EmitDivide(Instruction& instruction, int width);
     void EmitMove(Instruction& instruction, int width, bool load);

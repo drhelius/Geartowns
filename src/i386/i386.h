@@ -933,7 +933,7 @@ private:
     template<bool i486>
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
-    static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t form);
+    static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t count, uintptr_t form);
     static void DynarecFlags(I386* cpu, uintptr_t form);
     static uintptr_t DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access);
     static uintptr_t DynarecReopen(I386* cpu, uintptr_t site);

@@ -848,20 +848,19 @@ template bool I386::OPCodes_Group3<16>();
 template bool I386::OPCodes_Group3<32>();
 
 #if !defined(GT_DISABLE_DYNAREC)
-// Shifts and rotates by CL for translated blocks, as OPCodes_Group2 runs them for a count other than zero. form: the
-// width, the operation from bit 8
-uintptr_t I386::DynarecShift(I386* cpu, uintptr_t value, uintptr_t form)
+// Shifts and rotates by CL or a live count for translated blocks, as OPCodes_Group2 runs them for a count other than
+// zero. form: the width, the operation from bit 8
+uintptr_t I386::DynarecShift(I386* cpu, uintptr_t value, uintptr_t count, uintptr_t form)
 {
-    u32 count = cpu->m_state.registers[I386_REG_ECX].byte0;
     int operation = (int)(form >> 8);
 
     if ((form & 0xFF) == 8)
-        return cpu->RotateShift<8>((u32)value, operation, count);
+        return cpu->RotateShift<8>((u32)value, operation, (u32)count);
 
     if ((form & 0xFF) == 16)
-        return cpu->RotateShift<16>((u32)value, operation, count);
+        return cpu->RotateShift<16>((u32)value, operation, (u32)count);
 
-    return cpu->RotateShift<32>((u32)value, operation, count);
+    return cpu->RotateShift<32>((u32)value, operation, (u32)count);
 }
 
 // The flags a translated instruction left to its block's cold paths, from its record. form: the kind (add, sub, logic,

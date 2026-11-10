@@ -717,6 +717,13 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
         if (m_dynarec_page_blocks[page] == k_dynarec_none)
             continue;
 
+        u32 first = MAX(offset, page << 12) & 0xFFF;
+        u32 last = (MIN(end, (page + 1) << 12) - 1) & 0xFFF;
+
+        // Rewriting live operands is what blocks read them for, so those writes don't heat the page either
+        if (m_dynarec_page_live[page] != k_dynarec_live_none && IsDynarecSafeWrite(page, first, last))
+            continue;
+
         if (++m_dynarec_page_writes[page] >= k_dynarec_hot_writes)
         {
             EvictDynarecPage(page);
@@ -725,12 +732,6 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
 
         // A write that leaves memory as it was can't change translated code, but it still heats the page
         if (!changed)
-            continue;
-
-        u32 first = MAX(offset, page << 12) & 0xFFF;
-        u32 last = (MIN(end, (page + 1) << 12) - 1) & 0xFFF;
-
-        if (m_dynarec_page_live[page] != k_dynarec_live_none && IsDynarecSafeWrite(page, first, last))
             continue;
 
         bool hit = false;

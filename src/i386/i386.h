@@ -911,7 +911,7 @@ private:
     void AddDynarecPageBlock(u32 index);
     void LinkDynarecBlock(u32 from, u8 slot, u32 to);
     void RemoveDynarecBlock(u32 index);
-    void InvalidateDynarecCode(u32 offset, u32 size);
+    void InvalidateDynarecCode(u32 offset, u32 size, bool changed);
     void EvictDynarecPage(u32 page);
     bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const;
     bool IsDynarecSafeWrite(u32 page, u32 first, u32 last) const;
@@ -921,7 +921,7 @@ private:
     bool FindDynarecLive(u32 page, u32 first, u32 length) const;
     void CoolDynarecPages();
     void CheckDynarecMemory();
-    static void DynarecCodeWrite(void* context, u32 offset, u32 size);
+    static void DynarecCodeWrite(void* context, u32 offset, u32 size, bool changed);
     s64 GetDynarecFit(const DynarecCheck& check) const;
     template<int timing>
     bool FitsDynarecBlock(const DynarecBlock& block, u64 used, u32 budget) const;

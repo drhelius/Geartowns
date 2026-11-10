@@ -35,7 +35,7 @@ typedef u32 (*GT_Memory_Read32_Fn)(void* device, u32 offset);
 typedef void (*GT_Memory_Write8_Fn)(void* device, u32 offset, u8 value);
 typedef void (*GT_Memory_Write16_Fn)(void* device, u32 offset, u16 value);
 typedef void (*GT_Memory_Write32_Fn)(void* device, u32 offset, u32 value);
-typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size);
+typedef void (*GT_Memory_Code_Write_Fn)(void* context, u32 offset, u32 size, bool changed);
 
 static const u32 k_memory_dma_slots = 4096;
 static const u32 k_memory_backup_ram_size = 0x6000;
@@ -182,7 +182,7 @@ private:
     void UpdateCPUPage(u32 page, const DebugRegion* region);
     void RemapRange(u32 base, u32 size);
 #if !defined(GT_DISABLE_DYNAREC)
-    void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size);
+    void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size, bool changed);
 #endif
     void ApplyMapping();
     void ResetCMOSSetup();

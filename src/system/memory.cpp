@@ -434,7 +434,7 @@ INLINE bool Memory::IsProtectedSpan(const DebugRegion* region, u32 offset, u32 s
 
 #if !defined(GT_DISABLE_DYNAREC)
 // Writes that reach RAM pages holding translated code outside the CPU fast path
-INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size)
+INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size, bool changed)
 {
     if (region->write_data != m_working_ram || !IsValidPointer(m_code_pages))
         return;
@@ -446,7 +446,7 @@ INLINE void Memory::NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 s
     {
         if (m_code_pages[page] != 0)
         {
-            m_code_write_callback(m_code_write_context, offset, size);
+            m_code_write_callback(m_code_write_context, offset, size, changed);
             return;
         }
     }
@@ -543,8 +543,7 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
                 write_u16_le(region->write_data + offset, value);
                 m_debug_snapshot_id += 2;
 #if !defined(GT_DISABLE_DYNAREC)
-                if (changed)
-                    NotifyCodeWrite(region, offset, 2);
+                NotifyCodeWrite(region, offset, 2, changed);
 #endif
                 return;
             }
@@ -583,8 +582,7 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
                 write_u32_le(region->write_data + offset, value);
                 m_debug_snapshot_id += 4;
 #if !defined(GT_DISABLE_DYNAREC)
-                if (changed)
-                    NotifyCodeWrite(region, offset, 4);
+                NotifyCodeWrite(region, offset, 4, changed);
 #endif
                 return;
             }
@@ -879,7 +877,7 @@ bool Memory::DebugWriteRegionBlock(int id, u32 offset, const u8* data, u32 size)
     memcpy(region->write_data + offset, data, size);
     m_debug_snapshot_id++;
 #if !defined(GT_DISABLE_DYNAREC)
-    NotifyCodeWrite(region, offset, size);
+    NotifyCodeWrite(region, offset, size, true);
 #endif
     return true;
 }
@@ -1003,7 +1001,7 @@ bool Memory::DebugWritePhysicalBlock(u32 physical, const u8* data, u32 size)
         {
             region->write_data[offset] = data[i];
 #if !defined(GT_DISABLE_DYNAREC)
-            NotifyCodeWrite(region, offset, 1);
+            NotifyCodeWrite(region, offset, 1, true);
 #endif
         }
     }
@@ -1043,7 +1041,7 @@ bool Memory::DebugWriteBusBlock(u32 bus_address, const u8* data, u32 size)
         {
             region->write_data[offset] = data[i];
 #if !defined(GT_DISABLE_DYNAREC)
-            NotifyCodeWrite(region, offset, 1);
+            NotifyCodeWrite(region, offset, 1, true);
 #endif
         }
     }
@@ -1385,9 +1383,7 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
 #endif
         region->write_data[offset] = value;
 #if !defined(GT_DISABLE_DYNAREC)
-        // A write that leaves the byte as it was can't change translated code
-        if (changed)
-            NotifyCodeWrite(region, offset, 1);
+        NotifyCodeWrite(region, offset, 1, changed);
 #endif
     }
 

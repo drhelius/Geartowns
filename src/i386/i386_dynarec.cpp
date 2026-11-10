@@ -693,13 +693,13 @@ void I386::RemoveDynarecBlock(u32 index)
     m_dynarec_invalidations++;
 }
 
-void I386::DynarecCodeWrite(void* context, u32 offset, u32 size)
+void I386::DynarecCodeWrite(void* context, u32 offset, u32 size, bool changed)
 {
-    ((I386*)context)->InvalidateDynarecCode(offset, size);
+    ((I386*)context)->InvalidateDynarecCode(offset, size, changed);
 }
 
 // A write to a RAM page with blocks removes the blocks whose bytes it overlaps
-void I386::InvalidateDynarecCode(u32 offset, u32 size)
+void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
 {
     u32 end = offset + size;
 
@@ -713,6 +713,10 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             EvictDynarecPage(page);
             continue;
         }
+
+        // A write that leaves memory as it was can't change translated code, but it still heats the page
+        if (!changed)
+            continue;
 
         u32 first = MAX(offset, page << 12) & 0xFFF;
         u32 last = (MIN(end, (page + 1) << 12) - 1) & 0xFFF;

@@ -214,6 +214,40 @@ INLINE int I386::FindTLBWay(u32 set, u32 linear_page) const
     return -1;
 }
 
+#if !defined(GT_DISABLE_DYNAREC)
+// A translated access whose page isn't its TLB set's most recent way: the host page of the way that holds it, touched as
+// the interpreter's access touches it, or zero with nothing changed. access: 1 read, 2 write, 3 both on one page
+uintptr_t I386::DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access)
+{
+    u32 set = ((u32)linear >> 12) & (I386_TLB_SETS - 1);
+    int way = cpu->FindTLBWay(set, (u32)linear & 0xFFFFF000U);
+
+    if (way < 0)
+        return 0;
+
+    const TLBEntry& entry = cpu->m_tlb[set * I386_TLB_WAYS + way];
+    const u8* page = (access & 1) != 0 ? entry.read_page : entry.write_page;
+
+    if (!IsValidPointer(page) || (access == 3 && page != entry.write_page))
+        return 0;
+
+    cpu->TouchTLBWay(set, (u32)way);
+    return (uintptr_t)page;
+}
+
+// After a translated access moved a TLB way: the window opens again for the next instruction as StartInstruction would,
+// touching its page before a check as DynarecStep does. 1 when the block no longer lies in it and must leave
+uintptr_t I386::DynarecReopen(I386* cpu, uintptr_t check)
+{
+    const DynarecBlock& block = cpu->m_dynarec_blocks[cpu->m_dynarec_current];
+    cpu->OpenCodeWindow(cpu->m_state.eip, check != 0);
+    u32 watch_offset = block.watch_eip - cpu->m_code_window_eip;
+
+    return watch_offset >= cpu->m_code_window_size || watch_offset + block.watch_length > cpu->m_code_window_size ||
+        cpu->m_code_window + (block.eip - cpu->m_code_window_eip) != block.host ? 1 : 0;
+}
+#endif
+
 // A hit in any way of the set whose host page allows the access
 // as the fast paths would use it from the most recent way
 // It updates the replacement state like every translating hit

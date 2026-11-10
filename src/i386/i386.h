@@ -916,6 +916,8 @@ private:
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
     static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t form);
+    static uintptr_t DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access);
+    static uintptr_t DynarecReopen(I386* cpu, uintptr_t check);
     template<bool i486>
     static void DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
     static uintptr_t DynarecDivideSlow(I386* cpu, uintptr_t value, uintptr_t form);

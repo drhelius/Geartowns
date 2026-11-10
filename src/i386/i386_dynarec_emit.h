@@ -153,6 +153,7 @@ private:
     uintptr_t GetBusAccessFlags(u32 size, int access) const;
     const I386::DynarecBusRun* GetSettleRun(Instruction& instruction);
     void StoreOrSlow(Instruction& instruction, int width);
+    void EmitReopen(Instruction& instruction, int index);
     void EmitBusDram(int row, int scratch, int t2, u32 size, int access);
     void EmitBusCheck(int host, int linear, int t, u32 size, jit_node* fallback);
     void EmitBusPiece(int host, int linear, int t, u32 size, int access);

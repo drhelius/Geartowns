@@ -1709,6 +1709,9 @@ void DynarecEmitter::EmitBlock()
             m_slow_index = i;
             EmitNative(instruction, i);
             m_slow_ok = false;
+
+            if (instruction.memory && !instruction.ends_block && (m_key & k_dynarec_key_paging) != 0)
+                EmitReopen(instruction, i);
             m_exit_written = -1;
 
             if (!instruction.ends_block)
@@ -1776,6 +1779,24 @@ void DynarecEmitter::EmitBlock()
         if (IsValidPointer(instruction.fallback) && !k_dynarec_near_fallbacks)
             EmitFallback(instruction, i, last);
     }
+}
+
+// An access on another TLB way closed the code window: it opens again for the next instruction, and the block leaves
+// if it no longer lies in it
+void DynarecEmitter::EmitReopen(Instruction& instruction, int index)
+{
+    jit_ldxi_i(DR_T0, DR_CPU, Offset(&m_cpu->m_code_window_size));
+    jit_node_t* open = jit_bnei(DR_T0, 0);
+    StoreEIP(instruction.context.next_eip);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargi((jit_word_t)(uintptr_t)instruction.next_check);
+    jit_finishi((jit_pointer_t)&I386::DynarecReopen);
+    jit_retval(DR_T0);
+    jit_node_t* stay = jit_beqi(DR_T0, 0);
+    Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
+    jit_patch(stay);
+    jit_patch(open);
 }
 
 // The shadow had one step left, which this instruction took
@@ -2387,7 +2408,7 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
         jit_addr(t2, t2, DR_CPU);
         LoadU32(t3, t2, tlb + (jit_word_t)offsetof(I386::TLBEntry, linear_page));
         jit_andi(r, t1, 0xFFFFF000);
-        jit_patch_at(jit_bner(t3, r), fallback);
+        jit_node_t* other_way = jit_bner(t3, r);
 
         if (access == DYNAREC_READ_WRITE)
         {
@@ -2398,6 +2419,20 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
         else
             jit_ldxi(t3, t2, tlb + (jit_word_t)(access == DYNAREC_READ ? offsetof(I386::TLBEntry, read_page) :
                 offsetof(I386::TLBEntry, write_page)));
+
+        // Another way of the set: DynarecTLBHost finds and touches it as the interpreter would, or the access falls back
+        jit_node_t* found = jit_jmpi();
+        jit_patch(other_way);
+        jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, t1);
+        jit_prepare();
+        jit_pushargr(DR_CPU);
+        jit_pushargr(t1);
+        jit_pushargi((jit_word_t)(access == DYNAREC_READ ? 1 : access == DYNAREC_WRITE ? 2 : 3));
+        jit_finishi((jit_pointer_t)&I386::DynarecTLBHost);
+        jit_retval(t3);
+        jit_patch_at(jit_beqi(t3, 0), fallback);
+        LoadU32(t1, DR_CPU, Offset(&m_cpu->m_dynarec_slow_linear));
+        jit_patch(found);
     }
 
     bool slow = m_slow_store && access == DYNAREC_WRITE;

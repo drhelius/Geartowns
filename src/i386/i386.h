@@ -915,6 +915,9 @@ private:
     template<bool i486>
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
+    template<bool i486>
+    static uintptr_t DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check, uintptr_t first_base,
+        uintptr_t settle, uintptr_t before);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     static void DynarecCall(I386* cpu);
 #endif
@@ -1527,6 +1530,7 @@ private:
     u8* m_dynarec_page_backoff;
     u16* m_dynarec_page_live;
     u8* m_dynarec_page_safe;
+    u32 m_dynarec_slow_linear;
     u32 m_dynarec_page_count;
     const u8* m_dynarec_ram;
     u32 m_dynarec_region_generation;

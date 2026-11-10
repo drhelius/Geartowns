@@ -99,6 +99,10 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_count = 0;
     m_key = 0;
     m_timed = false;
+    m_slow_ok = false;
+    m_slow_store = false;
+    m_slow_index = 0;
+    m_slow_first_base = -1;
     m_first_base = -1;
     m_bus_code_row = 0;
     InitPointer(m_bus_next_check);
@@ -452,6 +456,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
     instruction.clocks = 0;
     InitPointer(instruction.fallback);
     InitPointer(instruction.resume);
+    InitPointer(instruction.settle);
 
     if (c.lock)
         return;
@@ -1550,10 +1555,7 @@ void DynarecEmitter::EmitBusDram(int row, int scratch, int t2, u32 size, int acc
 void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback,
     int first_base)
 {
-    u32 code = m_bus_code_row & k_i386_bus_code_row;
-    u32 shift = m_bus_code_row >> 31;
-    uintptr_t flags = size | (access == DYNAREC_WRITE ? 0x08 : 0) | (access == DYNAREC_READ_WRITE ? 0x10 : 0) |
-        (code != k_i386_bus_code_row ? 0x20 | ((uintptr_t)code << 8) : 0) | (shift != 0 ? 0x40 : 0);
+    uintptr_t flags = GetBusAccessFlags(size, access);
     const I386::DynarecCheck* check = IsValidPointer(fallback) ? m_bus_next_check : NULL;
     jit_stxi(Offset(&m_cpu->m_dynarec_spill), DR_CPU, host);
     jit_movi(t2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<true> :
@@ -1573,6 +1575,16 @@ void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, i
 
     if (IsValidPointer(check))
         jit_patch_at(jit_bnei(t2, 0), fallback);
+}
+
+// DynarecBusAccess's flags for an access of the instruction being emitted
+uintptr_t DynarecEmitter::GetBusAccessFlags(u32 size, int access) const
+{
+    u32 code = m_bus_code_row & k_i386_bus_code_row;
+    u32 shift = m_bus_code_row >> 31;
+
+    return size | (access == DYNAREC_WRITE ? 0x08 : 0) | (access == DYNAREC_READ_WRITE ? 0x10 : 0) |
+        (code != k_i386_bus_code_row ? 0x20 | ((uintptr_t)code << 8) : 0) | (shift != 0 ? 0x40 : 0);
 }
 
 // Checks run before anything is written. A native instruction whose checks fail runs in the interpreter
@@ -1635,7 +1647,10 @@ void DynarecEmitter::EmitBlock()
                 Emit486FirstAGI(DR_T0);
 
             m_exit_written = m_i486 ? instruction.written : -1;
+            m_slow_ok = !shadow;
+            m_slow_index = i;
             EmitNative(instruction, i);
+            m_slow_ok = false;
             m_exit_written = -1;
 
             if (!instruction.ends_block)
@@ -1736,7 +1751,7 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
     if (m_i486 && index > 0)
         Store486Written(m_instructions[index - 1].written);
 
-    const I386::DynarecBusRun* settle = m_timed ? AddBusRun(instruction.bus_before) : NULL;
+    const I386::DynarecBusRun* settle = GetSettleRun(instruction);
     const I386::DynarecBusRun* revert = m_timed && !instruction.ends_block ? AddBusRun(instruction.bus_after) : NULL;
     CallStep(instruction.next_check, instruction.clocks, instruction.before, settle, revert);
 
@@ -1750,6 +1765,15 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
     jit_patch_at(jit_jmpi(), instruction.resume);
     jit_patch(stop);
     Exit(index + 1, instruction.before + instruction.clocks, index == last ? k_dynarec_exit_end : 0);
+}
+
+// The run before the instruction, which its fallback and its slow store apply to find the time of its access
+const I386::DynarecBusRun* DynarecEmitter::GetSettleRun(Instruction& instruction)
+{
+    if (m_timed && !IsValidPointer(instruction.settle))
+        instruction.settle = AddBusRun(instruction.bus_before);
+
+    return instruction.settle;
 }
 
 // Leaves for the dispatcher through the exit of the entry function, with the steps and clocks of the block up to here
@@ -2318,11 +2342,28 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
                 offsetof(I386::TLBEntry, write_page)));
     }
 
-    jit_patch_at(jit_beqi(t3, 0), fallback);
+    bool slow = m_slow_store && access == DYNAREC_WRITE;
+    jit_node_t* join = NULL;
+
+    if (slow)
+    {
+        jit_node_t* host = jit_bnei(t3, 0);
+        jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, t1);
+        jit_movi(r, 0);
+        join = jit_jmpi();
+        jit_patch(host);
+    }
+    else
+        jit_patch_at(jit_beqi(t3, 0), fallback);
+
     jit_andi(r, t1, 0xFFF);
     jit_addr(r, r, t3);
 
+    if (IsValidPointer(join))
+        jit_patch(join);
+
     int first_base = bus && m_i486 ? m_first_base : -1;
+    m_slow_first_base = first_base;
 
     if (bus && m_i486)
     {
@@ -2331,7 +2372,13 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     }
 
     if (bus && m_timed)
+    {
+        jit_node_t* counted = slow ? jit_beqi(r, 0) : NULL;
         EmitBusAccess(r, t1, t2, t3, size, access, fallback, first_base);
+
+        if (IsValidPointer(counted))
+            jit_patch(counted);
+    }
 }
 
 // 3 clocks for each access of a misaligned 486 operand, past the last check that can fall back to the interpreter
@@ -3043,6 +3090,43 @@ void DynarecEmitter::EmitGroup3(Instruction& instruction, int width)
     }
 }
 
+// A store whose page has no host memory (DRAM with blocks, VRAM behind its handlers) calls DynarecSlowStore, which
+// counts and makes it as the interpreter would, or falls back before anything changes. A write that ends the batch or
+// removes this block leaves after the instruction
+void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
+{
+    if (!m_slow_store)
+    {
+        StoreHost(DR_T0, DR_T1, width, DR_T2);
+        return;
+    }
+
+    u32 size = (u32)width / 8;
+    uintptr_t access = GetBusAccessFlags(size, DYNAREC_WRITE) | (m_timed ? 0x80 : 0);
+    jit_node_t* slow = jit_beqi(DR_T0, 0);
+    StoreHost(DR_T0, DR_T1, width, DR_T2);
+    jit_node_t* done = jit_jmpi();
+    jit_patch(slow);
+    jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<true> :
+        (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<false>);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(DR_T1);
+    jit_pushargi((jit_word_t)access);
+    jit_pushargi((jit_word_t)(uintptr_t)m_bus_next_check);
+    jit_pushargi((jit_word_t)(m_slow_first_base + 1));
+    jit_pushargi((jit_word_t)(uintptr_t)GetSettleRun(instruction));
+    jit_pushargi((jit_word_t)instruction.before);
+    jit_finishr(DR_T2);
+    jit_retval(DR_T0);
+    jit_patch_at(jit_beqi(DR_T0, 2), instruction.fallback);
+    jit_node_t* stay = jit_beqi(DR_T0, 0);
+    StoreEIP(instruction.context.next_eip);
+    Exit(m_slow_index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
+    jit_patch(stay);
+    jit_patch(done);
+}
+
 void DynarecEmitter::EmitMove(Instruction& instruction, int width, bool load)
 {
     const I386::InstructionContext& c = instruction.context;
@@ -3054,6 +3138,7 @@ void DynarecEmitter::EmitMove(Instruction& instruction, int width, bool load)
         return;
     }
 
+    m_slow_store = m_slow_ok && !load;
     EmitOperandAddress(instruction, width, load ? DYNAREC_READ : DYNAREC_WRITE);
 
     if (load)
@@ -3064,8 +3149,10 @@ void DynarecEmitter::EmitMove(Instruction& instruction, int width, bool load)
     else
     {
         LoadRegister(DR_T1, c.reg, width);
-        StoreHost(DR_T0, DR_T1, width, DR_T2);
+        StoreOrSlow(instruction, width);
     }
+
+    m_slow_store = false;
 }
 
 void DynarecEmitter::EmitMoveImmediate(Instruction& instruction, int width)
@@ -3079,9 +3166,11 @@ void DynarecEmitter::EmitMoveImmediate(Instruction& instruction, int width)
         return;
     }
 
+    m_slow_store = m_slow_ok;
     EmitOperandAddress(instruction, width, DYNAREC_WRITE);
     EmitImmediate(DR_T1, instruction, c.immediate, width, false);
-    StoreHost(DR_T0, DR_T1, width, DR_T2);
+    StoreOrSlow(instruction, width);
+    m_slow_store = false;
 }
 
 void DynarecEmitter::EmitMoveOffset(Instruction& instruction, int width, bool load)
@@ -3098,6 +3187,7 @@ void DynarecEmitter::EmitMoveOffset(Instruction& instruction, int width, bool lo
     else
         jit_movi(DR_T0, (jit_word_t)c.immediate);
 
+    m_slow_store = m_slow_ok && !load;
     EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, (u32)width / 8, load ? DYNAREC_READ : DYNAREC_WRITE,
         instruction.fallback);
 
@@ -3109,8 +3199,10 @@ void DynarecEmitter::EmitMoveOffset(Instruction& instruction, int width, bool lo
     else
     {
         LoadRegister(DR_T1, I386_REG_EAX, width);
-        StoreHost(DR_T0, DR_T1, width, DR_T2);
+        StoreOrSlow(instruction, width);
     }
+
+    m_slow_store = false;
 }
 
 void DynarecEmitter::EmitLEA(Instruction& instruction, int width)

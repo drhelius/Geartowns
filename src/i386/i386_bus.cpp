@@ -846,4 +846,77 @@ template uintptr_t I386::DynarecBusAccess<false>(I386* cpu, uintptr_t linear, ui
     uintptr_t first_base);
 template uintptr_t I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
     uintptr_t first_base);
+
+// A native store to a page without host memory, at the linear address the block left in m_dynarec_slow_linear: DRAM
+// with blocks or VRAM behind its handlers, and only where the interpreter's write couldn't fault or touch a page table.
+// The handler sees the access at the time DynarecStep would give it, the bus time is DynarecBusAccess's. Returns 0,
+// 1 when the block must leave after the instruction, 2 when nothing was done and the instruction falls back, with the
+// 486 clocks the block added for it taken back. access: DynarecBusAccess's flags, 80h with bus timing
+template<bool i486>
+uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check, uintptr_t first_base,
+    uintptr_t settle, uintptr_t before)
+{
+    u32 linear = cpu->m_dynarec_slow_linear;
+    u32 size = (u32)(access & 7);
+    u32 extra = 0;
+
+    if (i486)
+    {
+        if (size > 1 && (linear & (size - 1)) != 0)
+            extra += 3;
+
+        if (first_base != 0 && (cpu->m_486_written & (1 << (first_base - 1))) != 0)
+            extra += 1;
+    }
+
+    u32 physical = linear;
+    bool fits = (cpu->m_state.debug_registers[7] & 0xFF) == 0 && !cpu->m_debugger_memory_checks &&
+        !(cpu->m_alignment_check && (linear & (size - 1)) != 0);
+
+    if (fits && (cpu->m_state.cr0 & 0x80000000U) != 0)
+    {
+        u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
+        const TLBEntry& entry = cpu->m_tlb[set * I386_TLB_WAYS + cpu->m_tlb_mru[set]];
+        fits = (entry.flags & cpu->m_tlb_write_mask) == cpu->m_tlb_write_mask;
+        physical = entry.physical_page | (linear & 0xFFF);
+    }
+
+    u8 bus_class = fits ? cpu->m_bus_page_class[physical >> 12] : (u8)GT_BUS_NONE;
+
+    if (bus_class != GT_BUS_DRAM && bus_class != GT_BUS_VRAM)
+    {
+        cpu->m_dynarec_clocks -= extra;
+        return 2;
+    }
+
+    s32 fraction = cpu->m_bus_fraction;
+    u32 level = cpu->m_bus_queue;
+
+    if (settle != 0)
+    {
+        const DynarecBusRun& run = *(const DynarecBusRun*)settle;
+        s32 queue = MIN(MAX((s32)level + run.offset, (s32)run.low), (s32)run.high);
+        cpu->m_bus_fraction += cpu->GetDynarecBusTime(run, level);
+        cpu->m_bus_queue = (u32)queue;
+    }
+
+    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks - extra + (u32)before +
+        (cpu->m_bus_timed ? cpu->GetBusPending() : 0);
+    cpu->m_bus_fraction = fraction;
+    cpu->m_bus_queue = level;
+
+    if ((access & 0x80) != 0 && DynarecBusAccess<i486>(cpu, linear, access & ~(uintptr_t)0x80, check, first_base) != 0)
+        return 2;
+
+    GT_Bus_Access_Context& context = *cpu->m_bus_context;
+    cpu->WritePhysical(physical, (u32)value, size, context);
+
+    return cpu->m_dynarec_dirty || context.end_batch || context.wait_cycles != cpu->m_dynarec_wait ||
+        cpu->m_code_window_size == 0 ? 1 : 0;
+}
+
+template uintptr_t I386::DynarecSlowStore<false>(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check,
+    uintptr_t first_base, uintptr_t settle, uintptr_t before);
+template uintptr_t I386::DynarecSlowStore<true>(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check,
+    uintptr_t first_base, uintptr_t settle, uintptr_t before);
 #endif

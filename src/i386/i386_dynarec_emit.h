@@ -117,6 +117,7 @@ private:
         BusRun bus_taken;
         jit_node* fallback;
         jit_node* resume;
+        const I386::DynarecBusRun* settle;
     };
 
     bool Decode(u32 available, u32 instruction_limit);
@@ -149,6 +150,9 @@ private:
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback = NULL,
         int first_base = -1);
     void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback, int first_base);
+    uintptr_t GetBusAccessFlags(u32 size, int access) const;
+    const I386::DynarecBusRun* GetSettleRun(Instruction& instruction);
+    void StoreOrSlow(Instruction& instruction, int width);
     void EmitBusDram(int row, int scratch, int t2, u32 size, int access);
     void EmitBusCheck(int host, int linear, int t, u32 size, jit_node* fallback);
     void EmitBusPiece(int host, int linear, int t, u32 size, int access);
@@ -240,6 +244,10 @@ private:
     u8 m_key;
     int m_count;
     bool m_timed;
+    bool m_slow_ok;
+    bool m_slow_store;
+    int m_slow_index;
+    int m_slow_first_base;
     bool m_i486;
     int m_exit_written;
     int m_first_base;

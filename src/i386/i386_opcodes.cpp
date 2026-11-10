@@ -2623,6 +2623,60 @@ bool I386::EscapeCoprocessor()
     return true;
 }
 
+#if !defined(GT_DISABLE_DYNAREC)
+// Translated ESC instructions run while every x87 exception is masked and none is pending: none can raise an
+// exception, call the error callback or skip a store then
+uintptr_t I386::DynarecEscapeReady(I386* cpu)
+{
+    return (cpu->m_x87->GetState()->control & 0x3F) == 0x3F && !cpu->m_x87->IsErrorPending() ? 1 : 0;
+}
+
+// EscapeCoprocessor past its checks, with the operand at host, its offset in the first temp, and the x87's clocks past
+// the fewest the block counted. form: the opcode, ModR/M from bit 8, the operand size from bit 16, 32-bit operands at
+// bit 20, protected mode at bit 21 and the segment from bit 24
+void I386::DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t eip, uintptr_t fewest)
+{
+    X87_Operation operation;
+    u32 size = (u32)(form >> 16) & 0xF;
+    int segment = (int)(form >> 24) & 7;
+    operation.opcode = (u8)form;
+    operation.modrm = (u8)(form >> 8);
+    operation.memory = size != 0;
+    operation.operand32 = (form & (1 << 20)) != 0;
+    operation.protected_mode = (form & (1 << 21)) != 0;
+    operation.instruction_selector = cpu->m_state.segments[I386_SEGMENT_CS].selector;
+    operation.instruction_offset = (u32)eip;
+    operation.operand_selector = operation.memory ? cpu->m_state.segments[segment].selector : 0;
+    operation.operand_offset = operation.memory ? (u32)cpu->m_dynarec_temp[0] : 0;
+
+    u8 operand[8];
+    bool write = false;
+
+    if (operation.memory)
+    {
+        X87::GetMemoryOperandSize(operation.opcode, operation.modrm, operation.operand32, write);
+
+        if (!write)
+            memcpy(operand, (const u8*)host, size);
+    }
+
+    cpu->m_dynarec_clocks += cpu->m_x87->GetClocks(operation, operand) - (u32)fewest;
+
+    if (cpu->m_x87->Execute(operation, operand))
+        memcpy((u8*)host, operand, size);
+
+    // FNSTSW AX
+    if (operation.opcode == 0xDF && operation.modrm == 0xE0)
+        cpu->SetRegister(I386_REG_EAX, 16, cpu->m_x87->GetStatusWord());
+}
+
+// The x87's 486 clocks for the form at their fewest and at most: stores of a zero and lower precisions move them
+void I386::GetEscapeClocks(const InstructionContext& c, u32& fewest, u32& most) const
+{
+    m_x87->Get486ClockRange(c.opcode, c.modrm, m_state.execution_mode == I386_MODE_PROTECTED, fewest, most);
+}
+#endif
+
 // The 386 checks only the first and last bytes before the transfer
 // An operand that wraps the address limit with a bad byte in between raises exception 9 instead
 bool I386::CheckCoprocessorOperand(u32 size, bool write)

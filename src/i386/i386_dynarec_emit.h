@@ -221,6 +221,8 @@ private:
     void EmitGroup3(Instruction& instruction, int width);
     void EmitLeave(Instruction& instruction, int width);
     void EmitShiftCount(Instruction& instruction, int width);
+    bool IsEscapeNative(const I386::InstructionContext& c) const;
+    void EmitEscape(Instruction& instruction);
     void LoadShiftCount(int r, const Instruction& instruction);
     void EmitMultiply(Instruction& instruction, int width, u32 form, u32 multiplier);
     void EmitDivide(Instruction& instruction, int width);

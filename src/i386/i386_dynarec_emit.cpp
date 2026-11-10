@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "i386_dynarec_emit.h"
+#include "x87.h"
 
 #if !defined(GT_DISABLE_DYNAREC)
 
@@ -292,6 +293,15 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 
             if (c.two_byte ? c.opcode2 == 0xAF : (c.opcode == 0xF6 || c.opcode == 0xF7) && (c.reg == 4 || c.reg == 5))
                 extra += 10 + (c.opcode == 0xF6 ? 8 : c.operand_size * 8);
+
+            // An x87 store of a zero or a division at full precision takes longer than the form's fewest clocks
+            if (!c.two_byte && c.opcode >= 0xD8 && c.opcode <= 0xDF)
+            {
+                u32 fewest = 0;
+                u32 most = 0;
+                m_cpu->GetEscapeClocks(c, fewest, most);
+                extra += most - fewest;
+            }
         }
         position += length;
         m_count++;
@@ -828,8 +838,12 @@ void DynarecEmitter::Classify(Instruction& instruction)
 
             break;
         case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
-            // ESC
-            instruction.kind = DYNAREC_HELPER;
+            // ESC: the 486's x87 forms EmitEscape takes, the others in the interpreter
+            if (IsEscapeNative(c))
+                SetNative(instruction, 0, true);
+            else
+                instruction.kind = DYNAREC_HELPER;
+
             break;
         case 0x8C:
             // MOV r/m,Sreg
@@ -1162,14 +1176,21 @@ void DynarecEmitter::Set486Clocks(Instruction& instruction)
     bool set = c.two_byte && c.opcode2 >= 0x90 && c.opcode2 <= 0x9F;
 
     // SETcc's clocks with its condition false, EmitSETcc adds the difference of a true one. The multiplies by r/m add
-    // theirs at run time, IMUL by an immediate knows them
-    u32 form = m_cpu->Get486Clocks(c, false);
+    // theirs at run time, IMUL by an immediate knows them. ESC counts the x87's fewest, DynarecEscape adds the rest
+    bool escape = !c.two_byte && c.opcode >= 0xD8 && c.opcode <= 0xDF;
+    u32 most = 0;
+    u32 form = 0;
+
+    if (escape)
+        m_cpu->GetEscapeClocks(c, form, most);
+    else
+        form = m_cpu->Get486Clocks(c, false);
     bool multiply = c.two_byte ? c.opcode2 == 0xAF : (c.opcode == 0xF6 || c.opcode == 0xF7) && (c.reg == 4 || c.reg == 5);
 
     if (form == k_i486_data)
         form = multiply ? 0 : m_cpu->Get486DataClocks(c);
 
-    u32 taken = m_cpu->Get486Clocks(c, true);
+    u32 taken = escape ? form : m_cpu->Get486Clocks(c, true);
 
     if (taken == k_i486_data)
         taken = form;
@@ -1517,6 +1538,18 @@ int DynarecEmitter::GetBusAccesses(const I386::InstructionContext& c, u32* sizes
             {
                 AddBusAccess(sizes, writes, count, size, false);
                 AddBusAccess(sizes, writes, count, 2, false);
+            }
+
+            break;
+        case I386_BUS_ESC:
+            // Only natives list their accesses, and ESC is one only with an FPU
+            if (c.memory_operand)
+            {
+                bool write = false;
+                u32 operand = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
+
+                for (u32 done = 0; done < operand && count < 8; done += 4)
+                    AddBusAccess(sizes, writes, count, MIN(operand - done, 4U), write);
             }
 
             break;
@@ -3151,6 +3184,9 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         case 0xD2:
             EmitShiftCount(instruction, 8);
             break;
+        case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
+            EmitEscape(instruction);
+            break;
         case 0xD3:
             EmitShiftCount(instruction, width);
             break;
@@ -3566,6 +3602,67 @@ void DynarecEmitter::EmitShiftCount(Instruction& instruction, int width)
         StoreHost(DR_T4, DR_T1, width, DR_T2);
     else
         StoreRegister(c.rm, width, DR_T1);
+}
+
+// The 486's defined x87 forms with no operand or one of 2 or 4 bytes, except those that load the control word or an
+// environment, which can unmask exceptions. Their clocks vary at run time, so not where they move the prefetch queue
+bool DynarecEmitter::IsEscapeNative(const I386::InstructionContext& c) const
+{
+    if (!m_i486 || !IsValidPointer(m_cpu->m_x87) || m_cpu->m_x87->GetFlavor() != X87_FLAVOR_80486 ||
+        !X87::IsDefined(c.opcode, c.modrm) || (m_timed && m_cpu->m_bus_code_cost != 0))
+        return false;
+
+    if (!c.memory_operand)
+        return true;
+
+    bool write = false;
+    u32 size = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
+
+    return (size == 2 || size == 4) && !(c.opcode == 0xD9 && c.reg == 5);
+}
+
+// The interpreter for CR0.EM or TS, an unmasked exception or a pending error, then the operand through the native
+// path and DynarecEscape
+void DynarecEmitter::EmitEscape(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    u32 size = 0;
+    bool write = false;
+
+    LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_state.cr0));
+    jit_andi(DR_T0, DR_T0, 0x0C);
+    jit_patch_at(jit_bnei(DR_T0, 0), instruction.fallback);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_finishi((jit_pointer_t)&I386::DynarecEscapeReady);
+    jit_retval(DR_T0);
+    jit_patch_at(jit_beqi(DR_T0, 0), instruction.fallback);
+
+    if (c.memory_operand)
+    {
+        size = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
+        u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
+        StoreTemp(0, DR_T0);
+        EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, write ? DYNAREC_WRITE : DYNAREC_READ,
+            instruction.fallback);
+        size |= (u32)segment << 8;
+    }
+    else
+        jit_movi(DR_T0, 0);
+
+    u32 form = c.opcode | ((u32)c.modrm << 8) | ((size & 0xF) << 16) | (c.operand_size == 4 ? 1U << 20 : 0) |
+        (m_cpu->m_state.execution_mode == I386_MODE_PROTECTED ? 1U << 21 : 0) | ((size >> 8) << 24);
+    u32 fewest = 0;
+    u32 most = 0;
+    m_cpu->GetEscapeClocks(c, fewest, most);
+
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(DR_T0);
+    jit_pushargi((jit_word_t)form);
+    jit_pushargi((jit_word_t)c.start_eip);
+    jit_pushargi((jit_word_t)fewest);
+    jit_finishi((jit_pointer_t)&I386::DynarecEscape);
 }
 
 // CL for D2 and D3, the live immediate for C0 and C1, masked to 5 bits

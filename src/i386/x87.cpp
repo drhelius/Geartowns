@@ -486,7 +486,7 @@ u32 X87::GetClocks(const X87_Operation& operation, const u8* operand) const
 }
 
 // Intel's average for each form, to the nearest clock with halves down, and notes 1-5 of the table
-u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
+u32 X87::Get486FormClocks(u8 opcode, u8 modrm, bool protected_mode) const
 {
     int row = opcode & 7;
     int reg = (modrm >> 3) & 7;
@@ -507,6 +507,15 @@ u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
     // FLDENV, FSTENV, FRSTOR and FSAVE in protected mode
     if (memory && protected_mode && (opcode == 0xD9 || opcode == 0xDD) && (reg == 4 || reg == 6))
         clocks = opcode == 0xD9 ? (reg == 4 ? 34 : 56) : (reg == 4 ? 120 : 143);
+
+    return clocks;
+}
+
+u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
+{
+    int reg = (modrm >> 3) & 7;
+    bool memory = (modrm >> 6) != 3;
+    u32 clocks = Get486FormClocks(opcode, modrm, protected_mode);
 
     // FST and FSTP of a zero to a single or double take 27 and 28
     if (memory && (opcode == 0xD9 || opcode == 0xDD) && (reg == 2 || reg == 3) && !IsEmpty(0) &&
@@ -530,6 +539,19 @@ u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
     }
 
     return clocks;
+}
+
+// The form's clocks at their fewest and at most with no error pending: a zero stored, a lower precision
+void X87::Get486ClockRange(u8 opcode, u8 modrm, bool protected_mode, u32& fewest, u32& most) const
+{
+    int reg = (modrm >> 3) & 7;
+    bool memory = (modrm >> 6) != 3;
+    u32 clocks = Get486FormClocks(opcode, modrm, protected_mode);
+    bool divide = reg >= 6 && (opcode == 0xD8 || opcode == 0xDC || opcode == 0xDE || (memory && opcode == 0xDA));
+    bool store = memory && (opcode == 0xD9 || opcode == 0xDD) && (reg == 2 || reg == 3);
+
+    fewest = divide ? clocks - 38 : clocks;
+    most = store ? (opcode == 0xD9 ? 27 : 28) : clocks;
 }
 
 void X87::SaveState(std::ostream& stream)

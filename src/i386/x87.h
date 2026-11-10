@@ -86,9 +86,11 @@ public:
     static bool IsWaiting(u8 opcode, u8 modrm);
     static bool IsDefined(u8 opcode, u8 modrm);
     static u32 GetMemoryOperandSize(u8 opcode, u8 modrm, bool operand32, bool& write);
+    void Get486ClockRange(u8 opcode, u8 modrm, bool protected_mode, u32& fewest, u32& most) const;
 
 private:
     u32 Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const;
+    u32 Get486FormClocks(u8 opcode, u8 modrm, bool protected_mode) const;
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
     void Initialize();

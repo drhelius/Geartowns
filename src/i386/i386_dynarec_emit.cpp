@@ -273,16 +273,19 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         instruction.extra_before = extra;
         clocks += instruction.clocks;
 
-        // The most a 486 native can add at run time: its misaligned accesses, the AGI clock of a first instruction and
-        // a true SETcc condition in a register
+        // The most a 486 native can add at run time: its misaligned accesses, the AGI clock of a first instruction, a
+        // true SETcc condition in a register and a multiplier's clocks, 10 plus its width
         if (m_i486 && instruction.kind == DYNAREC_NATIVE)
         {
+            const I386::InstructionContext& c = instruction.context;
             u32 sizes[8];
             bool writes[8];
-            extra += instruction.memory ? 3 * (u32)MAX(GetBusAccesses(instruction.context, sizes, writes), 1) : 0;
-            extra += m_count == 0 && I386::Get486Base(instruction.context) >= 0 ? 1 : 0;
-            extra += instruction.context.two_byte && (instruction.context.opcode2 & 0xF0) == 0x90 &&
-                !instruction.memory ? 1 : 0;
+            extra += instruction.memory ? 3 * (u32)MAX(GetBusAccesses(c, sizes, writes), 1) : 0;
+            extra += m_count == 0 && I386::Get486Base(c) >= 0 ? 1 : 0;
+            extra += c.two_byte && (c.opcode2 & 0xF0) == 0x90 && !instruction.memory ? 1 : 0;
+
+            if (c.two_byte ? c.opcode2 == 0xAF : (c.opcode == 0xF6 || c.opcode == 0xF7) && (c.reg == 4 || c.reg == 5))
+                extra += 10 + (c.opcode == 0xF6 ? 8 : c.operand_size * 8);
         }
         position += length;
         m_count++;
@@ -505,6 +508,13 @@ void DynarecEmitter::Classify(Instruction& instruction)
             SetNative(instruction, memory ? 7 : 3, memory);
             instruction.defs = k_flags_all;
         }
+        else if (opcode2 == 0xAF && m_i486 && !(m_timed && m_cpu->m_bus_code_cost != 0))
+        {
+            // IMUL r,r/m on the 486, its multiplier's clocks added at run time, except where clocks move the prefetch
+            // queue
+            SetNative(instruction, 6 + (memory ? 3 : 0), memory);
+            instruction.defs = k_flags_all;
+        }
         else if (opcode2 == 0x02 || opcode2 == 0x03 || opcode2 == 0xA3 ||
             opcode2 == 0xAB || opcode2 == 0xB3 || opcode2 == 0xBB || opcode2 == 0xBA || opcode2 == 0xA4 ||
             opcode2 == 0xA5 || opcode2 == 0xAC || opcode2 == 0xAD || opcode2 == 0xAF || opcode2 == 0xBC ||
@@ -576,17 +586,39 @@ void DynarecEmitter::Classify(Instruction& instruction)
             break;
         case 0x27: case 0x2F: case 0x37: case 0x3F:
             // DAA, DAS, AAA, AAS
-        case 0x62: case 0x69: case 0x6B:
-            // BOUND, IMUL
+        case 0x62:
+            // BOUND
         case 0x9B: case 0x9C: case 0x9E: case 0x9F:
             // WAIT, PUSHF, SAHF, LAHF
-        case 0xC8: case 0xC9:
-            // ENTER, LEAVE
+        case 0xC8:
+            // ENTER
         case 0xD4: case 0xD5: case 0xD6: case 0xD7:
             // AAM, AAD, SALC, XLAT
-        case 0xD2: case 0xD3:
-            // Shifts by CL
             instruction.kind = DYNAREC_HELPER;
+            break;
+        case 0x69: case 0x6B:
+        {
+            // IMUL r,r/m,imm: the immediate is the multiplier, so its clocks are known
+            u32 multiplier = opcode == 0x6B ? (u32)SignExtend(c.immediate, 8) : c.immediate;
+            SetNative(instruction, m_cpu->GetMultiplyClocks(m_cpu->GetMultiplySteps(multiplier, width, true), memory),
+                memory);
+            instruction.defs = k_flags_all;
+            break;
+        }
+        case 0xC9:
+            // LEAVE
+            SetNative(instruction, 4, true);
+            break;
+        case 0xD2: case 0xD3:
+            // Shifts and rotates by CL, a count of zero falls back. The rotates through carry run in the interpreter
+            if (c.reg != 2 && c.reg != 3)
+            {
+                SetNative(instruction, memory ? 7 : 3, true);
+                instruction.defs = c.reg <= 1 ? (u16)(I386_FLAG_CF | I386_FLAG_OF) : k_flags_all;
+            }
+            else
+                instruction.kind = DYNAREC_HELPER;
+
             break;
         case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
             // ESC
@@ -793,12 +825,25 @@ void DynarecEmitter::Classify(Instruction& instruction)
             instruction.defs = I386_FLAG_CF;
             break;
         case 0xF6: case 0xF7:
-            // Group 3: TEST, NOT and NEG, the multiplies and divides run in the interpreter
+            // Group 3. MUL and IMUL on the 486 add their multiplier's clocks at run time, except where clocks move the
+            // prefetch queue. DIV and IDIV fall back where the handler faults or loops
             if (c.reg <= 3)
             {
                 static const u8 k_memory_extra[4] = { 3, 3, 4, 4 };
                 SetNative(instruction, 2 + (memory ? k_memory_extra[c.reg] : 0), memory);
                 instruction.defs = c.reg <= 1 || c.reg == 3 ? k_flags_all : 0;
+            }
+            else if (c.reg <= 5 && m_i486 && !(m_timed && m_cpu->m_bus_code_cost != 0))
+            {
+                SetNative(instruction, 6 + (memory ? 3 : 0), memory);
+                instruction.defs = k_flags_all;
+            }
+            else if (c.reg >= 6)
+            {
+                static const u8 k_divide_clocks[3][2] = { { 14, 19 }, { 22, 27 }, { 38, 43 } };
+                int size = opcode == 0xF6 ? 0 : width == 16 ? 1 : 2;
+                SetNative(instruction, k_divide_clocks[size][c.reg - 6] + (memory && c.reg == 6 ? 3 : 0), true);
+                instruction.defs = k_flags_all;
             }
             else
                 instruction.kind = DYNAREC_HELPER;
@@ -903,10 +948,22 @@ void DynarecEmitter::Set486Clocks(Instruction& instruction)
     u32 agi = base >= 0 && m_count > 0 && (m_instructions[m_count - 1].written & (1 << base)) != 0 ? 1 : 0;
     bool set = c.two_byte && c.opcode2 >= 0x90 && c.opcode2 <= 0x9F;
 
-    // SETcc's clocks with its condition false, EmitSETcc adds the difference of a true one
-    instruction.bus_clocks = (set ? (c.memory_operand ? 4 : 3) : m_cpu->Get486Clocks(c, false)) + prefixes;
+    // SETcc's clocks with its condition false, EmitSETcc adds the difference of a true one. The multiplies by r/m add
+    // theirs at run time, IMUL by an immediate knows them
+    u32 form = m_cpu->Get486Clocks(c, false);
+    bool multiply = c.two_byte ? c.opcode2 == 0xAF : (c.opcode == 0xF6 || c.opcode == 0xF7) && (c.reg == 4 || c.reg == 5);
+
+    if (form == k_i486_data)
+        form = multiply ? 0 : m_cpu->Get486DataClocks(c);
+
+    u32 taken = m_cpu->Get486Clocks(c, true);
+
+    if (taken == k_i486_data)
+        taken = form;
+
+    instruction.bus_clocks = (set ? (c.memory_operand ? 4 : 3) : form) + prefixes;
     instruction.clocks = instruction.bus_clocks + agi;
-    instruction.taken_clocks = m_cpu->Get486Clocks(c, true) + prefixes + agi;
+    instruction.taken_clocks = taken + prefixes + agi;
 }
 
 // The base and index clock of the 386 effective address unit, as DecodeOperands counts it
@@ -1221,6 +1278,7 @@ int DynarecEmitter::GetBusAccesses(const I386::InstructionContext& c, u32* sizes
         case I386_BUS_POP:
         case I386_BUS_RET:
         case I386_BUS_MOFFS_READ:
+        case I386_BUS_LEAVE:
             AddBusAccess(sizes, writes, count, size, false);
             break;
         case I386_BUS_PUSH:
@@ -2619,6 +2677,8 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitDoubleShift(instruction, width, c.immediate & 0x1F);
         else if (opcode2 == 0xB4 || opcode2 == 0xB5)
             EmitLoadFarPointer(instruction, opcode2 == 0xB4 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
+        else if (opcode2 == 0xAF)
+            EmitMultiply(instruction, width, 0x200 | (c.reg << 12), 0);
         else
             EmitMOVX(instruction, opcode2 == 0xB6 || opcode2 == 0xBE ? 8 : 16, opcode2 >= 0xBE);
 
@@ -2657,6 +2717,12 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         case 0x68:
             EmitImmediate(DR_T4, instruction, c.immediate, width, false);
             EmitPush(instruction, width, width);
+            break;
+        case 0x69:
+            EmitMultiply(instruction, width, 0x400 | (c.reg << 12), c.immediate);
+            break;
+        case 0x6B:
+            EmitMultiply(instruction, width, 0x400 | (c.reg << 12), (u32)SignExtend(c.immediate, 8));
             break;
         case 0x6A:
             EmitImmediate(DR_T4, instruction, (u32)(s32)(s8)c.immediate & (width == 16 ? 0xFFFFU : 0xFFFFFFFFU), width,
@@ -2776,6 +2842,15 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         case 0xC6: case 0xC7:
             EmitMoveImmediate(instruction, opcode == 0xC6 ? 8 : width);
             break;
+        case 0xC9:
+            EmitLeave(instruction, width);
+            break;
+        case 0xD2:
+            EmitShiftCL(instruction, 8);
+            break;
+        case 0xD3:
+            EmitShiftCL(instruction, width);
+            break;
         case 0xE0: case 0xE1: case 0xE2: case 0xE3:
             EmitLoop(instruction, index, SignExtend(c.immediate, 8));
             break;
@@ -2807,7 +2882,13 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             break;
         }
         case 0xF6: case 0xF7:
-            EmitGroup3(instruction, opcode == 0xF6 ? 8 : width);
+            if (c.reg == 4 || c.reg == 5)
+                EmitMultiply(instruction, opcode == 0xF6 ? 8 : width, c.reg == 5 ? 0x100 : 0, 0);
+            else if (c.reg >= 6)
+                EmitDivide(instruction, opcode == 0xF6 ? 8 : width);
+            else
+                EmitGroup3(instruction, opcode == 0xF6 ? 8 : width);
+
             break;
         case 0xFA: case 0xFB:
             EmitInterruptFlag(instruction, index);
@@ -3125,6 +3206,130 @@ void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
     Exit(m_slow_index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
     jit_patch(stay);
     jit_patch(done);
+}
+
+// LEAVE: the frame's saved EBP read at EBP, ESP past it
+void DynarecEmitter::EmitLeave(Instruction& instruction, int width)
+{
+    bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
+
+    LoadRegister(DR_T0, I386_REG_EBP, stack32 ? 32 : 16);
+    jit_movr(DR_T4, DR_T0);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, (u32)width / 8, DYNAREC_READ, instruction.fallback);
+    LoadHost(DR_T1, DR_T0, width);
+    jit_addi(DR_T4, DR_T4, width / 8);
+    StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T4);
+    StoreRegister(I386_REG_EBP, width, DR_T1);
+}
+
+// Shifts and rotates by CL through RotateShift, as OPCodes_Group2 runs them. A count of zero leaves the operand and the
+// flags and falls back before anything is counted
+void DynarecEmitter::EmitShiftCL(Instruction& instruction, int width)
+{
+    const I386::InstructionContext& c = instruction.context;
+
+    LoadRegister(DR_T1, I386_REG_ECX, 8);
+    jit_andi(DR_T1, DR_T1, 0x1F);
+    jit_patch_at(jit_beqi(DR_T1, 0), instruction.fallback);
+
+    if (c.memory_operand)
+    {
+        EmitOperandAddress(instruction, width, DYNAREC_READ_WRITE);
+        jit_movr(DR_T4, DR_T0);
+        LoadHost(DR_T1, DR_T0, width);
+    }
+    else
+    {
+        Emit486FirstAGI(DR_T0);
+        LoadRegister(DR_T1, c.rm, width);
+    }
+
+    jit_movi(DR_T2, (jit_word_t)(uintptr_t)&I386::DynarecShift);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(DR_T1);
+    jit_pushargi((jit_word_t)(width | (c.reg << 8)));
+    jit_finishr(DR_T2);
+    jit_retval(DR_T1);
+
+    if (c.memory_operand)
+        StoreHost(DR_T4, DR_T1, width, DR_T2);
+    else
+        StoreRegister(c.rm, width, DR_T1);
+}
+
+// MUL, IMUL r/m, IMUL r,r/m and IMUL r,r/m,imm through DynarecMultiply, form as it takes it
+void DynarecEmitter::EmitMultiply(Instruction& instruction, int width, u32 form, u32 multiplier)
+{
+    const I386::InstructionContext& c = instruction.context;
+
+    if (c.memory_operand)
+    {
+        EmitOperandAddress(instruction, width, DYNAREC_READ);
+        LoadHost(DR_T1, DR_T0, width);
+    }
+    else
+        LoadRegister(DR_T1, c.rm, width);
+
+    jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecMultiply<true> :
+        (jit_word_t)(uintptr_t)&I386::DynarecMultiply<false>);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(DR_T1);
+    jit_pushargi((jit_word_t)multiplier);
+    jit_pushargi((jit_word_t)(form | (u32)width));
+    jit_finishr(DR_T2);
+}
+
+// DIV and IDIV: the divisor read without counting, the interpreter for a divide that faults or loops, then the 486
+// extras and the access counted past that last fallback, as EmitReturn does, and the divide
+void DynarecEmitter::EmitDivide(Instruction& instruction, int width)
+{
+    const I386::InstructionContext& c = instruction.context;
+    u32 form = (u32)width | (c.reg == 7 ? 0x100 : 0);
+    u32 size = (u32)width / 8;
+    int first_base = m_i486 ? m_first_base : -1;
+
+    if (c.memory_operand)
+    {
+        u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
+        EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, DYNAREC_READ, instruction.fallback, false);
+        jit_movr(DR_T3, DR_T0);
+        jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, DR_T1);
+        LoadHost(DR_T4, DR_T0, width);
+    }
+    else
+        LoadRegister(DR_T4, c.rm, width);
+
+    jit_movi(DR_T2, (jit_word_t)(uintptr_t)&I386::DynarecDivideSlow);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(DR_T4);
+    jit_pushargi((jit_word_t)form);
+    jit_finishr(DR_T2);
+    jit_retval(DR_T0);
+    jit_patch_at(jit_bnei(DR_T0, 0), instruction.fallback);
+
+    if (m_i486)
+        Emit486FirstAGI(DR_T2);
+
+    if (c.memory_operand)
+    {
+        LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_dynarec_slow_linear));
+
+        if (m_i486)
+            Emit486Misaligned(DR_T1, DR_T2, size, DYNAREC_READ);
+
+        if (m_timed)
+            EmitBusAccess(DR_T3, DR_T1, DR_T2, DR_T0, size, DYNAREC_READ, instruction.fallback, first_base);
+    }
+
+    jit_movi(DR_T2, (jit_word_t)(uintptr_t)&I386::DynarecDivide);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargr(DR_T4);
+    jit_pushargi((jit_word_t)form);
+    jit_finishr(DR_T2);
 }
 
 void DynarecEmitter::EmitMove(Instruction& instruction, int width, bool load)

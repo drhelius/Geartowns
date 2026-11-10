@@ -915,6 +915,11 @@ private:
     template<bool i486>
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
+    static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t form);
+    template<bool i486>
+    static void DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
+    static uintptr_t DynarecDivideSlow(I386* cpu, uintptr_t value, uintptr_t form);
+    static void DynarecDivide(I386* cpu, uintptr_t value, uintptr_t form);
     template<bool i486>
     static uintptr_t DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check, uintptr_t first_base,
         uintptr_t settle, uintptr_t before);
@@ -1008,6 +1013,10 @@ private:
     void SetSZP(u32 value, int width);
     u32 GetSZP(u32 value, int width) const;
     void SetMultiplyFlags(u32 multiplicand, u32 multiplier, u32 steps, int width, bool signed_multiplier);
+    u32 MultiplyRM(int width, u32 operand, bool signed_multiplier);
+    u32 MultiplyRegister(int reg, int width, u32 source);
+    void MultiplyImmediate(int reg, int width, u32 source, u32 multiplier, u32 steps);
+    bool IsDivideSlow(int width, u32 operand, bool signed_divide) const;
     bool CheckCondition(int condition) const;
     static bool EvaluateCondition(u32 eflags, int condition);
     template<int width> u32 RotateShift(u32 value, int shift_operation, u32 count);

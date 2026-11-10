@@ -204,6 +204,10 @@ private:
     void EmitIncDecRegister(Instruction& instruction, int index, int width, bool decrement);
     void EmitIncDecRM(Instruction& instruction, int width, bool decrement);
     void EmitGroup3(Instruction& instruction, int width);
+    void EmitLeave(Instruction& instruction, int width);
+    void EmitShiftCL(Instruction& instruction, int width);
+    void EmitMultiply(Instruction& instruction, int width, u32 form, u32 multiplier);
+    void EmitDivide(Instruction& instruction, int width);
     void EmitMove(Instruction& instruction, int width, bool load);
     void EmitMoveImmediate(Instruction& instruction, int width);
     void EmitMoveOffset(Instruction& instruction, int width, bool load);

@@ -1288,23 +1288,9 @@ bool I386::OPCodes0F_IMUL()
     if (!ReadRM(m_instruction, width, *m_bus_context, source))
         return false;
 
-    u32 steps = GetMultiplySteps(source, width, true);
+    u32 steps = MultiplyRegister(m_instruction.reg, width, source);
 
     m_step.clocks = GetMultiplyClocks(steps, m_instruction.memory_operand) + m_address_clocks;
-    SetMultiplyFlags(GetRegister(m_instruction.reg, width), source, steps, width, true);
-
-    s64 product = (s64)SignExtend(GetRegister(m_instruction.reg, width), width) * SignExtend(source, width);
-    u32 value = Truncate((u64)product, width);
-
-    SetRegister(m_instruction.reg, width, value);
-
-    bool overflow = product != (s64)SignExtend(value, width);
-
-    m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
-
-    if (overflow)
-        m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
-
     CommitEIP(m_instruction);
     return true;
 }

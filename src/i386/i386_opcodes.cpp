@@ -1842,29 +1842,13 @@ bool I386::OPCodes_IMUL_Immediate()
     if (!StartExecution(clocks))
         return false;
 
-    u8 opcode = m_instruction.opcode;
     int operand_width = m_instruction.operand_size * 8;
     u32 source = 0;
 
     if (!ReadRM(m_instruction, operand_width, *m_bus_context, source))
         return false;
 
-    SetMultiplyFlags(source, multiplier, steps, operand_width, true);
-
-    s64 left = SignExtend(source, operand_width);
-    s64 right = SignExtend(m_instruction.immediate, opcode == 0x6B ? 8 : operand_width);
-    s64 product = left * right;
-    u32 value = Truncate((u64)product, operand_width);
-
-    SetRegister(m_instruction.reg, operand_width, value);
-
-    bool overflow = product != (s64)SignExtend(value, operand_width);
-
-    m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
-
-    if (overflow)
-        m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
-
+    MultiplyImmediate(m_instruction.reg, operand_width, source, multiplier, steps);
     CommitEIP(m_instruction);
     return true;
 }

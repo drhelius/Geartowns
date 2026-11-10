@@ -118,85 +118,132 @@ INLINE bool I386::OPCodes_NEG_RM(int width, u32 operand)
 
 INLINE bool I386::OPCodes_MUL_RM(int width, u32 operand)
 {
-    u32 steps = GetMultiplySteps(operand, width, false);
-
+    u32 steps = MultiplyRM(width, operand, false);
     m_step.clocks = GetMultiplyClocks(steps, m_instruction.memory_operand) + m_address_clocks;
-    SetMultiplyFlags(GetRegister(0, width), operand, steps, width, false);
-
-    if (width == 8)
-    {
-        u16 product = (u16)GetRegister8(0) * (u8)operand;
-
-        m_state.registers[I386_REG_EAX].low = product;
-        m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
-
-        if ((product & 0xFF00) != 0)
-            m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
-    }
-    else if (width == 16)
-    {
-        u32 product = (u32)m_state.registers[I386_REG_EAX].low * (u16)operand;
-
-        m_state.registers[I386_REG_EAX].low = (u16)product;
-        m_state.registers[I386_REG_EDX].low = (u16)(product >> 16);
-        m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
-
-        if ((product >> 16) != 0)
-            m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
-    }
-    else
-    {
-        u64 product = (u64)m_state.registers[I386_REG_EAX].value * operand;
-
-        m_state.registers[I386_REG_EAX].value = (u32)product;
-        m_state.registers[I386_REG_EDX].value = (u32)(product >> 32);
-        m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
-
-        if ((product >> 32) != 0)
-            m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
-    }
-
     return true;
 }
 
 INLINE bool I386::OPCodes_IMUL_RM(int width, u32 operand)
 {
-    u32 steps = GetMultiplySteps(operand, width, true);
-
+    u32 steps = MultiplyRM(width, operand, true);
     m_step.clocks = GetMultiplyClocks(steps, m_instruction.memory_operand) + m_address_clocks;
-    SetMultiplyFlags(GetRegister(0, width), operand, steps, width, true);
+    return true;
+}
 
-    if (width == 8)
+// MUL and IMUL r/m: the product, the flags, and the early-out steps the clocks count
+u32 I386::MultiplyRM(int width, u32 operand, bool signed_multiplier)
+{
+    u32 steps = GetMultiplySteps(operand, width, signed_multiplier);
+    SetMultiplyFlags(GetRegister(0, width), operand, steps, width, signed_multiplier);
+
+    if (!signed_multiplier)
     {
-        s16 product = (s16)(s8)GetRegister8(0) * (s8)(u8)operand;
-        bool overflow = product < -128 || product > 127;
+        if (width == 8)
+        {
+            u16 product = (u16)GetRegister8(0) * (u8)operand;
 
-        m_state.registers[I386_REG_EAX].low = (u16)product;
-        m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
-            m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
-    }
-    else if (width == 16)
-    {
-        s32 product = (s32)(s16)m_state.registers[I386_REG_EAX].low * (s16)(u16)operand;
-        bool overflow = product < -32768 || product > 32767;
+            m_state.registers[I386_REG_EAX].low = product;
+            m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
 
-        m_state.registers[I386_REG_EAX].low = (u16)product;
-        m_state.registers[I386_REG_EDX].low = (u16)((u32)product >> 16);
-        m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
-            m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+            if ((product & 0xFF00) != 0)
+                m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
+        }
+        else if (width == 16)
+        {
+            u32 product = (u32)m_state.registers[I386_REG_EAX].low * (u16)operand;
+
+            m_state.registers[I386_REG_EAX].low = (u16)product;
+            m_state.registers[I386_REG_EDX].low = (u16)(product >> 16);
+            m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+
+            if ((product >> 16) != 0)
+                m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
+        }
+        else
+        {
+            u64 product = (u64)m_state.registers[I386_REG_EAX].value * operand;
+
+            m_state.registers[I386_REG_EAX].value = (u32)product;
+            m_state.registers[I386_REG_EDX].value = (u32)(product >> 32);
+            m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+
+            if ((product >> 32) != 0)
+                m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
+        }
     }
     else
     {
-        s64 product = (s64)(s32)m_state.registers[I386_REG_EAX].value * (s32)operand;
-        bool overflow = product < (s64)INT_MIN || product > (s64)INT_MAX;
+        if (width == 8)
+        {
+            s16 product = (s16)(s8)GetRegister8(0) * (s8)(u8)operand;
+            bool overflow = product < -128 || product > 127;
 
-        m_state.registers[I386_REG_EAX].value = (u32)product;
-        m_state.registers[I386_REG_EDX].value = (u32)((u64)product >> 32);
-        m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
-            m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+            m_state.registers[I386_REG_EAX].low = (u16)product;
+            m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
+                m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+        }
+        else if (width == 16)
+        {
+            s32 product = (s32)(s16)m_state.registers[I386_REG_EAX].low * (s16)(u16)operand;
+            bool overflow = product < -32768 || product > 32767;
+
+            m_state.registers[I386_REG_EAX].low = (u16)product;
+            m_state.registers[I386_REG_EDX].low = (u16)((u32)product >> 16);
+            m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
+                m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+        }
+        else
+        {
+            s64 product = (s64)(s32)m_state.registers[I386_REG_EAX].value * (s32)operand;
+            bool overflow = product < (s64)INT_MIN || product > (s64)INT_MAX;
+
+            m_state.registers[I386_REG_EAX].value = (u32)product;
+            m_state.registers[I386_REG_EDX].value = (u32)((u64)product >> 32);
+            m_state.eflags = overflow ? m_state.eflags | I386_FLAG_CF | I386_FLAG_OF :
+                m_state.eflags & ~(I386_FLAG_CF | I386_FLAG_OF);
+        }
     }
 
-    return true;
+    return steps;
+}
+
+// IMUL r,r/m: the product of the register and the source in the register, the flags, and the early-out steps
+u32 I386::MultiplyRegister(int reg, int width, u32 source)
+{
+    u32 steps = GetMultiplySteps(source, width, true);
+    SetMultiplyFlags(GetRegister(reg, width), source, steps, width, true);
+
+    s64 product = (s64)SignExtend(GetRegister(reg, width), width) * SignExtend(source, width);
+    u32 value = Truncate((u64)product, width);
+
+    SetRegister(reg, width, value);
+
+    bool overflow = product != (s64)SignExtend(value, width);
+
+    m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+
+    if (overflow)
+        m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
+
+    return steps;
+}
+
+// IMUL r,r/m,imm with the immediate already sign-extended to the multiplier
+void I386::MultiplyImmediate(int reg, int width, u32 source, u32 multiplier, u32 steps)
+{
+    SetMultiplyFlags(source, multiplier, steps, width, true);
+
+    s64 product = (s64)SignExtend(source, width) * SignExtend(multiplier, width);
+    u32 value = Truncate((u64)product, width);
+
+    SetRegister(reg, width, value);
+
+    bool overflow = product != (s64)SignExtend(value, width);
+
+    m_state.eflags &= ~(I386_FLAG_CF | I386_FLAG_OF);
+
+    if (overflow)
+        m_state.eflags |= I386_FLAG_CF | I386_FLAG_OF;
 }
 
 INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
@@ -247,6 +294,44 @@ INLINE bool I386::OPCodes_DIV_RM(int width, u32 operand)
     }
 
     return true;
+}
+
+// The divides whose handlers take RaiseUnsignedDivideError or SignedDivideLoop
+bool I386::IsDivideSlow(int width, u32 operand, bool signed_divide) const
+{
+    if (!signed_divide)
+    {
+        if (width == 8)
+            return (u32)(m_state.registers[I386_REG_EAX].low >> 8) >= (operand & 0xFF);
+
+        if (width == 16)
+            return (u32)m_state.registers[I386_REG_EDX].low >= (operand & 0xFFFF);
+
+        return m_state.registers[I386_REG_EDX].value >= operand;
+    }
+
+    if (width == 8)
+    {
+        s16 dividend = (s16)m_state.registers[I386_REG_EAX].low;
+        s16 divisor = (s8)(u8)operand;
+        s32 quotient = divisor != 0 ? dividend / divisor : 0;
+        return divisor == 0 || quotient < -128 || quotient > 127;
+    }
+
+    if (width == 16)
+    {
+        s32 dividend = (s32)(((u32)m_state.registers[I386_REG_EDX].low << 16) | m_state.registers[I386_REG_EAX].low);
+        s32 divisor = (s16)(u16)operand;
+        bool overflow = divisor == 0 || (dividend == INT_MIN && divisor == -1);
+        s32 quotient = overflow ? 0 : dividend / divisor;
+        return overflow || quotient < -32768 || quotient > 32767;
+    }
+
+    s64 dividend = (s64)(((u64)m_state.registers[I386_REG_EDX].value << 32) | m_state.registers[I386_REG_EAX].value);
+    s64 divisor = (s32)operand;
+    bool overflow = divisor == 0 || (dividend == (s64)0x8000000000000000ULL && divisor == -1);
+    s64 quotient = overflow ? 0 : dividend / divisor;
+    return overflow || quotient < (s64)INT_MIN || quotient > (s64)INT_MAX;
 }
 
 // The fault comes after the second to last step of the restoring division, which starts from high - divisor
@@ -761,6 +846,64 @@ bool I386::OPCodes_Group3()
 template bool I386::OPCodes_Group3<8>();
 template bool I386::OPCodes_Group3<16>();
 template bool I386::OPCodes_Group3<32>();
+
+#if !defined(GT_DISABLE_DYNAREC)
+// Shifts and rotates by CL for translated blocks, as OPCodes_Group2 runs them for a count other than zero. form: the
+// width, the operation from bit 8
+uintptr_t I386::DynarecShift(I386* cpu, uintptr_t value, uintptr_t form)
+{
+    u32 count = cpu->m_state.registers[I386_REG_ECX].byte0;
+    int operation = (int)(form >> 8);
+
+    if ((form & 0xFF) == 8)
+        return cpu->RotateShift<8>((u32)value, operation, count);
+
+    if ((form & 0xFF) == 16)
+        return cpu->RotateShift<16>((u32)value, operation, count);
+
+    return cpu->RotateShift<32>((u32)value, operation, count);
+}
+
+// MUL and IMUL for translated blocks. form: the width, 100h IMUL r/m, 200h IMUL r,r/m and 400h IMUL r,r/m,imm with
+// the register from bit 12 and the multiplier in other. A multiplier from r/m adds its data-dependent clocks
+template<bool i486>
+void I386::DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form)
+{
+    int width = (int)(form & 0xFF);
+    int reg = (int)((form >> 12) & 7);
+    u32 operand = (u32)value;
+
+    if ((form & 0x400) != 0)
+    {
+        cpu->MultiplyImmediate(reg, width, operand, (u32)other, cpu->GetMultiplySteps((u32)other, width, true));
+        return;
+    }
+
+    bool signed_multiplier = (form & 0x300) != 0;
+    u32 steps = (form & 0x200) != 0 ? cpu->MultiplyRegister(reg, width, operand) :
+        cpu->MultiplyRM(width, operand, signed_multiplier);
+
+    cpu->m_dynarec_clocks += i486 ? cpu->Get486MultiplyClocks(operand, width, signed_multiplier) : steps;
+}
+
+template void I386::DynarecMultiply<false>(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
+template void I386::DynarecMultiply<true>(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
+
+// DIV and IDIV for translated blocks: whether the handler would fault or loop, which the interpreter takes, then the
+// divide. form: the width, 100h IDIV
+uintptr_t I386::DynarecDivideSlow(I386* cpu, uintptr_t value, uintptr_t form)
+{
+    return cpu->IsDivideSlow((int)(form & 0xFF), (u32)value, (form & 0x100) != 0) ? 1 : 0;
+}
+
+void I386::DynarecDivide(I386* cpu, uintptr_t value, uintptr_t form)
+{
+    if ((form & 0x100) != 0)
+        cpu->OPCodes_IDIV_RM((int)(form & 0xFF), (u32)value);
+    else
+        cpu->OPCodes_DIV_RM((int)(form & 0xFF), (u32)value);
+}
+#endif
 
 bool I386::OPCodes_Group4()
 {

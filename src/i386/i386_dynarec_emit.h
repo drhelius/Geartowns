@@ -121,6 +121,8 @@ private:
         jit_node* fallback;
         jit_node* resume;
         const I386::DynarecBusRun* settle;
+        const I386::DynarecBusRun* after;
+        I386::DynarecSite* site;
     };
 
     bool Decode(u32 available, u32 instruction_limit);
@@ -160,6 +162,8 @@ private:
     void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback, int first_base);
     uintptr_t GetBusAccessFlags(u32 size, int access) const;
     const I386::DynarecBusRun* GetSettleRun(Instruction& instruction);
+    const I386::DynarecBusRun* GetAfterRun(Instruction& instruction);
+    I386::DynarecSite* GetSite(Instruction& instruction);
     void StoreOrSlow(Instruction& instruction, int width);
     void EmitReopen(Instruction& instruction, int index);
     void EmitBusDram(int row, int scratch, int t2, u32 size, int access);
@@ -256,6 +260,8 @@ private:
     jit_node* m_block_start;
     u8 m_key;
     int m_count;
+    jit_node* m_leave;
+    bool m_leave_used;
     bool m_timed;
     bool m_slow_ok;
     bool m_slow_store;

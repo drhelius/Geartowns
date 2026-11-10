@@ -182,6 +182,10 @@ I386::I386()
     m_dynarec_bytes_used = 0;
     InitPointer(m_dynarec_bus_runs);
     m_dynarec_bus_runs_used = 0;
+    InitPointer(m_dynarec_sites);
+    m_dynarec_sites_used = 0;
+    m_dynarec_leave_steps = 0;
+    m_dynarec_leave_clocks = 0;
     InitPointer(m_dynarec_checks);
     m_dynarec_checks_used = 0;
     InitPointer(m_dynarec_page_blocks);
@@ -233,6 +237,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_hash);
     SafeDeleteArray(m_dynarec_bytes);
     SafeDeleteArray(m_dynarec_bus_runs);
+    SafeDeleteArray(m_dynarec_sites);
     SafeDeleteArray(m_dynarec_checks);
     SafeDeleteArray(m_dynarec_page_blocks);
     SafeDeleteArray(m_dynarec_page_granules);

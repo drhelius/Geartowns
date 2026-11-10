@@ -43,6 +43,8 @@ static const u32 k_dynarec_block_code = 64 * 1024;
 static const u32 k_dynarec_bus_runs = GT_DYNAREC_MAX_BLOCKS * 4;
 // Two per instruction of the longest block
 static const u32 k_dynarec_max_bus_runs = 128;
+static const u32 k_dynarec_sites = GT_DYNAREC_MAX_BLOCKS * 2;
+static const u32 k_dynarec_max_sites = 64;
 static const u32 k_dynarec_checks = GT_DYNAREC_MAX_BLOCKS * 4;
 static const u32 k_dynarec_max_checks = 64;
 static const u32 k_dynarec_default_threshold = 8;
@@ -101,6 +103,7 @@ void I386::EnableDynarec(bool enable)
     m_dynarec_hash = new u32[GT_DYNAREC_MAX_BLOCKS];
     m_dynarec_bytes = new u8[GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes];
     m_dynarec_bus_runs = new DynarecBusRun[k_dynarec_bus_runs];
+    m_dynarec_sites = new DynarecSite[k_dynarec_sites];
     m_dynarec_checks = new DynarecCheck[k_dynarec_checks];
     m_dynarec_region_generation = 0;
 
@@ -173,6 +176,7 @@ void I386::FlushDynarec()
     m_dynarec_block_count = 0;
     m_dynarec_bytes_used = 0;
     m_dynarec_bus_runs_used = 0;
+    m_dynarec_sites_used = 0;
     m_dynarec_checks_used = 0;
     m_dynarec_code_used = m_dynarec_code_start;
     m_dynarec_link_block = k_dynarec_none;
@@ -537,6 +541,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     if (m_dynarec_code_used + k_dynarec_block_code > m_dynarec_memory->GetSize() ||
         m_dynarec_bytes_used + k_dynarec_max_watch_bytes > GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes ||
         m_dynarec_bus_runs_used + k_dynarec_max_bus_runs > k_dynarec_bus_runs ||
+        m_dynarec_sites_used + k_dynarec_max_sites > k_dynarec_sites ||
         m_dynarec_checks_used + k_dynarec_max_checks > k_dynarec_checks)
     {
         FlushDynarec();
@@ -546,6 +551,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     DynarecEmitter emitter(this);
     u32 code_size = 0;
     u32 bus_runs = m_dynarec_bus_runs_used;
+    u32 sites = m_dynarec_sites_used;
     u32 checks = m_dynarec_checks_used;
 
     m_dynarec_memory->BeginWrite();
@@ -556,6 +562,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     if (!compiled)
     {
         m_dynarec_bus_runs_used = bus_runs;
+        m_dynarec_sites_used = sites;
         m_dynarec_checks_used = checks;
         block.state = k_dynarec_interpret;
         return;

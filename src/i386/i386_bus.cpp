@@ -853,9 +853,14 @@ template uintptr_t I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uin
 // 1 when the block must leave after the instruction, 2 when nothing was done and the instruction falls back, with the
 // 486 clocks the block added for it taken back. access: DynarecBusAccess's flags, 80h with bus timing
 template<bool i486>
-uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check, uintptr_t first_base,
-    uintptr_t settle, uintptr_t before)
+uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
 {
+    const DynarecSite& store = *(const DynarecSite*)site;
+    uintptr_t access = store.access;
+    uintptr_t check = (uintptr_t)store.check;
+    uintptr_t first_base = store.first_base;
+    uintptr_t settle = (uintptr_t)store.settle;
+    u32 before = store.before;
     u32 linear = cpu->m_dynarec_slow_linear;
     u32 size = (u32)(access & 7);
     u32 extra = 0;
@@ -900,7 +905,7 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, u
         cpu->m_bus_queue = (u32)queue;
     }
 
-    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks - extra + (u32)before +
+    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks - extra + before +
         (cpu->m_bus_timed ? cpu->GetBusPending() : 0);
     cpu->m_bus_fraction = fraction;
     cpu->m_bus_queue = level;
@@ -911,12 +916,14 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, u
     GT_Bus_Access_Context& context = *cpu->m_bus_context;
     cpu->WritePhysical(physical, (u32)value, size, context);
 
-    return cpu->m_dynarec_dirty || context.end_batch || context.wait_cycles != cpu->m_dynarec_wait ||
-        cpu->m_code_window_size == 0 ? 1 : 0;
+    if (!cpu->m_dynarec_dirty && !context.end_batch && context.wait_cycles == cpu->m_dynarec_wait &&
+        cpu->m_code_window_size != 0)
+        return 0;
+
+    cpu->LeaveDynarecSite(store);
+    return 1;
 }
 
-template uintptr_t I386::DynarecSlowStore<false>(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check,
-    uintptr_t first_base, uintptr_t settle, uintptr_t before);
-template uintptr_t I386::DynarecSlowStore<true>(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check,
-    uintptr_t first_base, uintptr_t settle, uintptr_t before);
+template uintptr_t I386::DynarecSlowStore<false>(I386* cpu, uintptr_t value, uintptr_t site);
+template uintptr_t I386::DynarecSlowStore<true>(I386* cpu, uintptr_t value, uintptr_t site);
 #endif

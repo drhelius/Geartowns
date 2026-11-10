@@ -237,14 +237,59 @@ uintptr_t I386::DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access)
 
 // After a translated access moved a TLB way: the window opens again for the next instruction as StartInstruction would,
 // touching its page before a check as DynarecStep does. 1 when the block no longer lies in it and must leave
-uintptr_t I386::DynarecReopen(I386* cpu, uintptr_t check)
+uintptr_t I386::DynarecReopen(I386* cpu, uintptr_t site)
 {
+    const DynarecSite& leave = *(const DynarecSite*)site;
     const DynarecBlock& block = cpu->m_dynarec_blocks[cpu->m_dynarec_current];
-    cpu->OpenCodeWindow(cpu->m_state.eip, check != 0);
+    cpu->m_state.eip = leave.eip;
+    cpu->OpenCodeWindow(leave.eip, IsValidPointer(leave.check));
     u32 watch_offset = block.watch_eip - cpu->m_code_window_eip;
 
-    return watch_offset >= cpu->m_code_window_size || watch_offset + block.watch_length > cpu->m_code_window_size ||
-        cpu->m_code_window + (block.eip - cpu->m_code_window_eip) != block.host ? 1 : 0;
+    if (watch_offset < cpu->m_code_window_size && watch_offset + block.watch_length <= cpu->m_code_window_size &&
+        cpu->m_code_window + (block.eip - cpu->m_code_window_eip) == block.host)
+        return 0;
+
+    cpu->LeaveDynarecSite(leave);
+    return 1;
+}
+
+// The block leaves after the site's instruction with what its Exit would count: written registers, code lines, bus run
+void I386::LeaveDynarecSite(const DynarecSite& site)
+{
+    m_state.eip = site.eip;
+
+    if (site.written >= 0)
+        m_486_written = (u8)site.written;
+
+    for (u32 i = 0; i < site.line_count; i++)
+    {
+        u32 line = site.line_first + i;
+        u32& tag = m_bus_lines[line & (I386_BUS_LINES - 1)];
+
+        if (tag != line)
+        {
+            tag = line;
+            m_bus_fraction += (s32)site.line_fill;
+        }
+    }
+
+    if (IsValidPointer(site.run))
+    {
+        const DynarecBusRun& run = *site.run;
+        u32 level = m_bus_queue;
+
+        // Code the 486's cache serves keeps no queue level
+        if (run.cost == 0)
+            m_bus_fraction += (s32)run.add;
+        else
+        {
+            m_bus_fraction += GetDynarecBusTime(run, level);
+            m_bus_queue = (u32)MIN(MAX((s32)level + run.offset, (s32)run.low), (s32)run.high);
+        }
+    }
+
+    m_dynarec_leave_steps = site.steps;
+    m_dynarec_leave_clocks = site.clocks;
 }
 #endif
 

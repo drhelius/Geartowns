@@ -832,6 +832,24 @@ private:
         u32 high;
         u32 add;
     };
+
+    // An instruction whose block may leave after it from C: a slow store's arguments, and what Exit would count
+    struct DynarecSite
+    {
+        const DynarecCheck* check;
+        const DynarecBusRun* run;
+        const DynarecBusRun* settle;
+        u32 access;
+        u32 first_base;
+        u32 before;
+        u32 eip;
+        u32 steps;
+        u32 clocks;
+        u32 line_first;
+        u32 line_count;
+        u32 line_fill;
+        s32 written;
+    };
 #endif
 
     typedef bool (I386::*opcode_member_ptr)();
@@ -919,14 +937,14 @@ private:
     static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t form);
     static void DynarecFlags(I386* cpu, uintptr_t form);
     static uintptr_t DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access);
-    static uintptr_t DynarecReopen(I386* cpu, uintptr_t check);
+    static uintptr_t DynarecReopen(I386* cpu, uintptr_t site);
+    void LeaveDynarecSite(const DynarecSite& site);
     template<bool i486>
     static void DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
     static uintptr_t DynarecDivideSlow(I386* cpu, uintptr_t value, uintptr_t form);
     static void DynarecDivide(I386* cpu, uintptr_t value, uintptr_t form);
     template<bool i486>
-    static uintptr_t DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t access, uintptr_t check, uintptr_t first_base,
-        uintptr_t settle, uintptr_t before);
+    static uintptr_t DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site);
 #if !defined(GT_DISABLE_DISASSEMBLER)
     static void DynarecCall(I386* cpu);
 #endif
@@ -1534,6 +1552,10 @@ private:
     DynarecBusRun* m_dynarec_bus_runs;
     u32 m_dynarec_bus_runs_used;
     DynarecCheck* m_dynarec_checks;
+    DynarecSite* m_dynarec_sites;
+    u32 m_dynarec_sites_used;
+    u32 m_dynarec_leave_steps;
+    u32 m_dynarec_leave_clocks;
     u32 m_dynarec_checks_used;
     u32* m_dynarec_page_blocks;
     u64* m_dynarec_page_granules;

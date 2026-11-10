@@ -103,6 +103,8 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_slow_store = false;
     m_slow_index = 0;
     m_slow_first_base = -1;
+    InitPointer(m_leave);
+    m_leave_used = false;
     m_first_base = -1;
     m_bus_code_row = 0;
     InitPointer(m_bus_next_check);
@@ -632,6 +634,8 @@ void DynarecEmitter::Classify(Instruction& instruction)
     InitPointer(instruction.fallback);
     InitPointer(instruction.resume);
     InitPointer(instruction.settle);
+    InitPointer(instruction.after);
+    InitPointer(instruction.site);
 
     if (c.lock)
         return;
@@ -1846,6 +1850,8 @@ void DynarecEmitter::EmitBlock()
     jit_prolog();
     jit_tramp(k_dynarec_frame);
     m_block_start = jit_label();
+    m_leave = jit_forward();
+    m_leave_used = false;
 
     // The AGI clock of the first instruction against the one before the block, counted past its last fallback
     m_first_base = m_i486 && m_instructions[0].kind == DYNAREC_NATIVE ? I386::Get486Base(m_instructions[0].context) : -1;
@@ -1951,25 +1957,37 @@ void DynarecEmitter::EmitBlock()
         if (IsValidPointer(instruction.fallback) && !k_dynarec_near_fallbacks)
             EmitFallback(instruction, i, last);
     }
+
+    // Instructions after which the code window didn't open again leave here, with what DynarecReopen counted
+    if (m_leave_used)
+    {
+        jit_link(m_leave);
+        jit_movi(JIT_R0, (jit_word_t)k_dynarec_exit_end);
+        LoadU32(JIT_R1, DR_CPU, Offset(&m_cpu->m_dynarec_leave_steps));
+        LoadU32(JIT_R2, DR_CPU, Offset(&m_cpu->m_dynarec_leave_clocks));
+        jit_movi(DR_T3, (jit_word_t)(uintptr_t)m_cpu->m_dynarec_exit);
+        jit_jmpr(DR_T3);
+    }
 }
 
 // An access on another TLB way closed the code window: it opens again for the next instruction, and the block leaves
 // if it no longer lies in it
 void DynarecEmitter::EmitReopen(Instruction& instruction, int index)
 {
+    I386::DynarecSite& site = *GetSite(instruction);
+    jit_node_t* go = jit_forward();
     jit_ldxi_i(DR_T0, DR_CPU, Offset(&m_cpu->m_code_window_size));
-    jit_node_t* open = jit_bnei(DR_T0, 0);
-    StoreEIP(instruction.context.next_eip);
+    jit_patch_at(jit_bnei(DR_T0, 0), go);
     jit_prepare();
     jit_pushargr(DR_CPU);
-    jit_pushargi((jit_word_t)(uintptr_t)instruction.next_check);
+    jit_pushargi((jit_word_t)(uintptr_t)&site);
     jit_finishi((jit_pointer_t)&I386::DynarecReopen);
     jit_retval(DR_T0);
-    jit_node_t* stay = jit_beqi(DR_T0, 0);
+    jit_patch_at(jit_beqi(DR_T0, 0), go);
     EmitMaterialize(index + 1);
-    Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
-    jit_patch(stay);
-    jit_patch(open);
+    m_leave_used = true;
+    jit_patch_at(jit_jmpi(), m_leave);
+    jit_link(go);
 }
 
 // The shadow had one step left, which this instruction took
@@ -2005,7 +2023,7 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
         Store486Written(m_instructions[index - 1].written);
 
     const I386::DynarecBusRun* settle = GetSettleRun(instruction);
-    const I386::DynarecBusRun* revert = m_timed && !instruction.ends_block ? AddBusRun(instruction.bus_after) : NULL;
+    const I386::DynarecBusRun* revert = !instruction.ends_block ? GetAfterRun(instruction) : NULL;
     CallStep(instruction.next_check, instruction.clocks, instruction.before, settle, revert);
 
     if (instruction.ends_block)
@@ -2027,6 +2045,38 @@ const I386::DynarecBusRun* DynarecEmitter::GetSettleRun(Instruction& instruction
         instruction.settle = AddBusRun(instruction.bus_before);
 
     return instruction.settle;
+}
+
+// What the instruction's slow store and its reopen pass to C, where the block may leave after it
+I386::DynarecSite* DynarecEmitter::GetSite(Instruction& instruction)
+{
+    if (IsValidPointer(instruction.site))
+        return instruction.site;
+
+    I386::DynarecSite& site = m_cpu->m_dynarec_sites[m_cpu->m_dynarec_sites_used++];
+    site.check = instruction.next_check;
+    site.run = GetAfterRun(instruction);
+    site.settle = GetSettleRun(instruction);
+    site.access = 0;
+    site.first_base = 0;
+    site.before = instruction.before;
+    site.eip = instruction.context.next_eip;
+    site.steps = (u32)(&instruction - m_instructions) + 1;
+    site.clocks = instruction.before + instruction.clocks;
+    site.line_first = m_bus_line_first;
+    site.line_count = m_timed ? m_bus_line_count : 0;
+    site.line_fill = m_cpu->m_bus.line_fill;
+    site.written = m_exit_written;
+    instruction.site = &site;
+    return &site;
+}
+
+const I386::DynarecBusRun* DynarecEmitter::GetAfterRun(Instruction& instruction)
+{
+    if (m_timed && !IsValidPointer(instruction.after))
+        instruction.after = AddBusRun(instruction.bus_after);
+
+    return instruction.after;
 }
 
 // Leaves for the dispatcher through the exit of the entry function, with the steps and clocks of the block up to here
@@ -3399,31 +3449,29 @@ void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
         return;
     }
 
-    u32 size = (u32)width / 8;
-    uintptr_t access = GetBusAccessFlags(size, DYNAREC_WRITE) | (m_timed ? 0x80 : 0);
+    I386::DynarecSite& site = *GetSite(instruction);
+    site.access = (u32)(GetBusAccessFlags((u32)width / 8, DYNAREC_WRITE) | (m_timed ? 0x80 : 0));
+    site.first_base = (u32)(m_slow_first_base + 1);
+
+    jit_node_t* done = jit_forward();
     jit_node_t* slow = jit_beqi(DR_T0, 0);
     StoreHost(DR_T0, DR_T1, width, DR_T2);
-    jit_node_t* done = jit_jmpi();
+    jit_patch_at(jit_jmpi(), done);
     jit_patch(slow);
     jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<true> :
         (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<false>);
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_pushargr(DR_T1);
-    jit_pushargi((jit_word_t)access);
-    jit_pushargi((jit_word_t)(uintptr_t)m_bus_next_check);
-    jit_pushargi((jit_word_t)(m_slow_first_base + 1));
-    jit_pushargi((jit_word_t)(uintptr_t)GetSettleRun(instruction));
-    jit_pushargi((jit_word_t)instruction.before);
+    jit_pushargi((jit_word_t)(uintptr_t)&site);
     jit_finishr(DR_T2);
     jit_retval(DR_T0);
     jit_patch_at(jit_beqi(DR_T0, 2), instruction.fallback);
-    jit_node_t* stay = jit_beqi(DR_T0, 0);
+    jit_patch_at(jit_beqi(DR_T0, 0), done);
     EmitMaterialize(m_slow_index + 1);
-    StoreEIP(instruction.context.next_eip);
-    Exit(m_slow_index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
-    jit_patch(stay);
-    jit_patch(done);
+    m_leave_used = true;
+    jit_patch_at(jit_jmpi(), m_leave);
+    jit_link(done);
 }
 
 // LEAVE: the frame's saved EBP read at EBP, ESP past it

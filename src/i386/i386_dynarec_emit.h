@@ -208,6 +208,7 @@ private:
     void EmitExchange(Instruction& instruction, int width);
     void EmitSETcc(Instruction& instruction);
     void EmitShift(Instruction& instruction, int width, u32 count);
+    void EmitDoubleShift(Instruction& instruction, int width, u32 count);
     void EmitPush(Instruction& instruction, int width, int store_width);
     void EmitPop(Instruction& instruction, int index, int width);
     void EmitPushSegment(Instruction& instruction, int segment);

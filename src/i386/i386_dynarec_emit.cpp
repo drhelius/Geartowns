@@ -493,6 +493,13 @@ void DynarecEmitter::Classify(Instruction& instruction)
             SetNative(instruction, 7, true);
         else if (opcode2 == 0xB6 || opcode2 == 0xB7 || opcode2 == 0xBE || opcode2 == 0xBF)
             SetNative(instruction, memory ? 6 : 3, memory);
+        else if ((opcode2 == 0xA4 || opcode2 == 0xAC) && (c.immediate & 0x1F) != 0 &&
+            (width == 32 || (c.immediate & 0x1F) <= 16))
+        {
+            // SHLD and SHRD by a constant count. A 16-bit count above 16 rotates and stays in the interpreter
+            SetNative(instruction, memory ? 7 : 3, memory);
+            instruction.defs = k_flags_all;
+        }
         else if (opcode2 == 0x02 || opcode2 == 0x03 || opcode2 == 0xA3 ||
             opcode2 == 0xAB || opcode2 == 0xB3 || opcode2 == 0xBB || opcode2 == 0xBA || opcode2 == 0xA4 ||
             opcode2 == 0xA5 || opcode2 == 0xAC || opcode2 == 0xAD || opcode2 == 0xAF || opcode2 == 0xBC ||
@@ -2561,6 +2568,8 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitPushSegment(instruction, opcode2 == 0xA0 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
         else if (opcode2 == 0xA1 || opcode2 == 0xA9)
             EmitPopSegment(instruction, opcode2 == 0xA1 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
+        else if (opcode2 == 0xA4 || opcode2 == 0xAC)
+            EmitDoubleShift(instruction, width, c.immediate & 0x1F);
         else if (opcode2 == 0xB4 || opcode2 == 0xB5)
             EmitLoadFarPointer(instruction, opcode2 == 0xB4 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
         else
@@ -3302,6 +3311,79 @@ void DynarecEmitter::EmitShift(Instruction& instruction, int width, u32 count)
     }
 
     EmitSZP(DR_T0, DR_T1, DR_T4, DR_T3, width, needed);
+    MergeFlags(DR_T0, DR_T1, needed);
+}
+
+// SHLD and SHRD by a count from 1 to the width, as OPCodes0F_DoubleShift computes them: CF is the last bit out, AF
+// set, OF the top bit against CF for SHLD and against the bit below it for SHRD
+void DynarecEmitter::EmitDoubleShift(Instruction& instruction, int width, u32 count)
+{
+    const I386::InstructionContext& c = instruction.context;
+    bool right = c.opcode2 == 0xAC;
+    u16 needed = instruction.live & instruction.defs;
+
+    if (c.memory_operand)
+    {
+        EmitOperandAddress(instruction, width, DYNAREC_READ_WRITE);
+        LoadHost(DR_T1, DR_T0, width);
+    }
+    else
+        LoadRegister(DR_T1, c.rm, width);
+
+    LoadRegister(DR_T2, c.reg, width);
+
+    // T1 destination, T2 source, T3 result, T4 carry
+    if (right)
+    {
+        jit_rshi_u(DR_T3, DR_T1, (jit_word_t)count);
+        jit_lshi(DR_T4, DR_T2, (jit_word_t)(width - count));
+    }
+    else
+    {
+        jit_lshi(DR_T3, DR_T1, (jit_word_t)count);
+        jit_rshi_u(DR_T4, DR_T2, (jit_word_t)(width - count));
+    }
+
+    jit_orr(DR_T3, DR_T3, DR_T4);
+    Mask(DR_T3, width);
+    jit_rshi_u(DR_T4, DR_T1, (jit_word_t)(right ? count - 1 : width - count));
+    jit_andi(DR_T4, DR_T4, 1);
+
+    if (c.memory_operand)
+        StoreHost(DR_T0, DR_T3, width, DR_T2);
+    else
+        StoreRegister(c.rm, width, DR_T3);
+
+    if (needed == 0)
+        return;
+
+    // T0 flags, T1 and T2 scratch
+    if ((needed & I386_FLAG_CF) != 0)
+        jit_movr(DR_T0, DR_T4);
+    else
+        jit_movi(DR_T0, 0);
+
+    if ((needed & I386_FLAG_AF) != 0)
+        jit_ori(DR_T0, DR_T0, I386_FLAG_AF);
+
+    if ((needed & I386_FLAG_OF) != 0)
+    {
+        jit_rshi_u(DR_T1, DR_T3, width - 1);
+
+        if (right)
+        {
+            jit_rshi_u(DR_T2, DR_T3, width - 2);
+            jit_xorr(DR_T1, DR_T1, DR_T2);
+            jit_andi(DR_T1, DR_T1, 1);
+        }
+        else
+            jit_xorr(DR_T1, DR_T1, DR_T4);
+
+        jit_lshi(DR_T1, DR_T1, 11);
+        jit_orr(DR_T0, DR_T0, DR_T1);
+    }
+
+    EmitSZP(DR_T0, DR_T1, DR_T2, DR_T3, width, needed);
     MergeFlags(DR_T0, DR_T1, needed);
 }
 

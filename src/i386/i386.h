@@ -896,6 +896,8 @@ private:
     void InvalidateDynarecCode(u32 offset, u32 size);
     void EvictDynarecPage(u32 page);
     bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const;
+    bool IsDynarecSafeWrite(u32 page, u32 first, u32 last) const;
+    u8 GetDynarecConflicts(u32 page, const DynarecBlock& block, u32 first, u32 last) const;
     void AddDynarecLive(u32 page, u32 first, u32 length);
     bool FindDynarecLive(u32 page, u32 first, u32 length) const;
     void CoolDynarecPages();
@@ -1524,6 +1526,7 @@ private:
     u8* m_dynarec_page_cool;
     u8* m_dynarec_page_backoff;
     u16* m_dynarec_page_live;
+    u8* m_dynarec_page_safe;
     u32 m_dynarec_page_count;
     const u8* m_dynarec_ram;
     u32 m_dynarec_region_generation;

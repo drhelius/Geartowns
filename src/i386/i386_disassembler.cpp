@@ -2009,8 +2009,9 @@ void I386::PushCallStack(u16 src_cs, u32 src_base, u32 src, u32 back, I386_Call_
     entry.back_linear = src_base + back;
     GetStackPointer(entry.stack_selector, entry.stack_pointer);
 
-    if (m_disassembler_call_stack.size() == 256)
-        m_disassembler_call_stack.erase(m_disassembler_call_stack.begin());
+    // The newest 256 to 511 frames: a full stack drops its older half at once, not a frame per call
+    if (m_disassembler_call_stack.size() == 511)
+        m_disassembler_call_stack.erase(m_disassembler_call_stack.begin(), m_disassembler_call_stack.begin() + 256);
 
     m_disassembler_call_stack.push_back(entry);
 

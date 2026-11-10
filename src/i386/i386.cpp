@@ -191,6 +191,7 @@ I386::I386()
     InitPointer(m_dynarec_page_cool);
     InitPointer(m_dynarec_page_backoff);
     InitPointer(m_dynarec_page_live);
+    InitPointer(m_dynarec_page_safe);
     m_dynarec_page_count = 0;
     InitPointer(m_dynarec_ram);
     m_dynarec_region_generation = 0;
@@ -238,6 +239,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_page_cool);
     SafeDeleteArray(m_dynarec_page_backoff);
     SafeDeleteArray(m_dynarec_page_live);
+    SafeDeleteArray(m_dynarec_page_safe);
 #endif
 }
 

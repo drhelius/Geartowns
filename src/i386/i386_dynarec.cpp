@@ -57,6 +57,11 @@ static const u8 k_dynarec_cool_periods = 8;
 static const u8 k_dynarec_max_backoff = 4;
 static const u64 k_dynarec_cool_period_clocks = 1 << 20;
 
+// Code bytes a write rewrote, offset and length - 1 in the page, most recent first. Blocks compiled over them read
+// those operands at run time, so later rewrites keep the blocks
+static const u32 k_dynarec_page_live = 4;
+static const u16 k_dynarec_live_none = 0xFFFF;
+
 // A block watches its own bytes and the bytes of the transfer targets it timed when it was compiled
 INLINE static const u8* GetDynarecWatchHost(const u8* host, u32 eip, u32 watch_eip)
 {
@@ -187,6 +192,7 @@ void I386::CheckDynarecMemory()
     SafeDeleteArray(m_dynarec_page_writes);
     SafeDeleteArray(m_dynarec_page_cool);
     SafeDeleteArray(m_dynarec_page_backoff);
+    SafeDeleteArray(m_dynarec_page_live);
 
     m_dynarec_ram = m_memory->GetWorkingRAM();
     m_dynarec_page_count = IsValidPointer(m_dynarec_ram) ? (u32)(m_memory->GetWorkingRAMSize() >> 12) : 0;
@@ -201,7 +207,9 @@ void I386::CheckDynarecMemory()
     m_dynarec_page_writes = new u16[m_dynarec_page_count];
     m_dynarec_page_cool = new u8[m_dynarec_page_count];
     m_dynarec_page_backoff = new u8[m_dynarec_page_count];
+    m_dynarec_page_live = new u16[m_dynarec_page_count * k_dynarec_page_live];
     memset(m_dynarec_page_blocks, 0xFF, m_dynarec_page_count * sizeof(u32));
+    memset(m_dynarec_page_live, 0xFF, m_dynarec_page_count * k_dynarec_page_live * sizeof(u16));
     memset(m_dynarec_page_granules, 0, m_dynarec_page_count * 2 * sizeof(u64));
     memset(m_dynarec_page_heat, 0, m_dynarec_page_count);
     memset(m_dynarec_page_writes, 0, m_dynarec_page_count * sizeof(u16));
@@ -589,8 +597,23 @@ void I386::LinkDynarecBlock(u32 from, u8 slot, u32 to)
 // After a state load or a reset the bytes of a block may have changed without a write the CPU saw
 bool I386::VerifyDynarecBlock(DynarecBlock& block)
 {
-    if (memcmp(GetDynarecWatchHost(block.host, block.eip, block.watch_eip), m_dynarec_bytes + block.copy,
-        block.watch_length) == 0)
+    const u8* host = GetDynarecWatchHost(block.host, block.eip, block.watch_eip);
+    const u8* copy = m_dynarec_bytes + block.copy;
+    bool same = memcmp(host, copy, block.watch_length) == 0;
+
+    // Live operands may differ from the copy, the block reads them
+    if (!same && block.live_count != 0)
+    {
+        same = true;
+
+        for (u32 i = 0; i < block.watch_length && same; i++)
+        {
+            u32 offset = (u32)(host + i - m_dynarec_ram) & 0xFFF;
+            same = host[i] == copy[i] || IsDynarecLiveWrite(block, offset, offset);
+        }
+    }
+
+    if (same)
     {
         block.epoch = m_dynarec_epoch;
         return true;
@@ -701,7 +724,7 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             u32 block_first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) & 0xFFF;
             u32 block_last = block_first + block.watch_length - 1;
 
-            if (block_first <= last && first <= block_last)
+            if (block_first <= last && first <= block_last && !IsDynarecLiveWrite(block, first, last))
             {
                 RemoveDynarecBlock(index);
                 removed = true;
@@ -715,12 +738,60 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             index = next;
         }
 
+        // A small rewrite may be an operand, which the next compile takes as live
+        if (removed && last - first < 4)
+            AddDynarecLive(page, first, last - first + 1);
+
         // Only rewritten code heats a page, data next to code in its granules doesn't
         if (removed && ++m_dynarec_page_heat[page] >= k_dynarec_hot_rewrites)
             EvictDynarecPage(page);
         else if (m_dynarec_page_blocks[page] == k_dynarec_none)
             m_memory->SetCodePage(page, false);
     }
+}
+
+// A write inside one of the block's live operands, page offsets
+bool I386::IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const
+{
+    for (u32 i = 0; i < block.live_count; i++)
+    {
+        if (first >= block.live_first[i] && last < (u32)block.live_first[i] + block.live_length[i])
+            return true;
+    }
+
+    return false;
+}
+
+void I386::AddDynarecLive(u32 page, u32 first, u32 length)
+{
+    u16* live = &m_dynarec_page_live[page * k_dynarec_page_live];
+    u16 entry = (u16)(first | ((length - 1) << 12));
+
+    for (u32 i = 0; i < k_dynarec_page_live; i++)
+    {
+        if (live[i] == entry)
+            return;
+    }
+
+    memmove(live + 1, live, (k_dynarec_page_live - 1) * sizeof(u16));
+    live[0] = entry;
+}
+
+// Whether a rewrite of the page lies inside first to first + length - 1
+bool I386::FindDynarecLive(u32 page, u32 first, u32 length) const
+{
+    const u16* live = &m_dynarec_page_live[page * k_dynarec_page_live];
+
+    for (u32 i = 0; i < k_dynarec_page_live && live[i] != k_dynarec_live_none; i++)
+    {
+        u32 start = live[i] & 0xFFF;
+        u32 end = start + (live[i] >> 12);
+
+        if (start >= first && end < first + length)
+            return true;
+    }
+
+    return false;
 }
 
 void I386::EvictDynarecPage(u32 page)

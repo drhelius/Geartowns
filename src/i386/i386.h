@@ -808,6 +808,9 @@ private:
         const DynarecCheck* fit;
         u32 eip_limit;
         u8 shadow_entry;
+        u8 live_count;
+        u8 live_length[4];
+        u16 live_first[4];
         u32 epoch;
         u32 copy;
         u32 hash_next;
@@ -892,6 +895,9 @@ private:
     void RemoveDynarecBlock(u32 index);
     void InvalidateDynarecCode(u32 offset, u32 size);
     void EvictDynarecPage(u32 page);
+    bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const;
+    void AddDynarecLive(u32 page, u32 first, u32 length);
+    bool FindDynarecLive(u32 page, u32 first, u32 length) const;
     void CoolDynarecPages();
     void CheckDynarecMemory();
     static void DynarecCodeWrite(void* context, u32 offset, u32 size);
@@ -1517,6 +1523,7 @@ private:
     u16* m_dynarec_page_writes;
     u8* m_dynarec_page_cool;
     u8* m_dynarec_page_backoff;
+    u16* m_dynarec_page_live;
     u32 m_dynarec_page_count;
     const u8* m_dynarec_ram;
     u32 m_dynarec_region_generation;

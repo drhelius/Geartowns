@@ -51,6 +51,10 @@ static const bool k_dynarec_near_fallbacks = false;
 #endif
 static const u32 k_dynarec_compiled = 1;
 
+// Operands a native reads from its code bytes when it runs
+static const u8 k_live_immediate = 0x01;
+static const u8 k_live_displacement = 0x02;
+
 static const u16 k_flags_all = I386_FLAG_CF | I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF;
 static const u16 k_flags_inc_dec = I386_FLAG_PF | I386_FLAG_AF | I386_FLAG_ZF | I386_FLAG_SF | I386_FLAG_OF;
 
@@ -222,6 +226,7 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 
     m_count = 0;
     block.eip_limit = 0;
+    block.live_count = 0;
     block.call_eip = 0;
     block.call_next_eip = 0;
 
@@ -259,6 +264,7 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         m_cpu->DisassembleInstruction(eip);
 #endif
 
+        SetLiveOperands(instruction);
         instruction.before = clocks;
         instruction.extra_before = extra;
         clocks += instruction.clocks;
@@ -284,6 +290,127 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
     m_block->watch_eip = block.eip;
     m_block->watch_length = (u16)position;
     return m_count != 0;
+}
+
+// Operands a rewrite of the page touched are read from the code bytes when the instruction runs, up to four per block:
+// helpers decode all their bytes then, natives the immediates EmitImmediate takes and every displacement. A write
+// inside one of them keeps the block, any other rewrite of its bytes removes it
+void DynarecEmitter::SetLiveOperands(Instruction& instruction)
+{
+    I386::DynarecBlock& block = *m_block;
+    const u8* bytes = m_cpu->m_passive_bytes;
+    const u8* ram = m_cpu->m_dynarec_ram;
+
+    instruction.live_operands = 0;
+    instruction.host = bytes;
+
+    if (bytes < ram || bytes >= ram + ((size_t)m_cpu->m_dynarec_page_count << 12))
+        return;
+
+    u32 page = (u32)((bytes - ram) >> 12);
+    u32 offset = (u32)(bytes - ram) & 0xFFF;
+    bool native = instruction.kind == DYNAREC_NATIVE;
+
+    GetOperandBytes(instruction, bytes);
+
+    if (instruction.immediate_size != 0 && (!native || CanLiveImmediate(instruction)) && block.live_count < 4 &&
+        m_cpu->FindDynarecLive(page, offset + instruction.immediate_position, instruction.immediate_size))
+    {
+        instruction.live_operands |= k_live_immediate;
+        block.live_first[block.live_count] = (u16)(offset + instruction.immediate_position);
+        block.live_length[block.live_count] = instruction.immediate_size;
+        block.live_count++;
+    }
+
+    if (instruction.displacement_size != 0 && block.live_count < 4 &&
+        m_cpu->FindDynarecLive(page, offset + instruction.displacement_position, instruction.displacement_size))
+    {
+        instruction.live_operands |= k_live_displacement;
+        block.live_first[block.live_count] = (u16)(offset + instruction.displacement_position);
+        block.live_length[block.live_count] = instruction.displacement_size;
+        block.live_count++;
+    }
+}
+
+// The displacement follows ModR/M and SIB, the immediate takes the rest. MOV moffs has its offset as the displacement
+void DynarecEmitter::GetOperandBytes(Instruction& instruction, const u8* bytes) const
+{
+    const I386::InstructionContext& c = instruction.context;
+    u32 length = c.next_eip - c.start_eip;
+    u32 position = 0;
+    u32 displacement = 0;
+
+    while (position < length && (bytes[position] == 0x26 || bytes[position] == 0x2E || bytes[position] == 0x36 ||
+        bytes[position] == 0x3E || bytes[position] == 0x64 || bytes[position] == 0x65 || bytes[position] == 0x66 ||
+        bytes[position] == 0x67 || bytes[position] == 0xF0 || bytes[position] == 0xF2 || bytes[position] == 0xF3))
+        position++;
+
+    position += c.two_byte ? 2 : 1;
+
+    if (!c.two_byte && (c.opcode & 0xFC) == 0xA0)
+        displacement = c.address_size;
+    else if (m_cpu->OPCodeHasModRM(c.two_byte, c.two_byte ? c.opcode2 : c.opcode))
+    {
+        u8 mod = c.modrm >> 6;
+        u8 rm = c.modrm & 7;
+        position++;
+
+        if (mod != 3 && c.address_size == 2)
+            displacement = (mod == 0 && rm == 6) || mod == 2 ? 2 : mod == 1 ? 1 : 0;
+        else if (mod != 3)
+        {
+            bool direct = mod == 0 && rm == 5;
+
+            if (rm == 4)
+            {
+                position++;
+                direct = mod == 0 && (c.sib & 7) == 5;
+            }
+
+            displacement = direct || mod == 2 ? 4 : mod == 1 ? 1 : 0;
+        }
+    }
+
+    instruction.displacement_position = position;
+    instruction.displacement_size = (u8)displacement;
+    instruction.immediate_position = position + displacement;
+    instruction.immediate_size = (u8)(position + displacement < length ? length - position - displacement : 0);
+}
+
+// The natives whose immediate EmitImmediate loads: ALU and TEST with one, MOV of one and PUSH of one
+bool DynarecEmitter::CanLiveImmediate(const Instruction& instruction) const
+{
+    const I386::InstructionContext& c = instruction.context;
+    u8 opcode = c.opcode;
+
+    if (c.two_byte)
+        return false;
+
+    if (opcode < 0x40)
+        return (opcode & 7) == 4 || (opcode & 7) == 5;
+
+    return (opcode >= 0x80 && opcode <= 0x83) || (opcode >= 0xB0 && opcode <= 0xBF) || opcode == 0xC6 ||
+        opcode == 0xC7 || opcode == 0x68 || opcode == 0x6A || opcode == 0xA8 || opcode == 0xA9 ||
+        ((opcode == 0xF6 || opcode == 0xF7) && c.reg <= 1);
+}
+
+// The constant value, or a live immediate read now, sign-extended from one byte when sign, masked to width
+void DynarecEmitter::EmitImmediate(int r, const Instruction& instruction, u32 value, int width, bool sign)
+{
+    if ((instruction.live_operands & k_live_immediate) == 0)
+    {
+        jit_movi(r, (jit_word_t)value);
+        return;
+    }
+
+    jit_movi(r, (jit_word_t)(uintptr_t)(instruction.host + instruction.immediate_position));
+    LoadHost(r, r, instruction.immediate_size * 8);
+
+    if (sign && instruction.immediate_size == 1)
+    {
+        jit_extr_c(r, r);
+        Mask(r, width);
+    }
 }
 
 // Flags written by an instruction and overwritten before anything can read them are not computed
@@ -1971,8 +2098,9 @@ void DynarecEmitter::StoreHost(int host, int r, int width, int scratch)
 }
 
 // Effective offset from ModR/M, SIB and displacement, as CalculateEffectiveOffset computes it
-u8 DynarecEmitter::EmitEffectiveOffset(int r, int t, const I386::InstructionContext& c)
+u8 DynarecEmitter::EmitEffectiveOffset(int r, int t, const Instruction& instruction)
 {
+    const I386::InstructionContext& c = instruction.context;
     u8 mod = c.modrm >> 6;
     u8 rm = c.modrm & 7;
     bool stack = false;
@@ -2048,7 +2176,20 @@ u8 DynarecEmitter::EmitEffectiveOffset(int r, int t, const I386::InstructionCont
         }
     }
 
-    if (!initialized)
+    // A live displacement is read from the code bytes, one byte sign-extended
+    if ((instruction.live_operands & k_live_displacement) != 0)
+    {
+        int d = initialized ? t : r;
+        jit_movi(d, (jit_word_t)(uintptr_t)(instruction.host + instruction.displacement_position));
+        LoadHost(d, d, instruction.displacement_size * 8);
+
+        if (instruction.displacement_size == 1)
+            jit_extr_c(d, d);
+
+        if (initialized)
+            jit_addr(r, r, d);
+    }
+    else if (!initialized)
         jit_movi(r, (jit_word_t)(u32)c.displacement);
     else if (c.displacement != 0)
         jit_addi(r, r, (jit_word_t)c.displacement);
@@ -2458,11 +2599,12 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitPush(instruction, width, width);
             break;
         case 0x68:
-            jit_movi(DR_T4, (jit_word_t)c.immediate);
+            EmitImmediate(DR_T4, instruction, c.immediate, width, false);
             EmitPush(instruction, width, width);
             break;
         case 0x6A:
-            jit_movi(DR_T4, (jit_word_t)((u32)(s32)(s8)c.immediate & (width == 16 ? 0xFFFFU : 0xFFFFFFFFU)));
+            EmitImmediate(DR_T4, instruction, (u32)(s32)(s8)c.immediate & (width == 16 ? 0xFFFFU : 0xFFFFFFFFU), width,
+                true);
             EmitPush(instruction, width, width);
             break;
         case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
@@ -2544,7 +2686,8 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         {
             int test_width = opcode == 0xA8 ? 8 : width;
             LoadRegister(DR_T1, I386_REG_EAX, test_width);
-            jit_andi(DR_T1, DR_T1, (jit_word_t)c.immediate);
+            EmitImmediate(DR_T2, instruction, c.immediate, test_width, false);
+            jit_andr(DR_T1, DR_T1, DR_T2);
             EmitLogicFlags(instruction, DR_T1, test_width);
             break;
         }
@@ -2555,11 +2698,11 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitString(instruction);
             break;
         case 0xB0: case 0xB1: case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB7:
-            jit_movi(DR_T0, (jit_word_t)(c.immediate & 0xFF));
+            EmitImmediate(DR_T0, instruction, c.immediate & 0xFF, 8, false);
             StoreRegister(opcode & 7, 8, DR_T0);
             break;
         case 0xB8: case 0xB9: case 0xBA: case 0xBB: case 0xBC: case 0xBD: case 0xBE: case 0xBF:
-            jit_movi(DR_T0, (jit_word_t)c.immediate);
+            EmitImmediate(DR_T0, instruction, c.immediate, width, false);
             StoreRegister(opcode & 7, width, DR_T0);
             break;
         case 0xC0: case 0xD0:
@@ -2639,7 +2782,7 @@ s32 DynarecEmitter::SignExtend(u32 value, int width) const
 // Host address of the memory operand in T0, from the offset of the effective address
 void DynarecEmitter::EmitOperandAddress(Instruction& instruction, int width, int access)
 {
-    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction.context);
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
     EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, (u32)width / 8, access, instruction.fallback);
 }
 
@@ -2661,7 +2804,7 @@ void DynarecEmitter::EmitALU(Instruction& instruction, int operation, int form, 
         if (group1)
         {
             LoadHost(DR_T1, DR_T0, width);
-            jit_movi(DR_T2, (jit_word_t)(immediate & mask));
+            EmitImmediate(DR_T2, instruction, immediate & mask, width, c.opcode == 0x83);
         }
         else if (destination_rm)
         {
@@ -2677,7 +2820,7 @@ void DynarecEmitter::EmitALU(Instruction& instruction, int operation, int form, 
     else if (group1)
     {
         LoadRegister(DR_T1, c.rm, width);
-        jit_movi(DR_T2, (jit_word_t)(immediate & mask));
+        EmitImmediate(DR_T2, instruction, immediate & mask, width, c.opcode == 0x83);
     }
     else if (form <= 1)
     {
@@ -2692,7 +2835,7 @@ void DynarecEmitter::EmitALU(Instruction& instruction, int operation, int form, 
     else
     {
         LoadRegister(DR_T1, I386_REG_EAX, width);
-        jit_movi(DR_T2, (jit_word_t)(immediate & mask));
+        EmitImmediate(DR_T2, instruction, immediate & mask, width, c.opcode == 0x83);
     }
 
     u16 needed = instruction.live & instruction.defs;
@@ -2864,7 +3007,8 @@ void DynarecEmitter::EmitGroup3(Instruction& instruction, int width)
 
     if (reg <= 1)
     {
-        jit_andi(DR_T3, DR_T2, (jit_word_t)c.immediate);
+        EmitImmediate(DR_T3, instruction, c.immediate, width, false);
+        jit_andr(DR_T3, DR_T2, DR_T3);
         EmitLogicFlags(instruction, DR_T3, width);
         return;
     }
@@ -2921,13 +3065,13 @@ void DynarecEmitter::EmitMoveImmediate(Instruction& instruction, int width)
 
     if (!c.memory_operand)
     {
-        jit_movi(DR_T0, (jit_word_t)c.immediate);
+        EmitImmediate(DR_T0, instruction, c.immediate, width, false);
         StoreRegister(c.rm, width, DR_T0);
         return;
     }
 
     EmitOperandAddress(instruction, width, DYNAREC_WRITE);
-    jit_movi(DR_T1, (jit_word_t)c.immediate);
+    EmitImmediate(DR_T1, instruction, c.immediate, width, false);
     StoreHost(DR_T0, DR_T1, width, DR_T2);
 }
 
@@ -2936,7 +3080,15 @@ void DynarecEmitter::EmitMoveOffset(Instruction& instruction, int width, bool lo
     const I386::InstructionContext& c = instruction.context;
     u8 segment = c.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : c.segment_override;
 
-    jit_movi(DR_T0, (jit_word_t)c.immediate);
+    // The offset is the instruction's displacement for live operands
+    if ((instruction.live_operands & k_live_displacement) != 0)
+    {
+        jit_movi(DR_T0, (jit_word_t)(uintptr_t)(instruction.host + instruction.displacement_position));
+        LoadHost(DR_T0, DR_T0, instruction.displacement_size * 8);
+    }
+    else
+        jit_movi(DR_T0, (jit_word_t)c.immediate);
+
     EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, (u32)width / 8, load ? DYNAREC_READ : DYNAREC_WRITE,
         instruction.fallback);
 
@@ -2954,7 +3106,7 @@ void DynarecEmitter::EmitMoveOffset(Instruction& instruction, int width, bool lo
 
 void DynarecEmitter::EmitLEA(Instruction& instruction, int width)
 {
-    EmitEffectiveOffset(DR_T0, DR_T1, instruction.context);
+    EmitEffectiveOffset(DR_T0, DR_T1, instruction);
     StoreRegister(instruction.context.reg, width, DR_T0);
 }
 
@@ -3391,7 +3543,7 @@ void DynarecEmitter::EmitPushRM(Instruction& instruction, int width)
         return;
     }
 
-    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, c);
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
     EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, DYNAREC_READ, instruction.fallback, false);
     EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
     LoadHost(DR_T4, DR_T0, width);
@@ -3442,7 +3594,7 @@ void DynarecEmitter::EmitPopRM(Instruction& instruction, int width)
     LoadHost(DR_T2, DR_T0, width);
     StoreTemp(2, DR_T2);
 
-    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, c);
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
     EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, DYNAREC_WRITE, instruction.fallback, false);
     EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
     LoadTemp(DR_T2, 2);
@@ -3469,7 +3621,7 @@ void DynarecEmitter::EmitLoadFarPointer(Instruction& instruction, int segment)
     u32 size = c.operand_size;
     int width = (int)size * 8;
 
-    u8 operand = EmitEffectiveOffset(DR_T0, DR_T1, c);
+    u8 operand = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
 
     if (c.address_size == 2)
         jit_patch_at(jit_bgti_u(DR_T0, (jit_word_t)(0xFFFF - size - 1)), instruction.fallback);

@@ -86,6 +86,12 @@ private:
         bool memory;
         bool ends_block;
         bool shadow;
+        u8 live_operands;
+        u8 immediate_size;
+        u8 displacement_size;
+        u32 immediate_position;
+        u32 displacement_position;
+        const u8* host;
         u16 uses;
         u16 defs;
         u16 live;
@@ -174,7 +180,11 @@ private:
     void StoreRegister(int index, int width, int r);
     void LoadHost(int r, int host, int width);
     void StoreHost(int host, int r, int width, int scratch);
-    u8 EmitEffectiveOffset(int r, int t, const I386::InstructionContext& c);
+    u8 EmitEffectiveOffset(int r, int t, const Instruction& instruction);
+    void EmitImmediate(int r, const Instruction& instruction, u32 value, int width, bool sign);
+    void SetLiveOperands(Instruction& instruction);
+    void GetOperandBytes(Instruction& instruction, const u8* bytes) const;
+    bool CanLiveImmediate(const Instruction& instruction) const;
     void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback, bool bus = true);
     void EmitOperandAddress(Instruction& instruction, int width, int access);
     void EmitSZP(int f, int t, int u, int result, int width, u16 needed);

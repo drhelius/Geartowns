@@ -45,6 +45,9 @@ static const u32 k_dynarec_bus_runs = GT_DYNAREC_MAX_BLOCKS * 4;
 static const u32 k_dynarec_max_bus_runs = 128;
 static const u32 k_dynarec_sites = GT_DYNAREC_MAX_BLOCKS * 2;
 static const u32 k_dynarec_max_sites = 64;
+static const u32 k_dynarec_lives = GT_DYNAREC_MAX_BLOCKS * 2;
+// An immediate and a displacement per instruction of the longest block
+static const u32 k_dynarec_max_lives = 128;
 static const u32 k_dynarec_checks = GT_DYNAREC_MAX_BLOCKS * 4;
 static const u32 k_dynarec_max_checks = 64;
 static const u32 k_dynarec_default_threshold = 8;
@@ -59,9 +62,11 @@ static const u8 k_dynarec_cool_periods = 8;
 static const u8 k_dynarec_max_backoff = 4;
 static const u64 k_dynarec_cool_period_clocks = 1 << 20;
 
-// Code bytes a write rewrote, offset and length - 1 in the page, most recent first. Blocks compiled over them read
-// those operands at run time, so later rewrites keep the blocks
-static const u32 k_dynarec_page_live = 4;
+// A page whose code a small write rewrote gets a map from a pool: a bit per rewritten byte (live), then a bit per live
+// byte that a block of the page compiled as a constant (conflict). Blocks compiled over live bytes read those operands
+// at run time, so later rewrites keep the blocks. A page that finds the pool full gets no live operands
+static const u32 k_dynarec_live_maps = 256;
+static const u32 k_dynarec_live_words = 64;
 static const u16 k_dynarec_live_none = 0xFFFF;
 
 // A block watches its own bytes and the bytes of the transfer targets it timed when it was compiled
@@ -104,6 +109,7 @@ void I386::EnableDynarec(bool enable)
     m_dynarec_bytes = new u8[GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes];
     m_dynarec_bus_runs = new DynarecBusRun[k_dynarec_bus_runs];
     m_dynarec_sites = new DynarecSite[k_dynarec_sites];
+    m_dynarec_lives = new u16[k_dynarec_lives];
     m_dynarec_checks = new DynarecCheck[k_dynarec_checks];
     m_dynarec_region_generation = 0;
 
@@ -177,6 +183,7 @@ void I386::FlushDynarec()
     m_dynarec_bytes_used = 0;
     m_dynarec_bus_runs_used = 0;
     m_dynarec_sites_used = 0;
+    m_dynarec_lives_used = 0;
     m_dynarec_checks_used = 0;
     m_dynarec_code_used = m_dynarec_code_start;
     m_dynarec_link_block = k_dynarec_none;
@@ -197,7 +204,8 @@ void I386::CheckDynarecMemory()
     SafeDeleteArray(m_dynarec_page_cool);
     SafeDeleteArray(m_dynarec_page_backoff);
     SafeDeleteArray(m_dynarec_page_live);
-    SafeDeleteArray(m_dynarec_page_safe);
+    SafeDeleteArray(m_dynarec_live_maps);
+    m_dynarec_live_maps_used = 0;
 
     m_dynarec_ram = m_memory->GetWorkingRAM();
     m_dynarec_page_count = IsValidPointer(m_dynarec_ram) ? (u32)(m_memory->GetWorkingRAMSize() >> 12) : 0;
@@ -212,16 +220,15 @@ void I386::CheckDynarecMemory()
     m_dynarec_page_writes = new u16[m_dynarec_page_count];
     m_dynarec_page_cool = new u8[m_dynarec_page_count];
     m_dynarec_page_backoff = new u8[m_dynarec_page_count];
-    m_dynarec_page_live = new u16[m_dynarec_page_count * k_dynarec_page_live];
-    m_dynarec_page_safe = new u8[m_dynarec_page_count];
+    m_dynarec_page_live = new u16[m_dynarec_page_count];
+    m_dynarec_live_maps = new u64[k_dynarec_live_maps * k_dynarec_live_words * 2];
     memset(m_dynarec_page_blocks, 0xFF, m_dynarec_page_count * sizeof(u32));
-    memset(m_dynarec_page_live, 0xFF, m_dynarec_page_count * k_dynarec_page_live * sizeof(u16));
+    memset(m_dynarec_page_live, 0xFF, m_dynarec_page_count * sizeof(u16));
     memset(m_dynarec_page_granules, 0, m_dynarec_page_count * 2 * sizeof(u64));
     memset(m_dynarec_page_heat, 0, m_dynarec_page_count);
     memset(m_dynarec_page_writes, 0, m_dynarec_page_count * sizeof(u16));
     memset(m_dynarec_page_cool, 0, m_dynarec_page_count);
     memset(m_dynarec_page_backoff, 0, m_dynarec_page_count);
-    memset(m_dynarec_page_safe, 0, m_dynarec_page_count);
 }
 
 // The block's compiled bound first, then near the end of the slice its exact time
@@ -542,6 +549,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
         m_dynarec_bytes_used + k_dynarec_max_watch_bytes > GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes ||
         m_dynarec_bus_runs_used + k_dynarec_max_bus_runs > k_dynarec_bus_runs ||
         m_dynarec_sites_used + k_dynarec_max_sites > k_dynarec_sites ||
+        m_dynarec_lives_used + k_dynarec_max_lives > k_dynarec_lives ||
         m_dynarec_checks_used + k_dynarec_max_checks > k_dynarec_checks)
     {
         FlushDynarec();
@@ -575,6 +583,7 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
     block.page = page;
     memcpy(m_dynarec_bytes + block.copy, GetDynarecWatchHost(block.host, block.eip, block.watch_eip), block.watch_length);
     m_dynarec_bytes_used += (block.watch_length + 3) & ~3U;
+    m_dynarec_lives_used += block.live_count;
     m_dynarec_code_used += (code_size + 15) & ~15U;
 
     if (page != k_dynarec_none)
@@ -651,7 +660,7 @@ void I386::AddDynarecPageBlock(u32 index)
     for (u32 granule = first >> 5; granule <= (last >> 5); granule++)
         m_dynarec_page_granules[page * 2 + (granule >> 6)] |= 1ULL << (granule & 63);
 
-    m_dynarec_page_safe[page] &= (u8)~GetDynarecConflicts(page, block, first, last);
+    AddDynarecConflicts(page, block);
 
     bool first_block = m_dynarec_page_blocks[page] == k_dynarec_none;
     block.page_next = m_dynarec_page_blocks[page];
@@ -721,7 +730,7 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
         u32 first = MAX(offset, page << 12) & 0xFFF;
         u32 last = (MIN(end, (page + 1) << 12) - 1) & 0xFFF;
 
-        if (m_dynarec_page_safe[page] != 0 && IsDynarecSafeWrite(page, first, last))
+        if (m_dynarec_page_live[page] != k_dynarec_live_none && IsDynarecSafeWrite(page, first, last))
             continue;
 
         bool hit = false;
@@ -733,6 +742,7 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
             continue;
 
         bool removed = false;
+        bool live = false;
         u32 index = m_dynarec_page_blocks[page];
         m_dynarec_page_granules[page * 2] = 0;
         m_dynarec_page_granules[page * 2 + 1] = 0;
@@ -751,6 +761,8 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
             }
             else
             {
+                live = live || (block_first <= last && first <= block_last);
+
                 for (u32 granule = block_first >> 5; granule <= (block_last >> 5); granule++)
                     m_dynarec_page_granules[page * 2 + (granule >> 6)] |= 1ULL << (granule & 63);
             }
@@ -758,12 +770,13 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
             index = next;
         }
 
-        // Only a walk that removed blocks can make a slot safe again
+        // Only a walk that removed blocks can clear conflicts
         if (removed)
-            UpdateDynarecSafe(page);
+            UpdateDynarecConflicts(page);
 
-        // A small rewrite may be an operand, which the next compile takes as live
-        if (removed && last - first < 4)
+        // A small rewrite may be an operand, which the next compile takes as live. One that blocks kept because they
+        // read it live is one, which makes its next write safe
+        if ((removed || live) && last - first < 4)
             AddDynarecLive(page, first, last - first + 1);
 
         // Only rewritten code heats a page, data next to code in its granules doesn't
@@ -774,18 +787,17 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
     }
 }
 
-void I386::UpdateDynarecSafe(u32 page)
+void I386::UpdateDynarecConflicts(u32 page)
 {
-    u8 conflicts = 0;
+    u16 map = m_dynarec_page_live[page];
+
+    if (map == k_dynarec_live_none)
+        return;
+
+    memset(&m_dynarec_live_maps[(map * 2 + 1) * k_dynarec_live_words], 0, k_dynarec_live_words * sizeof(u64));
 
     for (u32 index = m_dynarec_page_blocks[page]; index != k_dynarec_none; index = m_dynarec_blocks[index].page_next)
-    {
-        const DynarecBlock& block = m_dynarec_blocks[index];
-        u32 first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) & 0xFFF;
-        conflicts |= GetDynarecConflicts(page, block, first, first + block.watch_length - 1);
-    }
-
-    m_dynarec_page_safe[page] = (u8)(~conflicts & ((1 << k_dynarec_page_live) - 1));
+        AddDynarecConflicts(page, m_dynarec_blocks[index]);
 }
 
 // A write inside one of the block's live operands, page offsets
@@ -793,7 +805,10 @@ bool I386::IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) co
 {
     for (u32 i = 0; i < block.live_count; i++)
     {
-        if (first >= block.live_first[i] && last < (u32)block.live_first[i] + block.live_length[i])
+        u16 live = m_dynarec_lives[block.live + i];
+        u32 start = live & 0xFFF;
+
+        if (first >= start && last <= start + (live >> 12))
             return true;
     }
 
@@ -802,70 +817,82 @@ bool I386::IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) co
 
 void I386::AddDynarecLive(u32 page, u32 first, u32 length)
 {
-    u16* live = &m_dynarec_page_live[page * k_dynarec_page_live];
-    u16 entry = (u16)(first | ((length - 1) << 12));
+    u16 map = m_dynarec_page_live[page];
 
-    for (u32 i = 0; i < k_dynarec_page_live; i++)
+    if (map == k_dynarec_live_none)
     {
-        if (live[i] == entry)
-        {
-            m_dynarec_page_safe[page] |= (u8)(1 << i);
+        if (m_dynarec_live_maps_used == k_dynarec_live_maps)
             return;
-        }
+
+        map = (u16)m_dynarec_live_maps_used++;
+        m_dynarec_page_live[page] = map;
+        memset(&m_dynarec_live_maps[map * 2 * k_dynarec_live_words], 0, 2 * k_dynarec_live_words * sizeof(u64));
     }
 
-    memmove(live + 1, live, (k_dynarec_page_live - 1) * sizeof(u16));
-    live[0] = entry;
-    m_dynarec_page_safe[page] = (u8)(((m_dynarec_page_safe[page] << 1) | 1) & ((1 << k_dynarec_page_live) - 1));
+    u64* live = &m_dynarec_live_maps[map * 2 * k_dynarec_live_words];
+
+    for (u32 i = first; i < first + length; i++)
+        live[i >> 6] |= 1ULL << (i & 63);
 }
 
-// A write inside a rewrite slot that no block of the page compiled as constant bytes removes nothing
+// A write whose bytes are all live and that no block of the page compiled as constant bytes removes nothing
 bool I386::IsDynarecSafeWrite(u32 page, u32 first, u32 last) const
 {
-    const u16* live = &m_dynarec_page_live[page * k_dynarec_page_live];
-    u8 safe = m_dynarec_page_safe[page];
+    const u64* live = &m_dynarec_live_maps[m_dynarec_page_live[page] * 2 * k_dynarec_live_words];
+    const u64* conflict = live + k_dynarec_live_words;
 
-    for (u32 i = 0; i < k_dynarec_page_live; i++)
+    for (u32 i = first; i <= last; i++)
     {
-        u32 start = live[i] & 0xFFF;
-        u32 end = start + (live[i] >> 12);
+        u64 bit = 1ULL << (i & 63);
 
-        if ((safe & (1 << i)) != 0 && live[i] != k_dynarec_live_none && start <= first && last <= end)
-            return true;
+        if ((live[i >> 6] & bit) == 0 || (conflict[i >> 6] & bit) != 0)
+            return false;
     }
 
-    return false;
+    return true;
 }
 
-// The rewrite slots a block overlapping first to last compiles as constant bytes
-u8 I386::GetDynarecConflicts(u32 page, const DynarecBlock& block, u32 first, u32 last) const
+// The page's live bytes the block compiled as constant bytes
+void I386::AddDynarecConflicts(u32 page, const DynarecBlock& block)
 {
-    const u16* live = &m_dynarec_page_live[page * k_dynarec_page_live];
-    u8 conflicts = 0;
+    u16 map = m_dynarec_page_live[page];
 
-    for (u32 i = 0; i < k_dynarec_page_live; i++)
+    if (map == k_dynarec_live_none)
+        return;
+
+    const u64* live = &m_dynarec_live_maps[map * 2 * k_dynarec_live_words];
+    u64* conflict = &m_dynarec_live_maps[(map * 2 + 1) * k_dynarec_live_words];
+    u32 first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) & 0xFFF;
+    u32 last = MIN(first + block.watch_length - 1, 0xFFFU);
+
+    for (u32 i = first; i <= last; i++)
     {
-        u32 start = live[i] & 0xFFF;
-        u32 end = start + (live[i] >> 12);
+        if (live[i >> 6] == 0)
+        {
+            i |= 63;
+            continue;
+        }
 
-        if (live[i] != k_dynarec_live_none && start <= last && first <= end && !IsDynarecLiveWrite(block, start, end))
-            conflicts |= (u8)(1 << i);
+        u64 bit = 1ULL << (i & 63);
+
+        if ((live[i >> 6] & bit) != 0 && !IsDynarecLiveWrite(block, i, i))
+            conflict[i >> 6] |= bit;
     }
-
-    return conflicts;
 }
 
-// Whether a rewrite of the page lies inside first to first + length - 1
+// Whether an operand holds a live byte
 bool I386::FindDynarecLive(u32 page, u32 first, u32 length) const
 {
-    const u16* live = &m_dynarec_page_live[page * k_dynarec_page_live];
+    u16 map = m_dynarec_page_live[page];
 
-    for (u32 i = 0; i < k_dynarec_page_live && live[i] != k_dynarec_live_none; i++)
+    if (map == k_dynarec_live_none)
+        return false;
+
+    const u64* live = &m_dynarec_live_maps[map * 2 * k_dynarec_live_words];
+
+    for (u32 i = first; i < first + length; i++)
     {
-        u32 start = live[i] & 0xFFF;
-        u32 end = start + (live[i] >> 12);
-
-        if (start >= first && end < first + length)
+        if ((live[i >> 6] & (1ULL << (i & 63))) != 0)
             return true;
     }
 

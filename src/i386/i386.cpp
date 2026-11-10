@@ -184,6 +184,8 @@ I386::I386()
     m_dynarec_bus_runs_used = 0;
     InitPointer(m_dynarec_sites);
     m_dynarec_sites_used = 0;
+    InitPointer(m_dynarec_lives);
+    m_dynarec_lives_used = 0;
     m_dynarec_leave_steps = 0;
     m_dynarec_leave_clocks = 0;
     InitPointer(m_dynarec_checks);
@@ -195,7 +197,8 @@ I386::I386()
     InitPointer(m_dynarec_page_cool);
     InitPointer(m_dynarec_page_backoff);
     InitPointer(m_dynarec_page_live);
-    InitPointer(m_dynarec_page_safe);
+    InitPointer(m_dynarec_live_maps);
+    m_dynarec_live_maps_used = 0;
     m_dynarec_slow_linear = 0;
     memset(m_dynarec_flags, 0, sizeof(m_dynarec_flags));
     m_dynarec_page_count = 0;
@@ -238,6 +241,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_bytes);
     SafeDeleteArray(m_dynarec_bus_runs);
     SafeDeleteArray(m_dynarec_sites);
+    SafeDeleteArray(m_dynarec_lives);
     SafeDeleteArray(m_dynarec_checks);
     SafeDeleteArray(m_dynarec_page_blocks);
     SafeDeleteArray(m_dynarec_page_granules);
@@ -246,7 +250,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_page_cool);
     SafeDeleteArray(m_dynarec_page_backoff);
     SafeDeleteArray(m_dynarec_page_live);
-    SafeDeleteArray(m_dynarec_page_safe);
+    SafeDeleteArray(m_dynarec_live_maps);
 #endif
 }
 

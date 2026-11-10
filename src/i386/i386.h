@@ -809,8 +809,7 @@ private:
         u32 eip_limit;
         u8 shadow_entry;
         u8 live_count;
-        u8 live_length[4];
-        u16 live_first[4];
+        u32 live;
         u32 epoch;
         u32 copy;
         u32 hash_next;
@@ -915,8 +914,8 @@ private:
     void EvictDynarecPage(u32 page);
     bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const;
     bool IsDynarecSafeWrite(u32 page, u32 first, u32 last) const;
-    void UpdateDynarecSafe(u32 page);
-    u8 GetDynarecConflicts(u32 page, const DynarecBlock& block, u32 first, u32 last) const;
+    void UpdateDynarecConflicts(u32 page);
+    void AddDynarecConflicts(u32 page, const DynarecBlock& block);
     void AddDynarecLive(u32 page, u32 first, u32 length);
     bool FindDynarecLive(u32 page, u32 first, u32 length) const;
     void CoolDynarecPages();
@@ -1554,6 +1553,8 @@ private:
     DynarecCheck* m_dynarec_checks;
     DynarecSite* m_dynarec_sites;
     u32 m_dynarec_sites_used;
+    u16* m_dynarec_lives;
+    u32 m_dynarec_lives_used;
     u32 m_dynarec_leave_steps;
     u32 m_dynarec_leave_clocks;
     u32 m_dynarec_checks_used;
@@ -1564,7 +1565,8 @@ private:
     u8* m_dynarec_page_cool;
     u8* m_dynarec_page_backoff;
     u16* m_dynarec_page_live;
-    u8* m_dynarec_page_safe;
+    u64* m_dynarec_live_maps;
+    u32 m_dynarec_live_maps_used;
     u32 m_dynarec_slow_linear;
     u32 m_dynarec_flags[4][2];
     u32 m_dynarec_page_count;

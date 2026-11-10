@@ -200,6 +200,7 @@ private:
     u8 EmitEffectiveOffset(int r, int t, const Instruction& instruction);
     void EmitImmediate(int r, const Instruction& instruction, u32 value, int width, bool sign);
     void SetLiveOperands(Instruction& instruction);
+    void AddLiveOperand(u32 first, u32 length);
     void GetOperandBytes(Instruction& instruction, const u8* bytes) const;
     bool CanLiveImmediate(const Instruction& instruction) const;
     void EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, u32 size, int access, jit_node* fallback, bool bus = true);

@@ -232,6 +232,7 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 
     m_count = 0;
     block.eip_limit = 0;
+    block.live = m_cpu->m_dynarec_lives_used;
     block.live_count = 0;
     block.call_eip = 0;
     block.call_next_eip = 0;
@@ -301,12 +302,11 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
     return m_count != 0;
 }
 
-// Operands a rewrite of the page touched are read from the code bytes when the instruction runs, up to four per block:
-// helpers decode all their bytes then, natives the immediates EmitImmediate takes and every displacement. A write
-// inside one of them keeps the block, any other rewrite of its bytes removes it
+// Operands with a byte a rewrite of the page touched are read from the code bytes when the instruction runs: helpers
+// decode all their bytes then, natives the immediates EmitImmediate takes and every displacement. A write inside one
+// of them keeps the block, any other rewrite of its bytes removes it
 void DynarecEmitter::SetLiveOperands(Instruction& instruction)
 {
-    I386::DynarecBlock& block = *m_block;
     const u8* bytes = m_cpu->m_passive_bytes;
     const u8* ram = m_cpu->m_dynarec_ram;
 
@@ -322,23 +322,31 @@ void DynarecEmitter::SetLiveOperands(Instruction& instruction)
 
     GetOperandBytes(instruction, bytes);
 
-    if (instruction.immediate_size != 0 && (!native || CanLiveImmediate(instruction)) && block.live_count < 4 &&
-        m_cpu->FindDynarecLive(page, offset + instruction.immediate_position, instruction.immediate_size))
+    u32 immediate = offset + instruction.immediate_position;
+    u32 displacement = offset + instruction.displacement_position;
+
+    if (instruction.immediate_size != 0 && (!native || CanLiveImmediate(instruction)) &&
+        immediate + instruction.immediate_size <= 0x1000 &&
+        m_cpu->FindDynarecLive(page, immediate, instruction.immediate_size))
     {
         instruction.live_operands |= k_live_immediate;
-        block.live_first[block.live_count] = (u16)(offset + instruction.immediate_position);
-        block.live_length[block.live_count] = instruction.immediate_size;
-        block.live_count++;
+        AddLiveOperand(immediate, instruction.immediate_size);
     }
 
-    if (instruction.displacement_size != 0 && block.live_count < 4 &&
-        m_cpu->FindDynarecLive(page, offset + instruction.displacement_position, instruction.displacement_size))
+    if (instruction.displacement_size != 0 && displacement + instruction.displacement_size <= 0x1000 &&
+        m_cpu->FindDynarecLive(page, displacement, instruction.displacement_size))
     {
         instruction.live_operands |= k_live_displacement;
-        block.live_first[block.live_count] = (u16)(offset + instruction.displacement_position);
-        block.live_length[block.live_count] = instruction.displacement_size;
-        block.live_count++;
+        AddLiveOperand(displacement, instruction.displacement_size);
     }
+}
+
+// Page offset in the low 12 bits, length - 1 above
+void DynarecEmitter::AddLiveOperand(u32 first, u32 length)
+{
+    I386::DynarecBlock& block = *m_block;
+    m_cpu->m_dynarec_lives[block.live + block.live_count] = (u16)(first | ((length - 1) << 12));
+    block.live_count++;
 }
 
 // The displacement follows ModR/M and SIB, the immediate takes the rest. MOV moffs has its offset as the displacement

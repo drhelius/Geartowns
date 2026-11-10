@@ -423,7 +423,7 @@ INLINE bool I386::StartInstruction()
     m_address_clocks = 0;
 
     if (unlikely(eip - m_code_window_eip >= m_code_window_size))
-        OpenCodeWindow(eip);
+        OpenCodeWindow(eip, true);
 
     u32 offset = eip - m_code_window_eip;
 

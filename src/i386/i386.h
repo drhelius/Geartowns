@@ -807,6 +807,7 @@ private:
         u32 fit_clocks;
         const DynarecCheck* fit;
         u32 eip_limit;
+        u8 shadow_entry;
         u32 epoch;
         u32 copy;
         u32 hash_next;
@@ -880,7 +881,8 @@ private:
     template<int timing>
     I386_Run_Result RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
     void FlushDynarec();
-    DynarecBlock* FindDynarecBlock(u8 entry);
+    bool EnterDynarecShadow(const DynarecBlock& block);
+    DynarecBlock* FindDynarecBlock(u8 entry, bool fetch);
     u32 LookupDynarecBlock(const u8* host, u32 eip, u64 key) const;
     u32 CountTargetComponents(const u8* bytes, u32 count, bool& truncated) const;
     void CompileDynarecBlock(DynarecBlock& block, u32 available);
@@ -940,7 +942,7 @@ private:
     s32 SignExtend(u32 value, int width) const;
 
     bool StartInstruction();
-    void OpenCodeWindow(u32 eip);
+    void OpenCodeWindow(u32 eip, bool fetch);
     void CloseCodeWindow();
     bool DispatchOPCode();
     bool DispatchOPCode0F();
@@ -1530,6 +1532,7 @@ private:
     u32 m_dynarec_link_window;
     bool m_dynarec_dirty;
     bool m_dynarec_keep_entry;
+    bool m_dynarec_interrupt_pending;
     u32 m_dynarec_clocks;
     u32 m_dynarec_remaining;
     u32 m_dynarec_wait;

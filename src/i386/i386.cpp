@@ -206,6 +206,7 @@ I386::I386()
     m_dynarec_link_window = 0;
     m_dynarec_dirty = false;
     m_dynarec_keep_entry = false;
+    m_dynarec_interrupt_pending = false;
     m_dynarec_clocks = 0;
     m_dynarec_remaining = 0;
     m_dynarec_wait = 0;

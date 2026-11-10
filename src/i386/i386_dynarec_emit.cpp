@@ -122,6 +122,10 @@ bool DynarecEmitter::Compile(I386::DynarecBlock& block, u32 available, u32 instr
     ComputeLiveness();
     ComputeBus();
 
+    const Instruction& first = m_instructions[0];
+    block.shadow_entry = first.kind != DYNAREC_NATIVE ? k_dynarec_shadow_keep :
+        !first.memory ? k_dynarec_shadow_count : k_dynarec_shadow_none;
+
     _jit = jit_new_state();
     EmitBlock();
     block.eip_limit = MAX(block.eip_limit, block.watch_eip + block.watch_length - 1);
@@ -240,6 +244,11 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
 
         Classify(instruction);
 
+        // A native that leaves the block through its own exits can't end a shadow that a fallback still needs
+        if (m_count > 0 && m_instructions[m_count - 1].shadow && instruction.kind == DYNAREC_NATIVE &&
+            instruction.memory && instruction.ends_block)
+            break;
+
         if (m_i486)
             Set486Clocks(instruction);
 
@@ -304,6 +313,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
     instruction.kind = DYNAREC_HELPER_LAST;
     instruction.memory = false;
     instruction.ends_block = true;
+    instruction.shadow = false;
     instruction.uses = 0;
     instruction.defs = 0;
     instruction.clocks = 0;
@@ -397,9 +407,13 @@ void DynarecEmitter::Classify(Instruction& instruction)
             instruction.kind = DYNAREC_HELPER;
             break;
         case 0x8E:
-            // MOV Sreg,r/m for the data segments. SS changes the stack size and CS is invalid
+            // MOV Sreg,r/m for the data segments. SS changes the stack size and CS is invalid. Outside protected mode
+            // the register form starts a shadow
             if (c.reg != I386_SEGMENT_SS && c.reg != I386_SEGMENT_CS && c.reg < I386_SEGMENT_COUNT)
+            {
                 instruction.kind = DYNAREC_HELPER;
+                instruction.shadow = !memory && m_cpu->m_state.execution_mode != I386_MODE_PROTECTED;
+            }
             else
                 instruction.ends_block = true;
 
@@ -1289,6 +1303,13 @@ void DynarecEmitter::EmitBlock()
 
         if (instruction.kind == DYNAREC_NATIVE)
         {
+            // The instruction after one that can start a shadow counts it down once it completes. A fallback has
+            // counted it already
+            bool shadow = i > 0 && m_instructions[i - 1].shadow;
+
+            if (shadow && instruction.ends_block)
+                EmitShadowEnd();
+
             if (instruction.memory)
             {
                 instruction.fallback = jit_forward();
@@ -1316,6 +1337,9 @@ void DynarecEmitter::EmitBlock()
 
             if (instruction.memory)
                 jit_link(instruction.resume);
+
+            if (shadow && !instruction.ends_block)
+                EmitShadowEnd();
         }
         else
         {
@@ -1340,12 +1364,19 @@ void DynarecEmitter::EmitBlock()
 
     const Instruction& end = m_instructions[last];
 
+    // With a shadow pending the dispatcher takes the next block, links don't count shadows down
     if (!end.ends_block)
     {
         StoreEIP(end.context.next_eip);
         m_exit_written = m_i486 && end.kind == DYNAREC_NATIVE ? end.written : -1;
-        ExitLinked(m_count, end.before + end.clocks, k_dynarec_exit_end, 0,
-            m_timed && end.kind == DYNAREC_NATIVE ? &end.bus_after : NULL);
+
+        if (end.shadow)
+            Exit(m_count, end.before + end.clocks, k_dynarec_exit_end,
+                m_timed && end.kind == DYNAREC_NATIVE ? &end.bus_after : NULL);
+        else
+            ExitLinked(m_count, end.before + end.clocks, k_dynarec_exit_end, 0,
+                m_timed && end.kind == DYNAREC_NATIVE ? &end.bus_after : NULL);
+
         m_exit_written = -1;
     }
 
@@ -1356,6 +1387,21 @@ void DynarecEmitter::EmitBlock()
         if (IsValidPointer(instruction.fallback) && !k_dynarec_near_fallbacks)
             EmitFallback(instruction, i, last);
     }
+}
+
+// The shadow had one step left, which this instruction took
+void DynarecEmitter::EmitShadowEnd()
+{
+    I386_State& state = m_cpu->m_state;
+
+    jit_movi(DR_T0, 0);
+    jit_stxi_c(Offset(&state.interrupt_shadow_steps), DR_CPU, DR_T0);
+    jit_movi(DR_T0, I386_SHADOW_NONE);
+
+    if (sizeof(state.interrupt_shadow) == 4)
+        jit_stxi_i(Offset(&state.interrupt_shadow), DR_CPU, DR_T0);
+    else
+        jit_stxi_c(Offset(&state.interrupt_shadow), DR_CPU, DR_T0);
 }
 
 // The interpreter runs the instruction from its start when one of its checks fails, then the block goes on after it

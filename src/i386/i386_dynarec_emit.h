@@ -40,6 +40,12 @@ static const u32 k_dynarec_exit_link = 0x10;
 static const u32 k_dynarec_exit_slot = 0x20;
 static const u32 k_dynarec_exit_prefetch = 0x40;
 
+// How a block starts with an interrupt shadow pending: it can't, the dispatcher counts it down before a first native
+// that can't fall back, or the first instruction, a helper, counts it
+static const u8 k_dynarec_shadow_none = 0;
+static const u8 k_dynarec_shadow_count = 1;
+static const u8 k_dynarec_shadow_keep = 2;
+
 // Whether a transfer waited for its own code: never, always, or when the run's entry level is under stall_below
 static const u8 k_dynarec_stall_never = 0;
 static const u8 k_dynarec_stall_always = 1;
@@ -79,6 +85,7 @@ private:
         u8 kind;
         bool memory;
         bool ends_block;
+        bool shadow;
         u16 uses;
         u16 defs;
         u16 live;
@@ -139,6 +146,7 @@ private:
     void EmitBusLines();
 
     void EmitBlock();
+    void EmitShadowEnd();
     void EmitLink(jit_node* exit);
     void EmitFallback(Instruction& instruction, int index, int last);
     void Exit(int steps, u32 clocks, u32 flags, const BusRun* run = NULL);

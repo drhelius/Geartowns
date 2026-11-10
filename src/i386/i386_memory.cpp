@@ -894,26 +894,36 @@ void I386::TestTLB486()
 }
 
 // Opens the code window over the code page of EIP when it has host memory
-// and, with paging, its TLB entry is the most recent way of the set
+// and, with paging, a TLB way of the set holds it with its host page
 // The window starts at the page start, or at EIP 0 when the segment
 // begins inside the page, and ends at the page end or the CS limit
 // Otherwise it stays closed and the bytes come from FetchCodeSlow8
 // Also sets the code fetch cost, from the page, even when the window doesn't open
-NO_INLINE void I386::OpenCodeWindow(u32 eip)
+// fetch: the instruction at EIP runs next, so what its first fetch does to a TLB hit can be done here: the pseudo-LRU
+// update, and the host page a valid way lost to a privilege change. Without it only the most recent way opens
+NO_INLINE void I386::OpenCodeWindow(u32 eip, bool fetch)
 {
     CloseCodeWindow();
 
     u32 base = m_state.segments[I386_SEGMENT_CS].base;
     u32 linear = base + eip;
+    u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
+    u32 way = 0;
 
     const TLBEntry* entry = NULL;
 
     if ((m_state.cr0 & 0x80000000U) != 0)
     {
-        entry = &GetRecentTLBEntry(linear);
+        for (; way < I386_TLB_WAYS; way++)
+        {
+            const TLBEntry& candidate = m_tlb[set * I386_TLB_WAYS + way];
 
-        if ((entry->flags & k_i386_tlb_valid) == 0 || entry->linear_page != (linear & 0xFFFFF000U))
-            entry = NULL;
+            if (candidate.linear_page == (linear & 0xFFFFF000U) && IsValidPointer(candidate.read_page))
+            {
+                entry = &candidate;
+                break;
+            }
+        }
     }
 
     if (m_bus_timed)
@@ -930,8 +940,25 @@ NO_INLINE void I386::OpenCodeWindow(u32 eip)
 
     if ((m_state.cr0 & 0x80000000U) == 0)
         page = m_read_pages[linear >> 12];
-    else if (IsValidPointer(entry))
+    else if (IsValidPointer(entry) && (m_tlb_mru[set] == way || fetch))
+    {
         page = entry->read_page;
+        TouchTLBWay(set, way);
+    }
+    else if (fetch && !IsValidPointer(entry) && m_memory_generation == m_memory->GetMapGeneration())
+    {
+        // As TranslatePagedWay's hit: no walk, and a page the privilege level can't read faults in the interpreter
+        int hit = FindTLBWay(set, linear & 0xFFFFF000U);
+        bool user = m_state.execution_mode == I386_MODE_VM86 || m_state.current_privilege_level == 3;
+
+        if (hit < 0 || (user && (m_tlb[set * I386_TLB_WAYS + hit].flags & k_i386_tlb_user) == 0))
+            return;
+
+        TLBEntry& cached = m_tlb[set * I386_TLB_WAYS + hit];
+        TouchTLBWay(set, (u32)hit);
+        CacheTLBPages(cached);
+        page = cached.read_page;
+    }
     else
         return;
 

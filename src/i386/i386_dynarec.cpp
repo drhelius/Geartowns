@@ -240,6 +240,8 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
     bool interrupt_pending = nmi_pending || intr_pending;
     u8 entry = k_dynarec_entry_count;
 
+    m_dynarec_interrupt_pending = interrupt_pending;
+
     while (clocks + context.wait_cycles < cycle_budget)
     {
         if (likely(!m_step_slow && !m_state.repeat.active && (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) == 0))
@@ -247,10 +249,13 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
             DynarecBlock* block = NULL;
             m_dynarec_keep_entry = false;
 
-            // Blocks never change IF or the interrupt shadow, so an interrupt that isn't ready now stays so
-            if (likely(m_state.interrupt_shadow_steps == 0) &&
-                !(unlikely(interrupt_pending) && IsInterruptReady(nmi_pending, intr_pending)))
-                block = FindDynarecBlock(entry);
+            // With an interrupt pending, a block starts only where it isn't ready and no shadow is pending, and leaves
+            // where the shadow or IF could change that. With none pending, nothing makes one ready and shadows run in
+            // blocks. The instruction at EIP runs next unless the pending bus time ends the slice first
+            if (likely(!interrupt_pending) ||
+                (m_state.interrupt_shadow_steps == 0 && !IsInterruptReady(nmi_pending, intr_pending)))
+                block = FindDynarecBlock(entry, (timing & I386_TIMING_BUS) == 0 ||
+                    clocks + context.wait_cycles + GetBusPending() < cycle_budget);
 
             // A flush in the lookup drops the pending link
             u32 link = m_dynarec_link_block;
@@ -260,7 +265,8 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
             if (link != k_dynarec_none && IsValidPointer(block) && m_code_window_eip == m_dynarec_link_window)
                 LinkDynarecBlock(link, m_dynarec_link_slot, (u32)(block - m_dynarec_blocks));
 
-            if (IsValidPointer(block) && FitsDynarecBlock<timing>(*block, clocks + context.wait_cycles, cycle_budget))
+            if (IsValidPointer(block) && FitsDynarecBlock<timing>(*block, clocks + context.wait_cycles, cycle_budget) &&
+                (likely(m_state.interrupt_shadow_steps == 0) || EnterDynarecShadow(*block)))
             {
                 m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_cycles);
                 m_dynarec_wait = context.wait_cycles;
@@ -380,14 +386,32 @@ template I386_Run_Result I386::RunDynarec<I386_TIMING_486>(u32 cycle_budget, GT_
 template I386_Run_Result I386::RunDynarec<I386_TIMING_486_BUS>(u32 cycle_budget, GT_Bus_Access_Context& context,
     bool nmi_pending, bool intr_pending);
 
+// A block starts with a shadow pending only while no interrupt is pending. A helper first counts the shadow down
+// itself, a first native without memory operands can't fall back, so it is counted here
+INLINE bool I386::EnterDynarecShadow(const DynarecBlock& block)
+{
+    if (block.shadow_entry == k_dynarec_shadow_keep)
+        return true;
+
+    if (block.shadow_entry != k_dynarec_shadow_count || m_state.interrupt_shadow_steps != 1)
+    {
+        m_dynarec_keep_entry = true;
+        return false;
+    }
+
+    CountInterruptShadow();
+    return true;
+}
+
 // The block at CS:EIP when it is compiled, valid and inside the code window, which opens as StartInstruction opens it
 // Entry points are counted and compiled once they get hot, successors of blocks that ran to their end right away
-INLINE I386::DynarecBlock* I386::FindDynarecBlock(u8 entry)
+// fetch: the instruction at EIP runs next, as OpenCodeWindow takes it
+INLINE I386::DynarecBlock* I386::FindDynarecBlock(u8 entry, bool fetch)
 {
     u32 eip = m_state.eip;
 
     if (unlikely(eip - m_code_window_eip >= m_code_window_size))
-        OpenCodeWindow(eip);
+        OpenCodeWindow(eip, fetch);
 
     u32 offset = eip - m_code_window_eip;
 
@@ -449,7 +473,7 @@ INLINE I386::DynarecBlock* I386::FindDynarecBlock(u8 entry)
         // The first block of a RAM page refreshes the CPU memory pointers, which closes the code window
         if (unlikely(eip - m_code_window_eip >= m_code_window_size))
         {
-            OpenCodeWindow(eip);
+            OpenCodeWindow(eip, fetch);
             offset = eip - m_code_window_eip;
 
             if (offset >= m_code_window_size || m_code_window + offset != host)
@@ -665,12 +689,7 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
         if (!hit)
             continue;
 
-        if (++m_dynarec_page_heat[page] >= k_dynarec_hot_rewrites)
-        {
-            EvictDynarecPage(page);
-            continue;
-        }
-
+        bool removed = false;
         u32 index = m_dynarec_page_blocks[page];
         m_dynarec_page_granules[page * 2] = 0;
         m_dynarec_page_granules[page * 2 + 1] = 0;
@@ -683,7 +702,10 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             u32 block_last = block_first + block.watch_length - 1;
 
             if (block_first <= last && first <= block_last)
+            {
                 RemoveDynarecBlock(index);
+                removed = true;
+            }
             else
             {
                 for (u32 granule = block_first >> 5; granule <= (block_last >> 5); granule++)
@@ -693,7 +715,10 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             index = next;
         }
 
-        if (m_dynarec_page_blocks[page] == k_dynarec_none)
+        // Only rewritten code heats a page, data next to code in its granules doesn't
+        if (removed && ++m_dynarec_page_heat[page] >= k_dynarec_hot_rewrites)
+            EvictDynarecPage(page);
+        else if (m_dynarec_page_blocks[page] == k_dynarec_none)
             m_memory->SetCodePage(page, false);
     }
 }
@@ -788,18 +813,21 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
     bool fits = used + (IsValidPointer(next) ? (s64)next->clocks : 0) + pending < remaining ||
         (IsValidPointer(next) && revert == 0 && cpu->m_bus_timed && used + cpu->GetDynarecFit(*next) < remaining);
 
-    // A real mode load of a data segment register starts an interrupt shadow, which the dispatcher counts down
+    // A shadow the instruction started, such as a real mode load of a data segment register, leaves the block while
+    // an interrupt is pending in the slice. Otherwise the next instruction counts it down
     if (step.end_batch || context.end_batch || cpu->m_state.halted || cpu->m_state.shutdown ||
-        !step.instruction_completed || cpu->m_state.repeat.active || cpu->m_state.interrupt_shadow_steps != 0 ||
+        !step.instruction_completed || cpu->m_state.repeat.active ||
+        (cpu->m_state.interrupt_shadow_steps != 0 && cpu->m_dynarec_interrupt_pending) ||
         cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait || !fits)
         return 1;
 
     // Any TLB way change closes the code window. The next instruction opens it again as StartInstruction would, and
-    // the block goes on while the window still covers its bytes
+    // the block goes on while the window still covers its bytes. Before a check the budget covers that instruction, so
+    // it runs next, in the block or in the dispatcher
     if (unlikely(cpu->m_code_window_size == 0))
     {
         const DynarecBlock& block = cpu->m_dynarec_blocks[cpu->m_dynarec_current];
-        cpu->OpenCodeWindow(cpu->m_state.eip);
+        cpu->OpenCodeWindow(cpu->m_state.eip, IsValidPointer(next));
         u32 watch_offset = block.watch_eip - cpu->m_code_window_eip;
 
         if (watch_offset >= cpu->m_code_window_size || watch_offset + block.watch_length > cpu->m_code_window_size ||

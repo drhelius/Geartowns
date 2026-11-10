@@ -897,6 +897,7 @@ private:
     void EvictDynarecPage(u32 page);
     bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const;
     bool IsDynarecSafeWrite(u32 page, u32 first, u32 last) const;
+    void UpdateDynarecSafe(u32 page);
     u8 GetDynarecConflicts(u32 page, const DynarecBlock& block, u32 first, u32 last) const;
     void AddDynarecLive(u32 page, u32 first, u32 length);
     bool FindDynarecLive(u32 page, u32 first, u32 length) const;

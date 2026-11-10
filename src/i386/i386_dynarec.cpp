@@ -722,7 +722,6 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             continue;
 
         bool removed = false;
-        u8 conflicts = 0;
         u32 index = m_dynarec_page_blocks[page];
         m_dynarec_page_granules[page * 2] = 0;
         m_dynarec_page_granules[page * 2 + 1] = 0;
@@ -743,14 +742,14 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
             {
                 for (u32 granule = block_first >> 5; granule <= (block_last >> 5); granule++)
                     m_dynarec_page_granules[page * 2 + (granule >> 6)] |= 1ULL << (granule & 63);
-
-                conflicts |= GetDynarecConflicts(page, block, block_first, block_last);
             }
 
             index = next;
         }
 
-        m_dynarec_page_safe[page] = (u8)(~conflicts & ((1 << k_dynarec_page_live) - 1));
+        // Only a walk that removed blocks can make a slot safe again
+        if (removed)
+            UpdateDynarecSafe(page);
 
         // A small rewrite may be an operand, which the next compile takes as live
         if (removed && last - first < 4)
@@ -762,6 +761,20 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size)
         else if (m_dynarec_page_blocks[page] == k_dynarec_none)
             m_memory->SetCodePage(page, false);
     }
+}
+
+void I386::UpdateDynarecSafe(u32 page)
+{
+    u8 conflicts = 0;
+
+    for (u32 index = m_dynarec_page_blocks[page]; index != k_dynarec_none; index = m_dynarec_blocks[index].page_next)
+    {
+        const DynarecBlock& block = m_dynarec_blocks[index];
+        u32 first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) & 0xFFF;
+        conflicts |= GetDynarecConflicts(page, block, first, first + block.watch_length - 1);
+    }
+
+    m_dynarec_page_safe[page] = (u8)(~conflicts & ((1 << k_dynarec_page_live) - 1));
 }
 
 // A write inside one of the block's live operands, page offsets

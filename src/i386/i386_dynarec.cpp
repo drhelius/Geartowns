@@ -867,6 +867,12 @@ s64 I386::GetDynarecFit(const DynarecCheck& check) const
     return (s64)check.exec + (fraction >> 16);
 }
 
+// A data segment load of a real mode or VM86 block, which can't fault
+void I386::DynarecLoadSegment(I386* cpu, uintptr_t segment, uintptr_t selector)
+{
+    cpu->LoadRealSegment((int)segment, (u16)selector);
+}
+
 // For the link code and loops of blocks once the compiled bound doesn't fit
 uintptr_t I386::DynarecFits(I386* cpu, uintptr_t block)
 {

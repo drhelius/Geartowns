@@ -1405,7 +1405,7 @@ void I386::SetRealModeSegment(I386_Segment_Register segment, u16 selector)
     else
         state.attributes |= I386_SEGMENT_WRITABLE;
 
-    UpdateSegmentFastPaths();
+    UpdateSegmentFastPaths(state);
 }
 
 void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
@@ -1414,7 +1414,7 @@ void I386::SetVM86Segment(I386_Segment_Register segment, u16 selector)
     m_state.segments[segment].attributes &= ~(I386_SEGMENT_TYPE_MASK | I386_SEGMENT_ACCESSED);
     m_state.segments[segment].attributes |= I386_SEGMENT_SYSTEM | (2U << I386_SEGMENT_TYPE_SHIFT);
     m_state.segments[segment].dpl = 3;
-    UpdateSegmentFastPaths();
+    UpdateSegmentFastPaths(m_state.segments[segment]);
 }
 
 // A real mode CS load only sets the selector and base, so the cached limit, access rights and D/B stay

@@ -903,6 +903,7 @@ private:
     static uintptr_t DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
         uintptr_t settle, uintptr_t revert);
     s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
+    static void DynarecLoadSegment(I386* cpu, uintptr_t segment, uintptr_t selector);
     template<bool i486>
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
@@ -1538,6 +1539,7 @@ private:
     u32 m_dynarec_wait;
     u32 m_dynarec_start;
     uintptr_t m_dynarec_spill;
+    uintptr_t m_dynarec_temp[4];
 #endif
 
     std::map<u32, I386_Disassembler_Record> m_disassembler_records;

@@ -118,6 +118,8 @@ private:
     void SetNative(Instruction& instruction, u32 clocks, bool memory);
     void Set486Clocks(Instruction& instruction);
     bool CanCarry(int width) const;
+    u8 GetOperandSegment(const I386::InstructionContext& c) const;
+    bool UsesStackBase(const I386::InstructionContext& c) const;
     u32 GetAddressClocks(const I386::InstructionContext& c) const;
     u16 GetConditionFlags(int condition) const;
     bool GetTargetComponents(u32 target, u32& components);
@@ -131,6 +133,8 @@ private:
     void ComputeBusTransfer(Instruction& instruction);
     bool GetStaticTarget(const I386::InstructionContext& c, u32& target) const;
     BusRun AppendBus(const BusRun& run, const Instruction& instruction, bool transfer) const;
+    static int GetBusAccesses(const I386::InstructionContext& c, u32* sizes, bool* writes);
+    static void AddBusAccess(u32* sizes, bool* writes, int& count, u32 size, bool write);
     static u32 StepBusLevel(u32 level, s32 step, u32 prefetch);
     static u32 GetBusStall(const BusRun& run, u32 level);
     static u32 GetBusLevel(const BusRun& run, u32 level);
@@ -139,6 +143,11 @@ private:
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback = NULL,
         int first_base = -1);
     void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback, int first_base);
+    void EmitBusDram(int row, int scratch, int t2, u32 size, int access);
+    void EmitBusCheck(int host, int linear, int t, u32 size, jit_node* fallback);
+    void EmitBusPiece(int host, int linear, int t, u32 size, int access);
+    void StoreTemp(int index, int r);
+    void LoadTemp(int r, int index);
     void Emit486Misaligned(int linear, int t, u32 size, int access);
     void Emit486FirstAGI(int t);
     void Store486Written(int written);
@@ -147,6 +156,7 @@ private:
 
     void EmitBlock();
     void EmitShadowEnd();
+    void StoreShadow(int steps, int shadow);
     void EmitLink(jit_node* exit);
     void EmitFallback(Instruction& instruction, int index, int last);
     void Exit(int steps, u32 clocks, u32 flags, const BusRun* run = NULL);
@@ -188,8 +198,23 @@ private:
     void EmitExchange(Instruction& instruction, int width);
     void EmitSETcc(Instruction& instruction);
     void EmitShift(Instruction& instruction, int width, u32 count);
-    void EmitPush(Instruction& instruction, int width);
+    void EmitPush(Instruction& instruction, int width, int store_width);
     void EmitPop(Instruction& instruction, int index, int width);
+    void EmitPushSegment(Instruction& instruction, int segment);
+    void EmitPopSegment(Instruction& instruction, int segment);
+    void EmitMoveFromSegment(Instruction& instruction, int width);
+    void EmitMoveToSegment(Instruction& instruction, int index);
+    void EmitSegmentLoad(int segment, int value);
+    void EmitShadowStart(Instruction& instruction, int index, int shadow);
+    void EmitString(Instruction& instruction);
+    void EmitInterruptFlag(Instruction& instruction, int index);
+    void EmitPushRM(Instruction& instruction, int width);
+    void EmitPopRM(Instruction& instruction, int width);
+    void EmitLoadFarPointer(Instruction& instruction, int segment);
+    void EmitPushAll(Instruction& instruction);
+    void EmitPopAll(Instruction& instruction);
+    void EmitMoveString(Instruction& instruction);
+    void EmitStringStep(int index, int address_width, int delta);
     void EmitJcc(Instruction& instruction, int index, int condition, s32 displacement);
     void EmitLoop(Instruction& instruction, int index, s32 displacement);
     void EmitJump(Instruction& instruction, int index, s32 displacement);

@@ -263,12 +263,16 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         instruction.extra_before = extra;
         clocks += instruction.clocks;
 
-        // The most a 486 native can add at run time: its misaligned accesses, and the AGI clock of a first instruction
+        // The most a 486 native can add at run time: its misaligned accesses, the AGI clock of a first instruction and
+        // a true SETcc condition in a register
         if (m_i486 && instruction.kind == DYNAREC_NATIVE)
         {
-            u8 pattern = I386::GetBusPattern(instruction.context) & k_i386_bus_pattern_mask;
-            extra += instruction.memory ? (pattern == I386_BUS_RMW ? 6 : 3) : 0;
+            u32 sizes[8];
+            bool writes[8];
+            extra += instruction.memory ? 3 * (u32)MAX(GetBusAccesses(instruction.context, sizes, writes), 1) : 0;
             extra += m_count == 0 && I386::Get486Base(instruction.context) >= 0 ? 1 : 0;
+            extra += instruction.context.two_byte && (instruction.context.opcode2 & 0xF0) == 0x90 &&
+                !instruction.memory ? 1 : 0;
         }
         position += length;
         m_count++;
@@ -309,6 +313,8 @@ void DynarecEmitter::Classify(Instruction& instruction)
     u8 opcode = c.opcode;
     int width = c.operand_size * 8;
     bool memory = c.memory_operand;
+    // Blocks are compiled for one mode, the key holds it
+    bool real = m_cpu->m_state.execution_mode != I386_MODE_PROTECTED;
 
     instruction.kind = DYNAREC_HELPER_LAST;
     instruction.memory = false;
@@ -338,8 +344,9 @@ void DynarecEmitter::Classify(Instruction& instruction)
         }
         else if (opcode2 >= 0x90 && opcode2 <= 0x9F)
         {
-            // SETcc r/m8, whose 486 clocks depend on the condition
-            if (m_i486)
+            // SETcc r/m8. The 486's clocks depend on the condition, which the block adds at run time, except with its
+            // cache off, where they also move the prefetch queue
+            if (m_i486 && m_timed && m_cpu->m_bus_code_cost != 0)
                 instruction.kind = DYNAREC_HELPER;
             else
             {
@@ -347,9 +354,19 @@ void DynarecEmitter::Classify(Instruction& instruction)
                 instruction.uses = GetConditionFlags(opcode2 & 15);
             }
         }
+        else if (opcode2 == 0xA0 || opcode2 == 0xA8)
+            // PUSH FS and GS
+            SetNative(instruction, 2, true);
+        else if ((opcode2 == 0xA1 || opcode2 == 0xA9) && real)
+            // POP FS and GS, outside protected mode no descriptor is loaded
+            SetNative(instruction, 7, true);
+        else if ((opcode2 == 0xB4 || opcode2 == 0xB5) && memory && real &&
+            !(m_timed && GetOperandSegment(c) == (opcode2 == 0xB4 ? I386_SEGMENT_FS : I386_SEGMENT_GS)))
+            // LFS and LGS, as LES
+            SetNative(instruction, 7, true);
         else if (opcode2 == 0xB6 || opcode2 == 0xB7 || opcode2 == 0xBE || opcode2 == 0xBF)
             SetNative(instruction, memory ? 6 : 3, memory);
-        else if (opcode2 == 0x02 || opcode2 == 0x03 || opcode2 == 0xA0 || opcode2 == 0xA8 || opcode2 == 0xA3 ||
+        else if (opcode2 == 0x02 || opcode2 == 0x03 || opcode2 == 0xA3 ||
             opcode2 == 0xAB || opcode2 == 0xB3 || opcode2 == 0xBB || opcode2 == 0xBA || opcode2 == 0xA4 ||
             opcode2 == 0xA5 || opcode2 == 0xAC || opcode2 == 0xAD || opcode2 == 0xAF || opcode2 == 0xBC ||
             opcode2 == 0xBD || opcode2 == 0xA1 || opcode2 == 0xA9 || opcode2 == 0xB4 || opcode2 == 0xB5)
@@ -382,16 +399,46 @@ void DynarecEmitter::Classify(Instruction& instruction)
 
     switch (opcode)
     {
-        case 0x07: case 0x1F: case 0xC4: case 0xC5:
-            // POP ES, POP DS, LES and LDS
         case 0x06: case 0x0E: case 0x16: case 0x1E:
             // PUSH segment
+            SetNative(instruction, 2, true);
+            break;
+        case 0x07: case 0x1F:
+            // POP ES and DS, outside protected mode no descriptor is loaded
+            if (real)
+                SetNative(instruction, 7, true);
+            else
+                instruction.kind = DYNAREC_HELPER;
+
+            break;
+        case 0xC4: case 0xC5:
+            // LES and LDS outside protected mode, see 8Eh for the operand's own segment
+            if (memory && real &&
+                !(m_timed && GetOperandSegment(c) == (opcode == 0xC4 ? I386_SEGMENT_ES : I386_SEGMENT_DS)))
+                SetNative(instruction, 7, true);
+            else
+                instruction.kind = DYNAREC_HELPER;
+
+            break;
+        case 0x60: case 0x61:
+            // PUSHA and POPA
+            SetNative(instruction, opcode == 0x60 ? 18 : 24, true);
+            break;
+        case 0x8F:
+            // POP r/m. ESP as the destination, or as the base of an address the interpreter computes with the
+            // incremented stack pointer, stays in the interpreter
+            if (c.reg != 0)
+                instruction.ends_block = true;
+            else if (memory ? UsesStackBase(c) : c.rm == I386_REG_ESP)
+                instruction.kind = DYNAREC_HELPER;
+            else
+                SetNative(instruction, memory ? 5 : 4, true);
+
+            break;
         case 0x27: case 0x2F: case 0x37: case 0x3F:
             // DAA, DAS, AAA, AAS
-        case 0x60: case 0x61: case 0x62: case 0x69: case 0x6B:
-            // PUSHA, POPA, BOUND, IMUL
-        case 0x8C: case 0x8F:
-            // MOV r/m,Sreg and POP r/m
+        case 0x62: case 0x69: case 0x6B:
+            // BOUND, IMUL
         case 0x9B: case 0x9C: case 0x9E: case 0x9F:
             // WAIT, PUSHF, SAHF, LAHF
         case 0xC8: case 0xC9:
@@ -406,20 +453,48 @@ void DynarecEmitter::Classify(Instruction& instruction)
             // ESC
             instruction.kind = DYNAREC_HELPER;
             break;
-        case 0x8E:
-            // MOV Sreg,r/m for the data segments. SS changes the stack size and CS is invalid. Outside protected mode
-            // the register form starts a shadow
-            if (c.reg != I386_SEGMENT_SS && c.reg != I386_SEGMENT_CS && c.reg < I386_SEGMENT_COUNT)
-            {
-                instruction.kind = DYNAREC_HELPER;
-                instruction.shadow = !memory && m_cpu->m_state.execution_mode != I386_MODE_PROTECTED;
-            }
+        case 0x8C:
+            // MOV r/m,Sreg
+            if (c.reg < I386_SEGMENT_COUNT)
+                SetNative(instruction, 2, memory);
             else
                 instruction.ends_block = true;
 
             break;
-        case 0xA4: case 0xA5: case 0xA6: case 0xA7: case 0xAA: case 0xAB: case 0xAC: case 0xAD: case 0xAE: case 0xAF:
-            // String instructions, repeated ones continue in RunRepeatBatch
+        case 0x8E:
+            // MOV Sreg,r/m for the data segments. SS changes the stack size and CS is invalid. Outside protected mode
+            // no descriptor is loaded and the register form starts a shadow. The bus model times the access with the
+            // segment the instruction leaves, so one that loads its own operand's segment stays a helper
+            if (c.reg != I386_SEGMENT_SS && c.reg != I386_SEGMENT_CS && c.reg < I386_SEGMENT_COUNT && real &&
+                !(memory && m_timed && GetOperandSegment(c) == c.reg))
+            {
+                SetNative(instruction, memory ? 5 : 2, memory);
+                instruction.shadow = !memory;
+            }
+            else if (c.reg != I386_SEGMENT_SS && c.reg != I386_SEGMENT_CS && c.reg < I386_SEGMENT_COUNT)
+                instruction.kind = DYNAREC_HELPER;
+            else
+                instruction.ends_block = true;
+
+            break;
+        case 0xAA: case 0xAB: case 0xAC: case 0xAD:
+            // STOS and LODS of one element, repeated ones continue in RunRepeatBatch
+            if (c.repeat == 0)
+                SetNative(instruction, opcode <= 0xAB ? 4 : 5, true);
+            else
+                instruction.ends_block = true;
+
+            break;
+        case 0xA4: case 0xA5:
+            // MOVS of one element
+            if (c.repeat == 0)
+                SetNative(instruction, 7, true);
+            else
+                instruction.ends_block = true;
+
+            break;
+        case 0xA6: case 0xA7: case 0xAE: case 0xAF:
+            // CMPS and SCAS
             if (c.repeat == 0)
                 instruction.kind = DYNAREC_HELPER;
             else
@@ -595,6 +670,11 @@ void DynarecEmitter::Classify(Instruction& instruction)
             SetNative(instruction, 2, false);
             instruction.defs = I386_FLAG_CF;
             break;
+        case 0xFA: case 0xFB:
+            // CLI and STI. Outside real mode a CPL above IOPL faults, which the fallback takes. STI starts a shadow
+            SetNative(instruction, 3, m_cpu->m_state.execution_mode != I386_MODE_REAL);
+            instruction.shadow = opcode == 0xFB;
+            break;
         case 0xFC: case 0xFD:
             // CLD, STD
             SetNative(instruction, 2, false);
@@ -612,7 +692,7 @@ void DynarecEmitter::Classify(Instruction& instruction)
                 instruction.ends_block = true;
             }
             else if (opcode == 0xFF && c.reg == 6)
-                instruction.kind = DYNAREC_HELPER;
+                SetNative(instruction, memory ? 5 : 2, true);
             else
                 instruction.ends_block = true;
 
@@ -621,6 +701,34 @@ void DynarecEmitter::Classify(Instruction& instruction)
             instruction.ends_block = true;
             break;
     }
+}
+
+// The memory operand's segment, as CalculateEffectiveOffset picks it
+u8 DynarecEmitter::GetOperandSegment(const I386::InstructionContext& c) const
+{
+    u8 mod = c.modrm >> 6;
+    u8 rm = c.modrm & 7;
+    bool stack = false;
+
+    if (c.segment_override != 0xFF)
+        return c.segment_override;
+
+    if (c.address_size == 2)
+        stack = rm == 2 || rm == 3 || (rm == 6 && mod != 0);
+    else if (rm == 4)
+        stack = (mod != 0 || (c.sib & 7) != 5) && ((c.sib & 7) == I386_REG_EBP || (c.sib & 7) == I386_REG_ESP);
+    else
+        stack = (mod != 0 || rm != 5) && rm == I386_REG_EBP;
+
+    return stack ? (u8)I386_SEGMENT_SS : (u8)I386_SEGMENT_DS;
+}
+
+// ESP as the base of a 32-bit address
+bool DynarecEmitter::UsesStackBase(const I386::InstructionContext& c) const
+{
+    u8 mod = c.modrm >> 6;
+
+    return c.address_size == 4 && (c.modrm & 7) == 4 && (c.sib & 7) == I386_REG_ESP && (mod != 0 || (c.sib & 7) != 5);
 }
 
 bool DynarecEmitter::CanCarry(int width) const
@@ -654,8 +762,10 @@ void DynarecEmitter::Set486Clocks(Instruction& instruction)
     u32 prefixes = I386::Count486Prefixes(m_cpu->m_passive_bytes, c.next_eip - c.start_eip);
     int base = I386::Get486Base(c);
     u32 agi = base >= 0 && m_count > 0 && (m_instructions[m_count - 1].written & (1 << base)) != 0 ? 1 : 0;
+    bool set = c.two_byte && c.opcode2 >= 0x90 && c.opcode2 <= 0x9F;
 
-    instruction.bus_clocks = m_cpu->Get486Clocks(c, false) + prefixes;
+    // SETcc's clocks with its condition false, EmitSETcc adds the difference of a true one
+    instruction.bus_clocks = (set ? (c.memory_operand ? 4 : 3) : m_cpu->Get486Clocks(c, false)) + prefixes;
     instruction.clocks = instruction.bus_clocks + agi;
     instruction.taken_clocks = m_cpu->Get486Clocks(c, true) + prefixes + agi;
 }
@@ -868,39 +978,14 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
 {
     const I386::InstructionContext& c = instruction.context;
     const I386::BusTiming& bus = m_cpu->m_bus;
-    u8 pattern = I386::GetBusPattern(c);
-    u32 size = (pattern & k_i386_bus_byte) != 0 ? 1 : (pattern & k_i386_bus_word) != 0 ? 2 : c.operand_size;
-    u32 one = (m_cpu->GetBusCycles(size) << 8) | 1;
-    bool read = false;
-    bool write = false;
+    u32 sizes[8];
+    bool writes[8];
+    int count = GetBusAccesses(c, sizes, writes);
+    u32 data = 0;
 
-    switch (pattern & k_i386_bus_pattern_mask)
-    {
-        case I386_BUS_READ:
-            read = c.memory_operand;
-            break;
-        case I386_BUS_WRITE:
-            write = c.memory_operand;
-            break;
-        case I386_BUS_RMW:
-            read = c.memory_operand;
-            write = c.memory_operand;
-            break;
-        case I386_BUS_POP:
-        case I386_BUS_RET:
-        case I386_BUS_MOFFS_READ:
-            read = true;
-            break;
-        case I386_BUS_PUSH:
-        case I386_BUS_CALL:
-        case I386_BUS_MOFFS_WRITE:
-            write = true;
-            break;
-        default:
-            break;
-    }
+    for (int i = 0; i < count; i++)
+        data += (m_cpu->GetBusCycles(sizes[i]) << 8) | 1;
 
-    u32 data = (read ? one : 0) + (write ? one : 0);
     u32 accesses = data & 0xFF;
     u32 cycles = data >> 8;
     u32 length = (c.next_eip - c.start_eip) << 8;
@@ -939,8 +1024,8 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
     result.access = false;
     result.static_target = false;
 
-    if (read || write)
-        result.add += m_cpu->GetBusDramFold(size, read, write, instruction.bus_code_row, m_i486);
+    for (int i = 0; i < count; i++)
+        result.add += m_cpu->GetBusDramFold(sizes[i], !writes[i], writes[i], instruction.bus_code_row, m_i486);
 
     // For a target outside the code window the dispatcher sets the queue
     // The instruction stalled when its level, clamp(s + offset, low, high) of the run before it, was under need
@@ -951,7 +1036,7 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
         result.high = instruction.transfer_level;
         result.add += bus.refill + instruction.transfer_add;
         result.target = instruction.transfer_target;
-        result.access = read || write;
+        result.access = count != 0;
         result.static_target = instruction.transfer_static;
         result.stall = run.low >= need ? k_dynarec_stall_never : run.high < need ? k_dynarec_stall_always : k_dynarec_stall_below;
         result.stall_below = (s32)need - run.offset;
@@ -970,6 +1055,92 @@ DynarecEmitter::BusRun DynarecEmitter::AppendBus(const BusRun& run, const Instru
     }
 
     return result;
+}
+
+// The data accesses of a native, in the order and with the sizes AddBusTime takes them
+int DynarecEmitter::GetBusAccesses(const I386::InstructionContext& c, u32* sizes, bool* writes)
+{
+    u8 pattern = I386::GetBusPattern(c);
+    u32 size = (pattern & k_i386_bus_byte) != 0 ? 1 : (pattern & k_i386_bus_word) != 0 ? 2 : c.operand_size;
+    int count = 0;
+
+    switch (pattern & k_i386_bus_pattern_mask)
+    {
+        case I386_BUS_READ:
+        case I386_BUS_WRITE:
+        case I386_BUS_RMW:
+            if (!c.memory_operand)
+                break;
+
+            if ((pattern & k_i386_bus_pattern_mask) != I386_BUS_WRITE)
+                AddBusAccess(sizes, writes, count, size, false);
+
+            if ((pattern & k_i386_bus_pattern_mask) != I386_BUS_READ)
+                AddBusAccess(sizes, writes, count, size, true);
+
+            break;
+        case I386_BUS_POP:
+        case I386_BUS_RET:
+        case I386_BUS_MOFFS_READ:
+            AddBusAccess(sizes, writes, count, size, false);
+            break;
+        case I386_BUS_PUSH:
+        case I386_BUS_CALL:
+        case I386_BUS_MOFFS_WRITE:
+            AddBusAccess(sizes, writes, count, size, true);
+            break;
+        case I386_BUS_PUSH_READ:
+            if (c.memory_operand)
+                AddBusAccess(sizes, writes, count, size, false);
+
+            AddBusAccess(sizes, writes, count, size, true);
+            break;
+        case I386_BUS_POP_WRITE:
+            AddBusAccess(sizes, writes, count, size, false);
+
+            if (c.memory_operand)
+                AddBusAccess(sizes, writes, count, size, true);
+
+            break;
+        case I386_BUS_READ_FAR:
+            if (c.memory_operand)
+            {
+                AddBusAccess(sizes, writes, count, size, false);
+                AddBusAccess(sizes, writes, count, 2, false);
+            }
+
+            break;
+        case I386_BUS_PUSHA:
+        case I386_BUS_POPA:
+            for (int i = 0; i < 8; i++)
+                AddBusAccess(sizes, writes, count, size, (pattern & k_i386_bus_pattern_mask) == I386_BUS_PUSHA);
+
+            break;
+        case I386_BUS_STRING:
+        {
+            // The element of MOVS, LODS and STOS
+            u32 width = (c.opcode & 1) != 0 ? c.operand_size : 1;
+
+            if ((c.opcode & 0xFE) != 0xAA)
+                AddBusAccess(sizes, writes, count, width, false);
+
+            if ((c.opcode & 0xFE) != 0xAC)
+                AddBusAccess(sizes, writes, count, width, true);
+
+            break;
+        }
+        default:
+            break;
+    }
+
+    return count;
+}
+
+void DynarecEmitter::AddBusAccess(u32* sizes, bool* writes, int& count, u32 size, bool write)
+{
+    sizes[count] = size;
+    writes[count] = write;
+    count++;
 }
 
 u32 DynarecEmitter::StepBusLevel(u32 level, s32 step, u32 prefetch)
@@ -1131,15 +1302,6 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
     int first_base)
 {
     const I386::BusTiming& bus = m_cpu->m_bus;
-    intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
-    intptr_t row_member = Offset(&m_cpu->m_bus_row);
-    bool read = access != DYNAREC_WRITE;
-    bool write = access != DYNAREC_READ;
-    u32 code = m_bus_code_row & k_i386_bus_code_row;
-    u32 shift = m_bus_code_row >> 31;
-    u32 near_add = (read ? bus.dram_near[0] : 0) + (write ? bus.dram_near[1] : 0);
-    u32 far_add = (read ? bus.dram_far[0] >> shift : 0) + (write ? bus.dram_far[1] >> shift : 0);
-    u32 change_add = read ? bus.dram_change[0] : bus.dram_change[1];
     u32 ram_size = m_cpu->m_dynarec_page_count << 12;
     jit_node_t* misaligned = NULL;
     jit_node_t* done = NULL;
@@ -1165,6 +1327,35 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
     jit_ldxi(t1, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
     jit_subr(t1, host, t1);
     other = jit_bgei_u(t1, (jit_word_t)ram_size);
+    EmitBusDram(t1, linear, t2, size, access);
+    done = jit_jmpi();
+
+    jit_patch(other);
+
+    if (IsValidPointer(misaligned))
+        jit_patch(misaligned);
+
+    EmitBusAccessCall(host, linear, t2, size, access, fallback, first_base);
+    jit_patch(done);
+}
+
+// The time of an aligned DRAM access past its fold: near-row or row-change time. row holds the access's offset in RAM on
+// entry, scratch and t2 are clobbered
+void DynarecEmitter::EmitBusDram(int row, int scratch, int t2, u32 size, int access)
+{
+    const I386::BusTiming& bus = m_cpu->m_bus;
+    intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
+    intptr_t row_member = Offset(&m_cpu->m_bus_row);
+    bool read = access != DYNAREC_WRITE;
+    bool write = access != DYNAREC_READ;
+    u32 code = m_bus_code_row & k_i386_bus_code_row;
+    u32 shift = m_bus_code_row >> 31;
+    u32 near_add = (read ? bus.dram_near[0] : 0) + (write ? bus.dram_near[1] : 0);
+    u32 far_add = (read ? bus.dram_far[0] >> shift : 0) + (write ? bus.dram_far[1] >> shift : 0);
+    u32 change_add = read ? bus.dram_change[0] : bus.dram_change[1];
+    int t1 = row;
+    int linear = scratch;
+
     jit_rshi_u(t1, t1, 10);
 
     if (code != k_i386_bus_code_row && far_add != near_add)
@@ -1218,15 +1409,6 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
         jit_ori(t1, t1, (jit_word_t)k_i386_bus_row_stored);
 
     jit_stxi_i(row_member, DR_CPU, t1);
-    done = jit_jmpi();
-
-    jit_patch(other);
-
-    if (IsValidPointer(misaligned))
-        jit_patch(misaligned);
-
-    EmitBusAccessCall(host, linear, t2, size, access, fallback, first_base);
-    jit_patch(done);
 }
 
 // The access the run couldn't fold: DynarecBusAccess counts it as the interpreter does. While more of the block runs
@@ -1303,9 +1485,9 @@ void DynarecEmitter::EmitBlock()
 
         if (instruction.kind == DYNAREC_NATIVE)
         {
-            // The instruction after one that can start a shadow counts it down once it completes. A fallback has
-            // counted it already
-            bool shadow = i > 0 && m_instructions[i - 1].shadow;
+            // The instruction after one that can start a shadow counts it down once it completes, unless it starts
+            // one itself. A fallback has counted it already
+            bool shadow = i > 0 && m_instructions[i - 1].shadow && !instruction.shadow;
 
             if (shadow && instruction.ends_block)
                 EmitShadowEnd();
@@ -1392,11 +1574,16 @@ void DynarecEmitter::EmitBlock()
 // The shadow had one step left, which this instruction took
 void DynarecEmitter::EmitShadowEnd()
 {
+    StoreShadow(0, I386_SHADOW_NONE);
+}
+
+void DynarecEmitter::StoreShadow(int steps, int shadow)
+{
     I386_State& state = m_cpu->m_state;
 
-    jit_movi(DR_T0, 0);
+    jit_movi(DR_T0, steps);
     jit_stxi_c(Offset(&state.interrupt_shadow_steps), DR_CPU, DR_T0);
-    jit_movi(DR_T0, I386_SHADOW_NONE);
+    jit_movi(DR_T0, shadow);
 
     if (sizeof(state.interrupt_shadow) == 4)
         jit_stxi_i(Offset(&state.interrupt_shadow), DR_CPU, DR_T0);
@@ -2229,13 +2416,19 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitJcc(instruction, index, opcode2 & 15, SignExtend(c.immediate, width));
         else if (opcode2 >= 0x90 && opcode2 <= 0x9F)
             EmitSETcc(instruction);
+        else if (opcode2 == 0xA0 || opcode2 == 0xA8)
+            EmitPushSegment(instruction, opcode2 == 0xA0 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
+        else if (opcode2 == 0xA1 || opcode2 == 0xA9)
+            EmitPopSegment(instruction, opcode2 == 0xA1 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
+        else if (opcode2 == 0xB4 || opcode2 == 0xB5)
+            EmitLoadFarPointer(instruction, opcode2 == 0xB4 ? I386_SEGMENT_FS : I386_SEGMENT_GS);
         else
             EmitMOVX(instruction, opcode2 == 0xB6 || opcode2 == 0xBE ? 8 : 16, opcode2 >= 0xBE);
 
         return;
     }
 
-    if (opcode < 0x40)
+    if (opcode < 0x40 && (opcode & 7) <= 5)
     {
         int form = opcode & 7;
         int alu_width = (form & 1) == 0 ? 8 : width;
@@ -2250,24 +2443,36 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
 
     switch (opcode)
     {
+        case 0x06: case 0x0E: case 0x16: case 0x1E:
+            EmitPushSegment(instruction, opcode >> 3);
+            break;
+        case 0x07: case 0x1F:
+            EmitPopSegment(instruction, opcode >> 3);
+            break;
         case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
         case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F:
             EmitIncDecRegister(instruction, opcode & 7, width, opcode >= 0x48);
             break;
         case 0x50: case 0x51: case 0x52: case 0x53: case 0x54: case 0x55: case 0x56: case 0x57:
             LoadRegister(DR_T4, opcode & 7, width);
-            EmitPush(instruction, width);
+            EmitPush(instruction, width, width);
             break;
         case 0x68:
             jit_movi(DR_T4, (jit_word_t)c.immediate);
-            EmitPush(instruction, width);
+            EmitPush(instruction, width, width);
             break;
         case 0x6A:
             jit_movi(DR_T4, (jit_word_t)((u32)(s32)(s8)c.immediate & (width == 16 ? 0xFFFFU : 0xFFFFFFFFU)));
-            EmitPush(instruction, width);
+            EmitPush(instruction, width, width);
             break;
         case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
             EmitPop(instruction, opcode & 7, width);
+            break;
+        case 0x60:
+            EmitPushAll(instruction);
+            break;
+        case 0x61:
+            EmitPopAll(instruction);
             break;
         case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
         case 0x78: case 0x79: case 0x7A: case 0x7B: case 0x7C: case 0x7D: case 0x7E: case 0x7F:
@@ -2291,8 +2496,17 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         case 0x88: case 0x89: case 0x8A: case 0x8B:
             EmitMove(instruction, (opcode & 1) == 0 ? 8 : width, opcode >= 0x8A);
             break;
+        case 0x8C:
+            EmitMoveFromSegment(instruction, width);
+            break;
         case 0x8D:
             EmitLEA(instruction, width);
+            break;
+        case 0x8E:
+            EmitMoveToSegment(instruction, index);
+            break;
+        case 0x8F:
+            EmitPopRM(instruction, width);
             break;
         case 0x90:
             break;
@@ -2334,6 +2548,12 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             EmitLogicFlags(instruction, DR_T1, test_width);
             break;
         }
+        case 0xA4: case 0xA5:
+            EmitMoveString(instruction);
+            break;
+        case 0xAA: case 0xAB: case 0xAC: case 0xAD:
+            EmitString(instruction);
+            break;
         case 0xB0: case 0xB1: case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB7:
             jit_movi(DR_T0, (jit_word_t)(c.immediate & 0xFF));
             StoreRegister(opcode & 7, 8, DR_T0);
@@ -2350,6 +2570,9 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             break;
         case 0xC2: case 0xC3:
             EmitReturn(instruction, index, width, opcode == 0xC2 ? (u16)c.immediate : 0);
+            break;
+        case 0xC4: case 0xC5:
+            EmitLoadFarPointer(instruction, opcode == 0xC4 ? I386_SEGMENT_ES : I386_SEGMENT_DS);
             break;
         case 0xC6: case 0xC7:
             EmitMoveImmediate(instruction, opcode == 0xC6 ? 8 : width);
@@ -2387,8 +2610,15 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
         case 0xF6: case 0xF7:
             EmitGroup3(instruction, opcode == 0xF6 ? 8 : width);
             break;
+        case 0xFA: case 0xFB:
+            EmitInterruptFlag(instruction, index);
+            break;
         case 0xFE: case 0xFF:
-            EmitIncDecRM(instruction, opcode == 0xFE ? 8 : width, c.reg == 1);
+            if (c.reg == 6)
+                EmitPushRM(instruction, width);
+            else
+                EmitIncDecRM(instruction, opcode == 0xFE ? 8 : width, c.reg == 1);
+
             break;
         default:
             break;
@@ -2786,6 +3016,20 @@ void DynarecEmitter::EmitSETcc(Instruction& instruction)
         EmitCondition(DR_T1, DR_T2, c.opcode2 & 15);
         StoreRegister(c.rm, 8, DR_T1);
     }
+
+    // On the 486 a true condition takes a clock more in a register and one less in memory
+    if (m_i486)
+    {
+        intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+        LoadU32(DR_T2, DR_CPU, clock_total);
+
+        if (c.memory_operand)
+            jit_subr(DR_T2, DR_T2, DR_T1);
+        else
+            jit_addr(DR_T2, DR_T2, DR_T1);
+
+        jit_stxi_i(clock_total, DR_CPU, DR_T2);
+    }
 }
 
 // ROL, ROR, SHL, SHR, SAL and SAR by a constant count, as RotateShift computes them. Shifts take counts from 1 to
@@ -2909,8 +3153,8 @@ void DynarecEmitter::EmitShift(Instruction& instruction, int width, u32 count)
     MergeFlags(DR_T0, DR_T1, needed);
 }
 
-// StackPush of the value in T4: ESP only changes after the write
-void DynarecEmitter::EmitPush(Instruction& instruction, int width)
+// StackPushSized of the value in T4, which writes store_width bits: ESP only changes after the write
+void DynarecEmitter::EmitPush(Instruction& instruction, int width, int store_width)
 {
     bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
     intptr_t esp = RegisterOffset(I386_REG_ESP, 32);
@@ -2919,7 +3163,7 @@ void DynarecEmitter::EmitPush(Instruction& instruction, int width)
     jit_subi(DR_T0, DR_T0, width / 8);
     Mask(DR_T0, stack32 ? 32 : 16);
     EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, (u32)width / 8, DYNAREC_WRITE, instruction.fallback);
-    StoreHost(DR_T0, DR_T4, width, DR_T1);
+    StoreHost(DR_T0, DR_T4, store_width, DR_T1);
     LoadU32(DR_T0, DR_CPU, esp);
     jit_subi(DR_T0, DR_T0, width / 8);
     StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T0);
@@ -2936,6 +3180,477 @@ void DynarecEmitter::EmitPop(Instruction& instruction, int index, int width)
     jit_addi(DR_T4, DR_T4, width / 8);
     StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T4);
     StoreRegister(index, width, DR_T1);
+}
+
+void DynarecEmitter::EmitPushSegment(Instruction& instruction, int segment)
+{
+    int width = instruction.context.operand_size * 8;
+
+    jit_ldxi_us(DR_T4, DR_CPU, Offset(&m_cpu->m_state.segments[segment].selector));
+    EmitPush(instruction, width, 16);
+}
+
+// The interpreter reads 16 bits, the stack checks and the bus model take the operand size
+void DynarecEmitter::EmitPopSegment(Instruction& instruction, int segment)
+{
+    bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
+    int width = instruction.context.operand_size * 8;
+
+    LoadRegister(DR_T0, I386_REG_ESP, stack32 ? 32 : 16);
+    jit_movr(DR_T4, DR_T0);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, (u32)width / 8, DYNAREC_READ, instruction.fallback);
+    LoadHost(DR_T1, DR_T0, 16);
+    jit_addi(DR_T4, DR_T4, width / 8);
+    StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T4);
+    jit_movr(DR_T4, DR_T1);
+    EmitSegmentLoad(segment, DR_T4);
+}
+
+// A register takes the selector zero-extended to the operand size, memory 16 bits
+void DynarecEmitter::EmitMoveFromSegment(Instruction& instruction, int width)
+{
+    const I386::InstructionContext& c = instruction.context;
+    intptr_t selector = Offset(&m_cpu->m_state.segments[c.reg].selector);
+
+    if (!c.memory_operand)
+    {
+        jit_ldxi_us(DR_T0, DR_CPU, selector);
+        StoreRegister(c.rm, width, DR_T0);
+        return;
+    }
+
+    EmitOperandAddress(instruction, 16, DYNAREC_WRITE);
+    jit_ldxi_us(DR_T1, DR_CPU, selector);
+    StoreHost(DR_T0, DR_T1, 16, DR_T2);
+}
+
+void DynarecEmitter::EmitMoveToSegment(Instruction& instruction, int index)
+{
+    const I386::InstructionContext& c = instruction.context;
+
+    if (c.memory_operand)
+    {
+        EmitOperandAddress(instruction, 16, DYNAREC_READ);
+        LoadHost(DR_T4, DR_T0, 16);
+    }
+    else
+        LoadRegister(DR_T4, c.rm, 16);
+
+    EmitSegmentLoad(c.reg, DR_T4);
+
+    if (!c.memory_operand)
+        EmitShadowStart(instruction, index, I386_SHADOW_MOV_SS);
+}
+
+// value in T4, the call keeps it and DR_CPU
+void DynarecEmitter::EmitSegmentLoad(int segment, int value)
+{
+    jit_movi(DR_T3, (jit_word_t)(uintptr_t)&I386::DynarecLoadSegment);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargi((jit_word_t)segment);
+    jit_pushargr(value);
+    jit_finishr(DR_T3);
+}
+
+// The shadow after its instruction's own step, one left. While an interrupt is pending in the slice the block leaves
+// here, and the dispatcher counts the next step with its interrupt checks
+void DynarecEmitter::EmitShadowStart(Instruction& instruction, int index, int shadow)
+{
+    StoreShadow(1, shadow);
+    jit_ldxi_uc(DR_T0, DR_CPU, Offset(&m_cpu->m_dynarec_interrupt_pending));
+    jit_node_t* none = jit_beqi(DR_T0, 0);
+    StoreEIP(instruction.context.next_eip);
+    Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
+    jit_patch(none);
+}
+
+// LODS and STOS of one element, as ExecuteStringElement runs it. DF steps the index down
+void DynarecEmitter::EmitString(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    bool store = (c.opcode & 0xFE) == 0xAA;
+    int width = (c.opcode & 1) != 0 ? c.operand_size * 8 : 8;
+    int address_width = c.address_size * 8;
+    int index = store ? I386_REG_EDI : I386_REG_ESI;
+    u8 segment = store ? (u8)I386_SEGMENT_ES : c.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : c.segment_override;
+
+    LoadRegister(DR_T0, index, address_width);
+    jit_movr(DR_T4, DR_T0);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, (u32)width / 8, store ? DYNAREC_WRITE : DYNAREC_READ,
+        instruction.fallback);
+
+    if (store)
+    {
+        LoadRegister(DR_T1, I386_REG_EAX, width);
+        StoreHost(DR_T0, DR_T1, width, DR_T2);
+    }
+    else
+    {
+        LoadHost(DR_T1, DR_T0, width);
+        StoreRegister(I386_REG_EAX, width, DR_T1);
+    }
+
+    jit_movr(DR_T1, DR_T4);
+    EmitStringStep(index, address_width, width / 8);
+}
+
+// The index in T1 steps by delta, down with DF. T0 is scratch
+void DynarecEmitter::EmitStringStep(int index, int address_width, int delta)
+{
+    u32 shift = delta == 1 ? 1 : delta == 2 ? 2 : 3;
+
+    LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_state.eflags));
+    jit_andi(DR_T0, DR_T0, I386_FLAG_DF);
+    jit_nei(DR_T0, DR_T0, 0);
+    jit_lshi(DR_T0, DR_T0, (jit_word_t)shift);
+    jit_addi(DR_T1, DR_T1, delta);
+    jit_subr(DR_T1, DR_T1, DR_T0);
+    StoreRegister(index, address_width, DR_T1);
+}
+
+void DynarecEmitter::EmitInterruptFlag(Instruction& instruction, int index)
+{
+    intptr_t eflags = Offset(&m_cpu->m_state.eflags);
+
+    LoadU32(DR_T0, DR_CPU, eflags);
+
+    if (IsValidPointer(instruction.fallback))
+    {
+        jit_rshi_u(DR_T1, DR_T0, 12);
+        jit_andi(DR_T1, DR_T1, 3);
+        jit_ldxi_uc(DR_T2, DR_CPU, Offset(&m_cpu->m_state.current_privilege_level));
+        jit_patch_at(jit_bgtr_u(DR_T2, DR_T1), instruction.fallback);
+    }
+
+    if (instruction.context.opcode == 0xFA)
+        jit_andi(DR_T0, DR_T0, (jit_word_t)(u32)~I386_FLAG_IF);
+    else
+        jit_ori(DR_T0, DR_T0, I386_FLAG_IF);
+
+    jit_stxi_i(eflags, DR_CPU, DR_T0);
+
+    if (instruction.context.opcode == 0xFB)
+        EmitShadowStart(instruction, index, I386_SHADOW_STI);
+}
+
+// Natives with several accesses check them all before they count or change anything, and each must take EmitBusDram's
+// path, so none falls back once the first is counted. Their rows change at most twice, as ComputeBusBounds bounds
+void DynarecEmitter::EmitBusCheck(int host, int linear, int t, u32 size, jit_node* fallback)
+{
+    if (!m_timed)
+        return;
+
+    jit_ldxi(t, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
+    jit_subr(t, host, t);
+    jit_patch_at(jit_bgei_u(t, (jit_word_t)(m_cpu->m_dynarec_page_count << 12)), fallback);
+
+    if (!m_cpu->m_bus.dram_free && size > 1)
+    {
+        jit_andi(t, linear, (jit_word_t)(size - 1));
+        jit_patch_at(jit_bnei(t, 0), fallback);
+    }
+}
+
+// One access of such a native: its misaligned 486 clocks and its DRAM time. Clobbers host and linear
+void DynarecEmitter::EmitBusPiece(int host, int linear, int t, u32 size, int access)
+{
+    if (m_i486)
+        Emit486Misaligned(linear, t, size, access);
+
+    if (m_timed && !m_cpu->m_bus.dram_free)
+    {
+        jit_ldxi(t, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
+        jit_subr(t, host, t);
+        EmitBusDram(t, linear, host, size, access);
+    }
+}
+
+void DynarecEmitter::StoreTemp(int index, int r)
+{
+    jit_stxi(Offset(&m_cpu->m_dynarec_temp[index]), DR_CPU, r);
+}
+
+void DynarecEmitter::LoadTemp(int r, int index)
+{
+    jit_ldxi(r, DR_CPU, Offset(&m_cpu->m_dynarec_temp[index]));
+}
+
+// PUSH r/m reads its operand, then pushes it
+void DynarecEmitter::EmitPushRM(Instruction& instruction, int width)
+{
+    const I386::InstructionContext& c = instruction.context;
+    bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
+    intptr_t esp = RegisterOffset(I386_REG_ESP, 32);
+    u32 size = (u32)width / 8;
+
+    if (!c.memory_operand)
+    {
+        LoadRegister(DR_T4, c.rm, width);
+        EmitPush(instruction, width, width);
+        return;
+    }
+
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, c);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, DYNAREC_READ, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    LoadHost(DR_T4, DR_T0, width);
+    StoreTemp(0, DR_T0);
+    StoreTemp(1, DR_T1);
+
+    LoadU32(DR_T0, DR_CPU, esp);
+    jit_subi(DR_T0, DR_T0, size);
+    Mask(DR_T0, stack32 ? 32 : 16);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, size, DYNAREC_WRITE, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    StoreHost(DR_T0, DR_T4, width, DR_T2);
+    StoreTemp(2, DR_T0);
+    StoreTemp(3, DR_T1);
+
+    Emit486FirstAGI(DR_T2);
+    LoadTemp(DR_T0, 0);
+    LoadTemp(DR_T1, 1);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_READ);
+    LoadTemp(DR_T0, 2);
+    LoadTemp(DR_T1, 3);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_WRITE);
+
+    LoadU32(DR_T0, DR_CPU, esp);
+    jit_subi(DR_T0, DR_T0, size);
+    StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T0);
+}
+
+// POP r/m pops, then writes its operand, whose address doesn't use ESP
+void DynarecEmitter::EmitPopRM(Instruction& instruction, int width)
+{
+    const I386::InstructionContext& c = instruction.context;
+    bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
+    u32 size = (u32)width / 8;
+
+    if (!c.memory_operand)
+    {
+        EmitPop(instruction, c.rm, width);
+        return;
+    }
+
+    LoadRegister(DR_T0, I386_REG_ESP, stack32 ? 32 : 16);
+    jit_movr(DR_T4, DR_T0);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, size, DYNAREC_READ, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    StoreTemp(0, DR_T0);
+    StoreTemp(1, DR_T1);
+    LoadHost(DR_T2, DR_T0, width);
+    StoreTemp(2, DR_T2);
+
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, c);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, DYNAREC_WRITE, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    LoadTemp(DR_T2, 2);
+    StoreHost(DR_T0, DR_T2, width, DR_T3);
+    StoreTemp(2, DR_T0);
+    StoreTemp(3, DR_T1);
+
+    Emit486FirstAGI(DR_T2);
+    LoadTemp(DR_T0, 0);
+    LoadTemp(DR_T1, 1);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_READ);
+    LoadTemp(DR_T0, 2);
+    LoadTemp(DR_T1, 3);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_WRITE);
+
+    jit_addi(DR_T4, DR_T4, size);
+    StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T4);
+}
+
+// LES, LDS, LFS and LGS: the offset, then the selector after it, in one page and without a 16-bit wrap
+void DynarecEmitter::EmitLoadFarPointer(Instruction& instruction, int segment)
+{
+    const I386::InstructionContext& c = instruction.context;
+    u32 size = c.operand_size;
+    int width = (int)size * 8;
+
+    u8 operand = EmitEffectiveOffset(DR_T0, DR_T1, c);
+
+    if (c.address_size == 2)
+        jit_patch_at(jit_bgti_u(DR_T0, (jit_word_t)(0xFFFF - size - 1)), instruction.fallback);
+
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, operand, size + 2, DYNAREC_READ, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    LoadHost(DR_T4, DR_T0, width);
+    StoreTemp(0, DR_T0);
+    StoreTemp(1, DR_T1);
+    jit_addi(DR_T2, DR_T0, size);
+    LoadHost(DR_T2, DR_T2, 16);
+    StoreTemp(2, DR_T2);
+
+    Emit486FirstAGI(DR_T2);
+    LoadTemp(DR_T0, 0);
+    LoadTemp(DR_T1, 1);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_READ);
+    LoadTemp(DR_T0, 0);
+    LoadTemp(DR_T1, 1);
+    jit_addi(DR_T0, DR_T0, size);
+    jit_addi(DR_T1, DR_T1, size);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, 2, DYNAREC_READ);
+
+    StoreRegister(c.reg, width, DR_T4);
+    LoadTemp(DR_T4, 2);
+    EmitSegmentLoad(segment, DR_T4);
+}
+
+// The eight stores of PUSHA in one stack check, from the new ESP up as the bus model takes them. A 16-bit stack must
+// not wrap
+void DynarecEmitter::EmitPushAll(Instruction& instruction)
+{
+    static const int k_order[8] = { I386_REG_EDI, I386_REG_ESI, I386_REG_EBP, I386_REG_ESP, I386_REG_EBX, I386_REG_EDX,
+        I386_REG_ECX, I386_REG_EAX };
+    bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
+    intptr_t esp = RegisterOffset(I386_REG_ESP, 32);
+    int width = instruction.context.operand_size * 8;
+    u32 size = (u32)width / 8;
+
+    LoadU32(DR_T0, DR_CPU, esp);
+    jit_subi(DR_T0, DR_T0, 8 * size);
+    Mask(DR_T0, stack32 ? 32 : 16);
+
+    if (!stack32)
+        jit_patch_at(jit_bgti_u(DR_T0, (jit_word_t)(0x10000 - 8 * size)), instruction.fallback);
+
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, 8 * size, DYNAREC_WRITE, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+
+    for (u32 i = 0; i < 8; i++)
+    {
+        LoadRegister(DR_T2, k_order[i], width);
+        jit_addi(DR_T3, DR_T0, i * size);
+        StoreHost(DR_T3, DR_T2, width, DR_T4);
+    }
+
+    StoreTemp(0, DR_T0);
+    Emit486FirstAGI(DR_T2);
+
+    if (m_i486)
+    {
+        intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+        jit_andi(DR_T2, DR_T1, (jit_word_t)(size - 1));
+        jit_node_t* aligned = jit_beqi(DR_T2, 0);
+        LoadU32(DR_T2, DR_CPU, clock_total);
+        jit_addi(DR_T2, DR_T2, 8 * 3);
+        jit_stxi_i(clock_total, DR_CPU, DR_T2);
+        jit_patch(aligned);
+    }
+
+    for (u32 i = 0; i < 8 && m_timed && !m_cpu->m_bus.dram_free; i++)
+    {
+        LoadTemp(DR_T0, 0);
+        jit_addi(DR_T0, DR_T0, i * size);
+        jit_ldxi(DR_T2, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
+        jit_subr(DR_T2, DR_T0, DR_T2);
+        EmitBusDram(DR_T2, DR_T1, DR_T3, size, DYNAREC_WRITE);
+    }
+
+    LoadU32(DR_T0, DR_CPU, esp);
+    jit_subi(DR_T0, DR_T0, 8 * size);
+    StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T0);
+}
+
+// POPA skips ESP, but with a 32-bit operand and a 16-bit stack takes its high half, as the interpreter does
+void DynarecEmitter::EmitPopAll(Instruction& instruction)
+{
+    static const int k_order[8] = { I386_REG_EDI, I386_REG_ESI, I386_REG_EBP, -1, I386_REG_EBX, I386_REG_EDX,
+        I386_REG_ECX, I386_REG_EAX };
+    bool stack32 = (m_key & k_dynarec_key_stack32) != 0;
+    int width = instruction.context.operand_size * 8;
+    u32 size = (u32)width / 8;
+
+    LoadRegister(DR_T0, I386_REG_ESP, stack32 ? 32 : 16);
+
+    if (!stack32)
+        jit_patch_at(jit_bgti_u(DR_T0, (jit_word_t)(0x10000 - 8 * size)), instruction.fallback);
+
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_SS, 8 * size, DYNAREC_READ, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+
+    for (u32 i = 0; i < 8; i++)
+    {
+        if (k_order[i] < 0 && (width != 32 || stack32))
+            continue;
+
+        jit_addi(DR_T3, DR_T0, i * size);
+        LoadHost(DR_T2, DR_T3, width);
+
+        if (k_order[i] >= 0)
+            StoreRegister(k_order[i], width, DR_T2);
+        else
+        {
+            jit_rshi_u(DR_T2, DR_T2, 16);
+            jit_stxi_s(Offset(&m_cpu->m_state.registers[I386_REG_ESP].high), DR_CPU, DR_T2);
+        }
+    }
+
+    StoreTemp(0, DR_T0);
+    Emit486FirstAGI(DR_T2);
+
+    if (m_i486)
+    {
+        intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+        jit_andi(DR_T2, DR_T1, (jit_word_t)(size - 1));
+        jit_node_t* aligned = jit_beqi(DR_T2, 0);
+        LoadU32(DR_T2, DR_CPU, clock_total);
+        jit_addi(DR_T2, DR_T2, 8 * 3);
+        jit_stxi_i(clock_total, DR_CPU, DR_T2);
+        jit_patch(aligned);
+    }
+
+    for (u32 i = 0; i < 8 && m_timed && !m_cpu->m_bus.dram_free; i++)
+    {
+        LoadTemp(DR_T0, 0);
+        jit_addi(DR_T0, DR_T0, i * size);
+        jit_ldxi(DR_T2, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
+        jit_subr(DR_T2, DR_T0, DR_T2);
+        EmitBusDram(DR_T2, DR_T1, DR_T3, size, DYNAREC_READ);
+    }
+
+    LoadRegister(DR_T0, I386_REG_ESP, stack32 ? 32 : 16);
+    jit_addi(DR_T0, DR_T0, 8 * size);
+    StoreRegister(I386_REG_ESP, stack32 ? 32 : 16, DR_T0);
+}
+
+// MOVS of one element: the read, then the write
+void DynarecEmitter::EmitMoveString(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    int width = (c.opcode & 1) != 0 ? c.operand_size * 8 : 8;
+    int address_width = c.address_size * 8;
+    u32 size = (u32)width / 8;
+    u8 source = c.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : c.segment_override;
+
+    LoadRegister(DR_T0, I386_REG_ESI, address_width);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, source, size, DYNAREC_READ, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    LoadHost(DR_T4, DR_T0, width);
+    StoreTemp(0, DR_T0);
+    StoreTemp(1, DR_T1);
+
+    LoadRegister(DR_T0, I386_REG_EDI, address_width);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, I386_SEGMENT_ES, size, DYNAREC_WRITE, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, size, instruction.fallback);
+    StoreHost(DR_T0, DR_T4, width, DR_T2);
+    StoreTemp(2, DR_T0);
+    StoreTemp(3, DR_T1);
+
+    Emit486FirstAGI(DR_T2);
+    LoadTemp(DR_T0, 0);
+    LoadTemp(DR_T1, 1);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_READ);
+    LoadTemp(DR_T0, 2);
+    LoadTemp(DR_T1, 3);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, size, DYNAREC_WRITE);
+
+    LoadRegister(DR_T1, I386_REG_ESI, address_width);
+    EmitStringStep(I386_REG_ESI, address_width, (int)size);
+    LoadRegister(DR_T1, I386_REG_EDI, address_width);
+    EmitStringStep(I386_REG_EDI, address_width, (int)size);
 }
 
 void DynarecEmitter::EmitJcc(Instruction& instruction, int index, int condition, s32 displacement)
@@ -3092,7 +3807,7 @@ void DynarecEmitter::EmitCall(Instruction& instruction, int index, int width)
     m_block->call_next_eip = width == 16 ? c.next_eip & 0xFFFF : c.next_eip;
 
     jit_movi(DR_T4, (jit_word_t)(width == 16 ? c.next_eip & 0xFFFF : c.next_eip));
-    EmitPush(instruction, width);
+    EmitPush(instruction, width, width);
     StoreEIP(target);
 
 #if !defined(GT_DISABLE_DISASSEMBLER)

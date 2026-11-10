@@ -864,6 +864,51 @@ uintptr_t I386::DynarecShift(I386* cpu, uintptr_t value, uintptr_t form)
     return cpu->RotateShift<32>((u32)value, operation, count);
 }
 
+// The flags a translated instruction left to its block's cold paths, from its record. form: the kind (add, sub, logic,
+// inc, dec, shift), the width as 8 << bits 3-4, the record's slot, the shift and its count, and the flags it sets
+void I386::DynarecFlags(I386* cpu, uintptr_t form)
+{
+    int width = 8 << ((form >> 3) & 3);
+    const u32* record = cpu->m_dynarec_flags[(form >> 5) & 3];
+    u32 bits = (u32)(form >> 15) & 0xFFF;
+    u32 saved = cpu->m_state.eflags;
+
+    switch (form & 7)
+    {
+        case 0:
+            cpu->Add(record[0], record[1], 0, width);
+            break;
+        case 1:
+            cpu->Sub(record[0], record[1], 0, width);
+            break;
+        case 2:
+            cpu->Logic(record[0], width);
+            break;
+        case 3:
+            cpu->Add(record[0], 1, 0, width);
+            break;
+        case 4:
+            cpu->Sub(record[0], 1, 0, width);
+            break;
+        default:
+        {
+            int operation = (int)((form >> 7) & 7);
+            u32 count = (u32)(form >> 10) & 0x1F;
+
+            if (width == 8)
+                cpu->RotateShift<8>(record[0], operation, count);
+            else if (width == 16)
+                cpu->RotateShift<16>(record[0], operation, count);
+            else
+                cpu->RotateShift<32>(record[0], operation, count);
+
+            break;
+        }
+    }
+
+    cpu->m_state.eflags = (saved & ~bits) | (cpu->m_state.eflags & bits);
+}
+
 // MUL and IMUL for translated blocks. form: the width, 100h IMUL r/m, 200h IMUL r,r/m and 400h IMUL r,r/m,imm with
 // the register from bit 12 and the multiplier in other. A multiplier from r/m adds its data-dependent clocks
 template<bool i486>

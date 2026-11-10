@@ -193,6 +193,7 @@ I386::I386()
     InitPointer(m_dynarec_page_live);
     InitPointer(m_dynarec_page_safe);
     m_dynarec_slow_linear = 0;
+    memset(m_dynarec_flags, 0, sizeof(m_dynarec_flags));
     m_dynarec_page_count = 0;
     InitPointer(m_dynarec_ram);
     m_dynarec_region_generation = 0;

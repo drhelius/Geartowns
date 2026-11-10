@@ -422,20 +422,192 @@ void DynarecEmitter::EmitImmediate(int r, const Instruction& instruction, u32 va
 
 // Flags written by an instruction and overwritten before anything can read them are not computed
 // Exits, helpers and instructions that can run in the interpreter see every flag
+// The flags each native computes. Hot liveness leaves out the fallbacks: a native that can't fall back keeps for them only
+// a record of its operands, from which EmitMaterialize gives those paths the exact flags (live_all)
 void DynarecEmitter::ComputeLiveness()
 {
-    u16 live = k_flags_all;
+    u16 live_all = k_flags_all;
+    u16 live_hot = k_flags_all;
 
     for (int i = m_count - 1; i >= 0; i--)
     {
         Instruction& instruction = m_instructions[i];
-        instruction.live = live;
+        bool defer = IsDeferrable(instruction);
+        instruction.live_all = live_all;
+        instruction.live = defer ? live_hot : live_all;
+        instruction.deferred = defer ? (u16)(live_all & instruction.defs & ~live_hot) : 0;
+        instruction.flags_slot = -1;
 
-        if (instruction.kind != DYNAREC_NATIVE || instruction.memory)
-            live = k_flags_all;
+        if (instruction.kind != DYNAREC_NATIVE)
+        {
+            live_all = k_flags_all;
+            live_hot = k_flags_all;
+        }
         else
-            live = (u16)((live & ~instruction.defs) | instruction.uses);
+        {
+            live_all = instruction.memory ? k_flags_all : (u16)((live_all & ~instruction.defs) | instruction.uses);
+            live_hot = (u16)((live_hot & ~instruction.defs) | instruction.uses);
+        }
     }
+
+    AssignFlagSlots();
+}
+
+// Natives without a fallback whose flags DynarecFlags can rebuild: ADD, SUB, CMP and the logic forms on registers and
+// immediates, TEST, INC and DEC of a register, and the shifts and rotates of a register by a constant
+bool DynarecEmitter::IsDeferrable(const Instruction& instruction) const
+{
+    const I386::InstructionContext& c = instruction.context;
+    u8 opcode = c.opcode;
+
+    if (instruction.kind != DYNAREC_NATIVE || instruction.memory || instruction.defs == 0 || c.two_byte ||
+        c.memory_operand)
+        return false;
+
+    if (opcode < 0x40 && (opcode & 7) <= 5)
+        return (opcode >> 3) != 2 && (opcode >> 3) != 3;
+
+    if (opcode >= 0x80 && opcode <= 0x83)
+        return c.reg != 2 && c.reg != 3;
+
+    if (opcode == 0xC0 || opcode == 0xC1 || opcode == 0xD0 || opcode == 0xD1)
+        return c.reg != 2 && c.reg != 3;
+
+    return (opcode >= 0x40 && opcode <= 0x4F) || opcode == 0x84 || opcode == 0x85 || opcode == 0xA8 || opcode == 0xA9;
+}
+
+// Four records per block. A deferring native takes a slot no earlier one still needs, or computes all its flags
+void DynarecEmitter::AssignFlagSlots()
+{
+    int slot_end[4] = { -1, -1, -1, -1 };
+
+    for (int i = 0; i < m_count; i++)
+    {
+        Instruction& instruction = m_instructions[i];
+
+        if (instruction.deferred == 0)
+            continue;
+
+        u16 owned = instruction.deferred;
+        int end = i;
+
+        for (int j = i + 1; j < m_count && owned != 0; j++)
+        {
+            const Instruction& next = m_instructions[j];
+            end = j;
+            owned &= next.kind == DYNAREC_NATIVE ? (u16)~next.defs : 0;
+        }
+
+        if (owned != 0)
+            end = m_count;
+
+        int slot = -1;
+
+        for (int k = 0; k < 4 && slot < 0; k++)
+        {
+            if (slot_end[k] <= i)
+                slot = k;
+        }
+
+        if (slot < 0)
+        {
+            instruction.live = instruction.live_all;
+            instruction.deferred = 0;
+            continue;
+        }
+
+        instruction.flags_slot = (s8)slot;
+        slot_end[slot] = end;
+    }
+}
+
+// A cold path at the start of instruction point (a fallback, or a block leaving past point - 1) first takes the flags
+// that deferring natives before it left only in their records
+void DynarecEmitter::EmitMaterialize(int point)
+{
+    static const u16 k_flags[6] = { I386_FLAG_CF, I386_FLAG_PF, I386_FLAG_AF, I386_FLAG_ZF, I386_FLAG_SF, I386_FLAG_OF };
+    int owner[6] = { -1, -1, -1, -1, -1, -1 };
+
+    for (int i = 0; i < point && i < m_count; i++)
+    {
+        const Instruction& instruction = m_instructions[i];
+
+        for (int f = 0; f < 6; f++)
+        {
+            if (instruction.kind != DYNAREC_NATIVE)
+                owner[f] = -1;
+            else if ((instruction.defs & k_flags[f]) != 0)
+                owner[f] = (instruction.deferred & k_flags[f]) != 0 ? i : -1;
+        }
+    }
+
+    for (int i = 0; i < point && i < m_count; i++)
+    {
+        u16 bits = 0;
+
+        for (int f = 0; f < 6; f++)
+        {
+            if (owner[f] == i)
+                bits |= k_flags[f];
+        }
+
+        if (bits == 0)
+            continue;
+
+        jit_movi(DR_T2, (jit_word_t)(uintptr_t)&I386::DynarecFlags);
+        jit_prepare();
+        jit_pushargr(DR_CPU);
+        jit_pushargi((jit_word_t)GetFlagForm(m_instructions[i], bits));
+        jit_finishr(DR_T2);
+    }
+}
+
+void DynarecEmitter::StoreFlagRecord(const Instruction& instruction, int first, int second)
+{
+    if (instruction.flags_slot < 0)
+        return;
+
+    jit_stxi_i(Offset(&m_cpu->m_dynarec_flags[instruction.flags_slot][0]), DR_CPU, first);
+
+    if (second >= 0)
+        jit_stxi_i(Offset(&m_cpu->m_dynarec_flags[instruction.flags_slot][1]), DR_CPU, second);
+}
+
+uintptr_t DynarecEmitter::GetFlagForm(const Instruction& instruction, u16 bits) const
+{
+    const I386::InstructionContext& c = instruction.context;
+    u8 opcode = c.opcode;
+    int width = c.operand_size * 8;
+    u32 kind = 2;
+    u32 operation = 0;
+    u32 count = 0;
+
+    if (opcode < 0x40)
+    {
+        int alu = opcode >> 3;
+        kind = alu == 0 ? 0 : alu == 5 || alu == 7 ? 1 : 2;
+        width = (opcode & 1) == 0 ? 8 : width;
+    }
+    else if (opcode <= 0x4F)
+        kind = opcode <= 0x47 ? 3 : 4;
+    else if (opcode >= 0x80 && opcode <= 0x83)
+    {
+        kind = c.reg == 0 ? 0 : c.reg == 5 || c.reg == 7 ? 1 : 2;
+        width = opcode == 0x80 || opcode == 0x82 ? 8 : width;
+    }
+    else if (opcode == 0x84 || opcode == 0xA8)
+        width = 8;
+    else if (opcode == 0xC0 || opcode == 0xC1 || opcode == 0xD0 || opcode == 0xD1)
+    {
+        kind = 5;
+        operation = c.reg;
+        count = opcode >= 0xD0 ? 1 : c.immediate & 0x1F;
+        width = opcode == 0xC0 || opcode == 0xD0 ? 8 : width;
+    }
+
+    u32 width_code = width == 8 ? 0 : width == 16 ? 1 : 2;
+    return kind | (width_code << 3) | ((u32)instruction.flags_slot << 5) | (operation << 7) | (count << 10) |
+        ((u32)bits << 15);
 }
 
 // Natives are translated. Helpers run in the interpreter and the block goes on, which needs the instruction to
@@ -1794,6 +1966,7 @@ void DynarecEmitter::EmitReopen(Instruction& instruction, int index)
     jit_finishi((jit_pointer_t)&I386::DynarecReopen);
     jit_retval(DR_T0);
     jit_node_t* stay = jit_beqi(DR_T0, 0);
+    EmitMaterialize(index + 1);
     Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
     jit_patch(stay);
     jit_patch(open);
@@ -1825,6 +1998,7 @@ void DynarecEmitter::StoreShadow(int steps, int shadow)
 void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
 {
     jit_link(instruction.fallback);
+    EmitMaterialize(index);
     StoreEIP(instruction.context.start_eip);
 
     if (m_i486 && index > 0)
@@ -2845,6 +3019,7 @@ void DynarecEmitter::EmitNative(Instruction& instruction, int index)
             LoadRegister(DR_T1, I386_REG_EAX, test_width);
             EmitImmediate(DR_T2, instruction, c.immediate, test_width, false);
             jit_andr(DR_T1, DR_T1, DR_T2);
+            StoreFlagRecord(instruction, DR_T1, -1);
             EmitLogicFlags(instruction, DR_T1, test_width);
             break;
         }
@@ -3068,6 +3243,11 @@ void DynarecEmitter::EmitALU(Instruction& instruction, int operation, int form, 
 
     Mask(DR_T3, width);
 
+    if (operation == 1 || operation == 4 || operation == 6)
+        StoreFlagRecord(instruction, DR_T3, -1);
+    else
+        StoreFlagRecord(instruction, DR_T1, DR_T2);
+
     if (needed == 0)
         return;
 
@@ -3113,6 +3293,7 @@ void DynarecEmitter::EmitTest(Instruction& instruction, int width)
 
     LoadRegister(DR_T2, c.reg, width);
     jit_andr(DR_T3, DR_T3, DR_T2);
+    StoreFlagRecord(instruction, DR_T3, -1);
     EmitLogicFlags(instruction, DR_T3, width);
 }
 
@@ -3128,6 +3309,7 @@ void DynarecEmitter::EmitIncDecRegister(Instruction& instruction, int index, int
 
     Mask(DR_T3, width);
     StoreRegister(index, width, DR_T3);
+    StoreFlagRecord(instruction, DR_T1, -1);
 
     u16 needed = instruction.live & instruction.defs;
 
@@ -3237,6 +3419,7 @@ void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
     jit_retval(DR_T0);
     jit_patch_at(jit_beqi(DR_T0, 2), instruction.fallback);
     jit_node_t* stay = jit_beqi(DR_T0, 0);
+    EmitMaterialize(m_slow_index + 1);
     StoreEIP(instruction.context.next_eip);
     Exit(m_slow_index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
     jit_patch(stay);
@@ -3612,6 +3795,8 @@ void DynarecEmitter::EmitShift(Instruction& instruction, int width, u32 count)
     else
         StoreRegister(c.rm, width, DR_T3);
 
+    StoreFlagRecord(instruction, DR_T1, -1);
+
     if (needed == 0)
         return;
 
@@ -3826,6 +4011,7 @@ void DynarecEmitter::EmitShadowStart(Instruction& instruction, int index, int sh
     StoreShadow(1, shadow);
     jit_ldxi_uc(DR_T0, DR_CPU, Offset(&m_cpu->m_dynarec_interrupt_pending));
     jit_node_t* none = jit_beqi(DR_T0, 0);
+    EmitMaterialize(index + 1);
     StoreEIP(instruction.context.next_eip);
     Exit(index + 1, instruction.before + instruction.clocks, k_dynarec_exit_end, m_timed ? &instruction.bus_after : NULL);
     jit_patch(none);

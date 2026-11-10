@@ -917,6 +917,7 @@ private:
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
     static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t form);
+    static void DynarecFlags(I386* cpu, uintptr_t form);
     static uintptr_t DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access);
     static uintptr_t DynarecReopen(I386* cpu, uintptr_t check);
     template<bool i486>
@@ -1543,6 +1544,7 @@ private:
     u16* m_dynarec_page_live;
     u8* m_dynarec_page_safe;
     u32 m_dynarec_slow_linear;
+    u32 m_dynarec_flags[4][2];
     u32 m_dynarec_page_count;
     const u8* m_dynarec_ram;
     u32 m_dynarec_region_generation;

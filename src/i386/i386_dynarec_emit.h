@@ -95,6 +95,9 @@ private:
         u16 uses;
         u16 defs;
         u16 live;
+        u16 live_all;
+        u16 deferred;
+        s8 flags_slot;
         u32 clocks;
         u32 taken_clocks;
         u32 bus_clocks;
@@ -132,6 +135,11 @@ private:
     bool GetTargetComponents(u32 target, u32& components);
     s32 SignExtend(u32 value, int width) const;
     void ComputeLiveness();
+    bool IsDeferrable(const Instruction& instruction) const;
+    void AssignFlagSlots();
+    void EmitMaterialize(int point);
+    void StoreFlagRecord(const Instruction& instruction, int first, int second);
+    uintptr_t GetFlagForm(const Instruction& instruction, u16 bits) const;
 
     void ComputeBus();
     void ComputeBusBounds();

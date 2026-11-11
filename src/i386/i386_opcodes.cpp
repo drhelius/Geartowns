@@ -2624,16 +2624,10 @@ bool I386::EscapeCoprocessor()
 }
 
 #if !defined(GT_DISABLE_DYNAREC)
-// Translated ESC instructions run while every x87 exception is masked and none is pending: none can raise an
-// exception, call the error callback or skip a store then
-uintptr_t I386::DynarecEscapeReady(I386* cpu)
-{
-    return (cpu->m_x87->GetState()->control & 0x3F) == 0x3F && !cpu->m_x87->IsErrorPending() ? 1 : 0;
-}
-
 // EscapeCoprocessor past its checks, with the operand at host, its offset in the first temp, and the x87's clocks past
 // the fewest the block counted. form: the opcode, ModR/M from bit 8, the operand size from bit 16, 32-bit operands at
-// bit 20, protected mode at bit 21 and the segment from bit 24
+// bit 20, protected mode at bit 21, a store at bit 22, clocks that depend on the data at bit 23 and the segment from
+// bit 24
 void I386::DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t eip, uintptr_t fewest)
 {
     X87_Operation operation;
@@ -2650,17 +2644,12 @@ void I386::DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t ei
     operation.operand_offset = operation.memory ? (u32)cpu->m_dynarec_temp[0] : 0;
 
     u8 operand[8];
-    bool write = false;
 
-    if (operation.memory)
-    {
-        X87::GetMemoryOperandSize(operation.opcode, operation.modrm, operation.operand32, write);
+    if (operation.memory && (form & (1 << 22)) == 0)
+        memcpy(operand, (const u8*)host, size);
 
-        if (!write)
-            memcpy(operand, (const u8*)host, size);
-    }
-
-    cpu->m_dynarec_clocks += cpu->m_x87->GetClocks(operation, operand) - (u32)fewest;
+    if ((form & (1 << 23)) != 0)
+        cpu->m_dynarec_clocks += cpu->m_x87->GetClocks(operation, operand) - (u32)fewest;
 
     if (cpu->m_x87->Execute(operation, operand))
         memcpy((u8*)host, operand, size);

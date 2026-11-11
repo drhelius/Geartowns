@@ -942,7 +942,6 @@ private:
     static void DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
     static uintptr_t DynarecDivideSlow(I386* cpu, uintptr_t value, uintptr_t form);
     static void DynarecDivide(I386* cpu, uintptr_t value, uintptr_t form);
-    static uintptr_t DynarecEscapeReady(I386* cpu);
     static void DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t eip, uintptr_t fewest);
     void GetEscapeClocks(const InstructionContext& c, u32& fewest, u32& most) const;
     template<bool i486>

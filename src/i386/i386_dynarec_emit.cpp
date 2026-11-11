@@ -3729,17 +3729,13 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
     jit_andi(DR_T0, DR_T0, 0x0C);
     jit_patch_at(jit_bnei(DR_T0, 0), instruction.fallback);
 
+    EmitX87Ready(instruction.fallback);
+
     if (IsX87Move(c))
     {
         EmitX87Move(instruction);
         return;
     }
-
-    jit_prepare();
-    jit_pushargr(DR_CPU);
-    jit_finishi((jit_pointer_t)&I386::DynarecEscapeReady);
-    jit_retval(DR_T0);
-    jit_patch_at(jit_beqi(DR_T0, 0), instruction.fallback);
 
     if (c.memory_operand)
     {
@@ -3753,11 +3749,12 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
     else
         jit_movi(DR_T0, 0);
 
-    u32 form = c.opcode | ((u32)c.modrm << 8) | ((size & 0xF) << 16) | (c.operand_size == 4 ? 1U << 20 : 0) |
-        (m_cpu->m_state.execution_mode == I386_MODE_PROTECTED ? 1U << 21 : 0) | ((size >> 8) << 24);
     u32 fewest = 0;
     u32 most = 0;
     m_cpu->GetEscapeClocks(c, fewest, most);
+    u32 form = c.opcode | ((u32)c.modrm << 8) | ((size & 0xF) << 16) | (c.operand_size == 4 ? 1U << 20 : 0) |
+        (m_cpu->m_state.execution_mode == I386_MODE_PROTECTED ? 1U << 21 : 0) | (write ? 1U << 22 : 0) |
+        (fewest != most ? 1U << 23 : 0) | ((size >> 8) << 24);
 
     jit_prepare();
     jit_pushargr(DR_CPU);
@@ -3786,8 +3783,23 @@ bool DynarecEmitter::IsX87Move(const I386::InstructionContext& c) const
     return c.opcode == 0xDF && modrm == 0xE0;
 }
 
-// T0 holds the x87's state, T1 its status word, T2 TOP and T3 the tag word. A stack fault, an unmasked exception or one
-// pending goes to the interpreter
+// Every x87 exception masked and none pending, so no native raises one, calls the error callback or skips a store. T0
+// holds the x87 and T1 its status word after it
+void DynarecEmitter::EmitX87Ready(jit_node* fallback)
+{
+    intptr_t state = (intptr_t)((const u8*)m_cpu->m_x87->GetState() - (const u8*)m_cpu->m_x87);
+
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_ldxi_us(DR_T1, DR_T0, state + (intptr_t)offsetof(X87::X87_State, control));
+    jit_andi(DR_T1, DR_T1, 0x3F);
+    jit_patch_at(jit_bnei(DR_T1, 0x3F), fallback);
+    jit_ldxi_us(DR_T1, DR_T0, state + (intptr_t)offsetof(X87::X87_State, status));
+    jit_andi(DR_T2, DR_T1, 0x0080);
+    jit_patch_at(jit_bnei(DR_T2, 0), fallback);
+}
+
+// Past EmitX87Ready: T0 holds the x87, T1 its status word, T2 TOP and T3 the tag word. A stack fault goes to the
+// interpreter
 void DynarecEmitter::EmitX87Move(Instruction& instruction)
 {
     const I386::InstructionContext& c = instruction.context;
@@ -3797,14 +3809,6 @@ void DynarecEmitter::EmitX87Move(Instruction& instruction)
     intptr_t status = state + (intptr_t)offsetof(X87::X87_State, status);
     intptr_t tag = state + (intptr_t)offsetof(X87::X87_State, tag);
     jit_node* fallback = instruction.fallback;
-
-    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
-    jit_ldxi_us(DR_T1, DR_T0, state + (intptr_t)offsetof(X87::X87_State, control));
-    jit_andi(DR_T1, DR_T1, 0x3F);
-    jit_patch_at(jit_bnei(DR_T1, 0x3F), fallback);
-    jit_ldxi_us(DR_T1, DR_T0, status);
-    jit_andi(DR_T2, DR_T1, 0x0080);
-    jit_patch_at(jit_bnei(DR_T2, 0), fallback);
 
     // FNSTSW AX, a control form: no pointers, no C1
     if (c.opcode == 0xDF)

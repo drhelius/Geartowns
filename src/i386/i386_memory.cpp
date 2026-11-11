@@ -1051,6 +1051,7 @@ NO_INLINE void I386::OpenCodeWindow(u32 eip, bool fetch)
     m_code_window = page + page_offset - before;
     m_code_window_eip = eip - before;
     m_code_window_size = before + (u32)after;
+    m_code_window_set = set;
 }
 
 // Code bytes outside the fetch window: the instruction length limit, the CS checks and the translation of the next

@@ -2159,8 +2159,8 @@ void DynarecEmitter::EmitBlock()
     }
 }
 
-// An access on another TLB way closed the code window: it opens again for the next instruction, and the block leaves
-// if it no longer lies in it
+// An access on another TLB way of the code page's set closed the code window: it opens again for the next
+// instruction, and the block leaves if it no longer lies in it
 void DynarecEmitter::EmitReopen(Instruction& instruction, int index)
 {
     ColdPath& cold = *AddColdPath(DYNAREC_COLD_REOPEN, NULL);

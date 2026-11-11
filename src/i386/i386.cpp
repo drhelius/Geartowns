@@ -319,6 +319,7 @@ void I386::Reset()
     InitPointer(m_code_window);
     m_code_window_eip = 0;
     m_code_window_size = 0;
+    m_code_window_set = 0;
     InitPointer(m_fetch_pointer);
     m_fetch_remaining = 0;
     m_bus_queue = 0;

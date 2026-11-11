@@ -1502,6 +1502,7 @@ private:
     const u8* m_code_window;
     u32 m_code_window_eip;
     u32 m_code_window_size;
+    u32 m_code_window_set;
     const u8* m_fetch_pointer;
     u32 m_fetch_remaining;
     u8 m_address_clocks;

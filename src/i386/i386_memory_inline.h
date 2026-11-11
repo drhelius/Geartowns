@@ -99,13 +99,13 @@ INLINE const I386::TLBEntry& I386::GetRecentTLBEntry(u32 linear) const
 }
 
 // A translating access to a way points the tree away from it: B0 selects the half, B1 and B2 the way in it
-// The code window skips these updates, which is only exact while its page stays the most recent way
+// The code window skips these updates, which is only exact while its page stays the most recent way of its set
 INLINE void I386::TouchTLBWay(u32 set, u32 way)
 {
     static const u8 k_plru_keep_mask[I386_TLB_WAYS] = { 0x04, 0x04, 0x02, 0x02 };
     static const u8 k_plru_way_bits[I386_TLB_WAYS] = { 0x03, 0x01, 0x04, 0x00 };
 
-    if (m_tlb_mru[set] != way)
+    if (m_tlb_mru[set] != way && set == m_code_window_set)
         CloseCodeWindow();
 
     m_tlb_plru[set] = (m_tlb_plru[set] & k_plru_keep_mask[way]) | k_plru_way_bits[way];

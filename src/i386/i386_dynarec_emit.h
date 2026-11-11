@@ -79,6 +79,22 @@ private:
         bool static_target;
     };
 
+    // A rare path of a native, off its hot path: branches go to entry, the path comes back to resume
+    struct ColdPath
+    {
+        u8 kind;
+        jit_node* entry;
+        jit_node* resume;
+        jit_node* fallback;
+        int host;
+        int linear;
+        int t;
+        u32 value;
+        uintptr_t flags;
+        const I386::DynarecCheck* check;
+        I386::DynarecSite* site;
+    };
+
     struct Instruction
     {
         I386::InstructionContext context;
@@ -159,7 +175,11 @@ private:
     void EmitBusTransferRow(const BusRun& run);
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback = NULL,
         int first_base = -1);
-    void EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback, int first_base);
+    void EmitBusAccessCall(int host, int linear, int t2, uintptr_t flags, const I386::DynarecCheck* check,
+        jit_node* fallback, int first_base);
+    ColdPath* AddColdPath(u8 kind, jit_node* fallback);
+    void EmitColdPaths(bool skip);
+    void EmitColdPath(const ColdPath& cold);
     uintptr_t GetBusAccessFlags(u32 size, int access) const;
     const I386::DynarecBusRun* GetSettleRun(Instruction& instruction);
     const I386::DynarecBusRun* GetAfterRun(Instruction& instruction);
@@ -281,6 +301,8 @@ private:
     u32 m_bus_line_next;
     u32 m_bus_line_first;
     u32 m_bus_line_count;
+    ColdPath m_cold[128];
+    int m_cold_count;
     Instruction m_instructions[64];
 };
 

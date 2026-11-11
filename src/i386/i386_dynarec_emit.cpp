@@ -51,6 +51,8 @@ static const bool k_dynarec_near_fallbacks = true;
 static const bool k_dynarec_near_fallbacks = false;
 #endif
 static const u32 k_dynarec_compiled = 1;
+static const int k_dynarec_cold_paths = 128;
+static const int k_dynarec_cold_margin = 32;
 
 // Operands a native reads from its code bytes when it runs
 static const u8 k_live_immediate = 0x01;
@@ -70,6 +72,17 @@ enum Dynarec_Kind
     DYNAREC_NATIVE = 0,
     DYNAREC_HELPER,
     DYNAREC_HELPER_LAST
+};
+
+enum Dynarec_Cold
+{
+    DYNAREC_COLD_BUS = 0,
+    DYNAREC_COLD_TLB,
+    DYNAREC_COLD_NO_PAGE,
+    DYNAREC_COLD_SLOW_STORE,
+    DYNAREC_COLD_REOPEN,
+    DYNAREC_COLD_LINE,
+    DYNAREC_COLD_MISALIGNED
 };
 
 enum Dynarec_Access
@@ -113,6 +126,7 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_bus_line_next = 0;
     m_bus_line_first = 0;
     m_bus_line_count = 0;
+    m_cold_count = 0;
 }
 
 // Decodes the block at the code window and translates it into code
@@ -1746,40 +1760,141 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
 {
     const I386::BusTiming& bus = m_cpu->m_bus;
     u32 ram_size = m_cpu->m_dynarec_page_count << 12;
-    jit_node_t* misaligned = NULL;
-    jit_node_t* done = NULL;
-    jit_node_t* other = NULL;
+    ColdPath& cold = *AddColdPath(DYNAREC_COLD_BUS, fallback);
+    cold.host = host;
+    cold.linear = linear;
+    cold.t = t2;
+    cold.value = (u32)(first_base + 1);
+    cold.flags = GetBusAccessFlags(size, access);
+    cold.check = IsValidPointer(fallback) ? m_bus_next_check : NULL;
 
-    // The 486's cache serves DRAM at no cost: only accesses outside it go to the helper
-    if (bus.dram_free)
-    {
-        jit_ldxi(t1, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
-        jit_subr(t1, host, t1);
-        done = jit_blti_u(t1, (jit_word_t)ram_size);
-        EmitBusAccessCall(host, linear, t2, size, access, fallback, first_base);
-        jit_patch(done);
-        return;
-    }
-
-    if (size > 1)
+    // The 486's cache serves DRAM at no cost: only accesses outside it go to the helper. Without it, misaligned
+    // accesses do too
+    if (!bus.dram_free && size > 1)
     {
         jit_andi(t1, linear, (jit_word_t)(size - 1));
-        misaligned = jit_bnei(t1, 0);
+        jit_patch_at(jit_bnei(t1, 0), cold.entry);
     }
 
     jit_ldxi(t1, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
     jit_subr(t1, host, t1);
-    other = jit_bgei_u(t1, (jit_word_t)ram_size);
-    EmitBusDram(t1, linear, t2, size, access);
-    done = jit_jmpi();
+    jit_patch_at(jit_bgei_u(t1, (jit_word_t)ram_size), cold.entry);
 
-    jit_patch(other);
+    if (!bus.dram_free)
+        EmitBusDram(t1, linear, t2, size, access);
 
-    if (IsValidPointer(misaligned))
-        jit_patch(misaligned);
+    cold.resume = jit_label();
+}
 
-    EmitBusAccessCall(host, linear, t2, size, access, fallback, first_base);
-    jit_patch(done);
+// No instruction adds more than the margin, which EmitBlock keeps free before each
+DynarecEmitter::ColdPath* DynarecEmitter::AddColdPath(u8 kind, jit_node* fallback)
+{
+    ColdPath& cold = m_cold[m_cold_count++];
+    cold.kind = kind;
+    cold.entry = jit_forward();
+    InitPointer(cold.resume);
+    cold.fallback = fallback;
+    cold.host = -1;
+    cold.linear = -1;
+    cold.t = -1;
+    cold.value = 0;
+    cold.flags = 0;
+    InitPointer(cold.check);
+    InitPointer(cold.site);
+    return &cold;
+}
+
+// After the block's fallbacks. Where conditional branches reach only a few KiB, or once the pool runs low, between
+// instructions behind a jump
+void DynarecEmitter::EmitColdPaths(bool skip)
+{
+    if (m_cold_count == 0)
+        return;
+
+    jit_node_t* over = skip ? jit_jmpi() : NULL;
+
+    for (int i = 0; i < m_cold_count; i++)
+        EmitColdPath(m_cold[i]);
+
+    m_cold_count = 0;
+
+    if (IsValidPointer(over))
+        jit_patch(over);
+}
+
+void DynarecEmitter::EmitColdPath(const ColdPath& cold)
+{
+    jit_link(cold.entry);
+
+    switch (cold.kind)
+    {
+        case DYNAREC_COLD_BUS:
+            EmitBusAccessCall(cold.host, cold.linear, cold.t, cold.flags, cold.check, cold.fallback, (int)cold.value - 1);
+            break;
+        case DYNAREC_COLD_TLB:
+            // Another way of the set: DynarecTLBHost finds and touches it as the interpreter would, or the access falls
+            // back
+            jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, cold.linear);
+            jit_prepare();
+            jit_pushargr(DR_CPU);
+            jit_pushargr(cold.linear);
+            jit_pushargi((jit_word_t)cold.value);
+            jit_finishi((jit_pointer_t)&I386::DynarecTLBHost);
+            jit_retval(cold.t);
+            jit_patch_at(jit_beqi(cold.t, 0), cold.fallback);
+            LoadU32(cold.linear, DR_CPU, Offset(&m_cpu->m_dynarec_slow_linear));
+            break;
+        case DYNAREC_COLD_NO_PAGE:
+            jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, cold.linear);
+            jit_movi(cold.host, 0);
+            break;
+        case DYNAREC_COLD_SLOW_STORE:
+            jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<true> :
+                (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<false>);
+            jit_prepare();
+            jit_pushargr(DR_CPU);
+            jit_pushargr(DR_T1);
+            jit_pushargi((jit_word_t)(uintptr_t)cold.site);
+            jit_finishr(DR_T2);
+            jit_retval(DR_T0);
+            jit_patch_at(jit_beqi(DR_T0, 2), cold.fallback);
+            jit_patch_at(jit_beqi(DR_T0, 0), cold.resume);
+            EmitMaterialize((int)cold.value);
+            m_leave_used = true;
+            jit_patch_at(jit_jmpi(), m_leave);
+            return;
+        case DYNAREC_COLD_REOPEN:
+            jit_prepare();
+            jit_pushargr(DR_CPU);
+            jit_pushargi((jit_word_t)(uintptr_t)cold.site);
+            jit_finishi((jit_pointer_t)&I386::DynarecReopen);
+            jit_retval(DR_T0);
+            jit_patch_at(jit_beqi(DR_T0, 0), cold.resume);
+            EmitMaterialize((int)cold.value);
+            m_leave_used = true;
+            jit_patch_at(jit_jmpi(), m_leave);
+            return;
+        case DYNAREC_COLD_LINE:
+        {
+            intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
+            jit_movi(DR_T0, (jit_word_t)cold.value);
+            jit_stxi_i(Offset(&m_cpu->m_bus_lines[cold.value & (I386_BUS_LINES - 1)]), DR_CPU, DR_T0);
+            jit_ldxi_i(DR_T0, DR_CPU, fraction);
+            jit_addi(DR_T0, DR_T0, (jit_word_t)m_cpu->m_bus.line_fill);
+            jit_stxi_i(fraction, DR_CPU, DR_T0);
+            break;
+        }
+        default:
+        {
+            intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+            LoadU32(cold.t, DR_CPU, clock_total);
+            jit_addi(cold.t, cold.t, (jit_word_t)cold.value);
+            jit_stxi_i(clock_total, DR_CPU, cold.t);
+            break;
+        }
+    }
+
+    jit_patch_at(jit_jmpi(), cold.resume);
 }
 
 // The time of an aligned DRAM access past its fold: near-row or row-change time. row holds the access's offset in RAM on
@@ -1856,11 +1971,9 @@ void DynarecEmitter::EmitBusDram(int row, int scratch, int t2, u32 size, int acc
 
 // The access the run couldn't fold: DynarecBusAccess counts it as the interpreter does. While more of the block runs
 // before its next check, an access that leaves the slice budget short of it falls back instead
-void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, u32 size, int access, jit_node* fallback,
-    int first_base)
+void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, uintptr_t flags, const I386::DynarecCheck* check,
+    jit_node* fallback, int first_base)
 {
-    uintptr_t flags = GetBusAccessFlags(size, access);
-    const I386::DynarecCheck* check = IsValidPointer(fallback) ? m_bus_next_check : NULL;
     jit_stxi(Offset(&m_cpu->m_dynarec_spill), DR_CPU, host);
     jit_movi(t2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<true> :
         (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<false>);
@@ -1922,6 +2035,7 @@ void DynarecEmitter::EmitBlock()
     m_block_start = jit_label();
     m_leave = jit_forward();
     m_leave_used = false;
+    m_cold_count = 0;
 
     // The AGI clock of the first instruction against the one before the block, counted past its last fallback
     m_first_base = m_i486 && m_instructions[0].kind == DYNAREC_NATIVE ? I386::Get486Base(m_instructions[0].context) : -1;
@@ -1934,6 +2048,9 @@ void DynarecEmitter::EmitBlock()
         m_bus_code_row = instruction.bus_code_row;
         m_bus_next_check = instruction.next_check;
         SetBusLines(instruction.context);
+
+        if (k_dynarec_near_fallbacks || m_cold_count > k_dynarec_cold_paths - k_dynarec_cold_margin)
+            EmitColdPaths(true);
 
         if (instruction.kind == DYNAREC_NATIVE)
         {
@@ -2028,6 +2145,8 @@ void DynarecEmitter::EmitBlock()
             EmitFallback(instruction, i, last);
     }
 
+    EmitColdPaths(false);
+
     // Instructions after which the code window didn't open again leave here, with what DynarecReopen counted
     if (m_leave_used)
     {
@@ -2044,20 +2163,12 @@ void DynarecEmitter::EmitBlock()
 // if it no longer lies in it
 void DynarecEmitter::EmitReopen(Instruction& instruction, int index)
 {
-    I386::DynarecSite& site = *GetSite(instruction);
-    jit_node_t* go = jit_forward();
+    ColdPath& cold = *AddColdPath(DYNAREC_COLD_REOPEN, NULL);
+    cold.site = GetSite(instruction);
+    cold.value = (u32)(index + 1);
     jit_ldxi_i(DR_T0, DR_CPU, Offset(&m_cpu->m_code_window_size));
-    jit_patch_at(jit_bnei(DR_T0, 0), go);
-    jit_prepare();
-    jit_pushargr(DR_CPU);
-    jit_pushargi((jit_word_t)(uintptr_t)&site);
-    jit_finishi((jit_pointer_t)&I386::DynarecReopen);
-    jit_retval(DR_T0);
-    jit_patch_at(jit_beqi(DR_T0, 0), go);
-    EmitMaterialize(index + 1);
-    m_leave_used = true;
-    jit_patch_at(jit_jmpi(), m_leave);
-    jit_link(go);
+    jit_patch_at(jit_beqi(DR_T0, 0), cold.entry);
+    cold.resume = jit_label();
 }
 
 // The shadow had one step left, which this instruction took
@@ -2698,11 +2809,20 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
         jit_ldxi_uc(t3, t3, Offset(&m_cpu->m_tlb_mru[0]));
         jit_lshi(t2, t2, 2);
         jit_addr(t2, t2, t3);
-        jit_muli(t2, t2, (jit_word_t)sizeof(I386::TLBEntry));
+
+        if (sizeof(I386::TLBEntry) == 32)
+            jit_lshi(t2, t2, 5);
+        else
+            jit_muli(t2, t2, (jit_word_t)sizeof(I386::TLBEntry));
+
         jit_addr(t2, t2, DR_CPU);
         LoadU32(t3, t2, tlb + (jit_word_t)offsetof(I386::TLBEntry, linear_page));
         jit_andi(r, t1, 0xFFFFF000);
-        jit_node_t* other_way = jit_bner(t3, r);
+        ColdPath& other_way = *AddColdPath(DYNAREC_COLD_TLB, fallback);
+        other_way.linear = t1;
+        other_way.t = t3;
+        other_way.value = access == DYNAREC_READ ? 1 : access == DYNAREC_WRITE ? 2 : 3;
+        jit_patch_at(jit_bner(t3, r), other_way.entry);
 
         if (access == DYNAREC_READ_WRITE)
         {
@@ -2714,31 +2834,17 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
             jit_ldxi(t3, t2, tlb + (jit_word_t)(access == DYNAREC_READ ? offsetof(I386::TLBEntry, read_page) :
                 offsetof(I386::TLBEntry, write_page)));
 
-        // Another way of the set: DynarecTLBHost finds and touches it as the interpreter would, or the access falls back
-        jit_node_t* found = jit_jmpi();
-        jit_patch(other_way);
-        jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, t1);
-        jit_prepare();
-        jit_pushargr(DR_CPU);
-        jit_pushargr(t1);
-        jit_pushargi((jit_word_t)(access == DYNAREC_READ ? 1 : access == DYNAREC_WRITE ? 2 : 3));
-        jit_finishi((jit_pointer_t)&I386::DynarecTLBHost);
-        jit_retval(t3);
-        jit_patch_at(jit_beqi(t3, 0), fallback);
-        LoadU32(t1, DR_CPU, Offset(&m_cpu->m_dynarec_slow_linear));
-        jit_patch(found);
+        other_way.resume = jit_label();
     }
 
     bool slow = m_slow_store && access == DYNAREC_WRITE;
-    jit_node_t* join = NULL;
+    ColdPath* no_page = slow ? AddColdPath(DYNAREC_COLD_NO_PAGE, NULL) : NULL;
 
-    if (slow)
+    if (IsValidPointer(no_page))
     {
-        jit_node_t* host = jit_bnei(t3, 0);
-        jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, t1);
-        jit_movi(r, 0);
-        join = jit_jmpi();
-        jit_patch(host);
+        no_page->linear = t1;
+        no_page->host = r;
+        jit_patch_at(jit_beqi(t3, 0), no_page->entry);
     }
     else
         jit_patch_at(jit_beqi(t3, 0), fallback);
@@ -2746,8 +2852,8 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     jit_andi(r, t1, 0xFFF);
     jit_addr(r, r, t3);
 
-    if (IsValidPointer(join))
-        jit_patch(join);
+    if (IsValidPointer(no_page))
+        no_page->resume = jit_label();
 
     int first_base = bus && m_i486 ? m_first_base : -1;
     m_slow_first_base = first_base;
@@ -2774,14 +2880,12 @@ void DynarecEmitter::Emit486Misaligned(int linear, int t, u32 size, int access)
     if (size <= 1)
         return;
 
-    intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
-
+    ColdPath& cold = *AddColdPath(DYNAREC_COLD_MISALIGNED, NULL);
+    cold.t = t;
+    cold.value = access == DYNAREC_READ_WRITE ? 6 : 3;
     jit_andi(t, linear, (jit_word_t)(size - 1));
-    jit_node_t* aligned = jit_beqi(t, 0);
-    LoadU32(t, DR_CPU, clock_total);
-    jit_addi(t, t, access == DYNAREC_READ_WRITE ? 6 : 3);
-    jit_stxi_i(clock_total, DR_CPU, t);
-    jit_patch(aligned);
+    jit_patch_at(jit_bnei(t, 0), cold.entry);
+    cold.resume = jit_label();
 }
 
 // Once, for the block's first instruction, whose base the instruction before the block may have written
@@ -2823,20 +2927,14 @@ void DynarecEmitter::SetBusLines(const I386::InstructionContext& c)
 // As AddBusCodeLines, once the instruction can't fall back: where it goes on, or before the bus run of its exits
 void DynarecEmitter::EmitBusLines()
 {
-    intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
-
     for (u32 i = 0; i < m_bus_line_count; i++)
     {
         u32 line = m_bus_line_first + i;
-        intptr_t tag = Offset(&m_cpu->m_bus_lines[line & (I386_BUS_LINES - 1)]);
-        LoadU32(DR_T0, DR_CPU, tag);
-        jit_node_t* hit = jit_beqi(DR_T0, (jit_word_t)line);
-        jit_movi(DR_T0, (jit_word_t)line);
-        jit_stxi_i(tag, DR_CPU, DR_T0);
-        jit_ldxi_i(DR_T0, DR_CPU, fraction);
-        jit_addi(DR_T0, DR_T0, (jit_word_t)m_cpu->m_bus.line_fill);
-        jit_stxi_i(fraction, DR_CPU, DR_T0);
-        jit_patch(hit);
+        ColdPath& miss = *AddColdPath(DYNAREC_COLD_LINE, NULL);
+        miss.value = line;
+        LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_bus_lines[line & (I386_BUS_LINES - 1)]));
+        jit_patch_at(jit_bnei(DR_T0, (jit_word_t)line), miss.entry);
+        miss.resume = jit_label();
     }
 }
 
@@ -3532,25 +3630,12 @@ void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
     site.access = (u32)(GetBusAccessFlags((u32)width / 8, DYNAREC_WRITE) | (m_timed ? 0x80 : 0));
     site.first_base = (u32)(m_slow_first_base + 1);
 
-    jit_node_t* done = jit_forward();
-    jit_node_t* slow = jit_beqi(DR_T0, 0);
+    ColdPath& cold = *AddColdPath(DYNAREC_COLD_SLOW_STORE, instruction.fallback);
+    cold.site = &site;
+    cold.value = (u32)(m_slow_index + 1);
+    jit_patch_at(jit_beqi(DR_T0, 0), cold.entry);
     StoreHost(DR_T0, DR_T1, width, DR_T2);
-    jit_patch_at(jit_jmpi(), done);
-    jit_patch(slow);
-    jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<true> :
-        (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<false>);
-    jit_prepare();
-    jit_pushargr(DR_CPU);
-    jit_pushargr(DR_T1);
-    jit_pushargi((jit_word_t)(uintptr_t)&site);
-    jit_finishr(DR_T2);
-    jit_retval(DR_T0);
-    jit_patch_at(jit_beqi(DR_T0, 2), instruction.fallback);
-    jit_patch_at(jit_beqi(DR_T0, 0), done);
-    EmitMaterialize(m_slow_index + 1);
-    m_leave_used = true;
-    jit_patch_at(jit_jmpi(), m_leave);
-    jit_link(done);
+    cold.resume = jit_label();
 }
 
 // LEAVE: the frame's saved EBP read at EBP, ESP past it

@@ -102,6 +102,7 @@ private:
         bool memory;
         bool ends_block;
         bool shadow;
+        bool stop;
         u8 live_operands;
         u8 immediate_size;
         u8 displacement_size;
@@ -152,6 +153,7 @@ private:
     u16 GetConditionFlags(int condition) const;
     bool GetTargetComponents(u32 target, u32& components);
     s32 SignExtend(u32 value, int width) const;
+    void ChooseStops();
     void ComputeLiveness();
     bool IsDeferrable(const Instruction& instruction) const;
     void AssignFlagSlots();

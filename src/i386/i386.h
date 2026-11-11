@@ -818,6 +818,9 @@ private:
         u32 call_eip;
         u32 call_next_eip;
         u32 link[2];
+        u32 stop_first;
+        u8 stop_count;
+        u8 stops[7];
         const u8* code;
     };
 
@@ -924,6 +927,8 @@ private:
     s64 GetDynarecFit(const DynarecCheck& check) const;
     template<int timing>
     bool FitsDynarecBlock(const DynarecBlock& block, u64 used, u32 budget) const;
+    template<int timing>
+    bool FitsDynarecCheck(const DynarecCheck& check, u64 used, u32 budget) const;
     static uintptr_t DynarecFits(I386* cpu, uintptr_t block);
     template<bool i486>
     static uintptr_t DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
@@ -1591,6 +1596,7 @@ private:
     bool m_dynarec_interrupt_pending;
     u32 m_dynarec_clocks;
     u32 m_dynarec_remaining;
+    u8 m_dynarec_stop;
     u32 m_dynarec_wait;
     u32 m_dynarec_start;
     uintptr_t m_dynarec_spill;

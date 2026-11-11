@@ -220,6 +220,7 @@ I386::I386()
     m_dynarec_interrupt_pending = false;
     m_dynarec_clocks = 0;
     m_dynarec_remaining = 0;
+    m_dynarec_stop = 0xFF;
     m_dynarec_wait = 0;
     m_dynarec_start = 0;
     m_dynarec_spill = 0;

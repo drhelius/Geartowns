@@ -3700,8 +3700,8 @@ void DynarecEmitter::EmitShiftCount(Instruction& instruction, int width)
         StoreRegister(c.rm, width, DR_T1);
 }
 
-// The 486's defined x87 forms with no operand or one of 2 or 4 bytes, except those that load the control word or an
-// environment, which can unmask exceptions. Their clocks vary at run time, so not where they move the prefetch queue
+// The 486's defined x87 forms with no operand or one of 2, 4 or 8 bytes: not the environments and saves, which can
+// unmask exceptions. Their clocks vary at run time, so not where they move the prefetch queue
 bool DynarecEmitter::IsEscapeNative(const I386::InstructionContext& c) const
 {
     if (!m_i486 || !IsValidPointer(m_cpu->m_x87) || m_cpu->m_x87->GetFlavor() != X87_FLAVOR_80486 ||
@@ -3714,7 +3714,7 @@ bool DynarecEmitter::IsEscapeNative(const I386::InstructionContext& c) const
     bool write = false;
     u32 size = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
 
-    return (size == 2 || size == 4) && !(c.opcode == 0xD9 && c.reg == 5);
+    return size == 2 || size == 4 || size == 8;
 }
 
 // The interpreter for CR0.EM or TS, an unmasked exception or a pending error, then the operand through the native
@@ -3737,13 +3737,38 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
         return;
     }
 
+    if (c.memory_operand && c.opcode == 0xD9 && c.reg == 5)
+    {
+        EmitLoadControlWord(instruction);
+        return;
+    }
+
     if (c.memory_operand)
     {
         size = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
+        int access = write ? DYNAREC_WRITE : DYNAREC_READ;
         u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
         StoreTemp(0, DR_T0);
-        EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, write ? DYNAREC_WRITE : DYNAREC_READ,
-            instruction.fallback);
+
+        if (size <= 4)
+            EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, access, instruction.fallback);
+        else
+        {
+            // Two 4-byte accesses, as TransferCoprocessorOperand moves the operand on the 486
+            EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, access, instruction.fallback, false);
+            EmitBusCheck(DR_T0, DR_T1, DR_T2, 4, instruction.fallback);
+            StoreTemp(1, DR_T0);
+            StoreTemp(2, DR_T1);
+            Emit486FirstAGI(DR_T2);
+            EmitBusPiece(DR_T0, DR_T1, DR_T2, 4, access);
+            LoadTemp(DR_T0, 1);
+            LoadTemp(DR_T1, 2);
+            jit_addi(DR_T0, DR_T0, 4);
+            jit_addi(DR_T1, DR_T1, 4);
+            EmitBusPiece(DR_T0, DR_T1, DR_T2, 4, access);
+            LoadTemp(DR_T0, 1);
+        }
+
         size |= (u32)segment << 8;
     }
     else
@@ -3781,6 +3806,36 @@ bool DynarecEmitter::IsX87Move(const I386::InstructionContext& c) const
         return modrm >= 0xD0 && modrm < 0xE0;
 
     return c.opcode == 0xDF && modrm == 0xE0;
+}
+
+// FLDCW as X87::ExecuteMemory loads it, where the new mask leaves no exception flag unmasked: one that would becomes an
+// error pending, which the interpreter signals
+void DynarecEmitter::EmitLoadControlWord(Instruction& instruction)
+{
+    intptr_t state = (intptr_t)((const u8*)m_cpu->m_x87->GetState() - (const u8*)m_cpu->m_x87);
+    intptr_t control = state + (intptr_t)offsetof(X87::X87_State, control);
+    intptr_t status = state + (intptr_t)offsetof(X87::X87_State, status);
+
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
+    EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, 2, DYNAREC_READ, instruction.fallback, false);
+    EmitBusCheck(DR_T0, DR_T1, DR_T2, 2, instruction.fallback);
+    LoadHost(DR_T3, DR_T0, 16);
+    jit_ldxi(DR_T4, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_ldxi_us(DR_T2, DR_T4, status);
+    jit_andi(DR_T2, DR_T2, 0x3F);
+    jit_orr(DR_T2, DR_T2, DR_T3);
+    jit_xorr(DR_T2, DR_T2, DR_T3);
+    jit_andi(DR_T2, DR_T2, 0x3F);
+    jit_patch_at(jit_bnei(DR_T2, 0), instruction.fallback);
+
+    Emit486FirstAGI(DR_T2);
+    EmitBusPiece(DR_T0, DR_T1, DR_T2, 2, DYNAREC_READ);
+    jit_andi(DR_T3, DR_T3, (jit_word_t)(u16)~0xE0C0);
+    jit_ori(DR_T3, DR_T3, 0x0040);
+    jit_stxi_s(control, DR_T4, DR_T3);
+    jit_ldxi_us(DR_T2, DR_T4, status);
+    jit_andi(DR_T2, DR_T2, (jit_word_t)(u16)~0x8080);
+    jit_stxi_s(status, DR_T4, DR_T2);
 }
 
 // Every x87 exception masked and none pending, so no native raises one, calls the error callback or skips a store. T0

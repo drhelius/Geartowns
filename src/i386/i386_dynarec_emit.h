@@ -244,6 +244,7 @@ private:
     bool IsEscapeNative(const I386::InstructionContext& c) const;
     void EmitEscape(Instruction& instruction);
     void EmitX87Ready(jit_node* fallback);
+    void EmitLoadControlWord(Instruction& instruction);
     bool IsX87Move(const I386::InstructionContext& c) const;
     void EmitX87Move(Instruction& instruction);
     void EmitX87Tag(int tag, int physical, bool empty, jit_node* fallback);

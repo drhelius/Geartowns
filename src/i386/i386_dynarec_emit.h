@@ -243,6 +243,11 @@ private:
     void EmitShiftCount(Instruction& instruction, int width);
     bool IsEscapeNative(const I386::InstructionContext& c) const;
     void EmitEscape(Instruction& instruction);
+    bool IsX87Move(const I386::InstructionContext& c) const;
+    void EmitX87Move(Instruction& instruction);
+    void EmitX87Tag(int tag, int physical, bool empty, jit_node* fallback);
+    void SetX87Tag(int tag, int physical, bool empty);
+    void EmitX87Address(int r, int base, int physical);
     void LoadShiftCount(int r, const Instruction& instruction);
     void EmitMultiply(Instruction& instruction, int width, u32 form, u32 multiplier);
     void EmitDivide(Instruction& instruction, int width);

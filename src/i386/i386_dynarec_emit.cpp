@@ -38,6 +38,17 @@ extern "C"
 #define DR_T3 JIT_V1
 #define DR_T4 JIT_V2
 
+// Two more callee-saved registers for the x87 moves, which 64-bit hosts compile inline
+#if __WORDSIZE == 64
+static const bool k_dynarec_x87_moves = JIT_V_NUM >= 5;
+#define DR_X0 JIT_V(3)
+#define DR_X1 JIT_V(4)
+#else
+static const bool k_dynarec_x87_moves = false;
+#define DR_X0 DR_T3
+#define DR_X1 DR_T4
+#endif
+
 static const int k_dynarec_max_instructions = 64;
 static const u32 k_dynarec_max_bytes = 256;
 static const u32 k_dynarec_max_clocks = 0xF000;
@@ -3717,6 +3728,13 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
     LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_state.cr0));
     jit_andi(DR_T0, DR_T0, 0x0C);
     jit_patch_at(jit_bnei(DR_T0, 0), instruction.fallback);
+
+    if (IsX87Move(c))
+    {
+        EmitX87Move(instruction);
+        return;
+    }
+
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_finishi((jit_pointer_t)&I386::DynarecEscapeReady);
@@ -3748,6 +3766,236 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
     jit_pushargi((jit_word_t)c.start_eip);
     jit_pushargi((jit_word_t)fewest);
     jit_finishi((jit_pointer_t)&I386::DynarecEscape);
+}
+
+// FLD ST(i), FXCH, FST and FSTP ST(i), FCHS, FABS, FLD1, FLDZ and FNSTSW AX: no arithmetic, so compiled on the x87's
+// state as X87::Execute runs them
+bool DynarecEmitter::IsX87Move(const I386::InstructionContext& c) const
+{
+    u8 modrm = c.modrm;
+
+    if (!k_dynarec_x87_moves || c.memory_operand)
+        return false;
+
+    if (c.opcode == 0xD9)
+        return modrm < 0xD0 || modrm == 0xE0 || modrm == 0xE1 || modrm == 0xE8 || modrm == 0xEE;
+
+    if (c.opcode == 0xDD)
+        return modrm >= 0xD0 && modrm < 0xE0;
+
+    return c.opcode == 0xDF && modrm == 0xE0;
+}
+
+// T0 holds the x87's state, T1 its status word, T2 TOP and T3 the tag word. A stack fault, an unmasked exception or one
+// pending goes to the interpreter
+void DynarecEmitter::EmitX87Move(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    u8 modrm = c.modrm;
+    int i = modrm & 7;
+    intptr_t state = (intptr_t)((const u8*)m_cpu->m_x87->GetState() - (const u8*)m_cpu->m_x87);
+    intptr_t status = state + (intptr_t)offsetof(X87::X87_State, status);
+    intptr_t tag = state + (intptr_t)offsetof(X87::X87_State, tag);
+    jit_node* fallback = instruction.fallback;
+
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_ldxi_us(DR_T1, DR_T0, state + (intptr_t)offsetof(X87::X87_State, control));
+    jit_andi(DR_T1, DR_T1, 0x3F);
+    jit_patch_at(jit_bnei(DR_T1, 0x3F), fallback);
+    jit_ldxi_us(DR_T1, DR_T0, status);
+    jit_andi(DR_T2, DR_T1, 0x0080);
+    jit_patch_at(jit_bnei(DR_T2, 0), fallback);
+
+    // FNSTSW AX, a control form: no pointers, no C1
+    if (c.opcode == 0xDF)
+    {
+        StoreRegister(I386_REG_EAX, 16, DR_T1);
+        return;
+    }
+
+    jit_rshi_u(DR_T2, DR_T1, 11);
+    jit_andi(DR_T2, DR_T2, 7);
+    jit_ldxi_us(DR_T3, DR_T0, tag);
+
+    bool push = c.opcode == 0xD9 && (modrm < 0xC8 || modrm == 0xE8 || modrm == 0xEE);
+    bool pop = c.opcode == 0xDD && modrm >= 0xD8;
+
+    // The registers it reads must hold a value, and a push needs ST(7) empty
+    if (!(c.opcode == 0xD9 && (modrm == 0xE8 || modrm == 0xEE)))
+    {
+        int read = c.opcode == 0xD9 && modrm < 0xD0 ? i : 0;
+        jit_addi(DR_T4, DR_T2, read);
+        jit_andi(DR_T4, DR_T4, 7);
+        EmitX87Tag(DR_T3, DR_T4, false, fallback);
+
+        if (c.opcode == 0xD9 && modrm >= 0xC8 && modrm < 0xD0)
+            EmitX87Tag(DR_T3, DR_T2, false, fallback);
+    }
+
+    if (push)
+    {
+        jit_addi(DR_T4, DR_T2, 7);
+        jit_andi(DR_T4, DR_T4, 7);
+        EmitX87Tag(DR_T3, DR_T4, true, fallback);
+    }
+
+    // Nothing falls back from here. C1 clears, TOP moves on a push or a pop
+    jit_andi(DR_T1, DR_T1, push || pop ? ~0x3A00 : ~0x0200);
+
+    if (c.opcode == 0xD9 && modrm < 0xC8)
+    {
+        // FLD ST(i): ST(i) by the old TOP into the new ST(0)
+        jit_addi(DR_T4, DR_T2, i);
+        jit_andi(DR_T4, DR_T4, 7);
+        jit_addi(DR_T2, DR_T2, 7);
+        jit_andi(DR_T2, DR_T2, 7);
+        SetX87Tag(DR_T3, DR_T2, false);
+        EmitX87Address(DR_X0, DR_T0, DR_T4);
+        EmitX87Address(DR_X1, DR_T0, DR_T2);
+    }
+    else if (c.opcode == 0xD9 && modrm < 0xD0)
+    {
+        // FXCH
+        jit_addi(DR_T4, DR_T2, i);
+        jit_andi(DR_T4, DR_T4, 7);
+        SetX87Tag(DR_T3, DR_T2, false);
+        SetX87Tag(DR_T3, DR_T4, false);
+        EmitX87Address(DR_X0, DR_T0, DR_T2);
+        EmitX87Address(DR_X1, DR_T0, DR_T4);
+    }
+    else if (c.opcode == 0xDD)
+    {
+        // FST and FSTP ST(i): ST(0) into ST(i), then the pop empties ST(0)
+        jit_addi(DR_T4, DR_T2, i);
+        jit_andi(DR_T4, DR_T4, 7);
+        SetX87Tag(DR_T3, DR_T4, false);
+
+        if (pop)
+            SetX87Tag(DR_T3, DR_T2, true);
+
+        EmitX87Address(DR_X0, DR_T0, DR_T2);
+        EmitX87Address(DR_X1, DR_T0, DR_T4);
+
+        if (pop)
+        {
+            jit_addi(DR_T2, DR_T2, 1);
+            jit_andi(DR_T2, DR_T2, 7);
+        }
+    }
+    else if (modrm == 0xE0 || modrm == 0xE1)
+    {
+        // FCHS and FABS
+        SetX87Tag(DR_T3, DR_T2, false);
+        EmitX87Address(DR_X0, DR_T0, DR_T2);
+    }
+    else
+    {
+        // FLD1 and FLDZ
+        jit_addi(DR_T2, DR_T2, 7);
+        jit_andi(DR_T2, DR_T2, 7);
+        SetX87Tag(DR_T3, DR_T2, false);
+        EmitX87Address(DR_X1, DR_T0, DR_T2);
+    }
+
+    if (push || pop)
+    {
+        jit_lshi(DR_T4, DR_T2, 11);
+        jit_orr(DR_T1, DR_T1, DR_T4);
+    }
+
+    jit_stxi_s(status, DR_T0, DR_T1);
+    jit_stxi_s(tag, DR_T0, DR_T3);
+
+    intptr_t significand = (intptr_t)offsetof(X87::X87_Register, significand);
+    intptr_t exponent = (intptr_t)offsetof(X87::X87_Register, sign_exponent);
+
+    if (c.opcode == 0xD9 && modrm >= 0xC8 && modrm < 0xD0)
+    {
+        jit_ldxi_l(DR_T1, DR_X0, significand);
+        jit_ldxi_l(DR_T2, DR_X1, significand);
+        jit_stxi_l(significand, DR_X0, DR_T2);
+        jit_stxi_l(significand, DR_X1, DR_T1);
+        jit_ldxi_us(DR_T1, DR_X0, exponent);
+        jit_ldxi_us(DR_T2, DR_X1, exponent);
+        jit_stxi_s(exponent, DR_X0, DR_T2);
+        jit_stxi_s(exponent, DR_X1, DR_T1);
+    }
+    else if (c.opcode == 0xDD || (c.opcode == 0xD9 && modrm < 0xC8))
+    {
+        jit_ldxi_l(DR_T1, DR_X0, significand);
+        jit_stxi_l(significand, DR_X1, DR_T1);
+        jit_ldxi_us(DR_T1, DR_X0, exponent);
+        jit_stxi_s(exponent, DR_X1, DR_T1);
+    }
+    else if (modrm == 0xE0 || modrm == 0xE1)
+    {
+        jit_ldxi_us(DR_T1, DR_X0, exponent);
+
+        if (modrm == 0xE0)
+            jit_xori(DR_T1, DR_T1, 0x8000);
+        else
+            jit_andi(DR_T1, DR_T1, 0x7FFF);
+
+        jit_stxi_s(exponent, DR_X0, DR_T1);
+    }
+    else
+    {
+        jit_movi(DR_T1, modrm == 0xE8 ? (jit_word_t)0x8000000000000000ULL : 0);
+        jit_stxi_l(significand, DR_X1, DR_T1);
+        jit_movi(DR_T1, modrm == 0xE8 ? 0x3FFF : 0);
+        jit_stxi_s(exponent, DR_X1, DR_T1);
+    }
+
+    // X87::UpdatePointers
+    jit_movi(DR_T1, (jit_word_t)(((c.opcode & 7) << 8) | modrm));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, opcode), DR_T0, DR_T1);
+    jit_ldxi_us(DR_T1, DR_CPU, Offset(&m_cpu->m_state.segments[I386_SEGMENT_CS].selector));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, instruction_selector), DR_T0, DR_T1);
+    jit_movi(DR_T1, (jit_word_t)c.start_eip);
+    jit_stxi_i(state + (intptr_t)offsetof(X87::X87_State, instruction_offset), DR_T0, DR_T1);
+}
+
+// Branches to fallback unless the physical register's tag is, or isn't, empty. Clobbers X0 and X1
+void DynarecEmitter::EmitX87Tag(int tag, int physical, bool empty, jit_node* fallback)
+{
+    jit_lshi(DR_X0, physical, 1);
+    jit_movi(DR_X1, 3);
+    jit_lshr(DR_X1, DR_X1, DR_X0);
+    jit_andr(DR_X0, tag, DR_X1);
+
+    if (empty)
+        jit_patch_at(jit_bner(DR_X0, DR_X1), fallback);
+    else
+        jit_patch_at(jit_beqr(DR_X0, DR_X1), fallback);
+}
+
+// The physical register's tag as X87::Write leaves it, or empty as X87::Pop does. Clobbers X0 and X1
+void DynarecEmitter::SetX87Tag(int tag, int physical, bool empty)
+{
+    jit_lshi(DR_X0, physical, 1);
+    jit_movi(DR_X1, 3);
+    jit_lshr(DR_X1, DR_X1, DR_X0);
+
+    if (empty)
+        jit_orr(tag, tag, DR_X1);
+    else
+    {
+        jit_comr(DR_X1, DR_X1);
+        jit_andr(tag, tag, DR_X1);
+    }
+}
+
+void DynarecEmitter::EmitX87Address(int r, int base, int physical)
+{
+    intptr_t registers = (intptr_t)((const u8*)&m_cpu->m_x87->GetState()->registers[0] - (const u8*)m_cpu->m_x87);
+
+    if (sizeof(X87::X87_Register) == 16)
+        jit_lshi(r, physical, 4);
+    else
+        jit_muli(r, physical, (jit_word_t)sizeof(X87::X87_Register));
+
+    jit_addr(r, r, base);
+    jit_addi(r, r, registers);
 }
 
 // CL for D2 and D3, the live immediate for C0 and C1, masked to 5 bits

@@ -2142,6 +2142,10 @@ void DynarecEmitter::EmitBlock()
             EmitNative(instruction, i);
             m_slow_ok = false;
 
+            // Before the reopen, which can leave the block. A fallback counts it in the interpreter and goes on after
+            if (shadow && !instruction.ends_block)
+                EmitShadowEnd();
+
             if (instruction.memory && !instruction.ends_block && (m_key & k_dynarec_key_paging) != 0)
                 EmitReopen(instruction, i);
             m_exit_written = -1;
@@ -2161,9 +2165,6 @@ void DynarecEmitter::EmitBlock()
 
             if (instruction.memory)
                 jit_link(instruction.resume);
-
-            if (shadow && !instruction.ends_block)
-                EmitShadowEnd();
 
             if (instruction.stop)
             {

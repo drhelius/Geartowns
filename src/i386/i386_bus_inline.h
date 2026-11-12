@@ -149,7 +149,9 @@ INLINE u32 I386::AddBusAccess(u32 linear, u32 size, int write, u32 code_row)
     if (i486 && write == 0)
         penalty += (s32)m_bus.read486[bus_class];
 
+#if !defined(GT_DISABLE_BUS_COUNTERS)
     m_bus_cycle_counts[bus_class][write] += cycles;
+#endif
     m_bus_fraction += penalty + (s32)m_bus.access_wait[bus_class][write][cycles];
     return (aligned << 8) | 1;
 }

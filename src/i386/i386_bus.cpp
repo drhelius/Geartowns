@@ -605,7 +605,9 @@ u32 I386::AddBusStringAccess(u32 linear, u32 size, int write, bool load)
         m_bus_row = row;
     }
 
+#if !defined(GT_DISABLE_BUS_COUNTERS)
     m_bus_cycle_counts[bus_class][write] += cycles * m_bus.busy[bus_class];
+#endif
     m_bus_fraction += penalty + (s32)m_bus.access_wait[bus_class][write][cycles];
     return aligned * m_bus.busy[bus_class];
 }
@@ -764,10 +766,12 @@ u32 I386::AddBusRepeat(const BusRepeat& repeat, u32 elements, u32 size, bool mov
     m_bus_row = row;
     m_bus_queue = k_i386_bus_queue;
     m_bus_fraction = (s32)(total & 0xFFFF);
+#if !defined(GT_DISABLE_BUS_COUNTERS)
     m_bus_cycle_counts[repeat.destination_class][1] += elements * GetBusCycles(size) * m_bus.busy[repeat.destination_class];
 
     if (move)
         m_bus_cycle_counts[repeat.source_class][0] += elements * GetBusCycles(size) * m_bus.busy[repeat.source_class];
+#endif
 
     return (u32)(total >> 16);
 }
@@ -800,9 +804,11 @@ uintptr_t I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, 
     bool write = (access & 0x08) != 0;
     s32 fraction = cpu->m_bus_fraction;
     u32 row = cpu->m_bus_row;
+#if !defined(GT_DISABLE_BUS_COUNTERS)
     u32 physical = 0;
     u8 bus_class = check != 0 ? cpu->GetBusPhysical((u32)linear, physical) : (u8)GT_BUS_NONE;
     u32 counts[2] = { cpu->m_bus_cycle_counts[bus_class][0], cpu->m_bus_cycle_counts[bus_class][1] };
+#endif
 
     cpu->m_bus_fraction -= (s32)cpu->GetBusDramFold(size, both || !write, both || write, code_row, i486);
 
@@ -827,8 +833,10 @@ uintptr_t I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, 
 
     cpu->m_bus_fraction = fraction;
     cpu->m_bus_row = row;
+#if !defined(GT_DISABLE_BUS_COUNTERS)
     cpu->m_bus_cycle_counts[bus_class][0] = counts[0];
     cpu->m_bus_cycle_counts[bus_class][1] = counts[1];
+#endif
 
     if (i486)
     {

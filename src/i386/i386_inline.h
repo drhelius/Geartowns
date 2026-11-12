@@ -60,6 +60,11 @@ INLINE u32 I386::GetStartCycles() const
     return m_io_start_cycles;
 }
 
+INLINE const u32* I386::GetStartCyclesPointer() const
+{
+    return &m_io_start_cycles;
+}
+
 INLINE u32 I386::GetRegister(int index, int width) const
 {
     if (width == 8)

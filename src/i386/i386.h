@@ -473,6 +473,7 @@ public:
     I386_Run_Result GetStepInfo() const;
     I386_Run_Result RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, bool nmi_pending, bool intr_pending);
     u32 GetStartCycles() const;
+    const u32* GetStartCyclesPointer() const;
 
     bool Halted() const;
     bool Shutdown() const;

@@ -242,14 +242,6 @@ uintptr_t I386::DynarecReopen(I386* cpu, uintptr_t site)
     const DynarecSite& leave = *(const DynarecSite*)site;
     const DynarecBlock& block = cpu->m_dynarec_blocks[cpu->m_dynarec_current];
     cpu->m_state.eip = leave.eip;
-
-    // A run stopped short of the slice's end may not reach the next instruction, whose fetch touches the TLB
-    if (cpu->m_dynarec_stop != 0xFF)
-    {
-        cpu->LeaveDynarecSite(leave);
-        return 1;
-    }
-
     cpu->OpenCodeWindow(leave.eip, IsValidPointer(leave.check));
     u32 watch_offset = block.watch_eip - cpu->m_code_window_eip;
 

@@ -48,8 +48,8 @@ static const u32 k_dynarec_max_sites = 64;
 static const u32 k_dynarec_lives = GT_DYNAREC_MAX_BLOCKS * 2;
 // An immediate and a displacement per instruction of the longest block
 static const u32 k_dynarec_max_lives = 128;
-static const u32 k_dynarec_checks = GT_DYNAREC_MAX_BLOCKS * 8;
-static const u32 k_dynarec_max_checks = 72;
+static const u32 k_dynarec_checks = GT_DYNAREC_MAX_BLOCKS * 4;
+static const u32 k_dynarec_max_checks = 64;
 static const u32 k_dynarec_default_threshold = 8;
 static const u32 k_dynarec_default_block_limit = 64;
 
@@ -241,15 +241,6 @@ INLINE bool I386::FitsDynarecBlock(const DynarecBlock& block, u64 used, u32 budg
     return used + block.fit_clocks + GetBusPending() < budget || (s64)used + GetDynarecFit(*block.fit) < (s64)budget;
 }
 
-template<int timing>
-INLINE bool I386::FitsDynarecCheck(const DynarecCheck& check, u64 used, u32 budget) const
-{
-    if ((timing & I386_TIMING_BUS) == 0)
-        return used + check.clocks < budget;
-
-    return used + check.clocks + GetBusPending() < budget || (s64)used + GetDynarecFit(check) < (s64)budget;
-}
-
 // RunFor with translated blocks: the interpreter steps whatever no block covers, with the same loop condition,
 // step epilogue and interrupt checks, so the slice ends at the same instruction as in RunFor
 template<int timing>
@@ -296,22 +287,8 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
             if (link != k_dynarec_none && IsValidPointer(block) && m_code_window_eip == m_dynarec_link_window)
                 LinkDynarecBlock(link, m_dynarec_link_slot, (u32)(block - m_dynarec_blocks));
 
-            u64 used = clocks + context.wait_cycles;
-            bool fits = IsValidPointer(block) && FitsDynarecBlock<timing>(*block, used, cycle_budget);
-            m_dynarec_stop = 0xFF;
-
-            // Short of the slice's end, the block runs to its last stop the interpreter would get past
-            for (int s = IsValidPointer(block) && !fits ? block->stop_count - 1 : -1; s >= 0; s--)
-            {
-                if (FitsDynarecCheck<timing>(m_dynarec_checks[block->stop_first + s], used, cycle_budget))
-                {
-                    m_dynarec_stop = block->stops[s];
-                    fits = true;
-                    break;
-                }
-            }
-
-            if (fits && (likely(m_state.interrupt_shadow_steps == 0) || EnterDynarecShadow(*block)))
+            if (IsValidPointer(block) && FitsDynarecBlock<timing>(*block, clocks + context.wait_cycles, cycle_budget) &&
+                (likely(m_state.interrupt_shadow_steps == 0) || EnterDynarecShadow(*block)))
             {
                 m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_cycles);
                 m_dynarec_wait = context.wait_cycles;
@@ -1026,10 +1003,6 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
     // covers that instruction, so it runs next, in the block or in the dispatcher
     if (unlikely(cpu->m_code_window_size == 0))
     {
-        // A run stopped short of the slice's end may not reach the next instruction, whose fetch touches the TLB
-        if (cpu->m_dynarec_stop != 0xFF)
-            return 1;
-
         const DynarecBlock& block = cpu->m_dynarec_blocks[cpu->m_dynarec_current];
         cpu->OpenCodeWindow(cpu->m_state.eip, IsValidPointer(next));
         u32 watch_offset = block.watch_eip - cpu->m_code_window_eip;

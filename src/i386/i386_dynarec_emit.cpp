@@ -93,8 +93,7 @@ enum Dynarec_Cold
     DYNAREC_COLD_SLOW_STORE,
     DYNAREC_COLD_REOPEN,
     DYNAREC_COLD_LINE,
-    DYNAREC_COLD_MISALIGNED,
-    DYNAREC_COLD_STOP
+    DYNAREC_COLD_MISALIGNED
 };
 
 enum Dynarec_Access
@@ -156,7 +155,6 @@ bool DynarecEmitter::Compile(I386::DynarecBlock& block, u32 available, u32 instr
     if (!Decode(available, instruction_limit))
         return false;
 
-    ChooseStops();
     ComputeLiveness();
     ComputeBus();
 
@@ -481,33 +479,6 @@ void DynarecEmitter::EmitImmediate(int r, const Instruction& instruction, u32 va
     }
 }
 
-// About every eighth native before the first helper can end a run short of the slice's end: a helper's clocks are only
-// known when it runs, and it checks the run after it itself. A stop leaves with every flag, as other exits do
-void DynarecEmitter::ChooseStops()
-{
-    int last = m_count - 1;
-    int helper = 0;
-    int stops = 0;
-    int next = 7;
-    for (int i = 0; i < m_count; i++)
-        m_instructions[i].stop = false;
-
-    while (helper < last && m_instructions[helper].kind == DYNAREC_NATIVE)
-        helper++;
-
-    for (int i = next; i < helper && stops < 7; i++)
-    {
-        Instruction& instruction = m_instructions[i];
-
-        if (i < next || instruction.ends_block || instruction.shadow)
-            continue;
-
-        instruction.stop = true;
-        stops++;
-        next = i + 8;
-    }
-}
-
 // Flags written by an instruction and overwritten before anything can read them are not computed
 // Exits, helpers and instructions that can run in the interpreter see every flag
 // The flags each native computes. Hot liveness leaves out the fallbacks: a native that can't fall back keeps for them only
@@ -521,10 +492,6 @@ void DynarecEmitter::ComputeLiveness()
     {
         Instruction& instruction = m_instructions[i];
         bool defer = IsDeferrable(instruction);
-
-        if (instruction.stop)
-            live_all = k_flags_all;
-
         instruction.live_all = live_all;
         instruction.live = defer ? live_hot : live_all;
         instruction.deferred = defer ? (u16)(live_all & instruction.defs & ~live_hot) : 0;
@@ -1918,17 +1885,6 @@ void DynarecEmitter::EmitColdPath(const ColdPath& cold)
             m_leave_used = true;
             jit_patch_at(jit_jmpi(), m_leave);
             return;
-        case DYNAREC_COLD_STOP:
-        {
-            // The block leaves where the dispatcher stopped it, as after a fallback that goes on
-            const Instruction& stop = m_instructions[cold.value];
-            EmitMaterialize((int)cold.value + 1);
-            StoreEIP(stop.context.next_eip);
-            m_exit_written = m_i486 ? stop.written : -1;
-            Exit((int)cold.value + 1, stop.before + stop.clocks, 0, m_timed ? &stop.bus_after : NULL);
-            m_exit_written = -1;
-            return;
-        }
         case DYNAREC_COLD_LINE:
         {
             intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
@@ -2081,17 +2037,6 @@ void DynarecEmitter::EmitBlock()
 
     m_block->fit = next;
     m_block->fit_clocks = next->clocks;
-    m_block->stop_first = m_cpu->m_dynarec_checks_used;
-    m_block->stop_count = 0;
-
-    for (int i = 0; i < last; i++)
-    {
-        if (m_instructions[i].stop)
-        {
-            m_block->stops[m_block->stop_count++] = (u8)i;
-            AddCheck(i);
-        }
-    }
     m_block->link[0] = 0xFFFFFFFFU;
     m_block->link[1] = 0xFFFFFFFFU;
 
@@ -2111,13 +2056,12 @@ void DynarecEmitter::EmitBlock()
     for (int i = 0; i < m_count; i++)
     {
         Instruction& instruction = m_instructions[i];
-
-        if (k_dynarec_near_fallbacks || m_cold_count > k_dynarec_cold_paths - k_dynarec_cold_margin)
-            EmitColdPaths(true);
-
         m_bus_code_row = instruction.bus_code_row;
         m_bus_next_check = instruction.next_check;
         SetBusLines(instruction.context);
+
+        if (k_dynarec_near_fallbacks || m_cold_count > k_dynarec_cold_paths - k_dynarec_cold_margin)
+            EmitColdPaths(true);
 
         if (instruction.kind == DYNAREC_NATIVE)
         {
@@ -2165,14 +2109,6 @@ void DynarecEmitter::EmitBlock()
 
             if (instruction.memory)
                 jit_link(instruction.resume);
-
-            if (instruction.stop)
-            {
-                ColdPath& stop = *AddColdPath(DYNAREC_COLD_STOP, NULL);
-                stop.value = (u32)i;
-                jit_ldxi_uc(DR_T0, DR_CPU, Offset(&m_cpu->m_dynarec_stop));
-                jit_patch_at(jit_beqi(DR_T0, i), stop.entry);
-            }
         }
         else
         {

@@ -391,7 +391,7 @@ void emu_update(void)
     }
 
     if (sample_count > 0 && !geartowns->IsPaused())
-        sound_queue_write(audio_buffer, sample_count, emu_audio_sync, emu_audio_rate_control, emu_audio_ratio);
+        sound_queue_write(audio_buffer, sample_count, emu_audio_sync, emu_audio_rate_control, emu_audio_ratio, !emu_audio_sync);
     else if (geartowns->IsPaused())
     {
         int silence_count = GT_AUDIO_QUEUE_SIZE;

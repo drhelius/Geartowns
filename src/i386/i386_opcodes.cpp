@@ -2331,7 +2331,9 @@ bool I386::OPCodes_OUT()
             m_io->Write32(port, value, *m_bus_context);
     }
 
+#if defined(GT_IO_ENDS_BATCH)
     m_bus_context->end_batch = true;
+#endif
     CommitEIP(m_instruction);
     return true;
 }

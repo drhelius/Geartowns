@@ -43,6 +43,9 @@
 #define GT_MAX_FLOPPY_DRIVES 2
 #define GT_MAX_HARD_DISKS 7
 
+// Port instructions end the CPU's batch, since port writes here don't report what they change
+#define GT_IO_ENDS_BATCH
+
 #define GT_MAX_PATH 4096
 
 #define GT_FIRMWARE_SYSTEM_SIZE (256 * 1024)

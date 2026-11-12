@@ -88,10 +88,8 @@ enum Dynarec_Kind
 enum Dynarec_Cold
 {
     DYNAREC_COLD_BUS = 0,
-    DYNAREC_COLD_TLB,
     DYNAREC_COLD_NO_PAGE,
     DYNAREC_COLD_SLOW_STORE,
-    DYNAREC_COLD_REOPEN,
     DYNAREC_COLD_LINE,
     DYNAREC_COLD_MISALIGNED
 };
@@ -1842,19 +1840,6 @@ void DynarecEmitter::EmitColdPath(const ColdPath& cold)
         case DYNAREC_COLD_BUS:
             EmitBusAccessCall(cold.host, cold.linear, cold.t, cold.flags, cold.check, cold.fallback, (int)cold.value - 1);
             break;
-        case DYNAREC_COLD_TLB:
-            // Another way of the set: DynarecTLBHost finds and touches it as the interpreter would, or the access falls
-            // back
-            jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, cold.linear);
-            jit_prepare();
-            jit_pushargr(DR_CPU);
-            jit_pushargr(cold.linear);
-            jit_pushargi((jit_word_t)cold.value);
-            jit_finishi((jit_pointer_t)&I386::DynarecTLBHost);
-            jit_retval(cold.t);
-            jit_patch_at(jit_beqi(cold.t, 0), cold.fallback);
-            LoadU32(cold.linear, DR_CPU, Offset(&m_cpu->m_dynarec_slow_linear));
-            break;
         case DYNAREC_COLD_NO_PAGE:
             jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, cold.linear);
             jit_movi(cold.host, 0);
@@ -1869,17 +1854,6 @@ void DynarecEmitter::EmitColdPath(const ColdPath& cold)
             jit_finishr(DR_T2);
             jit_retval(DR_T0);
             jit_patch_at(jit_beqi(DR_T0, 2), cold.fallback);
-            jit_patch_at(jit_beqi(DR_T0, 0), cold.resume);
-            EmitMaterialize((int)cold.value);
-            m_leave_used = true;
-            jit_patch_at(jit_jmpi(), m_leave);
-            return;
-        case DYNAREC_COLD_REOPEN:
-            jit_prepare();
-            jit_pushargr(DR_CPU);
-            jit_pushargi((jit_word_t)(uintptr_t)cold.site);
-            jit_finishi((jit_pointer_t)&I386::DynarecReopen);
-            jit_retval(DR_T0);
             jit_patch_at(jit_beqi(DR_T0, 0), cold.resume);
             EmitMaterialize((int)cold.value);
             m_leave_used = true;
@@ -2086,12 +2060,10 @@ void DynarecEmitter::EmitBlock()
             EmitNative(instruction, i);
             m_slow_ok = false;
 
-            // Before the reopen, which can leave the block. A fallback counts it in the interpreter and goes on after
+            // A fallback counts it in the interpreter and goes on after
             if (shadow && !instruction.ends_block)
                 EmitShadowEnd();
 
-            if (instruction.memory && !instruction.ends_block && (m_key & k_dynarec_key_paging) != 0)
-                EmitReopen(instruction, i);
             m_exit_written = -1;
 
             if (!instruction.ends_block)
@@ -2159,7 +2131,7 @@ void DynarecEmitter::EmitBlock()
 
     EmitColdPaths(false);
 
-    // Instructions after which the code window didn't open again leave here, with what DynarecReopen counted
+    // Instructions after which the block can't go on leave here, with what their C entry counted
     if (m_leave_used)
     {
         jit_link(m_leave);
@@ -2169,18 +2141,6 @@ void DynarecEmitter::EmitBlock()
         jit_movi(DR_T3, (jit_word_t)(uintptr_t)m_cpu->m_dynarec_exit);
         jit_jmpr(DR_T3);
     }
-}
-
-// An access on another TLB way of the code page's set closed the code window: it opens again for the next
-// instruction, and the block leaves if it no longer lies in it
-void DynarecEmitter::EmitReopen(Instruction& instruction, int index)
-{
-    ColdPath& cold = *AddColdPath(DYNAREC_COLD_REOPEN, NULL);
-    cold.site = GetSite(instruction);
-    cold.value = (u32)(index + 1);
-    jit_ldxi_i(DR_T0, DR_CPU, Offset(&m_cpu->m_code_window_size));
-    jit_patch_at(jit_beqi(DR_T0, 0), cold.entry);
-    cold.resume = jit_label();
 }
 
 // The shadow had one step left, which this instruction took
@@ -2812,15 +2772,9 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     }
     else
     {
-        // The most recently used way of the set, as GetRecentTLBEntry
-        intptr_t tlb = Offset(&m_cpu->m_tlb[0]);
-
+        // The page's entry, as GetTLBEntry. Another tag falls back, and the interpreter walks the tables
         jit_rshi_u(t2, t1, 12);
-        jit_andi(t2, t2, I386_TLB_SETS - 1);
-        jit_addr(t3, DR_CPU, t2);
-        jit_ldxi_uc(t3, t3, Offset(&m_cpu->m_tlb_mru[0]));
-        jit_lshi(t2, t2, 2);
-        jit_addr(t2, t2, t3);
+        jit_andi(t2, t2, I386_TLB_SIZE - 1);
 
         if (sizeof(I386::TLBEntry) == 32)
             jit_lshi(t2, t2, 5);
@@ -2828,25 +2782,20 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
             jit_muli(t2, t2, (jit_word_t)sizeof(I386::TLBEntry));
 
         jit_addr(t2, t2, DR_CPU);
-        LoadU32(t3, t2, tlb + (jit_word_t)offsetof(I386::TLBEntry, linear_page));
+        jit_addi(t2, t2, Offset(&m_cpu->m_tlb[0]));
+        LoadU32(t3, t2, (jit_word_t)offsetof(I386::TLBEntry, linear_page));
         jit_andi(r, t1, 0xFFFFF000);
-        ColdPath& other_way = *AddColdPath(DYNAREC_COLD_TLB, fallback);
-        other_way.linear = t1;
-        other_way.t = t3;
-        other_way.value = access == DYNAREC_READ ? 1 : access == DYNAREC_WRITE ? 2 : 3;
-        jit_patch_at(jit_bner(t3, r), other_way.entry);
+        jit_patch_at(jit_bner(t3, r), fallback);
 
         if (access == DYNAREC_READ_WRITE)
         {
-            jit_ldxi(t3, t2, tlb + (jit_word_t)offsetof(I386::TLBEntry, read_page));
-            jit_ldxi(r, t2, tlb + (jit_word_t)offsetof(I386::TLBEntry, write_page));
+            jit_ldxi(t3, t2, (jit_word_t)offsetof(I386::TLBEntry, read_page));
+            jit_ldxi(r, t2, (jit_word_t)offsetof(I386::TLBEntry, write_page));
             jit_patch_at(jit_bner(r, t3), fallback);
         }
         else
-            jit_ldxi(t3, t2, tlb + (jit_word_t)(access == DYNAREC_READ ? offsetof(I386::TLBEntry, read_page) :
+            jit_ldxi(t3, t2, (jit_word_t)(access == DYNAREC_READ ? offsetof(I386::TLBEntry, read_page) :
                 offsetof(I386::TLBEntry, write_page)));
-
-        other_way.resume = jit_label();
     }
 
     bool slow = m_slow_store && access == DYNAREC_WRITE;

@@ -185,7 +185,6 @@ private:
     const I386::DynarecBusRun* GetAfterRun(Instruction& instruction);
     I386::DynarecSite* GetSite(Instruction& instruction);
     void StoreOrSlow(Instruction& instruction, int width);
-    void EmitReopen(Instruction& instruction, int index);
     void EmitBusDram(int row, int scratch, int t2, u32 size, int access);
     void EmitBusCheck(int host, int linear, int t, u32 size, jit_node* fallback);
     void EmitBusPiece(int host, int linear, int t, u32 size, int access);

@@ -998,8 +998,8 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
         cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait || !fits)
         return 1;
 
-    // A TLB way change in the code page's set closes the code window. The next instruction opens it again as
-    // StartInstruction would, and the block goes on while the window still covers its bytes. Before a check the budget
+    // A step can close the code window, as a host page dropped by a privilege change does. The next instruction opens it
+    // again as StartInstruction would, and the block goes on while the window still covers its bytes. Before a check the budget
     // covers that instruction, so it runs next, in the block or in the dispatcher
     if (unlikely(cpu->m_code_window_size == 0))
     {

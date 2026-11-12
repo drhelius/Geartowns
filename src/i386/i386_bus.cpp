@@ -888,8 +888,7 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
 
     if (fits && (cpu->m_state.cr0 & 0x80000000U) != 0)
     {
-        u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
-        const TLBEntry& entry = cpu->m_tlb[set * I386_TLB_WAYS + cpu->m_tlb_mru[set]];
+        const TLBEntry& entry = cpu->GetTLBEntry(linear);
         fits = (entry.flags & cpu->m_tlb_write_mask) == cpu->m_tlb_write_mask;
         physical = entry.physical_page | (linear & 0xFFF);
     }

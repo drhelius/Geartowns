@@ -90,26 +90,20 @@ INLINE void I386::CloseCodeWindow()
     m_code_window_size = 0;
 }
 
-// Fast paths only check the most recently used way of the set. A repeated hit on that way leaves the
-// pseudo-LRU bits unchanged, so skipping their update there is exact. Hits on other ways take the slow path
-INLINE const I386::TLBEntry& I386::GetRecentTLBEntry(u32 linear) const
+// Direct mapped: a hit changes nothing, so fast paths and compiled code need only the entry and its tag
+INLINE I386::TLBEntry& I386::GetTLBEntry(u32 linear)
 {
-    u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
-    return m_tlb[set * I386_TLB_WAYS + m_tlb_mru[set]];
+    return m_tlb[(linear >> 12) & (I386_TLB_SIZE - 1)];
 }
 
-// A translating access to a way points the tree away from it: B0 selects the half, B1 and B2 the way in it
-// The code window skips these updates, which is only exact while its page stays the most recent way of its set
-INLINE void I386::TouchTLBWay(u32 set, u32 way)
+INLINE const I386::TLBEntry& I386::GetTLBEntry(u32 linear) const
 {
-    static const u8 k_plru_keep_mask[I386_TLB_WAYS] = { 0x04, 0x04, 0x02, 0x02 };
-    static const u8 k_plru_way_bits[I386_TLB_WAYS] = { 0x03, 0x01, 0x04, 0x00 };
+    return m_tlb[(linear >> 12) & (I386_TLB_SIZE - 1)];
+}
 
-    if (m_tlb_mru[set] != way && set == m_code_window_set)
-        CloseCodeWindow();
-
-    m_tlb_plru[set] = (m_tlb_plru[set] & k_plru_keep_mask[way]) | k_plru_way_bits[way];
-    m_tlb_mru[set] = (u8)way;
+INLINE bool I386::IsTLBHit(const TLBEntry& entry, u32 linear) const
+{
+    return (entry.flags & k_i386_tlb_valid) != 0 && entry.linear_page == (linear & 0xFFFFF000U);
 }
 
 // TLB host pages are only cached for valid entries the current privilege level may use
@@ -124,7 +118,7 @@ INLINE const u8* I386::GetReadHost(u32 linear, u32 size)
         page = m_read_pages[linear >> 12];
     else
     {
-        const TLBEntry& entry = GetRecentTLBEntry(linear);
+        const TLBEntry& entry = GetTLBEntry(linear);
 
         if (entry.linear_page != (linear & 0xFFFFF000U))
             return NULL;
@@ -146,7 +140,7 @@ INLINE u8* I386::GetWriteHost(u32 linear, u32 size)
         page = m_write_pages[linear >> 12];
     else
     {
-        const TLBEntry& entry = GetRecentTLBEntry(linear);
+        const TLBEntry& entry = GetTLBEntry(linear);
 
         if (entry.linear_page != (linear & 0xFFFFF000U))
             return NULL;

@@ -27,9 +27,11 @@
 #include "../common/debug_memory.h"
 #include "dynarec_platform.h"
 
-#define I386_TLB_SETS 8
-#define I386_TLB_WAYS 4
-#define I386_TLB_SIZE (I386_TLB_SETS * I386_TLB_WAYS)
+#define I386_TLB_SIZE 512
+#define I386_TLB_KERNEL_SIZE 64
+#define I386_TLB_TEST_SETS 8
+#define I386_TLB_TEST_WAYS 4
+#define I386_TLB_TEST_SIZE (I386_TLB_TEST_SETS * I386_TLB_TEST_WAYS)
 #define I386_POLL_CODE_SIZE 48
 #define I386_BUS_LINES 512
 
@@ -765,8 +767,8 @@ private:
         I386_TASK_SWITCH_INTERRUPT
     };
 
-    // TLB entries are indexed set * I386_TLB_WAYS + way
-    // The tag and the D/U/W attributes are the hardware entry
+    // Each linear page has one TLB entry, at its low page number bits, and the test registers an array of their own
+    // indexed set * I386_TLB_TEST_WAYS + way. The tag and the D/U/W attributes are the hardware entry
     // The host pages are cached for the current privilege level and are NULL for invalid entries
     struct TLBEntry
     {
@@ -936,8 +938,6 @@ private:
         uintptr_t first_base);
     static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t count, uintptr_t form);
     static void DynarecFlags(I386* cpu, uintptr_t form);
-    static uintptr_t DynarecTLBHost(I386* cpu, uintptr_t linear, uintptr_t access);
-    static uintptr_t DynarecReopen(I386* cpu, uintptr_t site);
     void LeaveDynarecSite(const DynarecSite& site);
     template<bool i486>
     static void DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);
@@ -1052,6 +1052,7 @@ private:
     void SetUserMode(bool user);
     void UpdateAlignmentCheck();
     void UpdateWriteProtect();
+    void UpdateTLBMasks();
     void LoadCR0(u32 value);
     void RefreshMemoryPointers();
     const u8* GetReadHost(u32 linear, u32 size);
@@ -1077,8 +1078,6 @@ private:
     bool LogicalToLinearProtected(int segment, u32 offset, u32 size, bool write, bool stack, bool execute, u32& linear);
     bool TranslateLinear(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor = false);
     bool TranslateLinearPaged(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor);
-    bool TranslatePagedWay(u32 linear, bool write, GT_Bus_Access_Context& context, u32& physical, bool supervisor,
-        u32 set, int way);
     bool TranslateRepeatPage(u32 linear, u32 size, bool write, u32& physical);
     bool TranslatePagedPassive(u32 linear, u32& physical) const;
     bool TranslateLinearForDebugger(u32 linear, u32& physical, u32& pde_address, u32& pte_address, u32& page_flags,
@@ -1087,14 +1086,19 @@ private:
     const I386_Segment* FindSegment(u16 selector) const;
     static bool IsValidSegmentOffset(const I386_Segment& segment, u32 offset);
 
-    int FindTLBWay(u32 set, u32 linear_page) const;
     const TLBEntry* FindTLBHost(u32 linear, bool write);
-    const TLBEntry& GetRecentTLBEntry(u32 linear) const;
+    TLBEntry& GetTLBEntry(u32 linear);
+    const TLBEntry& GetTLBEntry(u32 linear) const;
+    bool IsTLBHit(const TLBEntry& entry, u32 linear) const;
     void CacheTLBPages(TLBEntry& entry);
-    void TouchTLBWay(u32 set, u32 way);
-    int GetTLBVictim(u32 set) const;
-    void ResetTLBReplacement();
+    void DropTLBHostPages();
+    void DropTLBKernelPages();
     void FlushTLB();
+    void FillTestTLB(u32 linear_page, u32 physical_page, u8 flags);
+    void WriteTestTLB(u32 set, u32 way, u32 linear_page, u32 physical_page, u8 flags);
+    int FindTestTLBWay(u32 set, u32 linear_page) const;
+    int GetTestTLBVictim(u32 set) const;
+    void TouchTestTLBWay(u32 set, u32 way);
     bool InvalidateTLBPage(u32 linear);
     void TestTLB();
     void TestTLB486();
@@ -1502,7 +1506,6 @@ private:
     const u8* m_code_window;
     u32 m_code_window_eip;
     u32 m_code_window_size;
-    u32 m_code_window_set;
     const u8* m_fetch_pointer;
     u32 m_fetch_remaining;
     u8 m_address_clocks;
@@ -1533,10 +1536,6 @@ private:
     mutable I386_Debug_State m_debug_state;
 
     u8 m_segment_access_flags[I386_SEGMENT_COUNT];
-    TLBEntry m_tlb[I386_TLB_SIZE];
-    u32 m_tlb_used;
-    u8 m_tlb_plru[I386_TLB_SETS];
-    u8 m_tlb_mru[I386_TLB_SETS];
 
 #if !defined(GT_DISABLE_DYNAREC)
     bool m_dynarec_enabled;
@@ -1688,6 +1687,16 @@ private:
     u8 m_486_prefixes;
     u32 m_board_cacheable;
     u32 m_bus_lines[I386_BUS_LINES];
+
+    // Last, so the fields compiled code reads keep short offsets. The fills list the entries made valid since a flush,
+    // the kernel ones those whose host pages give the supervisor more than a user
+    TLBEntry m_tlb[I386_TLB_SIZE];
+    u16 m_tlb_fills[I386_TLB_SIZE];
+    u32 m_tlb_fill_count;
+    u16 m_tlb_kernel[I386_TLB_KERNEL_SIZE];
+    u32 m_tlb_kernel_count;
+    TLBEntry m_tlb_test[I386_TLB_TEST_SIZE];
+    u8 m_tlb_test_plru[I386_TLB_TEST_SETS];
 };
 
 static const u32 k_i386_poll_max_instructions = 16;

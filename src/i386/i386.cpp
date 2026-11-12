@@ -150,6 +150,11 @@ I386::I386()
     m_board_cache = true;
     m_board_cacheable = 1U << GT_BUS_DRAM;
     m_486_prefixes = 0;
+    memset(m_tlb, 0, sizeof(m_tlb));
+    m_tlb_fill_count = 0;
+    m_tlb_kernel_count = 0;
+    memset(m_tlb_test, 0, sizeof(m_tlb_test));
+    memset(m_tlb_test_plru, 0, sizeof(m_tlb_test_plru));
     memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
     m_486_bus_clocks = 0;
     m_486_protected = false;
@@ -319,7 +324,6 @@ void I386::Reset()
     InitPointer(m_code_window);
     m_code_window_eip = 0;
     m_code_window_size = 0;
-    m_code_window_set = 0;
     InitPointer(m_fetch_pointer);
     m_fetch_remaining = 0;
     m_bus_queue = 0;
@@ -334,8 +338,10 @@ void I386::Reset()
     m_checked_valid = false;
 
     memset(m_tlb, 0, sizeof(m_tlb));
-    m_tlb_used = 0;
-    ResetTLBReplacement();
+    m_tlb_fill_count = 0;
+    m_tlb_kernel_count = 0;
+    memset(m_tlb_test, 0, sizeof(m_tlb_test));
+    memset(m_tlb_test_plru, 0, sizeof(m_tlb_test_plru));
     m_trace_count = 0;
 
     // Decoded rows are debugger history and survive a machine reset
@@ -1138,14 +1144,37 @@ void I386::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_state.repeat.repeat);
     G_SERIALIZE(serializer, m_state.repeat.segment_override);
 
-    for (int i = 0; i < I386_TLB_SIZE; i++)
+    if (version >= GT_SAVESTATE_TLB_VERSION)
     {
-        G_SERIALIZE(serializer, m_tlb[i].linear_page);
-        G_SERIALIZE(serializer, m_tlb[i].physical_page);
-        G_SERIALIZE(serializer, m_tlb[i].flags);
+        for (int i = 0; i < I386_TLB_SIZE; i++)
+        {
+            G_SERIALIZE(serializer, m_tlb[i].linear_page);
+            G_SERIALIZE(serializer, m_tlb[i].physical_page);
+            G_SERIALIZE(serializer, m_tlb[i].flags);
+        }
     }
 
-    G_SERIALIZE_ARRAY(serializer, m_tlb_plru, I386_TLB_SETS);
+    for (int i = 0; i < I386_TLB_TEST_SIZE; i++)
+    {
+        G_SERIALIZE(serializer, m_tlb_test[i].linear_page);
+        G_SERIALIZE(serializer, m_tlb_test[i].physical_page);
+        G_SERIALIZE(serializer, m_tlb_test[i].flags);
+    }
+
+    G_SERIALIZE_ARRAY(serializer, m_tlb_test_plru, I386_TLB_TEST_SETS);
+
+    // Earlier states hold the 32 entries and the tree of the old organization, which are the test array's, and the
+    // table takes their translations
+    if (version < GT_SAVESTATE_TLB_VERSION)
+    {
+        memset(m_tlb, 0, sizeof(m_tlb));
+
+        for (int i = 0; i < I386_TLB_TEST_SIZE; i++)
+        {
+            if ((m_tlb_test[i].flags & k_i386_tlb_valid) != 0)
+                GetTLBEntry(m_tlb_test[i].linear_page) = m_tlb_test[i];
+        }
+    }
     G_SERIALIZE(serializer, m_bus_queue);
     G_SERIALIZE(serializer, m_bus_row);
     G_SERIALIZE(serializer, m_bus_fraction);
@@ -1211,26 +1240,39 @@ void I386::SanitizeState()
     m_address_clocks = 0;
     CloseCodeWindow();
 
-    // Host pages stay NULL until first use
-    // The most recent way follows from the tree bits
+    // Host pages stay NULL until first use, and the valid entries are the fills a flush clears
+    u8 flags = k_i386_tlb_valid | k_i386_tlb_user | k_i386_tlb_writable | k_i386_tlb_dirty | k_i386_tlb_pwt |
+        k_i386_tlb_pcd;
+    m_tlb_fill_count = 0;
+    m_tlb_kernel_count = 0;
+
     for (int i = 0; i < I386_TLB_SIZE; i++)
     {
-        m_tlb[i].linear_page &= 0xFFFFF000U;
-        m_tlb[i].physical_page &= 0xFFFFF000U;
-        m_tlb[i].flags &= k_i386_tlb_valid | k_i386_tlb_user | k_i386_tlb_writable | k_i386_tlb_dirty | k_i386_tlb_pwt |
-            k_i386_tlb_pcd;
-        InitPointer(m_tlb[i].read_page);
-        InitPointer(m_tlb[i].write_page);
+        TLBEntry& entry = m_tlb[i];
+        entry.linear_page &= 0xFFFFF000U;
+        entry.physical_page &= 0xFFFFF000U;
+        entry.flags &= flags;
+        InitPointer(entry.read_page);
+        InitPointer(entry.write_page);
+
+        if ((entry.flags & k_i386_tlb_valid) != 0 && ((entry.linear_page >> 12) & (I386_TLB_SIZE - 1)) != (u32)i)
+            entry.flags = 0;
+
+        if ((entry.flags & k_i386_tlb_valid) != 0)
+            m_tlb_fills[m_tlb_fill_count++] = (u16)i;
     }
 
-    m_tlb_used = 0xFFFFFFFFU;
-
-    for (int set = 0; set < I386_TLB_SETS; set++)
+    for (int i = 0; i < I386_TLB_TEST_SIZE; i++)
     {
-        u8 plru = m_tlb_plru[set] & 7;
-        m_tlb_plru[set] = plru;
-        m_tlb_mru[set] = (plru & 1) != 0 ? ((plru & 2) != 0 ? 0 : 1) : ((plru & 4) != 0 ? 2 : 3);
+        m_tlb_test[i].linear_page &= 0xFFFFF000U;
+        m_tlb_test[i].physical_page &= 0xFFFFF000U;
+        m_tlb_test[i].flags &= flags;
+        InitPointer(m_tlb_test[i].read_page);
+        InitPointer(m_tlb_test[i].write_page);
     }
+
+    for (int set = 0; set < I386_TLB_TEST_SETS; set++)
+        m_tlb_test_plru[set] &= 7;
 
     u8 privilege = m_state.current_privilege_level;
 

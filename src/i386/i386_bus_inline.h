@@ -59,7 +59,7 @@ INLINE u32 I386::GetBusDramFold(u32 size, bool read, bool write, u32 code_row, b
     return fold;
 }
 
-// Passive and host-cache independent: most recent way first, then any way of the set, then the page tables
+// Passive and host-cache independent: the TLB, then the page tables
 INLINE bool I386::TranslateCurrentPassive(u32 linear, u32& physical) const
 {
     physical = linear;
@@ -67,24 +67,11 @@ INLINE bool I386::TranslateCurrentPassive(u32 linear, u32& physical) const
     if ((m_state.cr0 & 0x80000000U) == 0)
         return true;
 
-    u32 set = (linear >> 12) & (I386_TLB_SETS - 1);
-    const TLBEntry* ways = &m_tlb[set * I386_TLB_WAYS];
-    const TLBEntry& recent = ways[m_tlb_mru[set]];
-    u32 page = linear & 0xFFFFF000U;
-    int way = 0;
+    const TLBEntry& entry = GetTLBEntry(linear);
 
-    if (likely((recent.flags & k_i386_tlb_valid) != 0 && recent.linear_page == page))
+    if (likely(IsTLBHit(entry, linear)))
     {
-        physical = recent.physical_page | (linear & 0xFFF);
-        return true;
-    }
-
-    while (way < I386_TLB_WAYS && ((ways[way].flags & k_i386_tlb_valid) == 0 || ways[way].linear_page != page))
-        way++;
-
-    if (way < I386_TLB_WAYS)
-    {
-        physical = ways[way].physical_page | (linear & 0xFFF);
+        physical = entry.physical_page | (linear & 0xFFF);
         return true;
     }
 

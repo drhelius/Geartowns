@@ -501,7 +501,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
         SetVM86Segment(I386_SEGMENT_FS, (u16)values[4]);
         SetVM86Segment(I386_SEGMENT_GS, (u16)values[5]);
 
-        m_state.eflags = (flags & (0x00037FD5U | m_eflags_ac)) | I386_FLAG_FIXED;
+        m_state.eflags = (flags & (0x00037FD5U | m_eflags_extra)) | I386_FLAG_FIXED;
         m_state.nmi_blocked = false;
         UpdateExecutionMode();
         UpdateAlignmentCheck();
@@ -596,7 +596,7 @@ bool I386::ProtectedInterruptReturn(int width, GT_Bus_Access_Context& context, u
 
     m_state.eip = checked_target;
 
-    u32 flag_mask = width == 16 ? 0x00007FD5U : 0x00017FD5U | m_eflags_ac;
+    u32 flag_mask = width == 16 ? 0x00007FD5U : 0x00017FD5U | m_eflags_extra;
 
     if (old_privilege != 0)
         flag_mask &= ~I386_FLAG_IOPL;

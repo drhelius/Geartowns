@@ -172,7 +172,7 @@ INLINE void I386::AddBusCodeLines(u32 start_eip, u32 next_eip)
 
 INLINE void I386::AddBusCodeLine(u32 line)
 {
-    u32& tag = m_bus_lines[line & (I386_BUS_LINES - 1)];
+    u32& tag = m_bus_lines[line & m_bus_line_mask];
 
     if (tag == line)
         return;

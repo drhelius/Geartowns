@@ -58,7 +58,7 @@ static const I386_Port_Clocks k_i386_port_clocks =
     { { 6, 6, 6, 6 }, { 12, 5, 5, 5 } }
 };
 
-// PRM486 Table 10.2
+// PRM486 Table 10.2, which the Intel486 family data book of 1995 gives the IntelDX4 too (Table 13-18)
 static const I386_Port_Clocks k_i486_port_clocks =
 {
     { { 14, 9, 29, 27 }, { 14, 8, 28, 27 } },
@@ -135,6 +135,9 @@ I386::I386()
     m_tlb_write_mask = k_i386_tlb_dirty;
     m_cr0_writable = 0x8000001FU;
     m_eflags_ac = 0;
+    m_eflags_extra = 0;
+    m_cpuid = false;
+    m_fast_imul = false;
     Init486Forms();
     m_port_clocks = &k_i386_port_clocks;
     m_i486_timing = false;
@@ -148,6 +151,7 @@ I386::I386()
     m_bus_table_valid = false;
     m_board_cache = true;
     m_board_cacheable = 1U << GT_BUS_DRAM;
+    m_bus_line_mask = I386_BUS_LINES / 2 - 1;
     m_486_prefixes = 0;
     memset(m_tlb, 0, sizeof(m_tlb));
     m_tlb_fill_count = 0;
@@ -1167,7 +1171,7 @@ void I386::Serialize(StateSerializer& serializer, int version)
     G_SERIALIZE(serializer, m_486_written);
 
     if (version >= GT_SAVESTATE_LINES_VERSION)
-        G_SERIALIZE_ARRAY(serializer, m_bus_lines, I386_BUS_LINES);
+        G_SERIALIZE_ARRAY(serializer, m_bus_lines, m_bus_line_mask + 1);
     else
         memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
 }
@@ -1380,8 +1384,10 @@ void I386::SetTraceEnabled(bool enabled)
 void I386::SetCPU(const GT_Machine_CPU_Info& info)
 {
     bool i486 = info.family >= 4;
+    u32 line_mask = info.cache_kb != 0 ? (u32)info.cache_kb * 64 - 1 : I386_BUS_LINES / 2 - 1;
 
-    if (i486 != m_i486)
+    // Compiled blocks keep the code lines' tags and the multiplier's clocks
+    if ((i486 != m_i486) || (line_mask != m_bus_line_mask) || (info.fast_imul != m_fast_imul))
     {
 #if !defined(GT_DISABLE_DYNAREC)
         FlushDynarec();
@@ -1391,11 +1397,15 @@ void I386::SetCPU(const GT_Machine_CPU_Info& info)
 
     m_i486 = i486;
     m_i486_timing = i486;
-    m_port_clocks = !m_i486_timing ? &k_i386_port_clocks : info.bus_ratio > 1 ? &k_i486dx2_port_clocks : &k_i486_port_clocks;
+    m_port_clocks = !m_i486_timing ? &k_i386_port_clocks : info.bus_ratio == 2 ? &k_i486dx2_port_clocks : &k_i486_port_clocks;
     m_reset_edx = info.reset_edx;
     m_cr0_fixed = info.cr0_fixed;
     m_cr0_writable = i486 ? 0xE005002FU : 0x8000001FU;
     m_eflags_ac = i486 ? I386_FLAG_AC : 0;
+    m_eflags_extra = m_eflags_ac | (info.cpuid ? I386_FLAG_ID : 0);
+    m_cpuid = info.cpuid;
+    m_fast_imul = info.fast_imul;
+    m_bus_line_mask = line_mask;
 }
 
 void I386::SetFPU(X87* fpu)

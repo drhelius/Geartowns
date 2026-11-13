@@ -214,7 +214,7 @@ void I386::LeaveDynarecSite(const DynarecSite& site)
     for (u32 i = 0; i < site.line_count; i++)
     {
         u32 line = site.line_first + i;
-        u32& tag = m_bus_lines[line & (I386_BUS_LINES - 1)];
+        u32& tag = m_bus_lines[line & m_bus_line_mask];
 
         if (tag != line)
         {

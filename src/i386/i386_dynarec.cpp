@@ -1037,7 +1037,7 @@ s64 I386::GetDynarecFit(const DynarecCheck& check) const
     {
         u32 line = check.line + i;
 
-        if (m_bus_lines[line & (I386_BUS_LINES - 1)] != line)
+        if (m_bus_lines[line & m_bus_line_mask] != line)
             fraction += m_bus.line_fill;
     }
 

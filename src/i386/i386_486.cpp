@@ -33,6 +33,12 @@ bool I386::OPCode0F_0x09()
     return OPCodes0F_INVD();
 }
 
+bool I386::OPCode0F_0xA2()
+{
+    // CPUID
+    return OPCodes0F_CPUID();
+}
+
 bool I386::OPCode0F_0xB0()
 {
     // CMPXCHG r/m8,r8
@@ -118,6 +124,45 @@ bool I386::OPCodes0F_INVD()
     if (m_state.execution_mode != I386_MODE_REAL && m_state.current_privilege_level != 0)
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
+    CommitEIP(m_instruction);
+    return true;
+}
+
+// Intel486 family data book, Appendix B: the reset signature and "GenuineIntel", 14 clocks for EAX 1 and 9 otherwise.
+// The FPU is the only feature it reports, as the core has no virtual mode extensions
+bool I386::OPCodes0F_CPUID()
+{
+    if (!m_cpuid)
+        return OPCodes_Invalid();
+
+    u32 function = m_state.registers[I386_REG_EAX].value;
+    u32 clocks = function == 1 ? 14 : 9;
+
+    if (!DecodeAndStart(false, 0, clocks, clocks))
+        return false;
+
+    u32 eax = 0;
+    u32 ebx = 0;
+    u32 ecx = 0;
+    u32 edx = 0;
+
+    if (function == 0)
+    {
+        eax = 1;
+        ebx = 0x756E6547;
+        edx = 0x49656E69;
+        ecx = 0x6C65746E;
+    }
+    else if (function == 1)
+    {
+        eax = m_reset_edx;
+        edx = IsValidPointer(m_x87) ? 1 : 0;
+    }
+
+    m_state.registers[I386_REG_EAX].value = eax;
+    m_state.registers[I386_REG_EBX].value = ebx;
+    m_state.registers[I386_REG_ECX].value = ecx;
+    m_state.registers[I386_REG_EDX].value = edx;
     CommitEIP(m_instruction);
     return true;
 }
@@ -291,6 +336,7 @@ static const u8 k_i486_xlat = 0x40;
 static const u8 k_i486_status = 0x80;
 
 static const u8 k_eax = 1 << I386_REG_EAX;
+static const u8 k_ebx = 1 << I386_REG_EBX;
 static const u8 k_ecx = 1 << I386_REG_ECX;
 static const u8 k_edx = 1 << I386_REG_EDX;
 static const u8 k_esp = 1 << I386_REG_ESP;
@@ -509,13 +555,14 @@ void I386::Init486Forms()
     SetForms(0x124, 0x124, I486_GROUP, I486_GROUP_TEST, 0, 0, 0);
     SetForms(0x126, 0x126, I486_FIXED, 4, 4, 0, 0);
 
-    // Jcc, SETcc, PUSH and POP FS and GS, the bit instructions, SHLD, SHRD, IMUL, CMPXCHG, LSS, LFS, LGS, MOVZX,
-    // MOVSX, BSF, BSR, XADD and BSWAP
+    // Jcc, SETcc, PUSH and POP FS and GS, CPUID, the bit instructions, SHLD, SHRD, IMUL, CMPXCHG, LSS, LFS, LGS,
+    // MOVZX, MOVSX, BSF, BSR, XADD and BSWAP
     SetForms(0x180, 0x18F, I486_JUMP, 1, 3, 0, 0);
     SetForms(0x190, 0x19F, I486_SETCC, 0, 0, 0, k_i486_rm | k_i486_byte);
     SetForms(0x1A0, 0x1A0, I486_FIXED, 3, 3, 0, k_i486_stack);
     SetForms(0x1A8, 0x1A8, I486_FIXED, 3, 3, 0, k_i486_stack);
     SetForms(0x1A1, 0x1A1, I486_MODE, 3, 9, 0, k_i486_stack);
+    SetForms(0x1A2, 0x1A2, I486_DATA, 0, 0, k_eax | k_ebx | k_ecx | k_edx, 0);
     SetForms(0x1A9, 0x1A9, I486_MODE, 3, 9, 0, k_i486_stack);
     SetForms(0x1A3, 0x1A3, I486_FIXED, 3, 8, 0, 0);
     SetForms(0x1AB, 0x1AB, I486_FIXED, 6, 13, 0, k_i486_rm);
@@ -781,6 +828,10 @@ u32 I386::Get486DataClocks(const InstructionContext& c) const
 
     if (c.two_byte)
     {
+        // CPUID by its function. Without it the instruction faults and counts no clocks of its own
+        if (c.opcode2 == 0xA2)
+            return m_cpuid ? (m_486_registers[I386_REG_EAX] == 1 ? 14 : 9) : 0;
+
         // IMUL r,r/m multiplies by r/m
         if (c.opcode2 == 0xAF)
             return Get486MultiplyClocks(Peek486Operand(c, c.operand_size * 8), c.operand_size * 8, true);
@@ -840,9 +891,13 @@ u32 I386::Get486DataClocks(const InstructionContext& c) const
     }
 }
 
-// 10 plus the multiplier's significant bits, at least 3, or 5 for a negative signed multiplier
+// 10 plus the multiplier's significant bits, at least 3, or 5 for a negative signed multiplier. The IntelDX4's IMUL
+// takes 5, 5 to 6 or 6 to 12 by width (Intel486 family data book, Table 13-15), with no rule between: the upper bounds
 u32 I386::Get486MultiplyClocks(u32 multiplier, int width, bool signed_multiplier) const
 {
+    if (m_fast_imul && signed_multiplier)
+        return width == 8 ? 5 : width == 16 ? 6 : 12;
+
     u32 value = multiplier & GetMask(width);
     bool negative = signed_multiplier && (value & GetSignBit(width)) != 0;
     u32 magnitude = negative ? (~value + 1) & GetMask(width) : value;

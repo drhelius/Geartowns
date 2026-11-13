@@ -1863,7 +1863,7 @@ void DynarecEmitter::EmitColdPath(const ColdPath& cold)
         {
             intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
             jit_movi(DR_T0, (jit_word_t)cold.value);
-            jit_stxi_i(Offset(&m_cpu->m_bus_lines[cold.value & (I386_BUS_LINES - 1)]), DR_CPU, DR_T0);
+            jit_stxi_i(Offset(&m_cpu->m_bus_lines[cold.value & m_cpu->m_bus_line_mask]), DR_CPU, DR_T0);
             jit_ldxi_i(DR_T0, DR_CPU, fraction);
             jit_addi(DR_T0, DR_T0, (jit_word_t)m_cpu->m_bus.line_fill);
             jit_stxi_i(fraction, DR_CPU, DR_T0);
@@ -2893,7 +2893,7 @@ void DynarecEmitter::EmitBusLines()
         u32 line = m_bus_line_first + i;
         ColdPath& miss = *AddColdPath(DYNAREC_COLD_LINE, NULL);
         miss.value = line;
-        LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_bus_lines[line & (I386_BUS_LINES - 1)]));
+        LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_bus_lines[line & m_cpu->m_bus_line_mask]));
         jit_patch_at(jit_bnei(DR_T0, (jit_word_t)line), miss.entry);
         miss.resume = jit_label();
     }

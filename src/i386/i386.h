@@ -33,7 +33,7 @@
 #define I386_TLB_TEST_WAYS 4
 #define I386_TLB_TEST_SIZE (I386_TLB_TEST_SETS * I386_TLB_TEST_WAYS)
 #define I386_POLL_CODE_SIZE 48
-#define I386_BUS_LINES 512
+#define I386_BUS_LINES 1024
 
 class Memory;
 class Profiler;
@@ -139,7 +139,8 @@ enum I386_Flags
     I386_FLAG_NT = 0x00004000,
     I386_FLAG_RF = 0x00010000,
     I386_FLAG_VM = 0x00020000,
-    I386_FLAG_AC = 0x00040000
+    I386_FLAG_AC = 0x00040000,
+    I386_FLAG_ID = 0x00200000
 };
 
 struct I386_Segment
@@ -1366,6 +1367,7 @@ private:
     bool OPCodes0F_Group8();
     bool OPCodes0F_BitScan();
     bool OPCodes0F_INVD();
+    bool OPCodes0F_CPUID();
     bool OPCodes0F_CMPXCHG();
     bool OPCodes0F_XADD();
     bool OPCodes0F_BSWAP();
@@ -1470,7 +1472,7 @@ private:
     bool OPCode0F_0x95(); bool OPCode0F_0x96(); bool OPCode0F_0x97(); bool OPCode0F_0x98();
     bool OPCode0F_0x99(); bool OPCode0F_0x9A(); bool OPCode0F_0x9B(); bool OPCode0F_0x9C();
     bool OPCode0F_0x9D(); bool OPCode0F_0x9E(); bool OPCode0F_0x9F(); bool OPCode0F_0xA0();
-    bool OPCode0F_0xA1(); bool OPCode0F_0xA3(); bool OPCode0F_0xA4(); bool OPCode0F_0xA5();
+    bool OPCode0F_0xA1(); bool OPCode0F_0xA2(); bool OPCode0F_0xA3(); bool OPCode0F_0xA4(); bool OPCode0F_0xA5();
     bool OPCode0F_0xA8(); bool OPCode0F_0xA9(); bool OPCode0F_0xAB(); bool OPCode0F_0xAC();
     bool OPCode0F_0xAD(); bool OPCode0F_0xAF(); bool OPCode0F_0xB0(); bool OPCode0F_0xB1();
     bool OPCode0F_0xB2(); bool OPCode0F_0xB3();
@@ -1672,6 +1674,9 @@ private:
     u8 m_tlb_write_mask;
     u32 m_cr0_writable;
     u32 m_eflags_ac;
+    u32 m_eflags_extra;
+    bool m_cpuid;
+    bool m_fast_imul;
     u32 m_cache_test_registers[3];
     const I386_Port_Clocks* m_port_clocks;
     bool m_486_continuation;
@@ -1685,6 +1690,7 @@ private:
     bool m_486_protected;
     u8 m_486_prefixes;
     u32 m_board_cacheable;
+    u32 m_bus_line_mask;
     u32 m_bus_lines[I386_BUS_LINES];
 
     // Last, so the fields compiled code reads keep short offsets. The fills list the entries made valid since a flush,

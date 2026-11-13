@@ -196,6 +196,7 @@ static const I386_Extended_Opcode_Name k_i486_extended_opcode_names[] =
 {
     { 0x08, "invd" },                // INVD
     { 0x09, "wbinvd" },              // WBINVD
+    { 0xA2, "cpuid" },               // CPUID
     { 0xB0, "cmpxchg {Eb},{Gb}" },   // CMPXCHG r/m8,r8
     { 0xB1, "cmpxchg {Ev},{Gv}" },   // CMPXCHG r/m16/32,r16/32
     { 0xC0, "xadd {Eb},{Gb}" },      // XADD r/m8,r8

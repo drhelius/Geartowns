@@ -146,11 +146,11 @@ const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 4, 6, 8, 1
 
 const GT_Machine_CPU_Info k_machine_cpus[GT_MACHINE_CPU_COUNT] =
 {
-    { "80386DX", true, 3, false, 0x00000300, 0x7FFFFFE0, 32, 1 },
-    { "80386SX", true, 3, false, 0x00002308, 0x7FFFFFF0, 16, 1 },
-    { "80486SX", true, 4, false, 0x00000420, 0x00000010, 32, 1 },
-    { "80486DX2", true, 4, true, 0x00000430, 0x00000010, 32, 2 },
-    { "Pentium", false, 5, true, 0x00000520, 0x00000010, 64, 1 }
+    { "80386DX", true, 3, false, 0x00000300, 0x7FFFFFE0, 32, 1, 0, false, false },
+    { "80386SX", true, 3, false, 0x00002308, 0x7FFFFFF0, 16, 1, 0, false, false },
+    { "80486SX", true, 4, false, 0x00000420, 0x00000010, 32, 1, 8, false, false },
+    { "80486DX2", true, 4, true, 0x00000430, 0x00000010, 32, 2, 8, false, false },
+    { "Pentium", false, 5, true, 0x00000520, 0x00000010, 64, 1, 16, true, false }
 };
 
 static inline const char* get_machine_fpu_name(GT_Machine_CPU cpu)

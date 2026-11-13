@@ -936,6 +936,7 @@ private:
     template<bool i486>
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
         uintptr_t first_base);
+    u32 GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t first_base) const;
     static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t count, uintptr_t form);
     static void DynarecFlags(I386* cpu, uintptr_t form);
     void LeaveDynarecSite(const DynarecSite& site);
@@ -1091,6 +1092,7 @@ private:
     const TLBEntry& GetTLBEntry(u32 linear) const;
     bool IsTLBHit(const TLBEntry& entry, u32 linear) const;
     void CacheTLBPages(TLBEntry& entry);
+    void RefreshTLBPages(TLBEntry& entry, bool write);
     void DropTLBHostPages();
     void DropTLBKernelPages();
     void FlushTLB();

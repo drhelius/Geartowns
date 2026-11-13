@@ -789,6 +789,17 @@ void I386::AddBusSlowAccess(u32 physical, u32 size, bool write)
 }
 
 #if !defined(GT_DISABLE_DYNAREC)
+// The 486 clocks a native adds before its access: Emit486Misaligned's 3 for each access, Emit486FirstAGI's 1
+INLINE u32 I386::GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t first_base) const
+{
+    u32 clocks = size > 1 && (linear & (size - 1)) != 0 ? (both ? 6 : 3) : 0;
+
+    if (first_base != 0 && (m_486_written & (1 << (first_base - 1))) != 0)
+        clocks += 1;
+
+    return clocks;
+}
+
 // access: size, 08h write, 10h RMW, 20h code in DRAM with its row from bit 8, 40h one-byte instruction
 // check: the block's next check while more of it runs before that, as DynarecStep takes it. An access that leaves the
 // slice budget short of it isn't counted, the 486 clocks the instruction added so far are taken back, and it returns 1
@@ -839,13 +850,7 @@ uintptr_t I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, 
 #endif
 
     if (i486)
-    {
-        if (size > 1 && (linear & (size - 1)) != 0)
-            cpu->m_dynarec_clocks -= both ? 6 : 3;
-
-        if (first_base != 0 && (cpu->m_486_written & (1 << (first_base - 1))) != 0)
-            cpu->m_dynarec_clocks -= 1;
-    }
+        cpu->m_dynarec_clocks -= cpu->GetDynarec486Clocks((u32)linear, size, both, first_base);
 
     return 1;
 }
@@ -871,17 +876,7 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
     u32 before = store.before;
     u32 linear = cpu->m_dynarec_slow_linear;
     u32 size = (u32)(access & 7);
-    u32 extra = 0;
-
-    if (i486)
-    {
-        if (size > 1 && (linear & (size - 1)) != 0)
-            extra += 3;
-
-        if (first_base != 0 && (cpu->m_486_written & (1 << (first_base - 1))) != 0)
-            extra += 1;
-    }
-
+    u32 extra = i486 ? cpu->GetDynarec486Clocks(linear, size, (access & 0x10) != 0, first_base) : 0;
     u32 physical = linear;
     bool fits = (cpu->m_state.debug_registers[7] & 0xFF) == 0 && !cpu->m_debugger_memory_checks &&
         !(cpu->m_alignment_check && (linear & (size - 1)) != 0);
@@ -889,7 +884,8 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
     if (fits && (cpu->m_state.cr0 & 0x80000000U) != 0)
     {
         const TLBEntry& entry = cpu->GetTLBEntry(linear);
-        fits = (entry.flags & cpu->m_tlb_write_mask) == cpu->m_tlb_write_mask;
+        fits = cpu->IsTLBHit(entry, linear) && (entry.flags & cpu->m_tlb_write_mask) == cpu->m_tlb_write_mask &&
+            !IsValidPointer(cpu->m_write_pages[entry.physical_page >> 12]);
         physical = entry.physical_page | (linear & 0xFFF);
     }
 

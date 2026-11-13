@@ -91,6 +91,8 @@ public:
 private:
     u32 Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const;
     u32 Get486FormClocks(u8 opcode, u8 modrm, bool protected_mode) const;
+    u32 Get486ZeroStoreClocks(u8 opcode, u8 modrm) const;
+    u32 Get486DivideSaving(u8 opcode, u8 modrm, int precision) const;
     void Serialize(StateSerializer& serializer);
     void SanitizeState();
     void Initialize();

@@ -585,6 +585,15 @@ INLINE void I386::CacheTLBPages(TLBEntry& entry)
         m_tlb_kernel_count = I386_TLB_KERNEL_SIZE + 1;
 }
 
+// On a hit, the host pages again when the read page is missing, or the write page of a page that has one: an entry
+// cached in user mode lacks it where only the supervisor may write (386, 486 with WP clear)
+INLINE void I386::RefreshTLBPages(TLBEntry& entry, bool write)
+{
+    if (!IsValidPointer(entry.read_page) || (write && !IsValidPointer(entry.write_page) &&
+        IsValidPointer(m_write_pages[entry.physical_page >> 12])))
+        CacheTLBPages(entry);
+}
+
 // Walks cost no clocks and hits change nothing, so neither the 386's 32 entries and random replacement (386 DX PRM
 // 1990 5.3.5) nor the 486's 4 ways and pseudo-LRU (PRM486 10.6.2) would show but in what a bigger table keeps longer:
 // 512 entries, one per linear page's low bits. A write to a page whose entry is still clean walks the tables again
@@ -610,9 +619,7 @@ NO_INLINE bool I386::TranslateLinearPaged(u32 linear, bool write, GT_Bus_Access_
 
         if (!write || (entry.flags & k_i386_tlb_dirty) != 0)
         {
-            if (!IsValidPointer(entry.read_page))
-                CacheTLBPages(entry);
-
+            RefreshTLBPages(entry, write);
             physical = entry.physical_page | (linear & 0xFFF);
             return true;
         }
@@ -705,9 +712,7 @@ bool I386::TranslateRepeatPage(u32 linear, u32 size, bool write, u32& physical)
         (write && (entry.flags & k_i386_tlb_writable) == 0 && (user || m_write_protect)))
         return false;
 
-    if (!IsValidPointer(entry.read_page))
-        CacheTLBPages(entry);
-
+    RefreshTLBPages(entry, write);
     physical = entry.physical_page | (linear & 0xFFF);
     return true;
 }

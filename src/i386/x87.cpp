@@ -511,23 +511,40 @@ u32 X87::Get486FormClocks(u8 opcode, u8 modrm, bool protected_mode) const
     return clocks;
 }
 
+// FST and FSTP of a zero to a single or double take 27 and 28, 0 for other forms
+INLINE u32 X87::Get486ZeroStoreClocks(u8 opcode, u8 modrm) const
+{
+    int reg = (modrm >> 3) & 7;
+
+    if ((modrm >> 6) == 3 || (opcode != 0xD9 && opcode != 0xDD) || (reg != 2 && reg != 3))
+        return 0;
+
+    return opcode == 0xD9 ? 27 : 28;
+}
+
+// Divisions are shorter at 24 and 53 bits of precision
+INLINE u32 X87::Get486DivideSaving(u8 opcode, u8 modrm, int precision) const
+{
+    int reg = (modrm >> 3) & 7;
+    bool memory = (modrm >> 6) != 3;
+
+    if (reg < 6 || (opcode != 0xD8 && opcode != 0xDC && opcode != 0xDE && (!memory || opcode != 0xDA)))
+        return 0;
+
+    return precision == 0 ? 38 : precision == 2 ? 11 : 0;
+}
+
 u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
 {
     int reg = (modrm >> 3) & 7;
     bool memory = (modrm >> 6) != 3;
     u32 clocks = Get486FormClocks(opcode, modrm, protected_mode);
+    u32 zero_store = Get486ZeroStoreClocks(opcode, modrm);
 
-    // FST and FSTP of a zero to a single or double take 27 and 28
-    if (memory && (opcode == 0xD9 || opcode == 0xDD) && (reg == 2 || reg == 3) && !IsEmpty(0) &&
-        (Read(0).sign_exponent & 0x7FFF) == 0 && Read(0).significand == 0)
-        clocks = opcode == 0xD9 ? 27 : 28;
+    if (zero_store != 0 && !IsEmpty(0) && (Read(0).sign_exponent & 0x7FFF) == 0 && Read(0).significand == 0)
+        clocks = zero_store;
 
-    // Divisions are shorter at 24 and 53 bits of precision
-    if (reg >= 6 && (opcode == 0xD8 || opcode == 0xDC || opcode == 0xDE || (memory && opcode == 0xDA)))
-    {
-        int precision = (m_state.control >> 8) & 3;
-        clocks -= precision == 0 ? 38 : precision == 2 ? 11 : 0;
-    }
+    clocks -= Get486DivideSaving(opcode, modrm, (m_state.control >> 8) & 3);
 
     // The no-wait forms take longer while an error is pending
     if (IsErrorPending())
@@ -544,14 +561,11 @@ u32 X87::Get486Clocks(u8 opcode, u8 modrm, bool protected_mode) const
 // The form's clocks at their fewest and at most with no error pending: a zero stored, a lower precision
 void X87::Get486ClockRange(u8 opcode, u8 modrm, bool protected_mode, u32& fewest, u32& most) const
 {
-    int reg = (modrm >> 3) & 7;
-    bool memory = (modrm >> 6) != 3;
     u32 clocks = Get486FormClocks(opcode, modrm, protected_mode);
-    bool divide = reg >= 6 && (opcode == 0xD8 || opcode == 0xDC || opcode == 0xDE || (memory && opcode == 0xDA));
-    bool store = memory && (opcode == 0xD9 || opcode == 0xDD) && (reg == 2 || reg == 3);
+    u32 zero_store = Get486ZeroStoreClocks(opcode, modrm);
 
-    fewest = divide ? clocks - 38 : clocks;
-    most = store ? (opcode == 0xD9 ? 27 : 28) : clocks;
+    fewest = clocks - Get486DivideSaving(opcode, modrm, 0);
+    most = zero_store != 0 ? zero_store : clocks;
 }
 
 void X87::SaveState(std::ostream& stream)

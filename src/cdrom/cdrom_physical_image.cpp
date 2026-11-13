@@ -300,8 +300,6 @@ bool CdRomPhysicalImage::ReadTOC()
         track.end_lba = next_lba - 1;
         track.sector_count = next_lba - track.start_lba;
         track.file_offset = track.start_lba * CDROM_PHYSICAL_SECTOR_SIZE;
-        LbaToMsf(track.start_lba, &track.start_msf);
-        LbaToMsf(track.end_lba, &track.end_msf);
 
         m_toc.tracks.push_back(track);
     }

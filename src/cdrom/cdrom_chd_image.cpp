@@ -446,7 +446,6 @@ bool CdRomChdImage::ReadTOC()
         new_track.sector_size = TrackTypeSectorSize(new_track.type);
 
         new_track.start_lba = current_lba;
-        LbaToMsf(new_track.start_lba, &new_track.start_msf);
 
         if (pregap_real > 0 || pregap_dv > 0)
         {
@@ -463,8 +462,6 @@ bool CdRomChdImage::ReadTOC()
             Error("Invalid CHD metadata for track %d - Track end LBA overflow", i + 1);
             return false;
         }
-
-        LbaToMsf(new_track.end_lba, &new_track.end_msf);
 
         // Advance current LBA past data and postgap
         if (!checked_add_u32(current_lba, data_frames, &current_lba) ||

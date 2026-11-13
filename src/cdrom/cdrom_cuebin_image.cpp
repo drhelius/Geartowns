@@ -1217,8 +1217,6 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
 
             track.start_lba = index1_lba + total_pregap_length + start_sector;
 
-            LbaToMsf(track.start_lba, &track.start_msf);
-
             if (p.has_pregap)
             {
                 track.has_lead_in = true;
@@ -1236,7 +1234,6 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
             {
                 Track& prev = m_toc.tracks.back();
                 prev.end_lba = track.has_lead_in ? track.lead_in_lba - 1 : track.start_lba - 1;
-                LbaToMsf(prev.end_lba, &prev.end_msf);
 
                 prev.sector_count = prev.end_lba - prev.start_lba + 1;
                 u64 previous_size;
@@ -1296,7 +1293,6 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
         last.sector_count = (u32)last_sector_count;
 
         last.end_lba = last.start_lba + last.sector_count - 1;
-        LbaToMsf(last.end_lba, &last.end_msf);
     }
 
     for (size_t i = 0; i < m_toc.tracks.size(); ++i)

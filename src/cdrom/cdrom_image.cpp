@@ -216,9 +216,7 @@ void CdRomImage::InitTrack(Track& track)
     track.sector_size = 0;
     track.sector_count = 0;
     track.start_lba = 0;
-    track.start_msf = {0, 0, 0};
     track.end_lba = 0;
-    track.end_msf = {0, 0, 0};
     track.has_lead_in = false;
     track.lead_in_lba = 0;
     track.lead_in_stored = false;

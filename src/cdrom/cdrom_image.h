@@ -34,9 +34,7 @@ public:
         u32 sector_size;
         u32 sector_count;
         u32 start_lba;
-        GT_CdRomMSF start_msf;
         u32 end_lba;
-        GT_CdRomMSF end_msf;
         bool has_lead_in;
         u32 lead_in_lba;
         bool lead_in_stored;

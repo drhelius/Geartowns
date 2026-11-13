@@ -34,7 +34,6 @@ public:
     ~ExecMemory();
     bool Init(u32 size);
     void Release();
-    bool IsReady() const;
     u8* GetWriteView() const;
     u8* GetExecuteView() const;
     u32 GetSize() const;

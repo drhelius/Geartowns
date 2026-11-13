@@ -483,7 +483,6 @@ public:
     bool CanAcceptMaskableInterrupt() const;
     bool CanAcceptNMI() const;
     u32 EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int line = -1);
-    u32 EnterNMI(GT_Bus_Access_Context& context);
 
     I386_State* GetState();
     const u32* GetCacheTestRegisters() const;
@@ -579,7 +578,6 @@ public:
     bool IsDynarecEnabled() const;
     void GetDynarecInfo(I386_Dynarec_Info& info) const;
     void SetDynarecTuning(u32 threshold, u32 block_limit);
-    void EnablePollSkip(bool enable);
 
 private:
     friend class DynarecEmitter;
@@ -1663,7 +1661,6 @@ private:
     u32 m_poll_budget;
     u32 m_poll_steps;
     bool m_poll_active;
-    bool m_poll_enabled;
     u32 m_cr0_fixed;
     X87* m_x87;
     void* m_fpu_error_context;

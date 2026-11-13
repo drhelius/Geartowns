@@ -58,11 +58,6 @@ ExecMemory::~ExecMemory()
     Release();
 }
 
-bool ExecMemory::IsReady() const
-{
-    return IsValidPointer(m_write);
-}
-
 u8* ExecMemory::GetWriteView() const
 {
     return m_write;

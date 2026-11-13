@@ -116,7 +116,6 @@ I386::I386()
     m_poll_budget = 0;
     m_poll_steps = 0;
     m_poll_active = false;
-    m_poll_enabled = true;
     m_debugger_hit_pending = false;
     memset(&m_last_exception, 0, sizeof(m_last_exception));
     m_irq_breakpoints = 0;
@@ -513,7 +512,7 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
 {
     m_poll_batch++;
     m_poll_budget = cycle_budget;
-    m_poll_active = m_poll_enabled;
+    m_poll_active = true;
 
     if (m_i486_timing)
         return m_bus_timed ? RunTimed<I386_TIMING_486_BUS>(cycle_budget, context, nmi_pending, intr_pending) :
@@ -646,11 +645,6 @@ void I386::CopyStepException(I386_Run_Result& total) const
 void I386::UpdateStepMode()
 {
     m_step_slow = m_state.halted || m_state.shutdown || m_trace_enabled || (m_state.debug_registers[7] & 0xFF) != 0;
-}
-
-void I386::EnablePollSkip(bool enable)
-{
-    m_poll_enabled = enable;
 }
 
 // 8-bit encodings 4-7 are AH, CH, DH and BH
@@ -1043,15 +1037,6 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
         m_state.shutdown = true;
 
     return (u32)clocks;
-}
-
-u32 I386::EnterNMI(GT_Bus_Access_Context& context)
-{
-    if (!CanAcceptNMI())
-        return 0;
-
-    m_state.nmi_blocked = true;
-    return EnterExternalInterrupt(2, context);
 }
 
 void I386::CopyState(I386_State& state) const

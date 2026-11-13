@@ -57,6 +57,34 @@ INLINE u32 l_zero16(u16 value)
 #endif
 }
 
+INLINE u32 l_zero32(u32 value)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return value ? (u32)__builtin_clz(value) : 32;
+#else
+    u32 n = 0;
+    u32 m = 0x80000000U;
+    while(m && !(value & m))
+    {
+        n++;
+        m >>= 1;
+    }
+    return n;
+#endif
+}
+
+INLINE u32 t_zero32(u32 value)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return value ? (u32)__builtin_ctz(value) : 32;
+#else
+    u32 n = 0;
+    while(n < 32 && !(value & (1U << n)))
+        n++;
+    return n;
+#endif
+}
+
 INLINE u8 parity8(u8 x)
 {
 #if defined(__GNUC__) || defined(__clang__)

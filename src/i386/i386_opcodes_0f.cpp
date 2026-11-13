@@ -1387,18 +1387,7 @@ bool I386::OPCodes0F_BitScan()
         Sub(0, 0, 0, width);
     else
     {
-        int bit = opcode == 0xBC ? 0 : width - 1;
-
-        if (opcode == 0xBC)
-        {
-            while (((source >> bit) & 1) == 0)
-                bit++;
-        }
-        else
-        {
-            while (((source >> bit) & 1) == 0)
-                bit--;
-        }
+        int bit = opcode == 0xBC ? (int)t_zero32(source) : 31 - (int)l_zero32(source);
 
         SetRegister(m_instruction.reg, width, (u32)bit);
 

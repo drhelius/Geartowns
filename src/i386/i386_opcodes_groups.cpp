@@ -26,23 +26,10 @@ u32 I386::GetMultiplySteps(u32 multiplier, int width, bool signed_multiplier) co
     u32 value = multiplier & GetMask(width);
     bool negative = signed_multiplier && (value & GetSignBit(width)) != 0;
     u32 significant = negative ? ~value & GetMask(width) : value;
-    u32 steps = 0;
-
-    while (significant != 0)
-    {
-        significant >>= 1;
-        steps++;
-    }
+    u32 steps = 32 - l_zero32(significant);
 
     if (negative)
-    {
-        u32 trailing_zeroes = 0;
-
-        while ((value & (1U << trailing_zeroes)) == 0)
-            trailing_zeroes++;
-
-        steps = MAX(steps, trailing_zeroes + 4);
-    }
+        steps = MAX(steps, t_zero32(value) + 4);
 
     return MIN(MAX(steps, 3U), (u32)width);
 }
@@ -73,29 +60,10 @@ u32 I386::GetBitScanClocks(u32 value, int width, bool reverse) const
     if (value == 0)
         return 6;
 
-    u32 zeroes = 0;
-
     if (reverse)
-    {
-        u32 bit = GetSignBit(width);
+        return 9 + (l_zero32(value) - (32 - (u32)width)) * 3;
 
-        while ((value & bit) == 0)
-        {
-            zeroes++;
-            bit >>= 1;
-        }
-
-        return 9 + zeroes * 3;
-    }
-
-    u32 bit = 1;
-
-    while ((value & bit) == 0)
-    {
-        zeroes++;
-        bit <<= 1;
-    }
-
+    u32 zeroes = t_zero32(value);
     return zeroes == 0 ? 10 : 11 + zeroes * 3;
 }
 

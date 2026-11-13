@@ -846,13 +846,7 @@ u32 I386::Get486MultiplyClocks(u32 multiplier, int width, bool signed_multiplier
     u32 value = multiplier & GetMask(width);
     bool negative = signed_multiplier && (value & GetSignBit(width)) != 0;
     u32 magnitude = negative ? (~value + 1) & GetMask(width) : value;
-    u32 bits = 0;
-
-    while (magnitude != 0)
-    {
-        magnitude >>= 1;
-        bits++;
-    }
+    u32 bits = 32 - l_zero32(magnitude);
 
     return 10 + MAX(bits, negative ? 5U : 3U);
 }

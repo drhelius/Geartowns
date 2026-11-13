@@ -93,8 +93,6 @@ struct PresetProgramState
     uint32_t program;
     int texture_count;
     PresetTextureBinding textures[OGL_SHADER_CHAIN_MAX_TEXTURE_UNITS];
-    bool uses_original;
-    bool uses_feedback;
     int uniform_source_size;
     int uniform_original_size;
     int uniform_output_size;
@@ -521,22 +519,6 @@ bool ogl_shader_chain_get_preset_pass_uses_history(int index)
     return active_preset.passes[index].history;
 }
 
-bool ogl_shader_chain_get_preset_pass_uses_original_sampler(int index)
-{
-    if (!preset_loaded || index < 0 || index >= active_preset.pass_count)
-        return false;
-
-    return preset_programs[index].uses_original;
-}
-
-bool ogl_shader_chain_get_preset_pass_uses_feedback_sampler(int index)
-{
-    if (!preset_loaded || index < 0 || index >= active_preset.pass_count)
-        return false;
-
-    return preset_programs[index].uses_feedback;
-}
-
 bool ogl_shader_chain_preset_uses_feedback(void)
 {
     if (!preset_loaded)
@@ -752,11 +734,6 @@ uint32_t ogl_shader_chain_get_pass_framebuffer(void)
     return pass_fbo;
 }
 
-uint32_t ogl_shader_chain_get_feedback_texture(void)
-{
-    return feedback_texture;
-}
-
 uint32_t ogl_shader_chain_get_feedback_framebuffer(void)
 {
     return feedback_fbo;
@@ -836,22 +813,6 @@ uint32_t ogl_shader_chain_get_pass_history_texture(int pass_index, int history_i
     return pass_history_textures[pass_index][index];
 }
 
-int ogl_shader_chain_get_intermediate_width(int index)
-{
-    if (index < 0 || index >= SHADER_PRESET_MAX_PASSES - 1)
-        return 1;
-
-    return intermediate_widths[index];
-}
-
-int ogl_shader_chain_get_intermediate_height(int index)
-{
-    if (index < 0 || index >= SHADER_PRESET_MAX_PASSES - 1)
-        return 1;
-
-    return intermediate_heights[index];
-}
-
 int ogl_shader_chain_get_pass_width(void)
 {
     return pass_width;
@@ -904,8 +865,8 @@ static void bind_preset_uniform_locations(int index)
 
     state->texture_count = 0;
     add_texture_binding(state, "Source", PresetTexture_Source, 0);
-    state->uses_original = add_texture_binding(state, "Original", PresetTexture_Original, 0);
-    state->uses_feedback = add_texture_binding(state, "PassFeedback0", PresetTexture_Feedback, 0);
+    add_texture_binding(state, "Original", PresetTexture_Original, 0);
+    add_texture_binding(state, "PassFeedback0", PresetTexture_Feedback, 0);
 
     for (int i = 0; i < SHADER_PRESET_MAX_HISTORY_TEXTURES; i++)
     {

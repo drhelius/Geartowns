@@ -34,7 +34,7 @@ extern bool g_mcp_stdio_mode;
 #if defined(GT_DEBUG)
     #if defined(__ANDROID__)
         #include <android/log.h>
-        #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, GT_TITLE, __VA_ARGS__);
+        #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, GT_TITLE, __VA_ARGS__)
     #endif
     #define Debug(msg, ...) (Log_func(msg, ##__VA_ARGS__))
 #else

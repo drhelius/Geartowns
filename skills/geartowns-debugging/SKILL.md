@@ -324,6 +324,9 @@ Towns OS runs MS-DOS in real mode and starts 32-bit protected-mode applications 
 
 - `keyboard_key` presses, releases or taps a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, HIRAGANA...)
 - `keyboard_type` types ASCII text, useful at Towns OS and DOS prompts
+- `host_key` presses a host key (USB names: `a`, `up`, `kp_8`, `left_ctrl`...) through the game's key map, as the host keyboard would; `keyboard_key` and `keyboard_type` skip the map
+- `get_key_map` shows the per-game bindings, the host keys that drive something else and the Towns keys no host key reaches; `set_key_binding` changes one (`none`, `default`) and `set_key_mapping` turns the game's bindings off
+- `open_key_mapper` and `close_key_mapper` show and hide the in-game keyboard mapper; the Towns stops while it's open
 - `controller_set_type` selects the device on a game port (`auto`, `none`, `original_gamepad`, `marty_gamepad`, `six_button_gamepad`, `mouse`); `auto` takes the device the game database names for the loaded game, or the default
 - `controller_button` presses, releases or taps pad buttons; on a mouse port the directions move the mouse and A/B are the left/right buttons
 - `mouse_click` with `x`, `y` clicks at a screen pixel from `get_screenshot` (`double_click`, `right` button, `press_frames`/`release_frames` for software that needs longer clicks); `drag` with `to_x`, `to_y` drags in one call and always releases, or use `press`/`release` around a `mouse_move`

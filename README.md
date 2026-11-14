@@ -108,6 +108,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - IC memory card slot with raw card images, the JEIDA 4 banked windows, blank card creation and booting from the card.
 - Save states with 5 slots and rewind support.
 - Run-ahead support to reduce input latency.
+- In-game keyboard mapper to bind host keys to the FM Towns keyboard per game.
 - Video recording to AVI and screenshots.
 - VGM recorder for the YM3438 and RF5C68 sound chips.
 - Internal database for automatic media detection and hardware selection if `Auto` options are selected.
@@ -137,6 +138,58 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from **Drives → CD-ROM**.
 - **Floppy Images**: Insert floppy disks from **Drives → Floppies**, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
+
+### Keyboard
+
+Keys type on the FM Towns keyboard. With **Input → Keyboard → Capture Keyboard** on (the default), only the Quit, Fullscreen, Capture Mouse, Capture Keyboard, Keyboard Mapper and Key Mapping hotkeys work. Press `Ctrl+Shift+K` to release the keyboard and get every hotkey back.
+
+The Towns keys a PC keyboard doesn't have are on these host keys, on desktop and libretro:
+
+| Host key | FM Towns key |
+|---|---|
+| F1-F12 / F13-F20 | PF1-PF12 / PF13-PF20 |
+| Escape / Pause | BREAK |
+| `` ` `` | ESC |
+| Print Screen | COPY |
+| Page Up / Page Down | 前行 / 次行 |
+| `=` / `[` / `]` / `\` | `^` / `@` / `[` / `¥` |
+| `'` | `:` |
+| Menu | ひらがな |
+| Left Win / Right Win (Cmd on macOS) | 無変換 / 変換 |
+| Right Alt (Option on macOS) | かな漢字 |
+
+On a Japanese keyboard, its own カタカナ/ひらがな, 変換, 無変換, `¥` and `_` keys drive the Towns ones.
+
+#### Keyboard Mapper
+
+Press `Ctrl+F1` (`Cmd+F1` on macOS), or use **Input → Keyboard → Keyboard Mapper...**, to stop the Towns and show its keyboard:
+
+- Click a Towns key, then press the host key that should drive it, on its own. It stays selected for more host keys; click it again to deselect it.
+- Each Towns key lists the host keys that drive it, built-in ones first. Click the **x** on one to remove it, or right click the Towns key to remove all but the built-in ones.
+- Red keys are ones no host key reaches, such as 実行, 取消 and the dictionary keys.
+- **Reset All**, clicked twice, drops the game's changes.
+- Press the same hotkey again, or click **Close**, to go back to the game.
+
+`Ctrl+F2` (`Cmd+F2` on macOS), or **Input → Keyboard → Key Mapping**, turns the game's changes off and on, for instance to type a name in a game whose letter keys were moved. Every game starts with them on. Both hotkeys can be changed in **Emulator → Hotkeys**, and the mapper can also have a gamepad shortcut.
+
+#### Key Files
+
+The changes are kept for that game only, in a `.keys` file named after the content (`FM Towns.keys` with nothing loaded) in the `Save Files` folder, written when the mapper closes. The file can be edited by hand. Host keys without a line keep their usual job:
+
+```ini
+[keys]
+up = kp_8
+f13 = ctrl + pf1
+grave = none
+```
+
+- **Host keys**: `a`-`z`, `0`-`9`, `f1`-`f24`, `return`, `escape`, `backspace`, `tab`, `space`, `minus`, `equals`, `left_bracket`, `right_bracket`, `backslash`, `non_us_hash`, `semicolon`, `apostrophe`, `grave`, `comma`, `period`, `slash`, `non_us_backslash`, `caps_lock`, `print_screen`, `scroll_lock`, `pause`, `insert`, `home`, `page_up`, `delete`, `end`, `page_down`, `up`, `down`, `left`, `right`, `num_lock`, `kp_0`-`kp_9`, `kp_00`, `kp_000`, `kp_divide`, `kp_multiply`, `kp_minus`, `kp_plus`, `kp_enter`, `kp_period`, `kp_equals`, `kp_comma`, `menu`, `help`, `sysreq`, `international1`-`international5`, `lang1`-`lang5`, `left_ctrl`, `left_shift`, `left_alt`, `left_gui`, `right_ctrl`, `right_shift`, `right_alt`, `right_gui`.
+- **FM Towns keys**: `a`-`z`, `0`-`9`, `pf1`-`pf20`, `escape`, `minus`, `caret`, `yen`, `backspace`, `tab`, `at`, `left_bracket`, `return`, `semicolon`, `colon`, `right_bracket`, `comma`, `period`, `slash`, `underscore`, `space`, `kp_0`-`kp_9`, `kp_000`, `kp_multiply`, `kp_divide`, `kp_plus`, `kp_minus`, `kp_equals`, `kp_enter`, `kp_period`, `insert`, `delete`, `home`, `up`, `down`, `left`, `right`, `ctrl`, `shift`, `caps`, `alt`, `hiragana`, `katakana`, `kana_kanji`, `convert`, `no_convert`, `half_full`, `kanji_dictionary`, `delete_word`, `add_word`, `previous`, `next`, `cancel`, `execute`, `break`, `copy`.
+- A host key takes up to four Towns keys joined with `+`, pressed in that order, such as `ctrl + pf1`, or `none` to do nothing.
+
+#### Libretro
+
+The same hotkeys work in libretro too. RetroArch keeps F1 and F2 for itself, so turn on Game Focus (Scroll Lock) first. Click keys with the mouse or a touch screen. The `.keys` files go to the save directory.
 
 ### Hard Disks
 

@@ -16,6 +16,7 @@ Features:
     - CD-ROM support for CUE/BIN, ISO, CHD, M3U and ZIP formats, plus physical discs on Windows, macOS and Linux.
     - Two floppy drives with D77, D88, HDM, XDF, IMG and MFM images, M3U playlists, write protection and optional persistence.
     - Save states with preview and rewind, and run-ahead.
+    - In-game keyboard mapper to bind host keys to the FM Towns keyboard per game.
     - Video recording to AVI, VGM recording and screenshots.
     - Full debugger with disassembly, breakpoints, call stack, symbols, memory editor, trace logger, profiler, i386 descriptor and paging inspectors, and CRTC, sprite, YM3438, RF5C68, CD-ROM and floppy tools.
     - MCP server for AI-assisted debugging and hardware inspection.
@@ -28,6 +29,7 @@ Licensing:
     - nlohmann/json: Copyright 2013-2025 Niels Lohmann, MIT.
     - libchdr: Copyright Romain Tisserand and contributors, BSD-3-clause.
     - LZMA SDK: Copyright Igor Pavlov, public domain.
+    - VGA fonts from SeaBIOS vgafonts.c (fntcol16.zip by Joseph Gil): public domain.
     - mINI: Copyright 2018 Danijel Durakovic, MIT.
     - miniz: Copyright Rich Geldreich and contributors, Unlicense.
     - stb: Copyright Sean Barrett and contributors, public domain or MIT.

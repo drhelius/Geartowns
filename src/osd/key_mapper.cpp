@@ -308,6 +308,7 @@ void KeyMapper::Click(int x, int y)
     {
         GT_Keys key = k_key_mapper_layout[index].key;
         m_selected = key == m_selected ? GT_KEY_NONE : key;
+        m_message.clear();
     }
 }
 
@@ -514,7 +515,11 @@ void KeyMapper::DrawInfo()
         m_canvas.DrawText(k_margin, y, "Select a key to show its mapping", k_color_text, true);
     else
     {
-        m_canvas.DrawText(k_margin, y, KeyMap::GetKeyLabel(m_selected), k_color_text, true);
+        const char* label = KeyMap::GetKeyLabel(m_selected);
+        int x = k_margin + OsdCanvas::GetTextWidth(label) + 24;
+        size_t fit = (size_t)MAX(0, (k_key_mapper_width - k_margin - x) / 8);
+        m_canvas.DrawText(k_margin, y, label, k_color_text, true);
+        m_canvas.DrawText(x, y, DescribeOwnHostKeys(m_selected).substr(0, fit).c_str(), k_color_text, true);
         DrawChips(y + k_line_height);
     }
 
@@ -643,6 +648,27 @@ std::string KeyMapper::DescribeHostKey(u16 usage) const
 
     char text[16];
     snprintf(text, sizeof(text), "Key %02Xh", usage);
+    return text;
+}
+
+std::string KeyMapper::DescribeOwnHostKeys(GT_Keys key) const
+{
+    std::string text;
+
+    for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
+    {
+        GT_Key_Map_Layer layer = GT_KEY_MAP_BUILT_IN;
+        const GT_Key_Map_Entry& entry = m_key_map->GetEntry((u16)usage, &layer);
+
+        if ((layer == GT_KEY_MAP_BUILT_IN) || !drives(m_key_map->GetLayerEntry(GT_KEY_MAP_BUILT_IN, (u16)usage), key))
+            continue;
+
+        if ((entry.count == 1) && (entry.keys[0] == (u8)key))
+            continue;
+
+        text += (text.empty() ? "Host " : ", ") + DescribeHostKey((u16)usage) + " \x1A " + DescribeTargets(entry);
+    }
+
     return text;
 }
 

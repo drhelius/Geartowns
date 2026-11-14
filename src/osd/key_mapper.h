@@ -80,6 +80,7 @@ private:
     void GetCloseRect(int* x, int* y, int* width, int* height) const;
     bool IsPointerIn(int x, int y, int width, int height) const;
     std::string DescribeHostKey(u16 usage) const;
+    std::string DescribeOwnHostKeys(GT_Keys key) const;
     std::string DescribeTargets(const GT_Key_Map_Entry& entry) const;
 
 private:

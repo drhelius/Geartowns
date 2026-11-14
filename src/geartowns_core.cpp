@@ -1281,6 +1281,7 @@ void GeartownsCore::HostKeyPressed(u16 usage)
             m_key_mapper->Open();
 
         m_key_map->IgnoreHostKey(usage);
+        m_key_map->DiscardDeferredHostKeys();
         return;
     }
 
@@ -1302,6 +1303,11 @@ void GeartownsCore::ReleaseAllHostKeys()
 {
     m_key_map->ReleaseAll();
     m_key_mapper->ReleaseHostKeys();
+}
+
+void GeartownsCore::DiscardDeferredHostKeys()
+{
+    m_key_map->DiscardDeferredHostKeys();
 }
 
 void GeartownsCore::EnableHostHotkeys(bool enable)

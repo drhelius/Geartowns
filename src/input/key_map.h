@@ -51,6 +51,7 @@ public:
     void HostKeyPressed(u16 usage);
     void HostKeyReleased(u16 usage);
     void IgnoreHostKey(u16 usage);
+    void DiscardDeferredHostKeys();
     bool IsHostKeyDown(u16 usage) const;
     void ReleaseAll();
     void Suspend();
@@ -89,6 +90,9 @@ private:
     const GT_Key_Map_Entry& GetActiveEntry(u16 usage) const;
     const GT_Key_Map_Entry& GetBaseEntry(GT_Key_Map_Layer layer, u16 usage) const;
     void SetUserEntry(u16 usage, const GT_Key_Map_Entry& entry);
+    void PressHostTargets(u16 usage);
+    void FlushDeferredHostKeys();
+    static bool IsDeferredHostKey(u16 usage);
     void PressKey(u8 key);
     void ReleaseKey(u8 key);
     void SyncKey(u8 key);
@@ -100,6 +104,7 @@ private:
     GT_Key_Map_Entry m_layers[GT_KEY_MAP_LAYER_COUNT][GT_HOST_KEY_COUNT];
     GT_Key_Map_Entry m_host_targets[GT_HOST_KEY_COUNT];
     bool m_host_down[GT_HOST_KEY_COUNT];
+    bool m_host_deferred[GT_HOST_KEY_COUNT];
     int m_references[GT_KEY_COUNT];
     bool m_enabled;
     bool m_blocked;

@@ -136,6 +136,7 @@ public:
     void HostKeyPressed(u16 usage);
     void HostKeyReleased(u16 usage);
     void ReleaseAllHostKeys();
+    void DiscardDeferredHostKeys();
     void EnableHostHotkeys(bool enable);
     void Pause(bool paused);
     bool IsPaused();

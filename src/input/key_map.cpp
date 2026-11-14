@@ -51,6 +51,7 @@ KeyMap::KeyMap()
     memset(m_layers, 0, sizeof(m_layers));
     memset(m_host_targets, 0, sizeof(m_host_targets));
     memset(m_host_down, 0, sizeof(m_host_down));
+    memset(m_host_deferred, 0, sizeof(m_host_deferred));
     memset(m_references, 0, sizeof(m_references));
     m_enabled = true;
     m_blocked = false;
@@ -72,20 +73,28 @@ void KeyMap::HostKeyPressed(u16 usage)
     m_host_down[usage] = true;
     m_host_targets[usage] = k_key_map_empty;
 
-    if (m_blocked)
+    if (IsDeferredHostKey(usage))
+    {
+        m_host_deferred[usage] = true;
         return;
+    }
 
-    const GT_Key_Map_Entry& entry = GetActiveEntry(usage);
-    m_host_targets[usage] = entry;
+    if (usage < k_host_key_first_modifier)
+        FlushDeferredHostKeys();
 
-    for (int i = 0; i < entry.count; i++)
-        PressKey(entry.keys[i]);
+    PressHostTargets(usage);
 }
 
 void KeyMap::HostKeyReleased(u16 usage)
 {
     if (!IsHostKey(usage) || !m_host_down[usage])
         return;
+
+    if (m_host_deferred[usage])
+    {
+        m_host_deferred[usage] = false;
+        PressHostTargets(usage);
+    }
 
     m_host_down[usage] = false;
     GT_Key_Map_Entry& targets = m_host_targets[usage];
@@ -103,6 +112,12 @@ void KeyMap::IgnoreHostKey(u16 usage)
 
     m_host_down[usage] = true;
     m_host_targets[usage] = k_key_map_empty;
+}
+
+void KeyMap::DiscardDeferredHostKeys()
+{
+    m_host_deferred[k_host_key_left_gui] = false;
+    m_host_deferred[k_host_key_right_gui] = false;
 }
 
 bool KeyMap::IsHostKeyDown(u16 usage) const
@@ -125,10 +140,13 @@ void KeyMap::ReleaseAll()
 
     memset(m_host_targets, 0, sizeof(m_host_targets));
     memset(m_host_down, 0, sizeof(m_host_down));
+    memset(m_host_deferred, 0, sizeof(m_host_deferred));
 }
 
 void KeyMap::Suspend()
 {
+    DiscardDeferredHostKeys();
+
     for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
     {
         GT_Key_Map_Entry& targets = m_host_targets[usage];
@@ -561,6 +579,38 @@ void KeyMap::SetUserEntry(u16 usage, const GT_Key_Map_Entry& entry)
         m_layers[GT_KEY_MAP_USER][usage] = entry;
 
     m_changed = true;
+}
+
+void KeyMap::PressHostTargets(u16 usage)
+{
+    if (m_blocked)
+        return;
+
+    const GT_Key_Map_Entry& entry = GetActiveEntry(usage);
+    m_host_targets[usage] = entry;
+
+    for (int i = 0; i < entry.count; i++)
+        PressKey(entry.keys[i]);
+}
+
+void KeyMap::FlushDeferredHostKeys()
+{
+    if (m_host_deferred[k_host_key_left_gui])
+    {
+        m_host_deferred[k_host_key_left_gui] = false;
+        PressHostTargets(k_host_key_left_gui);
+    }
+
+    if (m_host_deferred[k_host_key_right_gui])
+    {
+        m_host_deferred[k_host_key_right_gui] = false;
+        PressHostTargets(k_host_key_right_gui);
+    }
+}
+
+bool KeyMap::IsDeferredHostKey(u16 usage)
+{
+    return (usage == k_host_key_left_gui) || (usage == k_host_key_right_gui);
 }
 
 void KeyMap::PressKey(u8 key)

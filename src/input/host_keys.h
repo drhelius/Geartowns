@@ -124,6 +124,9 @@ static const int k_host_key_count = (int)(sizeof(k_host_keys) / sizeof(k_host_ke
 
 static const u16 k_host_key_f1 = 0x3A;
 static const u16 k_host_key_f2 = 0x3B;
+static const u16 k_host_key_first_modifier = 0xE0;
+static const u16 k_host_key_left_gui = 0xE3;
+static const u16 k_host_key_right_gui = 0xE7;
 #if defined(__APPLE__)
 static const u16 k_host_key_left_hotkey_mod = 0xE3;
 static const u16 k_host_key_right_hotkey_mod = 0xE7;

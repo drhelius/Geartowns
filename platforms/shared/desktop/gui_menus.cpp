@@ -46,6 +46,8 @@
 #include "video/video.h"
 #include "rewind.h"
 #include "events.h"
+#include "game_focus.h"
+#include "hotkeys.h"
 #include "input_macro.h"
 
 static bool open_rom = false;
@@ -103,6 +105,7 @@ static const char* get_current_media_directory_text(void);
 static void keyboard_configuration_item(const char* text, SDL_Scancode* key, int player);
 static void gamepad_configuration_item(const char* text, int* button, int player);
 static void hotkey_configuration_item(const char* text, config_Hotkey* hotkey);
+static void hotkey_configuration_menu(bool debug);
 static void gamepad_device_selector(int player);
 static void draw_savestate_slot_info(int slot);
 
@@ -786,49 +789,13 @@ static void menu_emulator(void)
 
         if (ImGui::BeginMenu("Hotkeys"))
         {
-            hotkey_configuration_item("Insert CD-ROM Image:", &config_hotkeys[config_HotkeyIndex_OpenROM]);
-            hotkey_configuration_item("Quit:", &config_hotkeys[config_HotkeyIndex_Quit]);
-            hotkey_configuration_item("Power On:", &config_hotkeys[config_HotkeyIndex_PowerOn]);
-            hotkey_configuration_item("Power Off:", &config_hotkeys[config_HotkeyIndex_PowerOff]);
-            hotkey_configuration_item("Reset:", &config_hotkeys[config_HotkeyIndex_Reset]);
-            hotkey_configuration_item("Reload CD-ROM and Reset:", &config_hotkeys[config_HotkeyIndex_ReloadROM]);
-            hotkey_configuration_item("Pause:", &config_hotkeys[config_HotkeyIndex_Pause]);
-            hotkey_configuration_item("Fast Forward:", &config_hotkeys[config_HotkeyIndex_FFWD]);
-            hotkey_configuration_item("Rewind:", &config_hotkeys[config_HotkeyIndex_Rewind]);
-            hotkey_configuration_item("Save State:", &config_hotkeys[config_HotkeyIndex_SaveState]);
-            hotkey_configuration_item("Load State:", &config_hotkeys[config_HotkeyIndex_LoadState]);
-            hotkey_configuration_item("Save State Slot 1:", &config_hotkeys[config_HotkeyIndex_SelectSlot1]);
-            hotkey_configuration_item("Save State Slot 2:", &config_hotkeys[config_HotkeyIndex_SelectSlot2]);
-            hotkey_configuration_item("Save State Slot 3:", &config_hotkeys[config_HotkeyIndex_SelectSlot3]);
-            hotkey_configuration_item("Save State Slot 4:", &config_hotkeys[config_HotkeyIndex_SelectSlot4]);
-            hotkey_configuration_item("Save State Slot 5:", &config_hotkeys[config_HotkeyIndex_SelectSlot5]);
-            hotkey_configuration_item("Screenshot:", &config_hotkeys[config_HotkeyIndex_Screenshot]);
-            hotkey_configuration_item("Video Recording:", &config_hotkeys[config_HotkeyIndex_VideoRecording]);
-            hotkey_configuration_item("Mute All Audio:", &config_hotkeys[config_HotkeyIndex_Mute]);
-            hotkey_configuration_item("Fullscreen:", &config_hotkeys[config_HotkeyIndex_Fullscreen]);
-            hotkey_configuration_item("Show Main Menu:", &config_hotkeys[config_HotkeyIndex_ShowMainMenu]);
-            hotkey_configuration_item("Capture Mouse:", &config_hotkeys[config_HotkeyIndex_CaptureMouse]);
-            hotkey_configuration_item("Capture Keyboard:", &config_hotkeys[config_HotkeyIndex_CaptureKeyboard]);
-            hotkey_configuration_item("Keyboard Mapper:", &config_hotkeys[config_HotkeyIndex_KeyboardMapper]);
-            hotkey_configuration_item("Key Mapping:", &config_hotkeys[config_HotkeyIndex_KeyMapping]);
-
-            gui_popup_modal_hotkey();
-
+            hotkey_configuration_menu(false);
             ImGui::EndMenu();
         }
 
         if (ImGui::BeginMenu("Debug Hotkeys"))
         {
-            hotkey_configuration_item("Step Into:", &config_hotkeys[config_HotkeyIndex_DebugStepInto]);
-            hotkey_configuration_item("Step Over:", &config_hotkeys[config_HotkeyIndex_DebugStepOver]);
-            hotkey_configuration_item("Step Out:", &config_hotkeys[config_HotkeyIndex_DebugStepOut]);
-            hotkey_configuration_item("Step Frame:", &config_hotkeys[config_HotkeyIndex_DebugStepFrame]);
-            hotkey_configuration_item("Continue:", &config_hotkeys[config_HotkeyIndex_DebugContinue]);
-            hotkey_configuration_item("Break:", &config_hotkeys[config_HotkeyIndex_DebugBreak]);
-            hotkey_configuration_item("Run to Cursor:", &config_hotkeys[config_HotkeyIndex_DebugRunToCursor]);
-            hotkey_configuration_item("Toggle Breakpoint:", &config_hotkeys[config_HotkeyIndex_DebugBreakpoint]);
-            hotkey_configuration_item("Go Back:", &config_hotkeys[config_HotkeyIndex_DebugGoBack]);
-            gui_popup_modal_hotkey();
+            hotkey_configuration_menu(true);
             ImGui::EndMenu();
         }
 
@@ -1671,6 +1638,20 @@ static void menu_input(void)
     {
         gui_in_use = true;
 
+        if (ImGui::MenuItem("Game Focus", config_hotkeys[config_HotkeyIndex_GameFocus].str, false, !emu_is_empty()))
+            game_focus_set(true);
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Locks the mouse in the window and turns hotkeys off,");
+            ImGui::Text("except Game Focus, Fullscreen and the keyboard mapper's.");
+            ImGui::Text("Going fullscreen also enters it.");
+            ImGui::EndTooltip();
+        }
+
+        ImGui::Separator();
+
         if (ImGui::BeginMenu("FM Towns Ports"))
         {
             for (int i = 0; i < GT_MAX_GAMEPADS; i++)
@@ -1715,21 +1696,6 @@ static void menu_input(void)
 
         if (ImGui::BeginMenu("Keyboard"))
         {
-            if (ImGui::MenuItem("Capture Keyboard", config_hotkeys[config_HotkeyIndex_CaptureKeyboard].str, &config_emulator.capture_keyboard))
-                events_release_keyboard();
-
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("When enabled, keys type on the FM Towns keyboard and only the");
-                ImGui::Text("Quit, Fullscreen, capture and key mapper hotkeys work.");
-                ImGui::Text("When disabled, all hotkeys work and other keys still type.");
-                ImGui::Text("Press %s to toggle it.", config_hotkeys[config_HotkeyIndex_CaptureKeyboard].str);
-                ImGui::EndTooltip();
-            }
-
-            ImGui::Separator();
-
             if (ImGui::MenuItem("Keyboard Mapper...", config_hotkeys[config_HotkeyIndex_KeyboardMapper].str,
                 emu_key_mapper_is_open(), !emu_is_empty()))
                 emu_key_mapper_toggle();
@@ -1821,18 +1787,6 @@ static void menu_input(void)
 
         if (ImGui::BeginMenu("Mouse"))
         {
-            if (ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse))
-                events_release_mouse();
-
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("When enabled, the mouse will be captured inside");
-                ImGui::Text("the emulator window to use the mouse freely.");
-                ImGui::Text("Press %s to release the mouse.", config_hotkeys[config_HotkeyIndex_CaptureMouse].str);
-                ImGui::EndTooltip();
-            }
-
             ImGui::SliderInt("##mouse_sensitivity", &config_emulator.mouse_sensitivity, 1, 15, "Sensitivity = %d");
 
             ImGui::EndMenu();
@@ -1901,30 +1855,15 @@ static void menu_input(void)
                         ImGui::TextDisabled("Gamepad %s - Shortcuts", gamepad_name);
                         ImGui::Separator();
 
-                        gamepad_configuration_item("Save State:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_SaveState], i);
-                        gamepad_configuration_item("Load State:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_LoadState], i);
-                        gamepad_configuration_item("Save State Slot 1:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_SelectSlot1], i);
-                        gamepad_configuration_item("Save State Slot 2:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_SelectSlot2], i);
-                        gamepad_configuration_item("Save State Slot 3:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_SelectSlot3], i);
-                        gamepad_configuration_item("Save State Slot 4:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_SelectSlot4], i);
-                        gamepad_configuration_item("Save State Slot 5:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_SelectSlot5], i);
+                        for (int j = 0; j < config_HotkeyIndex_COUNT; j++)
+                        {
+                            if ((hotkey_definitions[j].flags & HOTKEY_FLAG_GAMEPAD) == 0)
+                                continue;
 
-                        ImGui::Separator();
-
-                        gamepad_configuration_item("Power On:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_PowerOn], i);
-                        gamepad_configuration_item("Power Off:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_PowerOff], i);
-                        gamepad_configuration_item("Reset:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Reset], i);
-                        gamepad_configuration_item("Pause:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Pause], i);
-                        gamepad_configuration_item("Fast Forward:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_FFWD], i);
-                        gamepad_configuration_item("Rewind:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Rewind], i);
-                        gamepad_configuration_item("Screenshot:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Screenshot], i);
-                        gamepad_configuration_item("Video Recording:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_VideoRecording], i);
-                        gamepad_configuration_item("Mute All Audio:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Mute], i);
-                        gamepad_configuration_item("Fullscreen:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Fullscreen], i);
-                        gamepad_configuration_item("Capture Mouse:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_CaptureMouse], i);
-                        gamepad_configuration_item("Capture Keyboard:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_CaptureKeyboard], i);
-                        gamepad_configuration_item("Keyboard Mapper:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_KeyboardMapper], i);
-                        gamepad_configuration_item("Show Main Menu:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_ShowMainMenu], i);
+                            char label[64];
+                            snprintf(label, sizeof(label), "%s:", hotkey_definitions[j].label);
+                            gamepad_configuration_item(label, &config_input_gamepad_shortcuts[i].gamepad_shortcuts[j], i);
+                        }
 
                         gui_popup_modal_gamepad(i);
 
@@ -2625,6 +2564,26 @@ static void hotkey_configuration_item(const char* text, config_Hotkey* hotkey)
         hotkey->mod = SDL_KMOD_NONE;
         config_update_hotkey_string(hotkey);
     }
+}
+
+static void hotkey_configuration_menu(bool debug)
+{
+    for (int i = 0; i < config_HotkeyIndex_COUNT; i++)
+    {
+        if (((hotkey_definitions[i].flags & HOTKEY_FLAG_DEBUG) != 0) != debug)
+            continue;
+
+        char label[64];
+        snprintf(label, sizeof(label), "%s:", hotkey_definitions[i].label);
+        hotkey_configuration_item(label, &config_hotkeys[i]);
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::MenuItem("Reset to Defaults"))
+        hotkeys_reset_defaults(debug);
+
+    gui_popup_modal_hotkey();
 }
 
 static void gamepad_device_selector(int player)

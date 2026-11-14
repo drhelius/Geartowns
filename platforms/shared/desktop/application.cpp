@@ -38,6 +38,8 @@
 #include "single_instance.h"
 #include "gamepad.h"
 #include "events.h"
+#include "game_focus.h"
+#include "hotkeys.h"
 
 #define APPLICATION_IMPORT
 #include "application.h"
@@ -66,8 +68,6 @@ static void sdl_events(void);
 static void sdl_events_quit(const SDL_Event* event);
 static void request_quit(void);
 static void sdl_events_app(const SDL_Event* event);
-static bool is_mouse_captured(void);
-static bool is_captured_mouse_event(const SDL_Event* event);
 static void handle_mouse_cursor(void);
 static void handle_menu(void);
 static void handle_window_resizable(void);
@@ -505,27 +505,12 @@ static void sdl_destroy(void)
     SDL_Quit();
 }
 
-static bool is_mouse_captured(void)
-{
-    return config_emulator.capture_mouse && !ImGui::IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopup) &&
-        !emu_key_mapper_is_open();
-}
-
-static bool is_captured_mouse_event(const SDL_Event* event)
-{
-    if (!is_mouse_captured())
-        return false;
-
-    if (event->type != SDL_EVENT_MOUSE_MOTION && event->type != SDL_EVENT_MOUSE_WHEEL &&
-        event->type != SDL_EVENT_MOUSE_BUTTON_DOWN)
-        return false;
-
-    return SDL_GetWindowFromEvent(event) == application_sdl_window;
-}
-
 static void handle_mouse_cursor(void)
 {
-    if (gui_main_window_hovered && (emu_key_mapper_is_open() || (!config_debug.debug && !gui_has_open_window())))
+    game_focus_update();
+
+    if (game_focus_pointer_captured() ||
+        (gui_main_window_hovered && (emu_key_mapper_is_open() || (!config_debug.debug && !gui_has_open_window()))))
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
     else if (!config_debug.debug && config_emulator.fullscreen && !config_emulator.always_show_menu)
     {
@@ -538,13 +523,6 @@ static void handle_mouse_cursor(void)
     }
     else
         ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
-
-    bool mouse_captured = is_mouse_captured();
-
-    if (mouse_captured && !SDL_GetWindowRelativeMouseMode(application_sdl_window))
-        ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-
-    SDL_SetWindowRelativeMouseMode(application_sdl_window, mouse_captured);
 }
 
 static void handle_menu(void)
@@ -581,11 +559,21 @@ static void handle_title(void)
     if ((name[0] == 0) && !emu_is_empty())
         name = get_filename(emu_hard_disk_get_content_path());
 
-    if (strcmp(name, title_name) == 0)
+    char title[GT_MAX_PATH];
+    const char* hotkey = config_hotkeys[config_HotkeyIndex_GameFocus].str;
+
+    if (game_focus_is_on() && (hotkey[0] != 0))
+        snprintf(title, sizeof(title), "%s (Game Focus: %s to leave)", name, hotkey);
+    else if (game_focus_is_on())
+        snprintf(title, sizeof(title), "%s (Game Focus)", name);
+    else
+        strncpy_fit(title, name, sizeof(title));
+
+    if (strcmp(title, title_name) == 0)
         return;
 
-    strncpy_fit(title_name, name, sizeof(title_name));
-    application_update_title_with_rom(name);
+    strncpy_fit(title_name, title, sizeof(title_name));
+    application_update_title_with_rom(title);
 }
 
 static void handle_single_instance(void)
@@ -624,17 +612,17 @@ static void sdl_events(void)
         {
             sdl_events_app(&event);
 
-            if (!file_dialog_active && !is_captured_mouse_event(&event))
+            if (!file_dialog_active && !game_focus_is_captured_mouse_event(&event))
                 ImGui_ImplSDL3_ProcessEvent(&event);
 
             bool keyboard_captured = file_dialog_active || (ImGui::GetIO().WantCaptureKeyboard && !gui_main_window_active);
-            bool shortcut_consumed = false;
+            bool hotkey_consumed = false;
 
             if (!keyboard_captured)
-                shortcut_consumed = events_shortcuts(&event);
+                hotkey_consumed = hotkeys_process_event(&event);
 
             if (!file_dialog_active)
-                events_emu(&event, shortcut_consumed || keyboard_captured);
+                events_emu(&event, hotkey_consumed || keyboard_captured);
         }
     }
 }
@@ -695,6 +683,7 @@ static void sdl_events_app(const SDL_Event* event)
         case SDL_EVENT_WINDOW_FOCUS_LOST:
         {
             display_disable_vsync();
+            game_focus_set(false);
             events_release_keyboard();
             events_release_mouse();
 

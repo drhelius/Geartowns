@@ -28,7 +28,6 @@
     #define EXTERN extern
 #endif
 
-EXTERN bool events_shortcuts(const SDL_Event* event);
 EXTERN void events_emu(const SDL_Event* event, bool shortcut_consumed);
 EXTERN void events_emu(void);
 EXTERN void events_sync_input(void);

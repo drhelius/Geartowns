@@ -161,6 +161,8 @@ EXTERN void emu_release_all_keys(void);
 EXTERN void emu_host_key_pressed(int usage);
 EXTERN void emu_host_key_released(int usage);
 EXTERN void emu_release_all_host_keys(void);
+EXTERN void emu_host_hotkey_used(void);
+EXTERN bool emu_has_pointer(void);
 EXTERN bool emu_key_mapper_is_open(void);
 EXTERN void emu_key_mapper_toggle(void);
 EXTERN void emu_key_mapper_set_pointer(int x, int y);

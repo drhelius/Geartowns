@@ -23,7 +23,7 @@
 #include "emu.h"
 #include "gamepad.h"
 #include "gui.h"
-#include "gui_actions.h"
+#include "game_focus.h"
 
 #define EVENTS_IMPORT
 #include "events.h"
@@ -35,8 +35,6 @@ static float mouse_remainder_x = 0.0f;
 static float mouse_remainder_y = 0.0f;
 static bool keyboard_scancode_down[SDL_SCANCODE_COUNT] = { };
 
-static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey, bool allow_repeat);
-static bool events_match_hotkey_scancode(const SDL_Event* event, const config_Hotkey& hotkey);
 static void input_update(bool check_shortcuts);
 static GT_GamePad_State input_build_state(int controller);
 static u16 input_filter_opposing_directions(int controller, u16 buttons);
@@ -44,93 +42,6 @@ static void keyboard_send_key(SDL_Scancode scancode, bool pressed);
 static bool keyboard_captures_event(const SDL_Event* event);
 static bool keyboard_controller_uses_key(SDL_Scancode scancode);
 static int mouse_get_controller(void);
-
-bool events_shortcuts(const SDL_Event* event)
-{
-    bool keyboard_captured = config_emulator.capture_keyboard && keyboard_captures_event(event);
-
-    if (event->type == SDL_EVENT_KEY_UP)
-    {
-        if (!keyboard_captured && events_match_hotkey_scancode(event, config_hotkeys[config_HotkeyIndex_Rewind]))
-        {
-            gui_action_rewind_released();
-            return true;
-        }
-
-        return false;
-    }
-
-    if (event->type != SDL_EVENT_KEY_DOWN)
-        return false;
-
-    if (!keyboard_captured && events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_Rewind], false))
-    {
-        gui_action_rewind_pressed();
-        return true;
-    }
-
-    if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_Quit], false))
-    {
-        application_trigger_quit();
-        return true;
-    }
-
-    // While the keyboard is captured every other key belongs to the Towns keyboard
-    if (keyboard_captured)
-    {
-        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_Fullscreen], false))
-        {
-            gui_shortcut(gui_ShortcutFullscreen);
-            return true;
-        }
-
-        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_CaptureMouse], false))
-        {
-            gui_shortcut(gui_ShortcutCaptureMouse);
-            return true;
-        }
-
-        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_CaptureKeyboard], false))
-        {
-            gui_shortcut(gui_ShortcutCaptureKeyboard);
-            return true;
-        }
-
-        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_KeyboardMapper], false))
-        {
-            gui_shortcut(gui_ShortcutKeyboardMapper);
-            return true;
-        }
-
-        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_KeyMapping], false))
-        {
-            gui_shortcut(gui_ShortcutKeyMapping);
-            return true;
-        }
-
-        return false;
-    }
-
-    for (int i = 0; i < GUI_HOTKEY_MAP_COUNT; i++)
-    {
-        const gui_HotkeyMapping& mapping = gui_hotkey_map[i];
-
-        if (events_check_hotkey(event, config_hotkeys[mapping.config_index], mapping.allow_repeat))
-        {
-            gui_shortcut(mapping.shortcut);
-            return true;
-        }
-    }
-
-    if (event->key.repeat == 0 && event->key.scancode == SDL_SCANCODE_ESCAPE &&
-        config_emulator.fullscreen && !config_emulator.always_show_menu && !emu_is_video_recording())
-    {
-        application_trigger_fullscreen(false);
-        return true;
-    }
-
-    return false;
-}
 
 void events_emu(const SDL_Event* event, bool shortcut_consumed)
 {
@@ -155,7 +66,7 @@ void events_emu(const SDL_Event* event, bool shortcut_consumed)
         {
             int controller = mouse_get_controller();
 
-            if (controller < 0 || (!config_emulator.capture_mouse && !gui_main_window_hovered) || emu_key_mapper_is_open())
+            if (controller < 0 || (!game_focus_pointer_captured() && !gui_main_window_hovered) || emu_key_mapper_is_open())
                 break;
 
             float scale = (float)MAX(config_emulator.mouse_sensitivity, 1) / 6.0f;
@@ -182,7 +93,7 @@ void events_emu(const SDL_Event* event, bool shortcut_consumed)
 
             if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
                 mouse_buttons &= (u16)~button;
-            else if ((config_emulator.capture_mouse || gui_main_window_hovered) && !emu_key_mapper_is_open())
+            else if ((game_focus_pointer_captured() || gui_main_window_hovered) && !emu_key_mapper_is_open())
                 mouse_buttons |= button;
 
             input_update(true);
@@ -395,60 +306,6 @@ static u16 input_filter_opposing_directions(int controller, u16 buttons)
     }
 
     return buttons;
-}
-
-static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey, bool allow_repeat)
-{
-    if (event->type != SDL_EVENT_KEY_DOWN)
-        return false;
-
-    if (!allow_repeat && event->key.repeat != 0)
-        return false;
-
-    if (event->key.scancode != hotkey.key)
-        return false;
-
-    SDL_Keymod mods = event->key.mod;
-    SDL_Keymod expected = hotkey.mod;
-    SDL_Keymod normalized = (SDL_Keymod)0;
-    SDL_Keymod expected_normalized = (SDL_Keymod)0;
-
-    if (mods & (SDL_KMOD_LCTRL | SDL_KMOD_RCTRL))
-        normalized = (SDL_Keymod)(normalized | SDL_KMOD_CTRL);
-
-    if (mods & (SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT))
-        normalized = (SDL_Keymod)(normalized | SDL_KMOD_SHIFT);
-
-    if (mods & (SDL_KMOD_LALT | SDL_KMOD_RALT))
-        normalized = (SDL_Keymod)(normalized | SDL_KMOD_ALT);
-
-    if (mods & (SDL_KMOD_LGUI | SDL_KMOD_RGUI))
-        normalized = (SDL_Keymod)(normalized | SDL_KMOD_GUI);
-
-    if (expected & (SDL_KMOD_CTRL | SDL_KMOD_LCTRL | SDL_KMOD_RCTRL))
-        expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_CTRL);
-
-    if (expected & (SDL_KMOD_SHIFT | SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT))
-        expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_SHIFT);
-
-    if (expected & (SDL_KMOD_ALT | SDL_KMOD_LALT | SDL_KMOD_RALT))
-        expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_ALT);
-
-    if (expected & (SDL_KMOD_GUI | SDL_KMOD_LGUI | SDL_KMOD_RGUI))
-        expected_normalized = (SDL_Keymod)(expected_normalized | SDL_KMOD_GUI);
-
-    return normalized == expected_normalized;
-}
-
-static bool events_match_hotkey_scancode(const SDL_Event* event, const config_Hotkey& hotkey)
-{
-    if (event->type != SDL_EVENT_KEY_UP && event->type != SDL_EVENT_KEY_DOWN)
-        return false;
-
-    if (hotkey.key == SDL_SCANCODE_UNKNOWN)
-        return false;
-
-    return event->key.scancode == hotkey.key;
 }
 
 static bool keyboard_captures_event(const SDL_Event* event)

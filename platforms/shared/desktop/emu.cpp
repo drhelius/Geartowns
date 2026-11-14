@@ -564,6 +564,26 @@ void emu_release_all_host_keys(void)
         geartowns->ReleaseAllHostKeys();
 }
 
+void emu_host_hotkey_used(void)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->DiscardDeferredHostKeys();
+}
+
+bool emu_has_pointer(void)
+{
+    if (!IsValidPointer(geartowns) || emu_is_empty())
+        return false;
+
+    for (int i = 0; i < GT_MAX_GAMEPADS; i++)
+    {
+        if (emu_get_pad_type((GT_Controllers)i) == GT_CONTROLLER_MOUSE)
+            return true;
+    }
+
+    return false;
+}
+
 bool emu_key_mapper_is_open(void)
 {
     return IsValidPointer(geartowns) && geartowns->GetKeyMapper()->IsOpen();

@@ -676,6 +676,21 @@ void gui_center_next_window(void)
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 }
 
+bool gui_has_open_window(void)
+{
+    ImGuiContext* context = ImGui::GetCurrentContext();
+
+    for (int i = 0; i < context->Windows.Size; i++)
+    {
+        ImGuiWindow* window = context->Windows[i];
+
+        if (window->Active && (window->Flags & ImGuiWindowFlags_NoTitleBar) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 void gui_set_style(void)
 {
     set_style();

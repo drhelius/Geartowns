@@ -87,6 +87,16 @@ INLINE Input* GeartownsCore::GetInput()
     return m_input;
 }
 
+INLINE KeyMap* GeartownsCore::GetKeyMap()
+{
+    return m_key_map;
+}
+
+INLINE KeyMapper* GeartownsCore::GetKeyMapper()
+{
+    return m_key_mapper;
+}
+
 INLINE Memory* GeartownsCore::GetMemory()
 {
     return m_memory;

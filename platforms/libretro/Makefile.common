@@ -65,6 +65,7 @@ SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
                 $(SOURCE_DIR)/i386/x87.cpp \
                 $(SOURCE_DIR)/input/input.cpp \
                 $(SOURCE_DIR)/input/keyboard.cpp \
+                $(SOURCE_DIR)/input/key_map.cpp \
                 $(SOURCE_DIR)/media/chd_file_adapter.cpp \
                 $(SOURCE_DIR)/media/firmware.cpp \
                 $(SOURCE_DIR)/media/media.cpp \
@@ -85,4 +86,6 @@ SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
                 $(SOURCE_DIR)/system/load_detector.cpp \
                 $(SOURCE_DIR)/video/hires_crtc.cpp \
                 $(SOURCE_DIR)/video/sprite.cpp \
-                $(SOURCE_DIR)/video/video.cpp
+                $(SOURCE_DIR)/video/video.cpp \
+                $(SOURCE_DIR)/osd/osd_canvas.cpp \
+                $(SOURCE_DIR)/osd/key_mapper.cpp

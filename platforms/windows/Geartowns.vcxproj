@@ -49,6 +49,9 @@
     <ClCompile Include="..\..\src\common\trace_logger.cpp" />
     <ClCompile Include="..\..\src\input\input.cpp" />
     <ClCompile Include="..\..\src\input\keyboard.cpp" />
+    <ClCompile Include="..\..\src\input\key_map.cpp" />
+    <ClCompile Include="..\..\src\osd\osd_canvas.cpp" />
+    <ClCompile Include="..\..\src\osd\key_mapper.cpp" />
     <ClCompile Include="..\..\src\system\memory.cpp" />
     <ClCompile Include="..\..\src\audio\pcm16.cpp" />
     <ClCompile Include="..\..\src\audio\rf5c68.cpp" />
@@ -324,6 +327,13 @@
     <ClInclude Include="..\..\src\input\input_inline.h" />
     <ClInclude Include="..\..\src\input\keyboard.h" />
     <ClInclude Include="..\..\src\input\keyboard_inline.h" />
+    <ClInclude Include="..\..\src\input\host_keys.h" />
+    <ClInclude Include="..\..\src\input\keyboard_keys.h" />
+    <ClInclude Include="..\..\src\input\key_map.h" />
+    <ClInclude Include="..\..\src\osd\osd_font.h" />
+    <ClInclude Include="..\..\src\osd\osd_canvas.h" />
+    <ClInclude Include="..\..\src\osd\key_mapper.h" />
+    <ClInclude Include="..\..\src\osd\key_mapper_layout.h" />
     <ClInclude Include="..\..\src\system\memory.h" />
     <ClInclude Include="..\..\src\system\memory_inline.h" />
     <ClInclude Include="..\..\src\audio\pcm16.h" />

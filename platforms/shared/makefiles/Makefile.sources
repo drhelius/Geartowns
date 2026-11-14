@@ -135,6 +135,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/i386/x87.cpp \
     $(SRC_DIR)/input/input.cpp \
     $(SRC_DIR)/input/keyboard.cpp \
+    $(SRC_DIR)/input/key_map.cpp \
     $(SRC_DIR)/media/chd_file_adapter.cpp \
     $(SRC_DIR)/media/firmware.cpp \
     $(SRC_DIR)/media/media.cpp \
@@ -154,4 +155,6 @@ SOURCES_CXX := \
     $(SRC_DIR)/system/load_detector.cpp \
     $(SRC_DIR)/video/hires_crtc.cpp \
     $(SRC_DIR)/video/sprite.cpp \
-    $(SRC_DIR)/video/video.cpp
+    $(SRC_DIR)/video/video.cpp \
+    $(SRC_DIR)/osd/osd_canvas.cpp \
+    $(SRC_DIR)/osd/key_mapper.cpp

@@ -28,6 +28,8 @@
 #include "i386/x87.h"
 #include "geartowns_core.h"
 #include "input/input.h"
+#include "input/key_map.h"
+#include "osd/key_mapper.h"
 #include "audio/audio.h"
 #include "cdrom/cdrom.h"
 #include "cdrom/cdrom_audio.h"

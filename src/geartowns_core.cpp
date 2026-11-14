@@ -31,6 +31,8 @@
 #include "drive/memory_card.h"
 #include "media/firmware.h"
 #include "input/input.h"
+#include "input/key_map.h"
+#include "input/host_keys.h"
 #include "input/keyboard.h"
 #include "common/memory_stream.h"
 #include "common/profiler.h"
@@ -52,12 +54,15 @@
 #include "system/load_detector.h"
 #include "video/hires_crtc.h"
 #include "video/video.h"
+#include "osd/key_mapper.h"
 
 GeartownsCore::GeartownsCore()
 {
     InitPointer(m_audio);
     InitPointer(m_firmware);
     InitPointer(m_input);
+    InitPointer(m_key_map);
+    InitPointer(m_key_mapper);
     InitPointer(m_media);
     InitPointer(m_memory);
     InitPointer(m_i386);
@@ -111,6 +116,7 @@ GeartownsCore::GeartownsCore()
     m_machine_report = m_pending_machine_report;
     m_powered = false;
     m_paused = false;
+    m_host_hotkeys = false;
     m_debug_step = GT_DEBUG_STEP_NONE;
     m_debug_step_resume = false;
     m_debug_interrupt_deferred = false;
@@ -120,6 +126,8 @@ GeartownsCore::~GeartownsCore()
 {
     SafeDelete(m_audio);
     SafeDelete(m_input);
+    SafeDelete(m_key_mapper);
+    SafeDelete(m_key_map);
     SafeDelete(m_media);
     SafeDelete(m_i386);
     SafeDelete(m_x87);
@@ -161,6 +169,12 @@ void GeartownsCore::Init()
 
     if (!IsValidPointer(m_input))
         m_input = new Input();
+
+    if (!IsValidPointer(m_key_map))
+        m_key_map = new KeyMap();
+
+    if (!IsValidPointer(m_key_mapper))
+        m_key_mapper = new KeyMapper();
 
     if (!IsValidPointer(m_media))
         m_media = new Media(m_cdrom_media);
@@ -250,6 +264,8 @@ void GeartownsCore::Init()
     m_i386->SetDecodedPorts(m_io->GetDecodedPorts());
     m_video->GetSprite()->SetBusCycleCounts(m_i386->GetBusCycleCounts());
     m_input->Init();
+    m_key_map->Init(&GeartownsCore::KeyMapCallback, this);
+    m_key_mapper->Init(m_key_map);
     m_trace_logger->Init(&m_scheduler->GetState()->clocks);
     m_profiler->Init(&m_scheduler->GetState()->clocks);
     m_i386->SetTraceLogger(m_trace_logger);
@@ -297,6 +313,14 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
 
     if (sample_count != NULL)
         *sample_count = 0;
+
+    if (m_key_mapper->IsOpen())
+    {
+        if (render)
+            m_key_mapper->Render(frame_buffer);
+
+        return GT_RUN_FRAME_READY;
+    }
 
     if (m_paused)
         return GT_RUN_PAUSED;
@@ -1243,6 +1267,58 @@ void GeartownsCore::ReleaseAllKeys()
         m_keyboard->ReleaseAllKeys();
 }
 
+void GeartownsCore::HostKeyPressed(u16 usage)
+{
+    bool mod = m_key_map->IsHostKeyDown(k_host_key_left_hotkey_mod) || m_key_map->IsHostKeyDown(k_host_key_right_hotkey_mod);
+
+    if (m_host_hotkeys && mod && ((usage == k_host_key_f1) || (usage == k_host_key_f2)))
+    {
+        if (usage == k_host_key_f2)
+            m_key_map->SetEnabled(!m_key_map->IsEnabled());
+        else if (m_key_mapper->IsOpen())
+            m_key_mapper->Close();
+        else
+            m_key_mapper->Open();
+
+        m_key_map->IgnoreHostKey(usage);
+        return;
+    }
+
+    m_key_map->HostKeyPressed(usage);
+
+    if (m_key_mapper->IsOpen())
+        m_key_mapper->HostKey(usage, true);
+}
+
+void GeartownsCore::HostKeyReleased(u16 usage)
+{
+    m_key_map->HostKeyReleased(usage);
+
+    if (m_key_mapper->IsOpen())
+        m_key_mapper->HostKey(usage, false);
+}
+
+void GeartownsCore::ReleaseAllHostKeys()
+{
+    m_key_map->ReleaseAll();
+    m_key_mapper->ReleaseHostKeys();
+}
+
+void GeartownsCore::EnableHostHotkeys(bool enable)
+{
+    m_host_hotkeys = enable;
+}
+
+void GeartownsCore::KeyMapCallback(void* core, GT_Keys key, bool pressed)
+{
+    GeartownsCore* geartowns = static_cast<GeartownsCore*>(core);
+
+    if (pressed)
+        geartowns->KeyPressed(key);
+    else
+        geartowns->KeyReleased(key);
+}
+
 bool GeartownsCore::SaveState(const char* path, int index, bool screenshot)
 {
     using namespace std;
@@ -1425,7 +1501,7 @@ bool GeartownsCore::SaveState(std::ostream& stream, size_t& size, bool screensho
     Debug("Save state header rom crc: 0x%08X", header.rom_crc);
     Debug("Save state header emu build: %s", header.emu_build);
 
-    if (screenshot && IsValidPointer(m_frame_buffer))
+    if (screenshot && IsValidPointer(m_frame_buffer) && !m_key_mapper->IsOpen())
     {
         header.screenshot_width = (u16)m_video->GetFrameWidth();
         header.screenshot_height = (u16)m_video->GetFrameHeight();
@@ -1974,6 +2050,14 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
     if (IsValidPointer(m_video) && m_video->IsRunning())
         runtime_info.frame_time = m_video->GetFrameTime();
 
+    if (IsValidPointer(m_key_mapper) && m_key_mapper->IsOpen())
+    {
+        runtime_info.screen_width = m_key_mapper->GetWidth();
+        runtime_info.screen_height = m_key_mapper->GetHeight();
+        runtime_info.display_width = m_key_mapper->GetDisplayWidth();
+        runtime_info.display_height = m_key_mapper->GetDisplayHeight();
+    }
+
     runtime_info.sample_rate = GT_AUDIO_SAMPLE_RATE;
     runtime_info.media_ready = IsValidPointer(m_media) && m_media->IsReady();
     runtime_info.bios_ready = IsValidPointer(m_firmware) && m_firmware->IsReady();
@@ -1982,7 +2066,7 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
 
 bool GeartownsCore::UpdateLoadDetection()
 {
-    if (!m_powered)
+    if (!m_powered || m_key_mapper->IsOpen())
         return false;
 
     return m_load_detector->Update(m_frame_buffer, m_video->GetFrameWidth(), m_video->GetFrameHeight(), m_frame_rendered);

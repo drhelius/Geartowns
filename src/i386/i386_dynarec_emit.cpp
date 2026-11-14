@@ -3920,10 +3920,10 @@ void DynarecEmitter::EmitX87Move(Instruction& instruction)
 
     if (c.opcode == 0xD9 && modrm >= 0xC8 && modrm < 0xD0)
     {
-        jit_ldxi_l(DR_T1, DR_X0, significand);
-        jit_ldxi_l(DR_T2, DR_X1, significand);
-        jit_stxi_l(significand, DR_X0, DR_T2);
-        jit_stxi_l(significand, DR_X1, DR_T1);
+        jit_ldxi(DR_T1, DR_X0, significand);
+        jit_ldxi(DR_T2, DR_X1, significand);
+        jit_stxi(significand, DR_X0, DR_T2);
+        jit_stxi(significand, DR_X1, DR_T1);
         jit_ldxi_us(DR_T1, DR_X0, exponent);
         jit_ldxi_us(DR_T2, DR_X1, exponent);
         jit_stxi_s(exponent, DR_X0, DR_T2);
@@ -3931,8 +3931,8 @@ void DynarecEmitter::EmitX87Move(Instruction& instruction)
     }
     else if (c.opcode == 0xDD || (c.opcode == 0xD9 && modrm < 0xC8))
     {
-        jit_ldxi_l(DR_T1, DR_X0, significand);
-        jit_stxi_l(significand, DR_X1, DR_T1);
+        jit_ldxi(DR_T1, DR_X0, significand);
+        jit_stxi(significand, DR_X1, DR_T1);
         jit_ldxi_us(DR_T1, DR_X0, exponent);
         jit_stxi_s(exponent, DR_X1, DR_T1);
     }
@@ -3950,7 +3950,7 @@ void DynarecEmitter::EmitX87Move(Instruction& instruction)
     else
     {
         jit_movi(DR_T1, modrm == 0xE8 ? (jit_word_t)0x8000000000000000ULL : 0);
-        jit_stxi_l(significand, DR_X1, DR_T1);
+        jit_stxi(significand, DR_X1, DR_T1);
         jit_movi(DR_T1, modrm == 0xE8 ? 0x3FFF : 0);
         jit_stxi_s(exponent, DR_X1, DR_T1);
     }

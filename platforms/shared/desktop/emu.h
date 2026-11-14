@@ -158,6 +158,17 @@ EXTERN void emu_set_gamepad_state(GT_Controllers controller, const GT_GamePad_St
 EXTERN void emu_key_pressed(GT_Keys key);
 EXTERN void emu_key_released(GT_Keys key);
 EXTERN void emu_release_all_keys(void);
+EXTERN void emu_host_key_pressed(int usage);
+EXTERN void emu_host_key_released(int usage);
+EXTERN void emu_release_all_host_keys(void);
+EXTERN bool emu_key_mapper_is_open(void);
+EXTERN void emu_key_mapper_toggle(void);
+EXTERN void emu_key_mapper_set_pointer(int x, int y);
+EXTERN void emu_key_mapper_set_buttons(u8 buttons);
+EXTERN bool emu_key_mapping_is_enabled(void);
+EXTERN void emu_key_mapping_toggle(void);
+EXTERN const char* emu_key_map_get_path(void);
+EXTERN void emu_key_map_save(void);
 EXTERN void emu_set_mouse_delta(GT_Controllers controller, int x, int y);
 EXTERN void emu_clear_mouse(GT_Controllers controller);
 EXTERN void emu_pause(void);

@@ -34,15 +34,12 @@ static u16 mouse_buttons = 0;
 static float mouse_remainder_x = 0.0f;
 static float mouse_remainder_y = 0.0f;
 static bool keyboard_scancode_down[SDL_SCANCODE_COUNT] = { };
-static GT_Keys keyboard_pressed_keys[SDL_SCANCODE_COUNT];
-static int keyboard_key_references[GT_KEY_COUNT] = { };
 
 static bool events_check_hotkey(const SDL_Event* event, const config_Hotkey& hotkey, bool allow_repeat);
 static bool events_match_hotkey_scancode(const SDL_Event* event, const config_Hotkey& hotkey);
 static void input_update(bool check_shortcuts);
 static GT_GamePad_State input_build_state(int controller);
 static u16 input_filter_opposing_directions(int controller, u16 buttons);
-static GT_Keys keyboard_key_from_scancode(SDL_Scancode scancode);
 static void keyboard_send_key(SDL_Scancode scancode, bool pressed);
 static bool keyboard_captures_event(const SDL_Event* event);
 static bool keyboard_controller_uses_key(SDL_Scancode scancode);
@@ -99,6 +96,18 @@ bool events_shortcuts(const SDL_Event* event)
             return true;
         }
 
+        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_KeyboardMapper], false))
+        {
+            gui_shortcut(gui_ShortcutKeyboardMapper);
+            return true;
+        }
+
+        if (events_check_hotkey(event, config_hotkeys[config_HotkeyIndex_KeyMapping], false))
+        {
+            gui_shortcut(gui_ShortcutKeyMapping);
+            return true;
+        }
+
         return false;
     }
 
@@ -146,7 +155,7 @@ void events_emu(const SDL_Event* event, bool shortcut_consumed)
         {
             int controller = mouse_get_controller();
 
-            if (controller < 0 || (!config_emulator.capture_mouse && !gui_main_window_hovered))
+            if (controller < 0 || (!config_emulator.capture_mouse && !gui_main_window_hovered) || emu_key_mapper_is_open())
                 break;
 
             float scale = (float)MAX(config_emulator.mouse_sensitivity, 1) / 6.0f;
@@ -173,7 +182,7 @@ void events_emu(const SDL_Event* event, bool shortcut_consumed)
 
             if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
                 mouse_buttons &= (u16)~button;
-            else if (config_emulator.capture_mouse || gui_main_window_hovered)
+            else if ((config_emulator.capture_mouse || gui_main_window_hovered) && !emu_key_mapper_is_open())
                 mouse_buttons |= button;
 
             input_update(true);
@@ -218,7 +227,7 @@ void events_sync_input(void)
 void events_release_keyboard(void)
 {
     memset(keyboard_scancode_down, 0, sizeof(keyboard_scancode_down));
-    memset(keyboard_key_references, 0, sizeof(keyboard_key_references));
+    emu_release_all_host_keys();
     emu_release_all_keys();
 }
 
@@ -458,33 +467,15 @@ static void keyboard_send_key(SDL_Scancode scancode, bool pressed)
     if (scancode <= SDL_SCANCODE_UNKNOWN || scancode >= SDL_SCANCODE_COUNT)
         return;
 
+    if (keyboard_scancode_down[scancode] == pressed)
+        return;
+
+    keyboard_scancode_down[scancode] = pressed;
+
     if (pressed)
-    {
-        if (keyboard_scancode_down[scancode])
-            return;
-
-        GT_Keys key = keyboard_key_from_scancode(scancode);
-
-        if (key == GT_KEY_NONE)
-            return;
-
-        keyboard_scancode_down[scancode] = true;
-        keyboard_pressed_keys[scancode] = key;
-
-        if (keyboard_key_references[key]++ == 0)
-            emu_key_pressed(key);
-    }
+        emu_host_key_pressed((int)scancode);
     else
-    {
-        if (!keyboard_scancode_down[scancode])
-            return;
-
-        GT_Keys key = keyboard_pressed_keys[scancode];
-        keyboard_scancode_down[scancode] = false;
-
-        if (keyboard_key_references[key] > 0 && --keyboard_key_references[key] == 0)
-            emu_key_released(key);
-    }
+        emu_host_key_released((int)scancode);
 }
 
 // Keys bound to a gamepad driven by the keyboard never reach the Towns keyboard
@@ -531,128 +522,3 @@ static int mouse_get_controller(void)
     return -1;
 }
 
-static GT_Keys keyboard_key_from_scancode(SDL_Scancode scancode)
-{
-    switch (scancode)
-    {
-        case SDL_SCANCODE_A: return GT_KEY_A;
-        case SDL_SCANCODE_B: return GT_KEY_B;
-        case SDL_SCANCODE_C: return GT_KEY_C;
-        case SDL_SCANCODE_D: return GT_KEY_D;
-        case SDL_SCANCODE_E: return GT_KEY_E;
-        case SDL_SCANCODE_F: return GT_KEY_F;
-        case SDL_SCANCODE_G: return GT_KEY_G;
-        case SDL_SCANCODE_H: return GT_KEY_H;
-        case SDL_SCANCODE_I: return GT_KEY_I;
-        case SDL_SCANCODE_J: return GT_KEY_J;
-        case SDL_SCANCODE_K: return GT_KEY_K;
-        case SDL_SCANCODE_L: return GT_KEY_L;
-        case SDL_SCANCODE_M: return GT_KEY_M;
-        case SDL_SCANCODE_N: return GT_KEY_N;
-        case SDL_SCANCODE_O: return GT_KEY_O;
-        case SDL_SCANCODE_P: return GT_KEY_P;
-        case SDL_SCANCODE_Q: return GT_KEY_Q;
-        case SDL_SCANCODE_R: return GT_KEY_R;
-        case SDL_SCANCODE_S: return GT_KEY_S;
-        case SDL_SCANCODE_T: return GT_KEY_T;
-        case SDL_SCANCODE_U: return GT_KEY_U;
-        case SDL_SCANCODE_V: return GT_KEY_V;
-        case SDL_SCANCODE_W: return GT_KEY_W;
-        case SDL_SCANCODE_X: return GT_KEY_X;
-        case SDL_SCANCODE_Y: return GT_KEY_Y;
-        case SDL_SCANCODE_Z: return GT_KEY_Z;
-        case SDL_SCANCODE_1: return GT_KEY_1;
-        case SDL_SCANCODE_2: return GT_KEY_2;
-        case SDL_SCANCODE_3: return GT_KEY_3;
-        case SDL_SCANCODE_4: return GT_KEY_4;
-        case SDL_SCANCODE_5: return GT_KEY_5;
-        case SDL_SCANCODE_6: return GT_KEY_6;
-        case SDL_SCANCODE_7: return GT_KEY_7;
-        case SDL_SCANCODE_8: return GT_KEY_8;
-        case SDL_SCANCODE_9: return GT_KEY_9;
-        case SDL_SCANCODE_0: return GT_KEY_0;
-        case SDL_SCANCODE_RETURN: return GT_KEY_RETURN;
-        case SDL_SCANCODE_ESCAPE: return GT_KEY_BREAK;
-        case SDL_SCANCODE_BACKSPACE: return GT_KEY_BACKSPACE;
-        case SDL_SCANCODE_TAB: return GT_KEY_TAB;
-        case SDL_SCANCODE_SPACE: return GT_KEY_SPACE;
-        case SDL_SCANCODE_MINUS: return GT_KEY_MINUS;
-        case SDL_SCANCODE_EQUALS: return GT_KEY_CARET;
-        case SDL_SCANCODE_LEFTBRACKET: return GT_KEY_AT;
-        case SDL_SCANCODE_RIGHTBRACKET: return GT_KEY_LEFT_BRACKET;
-        case SDL_SCANCODE_BACKSLASH: return GT_KEY_YEN;
-        case SDL_SCANCODE_NONUSHASH: return GT_KEY_RIGHT_BRACKET;
-        case SDL_SCANCODE_SEMICOLON: return GT_KEY_SEMICOLON;
-        case SDL_SCANCODE_APOSTROPHE: return GT_KEY_COLON;
-        case SDL_SCANCODE_GRAVE: return GT_KEY_ESCAPE;
-        case SDL_SCANCODE_COMMA: return GT_KEY_COMMA;
-        case SDL_SCANCODE_PERIOD: return GT_KEY_PERIOD;
-        case SDL_SCANCODE_SLASH: return GT_KEY_SLASH;
-        case SDL_SCANCODE_NONUSBACKSLASH: return GT_KEY_UNDERSCORE;
-        case SDL_SCANCODE_INTERNATIONAL1: return GT_KEY_UNDERSCORE;
-        case SDL_SCANCODE_INTERNATIONAL3: return GT_KEY_YEN;
-        case SDL_SCANCODE_CAPSLOCK: return GT_KEY_CAPS;
-        case SDL_SCANCODE_F1: return GT_KEY_PF1;
-        case SDL_SCANCODE_F2: return GT_KEY_PF2;
-        case SDL_SCANCODE_F3: return GT_KEY_PF3;
-        case SDL_SCANCODE_F4: return GT_KEY_PF4;
-        case SDL_SCANCODE_F5: return GT_KEY_PF5;
-        case SDL_SCANCODE_F6: return GT_KEY_PF6;
-        case SDL_SCANCODE_F7: return GT_KEY_PF7;
-        case SDL_SCANCODE_F8: return GT_KEY_PF8;
-        case SDL_SCANCODE_F9: return GT_KEY_PF9;
-        case SDL_SCANCODE_F10: return GT_KEY_PF10;
-        case SDL_SCANCODE_F11: return GT_KEY_PF11;
-        case SDL_SCANCODE_F12: return GT_KEY_PF12;
-        case SDL_SCANCODE_F13: return GT_KEY_PF13;
-        case SDL_SCANCODE_F14: return GT_KEY_PF14;
-        case SDL_SCANCODE_F15: return GT_KEY_PF15;
-        case SDL_SCANCODE_F16: return GT_KEY_PF16;
-        case SDL_SCANCODE_F17: return GT_KEY_PF17;
-        case SDL_SCANCODE_F18: return GT_KEY_PF18;
-        case SDL_SCANCODE_F19: return GT_KEY_PF19;
-        case SDL_SCANCODE_F20: return GT_KEY_PF20;
-        case SDL_SCANCODE_PRINTSCREEN: return GT_KEY_COPY;
-        case SDL_SCANCODE_PAUSE: return GT_KEY_BREAK;
-        case SDL_SCANCODE_INSERT: return GT_KEY_INSERT;
-        case SDL_SCANCODE_HOME: return GT_KEY_HOME;
-        case SDL_SCANCODE_PAGEUP: return GT_KEY_PREVIOUS;
-        case SDL_SCANCODE_DELETE: return GT_KEY_DELETE;
-        case SDL_SCANCODE_PAGEDOWN: return GT_KEY_NEXT;
-        case SDL_SCANCODE_RIGHT: return GT_KEY_RIGHT;
-        case SDL_SCANCODE_LEFT: return GT_KEY_LEFT;
-        case SDL_SCANCODE_DOWN: return GT_KEY_DOWN;
-        case SDL_SCANCODE_UP: return GT_KEY_UP;
-        case SDL_SCANCODE_KP_DIVIDE: return GT_KEY_KP_DIVIDE;
-        case SDL_SCANCODE_KP_MULTIPLY: return GT_KEY_KP_MULTIPLY;
-        case SDL_SCANCODE_KP_MINUS: return GT_KEY_KP_MINUS;
-        case SDL_SCANCODE_KP_PLUS: return GT_KEY_KP_PLUS;
-        case SDL_SCANCODE_KP_ENTER: return GT_KEY_KP_ENTER;
-        case SDL_SCANCODE_KP_1: return GT_KEY_KP_1;
-        case SDL_SCANCODE_KP_2: return GT_KEY_KP_2;
-        case SDL_SCANCODE_KP_3: return GT_KEY_KP_3;
-        case SDL_SCANCODE_KP_4: return GT_KEY_KP_4;
-        case SDL_SCANCODE_KP_5: return GT_KEY_KP_5;
-        case SDL_SCANCODE_KP_6: return GT_KEY_KP_6;
-        case SDL_SCANCODE_KP_7: return GT_KEY_KP_7;
-        case SDL_SCANCODE_KP_8: return GT_KEY_KP_8;
-        case SDL_SCANCODE_KP_9: return GT_KEY_KP_9;
-        case SDL_SCANCODE_KP_0: return GT_KEY_KP_0;
-        case SDL_SCANCODE_KP_PERIOD: return GT_KEY_KP_PERIOD;
-        case SDL_SCANCODE_KP_EQUALS: return GT_KEY_KP_EQUALS;
-        case SDL_SCANCODE_KP_000: return GT_KEY_KP_000;
-        case SDL_SCANCODE_LCTRL: return GT_KEY_CTRL;
-        case SDL_SCANCODE_RCTRL: return GT_KEY_CTRL;
-        case SDL_SCANCODE_LSHIFT: return GT_KEY_SHIFT;
-        case SDL_SCANCODE_RSHIFT: return GT_KEY_SHIFT;
-        case SDL_SCANCODE_LALT: return GT_KEY_ALT;
-        case SDL_SCANCODE_RALT: return GT_KEY_KANA_KANJI;
-        case SDL_SCANCODE_INTERNATIONAL2: return GT_KEY_KATAKANA;
-        case SDL_SCANCODE_INTERNATIONAL4: return GT_KEY_CONVERT;
-        case SDL_SCANCODE_INTERNATIONAL5: return GT_KEY_NO_CONVERT;
-        case SDL_SCANCODE_LANG3: return GT_KEY_KATAKANA;
-        case SDL_SCANCODE_LANG4: return GT_KEY_HIRAGANA;
-        case SDL_SCANCODE_LANG5: return GT_KEY_HALF_FULL;
-        default: return GT_KEY_NONE;
-    }
-}

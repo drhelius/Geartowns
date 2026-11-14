@@ -5970,6 +5970,148 @@ json DebugAdapter::KeyboardKey(const std::string& key, const std::string& action
     return result;
 }
 
+static json key_map_layer(KeyMap* key_map, GT_Key_Map_Layer layer)
+{
+    json entries = json::object();
+
+    for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
+    {
+        const GT_Key_Map_Entry& entry = key_map->GetLayerEntry(layer, (u16)usage);
+        const char* name = KeyMap::GetHostKeyName((u16)usage);
+
+        if (entry.set && IsValidPointer(name))
+            entries[name] = KeyMap::FormatTargets(entry);
+    }
+
+    return entries;
+}
+
+json DebugAdapter::GetKeyMap()
+{
+    KeyMap* key_map = m_core->GetKeyMap();
+    bool reached[GT_KEY_COUNT] = { };
+    json remapped = json::object();
+
+    for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
+    {
+        GT_Key_Map_Layer layer = GT_KEY_MAP_BUILT_IN;
+        const GT_Key_Map_Entry& entry = key_map->GetEntry((u16)usage, &layer);
+        const char* name = KeyMap::GetHostKeyName((u16)usage);
+
+        for (int i = 0; i < entry.count; i++)
+            reached[entry.keys[i]] = true;
+
+        if ((layer != GT_KEY_MAP_BUILT_IN) && IsValidPointer(name))
+            remapped[name] = KeyMap::FormatTargets(entry);
+    }
+
+    json unreachable = json::array();
+
+    for (int key = GT_KEY_NONE + 1; key < GT_KEY_COUNT; key++)
+    {
+        const char* name = KeyMap::GetKeyName((GT_Keys)key);
+
+        if (IsValidPointer(name) && !reached[key])
+            unreachable.push_back(name);
+    }
+
+    json result;
+    result["enabled"] = key_map->IsEnabled();
+    result["mapper_open"] = m_core->GetKeyMapper()->IsOpen();
+    result["file"] = emu_key_map_get_path();
+    result["user"] = key_map_layer(key_map, GT_KEY_MAP_USER);
+    result["remapped"] = remapped;
+    result["unreachable"] = unreachable;
+    return result;
+}
+
+json DebugAdapter::SetKeyBinding(const std::string& host, const std::string& keys)
+{
+    KeyMap* key_map = m_core->GetKeyMap();
+    u16 usage = 0;
+    GT_Key_Map_Entry entry;
+    std::string error;
+
+    if (keys == "default")
+    {
+        int found = KeyMap::FindHostKey(host.c_str());
+
+        if (found < 0)
+            return {{"error", "Unknown host key " + host}};
+
+        GT_Key_Map_Entry empty;
+        memset(&empty, 0, sizeof(empty));
+        key_map->SetEntry(GT_KEY_MAP_USER, (u16)found, empty);
+        key_map->SetChanged(true);
+        usage = (u16)found;
+    }
+    else
+    {
+        if (!KeyMap::ParseEntry(host, keys, &usage, &entry, &error))
+            return {{"error", error}};
+
+        GT_Keys targets[GT_KEY_MAP_TARGETS];
+
+        for (int i = 0; i < entry.count; i++)
+            targets[i] = (GT_Keys)entry.keys[i];
+
+        key_map->Bind(usage, targets, entry.count);
+    }
+
+    emu_key_map_save();
+    return {{"success", true}, {"host", KeyMap::GetHostKeyName(usage)},
+        {"keys", KeyMap::FormatTargets(key_map->GetEntry(usage))}, {"file", emu_key_map_get_path()}};
+}
+
+json DebugAdapter::SetKeyMapping(bool enabled)
+{
+    if (m_core->GetKeyMap()->IsEnabled() != enabled)
+        emu_key_mapping_toggle();
+
+    return {{"success", true}, {"enabled", m_core->GetKeyMap()->IsEnabled()}};
+}
+
+json DebugAdapter::HostKey(const std::string& key, const std::string& action)
+{
+    int usage = KeyMap::FindHostKey(to_lower(key).c_str());
+
+    if (usage < 0)
+        return {{"error", "Unknown host key '" + key + "'"}};
+
+    bool delayed_release = false;
+
+    if (action == "press")
+        emu_host_key_pressed(usage);
+    else if (action == "release")
+        emu_host_key_released(usage);
+    else if (action == "press_and_release")
+    {
+        emu_host_key_pressed(usage);
+        delayed_release = true;
+    }
+    else
+        return {{"error", "Invalid action"}};
+
+    json result = {{"success", true}, {"key", KeyMap::GetHostKeyName((u16)usage)}, {"action", action},
+        {"drives", KeyMap::FormatTargets(m_core->GetKeyMap()->GetEntry((u16)usage))}};
+
+    if (delayed_release)
+        result["__delayed_host_release"] = usage;
+
+    return result;
+}
+
+json DebugAdapter::SetKeyMapperOpen(bool open)
+{
+    if (emu_is_empty())
+        return {{"error", "Emulator is powered off"}};
+
+    if (emu_key_mapper_is_open() != open)
+        emu_key_mapper_toggle();
+
+    return {{"success", true}, {"open", emu_key_mapper_is_open()}};
+}
+
 json DebugAdapter::GetInputState()
 {
     static const char* names[] = {

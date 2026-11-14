@@ -450,6 +450,13 @@ static inline void process(config_Operation operation)
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
     CONFIG_HOTKEY("PowerOff", config_hotkeys[config_HotkeyIndex_PowerOff], SDL_SCANCODE_F,
         (SDL_Keymod)(SDL_KMOD_CTRL | SDL_KMOD_SHIFT));
+#if defined(__APPLE__)
+    CONFIG_HOTKEY("KeyboardMapper", config_hotkeys[config_HotkeyIndex_KeyboardMapper], SDL_SCANCODE_F1, SDL_KMOD_GUI);
+    CONFIG_HOTKEY("KeyMapping", config_hotkeys[config_HotkeyIndex_KeyMapping], SDL_SCANCODE_F2, SDL_KMOD_GUI);
+#else
+    CONFIG_HOTKEY("KeyboardMapper", config_hotkeys[config_HotkeyIndex_KeyboardMapper], SDL_SCANCODE_F1, SDL_KMOD_CTRL);
+    CONFIG_HOTKEY("KeyMapping", config_hotkeys[config_HotkeyIndex_KeyMapping], SDL_SCANCODE_F2, SDL_KMOD_CTRL);
+#endif
 }
 
 //**************************************

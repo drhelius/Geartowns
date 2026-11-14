@@ -93,6 +93,7 @@ static std::vector<std::string> cdrom_playlist;
 static int cdrom_playlist_index = -1;
 static int cmos_model = -1;
 static u8 cmos_saved[GT_CMOS_SIZE];
+static std::string key_map_path;
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
@@ -109,6 +110,9 @@ static void load_cmos(int model);
 static void save_cmos(void);
 static void sync_cmos(void);
 static void notify_machine(void);
+static void update_key_map(void);
+static std::string get_key_map_path(std::string* title);
+static void save_key_map(void);
 static Emu_Pad_Source pad_sources[GT_MAX_GAMEPADS];
 static bool init_debug(void);
 static void destroy_debug(void);
@@ -212,6 +216,12 @@ void emu_destroy(void)
     emu_stop_vgm_recording();
     emu_stop_video_recording();
 
+    if (IsValidPointer(geartowns))
+    {
+        geartowns->GetKeyMapper()->Close();
+        save_key_map();
+    }
+
     if (!emu_floppy_flush())
         Error("Unable to save one or more floppy disks on exit");
 
@@ -252,7 +262,23 @@ void emu_update(void)
 #endif
 
     if (emu_is_empty())
+    {
+        geartowns->GetKeyMapper()->Close();
+        update_key_map();
         return;
+    }
+
+    update_key_map();
+
+    if (geartowns->GetKeyMapper()->IsOpen())
+    {
+        int mapper_samples = 0;
+        geartowns->RunToFrame(emu_frame_buffer, audio_buffer, &mapper_samples);
+        emu_frame_stale = false;
+        memset(audio_buffer, 0, GT_AUDIO_QUEUE_SIZE * sizeof(s16));
+        sound_queue_write(audio_buffer, GT_AUDIO_QUEUE_SIZE, false);
+        return;
+    }
 
     geartowns->GetAudio()->EnableChannelScopes(config_debug.debug && (config_debug.show_ym3438 || config_debug.show_rf5c68));
 
@@ -518,6 +544,92 @@ void emu_release_all_keys(void)
 {
     if (IsValidPointer(geartowns))
         geartowns->ReleaseAllKeys();
+}
+
+void emu_host_key_pressed(int usage)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->HostKeyPressed((u16)usage);
+}
+
+void emu_host_key_released(int usage)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->HostKeyReleased((u16)usage);
+}
+
+void emu_release_all_host_keys(void)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->ReleaseAllHostKeys();
+}
+
+bool emu_key_mapper_is_open(void)
+{
+    return IsValidPointer(geartowns) && geartowns->GetKeyMapper()->IsOpen();
+}
+
+void emu_key_mapper_toggle(void)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    KeyMapper* mapper = geartowns->GetKeyMapper();
+
+    if (mapper->IsOpen())
+    {
+        mapper->Close();
+        save_key_map();
+        return;
+    }
+
+    if (emu_is_empty())
+        return;
+
+    update_key_map();
+    mapper->SetHotkeyNames(config_hotkeys[config_HotkeyIndex_KeyboardMapper].str,
+        config_hotkeys[config_HotkeyIndex_KeyMapping].str);
+    mapper->Open();
+}
+
+void emu_key_mapper_set_pointer(int x, int y)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetKeyMapper()->SetPointer(x, y);
+}
+
+void emu_key_mapper_set_buttons(u8 buttons)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    KeyMapper* mapper = geartowns->GetKeyMapper();
+    mapper->SetPointerButtons(buttons);
+
+    if (!mapper->IsOpen())
+        save_key_map();
+}
+
+bool emu_key_mapping_is_enabled(void)
+{
+    return !IsValidPointer(geartowns) || geartowns->GetKeyMap()->IsEnabled();
+}
+
+void emu_key_mapping_toggle(void)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetKeyMap()->SetEnabled(!geartowns->GetKeyMap()->IsEnabled());
+}
+
+const char* emu_key_map_get_path(void)
+{
+    return key_map_path.c_str();
+}
+
+void emu_key_map_save(void)
+{
+    if (IsValidPointer(geartowns))
+        save_key_map();
 }
 
 void emu_set_mouse_delta(GT_Controllers controller, int x, int y)
@@ -2015,6 +2127,105 @@ static bool get_floppy_state_path(int index, char* path, size_t path_size)
 
     snprintf(file_name, sizeof(file_name), "%s.state%d", name, index);
     return join_path(directory, file_name, path, path_size);
+}
+
+static void update_key_map(void)
+{
+    std::string title;
+    std::string path = get_key_map_path(&title);
+    KeyMap* key_map = geartowns->GetKeyMap();
+
+    geartowns->GetKeyMapper()->SetTitle(title.c_str());
+
+    if (path == key_map_path)
+        return;
+
+    save_key_map();
+    key_map_path = path;
+    key_map->SetEnabled(true);
+    key_map->ClearLayer(GT_KEY_MAP_USER);
+    key_map->SetChanged(false);
+
+    std::ifstream file;
+    open_ifstream_utf8(file, path.c_str(), std::ios::in | std::ios::binary);
+
+    if (!file.is_open())
+        return;
+
+    std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::string error;
+
+    if (!key_map->SetLayer(GT_KEY_MAP_USER, text.c_str(), &error))
+    {
+        key_map->ClearLayer(GT_KEY_MAP_USER);
+        Log("Ignoring the key map %s: %s", path.c_str(), error.c_str());
+        gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Key map ignored", error.c_str(), "key_map", 6000);
+    }
+}
+
+static std::string get_key_map_path(std::string* title)
+{
+    const char* content = geartowns->GetMedia()->IsReady() ? geartowns->GetMedia()->GetFilePath() : "";
+
+    if (content[0] == '\0')
+        content = emu_floppy_get_content_path();
+
+    if (content[0] == '\0')
+        content = emu_hard_disk_get_content_path();
+
+    const char* directory = get_configurated_dir(config_emulator.savefiles_dir_option, config_emulator.savefiles_path.c_str());
+    char folder[GT_MAX_PATH];
+    char name[GT_MAX_PATH];
+    char path[GT_MAX_PATH];
+
+    if (!IsValidPointer(directory))
+    {
+        if (content[0] != '\0')
+            get_directory(content, folder, sizeof(folder));
+        else
+            strncpy_fit(folder, config_root_path, sizeof(folder));
+
+        directory = folder;
+    }
+
+    if (content[0] != '\0')
+        get_filename_without_extension(content, name, sizeof(name));
+    else
+        strncpy_fit(name, "FM Towns", sizeof(name));
+
+    *title = content[0] != '\0' ? get_filename(content) : "";
+    join_path(directory, (std::string(name) + ".keys").c_str(), path, sizeof(path));
+    return path;
+}
+
+static void save_key_map(void)
+{
+    KeyMap* key_map = geartowns->GetKeyMap();
+
+    if (!key_map->IsChanged() || key_map_path.empty())
+        return;
+
+    key_map->SetChanged(false);
+
+    if (key_map->IsLayerEmpty(GT_KEY_MAP_USER))
+    {
+        remove_file_utf8(key_map_path.c_str());
+        return;
+    }
+
+    std::string text = "[keys]\n" + key_map->GetLayer(GT_KEY_MAP_USER);
+    std::ofstream file;
+    open_ofstream_utf8(file, key_map_path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+
+    if (file.is_open())
+        file.write(text.c_str(), (std::streamsize)text.size());
+
+    if (!file.is_open() || file.fail())
+    {
+        Log("Unable to save the key map %s", key_map_path.c_str());
+        gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Unable to save the key map", key_map_path.c_str(),
+            "key_map", 6000);
+    }
 }
 
 static bool get_cmos_path(int model, char* path, size_t path_size)

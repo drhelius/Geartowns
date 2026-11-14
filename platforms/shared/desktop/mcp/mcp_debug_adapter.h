@@ -330,6 +330,11 @@ public:
     bool IsMouseButtonHeld(int player) const;
     json MouseGetCursor(int player);
     json KeyboardKey(const std::string& key, const std::string& action);
+    json GetKeyMap();
+    json SetKeyBinding(const std::string& host, const std::string& keys);
+    json SetKeyMapping(bool enabled);
+    json HostKey(const std::string& key, const std::string& action);
+    json SetKeyMapperOpen(bool open);
     bool GetKeyCode(const std::string& name, GT_Keys& key) const;
     json GetInputState();
     void ClearControllerState();

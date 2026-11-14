@@ -42,6 +42,7 @@ struct DelayedButtonRelease
     int player;
     std::string button;
     GT_Keys key;
+    int host_key;
     u64 release_at_frame;
 };
 
@@ -231,7 +232,9 @@ public:
 
         for (size_t i = 0; i < m_delayed_releases.size(); i++)
         {
-            if (m_delayed_releases[i].key != GT_KEY_NONE)
+            if (m_delayed_releases[i].host_key >= 0)
+                emu_host_key_released(m_delayed_releases[i].host_key);
+            else if (m_delayed_releases[i].key != GT_KEY_NONE)
                 emu_key_released(m_delayed_releases[i].key);
             else if (IsValidPointer(m_debug_adapter))
                 m_debug_adapter->ControllerButton(m_delayed_releases[i].player, m_delayed_releases[i].button, "release");
@@ -278,7 +281,9 @@ public:
         {
             if (emu_frame_counter >= m_delayed_releases[i].release_at_frame)
             {
-                if (m_delayed_releases[i].key != GT_KEY_NONE)
+                if (m_delayed_releases[i].host_key >= 0)
+                    emu_host_key_released(m_delayed_releases[i].host_key);
+                else if (m_delayed_releases[i].key != GT_KEY_NONE)
                     emu_key_released(m_delayed_releases[i].key);
                 else
                     m_debug_adapter->ControllerButton(m_delayed_releases[i].player, m_delayed_releases[i].button,
@@ -480,6 +485,7 @@ private:
             release.player = result["player"];
             release.button = result["button"];
             release.key = GT_KEY_NONE;
+            release.host_key = -1;
             release.release_at_frame = emu_frame_counter + k_mcp_tap_frames;
             m_delayed_releases.push_back(release);
             result.erase("__delayed_release");
@@ -492,9 +498,21 @@ private:
             m_debug_adapter->GetKeyCode(result["key"], key);
             release.player = 0;
             release.key = key;
+            release.host_key = -1;
             release.release_at_frame = emu_frame_counter + k_mcp_tap_frames;
             m_delayed_releases.push_back(release);
             result.erase("__delayed_key_release");
+        }
+
+        if (result.contains("__delayed_host_release"))
+        {
+            DelayedButtonRelease release;
+            release.player = 0;
+            release.key = GT_KEY_NONE;
+            release.host_key = result["__delayed_host_release"];
+            release.release_at_frame = emu_frame_counter + k_mcp_tap_frames;
+            m_delayed_releases.push_back(release);
+            result.erase("__delayed_host_release");
         }
 
         if (result.contains("__mouse_motion") && result["__mouse_motion"] == true)

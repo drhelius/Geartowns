@@ -311,7 +311,8 @@ static const char* const kMcpRewindTools[] =
 static const char* const kMcpInputTools[] =
 {
     "controller_button", "controller_set_type", "get_input_state",
-    "keyboard_key", "keyboard_type", "mouse_get_cursor", "mouse_move", "mouse_click"
+    "keyboard_key", "keyboard_type", "mouse_get_cursor", "mouse_move", "mouse_click",
+    "get_key_map", "set_key_binding", "set_key_mapping", "host_key", "open_key_mapper", "close_key_mapper"
 };
 
 static const char* const kMcpTraceTools[] =

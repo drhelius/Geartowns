@@ -809,6 +809,8 @@ static void menu_emulator(void)
             hotkey_configuration_item("Show Main Menu:", &config_hotkeys[config_HotkeyIndex_ShowMainMenu]);
             hotkey_configuration_item("Capture Mouse:", &config_hotkeys[config_HotkeyIndex_CaptureMouse]);
             hotkey_configuration_item("Capture Keyboard:", &config_hotkeys[config_HotkeyIndex_CaptureKeyboard]);
+            hotkey_configuration_item("Keyboard Mapper:", &config_hotkeys[config_HotkeyIndex_KeyboardMapper]);
+            hotkey_configuration_item("Key Mapping:", &config_hotkeys[config_HotkeyIndex_KeyMapping]);
 
             gui_popup_modal_hotkey();
 
@@ -1720,11 +1722,41 @@ static void menu_input(void)
             {
                 ImGui::BeginTooltip();
                 ImGui::Text("When enabled, keys type on the FM Towns keyboard and only the");
-                ImGui::Text("Quit, Fullscreen, Capture Mouse and Capture Keyboard hotkeys work.");
+                ImGui::Text("Quit, Fullscreen, capture and key mapper hotkeys work.");
                 ImGui::Text("When disabled, all hotkeys work and other keys still type.");
                 ImGui::Text("Press %s to toggle it.", config_hotkeys[config_HotkeyIndex_CaptureKeyboard].str);
                 ImGui::EndTooltip();
             }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Keyboard Mapper...", config_hotkeys[config_HotkeyIndex_KeyboardMapper].str,
+                emu_key_mapper_is_open(), !emu_is_empty()))
+                emu_key_mapper_toggle();
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Shows the FM Towns keyboard to bind host keys to it,");
+                ImGui::Text("for this game only. The Towns stops while it's open.");
+                ImGui::EndTooltip();
+            }
+
+            bool key_mapping = emu_key_mapping_is_enabled();
+
+            if (ImGui::MenuItem("Key Mapping", config_hotkeys[config_HotkeyIndex_KeyMapping].str, &key_mapping,
+                !emu_is_empty()))
+                gui_action_toggle_key_mapping();
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Off: every key types its own, to type text in a");
+                ImGui::Text("game whose keys were moved.");
+                ImGui::EndTooltip();
+            }
+
+            ImGui::Separator();
 
             if (input_macro_get_owner() == Input_Macro_Owner_GUI)
             {
@@ -1891,6 +1923,7 @@ static void menu_input(void)
                         gamepad_configuration_item("Fullscreen:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_Fullscreen], i);
                         gamepad_configuration_item("Capture Mouse:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_CaptureMouse], i);
                         gamepad_configuration_item("Capture Keyboard:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_CaptureKeyboard], i);
+                        gamepad_configuration_item("Keyboard Mapper:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_KeyboardMapper], i);
                         gamepad_configuration_item("Show Main Menu:", &config_input_gamepad_shortcuts[i].gamepad_shortcuts[config_HotkeyIndex_ShowMainMenu], i);
 
                         gui_popup_modal_gamepad(i);

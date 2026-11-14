@@ -383,6 +383,16 @@ void gui_action_stop_pasting(void)
     gui_notify(gui_NotificationInfo, ICON_MD_CONTENT_PASTE, "Pasting stopped", NULL, "paste");
 }
 
+void gui_action_toggle_key_mapping(void)
+{
+    if (emu_is_empty())
+        return;
+
+    emu_key_mapping_toggle();
+    gui_notify(gui_NotificationInfo, ICON_MD_KEYBOARD, emu_key_mapping_is_enabled() ? "Key mapping on" :
+        "Key mapping off", NULL, "key_mapping", 1500);
+}
+
 static std::string get_auto_file_path(int dir_option, const std::string& custom_path, const char* extension)
 {
     time_t now = time(NULL);

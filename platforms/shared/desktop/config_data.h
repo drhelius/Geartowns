@@ -252,6 +252,8 @@ enum config_HotkeyIndex
     config_HotkeyIndex_CaptureKeyboard,
     config_HotkeyIndex_PowerOn,
     config_HotkeyIndex_PowerOff,
+    config_HotkeyIndex_KeyboardMapper,
+    config_HotkeyIndex_KeyMapping,
     config_HotkeyIndex_COUNT
 };
 

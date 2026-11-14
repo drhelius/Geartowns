@@ -66,6 +66,7 @@ static bool loading_keep_debug = false;
 static void main_window(void);
 static void show_error_window(void);
 static void show_loading_popup(void);
+static void update_key_mapper_pointer(const ImVec2& min, const ImVec2& max);
 static void select_save_slot(int slot);
 static bool finish_loading_rom(void);
 static void load_pending_state(void);
@@ -334,6 +335,12 @@ void gui_shortcut(gui_ShortCutEvent event)
         events_release_keyboard();
         gui_notify(gui_NotificationInfo, ICON_MD_KEYBOARD,
             config_emulator.capture_keyboard ? "Keyboard captured" : "Keyboard released", NULL, "keyboard");
+        break;
+    case gui_ShortcutKeyboardMapper:
+        emu_key_mapper_toggle();
+        break;
+    case gui_ShortcutKeyMapping:
+        gui_action_toggle_key_mapping();
         break;
     case gui_ShortcutDebugStepOver:
         if (config_debug.debug)
@@ -968,6 +975,10 @@ static void main_window(void)
         draw_list->PushClipRect(clip_min, clip_max, false);
         draw_list->AddImage((ImTextureID)(intptr_t)ogl_renderer_get_screen_texture(), image_min, image_max, ImVec2(0, 0), ImVec2(tex_h, tex_v));
         draw_list->PopClipRect();
+
+        if (emu_key_mapper_is_open())
+            update_key_mapper_pointer(image_min, image_max);
+
         gui_notifications_render_output(image_min, image_max);
         gui_drive_activity_render_output(image_min, image_max);
 
@@ -994,6 +1005,33 @@ static ImVec2 snap_to_physical_pixel(const ImVec2& pos)
     float y = ceilf(((pos.y - viewport->Pos.y) * scale.y) - 0.5f - 0.01f);
 
     return ImVec2(viewport->Pos.x + (x / scale.x), viewport->Pos.y + (y / scale.y));
+}
+
+static void update_key_mapper_pointer(const ImVec2& min, const ImVec2& max)
+{
+    GT_Runtime_Info runtime;
+    emu_get_runtime(runtime);
+    ImVec2 mouse = ImGui::GetMousePos();
+    float width = max.x - min.x;
+    float height = max.y - min.y;
+
+    if ((width <= 0.0f) || (height <= 0.0f) || !ImGui::IsMousePosValid(&mouse))
+        return;
+
+    int x = (int)(((mouse.x - min.x) * (float)runtime.screen_width) / width);
+    int y = (int)(((mouse.y - min.y) * (float)runtime.screen_height) / height);
+    emu_key_mapper_set_pointer(x, y);
+
+    bool over = gui_main_window_hovered && !gui_in_use;
+    u8 buttons = 0;
+
+    if (over && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        buttons |= KEY_MAPPER_BUTTON_LEFT;
+
+    if (over && ImGui::IsMouseDown(ImGuiMouseButton_Right))
+        buttons |= KEY_MAPPER_BUTTON_RIGHT;
+
+    emu_key_mapper_set_buttons(buttons);
 }
 
 static void show_loading_popup(void)

@@ -253,7 +253,7 @@ bool KeyMap::SetLayer(GT_Key_Map_Layer layer, const char* text, std::string* err
         if (!message.empty())
         {
             if (IsValidPointer(error))
-                *error = "Line " + std::to_string(number) + ": " + message;
+                *error = "Line " + int_to_string(number) + ": " + message;
 
             return false;
         }
@@ -520,7 +520,7 @@ bool KeyMap::ParseEntry(const std::string& host, const std::string& value, u16* 
 
         if (entry->count == GT_KEY_MAP_TARGETS)
         {
-            *error = "More than " + std::to_string(GT_KEY_MAP_TARGETS) + " keys for " + name;
+            *error = "More than " + int_to_string(GT_KEY_MAP_TARGETS) + " keys for " + name;
             return false;
         }
 

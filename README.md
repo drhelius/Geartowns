@@ -141,7 +141,20 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 
 ### Keyboard
 
-Keys type on the FM Towns keyboard. With **Input → Keyboard → Capture Keyboard** on (the default), only the Quit, Fullscreen, Capture Mouse, Capture Keyboard, Keyboard Mapper and Key Mapping hotkeys work. Press `Ctrl+Shift+K` to release the keyboard and get every hotkey back.
+Keys type on the FM Towns keyboard while the window has focus. Geartowns keeps only its hotkeys, which use `Ctrl+Shift` or `Ctrl` with an F-key; on macOS, `Cmd` replaces `Ctrl` in all of them.
+
+**Game Focus** is for playing: press `Ctrl+F10`, or go fullscreen with `Alt+Enter`. The mouse is then locked in the window, and every hotkey is off except `Ctrl+F10`, `Alt+Enter`, `Ctrl+F1` and `Ctrl+F2`. The window title shows it's on. `Ctrl+F10` leaves it, and so do switching to another window and leaving fullscreen. Outside Game Focus, a mouse plugged into a port follows the pointer while it's over the screen.
+
+| Hotkey | Does |
+|---|---|
+| `Ctrl+F10` | Game Focus on and off |
+| `Alt+Enter` | Fullscreen |
+| `Ctrl+F1`, `Ctrl+F2` | Keyboard mapper, key changes off and on |
+| `Ctrl+F9` | Quit (`Cmd+Q` on macOS) |
+| `Ctrl+Shift+S`, `Ctrl+Shift+L` | Save state, load state |
+| `Ctrl+Shift+R`, `Ctrl+Shift+P` | Reset, pause |
+
+Every hotkey can be changed in **Emulator → Hotkeys**, and its **Reset to Defaults** brings these back.
 
 The Towns keys a PC keyboard doesn't have are on these host keys, on desktop and libretro:
 
@@ -189,7 +202,7 @@ grave = none
 
 #### Libretro
 
-The same hotkeys work in libretro too. RetroArch keeps F1 and F2 for itself, so turn on Game Focus (Scroll Lock) first. Click keys with the mouse or a touch screen. The `.keys` files go to the save directory.
+The mapper hotkeys work in libretro too. RetroArch keeps F1 and F2 for itself, so turn on RetroArch's Game Focus (Scroll Lock by default) first; Geartowns reminds you when a game loads. Click keys with the mouse or a touch screen. The `.keys` files go to the save directory.
 
 ### Hard Disks
 

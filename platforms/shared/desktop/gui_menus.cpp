@@ -2608,6 +2608,7 @@ static void gamepad_device_selector(int player)
     items.reserve(4096);
     items.append("<None>");
     items.push_back('\0');
+    float text_width = ImGui::CalcTextSize("<None>").x;
 
     Gamepad_Detected_Info detected[max_detected_gamepads];
     int num_detected = gamepad_get_detected(detected, max_detected_gamepads);
@@ -2639,6 +2640,7 @@ static void gamepad_device_selector(int player)
 
         items.append(label);
         items.push_back('\0');
+        text_width = MAX(text_width, ImGui::CalcTextSize(label).x);
         count++;
     }
 
@@ -2647,11 +2649,15 @@ static void gamepad_device_selector(int player)
     char label[32];
     snprintf(label, sizeof(label), "##device_player%d", player + 1);
 
+    ImGui::PushItemWidth(get_combo_width(text_width));
+
     if (ImGui::Combo(label, &selected, items.c_str()))
     {
         SDL_JoystickID instance_id = id_map[selected];
         gamepad_assign(player, instance_id);
     }
+
+    ImGui::PopItemWidth();
 }
 
 static void draw_savestate_slot_info(int slot)

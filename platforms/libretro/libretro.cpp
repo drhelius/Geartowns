@@ -898,7 +898,7 @@ static bool load_content(const char* path)
 
     struct retro_keyboard_callback keyboard = { keyboard_event };
     libretro_supports_keyboard = environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &keyboard);
-    log_cb(RETRO_LOG_INFO, "Enable Game Focus (Scroll Lock) to type on the FM Towns keyboard\n");
+    show_message("Turn on Game Focus to use the keyboard and mouse (Scroll Lock by default)", 3, RETRO_LOG_INFO);
 
     return true;
 }

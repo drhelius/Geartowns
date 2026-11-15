@@ -895,7 +895,8 @@ void I386::DynarecMultiply(I386* cpu, uintptr_t value, uintptr_t other, uintptr_
     u32 steps = (form & 0x200) != 0 ? cpu->MultiplyRegister(reg, width, operand) :
         cpu->MultiplyRM(width, operand, signed_multiplier);
 
-    cpu->m_dynarec_clocks += i486 ? cpu->Get486MultiplyClocks(operand, width, signed_multiplier) : steps;
+    cpu->m_dynarec_clocks += i486 ? (cpu->m_i586_timing ? 0 : cpu->Get486MultiplyClocks(operand, width, signed_multiplier)) :
+        steps;
 }
 
 template void I386::DynarecMultiply<false>(I386* cpu, uintptr_t value, uintptr_t other, uintptr_t form);

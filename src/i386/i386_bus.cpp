@@ -199,7 +199,7 @@ bool I386::IsBusCached() const
 void I386::UpdateBusTiming()
 {
     bool cached = IsBusCached();
-    bool timed = m_bus_table_valid;
+    bool timed = m_bus_table_valid && !m_i586_timing;
     BusTiming bus;
 
     if (timed)
@@ -211,6 +211,16 @@ void I386::UpdateBusTiming()
     }
     else
         memset(&bus, 0, sizeof(bus));
+
+    if (m_i586_timing && m_bus_table_valid)
+    {
+        bus.io[0] = m_bus_table.io[0];
+        bus.io[1] = m_bus_table.io[1];
+        bus.io_free_write = m_bus_table.io_free_write;
+        memcpy(bus.io_blocks, m_bus_table.io_blocks, sizeof(bus.io_blocks));
+    }
+
+    UpdateBus586(m_bus_table);
 
     bool changed = timed != m_bus_timed || memcmp(&bus, &m_bus, sizeof(bus)) != 0;
 
@@ -790,11 +800,11 @@ void I386::AddBusSlowAccess(u32 physical, u32 size, bool write)
 
 #if !defined(GT_DISABLE_DYNAREC)
 // The 486 clocks a native adds before its access: Emit486Misaligned's 3 for each access, Emit486FirstAGI's 1
-INLINE u32 I386::GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t first_base) const
+INLINE u32 I386::GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t first_mask) const
 {
-    u32 clocks = size > 1 && (linear & (size - 1)) != 0 ? (both ? 6 : 3) : 0;
+    u32 clocks = size > 1 && (linear & (size - 1)) != 0 && !m_i586_timing ? (both ? 6 : 3) : 0;
 
-    if (first_base != 0 && (m_486_written & (1 << (first_base - 1))) != 0)
+    if ((m_486_written & first_mask) != 0)
         clocks += 1;
 
     return clocks;
@@ -803,10 +813,10 @@ INLINE u32 I386::GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t 
 // access: size, 08h write, 10h RMW, 20h code in DRAM with its row from bit 8, 40h one-byte instruction
 // check: the block's next check while more of it runs before that, as DynarecStep takes it. An access that leaves the
 // slice budget short of it isn't counted, the 486 clocks the instruction added so far are taken back, and it returns 1
-// for the instruction to fall back. first_base: Emit486FirstAGI's base plus one, or zero
+// for the instruction to fall back. first_mask: the registers Emit486FirstAGI checked, or zero
 template<bool i486>
 uintptr_t I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
-    uintptr_t first_base)
+    uintptr_t first_mask)
 {
     u32 size = (u32)(access & 7);
     u32 code_row = ((access & 0x20) != 0 ? (u32)(access >> 8) & k_i386_bus_code_row : k_i386_bus_code_row) |
@@ -850,15 +860,15 @@ uintptr_t I386::DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, 
 #endif
 
     if (i486)
-        cpu->m_dynarec_clocks -= cpu->GetDynarec486Clocks((u32)linear, size, both, first_base);
+        cpu->m_dynarec_clocks -= cpu->GetDynarec486Clocks((u32)linear, size, both, first_mask);
 
     return 1;
 }
 
 template uintptr_t I386::DynarecBusAccess<false>(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
-    uintptr_t first_base);
+    uintptr_t first_mask);
 template uintptr_t I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
-    uintptr_t first_base);
+    uintptr_t first_mask);
 
 // A native store to a page without host memory, at the linear address the block left in m_dynarec_slow_linear: DRAM
 // with blocks or VRAM behind its handlers, and only where the interpreter's write couldn't fault or touch a page table.
@@ -871,12 +881,12 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
     const DynarecSite& store = *(const DynarecSite*)site;
     uintptr_t access = store.access;
     uintptr_t check = (uintptr_t)store.check;
-    uintptr_t first_base = store.first_base;
+    uintptr_t first_mask = store.first_mask;
     uintptr_t settle = (uintptr_t)store.settle;
     u32 before = store.before;
     u32 linear = cpu->m_dynarec_slow_linear;
     u32 size = (u32)(access & 7);
-    u32 extra = i486 ? cpu->GetDynarec486Clocks(linear, size, (access & 0x10) != 0, first_base) : 0;
+    u32 extra = i486 ? cpu->GetDynarec486Clocks(linear, size, (access & 0x10) != 0, first_mask) : 0;
     u32 physical = linear;
     bool fits = (cpu->m_state.debug_registers[7] & 0xFF) == 0 && !cpu->m_debugger_memory_checks &&
         !(cpu->m_alignment_check && (linear & (size - 1)) != 0);
@@ -908,16 +918,21 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
         cpu->m_bus_queue = (u32)queue;
     }
 
+    if (i486 && cpu->m_i586_timing)
+        cpu->Fold586To(store.weight);
+
     cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks - extra + before +
         (cpu->m_bus_timed ? cpu->GetBusPending() : 0);
     cpu->m_bus_fraction = fraction;
     cpu->m_bus_queue = level;
 
-    if ((access & 0x80) != 0 && DynarecBusAccess<i486>(cpu, linear, access & ~(uintptr_t)0x80, check, first_base) != 0)
+    if ((access & 0x80) != 0 && DynarecBusAccess<i486>(cpu, linear, access & ~(uintptr_t)0x80, check, first_mask) != 0)
         return 2;
 
     GT_Bus_Access_Context& context = *cpu->m_bus_context;
     cpu->WritePhysical(physical, (u32)value, size, context);
+    cpu->m_dynarec_clocks += cpu->m_586_wait;
+    cpu->m_586_wait = 0;
 
     if (!cpu->m_dynarec_dirty && !context.end_batch && context.wait_cycles == cpu->m_dynarec_wait &&
         cpu->m_code_window_size != 0)

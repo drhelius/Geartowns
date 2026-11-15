@@ -381,6 +381,9 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
         iteration_clocks = (move ? 3 : 4) + ((destination_linear & (size - 1)) != 0 ? 3 : 0) +
             (move && (source_linear & (size - 1)) != 0 ? 3 : 0);
 
+    if (m_i586_timing)
+        iteration_clocks = 1;
+
     u32 elements = m_bus_timed ? count : (u32)MIN((u64)count, ((u64)budget + iteration_clocks - 1) / iteration_clocks);
     u32 address_mask = address_width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
     bool reverse = (m_state.eflags & I386_FLAG_DF) != 0;
@@ -498,6 +501,13 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
 
     if (m_bus_timed)
         clocks += AddBusRepeat(repeat, elements, size, move, reverse);
+
+    if (m_i586_timing)
+    {
+        clocks += Fold586Memory(elements * (move ? 2 : 1) * m_586_memory_wait) + m_586_wait;
+        m_586_wait = 0;
+        m_586_pair = 0;
+    }
 
     return elements;
 }

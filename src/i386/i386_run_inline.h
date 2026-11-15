@@ -83,6 +83,8 @@ INLINE u32 I386::RunCheckedStep()
 
     if (!completed)
         CompleteFault(old_task);
+    else if (i486 && m_i586_timing && (result.instruction_completed || m_state.repeat.active))
+        Apply586Clocks();
     else if (i486 && (result.instruction_completed || m_state.repeat.active))
     {
         Apply486Clocks();
@@ -161,11 +163,13 @@ INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& con
     m_step.end_batch = false;
     m_step.exception = false;
 
-    if ((timing & I386_TIMING_486) != 0)
+    if ((timing & I386_TIMING_486) != 0 || timing == I386_TIMING_586)
         Capture486Step();
 
     if (unlikely(!ExecuteOPCode()))
         CompleteFault(old_task);
+    else if (timing == I386_TIMING_586 && likely(m_step.instruction_completed || m_state.repeat.active))
+        Apply586Clocks();
     else if (timing == I386_TIMING_BUS && likely(m_step.instruction_completed || m_state.repeat.active))
         AddBusTime<false>();
     else if ((timing & I386_TIMING_486) != 0 && likely(m_step.instruction_completed || m_state.repeat.active))
@@ -185,7 +189,7 @@ INLINE bool I386::RunFastStep(I386_Run_Result& total, GT_Bus_Access_Context& con
 
     if (unlikely(m_step.end_batch || context.end_batch || m_state.halted || m_state.shutdown))
     {
-        // Exceptions and software interrupts always end the batch
+        // Exceptions and software interrupts end the batch, unless the board's game timing keeps them in it
         if (m_step.exception)
             CopyStepException(total);
 

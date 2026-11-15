@@ -34,6 +34,7 @@
 #define I386_TLB_TEST_SIZE (I386_TLB_TEST_SETS * I386_TLB_TEST_WAYS)
 #define I386_POLL_CODE_SIZE 48
 #define I386_BUS_LINES 1024
+#define I386_MSR_COUNT 0x14
 
 class Memory;
 class Profiler;
@@ -90,13 +91,14 @@ enum I386_Interrupt_Shadow
 };
 
 // The run loop instances, a bit for the bus model and one for the 486's T1 clocks: today's 386, the 386 with the bus
-// model, the 486 with its cache on and the 486 with every access on the bus
+// model, the 486 with its cache on and the 486 with every access on the bus, and the Pentium, with no bus model
 enum I386_Timing
 {
     I386_TIMING_386 = 0,
     I386_TIMING_BUS = 1,
     I386_TIMING_486 = 2,
-    I386_TIMING_486_BUS = 3
+    I386_TIMING_486_BUS = 3,
+    I386_TIMING_586 = 4
 };
 
 enum I386_Call_Type
@@ -210,6 +212,7 @@ struct I386_State
     u32 cr0;
     u32 cr2;
     u32 cr3;
+    u32 cr4;
 
     u32 debug_registers[8];
     u32 test_registers[2];
@@ -461,7 +464,13 @@ public:
     void Init(Memory* memory, IO* io = NULL);
     void Reset();
     void SetCPU(const GT_Machine_CPU_Info& info);
+    void SetResetSignature(u32 signature);
+    void SetTimeStampSource(const u64* cycles);
+    void SetGameTiming(bool blocks, bool interrupts);
     bool IsI486() const;
+    bool IsI586() const;
+    u64 GetTimeStamp() const;
+    bool PeekMSR(u32 index, u64& value) const;
     void SetFPU(X87* fpu);
     void SetFPUErrorCallback(void* context, I386_FPU_Error_Fn callback);
     void SetBusTiming(const GT_Machine_Bus_Timing* timing, const GT_Machine_Bus_Waits* waits, int bus_width,
@@ -820,6 +829,8 @@ private:
         u32 call_eip;
         u32 call_next_eip;
         u32 link[2];
+        u32 first_pairing;
+        u8 first_named;
         const u8* code;
     };
 
@@ -841,7 +852,7 @@ private:
         const DynarecBusRun* run;
         const DynarecBusRun* settle;
         u32 access;
-        u32 first_base;
+        u32 first_mask;
         u32 before;
         u32 eip;
         u32 steps;
@@ -850,6 +861,9 @@ private:
         u32 line_count;
         u32 line_fill;
         s32 written;
+        u32 pair;
+        u32 weight;
+        u32 weight_after;
     };
 #endif
 
@@ -929,13 +943,15 @@ private:
     static uintptr_t DynarecFits(I386* cpu, uintptr_t block);
     template<bool i486>
     static uintptr_t DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-        uintptr_t settle, uintptr_t revert);
+        uintptr_t settle, uintptr_t revert, uintptr_t memory);
+    bool Pairs586Entry(const DynarecBlock& block) const;
+    void Fold586To(u32 weight);
     s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
     static void DynarecLoadSegment(I386* cpu, uintptr_t segment, uintptr_t selector);
     template<bool i486>
     static uintptr_t DynarecBusAccess(I386* cpu, uintptr_t linear, uintptr_t access, uintptr_t check,
-        uintptr_t first_base);
-    u32 GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t first_base) const;
+        uintptr_t first_mask);
+    u32 GetDynarec486Clocks(u32 linear, u32 size, bool both, uintptr_t first_mask) const;
     static uintptr_t DynarecShift(I386* cpu, uintptr_t value, uintptr_t count, uintptr_t form);
     static void DynarecFlags(I386* cpu, uintptr_t form);
     void LeaveDynarecSite(const DynarecSite& site);
@@ -944,6 +960,7 @@ private:
     static uintptr_t DynarecDivideSlow(I386* cpu, uintptr_t value, uintptr_t form);
     static void DynarecDivide(I386* cpu, uintptr_t value, uintptr_t form);
     static void DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t eip, uintptr_t fewest);
+    static void Dynarec586Wait(I386* cpu, uintptr_t before, uintptr_t weight, uintptr_t busy, uintptr_t first_mask);
     void GetEscapeClocks(const InstructionContext& c, u32& fewest, u32& most) const;
     template<bool i486>
     static uintptr_t DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site);
@@ -1106,6 +1123,21 @@ private:
     void Capture486Step();
     void Apply486Clocks();
     static void Init486Forms();
+    void Apply586Clocks();
+    static void Init586Forms();
+    u32 Get586Clocks(const InstructionContext& c, bool taken) const;
+    u32 Get586EscapeClocks(const InstructionContext& c, u32& busy) const;
+    static u32 Get586Pairing(const InstructionContext& c, u32 prefixes);
+    static u32 Get586Named(const InstructionContext& c);
+    static u32 Get586Address(const InstructionContext& c);
+    static u32 Get586Accesses(const InstructionContext& c);
+    static u32 Count586Prefixes(const InstructionContext& c, u32 prefixes);
+    static bool Is586Backward(const InstructionContext& c);
+    static u32 Pair586(u32 state, u32 pairing, u32 written, u32 clocks, u32 named, u32& charged);
+    u32 Wait586FPU(u32 start, u32 busy);
+    static bool Is586FPUFree(const InstructionContext& c);
+    u32 Fold586Memory(u32 weight);
+    void UpdateBus586(const BusTiming& bus);
     static const I486_Form& Get486Form(const InstructionContext& c, u8& flags);
     u32 Get486FormClocks(const I486_Form& form, const InstructionContext& c, bool protected_mode) const;
     static u8 Get486FormWritten(const I486_Form& form, u8 flags, const InstructionContext& c);
@@ -1371,6 +1403,12 @@ private:
     bool OPCodes0F_CMPXCHG();
     bool OPCodes0F_XADD();
     bool OPCodes0F_BSWAP();
+    bool OPCodes0F_RDTSC();
+    bool OPCodes0F_MSR();
+    bool OPCodes0F_CMPXCHG8B();
+    u64 ReadTimeStamp() const;
+    bool ReadMSR(u32 index, u64& value) const;
+    bool WriteMSR(u32 index, u64 value);
 
     bool StoreSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context, u16 selector);
     bool LoadSystemSelector(InstructionContext& instruction, GT_Bus_Access_Context& context, bool load_task_register);
@@ -1463,7 +1501,8 @@ private:
     bool OPCode0F_0x06(); bool OPCode0F_0x07(); bool OPCode0F_0x08(); bool OPCode0F_0x09();
     bool OPCode0F_0x10(); bool OPCode0F_0x11(); bool OPCode0F_0x12();
     bool OPCode0F_0x13(); bool OPCode0F_0x20(); bool OPCode0F_0x21(); bool OPCode0F_0x22();
-    bool OPCode0F_0x23(); bool OPCode0F_0x24(); bool OPCode0F_0x26(); bool OPCode0F_0x80();
+    bool OPCode0F_0x23(); bool OPCode0F_0x24(); bool OPCode0F_0x26(); bool OPCode0F_0x30();
+    bool OPCode0F_0x31(); bool OPCode0F_0x32(); bool OPCode0F_0x80();
     bool OPCode0F_0x81(); bool OPCode0F_0x82(); bool OPCode0F_0x83(); bool OPCode0F_0x84();
     bool OPCode0F_0x85(); bool OPCode0F_0x86(); bool OPCode0F_0x87(); bool OPCode0F_0x88();
     bool OPCode0F_0x89(); bool OPCode0F_0x8A(); bool OPCode0F_0x8B(); bool OPCode0F_0x8C();
@@ -1479,6 +1518,7 @@ private:
     bool OPCode0F_0xB4(); bool OPCode0F_0xB5(); bool OPCode0F_0xB6(); bool OPCode0F_0xB7();
     bool OPCode0F_0xBA(); bool OPCode0F_0xBB(); bool OPCode0F_0xBC(); bool OPCode0F_0xBD();
     bool OPCode0F_0xBE(); bool OPCode0F_0xBF(); bool OPCode0F_0xC0(); bool OPCode0F_0xC1();
+    bool OPCode0F_0xC7();
     bool OPCode0F_0xC8(); bool OPCode0F_0xC9(); bool OPCode0F_0xCA(); bool OPCode0F_0xCB();
     bool OPCode0F_0xCC(); bool OPCode0F_0xCD(); bool OPCode0F_0xCE(); bool OPCode0F_0xCF();
 
@@ -1678,6 +1718,23 @@ private:
     bool m_cpuid;
     bool m_fast_imul;
     u32 m_cache_test_registers[3];
+    bool m_i586;
+    bool m_i586_timing;
+    bool m_game_blocks;
+    bool m_game_interrupts;
+    u32 m_586_pair;
+    u32 m_586_fraction;
+    u32 m_586_folded;
+    u32 m_586_memory_wait;
+    u32 m_586_wait;
+    u32 m_586_device_wait[GT_BUS_CLASS_COUNT][2];
+    u64 m_586_fpu_free;
+    u32 m_586_site_weight;
+    u32 m_586_site_mask;
+    u32 m_cpuid_features;
+    const u64* m_tsc_source;
+    u64 m_tsc_offset;
+    u64 m_msrs[I386_MSR_COUNT];
     const I386_Port_Clocks* m_port_clocks;
     bool m_486_continuation;
     u8 m_486_written;
@@ -1716,6 +1773,22 @@ static const u32 k_i486_keep = 0xFFFFFFFFU;
 static const u32 k_i486_data = 0xFFFFFFFEU;
 
 static const u8 k_i386_tlb_valid = 0x01;
+static const u32 k_i386_cr4_tsd = 0x00000004;
+static const u32 k_i386_cr4_writable = 0x0000005F;
+static const u32 k_i586_open = 0x01;
+static const u32 k_i586_push = 0x02;
+static const u32 k_i586_pop = 0x04;
+static const u32 k_i586_fx = 0x08;
+static const u32 k_i586_rmw = 0x10;
+static const u32 k_i586_fmul = 0x20;
+static const u32 k_i586_paired = 0x40;
+static const u32 k_i586_fxch = 0x80;
+static const u32 k_i586_single = 0x100;
+static const u32 k_i586_alone = 0x200;
+static const u32 k_i586_np = 0;
+static const u32 k_i586_uv = 1;
+static const u32 k_i586_pu = 2;
+static const u32 k_i586_pv = 3;
 static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
 static const u8 k_i386_tlb_dirty = 0x08;

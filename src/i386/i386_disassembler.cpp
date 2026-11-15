@@ -76,6 +76,7 @@ struct I386_Disassembly_Context
     int mode;
     bool default32;
     bool i486;
+    bool i586;
 };
 
 static void append_text(char* output, size_t output_size, size_t& length, const char* text)
@@ -302,8 +303,19 @@ static void format_moffs(const I386_Decode_State& state, int width, char* output
         append_format(output, output_size, length, "[0x%08X]", state.immediate);
 }
 
-static const char* extended_format(u8 opcode, bool i486)
+static const char* extended_format(u8 opcode, bool i486, bool i586)
 {
+    if (i586)
+    {
+        size_t count = sizeof(k_i586_extended_opcode_names) / sizeof(k_i586_extended_opcode_names[0]);
+
+        for (size_t i = 0; i < count; i++)
+        {
+            if (k_i586_extended_opcode_names[i].opcode == opcode)
+                return k_i586_extended_opcode_names[i].name;
+        }
+    }
+
     if (i486)
     {
         size_t count = sizeof(k_i486_extended_opcode_names) / sizeof(k_i486_extended_opcode_names[0]);
@@ -689,7 +701,7 @@ static void mark_control_flow(const I386_Decode_State& state, I386_Disassembler_
 
 // Encoding rules only: protected-mode instructions keep their mnemonic in other modes, because look-ahead
 // disassembly cannot know the mode the code will run in
-static bool valid_encoding(const I386_Decode_State& state, bool i486)
+static bool valid_encoding(const I386_Decode_State& state, bool i486, bool i586)
 {
     if (state.invalid_lock)
         return false;
@@ -702,10 +714,12 @@ static bool valid_encoding(const I386_Decode_State& state, bool i486)
                 return (state.reg > 3 && state.reg != 7) || state.memory_operand;
             case 0x20:
             case 0x22:
-                return state.reg == 0 || state.reg == 2 || state.reg == 3;
+                return state.reg == 0 || state.reg == 2 || state.reg == 3 || (i586 && state.reg == 4);
             case 0x24:
             case 0x26:
-                return state.reg >= (i486 ? 3 : 6);
+                return !i586 && state.reg >= (i486 ? 3 : 6);
+            case 0xC7:
+                return state.memory_operand && state.reg == 1;
             case 0xB2:
             case 0xB4:
             case 0xB5:
@@ -740,12 +754,12 @@ static bool valid_encoding(const I386_Decode_State& state, bool i486)
 static void format_instruction(I386_Disassembly_Context& context, char* output, size_t output_size)
 {
     const I386_Decode_State& state = *context.state;
-    const char* format = state.two_byte ? extended_format(state.opcode2, context.i486) : k_i386_opcode_names[state.opcode];
+    const char* format = state.two_byte ? extended_format(state.opcode2, context.i486, context.i586) : k_i386_opcode_names[state.opcode];
     char selected[96];
 
     format = select_group_format(state, format, selected, sizeof(selected), context.i486);
 
-    if (!valid_encoding(state, context.i486))
+    if (!valid_encoding(state, context.i486, context.i586))
         format = "@invalid";
 
     size_t length = 0;
@@ -993,6 +1007,7 @@ void I386::FormatDisassemblerText(const I386_Decode_State& state, I386_Disassemb
     context.mode = record.mode;
     context.default32 = record.default32;
     context.i486 = m_i486;
+    context.i586 = m_i586;
 
     format_instruction(context, record.name, sizeof(record.name));
     uppercase_intel_identifiers(record.name);

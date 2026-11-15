@@ -193,6 +193,9 @@
     <ClCompile Include="..\..\src\i386\i386_486.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\i386\i386_586.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\i386\i386_disassembler.cpp">
       <Filter>src</Filter>
     </ClCompile>

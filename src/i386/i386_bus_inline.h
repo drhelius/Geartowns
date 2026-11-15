@@ -341,6 +341,12 @@ INLINE void I386::AddBusPortWait(u16 port, int write)
         }
     }
 
+    if (m_i586_timing)
+    {
+        m_step.clocks += (wait + 0x8000) >> 16;
+        return;
+    }
+
     m_step.clocks += wait >> 16;
     m_bus_fraction += (s32)(wait & 0xFFFF);
 }

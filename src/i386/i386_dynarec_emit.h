@@ -139,12 +139,19 @@ private:
         const I386::DynarecBusRun* settle;
         const I386::DynarecBusRun* after;
         I386::DynarecSite* site;
+        u32 pair_before;
+        u32 pair_after;
+        u32 weight_before;
+        u32 weight_after;
     };
 
     bool Decode(u32 available, u32 instruction_limit);
     void Classify(Instruction& instruction);
     void SetNative(Instruction& instruction, u32 clocks, bool memory);
     void Set486Clocks(Instruction& instruction);
+    void Set586Clocks(Instruction& instruction);
+    void Store586Pair(u32 pair);
+    void Emit586Fold(u32 weight);
     bool CanCarry(int width) const;
     u8 GetOperandSegment(const I386::InstructionContext& c) const;
     bool UsesStackBase(const I386::InstructionContext& c) const;
@@ -174,9 +181,9 @@ private:
     void EmitBusRun(const BusRun& run, int carry);
     void EmitBusTransferRow(const BusRun& run);
     void EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback = NULL,
-        int first_base = -1);
+        u32 first_mask = 0);
     void EmitBusAccessCall(int host, int linear, int t2, uintptr_t flags, const I386::DynarecCheck* check,
-        jit_node* fallback, int first_base);
+        jit_node* fallback, u32 first_mask);
     ColdPath* AddColdPath(u8 kind, jit_node* fallback);
     void EmitColdPaths(bool skip);
     void EmitColdPath(const ColdPath& cold);
@@ -206,7 +213,7 @@ private:
     void ExitTo(u32 target, int steps, u32 clocks, int slot, const BusRun* run);
     void StoreEIP(u32 eip);
     void CallStep(const I386::DynarecCheck* check, u32 native_clocks, u32 before,
-        const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert);
+        const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert, u32 memory = 0);
     const I386::DynarecBusRun* AddBusRun(const BusRun& run);
     intptr_t Offset(const void* member) const;
     intptr_t RegisterOffset(int index, int width) const;
@@ -242,6 +249,12 @@ private:
     void EmitShiftCount(Instruction& instruction, int width);
     bool IsEscapeNative(const I386::InstructionContext& c) const;
     void EmitEscape(Instruction& instruction);
+    u8 EmitEscapeOperand(Instruction& instruction, u32 size, int access);
+    bool IsX87Load(const I386::InstructionContext& c) const;
+    void EmitX87Load(Instruction& instruction, u32 first_mask);
+    bool IsX87Store(const I386::InstructionContext& c) const;
+    void EmitX87Store(Instruction& instruction, u32 first_mask);
+    void EmitX87Wait(Instruction& instruction, u32 first_mask);
     void EmitX87Ready(jit_node* fallback);
     void EmitLoadControlWord(Instruction& instruction);
     bool IsX87Move(const I386::InstructionContext& c) const;
@@ -297,10 +310,16 @@ private:
     bool m_slow_ok;
     bool m_slow_store;
     int m_slow_index;
-    int m_slow_first_base;
+    u32 m_slow_first_mask;
     bool m_i486;
+    bool m_i586;
+    u32 m_586_pair;
+    u8 m_586_agi;
+    u32 m_586_weight;
+    u32 m_first_mask;
+    u32 m_exit_pair;
+    u32 m_exit_weight;
     int m_exit_written;
-    int m_first_base;
     u32 m_bus_code_row;
     const I386::DynarecCheck* m_bus_next_check;
     bool m_bus_line_check;

@@ -235,6 +235,9 @@ void I386::CheckDynarecMemory()
 template<int timing>
 INLINE bool I386::FitsDynarecBlock(const DynarecBlock& block, u64 used, u32 budget) const
 {
+    if (timing == I386_TIMING_586 && m_game_blocks)
+        return used < budget;
+
     if ((timing & I386_TIMING_BUS) == 0)
         return used + block.fit_clocks < budget;
 
@@ -288,7 +291,8 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 LinkDynarecBlock(link, m_dynarec_link_slot, (u32)(block - m_dynarec_blocks));
 
             if (IsValidPointer(block) && FitsDynarecBlock<timing>(*block, clocks + context.wait_cycles, cycle_budget) &&
-                (likely(m_state.interrupt_shadow_steps == 0) || EnterDynarecShadow(*block)))
+                (likely(m_state.interrupt_shadow_steps == 0) || EnterDynarecShadow(*block)) &&
+                (timing != I386_TIMING_586 || !Pairs586Entry(*block)))
             {
                 m_dynarec_remaining = (u32)(cycle_budget - clocks - context.wait_cycles);
                 m_dynarec_wait = context.wait_cycles;
@@ -296,6 +300,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 m_dynarec_clocks = 0;
                 m_dynarec_steps = 0;
                 m_dynarec_dirty = false;
+                m_586_folded = 0;
                 m_dynarec_current = (u32)(block - m_dynarec_blocks);
                 m_step.instruction_completed = true;
                 m_step.end_batch = false;
@@ -319,7 +324,7 @@ I386_Run_Result I386::RunDynarec(u32 cycle_budget, GT_Bus_Access_Context& contex
                 m_dynarec_current = k_dynarec_none;
 
                 // The 486 has no m clocks
-                if (timing != I386_TIMING_486 && (exit & k_dynarec_exit_transfer) != 0)
+                if (timing != I386_TIMING_486 && timing != I386_TIMING_586 && (exit & k_dynarec_exit_transfer) != 0)
                 {
                     u32 components = (timing & I386_TIMING_486) != 0 ? 0 : GetNextInstructionComponents();
                     clocks += components;
@@ -406,6 +411,8 @@ template I386_Run_Result I386::RunDynarec<I386_TIMING_BUS>(u32 cycle_budget, GT_
 template I386_Run_Result I386::RunDynarec<I386_TIMING_486>(u32 cycle_budget, GT_Bus_Access_Context& context,
     bool nmi_pending, bool intr_pending);
 template I386_Run_Result I386::RunDynarec<I386_TIMING_486_BUS>(u32 cycle_budget, GT_Bus_Access_Context& context,
+    bool nmi_pending, bool intr_pending);
+template I386_Run_Result I386::RunDynarec<I386_TIMING_586>(u32 cycle_budget, GT_Bus_Access_Context& context,
     bool nmi_pending, bool intr_pending);
 
 // A block starts with a shadow pending only while no interrupt is pending. A helper first counts the shadow down
@@ -935,11 +942,14 @@ void I386::CoolDynarecPages()
 // and the slice budget covers every instruction up to the next check
 template<bool i486>
 uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-    uintptr_t settle, uintptr_t revert)
+    uintptr_t settle, uintptr_t revert, uintptr_t memory)
 {
     StepState& step = cpu->m_step;
     u16 old_task = cpu->m_state.task_register.selector;
     u32 level = cpu->m_bus_queue;
+
+    if (i486 && cpu->m_i586_timing)
+        cpu->Fold586To((u32)memory & 0x7FFFFFFFU);
 
     if (settle != 0)
     {
@@ -965,6 +975,8 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
 
     if (unlikely(!cpu->ExecuteOPCode()))
         cpu->CompleteFault(old_task);
+    else if (i486 && cpu->m_i586_timing && (step.instruction_completed || cpu->m_state.repeat.active))
+        cpu->Apply586Clocks();
     else if (i486 && (step.instruction_completed || cpu->m_state.repeat.active))
     {
         cpu->Apply486Clocks();
@@ -977,6 +989,9 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
 
     if (unlikely(cpu->m_state.interrupt_shadow_steps > 0) && step.instruction_completed)
         cpu->CountInterruptShadow();
+
+    if (i486 && cpu->m_i586_timing && ((u32)memory & 0x80000000U) != 0)
+        cpu->m_586_folded += Get586Accesses(cpu->m_instruction) * cpu->m_586_memory_wait;
 
     cpu->m_dynarec_clocks += (u32)step.clocks - (u32)native_clocks;
 
@@ -1022,9 +1037,23 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
 }
 
 template uintptr_t I386::DynarecStep<false>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-    uintptr_t settle, uintptr_t revert);
+    uintptr_t settle, uintptr_t revert, uintptr_t memory);
 template uintptr_t I386::DynarecStep<true>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-    uintptr_t settle, uintptr_t revert);
+    uintptr_t settle, uintptr_t revert, uintptr_t memory);
+
+bool I386::Pairs586Entry(const DynarecBlock& block) const
+{
+    u32 state = m_586_pair;
+
+    if ((state & block.first_pairing & k_i586_fmul) != 0)
+        return true;
+
+    if ((state & k_i586_open) == 0)
+        return false;
+
+    u32 charged = 0;
+    return (Pair586(state, block.first_pairing, 0, 0, block.first_named, charged) & k_i586_paired) != 0;
+}
 
 // The clocks to a check with the bus time pending there, as the run before it reaches it from the current queue level,
 // with the code lines it misses now. The check's clocks bound this for any level and line, and are tried first

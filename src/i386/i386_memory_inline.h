@@ -162,6 +162,8 @@ INLINE u32 I386::ReadPhysical(u32 physical, u32 size, GT_Bus_Access_Context& con
 
     if (m_bus_timed)
         AddBusSlowAccess(physical, size, false);
+    else if (m_i586_timing)
+        m_586_wait += m_586_device_wait[m_bus_page_class[physical >> 12]][0];
 
     if (size == 1)
         return m_memory->Read8Physical(physical, context);
@@ -184,6 +186,8 @@ INLINE void I386::WritePhysical(u32 physical, u32 value, u32 size, GT_Bus_Access
 
     if (m_bus_timed)
         AddBusSlowAccess(physical, size, true);
+    else if (m_i586_timing)
+        m_586_wait += m_586_device_wait[m_bus_page_class[physical >> 12]][1];
 
     if (size == 1)
         m_memory->Write8Physical(physical, (u8)value, context);

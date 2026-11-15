@@ -125,10 +125,10 @@ DynarecEmitter::DynarecEmitter(I386* cpu)
     m_slow_ok = false;
     m_slow_store = false;
     m_slow_index = 0;
-    m_slow_first_base = -1;
+    m_slow_first_mask = 0;
     InitPointer(m_leave);
     m_leave_used = false;
-    m_first_base = -1;
+    m_first_mask = 0;
     m_bus_code_row = 0;
     InitPointer(m_bus_next_check);
     m_bus_line_check = false;
@@ -147,8 +147,14 @@ bool DynarecEmitter::Compile(I386::DynarecBlock& block, u32 available, u32 instr
     m_key = (u8)block.key;
     m_timed = m_cpu->m_bus_timed;
     m_i486 = m_cpu->m_i486_timing;
+    m_i586 = m_cpu->m_i586_timing;
+    m_586_pair = 0;
+    m_586_agi = 0;
+    m_586_weight = 0;
+    m_first_mask = 0;
+    m_exit_pair = 0;
+    m_exit_weight = 0;
     m_exit_written = -1;
-    m_first_base = -1;
 
     if (!Decode(available, instruction_limit))
         return false;
@@ -159,6 +165,9 @@ bool DynarecEmitter::Compile(I386::DynarecBlock& block, u32 available, u32 instr
     const Instruction& first = m_instructions[0];
     block.shadow_entry = first.kind != DYNAREC_NATIVE ? k_dynarec_shadow_keep :
         !first.memory ? k_dynarec_shadow_count : k_dynarec_shadow_none;
+    block.first_pairing = m_i586 ? I386::Get586Pairing(first.context,
+        I386::Count486Prefixes(first.host, first.context.next_eip - first.context.start_eip)) : 0;
+    block.first_named = m_i586 ? (u8)I386::Get586Named(first.context) : 0;
 
     _jit = jit_new_state();
     EmitBlock();
@@ -288,11 +297,20 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
             instruction.memory && instruction.ends_block)
             break;
 
-        if (m_i486)
+        if (m_i586)
+            Set586Clocks(instruction);
+        else if (m_i486)
             Set486Clocks(instruction);
 
         if (clocks + instruction.clocks > k_dynarec_max_clocks)
             break;
+
+        if (m_i586)
+        {
+            m_586_pair = instruction.pair_after;
+            m_586_agi = instruction.written;
+            m_586_weight = instruction.weight_after;
+        }
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
         m_cpu->DisassembleInstruction(eip);
@@ -303,9 +321,23 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         instruction.extra_before = extra;
         clocks += instruction.clocks;
 
+        if (m_i586 && instruction.kind == DYNAREC_NATIVE)
+        {
+            const I386::InstructionContext& c = instruction.context;
+            u32 accesses = I386::Get586Accesses(c);
+            u32 device = 0;
+
+            for (int k = 0; k < GT_BUS_CLASS_COUNT; k++)
+                device = MAX(device, MAX(m_cpu->m_586_device_wait[k][0], m_cpu->m_586_device_wait[k][1]));
+
+            extra += m_count == 0 && I386::Get586Address(c) != 0 ? 1 : 0;
+            extra += (instruction.weight_after - instruction.weight_before + 255) / 256 + (accesses != 0 ? 1 : 0);
+            extra += instruction.memory ? device * MAX(accesses, 1U) : 0;
+            extra += !c.two_byte && c.opcode >= 0xD8 && c.opcode <= 0xDF ? 160 : 0;
+        }
         // The most a 486 native can add at run time: its misaligned accesses, the AGI clock of a first instruction, a
         // true SETcc condition in a register and a multiplier's clocks, 10 plus its width
-        if (m_i486 && instruction.kind == DYNAREC_NATIVE)
+        else if (m_i486 && instruction.kind == DYNAREC_NATIVE)
         {
             const I386::InstructionContext& c = instruction.context;
             u32 sizes[8];
@@ -753,6 +785,8 @@ void DynarecEmitter::Classify(Instruction& instruction)
             opcode2 == 0xBD || opcode2 == 0xA1 || opcode2 == 0xA9 || opcode2 == 0xB4 || opcode2 == 0xB5)
             instruction.kind = DYNAREC_HELPER;
         else if (m_cpu->m_i486 && ((opcode2 & 0xFE) == 0xB0 || (opcode2 & 0xFE) == 0xC0 || (opcode2 & 0xF8) == 0xC8))
+            instruction.kind = DYNAREC_HELPER;
+        else if (m_cpu->m_i586 && (opcode2 == 0x31 || opcode2 == 0xC7))
             instruction.kind = DYNAREC_HELPER;
         else
             instruction.ends_block = true;
@@ -1221,6 +1255,107 @@ void DynarecEmitter::Set486Clocks(Instruction& instruction)
     instruction.bus_clocks = (set ? (c.memory_operand ? 4 : 3) : form) + prefixes;
     instruction.clocks = instruction.bus_clocks + agi;
     instruction.taken_clocks = taken + prefixes + agi;
+}
+
+void DynarecEmitter::Set586Clocks(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    u32 prefixes = I386::Count486Prefixes(m_cpu->m_passive_bytes, c.next_eip - c.start_eip);
+    u32 pairing = I386::Get586Pairing(c, prefixes);
+    u32 written = I386::Get486Written(c);
+    u32 implicit = (pairing & (k_i586_push | k_i586_pop)) != 0 ? 1U << I386_REG_ESP : 0;
+    u32 kind = pairing >> 24;
+    bool native = instruction.kind == DYNAREC_NATIVE;
+    bool escape = !c.two_byte && c.opcode >= 0xD8 && c.opcode <= 0xDF;
+    bool loop = !c.two_byte && c.opcode >= 0xE0 && c.opcode <= 0xE3;
+    bool jump = loop || (c.two_byte ? (c.opcode2 & 0xF0) == 0x80 : (c.opcode & 0xF0) == 0x70);
+    u32 clocks = 0;
+    u32 taken = 0;
+
+    if (escape)
+    {
+        u32 busy = 0;
+        clocks = m_cpu->Get586EscapeClocks(c, busy);
+        taken = clocks;
+    }
+    else if (native || kind == k_i586_uv || kind == k_i586_pu)
+    {
+        clocks = m_cpu->Get586Clocks(c, false);
+        taken = loop ? m_cpu->Get586Clocks(c, true) : clocks;
+
+        if (clocks == k_i486_keep)
+        {
+            clocks = m_cpu->Get486Clocks(c, false);
+            taken = m_cpu->Get486Clocks(c, true);
+
+            if (clocks == k_i486_data)
+                clocks = m_cpu->Get486DataClocks(c);
+
+            if (taken == k_i486_data)
+                taken = clocks;
+
+            if (clocks == k_i486_keep || taken == k_i486_keep)
+            {
+                clocks = 0;
+                taken = 0;
+
+                if (native)
+                    instruction.kind = DYNAREC_HELPER;
+
+                native = false;
+            }
+        }
+    }
+
+    u32 charged = 0;
+    u32 charged_taken = 0;
+    u32 state = I386::Pair586(m_586_pair, pairing, written | implicit, clocks, I386::Get586Named(c), charged);
+    I386::Pair586(m_586_pair, pairing, written | implicit, taken, I386::Get586Named(c), charged_taken);
+    bool paired = (state & k_i586_paired) != 0;
+    u32 stalls = I386::Count586Prefixes(c, prefixes) +
+        (m_count > 0 && (m_586_agi & I386::Get586Address(c)) != 0 ? 1 : 0);
+    u32 penalty = paired && !loop ? 4 : 3;
+    bool backward = jump && I386::Is586Backward(c);
+
+    instruction.pair_before = m_586_pair;
+    instruction.pair_after = state & ~k_i586_paired;
+    instruction.weight_before = m_586_weight;
+    instruction.weight_after = m_586_weight + (native ? I386::Get586Accesses(c) * m_cpu->m_586_memory_wait : 0);
+    instruction.written = (u8)(paired ? m_586_agi | written : written);
+
+    if (!native)
+        return;
+
+    instruction.clocks = charged + stalls + (jump && backward ? penalty : 0);
+    instruction.taken_clocks = charged_taken + stalls + (jump && !backward ? penalty : 0);
+    instruction.bus_clocks = instruction.clocks;
+}
+
+void DynarecEmitter::Store586Pair(u32 pair)
+{
+    jit_movi(DR_T0, (jit_word_t)pair);
+    jit_stxi_i(Offset(&m_cpu->m_586_pair), DR_CPU, DR_T0);
+}
+
+void DynarecEmitter::Emit586Fold(u32 weight)
+{
+    intptr_t folded = Offset(&m_cpu->m_586_folded);
+    intptr_t fraction = Offset(&m_cpu->m_586_fraction);
+    intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
+
+    LoadU32(DR_T0, DR_CPU, folded);
+    LoadU32(DR_T1, DR_CPU, fraction);
+    jit_movi(DR_T2, (jit_word_t)weight);
+    jit_subr(DR_T2, DR_T2, DR_T0);
+    jit_addr(DR_T1, DR_T1, DR_T2);
+    jit_rshi_u(DR_T2, DR_T1, 8);
+    jit_andi(DR_T1, DR_T1, 0xFF);
+    jit_stxi_i(fraction, DR_CPU, DR_T1);
+    LoadU32(DR_T1, DR_CPU, clock_total);
+    jit_addr(DR_T1, DR_T1, DR_T2);
+    jit_stxi_i(clock_total, DR_CPU, DR_T1);
+    jit_movi(DR_T0, 0);
+    jit_stxi_i(folded, DR_CPU, DR_T0);
 }
 
 // The base and index clock of the 386 effective address unit, as DecodeOperands counts it
@@ -1765,7 +1900,7 @@ void DynarecEmitter::EmitBusTransferRow(const BusRun& run)
 
 // Aligned DRAM adds only near-row or row-change time, the rest calls DynarecBusAccess. Clobbers linear, t1, t2
 void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 size, int access, jit_node* fallback,
-    int first_base)
+    u32 first_mask)
 {
     const I386::BusTiming& bus = m_cpu->m_bus;
     u32 ram_size = m_cpu->m_dynarec_page_count << 12;
@@ -1773,7 +1908,7 @@ void DynarecEmitter::EmitBusAccess(int host, int linear, int t1, int t2, u32 siz
     cold.host = host;
     cold.linear = linear;
     cold.t = t2;
-    cold.value = (u32)(first_base + 1);
+    cold.value = first_mask;
     cold.flags = GetBusAccessFlags(size, access);
     cold.check = IsValidPointer(fallback) ? m_bus_next_check : NULL;
 
@@ -1838,7 +1973,7 @@ void DynarecEmitter::EmitColdPath(const ColdPath& cold)
     switch (cold.kind)
     {
         case DYNAREC_COLD_BUS:
-            EmitBusAccessCall(cold.host, cold.linear, cold.t, cold.flags, cold.check, cold.fallback, (int)cold.value - 1);
+            EmitBusAccessCall(cold.host, cold.linear, cold.t, cold.flags, cold.check, cold.fallback, cold.value);
             break;
         case DYNAREC_COLD_NO_PAGE:
             jit_stxi_i(Offset(&m_cpu->m_dynarec_slow_linear), DR_CPU, cold.linear);
@@ -1957,7 +2092,7 @@ void DynarecEmitter::EmitBusDram(int row, int scratch, int t2, u32 size, int acc
 // The access the run couldn't fold: DynarecBusAccess counts it as the interpreter does. While more of the block runs
 // before its next check, an access that leaves the slice budget short of it falls back instead
 void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, uintptr_t flags, const I386::DynarecCheck* check,
-    jit_node* fallback, int first_base)
+    jit_node* fallback, u32 first_mask)
 {
     jit_stxi(Offset(&m_cpu->m_dynarec_spill), DR_CPU, host);
     jit_movi(t2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecBusAccess<true> :
@@ -1967,7 +2102,7 @@ void DynarecEmitter::EmitBusAccessCall(int host, int linear, int t2, uintptr_t f
     jit_pushargr(linear);
     jit_pushargi((jit_word_t)flags);
     jit_pushargi((jit_word_t)(uintptr_t)check);
-    jit_pushargi((jit_word_t)(first_base + 1));
+    jit_pushargi((jit_word_t)first_mask);
     jit_finishr(t2);
 
     if (IsValidPointer(check))
@@ -2023,7 +2158,10 @@ void DynarecEmitter::EmitBlock()
     m_cold_count = 0;
 
     // The AGI clock of the first instruction against the one before the block, counted past its last fallback
-    m_first_base = m_i486 && m_instructions[0].kind == DYNAREC_NATIVE ? I386::Get486Base(m_instructions[0].context) : -1;
+    int first_base = m_i486 && !m_i586 && m_instructions[0].kind == DYNAREC_NATIVE ?
+        I386::Get486Base(m_instructions[0].context) : -1;
+    m_first_mask = m_i586 && m_instructions[0].kind == DYNAREC_NATIVE ? I386::Get586Address(m_instructions[0].context) :
+        first_base >= 0 ? 1U << first_base : 0;
     m_bus_line_check = m_timed && m_cpu->m_bus_code_cost == 0 && m_cpu->m_bus.line_fill != 0;
     m_bus_line_next = 0;
 
@@ -2055,6 +2193,8 @@ void DynarecEmitter::EmitBlock()
                 Emit486FirstAGI(DR_T0);
 
             m_exit_written = m_i486 ? instruction.written : -1;
+            m_exit_pair = instruction.pair_after;
+            m_exit_weight = instruction.weight_after;
             m_slow_ok = !shadow;
             m_slow_index = i;
             EmitNative(instruction, i);
@@ -2089,8 +2229,13 @@ void DynarecEmitter::EmitBlock()
             if (m_i486 && i > 0)
                 Store486Written(m_instructions[i - 1].written);
 
+            if (m_i586 && i > 0)
+                Store586Pair(instruction.pair_before);
+
+            m_exit_weight = instruction.weight_before;
             StoreEIP(instruction.context.start_eip);
-            CallStep(instruction.next_check, 0, instruction.before, m_timed ? AddBusRun(instruction.bus_before) : NULL, NULL);
+            CallStep(instruction.next_check, 0, instruction.before, m_timed ? AddBusRun(instruction.bus_before) : NULL, NULL,
+                instruction.weight_before);
 
             if (instruction.kind == DYNAREC_HELPER_LAST)
                 Exit(i + 1, instruction.before, k_dynarec_exit_end);
@@ -2110,8 +2255,10 @@ void DynarecEmitter::EmitBlock()
     {
         StoreEIP(end.context.next_eip);
         m_exit_written = m_i486 && end.kind == DYNAREC_NATIVE ? end.written : -1;
+        m_exit_pair = end.pair_after;
+        m_exit_weight = end.weight_after;
 
-        if (end.shadow)
+        if (end.shadow || (m_i586 && (end.pair_after & (k_i586_open | k_i586_fmul)) != 0))
             Exit(m_count, end.before + end.clocks, k_dynarec_exit_end,
                 m_timed && end.kind == DYNAREC_NATIVE ? &end.bus_after : NULL);
         else
@@ -2175,9 +2322,14 @@ void DynarecEmitter::EmitFallback(Instruction& instruction, int index, int last)
     if (m_i486 && index > 0)
         Store486Written(m_instructions[index - 1].written);
 
+    if (m_i586 && index > 0)
+        Store586Pair(instruction.pair_before);
+
+    m_exit_weight = instruction.weight_after;
     const I386::DynarecBusRun* settle = GetSettleRun(instruction);
     const I386::DynarecBusRun* revert = !instruction.ends_block ? GetAfterRun(instruction) : NULL;
-    CallStep(instruction.next_check, instruction.clocks, instruction.before, settle, revert);
+    CallStep(instruction.next_check, instruction.clocks, instruction.before, settle, revert,
+        instruction.weight_before | 0x80000000U);
 
     if (instruction.ends_block)
     {
@@ -2211,7 +2363,7 @@ I386::DynarecSite* DynarecEmitter::GetSite(Instruction& instruction)
     site.run = GetAfterRun(instruction);
     site.settle = GetSettleRun(instruction);
     site.access = 0;
-    site.first_base = 0;
+    site.first_mask = 0;
     site.before = instruction.before;
     site.eip = instruction.context.next_eip;
     site.steps = (u32)(&instruction - m_instructions) + 1;
@@ -2220,6 +2372,9 @@ I386::DynarecSite* DynarecEmitter::GetSite(Instruction& instruction)
     site.line_count = m_timed ? m_bus_line_count : 0;
     site.line_fill = m_cpu->m_bus.line_fill;
     site.written = m_exit_written;
+    site.pair = m_exit_pair;
+    site.weight = instruction.weight_before;
+    site.weight_after = m_exit_weight;
     instruction.site = &site;
     return &site;
 }
@@ -2237,6 +2392,12 @@ void DynarecEmitter::Exit(int steps, u32 clocks, u32 flags, const BusRun* run)
 {
     if (m_exit_written >= 0)
         Store486Written(m_exit_written);
+
+    if (m_i586 && m_exit_written >= 0)
+        Store586Pair(m_exit_pair);
+
+    if (m_i586)
+        Emit586Fold(m_exit_weight);
 
     if (IsValidPointer(run))
     {
@@ -2261,6 +2422,12 @@ void DynarecEmitter::ExitLinked(int steps, u32 clocks, u32 flags, int slot, cons
 {
     if (m_exit_written >= 0)
         Store486Written(m_exit_written);
+
+    if (m_i586 && m_exit_written >= 0)
+        Store586Pair(m_exit_pair);
+
+    if (m_i586)
+        Emit586Fold(m_exit_weight);
 
     if (IsValidPointer(run))
     {
@@ -2304,6 +2471,12 @@ void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot, const B
 
     if (m_exit_written >= 0)
         Store486Written(m_exit_written);
+
+    if (m_i586 && m_exit_written >= 0)
+        Store586Pair(m_exit_pair);
+
+    if (m_i586)
+        Emit586Fold(m_exit_weight);
 
     if (IsValidPointer(run))
     {
@@ -2352,7 +2525,10 @@ void DynarecEmitter::ExitTo(u32 target, int steps, u32 clocks, int slot, const B
         jit_patch_at(jit_bnei(JIT_R0, 0), m_block_start);
     }
 
+    u32 weight = m_exit_weight;
+    m_exit_weight = 0;
     Exit(0, 0, k_dynarec_exit_end | k_dynarec_exit_link | (slot != 0 ? k_dynarec_exit_slot : 0));
+    m_exit_weight = weight;
 }
 
 // Takes the exit flags in R0, the steps and clocks of the block in R1 and R2 and its link slot in T3. Once the
@@ -2427,7 +2603,7 @@ void DynarecEmitter::StoreEIP(u32 eip)
 
 // Helpers are reached through a register, so the code runs from any executable view
 void DynarecEmitter::CallStep(const I386::DynarecCheck* check, u32 native_clocks, u32 before,
-    const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert)
+    const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert, u32 memory)
 {
     jit_movi(DR_T3, m_cpu->m_i486_timing ? (jit_word_t)(uintptr_t)&I386::DynarecStep<true> :
         (jit_word_t)(uintptr_t)&I386::DynarecStep<false>);
@@ -2438,6 +2614,7 @@ void DynarecEmitter::CallStep(const I386::DynarecCheck* check, u32 native_clocks
     jit_pushargi((jit_word_t)before);
     jit_pushargi((jit_word_t)(uintptr_t)settle);
     jit_pushargi((jit_word_t)(uintptr_t)revert);
+    jit_pushargi((jit_word_t)memory);
     jit_finishr(DR_T3);
     jit_retval(JIT_R0);
 }
@@ -2816,8 +2993,8 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     if (IsValidPointer(no_page))
         no_page->resume = jit_label();
 
-    int first_base = bus && m_i486 ? m_first_base : -1;
-    m_slow_first_base = first_base;
+    u32 first_mask = bus && m_i486 ? m_first_mask : 0;
+    m_slow_first_mask = first_mask;
 
     if (bus && m_i486)
     {
@@ -2828,7 +3005,7 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     if (bus && m_timed)
     {
         jit_node_t* counted = slow ? jit_beqi(r, 0) : NULL;
-        EmitBusAccess(r, t1, t2, t3, size, access, fallback, first_base);
+        EmitBusAccess(r, t1, t2, t3, size, access, fallback, first_mask);
 
         if (IsValidPointer(counted))
             jit_patch(counted);
@@ -2838,7 +3015,7 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
 // 3 clocks for each access of a misaligned 486 operand, past the last check that can fall back to the interpreter
 void DynarecEmitter::Emit486Misaligned(int linear, int t, u32 size, int access)
 {
-    if (size <= 1)
+    if (size <= 1 || m_i586)
         return;
 
     ColdPath& cold = *AddColdPath(DYNAREC_COLD_MISALIGNED, NULL);
@@ -2852,18 +3029,20 @@ void DynarecEmitter::Emit486Misaligned(int linear, int t, u32 size, int access)
 // Once, for the block's first instruction, whose base the instruction before the block may have written
 void DynarecEmitter::Emit486FirstAGI(int t)
 {
-    if (m_first_base < 0)
+    u32 mask = m_first_mask;
+
+    if (mask == 0)
         return;
 
     intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
     jit_ldxi_uc(t, DR_CPU, Offset(&m_cpu->m_486_written));
-    jit_andi(t, t, (jit_word_t)1 << m_first_base);
+    jit_andi(t, t, (jit_word_t)mask);
     jit_node_t* free_base = jit_beqi(t, 0);
     LoadU32(t, DR_CPU, clock_total);
     jit_addi(t, t, 1);
     jit_stxi_i(clock_total, DR_CPU, t);
     jit_patch(free_base);
-    m_first_base = -1;
+    m_first_mask = 0;
 }
 
 void DynarecEmitter::Store486Written(int written)
@@ -3589,7 +3768,7 @@ void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
 
     I386::DynarecSite& site = *GetSite(instruction);
     site.access = (u32)(GetBusAccessFlags((u32)width / 8, DYNAREC_WRITE) | (m_timed ? 0x80 : 0));
-    site.first_base = (u32)(m_slow_first_base + 1);
+    site.first_mask = m_slow_first_mask;
 
     ColdPath& cold = *AddColdPath(DYNAREC_COLD_SLOW_STORE, instruction.fallback);
     cold.site = &site;
@@ -3674,6 +3853,7 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
     const I386::InstructionContext& c = instruction.context;
     u32 size = 0;
     bool write = false;
+    u32 first_mask = m_first_mask;
 
     LoadU32(DR_T0, DR_CPU, Offset(&m_cpu->m_state.cr0));
     jit_andi(DR_T0, DR_T0, 0x0C);
@@ -3693,32 +3873,22 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
         return;
     }
 
+    if (IsX87Load(c))
+    {
+        EmitX87Load(instruction, first_mask);
+        return;
+    }
+
+    if (IsX87Store(c))
+    {
+        EmitX87Store(instruction, first_mask);
+        return;
+    }
+
     if (c.memory_operand)
     {
         size = X87::GetMemoryOperandSize(c.opcode, c.modrm, c.operand_size == 4, write);
-        int access = write ? DYNAREC_WRITE : DYNAREC_READ;
-        u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
-        StoreTemp(0, DR_T0);
-
-        if (size <= 4)
-            EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, access, instruction.fallback);
-        else
-        {
-            // Two 4-byte accesses, as TransferCoprocessorOperand moves the operand on the 486
-            EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, access, instruction.fallback, false);
-            EmitBusCheck(DR_T0, DR_T1, DR_T2, 4, instruction.fallback);
-            StoreTemp(1, DR_T0);
-            StoreTemp(2, DR_T1);
-            Emit486FirstAGI(DR_T2);
-            EmitBusPiece(DR_T0, DR_T1, DR_T2, 4, access);
-            LoadTemp(DR_T0, 1);
-            LoadTemp(DR_T1, 2);
-            jit_addi(DR_T0, DR_T0, 4);
-            jit_addi(DR_T1, DR_T1, 4);
-            EmitBusPiece(DR_T0, DR_T1, DR_T2, 4, access);
-            LoadTemp(DR_T0, 1);
-        }
-
+        u8 segment = EmitEscapeOperand(instruction, size, write ? DYNAREC_WRITE : DYNAREC_READ);
         size |= (u32)segment << 8;
     }
     else
@@ -3726,7 +3896,19 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
 
     u32 fewest = 0;
     u32 most = 0;
-    m_cpu->GetEscapeClocks(c, fewest, most);
+
+    if (m_i586)
+    {
+        fewest = instruction.before;
+        most = instruction.before;
+        jit_movi(DR_T1, (jit_word_t)instruction.weight_before);
+        jit_stxi_i(Offset(&m_cpu->m_586_site_weight), DR_CPU, DR_T1);
+        jit_movi(DR_T1, (jit_word_t)first_mask);
+        jit_stxi_i(Offset(&m_cpu->m_586_site_mask), DR_CPU, DR_T1);
+    }
+    else
+        m_cpu->GetEscapeClocks(c, fewest, most);
+
     u32 form = c.opcode | ((u32)c.modrm << 8) | ((size & 0xF) << 16) | (c.operand_size == 4 ? 1U << 20 : 0) |
         (m_cpu->m_state.execution_mode == I386_MODE_PROTECTED ? 1U << 21 : 0) | (write ? 1U << 22 : 0) |
         (fewest != most ? 1U << 23 : 0) | ((size >> 8) << 24);
@@ -3738,6 +3920,308 @@ void DynarecEmitter::EmitEscape(Instruction& instruction)
     jit_pushargi((jit_word_t)c.start_eip);
     jit_pushargi((jit_word_t)fewest);
     jit_finishi((jit_pointer_t)&I386::DynarecEscape);
+}
+
+u8 DynarecEmitter::EmitEscapeOperand(Instruction& instruction, u32 size, int access)
+{
+    u8 segment = EmitEffectiveOffset(DR_T0, DR_T1, instruction);
+    StoreTemp(0, DR_T0);
+
+    if (size <= 4)
+        EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, access, instruction.fallback);
+    else
+    {
+        // Two 4-byte accesses, as TransferCoprocessorOperand moves the operand on the 486
+        EmitHostAddress(DR_T0, DR_T1, DR_T2, DR_T3, segment, size, access, instruction.fallback, false);
+        EmitBusCheck(DR_T0, DR_T1, DR_T2, 4, instruction.fallback);
+        StoreTemp(1, DR_T0);
+        StoreTemp(2, DR_T1);
+        Emit486FirstAGI(DR_T2);
+        EmitBusPiece(DR_T0, DR_T1, DR_T2, 4, access);
+        LoadTemp(DR_T0, 1);
+        LoadTemp(DR_T1, 2);
+        jit_addi(DR_T0, DR_T0, 4);
+        jit_addi(DR_T1, DR_T1, 4);
+        EmitBusPiece(DR_T0, DR_T1, DR_T2, 4, access);
+        LoadTemp(DR_T0, 1);
+    }
+
+    return segment;
+}
+
+bool DynarecEmitter::IsX87Load(const I386::InstructionContext& c) const
+{
+    if (!k_dynarec_x87_moves || !c.memory_operand || c.reg != 0 ||
+        (c.opcode != 0xD9 && c.opcode != 0xDD && c.opcode != 0xDB && c.opcode != 0xDF))
+        return false;
+
+    if (m_i586)
+        return true;
+
+    u32 fewest = 0;
+    u32 most = 0;
+    m_cpu->GetEscapeClocks(c, fewest, most);
+    return fewest == most;
+}
+
+void DynarecEmitter::EmitX87Load(Instruction& instruction, u32 first_mask)
+{
+    const I386::InstructionContext& c = instruction.context;
+    intptr_t state = (intptr_t)((const u8*)m_cpu->m_x87->GetState() - (const u8*)m_cpu->m_x87);
+    intptr_t status = state + (intptr_t)offsetof(X87::X87_State, status);
+    intptr_t tag = state + (intptr_t)offsetof(X87::X87_State, tag);
+    intptr_t significand = (intptr_t)offsetof(X87::X87_Register, significand);
+    intptr_t exponent = (intptr_t)offsetof(X87::X87_Register, sign_exponent);
+    jit_node* fallback = instruction.fallback;
+    bool integer = c.opcode == 0xDB || c.opcode == 0xDF;
+    u32 size = c.opcode == 0xDD ? 8 : c.opcode == 0xDF ? 2 : 4;
+    u8 segment = EmitEscapeOperand(instruction, size, DYNAREC_READ);
+
+    if (size == 8)
+    {
+        LoadHost(DR_T4, DR_T0, 32);
+        jit_addi(DR_T0, DR_T0, 4);
+        LoadHost(DR_T1, DR_T0, 32);
+        jit_lshi(DR_T1, DR_T1, 32);
+        jit_orr(DR_T4, DR_T4, DR_T1);
+    }
+    else
+        LoadHost(DR_T4, DR_T0, (int)size * 8);
+
+    jit_node* zero = NULL;
+
+    if (integer)
+    {
+        if (size == 2)
+            jit_extr_s(DR_T4, DR_T4);
+#if __WORDSIZE == 64
+        else
+            jit_extr_i(DR_T4, DR_T4);
+#endif
+
+        jit_movi(DR_X0, 0);
+        jit_movi(DR_X1, 0);
+        zero = jit_beqi(DR_T4, 0);
+        jit_node* positive = jit_bgti(DR_T4, 0);
+        jit_movi(DR_X1, 0x8000);
+        jit_negr(DR_T4, DR_T4);
+        jit_patch(positive);
+        jit_clzr(DR_T1, DR_T4);
+        jit_lshr(DR_X0, DR_T4, DR_T1);
+        jit_rsbi(DR_T1, DR_T1, 16383 + 63);
+        jit_orr(DR_X1, DR_X1, DR_T1);
+    }
+    else
+    {
+        int mantissa_bits = size == 8 ? 52 : 23;
+        jit_word_t field = size == 8 ? 0x7FF : 0xFF;
+        jit_word_t bias = size == 8 ? 16383 - 1023 : 16383 - 127;
+
+        jit_rshi_u(DR_X1, DR_T4, size * 8 - 16);
+        jit_andi(DR_X1, DR_X1, 0x8000);
+        jit_movi(DR_X0, 0);
+        jit_lshi(DR_T1, DR_T4, 64 - (int)size * 8 + 1);
+        zero = jit_beqi(DR_T1, 0);
+        jit_rshi_u(DR_T2, DR_T4, mantissa_bits);
+        jit_andi(DR_T2, DR_T2, field);
+        jit_patch_at(jit_beqi(DR_T2, 0), fallback);
+        jit_patch_at(jit_beqi(DR_T2, field), fallback);
+        jit_addi(DR_T2, DR_T2, bias);
+        jit_orr(DR_X1, DR_X1, DR_T2);
+        jit_lshi(DR_X0, DR_T4, 64 - mantissa_bits);
+        jit_rshi_u(DR_X0, DR_X0, 1);
+        jit_movi(DR_T1, (jit_word_t)0x8000000000000000ULL);
+        jit_orr(DR_X0, DR_X0, DR_T1);
+    }
+
+    jit_patch(zero);
+
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_ldxi_us(DR_T1, DR_T0, status);
+    jit_rshi_u(DR_T2, DR_T1, 11);
+    jit_andi(DR_T2, DR_T2, 7);
+    jit_ldxi_us(DR_T3, DR_T0, tag);
+    jit_addi(DR_T2, DR_T2, 7);
+    jit_andi(DR_T2, DR_T2, 7);
+    jit_lshi(DR_T4, DR_T2, 1);
+    jit_rshr_u(DR_T4, DR_T3, DR_T4);
+    jit_andi(DR_T4, DR_T4, 3);
+    jit_patch_at(jit_bnei(DR_T4, 3), fallback);
+
+    if (m_i586)
+    {
+        EmitX87Wait(instruction, first_mask);
+        jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+        jit_ldxi_us(DR_T1, DR_T0, status);
+        jit_rshi_u(DR_T2, DR_T1, 11);
+        jit_addi(DR_T2, DR_T2, 7);
+        jit_andi(DR_T2, DR_T2, 7);
+    }
+
+    jit_lshi(DR_T4, DR_T2, 1);
+    jit_movi(DR_T0, 3);
+    jit_lshr(DR_T4, DR_T0, DR_T4);
+    jit_comr(DR_T4, DR_T4);
+    jit_andr(DR_T3, DR_T3, DR_T4);
+    jit_andi(DR_T1, DR_T1, ~0x3A00);
+    jit_lshi(DR_T4, DR_T2, 11);
+    jit_orr(DR_T1, DR_T1, DR_T4);
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_stxi_s(status, DR_T0, DR_T1);
+    jit_stxi_s(tag, DR_T0, DR_T3);
+    EmitX87Address(DR_T4, DR_T0, DR_T2);
+    jit_stxi(significand, DR_T4, DR_X0);
+    jit_stxi_s(exponent, DR_T4, DR_X1);
+    jit_movi(DR_T1, (jit_word_t)(((c.opcode & 7) << 8) | c.modrm));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, opcode), DR_T0, DR_T1);
+    jit_ldxi_us(DR_T1, DR_CPU, Offset(&m_cpu->m_state.segments[I386_SEGMENT_CS].selector));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, instruction_selector), DR_T0, DR_T1);
+    jit_movi(DR_T1, (jit_word_t)c.start_eip);
+    jit_stxi_i(state + (intptr_t)offsetof(X87::X87_State, instruction_offset), DR_T0, DR_T1);
+    jit_ldxi_us(DR_T1, DR_CPU, Offset(&m_cpu->m_state.segments[segment].selector));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, operand_selector), DR_T0, DR_T1);
+    LoadTemp(DR_T1, 0);
+    jit_stxi_i(state + (intptr_t)offsetof(X87::X87_State, operand_offset), DR_T0, DR_T1);
+}
+
+bool DynarecEmitter::IsX87Store(const I386::InstructionContext& c) const
+{
+    if (!k_dynarec_x87_moves || !c.memory_operand || (c.reg != 2 && c.reg != 3) || (c.opcode != 0xD9 && c.opcode != 0xDD))
+        return false;
+
+    if (m_i586)
+        return true;
+
+    u32 fewest = 0;
+    u32 most = 0;
+    m_cpu->GetEscapeClocks(c, fewest, most);
+    return fewest == most;
+}
+
+void DynarecEmitter::EmitX87Store(Instruction& instruction, u32 first_mask)
+{
+    const I386::InstructionContext& c = instruction.context;
+    intptr_t state = (intptr_t)((const u8*)m_cpu->m_x87->GetState() - (const u8*)m_cpu->m_x87);
+    intptr_t status = state + (intptr_t)offsetof(X87::X87_State, status);
+    intptr_t tag = state + (intptr_t)offsetof(X87::X87_State, tag);
+    intptr_t significand = (intptr_t)offsetof(X87::X87_Register, significand);
+    intptr_t exponent = (intptr_t)offsetof(X87::X87_Register, sign_exponent);
+    jit_node* fallback = instruction.fallback;
+    bool pop = c.reg == 3;
+    bool wide = c.opcode == 0xDD;
+    int mantissa_bits = wide ? 52 : 23;
+    jit_word_t bias = wide ? 16383 - 1023 : 16383 - 127;
+    jit_word_t largest = wide ? 2046 : 254;
+    u8 segment = EmitEscapeOperand(instruction, wide ? 8 : 4, DYNAREC_WRITE);
+
+    StoreTemp(3, DR_T0);
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_ldxi_us(DR_T1, DR_T0, status);
+    jit_rshi_u(DR_T2, DR_T1, 11);
+    jit_andi(DR_T2, DR_T2, 7);
+    jit_ldxi_us(DR_T3, DR_T0, tag);
+    jit_lshi(DR_T4, DR_T2, 1);
+    jit_rshr_u(DR_T4, DR_T3, DR_T4);
+    jit_andi(DR_T4, DR_T4, 3);
+    jit_patch_at(jit_beqi(DR_T4, 3), fallback);
+    EmitX87Address(DR_T4, DR_T0, DR_T2);
+    jit_ldxi(DR_X0, DR_T4, significand);
+    jit_ldxi_us(DR_X1, DR_T4, exponent);
+
+    jit_andi(DR_T4, DR_X1, 0x7FFF);
+    jit_andi(DR_X1, DR_X1, 0x8000);
+    jit_lshi(DR_X1, DR_X1, wide ? 48 : 16);
+    jit_node* nonzero = jit_bnei(DR_T4, 0);
+    jit_patch_at(jit_bnei(DR_X0, 0), fallback);
+    jit_node* zero = jit_jmpi();
+    jit_patch(nonzero);
+    jit_patch_at(jit_bgei(DR_X0, 0), fallback);
+    jit_subi(DR_T4, DR_T4, bias);
+    jit_patch_at(jit_blei(DR_T4, 0), fallback);
+    jit_patch_at(jit_bgti(DR_T4, largest), fallback);
+    jit_andi(DR_T0, DR_X0, (jit_word_t)((1ULL << (63 - mantissa_bits)) - 1));
+    jit_patch_at(jit_bnei(DR_T0, 0), fallback);
+    jit_lshi(DR_T4, DR_T4, mantissa_bits);
+    jit_orr(DR_X1, DR_X1, DR_T4);
+    jit_lshi(DR_X0, DR_X0, 1);
+    jit_rshi_u(DR_X0, DR_X0, 64 - mantissa_bits);
+    jit_orr(DR_X1, DR_X1, DR_X0);
+    jit_patch(zero);
+
+    if (m_i586)
+        EmitX87Wait(instruction, first_mask);
+
+    LoadTemp(DR_T0, 3);
+    StoreHost(DR_T0, DR_X1, 32, DR_T1);
+
+    if (wide)
+    {
+        jit_rshi_u(DR_T2, DR_X1, 32);
+        jit_addi(DR_T0, DR_T0, 4);
+        StoreHost(DR_T0, DR_T2, 32, DR_T1);
+    }
+
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
+    jit_ldxi_us(DR_T1, DR_T0, status);
+    jit_andi(DR_T1, DR_T1, ~0x0200);
+
+    if (pop)
+    {
+        jit_rshi_u(DR_T2, DR_T1, 11);
+        jit_andi(DR_T2, DR_T2, 7);
+        jit_ldxi_us(DR_T3, DR_T0, tag);
+        jit_lshi(DR_T4, DR_T2, 1);
+        jit_movi(DR_X0, 3);
+        jit_lshr(DR_T4, DR_X0, DR_T4);
+        jit_orr(DR_T3, DR_T3, DR_T4);
+        jit_stxi_s(tag, DR_T0, DR_T3);
+        jit_addi(DR_T2, DR_T2, 1);
+        jit_andi(DR_T2, DR_T2, 7);
+        jit_andi(DR_T1, DR_T1, ~0x3800);
+        jit_lshi(DR_T2, DR_T2, 11);
+        jit_orr(DR_T1, DR_T1, DR_T2);
+    }
+
+    jit_stxi_s(status, DR_T0, DR_T1);
+    jit_movi(DR_T1, (jit_word_t)(((c.opcode & 7) << 8) | c.modrm));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, opcode), DR_T0, DR_T1);
+    jit_ldxi_us(DR_T1, DR_CPU, Offset(&m_cpu->m_state.segments[I386_SEGMENT_CS].selector));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, instruction_selector), DR_T0, DR_T1);
+    jit_movi(DR_T1, (jit_word_t)c.start_eip);
+    jit_stxi_i(state + (intptr_t)offsetof(X87::X87_State, instruction_offset), DR_T0, DR_T1);
+    jit_ldxi_us(DR_T1, DR_CPU, Offset(&m_cpu->m_state.segments[segment].selector));
+    jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, operand_selector), DR_T0, DR_T1);
+    LoadTemp(DR_T1, 0);
+    jit_stxi_i(state + (intptr_t)offsetof(X87::X87_State, operand_offset), DR_T0, DR_T1);
+}
+
+void DynarecEmitter::EmitX87Wait(Instruction& instruction, u32 first_mask)
+{
+    u32 busy = 0;
+    m_cpu->Get586EscapeClocks(instruction.context, busy);
+
+    jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_tsc_source));
+    jit_ldr(DR_T0, DR_T0);
+    jit_ldxi(DR_T1, DR_CPU, Offset(&m_cpu->m_tsc_offset));
+    jit_addr(DR_T0, DR_T0, DR_T1);
+    jit_ldxi(DR_T1, DR_CPU, Offset(&m_cpu->m_bus_context));
+    LoadU32(DR_T1, DR_T1, (intptr_t)offsetof(GT_Bus_Access_Context, synchronized_cycles));
+    jit_subr(DR_T0, DR_T0, DR_T1);
+    LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_dynarec_start));
+    jit_addr(DR_T0, DR_T0, DR_T1);
+    LoadU32(DR_T1, DR_CPU, Offset(&m_cpu->m_dynarec_clocks));
+    jit_addr(DR_T0, DR_T0, DR_T1);
+    jit_addi(DR_T0, DR_T0, (jit_word_t)instruction.before - (first_mask != 0 ? 1 : 0));
+    jit_ldxi(DR_T1, DR_CPU, Offset(&m_cpu->m_586_fpu_free));
+    jit_node* free = jit_bler_u(DR_T1, DR_T0);
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+    jit_pushargi((jit_word_t)instruction.before);
+    jit_pushargi((jit_word_t)instruction.weight_before);
+    jit_pushargi((jit_word_t)busy);
+    jit_pushargi((jit_word_t)first_mask);
+    jit_finishi((jit_pointer_t)&I386::Dynarec586Wait);
+    jit_patch(free);
 }
 
 // FLD ST(i), FXCH, FST and FSTP ST(i), FCHS, FABS, FLD1, FLDZ and FNSTSW AX: no arithmetic, so compiled on the x87's
@@ -4050,7 +4534,7 @@ void DynarecEmitter::EmitDivide(Instruction& instruction, int width)
     const I386::InstructionContext& c = instruction.context;
     u32 form = (u32)width | (c.reg == 7 ? 0x100 : 0);
     u32 size = (u32)width / 8;
-    int first_base = m_i486 ? m_first_base : -1;
+    u32 first_mask = m_i486 ? m_first_mask : 0;
 
     if (c.memory_operand)
     {
@@ -4083,7 +4567,7 @@ void DynarecEmitter::EmitDivide(Instruction& instruction, int width)
             Emit486Misaligned(DR_T1, DR_T2, size, DYNAREC_READ);
 
         if (m_timed)
-            EmitBusAccess(DR_T3, DR_T1, DR_T2, DR_T0, size, DYNAREC_READ, instruction.fallback, first_base);
+            EmitBusAccess(DR_T3, DR_T1, DR_T2, DR_T0, size, DYNAREC_READ, instruction.fallback, first_mask);
     }
 
     jit_movi(DR_T2, (jit_word_t)(uintptr_t)&I386::DynarecDivide);
@@ -4238,7 +4722,7 @@ void DynarecEmitter::EmitSETcc(Instruction& instruction)
     }
 
     // On the 486 a true condition takes a clock more in a register and one less in memory
-    if (m_i486)
+    if (m_i486 && !m_i586)
     {
         intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
         LoadU32(DR_T2, DR_CPU, clock_total);
@@ -4825,7 +5309,7 @@ void DynarecEmitter::EmitPushAll(Instruction& instruction)
     StoreTemp(0, DR_T0);
     Emit486FirstAGI(DR_T2);
 
-    if (m_i486)
+    if (m_i486 && !m_i586)
     {
         intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
         jit_andi(DR_T2, DR_T1, (jit_word_t)(size - 1));
@@ -4887,7 +5371,7 @@ void DynarecEmitter::EmitPopAll(Instruction& instruction)
     StoreTemp(0, DR_T0);
     Emit486FirstAGI(DR_T2);
 
-    if (m_i486)
+    if (m_i486 && !m_i586)
     {
         intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
         jit_andi(DR_T2, DR_T1, (jit_word_t)(size - 1));

@@ -1596,6 +1596,9 @@ bool I386::IsLockAllowed(const InstructionContext& instruction) const
         if (m_i486 && ((opcode & 0xFE) == 0xB0 || (opcode & 0xFE) == 0xC0))
             return true;
 
+        if (m_i586 && opcode == 0xC7)
+            return instruction.reg == 1;
+
         // Group 8 permits LOCK on BTS, BTR, and BTC, but not BT
         return opcode == 0xBA && instruction.reg >= 5;
     }
@@ -2626,6 +2629,14 @@ bool I386::EscapeCoprocessor()
 }
 
 #if !defined(GT_DISABLE_DYNAREC)
+void I386::Dynarec586Wait(I386* cpu, uintptr_t before, uintptr_t weight, uintptr_t busy, uintptr_t first_mask)
+{
+    u32 agi = (cpu->m_486_written & first_mask) != 0 ? 1 : 0;
+    cpu->Fold586To((u32)weight);
+    cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks - agi + (u32)before;
+    cpu->m_dynarec_clocks += cpu->Wait586FPU(cpu->m_io_start_cycles, (u32)busy);
+}
+
 // EscapeCoprocessor past its checks, with the operand at host, its offset in the first temp, and the x87's clocks past
 // the fewest the block counted. form: the opcode, ModR/M from bit 8, the operand size from bit 16, 32-bit operands at
 // bit 20, protected mode at bit 21, a store at bit 22, clocks that depend on the data at bit 23 and the segment from
@@ -2652,6 +2663,26 @@ void I386::DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t ei
 
     if ((form & (1 << 23)) != 0)
         cpu->m_dynarec_clocks += cpu->m_x87->GetClocks(operation, operand) - (u32)fewest;
+
+    if (cpu->m_i586_timing)
+    {
+        InstructionContext c = {};
+        c.opcode = operation.opcode;
+        c.modrm = operation.modrm;
+        c.reg = (operation.modrm >> 3) & 7;
+        c.memory_operand = operation.memory;
+        c.operand_size = operation.operand32 ? 4 : 2;
+
+        if (!Is586FPUFree(c))
+        {
+            u32 busy = 0;
+            cpu->Get586EscapeClocks(c, busy);
+            u32 agi = (cpu->m_486_written & cpu->m_586_site_mask) != 0 ? 1 : 0;
+            cpu->Fold586To(cpu->m_586_site_weight);
+            cpu->m_io_start_cycles = cpu->m_dynarec_start + cpu->m_dynarec_clocks - agi + (u32)fewest;
+            cpu->m_dynarec_clocks += cpu->Wait586FPU(cpu->m_io_start_cycles, busy);
+        }
+    }
 
     if (cpu->m_x87->Execute(operation, operand))
         memcpy((u8*)host, operand, size);

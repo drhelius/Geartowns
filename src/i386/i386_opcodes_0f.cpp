@@ -691,6 +691,18 @@ INLINE bool I386::OPCodes_LMSW()
 
 INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool write_special, u32 value)
 {
+    if (special_index == 4 && m_i586)
+    {
+        if (!write_special)
+            SetRegister(general_index, 32, m_state.cr4);
+        else if ((value & ~k_i386_cr4_writable) != 0)
+            return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+        else
+            m_state.cr4 = value;
+
+        return true;
+    }
+
     if (special_index != 0 && special_index != 2 && special_index != 3)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
@@ -754,7 +766,7 @@ INLINE bool I386::MoveDebugRegister(u8 special_index, u8 general_index, bool wri
 
 INLINE bool I386::MoveTestRegister(u8 special_index, u8 general_index, bool write_special, u32 value)
 {
-    if (special_index < (m_i486 ? 3 : 6) || special_index > 7)
+    if (m_i586 || special_index < (m_i486 ? 3 : 6) || special_index > 7)
         return RaiseException(6, I386_EXCEPTION_FAULT);
 
     u32* test_register = special_index >= 6 ? &m_state.test_registers[special_index - 6] :

@@ -211,4 +211,12 @@ static const I386_Extended_Opcode_Name k_i486_extended_opcode_names[] =
     { 0xCF, "bswap {rV}" }
 };
 
+static const I386_Extended_Opcode_Name k_i586_extended_opcode_names[] =
+{
+    { 0x30, "wrmsr" },
+    { 0x31, "rdtsc" },
+    { 0x32, "rdmsr" },
+    { 0xC7, "cmpxchg8b {M64}" }
+};
+
 #endif /* I386_NAMES_H */

@@ -78,6 +78,15 @@ static const I386_Port_Clocks k_i486dx2_port_clocks =
     { { 11, 11, 11, 11 }, { 8, 8, 8, 8 } }
 };
 
+static const I386_Port_Clocks k_i586_port_clocks =
+{
+    { { 7, 4, 21, 19 }, { 7, 4, 21, 19 } },
+    { { 12, 9, 26, 24 }, { 12, 9, 26, 24 } },
+    { { 9, 6, 24, 22 }, { 13, 10, 27, 25 } },
+    { { 11, 8, 25, 23 }, { 13, 10, 27, 25 } },
+    { { 3, 3, 3, 3 }, { 4, 4, 4, 4 } }
+};
+
 I386::I386()
 {
     InitPointer(m_memory);
@@ -129,6 +138,22 @@ I386::I386()
     InitPointer(m_fpu_error_context);
     InitPointer(m_fpu_error_callback);
     m_i486 = false;
+    m_i586 = false;
+    m_i586_timing = false;
+    m_game_blocks = false;
+    m_game_interrupts = false;
+    m_586_fraction = 0;
+    m_586_folded = 0;
+    m_586_site_weight = 0;
+    m_586_site_mask = 0;
+    m_586_fpu_free = 0;
+    m_586_memory_wait = 0;
+    m_586_wait = 0;
+    memset(m_586_device_wait, 0, sizeof(m_586_device_wait));
+    m_cpuid_features = 0;
+    InitPointer(m_tsc_source);
+    m_tsc_offset = 0;
+    memset(m_msrs, 0, sizeof(m_msrs));
     m_write_protect = false;
     m_alignment_check = false;
     m_tlb_read_mask = 0;
@@ -139,10 +164,12 @@ I386::I386()
     m_cpuid = false;
     m_fast_imul = false;
     Init486Forms();
+    Init586Forms();
     m_port_clocks = &k_i386_port_clocks;
     m_i486_timing = false;
     m_486_continuation = false;
     m_486_written = 0;
+    m_586_pair = 0;
     m_486_extra = 0;
     memset(m_486_registers, 0, sizeof(m_486_registers));
     memset(&m_bus, 0, sizeof(m_bus));
@@ -301,6 +328,12 @@ void I386::Reset()
     memset(m_state.debug_registers, 0, sizeof(m_state.debug_registers));
     memset(m_state.test_registers, 0, sizeof(m_state.test_registers));
     memset(m_cache_test_registers, 0, sizeof(m_cache_test_registers));
+    memset(m_msrs, 0, sizeof(m_msrs));
+    m_state.cr4 = 0;
+    m_586_fraction = 0;
+    m_586_wait = 0;
+    m_586_fpu_free = 0;
+    m_tsc_offset = 0 - (IsValidPointer(m_tsc_source) ? *m_tsc_source : 0);
 
     memset(&m_exception, 0, sizeof(m_exception));
 
@@ -324,6 +357,7 @@ void I386::Reset()
     m_tlb_read_mask = 0;
     m_tlb_write_mask = k_i386_tlb_dirty;
     m_486_written = 0;
+    m_586_pair = 0;
     InitPointer(m_code_window);
     m_code_window_eip = 0;
     m_code_window_size = 0;
@@ -482,6 +516,7 @@ void I386::CompleteFault(u16 old_task)
     {
         m_step_exception.cycles += Get486ExceptionClocks(vector, vm86);
         m_486_written = 0;
+        m_586_pair = 0;
     }
 
     result.clocks = m_step_exception.cycles;
@@ -517,6 +552,9 @@ I386_Run_Result I386::RunFor(u32 cycle_budget, GT_Bus_Access_Context& context, b
     m_poll_batch++;
     m_poll_budget = cycle_budget;
     m_poll_active = true;
+
+    if (m_i586_timing)
+        return RunTimed<I386_TIMING_586>(cycle_budget, context, nmi_pending, intr_pending);
 
     if (m_i486_timing)
         return m_bus_timed ? RunTimed<I386_TIMING_486_BUS>(cycle_budget, context, nmi_pending, intr_pending) :
@@ -1019,6 +1057,7 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
         {
             clocks += line >= 0 ? 11 : 3;
             m_486_written = 0;
+            m_586_pair = 0;
         }
 
         return (u32)clocks;
@@ -1174,6 +1213,16 @@ void I386::Serialize(StateSerializer& serializer, int version)
         G_SERIALIZE_ARRAY(serializer, m_bus_lines, m_bus_line_mask + 1);
     else
         memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
+
+    if (m_i586)
+    {
+        G_SERIALIZE(serializer, m_state.cr4);
+        G_SERIALIZE(serializer, m_tsc_offset);
+        G_SERIALIZE_ARRAY(serializer, m_msrs, I386_MSR_COUNT);
+        G_SERIALIZE(serializer, m_586_pair);
+        G_SERIALIZE(serializer, m_586_fraction);
+        G_SERIALIZE(serializer, m_586_fpu_free);
+    }
 }
 
 void I386::SanitizeState()
@@ -1182,6 +1231,7 @@ void I386::SanitizeState()
     m_bus_fraction &= 0xFFFF;
     m_state.eflags |= I386_FLAG_FIXED;
     m_state.current_privilege_level &= 3;
+    m_state.cr4 = m_i586 ? m_state.cr4 & k_i386_cr4_writable : 0;
 
     if (m_state.interrupt_shadow > I386_SHADOW_MOV_SS)
         m_state.interrupt_shadow = I386_SHADOW_NONE;
@@ -1384,10 +1434,11 @@ void I386::SetTraceEnabled(bool enabled)
 void I386::SetCPU(const GT_Machine_CPU_Info& info)
 {
     bool i486 = info.family >= 4;
+    bool i586 = info.family >= 5;
     u32 line_mask = info.cache_kb != 0 ? (u32)info.cache_kb * 64 - 1 : I386_BUS_LINES / 2 - 1;
 
     // Compiled blocks keep the code lines' tags and the multiplier's clocks
-    if ((i486 != m_i486) || (line_mask != m_bus_line_mask) || (info.fast_imul != m_fast_imul))
+    if ((i486 != m_i486) || (i586 != m_i586) || (line_mask != m_bus_line_mask) || (info.fast_imul != m_fast_imul))
     {
 #if !defined(GT_DISABLE_DYNAREC)
         FlushDynarec();
@@ -1396,14 +1447,18 @@ void I386::SetCPU(const GT_Machine_CPU_Info& info)
     }
 
     m_i486 = i486;
+    m_i586 = i586;
     m_i486_timing = i486;
-    m_port_clocks = !m_i486_timing ? &k_i386_port_clocks : info.bus_ratio == 2 ? &k_i486dx2_port_clocks : &k_i486_port_clocks;
+    m_i586_timing = i586;
+    m_port_clocks = !m_i486_timing ? &k_i386_port_clocks : i586 ? &k_i586_port_clocks : info.bus_ratio == 2 ?
+        &k_i486dx2_port_clocks : &k_i486_port_clocks;
     m_reset_edx = info.reset_edx;
     m_cr0_fixed = info.cr0_fixed;
     m_cr0_writable = i486 ? 0xE005002FU : 0x8000001FU;
     m_eflags_ac = i486 ? I386_FLAG_AC : 0;
     m_eflags_extra = m_eflags_ac | (info.cpuid ? I386_FLAG_ID : 0);
     m_cpuid = info.cpuid;
+    m_cpuid_features = i586 ? 0x000001B0 : 0;
     m_fast_imul = info.fast_imul;
     m_bus_line_mask = line_mask;
 }
@@ -1638,7 +1693,7 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
         {
             result.exception = true;
             result.exception_vector = current.vector;
-            result.end_batch = true;
+            result.end_batch = !m_game_interrupts;
             m_state.last_exception_vector = current.vector;
             m_last_exception.valid = true;
             m_last_exception.vector = current.vector;

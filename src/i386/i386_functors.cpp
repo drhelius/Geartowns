@@ -347,9 +347,9 @@ const I386::opcodeptr I386::k_opcodes_0f[256] =
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x2E invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x2F invalid
 
-    &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x30 invalid
-    &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x31 invalid
-    &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x32 invalid
+    &I386::OPCodeThunk<&I386::OPCode0F_0x30>,
+    &I386::OPCodeThunk<&I386::OPCode0F_0x31>,
+    &I386::OPCodeThunk<&I386::OPCode0F_0x32>,
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x33 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x34 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0x35 invalid
@@ -507,7 +507,7 @@ const I386::opcodeptr I386::k_opcodes_0f[256] =
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0xC4 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0xC5 invalid
     &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0xC6 invalid
-    &I386::OPCodeThunk<&I386::OPCodes_Invalid>, // 0xC7 invalid
+    &I386::OPCodeThunk<&I386::OPCode0F_0xC7>,
     &I386::OPCodeThunk<&I386::OPCode0F_0xC8>,
     &I386::OPCodeThunk<&I386::OPCode0F_0xC9>,
     &I386::OPCodeThunk<&I386::OPCode0F_0xCA>,

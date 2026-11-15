@@ -422,7 +422,7 @@ bool I386::OPCodes_INT()
     m_step.exception = true;
     m_step_exception.exception_after_instruction = false;
     m_step_exception.exception_vector = vector;
-    m_step.end_batch = true;
+    m_step.end_batch = !m_game_interrupts;
     return true;
 }
 

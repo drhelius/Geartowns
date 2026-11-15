@@ -32,6 +32,21 @@ INLINE bool I386::IsI486() const
     return m_i486;
 }
 
+INLINE bool I386::IsI586() const
+{
+    return m_i586;
+}
+
+INLINE u64 I386::GetTimeStamp() const
+{
+    return (IsValidPointer(m_tsc_source) ? *m_tsc_source : 0) + m_tsc_offset;
+}
+
+INLINE u64 I386::ReadTimeStamp() const
+{
+    return GetTimeStamp() - m_bus_context->synchronized_cycles + m_io_start_cycles;
+}
+
 // Real mode, protected mode with CPL <= IOPL and with CPL > IOPL, VM86 mode
 INLINE u32 I386::GetPortMode() const
 {

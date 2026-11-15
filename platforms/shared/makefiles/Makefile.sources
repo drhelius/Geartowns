@@ -118,6 +118,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/drive/memory_card.cpp \
     $(SRC_DIR)/i386/i386.cpp \
     $(SRC_DIR)/i386/i386_486.cpp \
+    $(SRC_DIR)/i386/i386_586.cpp \
     $(SRC_DIR)/i386/i386_bus.cpp \
     $(SRC_DIR)/i386/i386_disassembler.cpp \
     $(SRC_DIR)/i386/i386_dynarec.cpp \

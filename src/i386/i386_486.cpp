@@ -129,7 +129,7 @@ bool I386::OPCodes0F_INVD()
 }
 
 // Intel486 family data book, Appendix B: the reset signature and "GenuineIntel", 14 clocks for EAX 1 and 9 otherwise.
-// The FPU is the only feature it reports, as the core has no virtual mode extensions
+// The FPU is the only feature a 486 reports, as the core has no virtual mode extensions
 bool I386::OPCodes0F_CPUID()
 {
     if (!m_cpuid)
@@ -156,7 +156,7 @@ bool I386::OPCodes0F_CPUID()
     else if (function == 1)
     {
         eax = m_reset_edx;
-        edx = IsValidPointer(m_x87) ? 1 : 0;
+        edx = m_cpuid_features | (IsValidPointer(m_x87) ? 1 : 0);
     }
 
     m_state.registers[I386_REG_EAX].value = eax;

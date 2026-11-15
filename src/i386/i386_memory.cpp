@@ -211,6 +211,12 @@ void I386::LeaveDynarecSite(const DynarecSite& site)
     if (site.written >= 0)
         m_486_written = (u8)site.written;
 
+    if (site.written >= 0 && m_i586_timing)
+    {
+        m_586_pair = site.pair;
+        Fold586To(site.weight_after);
+    }
+
     for (u32 i = 0; i < site.line_count; i++)
     {
         u32 line = site.line_first + i;

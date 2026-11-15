@@ -89,6 +89,17 @@ public:
         u16 latched_haj[2];
     };
 
+    struct Video_Frame_Info
+    {
+        u32 clock_rate;
+        u32 line_clocks;
+        u32 dots_per_texel;
+        u32 lines_per_row;
+        u32 field;
+        bool interlaced;
+        bool hires;
+    };
+
 public:
     Video();
     ~Video();
@@ -125,6 +136,9 @@ public:
     HiresCRTC* GetHiresCRTC();
     bool HasHiresCRTC() const;
     bool IsHiresActive() const;
+    bool IsNTSCField() const;
+    const Video_Frame_Info& GetFrameInfo() const;
+    void SetFrameInfo(const Video_Frame_Info& frame_info);
     Video_State* GetState();
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
@@ -186,6 +200,8 @@ private:
     void DelaySpriteByFetch(u32 half_line);
     void CompleteFrame(u64 clocks);
     void UpdateGeometry();
+    void LatchFrameInfo();
+    void ResetFrameInfo();
     void UpdateCanvasZoom();
     void UpdateCanvasOffset();
     void ResizeCanvas(u32 zoom_x, u32 zoom_y);
@@ -296,6 +312,7 @@ private:
     u32 m_canvas_h_divider;
     u32 m_canvas_v_divider;
     bool m_canvas_interlaced;
+    Video_Frame_Info m_frame_info;
     u32 m_palette16_colors[2][16];
     u32 m_palette256_colors[256];
     u32 m_direct_colors[0x8000];

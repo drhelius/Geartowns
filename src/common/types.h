@@ -87,6 +87,13 @@ struct GT_Runtime_Info
     bool media_ready;
     bool bios_ready;
     bool paused;
+    float pixel_clock;
+    float line_rate;
+    int source_lines;
+    bool interlaced;
+    int field_parity;
+    int system_type;
+    int video_mode;
 };
 
 enum GT_Run_Result

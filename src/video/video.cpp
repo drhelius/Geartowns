@@ -75,6 +75,7 @@ Video::Video()
     m_canvas_h_divider = 1;
     m_canvas_v_divider = 1;
     m_canvas_interlaced = false;
+    ResetFrameInfo();
 }
 
 Video::~Video()
@@ -127,6 +128,7 @@ void Video::Reset()
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
     m_display_width = GT_FRAME_BUFFER_WIDTH;
     m_display_height = GT_FRAME_BUFFER_HEIGHT;
+    ResetFrameInfo();
     UpdateColorCaches();
     StartFrame(m_scheduler->GetClocks());
     UpdateIRQ();
@@ -491,6 +493,7 @@ void Video::EndFrame()
     m_frame_height = GT_FRAME_BUFFER_HEIGHT;
     m_display_width = GT_FRAME_BUFFER_WIDTH;
     m_display_height = GT_FRAME_BUFFER_HEIGHT;
+    ResetFrameInfo();
 
     if (!m_render || !IsValidPointer(m_frame_buffer))
         return;
@@ -1234,6 +1237,7 @@ void Video::CompleteFrame(u64 clocks)
         m_frame_height = m_render_height;
         m_display_width = m_canvas_width;
         m_display_height = m_canvas_height;
+        LatchFrameInfo();
         m_frame_ready = true;
     }
 
@@ -1374,6 +1378,28 @@ void Video::UpdateHiresGeometry()
     m_canvas_height = empty ? GT_FRAME_BUFFER_HEIGHT : (int)MIN(vde - vds, (u32)GT_MAX_FRAME_BUFFER_HEIGHT);
     SetCanvasZoom(1, 1);
     m_canvas_width = m_render_width;
+}
+
+void Video::LatchFrameInfo()
+{
+    m_frame_info.clock_rate = m_state.frame_clock_rate;
+    m_frame_info.line_clocks = m_state.frame_line_clocks;
+    m_frame_info.dots_per_texel = m_canvas_h_divider;
+    m_frame_info.lines_per_row = m_canvas_v_divider;
+    m_frame_info.field = m_canvas_interlaced ? (m_state.frame_count & 0x01) : 0;
+    m_frame_info.interlaced = m_canvas_interlaced;
+    m_frame_info.hires = m_hires_active;
+}
+
+void Video::ResetFrameInfo()
+{
+    m_frame_info.clock_rate = 0;
+    m_frame_info.line_clocks = 0;
+    m_frame_info.dots_per_texel = 1;
+    m_frame_info.lines_per_row = 1;
+    m_frame_info.field = 0;
+    m_frame_info.interlaced = false;
+    m_frame_info.hires = false;
 }
 
 void Video::UpdateGeometry()

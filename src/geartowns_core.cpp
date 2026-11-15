@@ -2056,12 +2056,44 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
     if (IsValidPointer(m_video) && m_video->IsRunning())
         runtime_info.frame_time = m_video->GetFrameTime();
 
-    if (IsValidPointer(m_key_mapper) && m_key_mapper->IsOpen())
+    bool key_mapper_open = IsValidPointer(m_key_mapper) && m_key_mapper->IsOpen();
+
+    if (key_mapper_open)
     {
         runtime_info.screen_width = m_key_mapper->GetWidth();
         runtime_info.screen_height = m_key_mapper->GetHeight();
         runtime_info.display_width = m_key_mapper->GetDisplayWidth();
         runtime_info.display_height = m_key_mapper->GetDisplayHeight();
+    }
+
+    runtime_info.pixel_clock = 0.0f;
+    runtime_info.line_rate = 0.0f;
+    runtime_info.source_lines = runtime_info.screen_height;
+    runtime_info.interlaced = false;
+    runtime_info.field_parity = 0;
+    runtime_info.system_type = 0;
+    runtime_info.video_mode = 0;
+
+    if (IsValidPointer(m_video))
+    {
+        runtime_info.system_type = m_video->IsNTSCField() ? 1 : 0;
+
+        if (!key_mapper_open)
+        {
+            const Video::Video_Frame_Info& frame_info = m_video->GetFrameInfo();
+
+            if ((frame_info.clock_rate > 0) && (frame_info.line_clocks > 0))
+            {
+                double clock_rate = (double)frame_info.clock_rate;
+                runtime_info.pixel_clock = (float)(clock_rate / frame_info.dots_per_texel / 1000000.0);
+                runtime_info.line_rate = (float)(clock_rate / frame_info.line_clocks / 1000.0);
+            }
+
+            runtime_info.source_lines = runtime_info.screen_height * (int)frame_info.lines_per_row;
+            runtime_info.interlaced = frame_info.interlaced;
+            runtime_info.field_parity = (int)frame_info.field;
+            runtime_info.video_mode = frame_info.hires ? 1 : 0;
+        }
     }
 
     runtime_info.sample_rate = GT_AUDIO_SAMPLE_RATE;

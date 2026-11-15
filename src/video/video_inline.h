@@ -123,6 +123,21 @@ INLINE bool Video::IsHiresActive() const
     return m_hires_active;
 }
 
+INLINE bool Video::IsNTSCField() const
+{
+    return m_timing.ntsc_field;
+}
+
+INLINE const Video::Video_Frame_Info& Video::GetFrameInfo() const
+{
+    return m_frame_info;
+}
+
+INLINE void Video::SetFrameInfo(const Video_Frame_Info& frame_info)
+{
+    m_frame_info = frame_info;
+}
+
 INLINE Video::Video_State* Video::GetState()
 {
     return &m_state;

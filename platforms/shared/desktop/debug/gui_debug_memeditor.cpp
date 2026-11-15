@@ -667,7 +667,7 @@ void MemEditor::DrawGrid()
     ImS64 row = m_view_address / bytes_per_row;
 
     ImGui::ScrollbarEx(scrollbar, ImGui::GetID("##memory_scrollbar"), ImGuiAxis_Y, &row, m_visible_rows, row_count,
-        ImDrawFlags_RoundCornersNone);
+        ImDrawFlags_RoundNone);
 
     if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseHoveringRect(position, scrollbar.Max) &&
         !io.MouseWheelRequestAxisSwap)

@@ -167,14 +167,14 @@ void gui_debug_window_sprites(void)
 
                 if (selected_sprite != i)
                     draw_list->AddRect(position, ImVec2(position.x + cell, position.y + cell), ImColor(cyan), 2.0f,
-                        ImDrawFlags_RoundCornersAll, 2.0f);
+                        2.0f, ImDrawFlags_StrokeCenterBiased);
             }
 
             if (selected_sprite == i)
             {
                 float t = (float)(0.5 + 0.5 * sin(ImGui::GetTime() * 4.0));
                 draw_list->AddRect(position, ImVec2(position.x + cell, position.y + cell),
-                    ImColor(gui_lerp_color(red, white, t)), 2.0f, ImDrawFlags_RoundCornersAll, 2.0f);
+                    ImColor(gui_lerp_color(red, white, t)), 2.0f, 2.0f, ImDrawFlags_StrokeCenterBiased);
             }
 
             draw_sprite_context_menu(i);
@@ -536,7 +536,7 @@ static void draw_visible_rect(ImDrawList* draw_list, ImVec2 position, float zoom
 {
     ImVec2 rect_min(position.x + x * zoom, position.y + y * zoom);
     ImVec2 rect_max(rect_min.x + width * zoom, rect_min.y + height * zoom);
-    draw_list->AddRect(rect_min, rect_max, ImColor(yellow), 0.0f, ImDrawFlags_None, 2.0f);
+    draw_list->AddRect(rect_min, rect_max, ImColor(yellow), 0.0f, 2.0f, ImDrawFlags_StrokeCenterBiased);
 }
 
 static u32 buffer_offset(const Emu_Debug_Buffer_Info& info, bool custom, int x, int y)
@@ -710,7 +710,7 @@ static void draw_sprite_position(int index)
     float t = (float)(0.5 + 0.5 * sin(ImGui::GetTime() * 4.0));
     ImGui::GetWindowDrawList()->AddRect(ImVec2(position.x + x, position.y + y),
         ImVec2(position.x + x + width, position.y + y + height), ImColor(gui_lerp_color(red, white, t)), 0.0f,
-        ImDrawFlags_None, 2.0f);
+        2.0f, ImDrawFlags_StrokeCenterBiased);
 }
 
 static void draw_sprite_context_menu(int index)

@@ -4818,7 +4818,7 @@ void DynarecEmitter::EmitPushAll(Instruction& instruction)
     for (u32 i = 0; i < 8; i++)
     {
         LoadRegister(DR_T2, k_order[i], width);
-        jit_addi(DR_T3, DR_T0, i * size);
+        jit_addi(DR_T3, DR_T0, (jit_word_t)i * size);
         StoreHost(DR_T3, DR_T2, width, DR_T4);
     }
 
@@ -4839,7 +4839,7 @@ void DynarecEmitter::EmitPushAll(Instruction& instruction)
     for (u32 i = 0; i < 8 && m_timed && !m_cpu->m_bus.dram_free; i++)
     {
         LoadTemp(DR_T0, 0);
-        jit_addi(DR_T0, DR_T0, i * size);
+        jit_addi(DR_T0, DR_T0, (jit_word_t)i * size);
         jit_ldxi(DR_T2, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
         jit_subr(DR_T2, DR_T0, DR_T2);
         EmitBusDram(DR_T2, DR_T1, DR_T3, size, DYNAREC_WRITE);
@@ -4872,7 +4872,7 @@ void DynarecEmitter::EmitPopAll(Instruction& instruction)
         if (k_order[i] < 0 && (width != 32 || stack32))
             continue;
 
-        jit_addi(DR_T3, DR_T0, i * size);
+        jit_addi(DR_T3, DR_T0, (jit_word_t)i * size);
         LoadHost(DR_T2, DR_T3, width);
 
         if (k_order[i] >= 0)
@@ -4901,7 +4901,7 @@ void DynarecEmitter::EmitPopAll(Instruction& instruction)
     for (u32 i = 0; i < 8 && m_timed && !m_cpu->m_bus.dram_free; i++)
     {
         LoadTemp(DR_T0, 0);
-        jit_addi(DR_T0, DR_T0, i * size);
+        jit_addi(DR_T0, DR_T0, (jit_word_t)i * size);
         jit_ldxi(DR_T2, DR_CPU, Offset(&m_cpu->m_dynarec_ram));
         jit_subr(DR_T2, DR_T0, DR_T2);
         EmitBusDram(DR_T2, DR_T1, DR_T3, size, DYNAREC_READ);

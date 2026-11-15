@@ -62,7 +62,7 @@ void OsdCanvas::Init(int width, int height)
     m_width = width;
     m_height = height;
     m_pixels = new u8[width * height];
-    memset(m_pixels, 0, width * height);
+    memset(m_pixels, 0, (size_t)width * height);
 }
 
 int OsdCanvas::GetWidth() const
@@ -83,7 +83,7 @@ void OsdCanvas::SetColor(u8 index, u8 red, u8 green, u8 blue)
 
 void OsdCanvas::Clear(u8 color)
 {
-    memset(m_pixels, color, m_width * m_height);
+    memset(m_pixels, color, (size_t)m_width * m_height);
 }
 
 void OsdCanvas::FillRect(int x, int y, int width, int height, u8 color)

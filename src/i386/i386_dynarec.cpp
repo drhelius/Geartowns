@@ -1055,6 +1055,14 @@ bool I386::Pairs586Entry(const DynarecBlock& block) const
     return (Pair586(state, block.first_pairing, 0, 0, block.first_named, charged) & k_i586_paired) != 0;
 }
 
+void I386::Fold586To(u32 weight)
+{
+    m_586_fraction += weight - m_586_folded;
+    m_dynarec_clocks += m_586_fraction >> 8;
+    m_586_fraction &= 0xFF;
+    m_586_folded = weight;
+}
+
 // The clocks to a check with the bus time pending there, as the run before it reaches it from the current queue level,
 // with the code lines it misses now. The check's clocks bound this for any level and line, and are tried first
 s64 I386::GetDynarecFit(const DynarecCheck& check) const

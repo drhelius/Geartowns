@@ -918,14 +918,6 @@ bool I386::Is586FPUFree(const InstructionContext& c)
     return c.opcode == 0xDF && modrm == 0xE0;
 }
 
-void I386::Fold586To(u32 weight)
-{
-    m_586_fraction += weight - m_586_folded;
-    m_dynarec_clocks += m_586_fraction >> 8;
-    m_586_fraction &= 0xFF;
-    m_586_folded = weight;
-}
-
 u32 I386::Fold586Memory(u32 weight)
 {
     m_586_fraction += weight;

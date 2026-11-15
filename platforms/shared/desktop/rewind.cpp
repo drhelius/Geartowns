@@ -39,6 +39,7 @@ struct Rewind_Snapshot
     int screen_height;
     int display_width;
     int display_height;
+    Video::Video_Frame_Info frame_info;
 };
 
 static Rewind_Snapshot snapshots[REWIND_MAX_SNAPSHOTS];
@@ -195,6 +196,7 @@ void rewind_push(void)
     snapshot->screen_height = runtime.screen_height;
     snapshot->display_width = runtime.display_width;
     snapshot->display_height = runtime.display_height;
+    snapshot->frame_info = emu_get_core()->GetVideo()->GetFrameInfo();
 
     if (config_debug.debug)
         call_stacks[head] = emu_get_core()->GetI386()->GetDisassemblerCallStack();
@@ -483,6 +485,7 @@ static bool load_snapshot(const u8* blob, int index)
         emu_get_core()->GetI386()->SetDisassemblerCallStack(call_stacks[index]);
         emu_get_core()->GetVideo()->SetFrameSize(snapshot->screen_width, snapshot->screen_height,
             snapshot->display_width, snapshot->display_height);
+        emu_get_core()->GetVideo()->SetFrameInfo(snapshot->frame_info);
         memcpy(emu_frame_buffer, blob + state_capacity, screen);
         events_sync_input();
         emu_reset_load_ffwd();

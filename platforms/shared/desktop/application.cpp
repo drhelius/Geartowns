@@ -566,6 +566,8 @@ static void handle_title(void)
         snprintf(title, sizeof(title), "%s (Game Focus: %s to leave)", name, hotkey);
     else if (game_focus_is_on())
         snprintf(title, sizeof(title), "%s (Game Focus)", name);
+    else if (events_is_keyboard_captured())
+        snprintf(title, sizeof(title), "%s (Keyboard Captured)", name);
     else
         strncpy_fit(title, name, sizeof(title));
 

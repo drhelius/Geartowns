@@ -19,6 +19,7 @@
 
 #include "config.h"
 #include "emu.h"
+#include "events.h"
 #include "game_focus.h"
 #include "gui.h"
 
@@ -157,6 +158,30 @@ SDL_Keymod hotkeys_default_mod(int hotkey)
     return (SDL_Keymod)resolved;
 }
 
+bool hotkeys_is_allowed(int hotkey, int mod)
+{
+    if ((hotkey_definitions[hotkey].flags & HOTKEY_FLAG_DEBUG) != 0)
+        return true;
+
+    return (mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0;
+}
+
+void hotkeys_validate(void)
+{
+    for (int i = 0; i < config_HotkeyIndex_COUNT; i++)
+    {
+        config_Hotkey& hotkey = config_hotkeys[i];
+
+        if ((hotkey.key == SDL_SCANCODE_UNKNOWN) || hotkeys_is_allowed(i, hotkey.mod))
+            continue;
+
+        Log("Hotkey %s has no Ctrl, Alt or Cmd, using its default", hotkey_definitions[i].name);
+        hotkey.key = hotkey_definitions[i].key;
+        hotkey.mod = hotkeys_default_mod(i);
+        config_update_hotkey_string(&hotkey);
+    }
+}
+
 static bool is_available(int hotkey)
 {
     const hotkey_Definition& definition = hotkey_definitions[hotkey];
@@ -164,7 +189,10 @@ static bool is_available(int hotkey)
     if (((definition.flags & HOTKEY_FLAG_DEBUG) != 0) && !config_debug.debug)
         return false;
 
-    return !game_focus_is_on() || ((definition.flags & HOTKEY_FLAG_GAME_FOCUS) != 0);
+    if (!game_focus_is_on() && !events_is_keyboard_captured())
+        return true;
+
+    return (definition.flags & HOTKEY_FLAG_GAME_FOCUS) != 0;
 }
 
 static bool matches(const SDL_Event* event, const config_Hotkey& hotkey, bool allow_repeat)

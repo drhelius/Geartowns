@@ -34,6 +34,7 @@
 #include "display.h"
 #include "gamepad.h"
 #include "emu.h"
+#include "hotkeys.h"
 #include "license.h"
 #include "backers.h"
 #include "ogl_renderer.h"
@@ -158,19 +159,24 @@ void gui_popup_modal_hotkey()
     if (ImGui::BeginPopupModal("Hotkey Configuration", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         gui_dialog_in_use = true;
-        ImGui::Text("Press any key combination...\n");
+        int hotkey = (int)(gui_configured_hotkey - config_hotkeys);
 #if defined(__APPLE__)
-        ImGui::Text("Hold Cmd, Ctrl, Shift or Option before pressing the key.");
+        const char* hint = "Hold Cmd, Ctrl or Option, and Shift if needed, before pressing the key.";
 #else
-        ImGui::Text("Hold Ctrl, Shift or Alt before pressing the key.");
+        const char* hint = "Hold Ctrl or Alt, and Shift if needed, before pressing the key.";
 #endif
-        ImGui::Text("Without one, that key won't reach the FM Towns while hotkeys are on.\n\n");
+
+        if ((hotkey_definitions[hotkey].flags & HOTKEY_FLAG_DEBUG) != 0)
+            hint = "Debugger hotkeys don't work while the Output window has the keyboard.";
+
+        ImGui::Text("Press any key combination...\n");
+        ImGui::Text("%s\n\n", hint);
         ImGui::Separator();
 
         SDL_Keymod mods = (SDL_Keymod)(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI));
         SDL_Scancode scancode = keyboard_get_first_pressed_scancode();
 
-        if (scancode != SDL_SCANCODE_UNKNOWN)
+        if ((scancode != SDL_SCANCODE_UNKNOWN) && hotkeys_is_allowed(hotkey, mods))
         {
             gui_configured_hotkey->key = scancode;
             gui_configured_hotkey->mod = mods;

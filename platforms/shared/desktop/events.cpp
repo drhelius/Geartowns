@@ -159,6 +159,11 @@ bool events_is_keyboard_active(void)
     return gui_main_window_focused && !gui_in_use && !gui_dialog_in_use && !emu_is_empty();
 }
 
+bool events_is_keyboard_captured(void)
+{
+    return config_debug.debug && events_is_keyboard_active();
+}
+
 void events_reset_input(void)
 {
     input_updated = false;

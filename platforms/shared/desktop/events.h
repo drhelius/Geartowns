@@ -34,6 +34,7 @@ EXTERN void events_sync_input(void);
 EXTERN void events_release_keyboard(void);
 EXTERN void events_release_mouse(void);
 EXTERN bool events_is_keyboard_active(void);
+EXTERN bool events_is_keyboard_captured(void);
 EXTERN void events_reset_input(void);
 EXTERN bool events_input_updated(void);
 

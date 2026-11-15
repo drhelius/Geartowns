@@ -2857,7 +2857,7 @@ void DynarecEmitter::Emit486FirstAGI(int t)
 
     intptr_t clock_total = Offset(&m_cpu->m_dynarec_clocks);
     jit_ldxi_uc(t, DR_CPU, Offset(&m_cpu->m_486_written));
-    jit_andi(t, t, (jit_word_t)(1 << m_first_base));
+    jit_andi(t, t, (jit_word_t)1 << m_first_base);
     jit_node_t* free_base = jit_beqi(t, 0);
     LoadU32(t, DR_CPU, clock_total);
     jit_addi(t, t, 1);

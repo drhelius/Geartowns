@@ -41,7 +41,7 @@ static bool parse_trace_filter(const std::string& filter, u32* flags, u32* event
         if ((filter != name) && (name.compare(0, group.size(), group) != 0))
             continue;
 
-        *flags |= 1U << trace_filter.type;
+        *flags = SET_BIT(*flags, trace_filter.type);
         event_filters[trace_filter.type] |= trace_filter.mask;
         found = true;
     }

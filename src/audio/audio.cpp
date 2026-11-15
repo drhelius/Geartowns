@@ -506,7 +506,7 @@ void Audio::TraceMixer(u8 event, u16 port, u8 value)
 // Only a rising IRQ13 is logged, with the causes each chip holds at that point
 void Audio::TraceIRQ()
 {
-    if ((m_pic->GetSlave()->GetState()->input_levels & (1 << (k_audio_irq - 8))) != 0)
+    if (IS_SET_BIT(m_pic->GetSlave()->GetState()->input_levels, k_audio_irq - 8))
         return;
 
     const YM3438::YM3438_State* fm = m_ym3438->GetState();
@@ -814,7 +814,7 @@ void Audio::WriteVgmInitialState()
         m_vgm_recorder.WriteRF5C68(0x06, channel.start);
 
         if (!channel.enabled)
-            channel_mask |= (u8)(1 << i);
+            channel_mask = SET_BIT(channel_mask, i);
     }
 
     m_vgm_recorder.WriteRF5C68(0x08, channel_mask);

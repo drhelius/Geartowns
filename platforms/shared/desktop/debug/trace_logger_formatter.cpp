@@ -309,7 +309,7 @@ static void format_io(const GT_Trace_Entry& entry, char* buffer, size_t size)
 {
     const char* label = gui_debug_port_label(entry.io.port);
     int digits = MIN((int)entry.io.size, 4) * 2;
-    u32 mask = digits >= 8 ? 0xFFFFFFFFU : (1U << (digits * 4)) - 1;
+    u32 mask = digits >= 8 ? 0xFFFFFFFFU : BIT_MASK(digits * 4);
     bool write = entry.event == TRACE_IO_WRITE;
 
     format_event(buffer, size, "I/O", write ? "OUT" : "IN", "$%04X %-18s %s $%0*X  PC:$%08X", entry.io.port,
@@ -490,7 +490,7 @@ static void format_dma(const GT_Trace_Entry& entry, char* buffer, size_t size)
         case TRACE_DMA_REQUEST:
             format_event(buffer, size, "DMA", "REQUEST", "CH%u %s  Address:$%08X  Count:$%04X  Mode:$%02X%s", channel,
                 device, entry.dma.address, entry.dma.count, entry.dma.mode,
-                ((entry.dma.mask >> channel) & 0x01) != 0 ? "  MASKED" : "");
+                IS_SET_BIT(entry.dma.mask, channel) ? "  MASKED" : "");
             break;
         case TRACE_DMA_END:
             format_event(buffer, size, "DMA", "END", "CH%u %s  %s  Address:$%08X  Count:$%04X", channel, device,
@@ -1079,7 +1079,7 @@ static void format_fdc(const GT_Trace_Entry& entry, char* buffer, size_t size)
 
             for (int i = 7; i >= 0; i--)
             {
-                if ((value & (1 << i)) == 0 || i == 0)
+                if (IS_NOT_SET_BIT(value, i) || i == 0)
                     continue;
 
                 strncat(status, " ", sizeof(status) - strlen(status) - 1);
@@ -1337,7 +1337,7 @@ static void format_bit_list(u8 bits, int base, char* buffer, size_t size)
 
     for (int i = 0; i < 8 && length + 4 < size; i++)
     {
-        if ((bits & (1 << i)) == 0)
+        if (IS_NOT_SET_BIT(bits, i))
             continue;
 
         int written = snprintf(buffer + length, size - length, length == 0 ? "%d" : ",%d", base + i);
@@ -1367,7 +1367,7 @@ static void format_buttons(u16 buttons, char* buffer, size_t size)
 
     for (int i = 0; i < 13; i++)
     {
-        if ((buttons & (1 << i)) == 0)
+        if (IS_NOT_SET_BIT(buttons, i))
             continue;
 
         int written = snprintf(buffer + length, size - length, length == 0 ? "%s" : "+%s", k_names[i]);

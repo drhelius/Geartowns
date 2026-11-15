@@ -984,11 +984,11 @@ bool FloppyImage::IsRawLayout(const u8* image, u32 size, u32 header_size, int cy
                 read_u16_le(header + 14) != sector_size || (header[6] & k_floppy_density_fm) != 0)
                 return false;
 
-            found |= 1U << (r - 1);
+            found = SET_BIT(found, r - 1);
             offset += k_floppy_sector_header_size + sector_size;
         }
 
-        if (found != (1U << sectors) - 1)
+        if (found != BIT_MASK(sectors))
             return false;
     }
 

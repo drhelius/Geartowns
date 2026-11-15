@@ -1618,7 +1618,7 @@ void CdRom::UpdateIRQ()
 
     if (unlikely((status_irq || dma_irq) && IsValidPointer(m_trace_logger) &&
         m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_IRQ) &&
-        (m_pic->GetSlave()->GetState()->input_levels & (1 << (k_cdrom_irq - 8))) == 0))
+        IS_NOT_SET_BIT(m_pic->GetSlave()->GetState()->input_levels, k_cdrom_irq - 8)))
         TraceEvent(TRACE_CDROM_IRQ, (status_irq ? 0x01 : 0x00) | (dma_irq ? 0x02 : 0x00));
 
     m_pic->SetIRQLine(k_cdrom_irq, status_irq || dma_irq);

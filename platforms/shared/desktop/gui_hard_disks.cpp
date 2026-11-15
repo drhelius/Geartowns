@@ -128,7 +128,7 @@ void gui_hard_disks_update(void)
 
     for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {
-        if ((changes & (1 << i)) == 0)
+        if (IS_NOT_SET_BIT(changes, i))
             continue;
 
         ids += ids.empty() ? "SCSI ID " : ", ";

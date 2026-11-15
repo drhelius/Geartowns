@@ -51,7 +51,7 @@ INLINE int FDC::GetSelectedDrive() const
 {
     for (int i = 0; i < 4; i++)
     {
-        if ((m_state.drive_select & (1 << i)) == 0)
+        if (IS_NOT_SET_BIT(m_state.drive_select, i))
             continue;
 
         int drive = (m_state.drive_switch & 0x01) != 0 ? i ^ 0x02 : i;

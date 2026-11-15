@@ -1298,7 +1298,7 @@ static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text
 
     for (int i = 0; i < GT_MACHINE_FEATURE_COUNT; i++)
     {
-        if ((registers & (1u << i)) != 0)
+        if (IS_SET_BIT(registers, i))
         {
             strncat_fit(text, "\n  ", text_size);
             strncat_fit(text, k_machine_feature_names[i], text_size);

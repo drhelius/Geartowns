@@ -294,7 +294,7 @@ static void draw_bits(const X87BitDefinition* bits, int count, u16 value, bool f
         if (i > 0)
             ImGui::SameLine();
 
-        bool set = fitted && ((value & (1U << bits[i].bit)) != 0);
+        bool set = fitted && IS_SET_BIT(value, bits[i].bit);
         ImGui::TextColored(set ? orange : gray, "%s", bits[i].name);
     }
 }

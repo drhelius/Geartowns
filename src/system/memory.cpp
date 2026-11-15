@@ -236,12 +236,12 @@ bool Memory::AssignCMOSDriveLetters(int unit, u16 partitions)
         u8 id = drives[(i * 2) + 1];
 
         if ((drives[i * 2] == 0x02) && ((id >> 4) == unit))
-            partitions &= (u16)~(1 << (id & 0x0F));
+            partitions = UNSET_BIT(partitions, id & 0x0F);
     }
 
     for (int partition = 0; partition < 16; partition++)
     {
-        if ((partitions & (1 << partition)) == 0)
+        if (IS_NOT_SET_BIT(partitions, partition))
             continue;
 
         while ((drive < k_memory_cmos_drive_count) && (drives[drive * 2] != 0xFF))

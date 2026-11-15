@@ -3174,7 +3174,7 @@ bool MemorySearch::CompareOperator(u64 current, u64 reference, int comparison, b
 
 bool MemorySearch::IsCandidate(u32 offset) const
 {
-    return offset < m_size && (m_candidate_bits[offset >> 3] & (1U << (offset & 7))) != 0;
+    return offset < m_size && IS_SET_BIT(m_candidate_bits[offset >> 3], offset & 7);
 }
 
 void MemorySearch::SetCandidate(u32 offset, bool candidate)

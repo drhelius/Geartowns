@@ -337,12 +337,12 @@ int UPD71071::GetServiceChannel() const
 
     u8 requests = (u8)(((m_state.request_levels & ~m_state.mask) | m_state.software_requests) & ~m_state.stalled);
 
-    if (m_state.active_channel >= 0 && (requests & (1 << m_state.active_channel)) != 0)
+    if (m_state.active_channel >= 0 && IS_SET_BIT(requests, m_state.active_channel))
         return m_state.active_channel;
 
     for (int i = 0; i < UPD71071_CHANNELS; i++)
     {
-        if ((requests & (1 << i)) != 0 && IsSupportedMode(m_state.channels[i].mode))
+        if (IS_SET_BIT(requests, i) && IsSupportedMode(m_state.channels[i].mode))
             return i;
     }
 

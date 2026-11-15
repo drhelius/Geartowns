@@ -303,7 +303,7 @@ static void draw_scsi_bits(u8 value, const char* const* names, bool fitted, int 
         if (!first)
             ImGui::SameLine(0.0f, space);
 
-        ImGui::TextColored(fitted && ((value >> bit) & 1) ? green : gray, "%s", names[bit]);
+        ImGui::TextColored(fitted && IS_SET_BIT(value, bit) ? green : gray, "%s", names[bit]);
         first = false;
     }
 }

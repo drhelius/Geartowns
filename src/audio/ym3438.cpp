@@ -434,7 +434,7 @@ void YM3438::UpdateEnvelopes()
 
         for (int operator_index = 0; operator_index < YM3438_OPERATOR_COUNT; operator_index++)
         {
-            if (active & (1 << operator_index))
+            if (IS_SET_BIT(active, operator_index))
                 UpdateEnvelope(m_state.channels[channel].operators[operator_index], channel, operator_index);
         }
     }
@@ -456,7 +456,7 @@ void YM3438::UpdateEnvelope(YM3438_Operator& op, int channel, int operator_index
         ((op.state == YM3438_ENVELOPE_SUSTAIN && op.key_on && op.sustain_rate == 0 && !envelope_off) ||
          (op.state == YM3438_ENVELOPE_RELEASE && op.envelope == k_ym3438_envelope_max)))
     {
-        m_state.envelope_active &= ~(1U << (channel * YM3438_OPERATOR_COUNT + operator_index));
+        m_state.envelope_active = UNSET_BIT(m_state.envelope_active, channel * YM3438_OPERATOR_COUNT + operator_index);
         return;
     }
 
@@ -556,7 +556,7 @@ u8 YM3438::GetEnvelopeIncrement(u8 rate) const
         pattern = 16;
     }
 
-    if (shift > 0 && (m_state.envelope_counter & ((1U << shift) - 1)) != 0)
+    if (shift > 0 && (m_state.envelope_counter & BIT_MASK(shift)) != 0)
         return 0;
 
     // Fast rates walk their step pattern backwards through the counter's low bits
@@ -667,7 +667,7 @@ void YM3438::SetKeyState(YM3438_Operator& op, bool key_on, int channel, int oper
             op.state = YM3438_ENVELOPE_ATTACK;
             op.phase = 0;
             op.ssg_direction = 0;
-            m_state.envelope_active |= 1U << (channel * YM3438_OPERATOR_COUNT + operator_index);
+            m_state.envelope_active = SET_BIT(m_state.envelope_active, channel * YM3438_OPERATOR_COUNT + operator_index);
 
             if (GetEnvelopeRate(op, channel, operator_index) >= 62)
                 op.envelope = 0;
@@ -686,7 +686,7 @@ void YM3438::SetKeyState(YM3438_Operator& op, bool key_on, int channel, int oper
         op.key_on = 0;
         op.key_on_pending = 0;
         op.ssg_direction = 0;
-        m_state.envelope_active |= 1U << (channel * YM3438_OPERATOR_COUNT + operator_index);
+        m_state.envelope_active = SET_BIT(m_state.envelope_active, channel * YM3438_OPERATOR_COUNT + operator_index);
     }
 }
 
@@ -702,7 +702,7 @@ void YM3438::KeyOnChannel(int channel, u8 slots)
     for (int i = 1; i < YM3438_OPERATOR_COUNT; i++)
     {
         YM3438_Operator& op = m_state.channels[channel].operators[i];
-        op.manual_key_on = (slots >> i) & 0x01;
+        op.manual_key_on = IS_SET_BIT(slots, i);
         bool key_on = op.manual_key_on || (channel == 2 && m_state.csm_key_active);
         SetKeyState(op, key_on, channel, i);
     }
@@ -1160,7 +1160,7 @@ void YM3438::WriteOperatorRegister(int bank, u8 address, u8 value)
     }
 
     if (address >= 0x50)
-        m_state.envelope_active |= 1U << (channel * YM3438_OPERATOR_COUNT + slot);
+        m_state.envelope_active = SET_BIT(m_state.envelope_active, channel * YM3438_OPERATOR_COUNT + slot);
 }
 
 void YM3438::WriteChannelRegister(int bank, u8 address, u8 value)

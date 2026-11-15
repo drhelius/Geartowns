@@ -931,7 +931,7 @@ static void draw_algorithm(int algorithm)
 
     for (int i = 0; i < 4; i++)
     {
-        bool carrier = (layout.carriers >> i) & 1;
+        bool carrier = IS_SET_BIT(layout.carriers, i);
         ImVec2 box_min(centers[i].x - box * 0.5f, centers[i].y - box * 0.5f);
         ImVec2 box_max(centers[i].x + box * 0.5f, centers[i].y + box * 0.5f);
         char text[2] = { (char)('1' + i), 0 };

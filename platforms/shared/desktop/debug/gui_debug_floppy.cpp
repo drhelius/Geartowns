@@ -101,7 +101,7 @@ void gui_debug_window_fdc(void)
 
         for (int bit = 7; bit >= 0; bit--)
         {
-            bool set = ((status >> bit) & 1) != 0;
+            bool set = IS_SET_BIT(status, bit);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextColored(gray, "%d", bit);

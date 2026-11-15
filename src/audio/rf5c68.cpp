@@ -115,7 +115,7 @@ void RF5C68::WriteRegister(u16 address, u8 value)
         case 0x08:
             for (int i = 0; i < RF5C68_CHANNEL_COUNT; i++)
             {
-                m_state.channels[i].enabled = ((value & (1 << i)) == 0) ? 1 : 0;
+                m_state.channels[i].enabled = IS_NOT_SET_BIT(value, i) ? 1 : 0;
 
                 if (!m_state.enabled || !m_state.channels[i].enabled)
                     ResetChannelAddress(i);

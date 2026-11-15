@@ -204,7 +204,7 @@ void PIT::Write(u16 port, u8 value, u64 clocks)
 
     // Reprogramming can raise OUT at once
     if (timeout && !output && m_pit[0].GetOutput(counter, tick))
-        m_state.timer_latch |= (u8)(1 << counter);
+        m_state.timer_latch = SET_BIT(m_state.timer_latch, counter);
 
     if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_TIMER)))
         TraceWrite(port, value);

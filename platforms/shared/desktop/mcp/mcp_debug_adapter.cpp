@@ -766,7 +766,7 @@ json DebugAdapter::ListMemoryAreas()
 
         for (int f = 0; f < (int)(sizeof(k_mcp_area_flags) / sizeof(k_mcp_area_flags[0])); f++)
         {
-            if ((area.flags & (1U << f)) != 0)
+            if (IS_SET_BIT(area.flags, f))
                 flags.push_back(k_mcp_area_flags[f]);
         }
 
@@ -2276,7 +2276,7 @@ json DebugAdapter::GetDMAStatus()
 
     for (int i = 0; i < 10; i++)
     {
-        if ((state->device_control & (1 << i)) != 0)
+        if (IS_SET_BIT(state->device_control, i))
             control.push_back(k_debug_dma_control_names[i]);
     }
 
@@ -3742,7 +3742,7 @@ json DebugAdapter::GetFDCStatus()
 
     for (int bit = 7; bit >= 0; bit--)
     {
-        if ((status >> bit) & 1)
+        if (IS_SET_BIT(status, bit))
             bits.push_back(mb8877->type1 ? k_debug_mb8877_type1_status[bit] : k_debug_mb8877_type2_status[bit]);
     }
 
@@ -4055,10 +4055,10 @@ json DebugAdapter::GetSCSIStatus()
 
     for (int bit = 7; bit >= 0; bit--)
     {
-        if (IsValidPointer(control_names[bit]) && ((state->control >> bit) & 1))
+        if (IsValidPointer(control_names[bit]) && IS_SET_BIT(state->control, bit))
             control_bits.push_back(control_names[bit]);
 
-        if (IsValidPointer(status_names[bit]) && ((status >> bit) & 1))
+        if (IsValidPointer(status_names[bit]) && IS_SET_BIT(status, bit))
             status_bits.push_back(status_names[bit]);
     }
 
@@ -4570,7 +4570,7 @@ json DebugAdapter::SetTraceLog(bool enabled, u32 flags, const std::string& outpu
         const McpTraceFilter& filter = k_mcp_trace_filters[i];
         u32 events = tl->GetEventFilter(filter.type);
 
-        if ((enabled_flags & (1U << filter.type)) != 0 && (events & filter.mask) == filter.mask)
+        if (IS_SET_BIT(enabled_flags, filter.type) && (events & filter.mask) == filter.mask)
             event_filter_list.push_back(filter.name);
     }
 
@@ -5438,7 +5438,7 @@ void DebugAdapter::AddMediaStateChanges(json& result)
 
     for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
     {
-        if ((changes & (1 << i)) != 0)
+        if (IS_SET_BIT(changes, i))
             ids.push_back(i);
     }
 

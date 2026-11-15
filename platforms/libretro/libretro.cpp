@@ -1605,7 +1605,7 @@ static void apply_gamepad(int port)
 
         for (int i = 0; i <= RETRO_DEVICE_ID_JOYPAD_R; i++)
         {
-            if (bits & (1 << i))
+            if (IS_SET_BIT(bits, i))
                 buttons |= table[i];
         }
     }

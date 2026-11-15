@@ -232,7 +232,7 @@ void ScsiController::Select(u64 clocks)
 
     for (int i = 0; i < SCSI_TARGETS; i++)
     {
-        if (((m_state.data & (1 << i)) != 0) && m_disks[i].IsAttached())
+        if (IS_SET_BIT(m_state.data, i) && m_disks[i].IsAttached())
         {
             m_state.target = (s8)i;
             break;

@@ -1241,7 +1241,7 @@ void GeartownsCore::AssignDriveLetters()
         for (int partition = 0; partition < 10; partition++)
         {
             if (table[0x20 + (partition * 0x30) + 1] == 0x01)
-                partitions |= 1 << partition;
+                partitions = SET_BIT(partitions, partition);
         }
 
         if (m_memory->AssignCMOSDriveLetters(i, partitions))
@@ -1794,7 +1794,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
         if (state_media.hard_disk_attached[i] &&
             !image->Restore(state_media.hard_disk_session[i], state_media.hard_disk_write[i]))
-            m_hard_disk_state_changes |= 1 << i;
+            m_hard_disk_state_changes = SET_BIT(m_hard_disk_state_changes, i);
     }
 
     m_memory_card_state_changed = state_media.memory_card_inserted &&

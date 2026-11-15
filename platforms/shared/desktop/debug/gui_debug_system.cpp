@@ -361,7 +361,7 @@ void gui_debug_window_dma(void)
 
         for (int i = 0; i < 10; i++)
         {
-            bool set = (state->device_control & (1 << i)) != 0;
+            bool set = IS_SET_BIT(state->device_control, i);
 
             if (i > 0)
                 ImGui::SameLine(0.0f, space);

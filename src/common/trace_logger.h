@@ -619,7 +619,7 @@ private:
 INLINE bool TraceLogger::IsEnabled(GT_Trace_Type type) const
 {
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    return (m_active_flags & (1U << type)) != 0;
+    return IS_SET_BIT(m_active_flags, type);
 #else
     UNUSED(type);
     return false;
@@ -638,7 +638,7 @@ INLINE bool TraceLogger::IsAnyEnabled() const
 INLINE bool TraceLogger::IsEventEnabled(GT_Trace_Type type, u8 event) const
 {
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    return (m_active_flags & (1U << type)) != 0 && (m_event_filters[type] & (1U << event)) != 0;
+    return IS_SET_BIT(m_active_flags, type) && IS_SET_BIT(m_event_filters[type], event);
 #else
     UNUSED(type);
     UNUSED(event);

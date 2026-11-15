@@ -170,6 +170,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "StepSkipInterrupts", config_debug.step_skip_interrupts, false);
 
     // Interface
+    CONFIG_INT_RANGE("Debug", "FontType", config_debug.font_type, 0, 0, 1);
     CONFIG_INT_RANGE("Debug", "FontSize", config_debug.font_size, 0, 0, 3);
     CONFIG_INT_RANGE("Debug", "Scale", config_debug.scale, 1, 1, 10);
     CONFIG_INT_RANGE("Debug", "AspectRatio", config_debug.ratio, 0, 0, 2);

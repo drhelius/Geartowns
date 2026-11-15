@@ -37,7 +37,7 @@ EXTERN bool gui_main_window_focused;
 EXTERN bool gui_main_window_active;
 EXTERN SDL_WindowID gui_main_window_sdl_window_id;
 EXTERN ImFont* gui_default_font;
-EXTERN ImFont* gui_default_fonts[4];
+EXTERN ImFont* gui_default_fonts[2][4];
 EXTERN ImFont* gui_roboto_font;
 EXTERN ImFont* gui_material_icons_font;
 EXTERN int gui_main_window_width;

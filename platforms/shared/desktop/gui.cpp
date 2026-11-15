@@ -125,7 +125,7 @@ bool gui_init(void)
 
     // Memory editor columns need one ProggyClean cell (7 px per 13 px) per Shift-JIS byte
     // Shift-JIS has these Latin-1 symbols as double-byte characters, so the Japanese font draws them
-    // ProggyClean glyphs sit 1 px lower per 13 px and the Japanese baseline follows
+    // ProggyClean glyphs sit 1 px lower per 13 px, ProggyForever 1 px per 32 px, and the Japanese baseline follows
     static const ImWchar latin_ranges[] = { 0x00A7, 0x00A8, 0x00B0, 0x00B1, 0x00B4, 0x00B4, 0x00B6, 0x00B6, 0x00D7, 0x00D7, 0x00F7, 0x00F7, 0 };
     static const ImWchar not_half_width_ranges[] = { 0x0001, 0xFF60, 0xFFA0, 0xFFFF, 0 };
     ImFontConfig font_cfg;
@@ -134,17 +134,25 @@ bool gui_init(void)
     for (int i = 0; i < 4; i++)
     {
         font_cfg.SizePixels = (13.0f + (i * 3));
-        gui_default_fonts[i] = io.Fonts->AddFontDefault(&font_cfg);
-
         float cell = font_cfg.SizePixels * 7.0f / 13.0f;
-        japanese_config.GlyphOffset = { 0.0f, font_cfg.SizePixels / 13.0f };
-        japanese_config.GlyphExcludeRanges = not_half_width_ranges;
-        japanese_config.GlyphMinAdvanceX = japanese_config.GlyphMaxAdvanceX = cell;
-        io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, font_cfg.SizePixels, &japanese_config);
+        font_cfg.GlyphMinAdvanceX = font_cfg.GlyphMaxAdvanceX = cell;
 
-        japanese_config.GlyphExcludeRanges = NULL;
-        japanese_config.GlyphMinAdvanceX = japanese_config.GlyphMaxAdvanceX = cell * 2.0f;
-        io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, font_cfg.SizePixels, &japanese_config);
+        for (int type = 0; type < 2; type++)
+        {
+            if (type == 0)
+                gui_default_fonts[type][i] = io.Fonts->AddFontDefaultVector(&font_cfg);
+            else
+                gui_default_fonts[type][i] = io.Fonts->AddFontDefaultBitmap(&font_cfg);
+
+            japanese_config.GlyphOffset = { 0.0f, font_cfg.SizePixels / ((type == 0) ? 32.0f : 13.0f) };
+            japanese_config.GlyphExcludeRanges = not_half_width_ranges;
+            japanese_config.GlyphMinAdvanceX = japanese_config.GlyphMaxAdvanceX = cell;
+            io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, font_cfg.SizePixels, &japanese_config);
+
+            japanese_config.GlyphExcludeRanges = NULL;
+            japanese_config.GlyphMinAdvanceX = japanese_config.GlyphMaxAdvanceX = cell * 2.0f;
+            io.Fonts->AddFontFromMemoryTTF((void*)BIZUDGothic_data, BIZUDGothic_size, font_cfg.SizePixels, &japanese_config);
+        }
     }
 
     gui_apply_settings();
@@ -163,7 +171,7 @@ bool gui_init(void)
 
 void gui_apply_settings(void)
 {
-    gui_default_font = gui_default_fonts[config_debug.font_size];
+    gui_default_font = gui_default_fonts[config_debug.font_type][config_debug.font_size];
 
     set_style();
 

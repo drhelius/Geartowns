@@ -183,7 +183,7 @@ void I8259::WriteOCW2(u8 value)
             break;
         case 3:
             // Specific EOI
-            m_state.isr &= ~(1 << line);
+            m_state.isr = UNSET_BIT(m_state.isr, line);
             break;
         case 4:
             // Set rotate on AEOI
@@ -205,7 +205,7 @@ void I8259::WriteOCW2(u8 value)
             break;
         case 7:
             // Rotate on specific EOI
-            m_state.isr &= ~(1 << line);
+            m_state.isr = UNSET_BIT(m_state.isr, line);
             m_state.lowest_priority = (u8)line;
             break;
         default:
@@ -237,7 +237,7 @@ int I8259::EndOfInterrupt()
     int line = FindHighest(in_service);
 
     if (line >= 0)
-        m_state.isr &= ~(1 << line);
+        m_state.isr = UNSET_BIT(m_state.isr, line);
 
     return line;
 }

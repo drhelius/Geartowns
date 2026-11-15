@@ -127,11 +127,11 @@ u8 PIC::AcknowledgeInterrupt(int& line)
 {
     line = m_master.Acknowledge();
 
-    // A default IR7 drives cascade address 7, so the slave supplies the vector without any service bit
+    // A spurious request returns the default IR7 vector, from the slave if IR7 were its cascade input
     if (line < 0)
     {
         Debug("PIC: spurious interrupt acknowledge");
-        line = k_pic_cascade_line;
+        line = 7;
 
         if (!m_master.IsCascadeLine(line))
             return m_master.GetVector(line);

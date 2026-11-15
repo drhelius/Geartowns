@@ -76,7 +76,7 @@ INLINE u8 I8259::GetVector(int line) const
 
 INLINE bool I8259::IsCascadeLine(int line) const
 {
-    return m_is_master && (m_state.icw1 & k_i8259_icw1_sngl) == 0 && (m_state.icw3 & (1 << line)) != 0;
+    return m_is_master && (m_state.icw1 & k_i8259_icw1_sngl) == 0 && IS_SET_BIT(m_state.icw3, line);
 }
 
 INLINE I8259::I8259_State* I8259::GetState()
@@ -90,7 +90,7 @@ INLINE int I8259::FindHighest(u8 bits) const
     {
         int line = (m_state.lowest_priority + 1 + rank) & 7;
 
-        if ((bits & (1 << line)) != 0)
+        if (IS_SET_BIT(bits, line))
             return line;
     }
 

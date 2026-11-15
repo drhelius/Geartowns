@@ -165,15 +165,14 @@ the program sets and the `Video > Native Resolution` option:
   fits its 24 and 31 kHz modes into its NTSC field, two CRTC lines per TV line, and reports them at `31.469`. `0.0`
   while the CRTC is stopped. CRT shaders that otherwise guess interlacing from the height of `Original` use
   `Interlaced` instead whenever `LineRate` is above `0.0`.
-- `float SourceLines`: number of scanlines `Original` covers. Scanline shaders use it instead of `OriginalSize.y`, so
-  the scanlines follow the CRTC lines when a row of `Original` spans several of them. It equals `OriginalSize.y` with
-  `Native Resolution` off and in interlaced modes. With it on it is `OriginalSize.y` times the vertical layer zoom,
-  for example `480` for a picture `240` rows tall that doubles every line.
+- `float SourceLines`: number of scanlines a scanline shader draws, one per `Original` row, so it always equals
+  `OriginalSize.y`. With `Native Resolution` on, a picture that doubles every line has `240` rows, one per layer pixel;
+  with it off it has `480`, one per CRTC line.
 - `int Interlaced`: `1` when `Original` holds both interlaced fields woven into one image, `0` otherwise. The CRTC
   interlaces when its frame has an odd number of half-lines, as in the standard 15.73 kHz modes (525 half-lines). Even
-  `Original` rows then come from the first field and odd rows from the second, and `SourceLines` equals
-  `OriginalSize.y`. The Marty counts 525 half-lines in all its 15.73 kHz modes, so they are always `1`; its standard 24
-  and 31 kHz modes are `0` because `Original` holds the whole progressive frame.
+  `Original` rows then come from the first field and odd rows from the second. The Marty counts 525 half-lines in all
+  its 15.73 kHz modes, so they are always `1`; its standard 24 and 31 kHz modes are `0` because `Original` holds the
+  whole progressive frame.
 - `int FieldParity`: `0` or `1`, the field the CRTC drew last. It flips every frame while `Interlaced` is `1`, and is
   `0` otherwise. Rows of `Original` with `row % 2 == FieldParity` belong to that field, which is what interlace
   shaders use it for.

@@ -94,7 +94,6 @@ public:
         u32 clock_rate;
         u32 line_clocks;
         u32 dots_per_texel;
-        u32 lines_per_row;
         u32 field;
         bool interlaced;
         bool hires;

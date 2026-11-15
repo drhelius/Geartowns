@@ -2089,7 +2089,6 @@ void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)
                 runtime_info.line_rate = (float)(clock_rate / frame_info.line_clocks / 1000.0);
             }
 
-            runtime_info.source_lines = runtime_info.screen_height * (int)frame_info.lines_per_row;
             runtime_info.interlaced = frame_info.interlaced;
             runtime_info.field_parity = (int)frame_info.field;
             runtime_info.video_mode = frame_info.hires ? 1 : 0;

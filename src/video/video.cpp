@@ -1385,7 +1385,6 @@ void Video::LatchFrameInfo()
     m_frame_info.clock_rate = m_state.frame_clock_rate;
     m_frame_info.line_clocks = m_state.frame_line_clocks;
     m_frame_info.dots_per_texel = m_canvas_h_divider;
-    m_frame_info.lines_per_row = m_canvas_v_divider;
     m_frame_info.field = m_canvas_interlaced ? (m_state.frame_count & 0x01) : 0;
     m_frame_info.interlaced = m_canvas_interlaced;
     m_frame_info.hires = m_hires_active;
@@ -1396,7 +1395,6 @@ void Video::ResetFrameInfo()
     m_frame_info.clock_rate = 0;
     m_frame_info.line_clocks = 0;
     m_frame_info.dots_per_texel = 1;
-    m_frame_info.lines_per_row = 1;
     m_frame_info.field = 0;
     m_frame_info.interlaced = false;
     m_frame_info.hires = false;

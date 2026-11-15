@@ -780,7 +780,7 @@ void MemEditor::DrawGrid()
 
             ImVec2 minimum = text_position + ImVec2(character_advance * column, 0.0f);
             ImVec2 maximum = minimum + ImVec2(character_advance, character_size.y);
-            draw_list->AddRectFilled(minimum, maximum, ImGui::GetColorU32(dark_cyan));
+            draw_list->AddRectFilled(gui_snap_to_physical_pixel(minimum), gui_snap_to_physical_pixel(maximum), ImGui::GetColorU32(dark_cyan));
         }
 
         if (m_options.text_encoding == 0)

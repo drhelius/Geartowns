@@ -69,6 +69,7 @@ EXTERN ImVec4 gui_get_firmware_status_color(GT_Machine_Model model);
 EXTERN void gui_set_style(void);
 EXTERN void gui_set_error_message(const char* message);
 EXTERN void gui_center_next_window(void);
+EXTERN ImVec2 gui_snap_to_physical_pixel(const ImVec2& pos);
 EXTERN bool gui_has_open_window(void);
 
 #undef GUI_IMPORT

@@ -1000,7 +1000,8 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
         cpu->CountInterruptShadow();
 
     if (i486 && cpu->m_i586_timing && ((u32)memory & 0x80000000U) != 0)
-        cpu->m_586_folded += Get586Accesses(cpu->m_instruction) * cpu->m_586_memory_wait;
+        cpu->m_586_folded += ((u32)pairing != k_i586_unknown ? ((u32)packed >> 24) & 0xF : Get586Accesses(cpu->m_instruction)) *
+            cpu->m_586_memory_wait;
 
     cpu->m_dynarec_clocks += (u32)step.clocks - (u32)native_clocks;
 

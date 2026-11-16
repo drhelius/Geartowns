@@ -302,6 +302,10 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         else if (m_i486)
             Set486Clocks(instruction);
 
+        if (m_i586 && m_count > 0 && !instruction.ends_block && (instruction.pair_after & (k_i586_open | k_i586_fmul)) != 0 &&
+            (m_count + 1 == limit || position + length + GT_I386_MAX_INSTRUCTION_LENGTH > k_dynarec_max_bytes))
+            break;
+
         if (clocks + instruction.clocks > k_dynarec_max_clocks)
             break;
 

@@ -366,6 +366,13 @@ enum I386_Breakpoint_Space
     I386_BREAKPOINT_SPACE_COUNT
 };
 
+enum I386_Hit_Request
+{
+    I386_HIT_REQUEST_NONE = 0,
+    I386_HIT_REQUEST_MAGIC,
+    I386_HIT_REQUEST_PROGRAM
+};
+
 enum I386_Breakpoint_State
 {
     I386_BREAKPOINT_STATE_NONE = 0,
@@ -411,6 +418,7 @@ struct I386_Breakpoint_Hit
     u8 source;
     u8 line;
     u16 ax;
+    u8 request;
 };
 
 struct I386_Dynarec_Info
@@ -571,6 +579,9 @@ public:
     bool NeedsDebuggerSteps() const;
     bool AcceptDebuggerHit();
     void DiscardDebuggerHit();
+    void SetMagicBreakpoint(bool enabled);
+    bool IsMagicBreakpoint() const;
+    void RequestDebuggerBreak(u8 request);
     bool GetBreakpointHitAddress(u32& address) const;
     bool GetBreakpointHit(I386_Breakpoint_Hit& hit) const;
     bool RunToBreakpointHit() const;
@@ -1668,6 +1679,7 @@ private:
     bool m_execute_filter_all;
     u8 m_execute_filter[32];
     bool m_debugger_hit_pending;
+    bool m_magic_breakpoint;
     I386_Exception_Info m_last_exception;
     TraceLogger* m_trace_logger;
     Profiler* m_profiler;

@@ -1009,7 +1009,10 @@ void DynarecEmitter::Classify(Instruction& instruction)
             break;
         case 0x86: case 0x87:
             // XCHG r/m,r
-            SetNative(instruction, memory ? 5 : 3, memory);
+            if (m_cpu->m_magic_breakpoint && (opcode == 0x87) && (c.modrm == 0xDB))
+                instruction.ends_block = true;
+            else
+                SetNative(instruction, memory ? 5 : 3, memory);
             break;
         case 0x88: case 0x89:
             // MOV r/m,r

@@ -1721,6 +1721,7 @@ bool I386::CheckExecuteBreakpoints(bool regular, bool run_to)
             m_breakpoint_hit_info.address = compare;
             m_breakpoint_hit_info.size = 1;
             m_breakpoint_hit_info.line = 0xFF;
+            m_breakpoint_hit_info.request = I386_HIT_REQUEST_NONE;
             return true;
         }
     }
@@ -1852,6 +1853,31 @@ void I386::RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32
     m_breakpoint_hit_info.source = source;
     m_breakpoint_hit_info.line = line;
     m_breakpoint_hit_info.ax = m_state.registers[I386_REG_EAX].low;
+    m_breakpoint_hit_info.request = I386_HIT_REQUEST_NONE;
+}
+
+void I386::SetMagicBreakpoint(bool enabled)
+{
+    if (m_magic_breakpoint == enabled)
+        return;
+
+    m_magic_breakpoint = enabled;
+    FlushDynarec();
+}
+
+bool I386::IsMagicBreakpoint() const
+{
+    return m_magic_breakpoint;
+}
+
+void I386::RequestDebuggerBreak(u8 request)
+{
+    if (m_debugger_hit_pending)
+        return;
+
+    RecordDebuggerHit(false, I386_BREAKPOINT_EXECUTE, I386_BREAKPOINT_LINEAR, GetCurrentLinearPC(), 1, 0, 0);
+    m_breakpoint_hit_info.request = request;
+    m_step.end_batch = true;
 }
 
 // Physical breakpoints see the first byte's page; an access split across pages reports that page's address

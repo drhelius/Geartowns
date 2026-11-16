@@ -1890,6 +1890,12 @@ bool I386::OPCodes_XCHG_RM()
 
     SetRegister(m_instruction.reg, width, rm_value);
     CommitEIP(m_instruction);
+
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    if (unlikely(m_magic_breakpoint) && (opcode == 0x87) && (m_instruction.modrm == 0xDB))
+        RequestDebuggerBreak(I386_HIT_REQUEST_MAGIC);
+#endif
+
     return true;
 }
 

@@ -126,6 +126,7 @@ I386::I386()
     m_poll_steps = 0;
     m_poll_active = false;
     m_debugger_hit_pending = false;
+    m_magic_breakpoint = false;
     memset(&m_last_exception, 0, sizeof(m_last_exception));
     m_irq_breakpoints = 0;
     m_irq_breakpoints_disabled = 0;

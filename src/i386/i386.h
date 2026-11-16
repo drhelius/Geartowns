@@ -954,7 +954,7 @@ private:
     template<bool i486>
     static uintptr_t DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
         uintptr_t settle, uintptr_t revert, uintptr_t memory, uintptr_t pairing, uintptr_t packed);
-    bool Pairs586Entry(const DynarecBlock& block) const;
+    bool Pairs586Entry(const DynarecBlock& block);
     void Fold586To(u32 weight);
     s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
     static void DynarecLoadSegment(I386* cpu, uintptr_t segment, uintptr_t selector);

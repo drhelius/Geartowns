@@ -1050,18 +1050,17 @@ template uintptr_t I386::DynarecStep<false>(I386* cpu, uintptr_t check, uintptr_
 template uintptr_t I386::DynarecStep<true>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
     uintptr_t settle, uintptr_t revert, uintptr_t memory, uintptr_t pairing, uintptr_t packed);
 
-bool I386::Pairs586Entry(const DynarecBlock& block) const
+bool I386::Pairs586Entry(const DynarecBlock& block)
 {
     u32 state = m_586_pair;
+    u32 charged = 0;
 
-    if ((state & block.first_pairing & k_i586_fmul) != 0)
-        return true;
-
-    if ((state & k_i586_open) == 0)
+    if ((state & block.first_pairing & k_i586_fmul) == 0 && ((state & k_i586_open) == 0 ||
+        (Pair586(state, block.first_pairing, 0, 0, block.first_named, charged) & k_i586_paired) == 0))
         return false;
 
-    u32 charged = 0;
-    return (Pair586(state, block.first_pairing, 0, 0, block.first_named, charged) & k_i586_paired) != 0;
+    m_dynarec_keep_entry = true;
+    return true;
 }
 
 void I386::Fold586To(u32 weight)

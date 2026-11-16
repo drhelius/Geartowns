@@ -332,6 +332,9 @@ public:
     bool IsMouseButtonHeld(int player) const;
     json MouseGetCursor(int player);
     json KeyboardKey(const std::string& key, const std::string& action);
+    bool PressKey(GT_Keys key);
+    void ReleaseKey(GT_Keys key);
+    void ReleaseKeys();
     json GetKeyMap();
     json SetKeyBinding(const std::string& host, const std::string& keys);
     json SetKeyMapping(bool enabled);
@@ -361,6 +364,7 @@ private:
 private:
     GeartownsCore* m_core;
     u16 m_buttons[GT_MAX_GAMEPADS];
+    bool m_keys[GT_KEY_COUNT];
     McpMousePointer m_mouse_pointers[GT_MAX_GAMEPADS];
 };
 

@@ -91,6 +91,7 @@ struct McpControllerMacroState
     u64 wait_target_frame;
     int command_count;
     int frames_waited;
+    int dropped;
     bool restore_pause;
     u64 breakpoint_stops;
     u32 generation;
@@ -278,9 +279,11 @@ public:
         {
             if (m_delayed_releases[i].host_key >= 0)
                 emu_host_key_released(m_delayed_releases[i].host_key);
+            else if (!IsValidPointer(m_debug_adapter))
+                continue;
             else if (m_delayed_releases[i].key != GT_KEY_NONE)
-                emu_key_released(m_delayed_releases[i].key);
-            else if (IsValidPointer(m_debug_adapter))
+                m_debug_adapter->ReleaseKey(m_delayed_releases[i].key);
+            else
                 m_debug_adapter->ControllerButton(m_delayed_releases[i].player, m_delayed_releases[i].button, "release");
         }
 
@@ -330,7 +333,7 @@ public:
                 if (m_delayed_releases[i].host_key >= 0)
                     emu_host_key_released(m_delayed_releases[i].host_key);
                 else if (m_delayed_releases[i].key != GT_KEY_NONE)
-                    emu_key_released(m_delayed_releases[i].key);
+                    m_debug_adapter->ReleaseKey(m_delayed_releases[i].key);
                 else
                     m_debug_adapter->ControllerButton(m_delayed_releases[i].player, m_delayed_releases[i].button,
                         "release");
@@ -762,7 +765,8 @@ private:
         response->result = {
             {"success", true},
             {"characters", m_input_macro.command_count},
-            {"frames_waited", m_input_macro.frames_waited}
+            {"frames_waited", m_input_macro.frames_waited},
+            {"dropped", input_macro_get_dropped()}
         };
 
         reset_input_macro();
@@ -805,6 +809,7 @@ private:
         macro.wait_target_frame = 0;
         macro.command_count = 0;
         macro.frames_waited = 0;
+        macro.dropped = 0;
         macro.restore_pause = false;
         macro.breakpoint_stops = 0;
         macro.generation = 0;
@@ -1012,10 +1017,10 @@ private:
     {
         if (step.device == MCP_CONTROLLER_MACRO_KEYBOARD)
         {
-            if (pressed)
-                emu_key_pressed(step.key);
-            else
-                emu_key_released(step.key);
+            if (!pressed)
+                m_debug_adapter->ReleaseKey(step.key);
+            else if (!m_debug_adapter->PressKey(step.key))
+                m_controller_macro.dropped++;
 
             return true;
         }
@@ -1103,6 +1108,7 @@ private:
             }
 
             std::string error;
+            int dropped = macro.dropped;
 
             if (!apply_controller_macro_step(step, step.type == MCP_CONTROLLER_MACRO_PRESS, error))
             {
@@ -1110,7 +1116,8 @@ private:
                 return;
             }
 
-            update_controller_macro_held(step);
+            if (macro.dropped == dropped)
+                update_controller_macro_held(step);
         }
 
         finish_controller_macro_success();
@@ -1154,7 +1161,8 @@ private:
             {"commands", macro.command_count},
             {"steps", (int)macro.steps.size()},
             {"frames_waited", macro.frames_waited},
-            {"held", (int)macro.held.size()}
+            {"held", (int)macro.held.size()},
+            {"dropped", macro.dropped}
         };
 
         reset_controller_macro();

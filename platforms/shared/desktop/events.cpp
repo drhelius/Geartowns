@@ -139,7 +139,6 @@ void events_release_keyboard(void)
 {
     memset(keyboard_scancode_down, 0, sizeof(keyboard_scancode_down));
     emu_release_all_host_keys();
-    emu_release_all_keys();
 }
 
 void events_release_mouse(void)

@@ -530,22 +530,15 @@ void emu_set_gamepad_state(GT_Controllers controller, const GT_GamePad_State& st
     geartowns->GetInput()->SetGamePadState((int)controller, state);
 }
 
-void emu_key_pressed(GT_Keys key)
+bool emu_key_pressed(GT_Keys key)
 {
-    if (IsValidPointer(geartowns))
-        geartowns->KeyPressed(key);
+    return IsValidPointer(geartowns) && geartowns->KeyPressed(key);
 }
 
 void emu_key_released(GT_Keys key)
 {
     if (IsValidPointer(geartowns))
         geartowns->KeyReleased(key);
-}
-
-void emu_release_all_keys(void)
-{
-    if (IsValidPointer(geartowns))
-        geartowns->ReleaseAllKeys();
 }
 
 void emu_host_key_pressed(int usage)

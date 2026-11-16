@@ -221,6 +221,7 @@ DebugAdapter::DebugAdapter(GeartownsCore* core)
 {
     m_core = core;
     memset(m_buttons, 0, sizeof(m_buttons));
+    memset(m_keys, 0, sizeof(m_keys));
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
     {
@@ -2511,8 +2512,8 @@ json DebugAdapter::GetKeyboardStatus()
         json item = {{"value", Hex(value, 2)}};
 
         if ((value & 0x80) != 0)
-            item["event"] = std::string((value & 0x10) ? "break" : "make") + ((value & 0x08) ? " ctrl" : "") +
-                ((value & 0x04) ? " shift" : "");
+            item["event"] = std::string((value & 0xF0) == 0xF0 ? "typematic" : (value & 0x10) ? "break" : "make") +
+                ((value & 0x08) ? " ctrl" : "") + ((value & 0x04) ? " shift" : "");
         else if (IsValidPointer(gui_debug_key_name(value)))
             item["key"] = gui_debug_key_name(value);
 
@@ -5975,26 +5976,48 @@ json DebugAdapter::KeyboardKey(const std::string& key, const std::string& action
     if (!GetKeyCode(key, code))
         return {{"error", "Invalid key name '" + key + "'"}};
 
-    bool delayed_release = false;
-
-    if (action == "press")
-        emu_key_pressed(code);
-    else if (action == "release")
-        emu_key_released(code);
-    else if (action == "press_and_release")
-    {
-        emu_key_pressed(code);
-        delayed_release = true;
-    }
-    else
+    if (action != "press" && action != "release" && action != "press_and_release")
         return {{"error", "Invalid action"}};
 
     json result = {{"success", true}, {"key", gui_debug_key_name(code)}, {"action", action}};
 
-    if (delayed_release)
+    if (action == "release")
+    {
+        ReleaseKey(code);
+        return result;
+    }
+
+    bool held = PressKey(code);
+    result["dropped"] = !held;
+
+    if (!held)
+        result["reason"] = "The keyboard buffer is full: nothing has read port 0600h, so the press was lost";
+    else if (action == "press_and_release")
         result["__delayed_key_release"] = true;
 
     return result;
+}
+
+bool DebugAdapter::PressKey(GT_Keys key)
+{
+    bool held = emu_key_pressed(key);
+    m_keys[key] = m_keys[key] || held;
+    return held;
+}
+
+void DebugAdapter::ReleaseKey(GT_Keys key)
+{
+    m_keys[key] = false;
+    emu_key_released(key);
+}
+
+void DebugAdapter::ReleaseKeys()
+{
+    for (int i = 0; i < GT_KEY_COUNT; i++)
+    {
+        if (m_keys[i])
+            ReleaseKey((GT_Keys)i);
+    }
 }
 
 static json key_map_layer(KeyMap* key_map, GT_Key_Map_Layer layer)
@@ -6256,6 +6279,8 @@ void DebugAdapter::ClearControllerState()
         GT_GamePad_State state = {0};
         m_core->GetInput()->SetInjectedGamePadState(player, state);
     }
+
+    ReleaseKeys();
 }
 
 std::string DebugAdapter::Hex(u32 value, int digits) const

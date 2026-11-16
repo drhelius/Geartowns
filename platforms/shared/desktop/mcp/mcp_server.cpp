@@ -1400,7 +1400,9 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_keyboard_status"},
         {"title", "Get Keyboard Status"},
-        {"description", "Read the keyboard interface: data, status, IRQ, last command, queued scan bytes and held keys."},
+        {"description", "Read the keyboard interface: data, status, IRQ, last command, queued bytes (make, break or "
+            "typematic events and key codes) and held keys. The queue holds 32 bytes; with nothing reading 0600h it "
+            "fills and new key presses are lost."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2404,7 +2406,8 @@ json McpServer::BuildToolList()
         {"name", "keyboard_key"},
         {"title", "Keyboard Key"},
         {"description", "Press, release or tap a JIS keyboard key by name, e.g. RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, "
-            "ESCAPE, UP, KP_ENTER, HIRAGANA."},
+            "ESCAPE, UP, KP_ENTER, HIRAGANA. A press the keyboard can't queue returns dropped true with the reason. "
+            "Keys stay held until released, even when the window loses focus."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2524,7 +2527,7 @@ json McpServer::BuildToolList()
         {"name", "keyboard_type"},
         {"title", "Keyboard Type"},
         {"description", "Type ASCII text on the JIS keyboard (Shift where needed, newline is RETURN), for Towns OS and "
-            "DOS prompts."},
+            "DOS prompts. dropped counts the key presses the keyboard couldn't queue."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2551,7 +2554,8 @@ json McpServer::BuildToolList()
         {"description", "Run a frame-timed input script of tap, press, release and wait commands on the game port pads "
             "(buttons as controller_button; on a mouse port the directions move it and A/B are its buttons) and the "
             "JIS keyboard (key names as keyboard_key). A tap holds tap_frames and leaves the same gap. Runs frames, "
-            "kept in rewind; breakpoints stop it and release what it holds."},
+            "kept in rewind; breakpoints stop it and release what it holds. dropped counts the key presses the keyboard "
+            "couldn't queue."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

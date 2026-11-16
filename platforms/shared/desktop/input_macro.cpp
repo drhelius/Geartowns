@@ -46,6 +46,7 @@ static size_t macro_step_index = 0;
 static bool macro_waiting = false;
 static u64 macro_wait_target_frame = 0;
 static Input_Macro_Owner macro_owner = Input_Macro_Owner_None;
+static int macro_dropped = 0;
 
 static int typed_key(const char* text, GT_Keys* key, bool* shift);
 static void ascii_key(char character, GT_Keys* key, bool* shift);
@@ -97,6 +98,7 @@ int input_macro_find_untypeable(const char* text, int* count)
 int input_macro_type_text(const char* text, int frames_per_key, Input_Macro_Owner owner)
 {
     input_macro_stop();
+    macro_dropped = 0;
 
     int typed = 0;
 
@@ -164,8 +166,10 @@ bool input_macro_update(Input_Macro_Owner owner)
 
         if (step.type == Input_Macro_Step_Press)
         {
-            emu_key_pressed(step.key);
-            macro_held_keys.push_back(step.key);
+            if (emu_key_pressed(step.key))
+                macro_held_keys.push_back(step.key);
+            else
+                macro_dropped++;
         }
         else
         {
@@ -185,6 +189,11 @@ void input_macro_stop(void)
         emu_key_released(macro_held_keys[i]);
 
     reset();
+}
+
+int input_macro_get_dropped(void)
+{
+    return macro_dropped;
 }
 
 Input_Macro_Owner input_macro_get_owner(void)

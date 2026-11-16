@@ -131,7 +131,7 @@ public:
     void LockRAMSize(bool locked);
     void DebugWritePort(u16 port, u32 value, int size);
 
-    void KeyPressed(GT_Keys key);
+    bool KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
     void ReleaseAllKeys();
     void HostKeyPressed(u16 usage);

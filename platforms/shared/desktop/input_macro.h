@@ -43,6 +43,7 @@ EXTERN int input_macro_find_untypeable(const char* text, int* count);
 EXTERN int input_macro_type_text(const char* text, int frames_per_key, Input_Macro_Owner owner);
 EXTERN bool input_macro_update(Input_Macro_Owner owner);
 EXTERN void input_macro_stop(void);
+EXTERN int input_macro_get_dropped(void);
 EXTERN Input_Macro_Owner input_macro_get_owner(void);
 EXTERN u64 input_macro_get_frames_left(void);
 

@@ -170,16 +170,19 @@ void Keyboard::Synchronize(u64 clocks)
         UpdateNextEvent();
 }
 
-void Keyboard::KeyPressed(GT_Keys key)
+bool Keyboard::KeyPressed(GT_Keys key)
 {
-    if (!IsValidKey(key) || m_state.keys[key])
-        return;
+    if (!IsValidKey(key))
+        return false;
+
+    if (m_state.keys[key])
+        return true;
 
     m_activity_count++;
     Synchronize(m_scheduler->GetClocks());
 
     if (!HasRoom(2))
-        return;
+        return false;
 
     m_state.keys[key] = true;
     PushEvent((u8)key, k_keyboard_make);
@@ -191,6 +194,7 @@ void Keyboard::KeyPressed(GT_Keys key)
     }
 
     UpdateNextEvent();
+    return true;
 }
 
 void Keyboard::KeyReleased(GT_Keys key)

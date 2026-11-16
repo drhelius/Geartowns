@@ -65,7 +65,7 @@ public:
     void Write(u16 port, u8 value, u64 clocks);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
-    void KeyPressed(GT_Keys key);
+    bool KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);
     void ReleaseAllKeys();
     bool IsKeyPressed(GT_Keys key) const;

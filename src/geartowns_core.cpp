@@ -1275,10 +1275,9 @@ void GeartownsCore::DebugWritePort(u16 port, u32 value, int size)
     m_memory->InvalidateDebugSnapshot();
 }
 
-void GeartownsCore::KeyPressed(GT_Keys key)
+bool GeartownsCore::KeyPressed(GT_Keys key)
 {
-    if (IsValidPointer(m_keyboard))
-        m_keyboard->KeyPressed(key);
+    return IsValidPointer(m_keyboard) && m_keyboard->KeyPressed(key);
 }
 
 void GeartownsCore::KeyReleased(GT_Keys key)

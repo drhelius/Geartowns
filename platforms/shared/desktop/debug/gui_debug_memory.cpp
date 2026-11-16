@@ -34,6 +34,7 @@
 #include "gui_debug_memory_provider.h"
 #include "../gui_filedialogs.h"
 #include "../gui_notifications.h"
+#include "../hotkeys.h"
 #include "../shift_jis.h"
 #include "../utils.h"
 #include "imgui.h"
@@ -245,6 +246,7 @@ static MemEditor* active_editor();
 static int active_view_count();
 static void new_editor_view();
 static void draw_memory_menu();
+static void process_shortcuts();
 static void draw_editor_tab(MemEditor& editor, int index);
 static void draw_region_browser(MemEditor& editor);
 static void draw_browser_title(const char* title);
@@ -413,6 +415,7 @@ void gui_debug_window_memory(void)
     ImGui::Begin("Memory Workspace", &config_debug.show_memory, ImGuiWindowFlags_MenuBar);
 
     draw_memory_menu();
+    process_shortcuts();
 
     if (ImGui::BeginTabBar("##memory_views", ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_AutoSelectNewTabs))
     {
@@ -667,18 +670,18 @@ static void draw_memory_menu()
 
     if (ImGui::BeginMenu("Edit"))
     {
-        if (ImGui::MenuItem("Undo", "Ctrl+Z", false, memory_provider.CanUndo()))
+        if (ImGui::MenuItem("Undo", HOTKEY_PRIMARY_LABEL "Z", false, memory_provider.CanUndo()))
             memory_provider.RequestUndo();
 
-        if (ImGui::MenuItem("Redo", "Ctrl+Y", false, memory_provider.CanRedo()))
+        if (ImGui::MenuItem("Redo", HOTKEY_REDO_LABEL, false, memory_provider.CanRedo()))
             memory_provider.RequestRedo();
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Copy", "Ctrl+C"))
+        if (ImGui::MenuItem("Copy", HOTKEY_PRIMARY_LABEL "C"))
             gui_debug_memory_copy();
 
-        if (ImGui::MenuItem("Paste", "Ctrl+V"))
+        if (ImGui::MenuItem("Paste", HOTKEY_PRIMARY_LABEL "V"))
             gui_debug_memory_paste();
 
         if (ImGui::MenuItem("Fill Selection..."))
@@ -784,6 +787,22 @@ static void draw_memory_menu()
     }
 
     ImGui::EndMenuBar();
+}
+
+static void process_shortcuts()
+{
+    if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) || ImGui::GetIO().WantTextInput)
+        return;
+
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Z))
+        memory_provider.RequestUndo();
+    else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Y) ||
+        ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z))
+        memory_provider.RequestRedo();
+    else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C))
+        gui_debug_memory_copy();
+    else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V))
+        gui_debug_memory_paste();
 }
 
 static void draw_editor_tab(MemEditor& editor, int index)

@@ -25,6 +25,7 @@
 #include "gui_debug_memory.h"
 #include "../gui.h"
 #include "../gui_colors.h"
+#include "../hotkeys.h"
 #include "../shift_jis.h"
 #include "gui_debug_memory_provider.h"
 #include "i386/i386.h"
@@ -1041,13 +1042,13 @@ void MemEditor::DrawContextMenu(u32 address)
     u32 start = inside ? GetSelectionStart() : address;
     u32 end = inside ? GetSelectionEnd() : address;
 
-    if (ImGui::MenuItem("Copy", "Ctrl+C"))
+    if (ImGui::MenuItem("Copy", HOTKEY_PRIMARY_LABEL "C"))
         CopyRange(start, end, false);
 
     if (ImGui::MenuItem("Copy As Decimal"))
         CopyRange(start, end, true);
 
-    if (ImGui::MenuItem("Paste", "Ctrl+V"))
+    if (ImGui::MenuItem("Paste", HOTKEY_PRIMARY_LABEL "V"))
         PasteRange(start, end);
 
     ImGui::Separator();

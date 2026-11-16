@@ -147,13 +147,7 @@ SDL_Keymod hotkeys_default_mod(int hotkey)
     int resolved = mod & ~HOTKEY_MOD_PRIMARY;
 
     if ((mod & HOTKEY_MOD_PRIMARY) != 0)
-    {
-#if defined(__APPLE__)
-        resolved |= SDL_KMOD_GUI;
-#else
-        resolved |= SDL_KMOD_CTRL;
-#endif
-    }
+        resolved |= HOTKEY_PRIMARY_KMOD;
 
     return (SDL_Keymod)resolved;
 }

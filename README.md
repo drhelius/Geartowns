@@ -141,7 +141,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 
 ### Keyboard
 
-Keys type on the FM Towns keyboard while the window has focus. Geartowns keeps only its hotkeys, which use `Ctrl+Shift` or `Ctrl` with an F-key; on macOS, `Cmd` replaces `Ctrl` in all of them.
+Keys type on the FM Towns keyboard while the window has focus. Geartowns keeps only its hotkeys, which use `Ctrl+Shift` or `Ctrl` with an F-key; on macOS, `Cmd` replaces `Ctrl` and `Option` replaces `Alt` in all of them.
 
 **Game Focus** is for playing: press `Ctrl+F10`, or go fullscreen with `Alt+Enter`. The mouse is then locked in the window, and every hotkey is off except `Ctrl+F10`, `Alt+Enter`, `Ctrl+F1` and `Ctrl+F2`. The window title shows it's on. `Ctrl+F10` leaves it, and so do switching to another window and leaving fullscreen. Outside Game Focus, a mouse plugged into a port follows the pointer while it's over the screen.
 

@@ -37,6 +37,16 @@
 
 #define HOTKEY_MOD_PRIMARY 0x10000
 
+#if defined(__APPLE__)
+#define HOTKEY_PRIMARY_KMOD SDL_KMOD_GUI
+#define HOTKEY_PRIMARY_LABEL "Cmd+"
+#define HOTKEY_REDO_LABEL "Cmd+Shift+Z"
+#else
+#define HOTKEY_PRIMARY_KMOD SDL_KMOD_CTRL
+#define HOTKEY_PRIMARY_LABEL "Ctrl+"
+#define HOTKEY_REDO_LABEL "Ctrl+Y"
+#endif
+
 struct hotkey_Definition
 {
     const char* name;

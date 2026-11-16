@@ -46,7 +46,7 @@ The V10 set is the firmware of the last generation: MAME's FM Towns II FreshTV s
 Open **Emulator → Firmware...**:
 
 - **Model**: the model whose firmware the window shows. The list shows the status of each model.
-- **Default Folder**: searched for every model, together with its subfolders and the MAME zips in it.
+- **Default Folder**: searched for every model, together with the subfolders and MAME zips directly inside it.
 - **Own Folder**: a folder for the selected model only, used instead of the default folder. **Use Default** goes back to the default folder.
 - **Refresh**: search the folders again after adding or removing files.
 
@@ -70,6 +70,7 @@ Place the files in a `geartowns` folder inside the frontend's system directory, 
 
 - File names are accepted in any case.
 - MAME's names are accepted too: `fmt_sys_a.rom` and `fmthr_sys.rom` for the system ROM, `fmt_dos_a.rom` for the OS ROM, `fmt_f20_a.rom` for the 20-dot font, and `mytownsux.rom`, `mytownsm2.rom`, `mytownsftv.rom`, `mytownshr.rom` or `mytownsmx.rom` for the serial ROM. MAME's Marty `mrom.m36` and `mrom.m37` hold the whole Marty firmware in two files, and MAME's MX `fmtownsiimxbios.m79` the whole V10 firmware in one.
+- MAME zips need to be non-merged sets. In split sets, `fmtownshr.zip` and `fmtownsftv.zip` lack `fmt_dos.rom`, which they share with the Model 1/2 set; add it from `fmtowns`. A merged `fmtowns.zip` loads as the Model 1/2 set only.
 - Without its extension ROM the Marty stops at its logo, although the firmware loads.
 
 ## Sets
@@ -101,7 +102,7 @@ Also used by the 1F/2F, 10F/20F, CX and UG.
 
 ### HR set (MAME `fmtownshr`)
 
-Also used by the HG.
+Also used by the HG and UR.
 
 | File          | Description               | Size     | CRC32    | md5                              |
 |---------------|---------------------------|----------|----------|----------------------------------|
@@ -122,7 +123,7 @@ MAME's FM Towns II FreshTV set. Also used by the ME, MA and MX, and by the HG an
 | fmt_fnt.rom    | Font ROM - Required         | 256 KB   | DD6FD544 | b91300e55b70227ce98b59c5f02fa8dd |
 | fmt_dic.rom    | Dictionary ROM - Required   | 512 KB   | 82D1DAA2 | 8fa4e553f28cfc0c30a0a1e589799942 |
 | fmt_f20.rom    | 20-dot Font ROM - Optional  | 512 KB   | 9F55A20C | ac0c7021e9bf48ca84b51ab651169a88 |
-| mytownsftv.rom | Serial ROM - Optional       | 32 bytes | A961AAE7 |                                  |
+| mytownsftv.rom | Serial ROM - Optional       | 32 bytes | A961AAE7 | 8a1fcc2c90b207d194a0f02b3093722e |
 
 ### V10 set (MAME `fmtownsmx`)
 

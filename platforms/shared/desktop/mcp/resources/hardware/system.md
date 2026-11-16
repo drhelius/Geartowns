@@ -239,6 +239,15 @@ Each key event is two bytes, a flag byte (bit 7 set) and a key code (bit 7 clear
 Examples on the JIS keyboard: `A0 1E` A down, `B0 1E` A up, `A4 1E` A down with SHIFT. Key codes follow the
 keyboard layout, for example 1Dh RETURN, 35h SPACE, 52h CTRL, 53h SHIFT, 5Dh PF1.
 
+A held key repeats as a typematic message, `1 11 1 C S L R` then the key code: `F0 1E` is A repeating. Bits 6-4 all
+set mark it and keep the previous keyboard type, so it is neither a make nor a break. The repeat starts after the
+typematic delay and comes at the typematic interval, both set by the commands below.
+
+Geartowns queues up to 32 bytes, 16 messages, for the CPU. A make needs room for itself and for the break of every key
+still held, so a release is never lost; with the queue full, a new press is dropped and the key is not counted as held.
+A program that never reads 0600h, such as the system ROM with no boot media, fills it with the repeats of a held
+key.
+
 Commands: A1h reset, A4h/A5h thumb shift chord monitoring on/off, A9h/AAh/ABh typematic delay 400/500/300 ms,
 ACh/ADh/AEh typematic interval 50/30/20 ms, B0h/B1h diagonal cursor codes on/off, B2h NMI acknowledge. Parameters
 go to 0600h first and the command to 0602h last.
@@ -255,9 +264,12 @@ go to 0600h first and the command to 0602h last.
 - `get_system_status` shows the model, CPU, clock, RAM, drives and firmware set, where each setting came from (`user`,
   `model`, `Auto`, game database) with `warnings`, the reset cause, the memory windows, NMI and RAM wait, the later
   models' registers and the serial ID ROM.
-- `get_keyboard_status` shows data, status, IRQ, the last command, the queued scan bytes and the held keys.
+- `get_keyboard_status` shows data, status, IRQ, the last command, the queued bytes (make, break and typematic events
+  with their key codes) and the held keys.
   `keyboard_key` presses, releases or taps a JIS key by name, `keyboard_type` types ASCII text (up to 256 characters,
-  `frames_per_key`) and `host_key` sends a host key through the key map; see the input resource.
+  `frames_per_key`) and `host_key` sends a host key through the key map; see the input resource. A press the queue
+  can't take comes back as `dropped` from `keyboard_key`, and counted in `dropped` by `keyboard_type` and
+  `controller_macro`. Keys a tool holds stay held when the window loses focus.
 - `write_io_port` does an OUT to any port above, so the device reacts and `io.writes` sees it. `debug_reset` resets,
   with `boot` to hold the boot keys.
 - Break on an interrupt line with `set_breakpoint_on_interrupt` and `irq` (0 timer, 1 keyboard, 6 floppy, 9 CD-ROM,

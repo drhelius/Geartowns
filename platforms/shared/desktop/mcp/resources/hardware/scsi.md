@@ -123,3 +123,18 @@ Hard disk images are raw 512-byte sectors with no header (`.hdd`, `.h0`-`.h6`, a
 CD-ROMs). A CHD is read-only: writes go to a raw working copy, made at the first flush and used instead from then on.
 `read_hard_disk_sector` reads one as the machine sees it, `list_hard_disks` shows the attached images, and
 `get_scsi_status` the interface and each disk's sense data.
+
+## 7. Driving it from MCP
+
+- `get_scsi_status` shows the `interface`, the `registers` (control and status with decoded bits, data, the 0C34h flag),
+  the `bus` (`phase`, `target`, `lun`, `message`, `signals`), `drq`, `irq8`, `word_dma`, the `command` in progress
+  (`cdb`, `decoded`, `status_name`, `transferred_bytes`, `length_bytes`) and each disk's sense key and code.
+- `list_hard_disks` shows IDs 0-6 with image, size, write protect, blocks not yet written and changes waiting for the
+  next reset. `attach_hard_disk` (`id`, `file_path`, `write_protected`, or `create_size_mb` with `formatted`),
+  `detach_hard_disk`, `flush_hard_disks` and `load_media` with a disk image change them; a running machine takes the
+  change at its next reset. `read_hard_disk_sector` (`id`, `lba`) reads a 512-byte sector without bus traffic.
+- `debug_reset` with `boot: hard_disk0` to `hard_disk4` holds H+0 to H+4.
+- `get_dma_status` shows channel 1. Break on IRQ8 with `set_breakpoint_on_interrupt` and `irq: 8`, or on the ports with
+  `set_breakpoint` in the `io` space over 0C30h-0C34h.
+- Trace `scsi.control`, `scsi.reset`, `scsi.selection`, `scsi.commands` (the CDB), `scsi.phases`, `scsi.status` (with
+  sense on CHECK CONDITION), `scsi.data` (start and end of each transfer) and `scsi.errors`.

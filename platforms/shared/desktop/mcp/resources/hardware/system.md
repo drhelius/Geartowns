@@ -242,3 +242,26 @@ keyboard layout, for example 1Dh RETURN, 35h SPACE, 52h CTRL, 53h SHIFT, 5Dh PF1
 Commands: A1h reset, A4h/A5h thumb shift chord monitoring on/off, A9h/AAh/ABh typematic delay 400/500/300 ms,
 ACh/ADh/AEh typematic interval 50/30/20 ms, B0h/B1h diagonal cursor codes on/off, B2h NMI acknowledge. Parameters
 go to 0600h first and the command to 0602h last.
+
+---
+
+## 8. Driving it from MCP
+
+- `get_pic_status` shows each IRQ line of both 8259As (`source`, `level`, `requested`, `in_service`, `masked`,
+  `vector`) and each PIC's decoded ICWs and modes. `get_pit_status` shows 0060h, the six 8253 counters (`mode`,
+  `reload`, `count`, `out`, `period_ms`, `use`), Interval Timer II and the 0026h microsecond timer where present.
+  `get_dma_status` shows control, mask, requests, terminal count and each channel's `device`, `mode`, addresses,
+  counts, `masked` and `request`. `get_rtc_status` shows the date, time, the 0070h/0080h interface and the registers.
+- `get_system_status` shows the model, CPU, clock, RAM, drives and firmware set, where each setting came from (`user`,
+  `model`, `Auto`, game database) with `warnings`, the reset cause, the memory windows, NMI and RAM wait, the later
+  models' registers and the serial ID ROM.
+- `get_keyboard_status` shows data, status, IRQ, the last command, the queued scan bytes and the held keys.
+  `keyboard_key` presses, releases or taps a JIS key by name, `keyboard_type` types ASCII text (up to 256 characters,
+  `frames_per_key`) and `host_key` sends a host key through the key map; see the input resource.
+- `write_io_port` does an OUT to any port above, so the device reacts and `io.writes` sees it. `debug_reset` resets,
+  with `boot` to hold the boot keys.
+- Break on an interrupt line with `set_breakpoint_on_interrupt` and `irq` (0 timer, 1 keyboard, 6 floppy, 9 CD-ROM,
+  11 VSYNC, 13 sound), before the handler's first instruction.
+- Trace `pic.requests`, `pic.mask`, `pic.commands`, `pic.init`, `timer.timeouts`, `timer.counters`,
+  `timer.interrupt_control`, `dma.registers`, `dma.requests`, `dma.ends`, `keyboard.keys`, `keyboard.reads`,
+  `keyboard.commands`, `system.reset`, `system.memory_map`, `system.rtc` and `system.memory_card`.

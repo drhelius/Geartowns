@@ -232,3 +232,22 @@ System ROM (FFFFF0h on the UX and the Marty). The boot ROM at F8000h–FFFFFh is
 Region offsets are 0-based; `physical_base` gives the bus address of mapped regions. The LINEAR area also accepts
 logical addresses (`CS:1234`, `0008:00001234`). The CPU reaches the 64 KB wave RAM through the 4 KB PCM wave RAM
 window with the bank selected in 04F7h; the PCM wave RAM region shows all of it.
+
+---
+
+## 9. Driving it from MCP
+
+- `list_memory_areas` gives each area's `id`, `name`, `size`, `flags`, `physical_base` and `group`, in the order of
+  section 8. `read_memory` (`area`, hex `offset`, `size` up to 65536) shows unmapped bytes as `??`; `write_memory` takes
+  hex `bytes` and a `repeat`, and refuses ROMs and the I/O PORTS area. LINEAR also takes `CS:1234` and `0008:00001234`.
+- `translate_address` shows how an address resolves: linear, PDE and PTE, physical, the bus and memory `region`, or why
+  it fails. `get_page_directory` lists the present pages.
+- `set_breakpoint` in the `linear` space stops on CPU accesses; the `physical` space also stops on DMA.
+- `memory_search_capture`, `memory_search` and `memory_find` look for values and bytes in an area. `add_memory_watch`
+  (`size` 8, 16, 32 or 64 bits) shows a value in `list_memory_watches`, and with `freeze` writes it back every frame
+  like a cheat. Bookmarks and `select_memory_range` mark places for the Memory Workspace.
+- `get_system_status` shows the memory windows, the boot window, the dictionary window and bank, and the reset cause.
+  `write_io_port` to 0404h, 0480h or 0484h switches the mapping.
+- Trace `system.memory_map` (each write to 0404h, 0480h and 0484h with the resulting window), `system.memory_card`
+  (0490h, 0491h, 048Ah) and `system.reset`.
+- `get_frame_buffer` with `buffer: custom` decodes any VRAM offset as pixels.

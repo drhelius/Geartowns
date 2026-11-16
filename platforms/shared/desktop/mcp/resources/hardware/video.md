@@ -207,3 +207,25 @@ programs it, then stops it, so a machine boots to the compatibility CRTC.
 Memory: 82000000h is page 0 and 82800000h page 1, 512 KiB each, for two-page modes. 83000000h is the whole VRAM as one
 page. With pack mode on, a 32-bit pixel at 83000000h is 3 bytes of VRAM, for EGB's mode 27. C2180000h is the 20-dot font.
 Pixels are linear: 4 bpp starts in the low nibble, 16 bpp is GRB 5:5:5, 24 bpp is blue, green, red.
+
+---
+
+## 10. Driving it from MCP
+
+- `get_crtc_status` shows the dot clock, timing (`line_dots`, `refresh_hz`, `interlaced`), the beam in `raster`,
+  `vsync_irq_pending` and each layer's format, window, VRAM start, stride, zoom and visible size. `get_crtc_registers`
+  lists the 32 registers with names and the 0440h index; `write_crtc_register` (`register` 0-31, 16-bit hex `value`)
+  writes through 0440h/0442h like the CPU. `get_hires_crtc_status` and `write_hires_crtc_register` do the same for the
+  MA and MX of section 9.
+- `get_video_output_status` shows 0448h/044Ah (`mode`, `layer0_format`, `layer1_format`, `front_layer`,
+  `palette_select`), the FDA0h layer enables, 044Ch status, the VRAM write mask and the FM-R display.
+- `get_palettes` (`all`, `layer0`, `layer1`, `256`, `digital`, `hires`) gives RGB888 colors; `in_use` tells which ones
+  the layers read.
+- `get_frame_buffer` decodes a layer's page, a sprite page or a `custom` view (`offset`, `format`, `width`, `height`,
+  `palette`) as PNG to find off-screen graphics. `get_screenshot` captures the output.
+- `write_io_port` reaches the output controller (0448h/044Ah) and the palette (FD90h onwards), which
+  `write_crtc_register` does not. The VRAM views are memory areas for `read_memory` and `write_memory`.
+- Break on VSYNC with `set_breakpoint_on_interrupt` and `irq: 11`.
+- Trace `video.crtc`, `video.output`, `video.palette`, `video.vram_mask`, `video.vsync` (IRQ11 and its clear),
+  `video.fmr`, `video.hires` and `video.missed_vblank`, which reports frames in which the game did not access the
+  address and operation given to `set_trace_log` as `vblank_watch_address` and `vblank_watch_operation`.

@@ -325,3 +325,20 @@ An optional second DMA controller at 00B0h–00BFh mirrors the 00A0h–00AFh lay
 counter 1 enable, bit 4 SOUND.
 0060h write: bit 7 clears the counter 0 latch, bit 0 counter 0 enable, bit 1 counter 1 enable, bit 2 SOUND.
 Loading counter 1 clears its latch. Counters 3 and 5 have no assigned clock, and no counter has a gate input.
+
+## 6. Driving it from MCP
+
+- The I/O PORTS memory area (its id is in `list_memory_areas`) reads ports with `read_memory` and no side effects;
+  ports the board does not decode show `??`. A write-only port such as 04D6h reads FFh there.
+- `write_io_port` (`port` hex, `value` hex, `size` 8, 16 or 32) does an OUT as the CPU does it, so the device reacts and
+  the `io.writes` trace sees it. It reaches what the register tools do not: the YM3438, the volumes, the output
+  controller, the sprite controller, the palette and any other port.
+- `set_breakpoint` with `space: io` stops on IN, OUT, INS and OUTS at a port or a range, for `read`, `write` or
+  `access`. The hit names the port with the names in the tables above, and `get_disassembly` with `detailed` names the
+  ports of IN and OUT.
+- Trace `io.reads` and `io.writes` for every port access, or the device's own filters (see its resource).
+- The device tools by port: PICs 0000h-0012h `get_pic_status`, timers 0040h-006Bh `get_pit_status`, 0070h/0080h
+  `get_rtc_status`, DMA 00A0h-00AFh `get_dma_status`, floppy 0200h-020Eh `get_fdc_status`, CRTC 0440h-0443h
+  `get_crtc_status`, 0448h-044Ch `get_video_output_status`, 0450h/0452h `list_sprites`, CD-ROM 04C0h-04CDh
+  `get_cdrom_status`, pads 04D0h-04D6h `get_input_state`, sound 04D5h-04F8h `get_sound_status`, 0600h-0604h
+  `get_keyboard_status`, SCSI 0C30h-0C34h `get_scsi_status`, and the system ports `get_system_status`.

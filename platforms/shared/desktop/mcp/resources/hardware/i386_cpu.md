@@ -242,3 +242,22 @@ marked busy.
 DR0–DR3 hold linear addresses; DR7 enables each one (L0–L3, G0–G3) and selects execute, write or read/write
 access and a length of 1, 2 or 4 bytes. A hit raises #DB and sets the matching B0–B3 bit in DR6; DR6 also reports
 single step (BS) and task switch (BT). The debugger's own breakpoints are separate and do not use these registers.
+
+---
+
+## 10. Driving it from MCP
+
+- `get_i386_status` shows the registers and EFLAGS, `cs_eip` with `linear_pc` and `physical_pc`, CR0-CR3 with the CR0
+  flags, `mode`, `cpl`, `iopl`, code and stack size, `last_exception`, the segment caches, GDTR, IDTR, LDTR, TR, the
+  debug and test registers, the 486's extras and the `fpu` when one is fitted. `write_i386_register` (`name`, hex
+  `value`) loads a register like the CPU does, failing on an invalid descriptor.
+- `get_i386_descriptors` (`table` `gdt`, `ldt` or `idt`, `start`, `count`) decodes entries with gate targets and
+  symbols; in real and VM86 mode `idt` is the IVT. `get_page_directory` and `translate_address` walk the paging of
+  section 5.
+- `debug_get_status`, `debug_step_into`, `debug_step_over`, `debug_step_out` and `debug_run_to_cursor` control the run.
+  `get_call_stack` lists calls, interrupts and exceptions. `get_disassembly` with `detailed` adds control flow, port
+  names for IN and OUT, vector names for INT and, at the current instruction, the BIOS or DOS function in AX.
+- `set_breakpoint_on_interrupt` stops on a vector (exceptions 0-31, BIOS IRQs 40h-4Fh) with `source` `exception`,
+  `hardware`, `software` or `any`, or on an `irq` line. The debugger's breakpoints do not use DR0-DR7.
+- Trace `cpu.instructions` (every instruction), `cpu.irqs`, `cpu.exceptions` and `cpu.software_ints` (INT n with AX).
+  `set_profiler` and `get_profiler_data` count cycles per function.

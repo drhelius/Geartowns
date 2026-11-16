@@ -149,3 +149,28 @@ EN set, C32 selects −32 dB, otherwise C0 selects 0 dB, otherwise the data appl
 | 04E8h | Read: bit 0 sample ready. Write: clears the sampling FIFO |
 
 Reset leaves the master output disabled. The mutes do not stop the FM timers or PCM playback and its interrupts.
+
+---
+
+## 7. Driving it from MCP
+
+- `get_ym3438_status` (all channels, or `channel` 1-6) shows the LFO, channel 3 mode, DAC, timers A and B with status,
+  and per channel `frequency` (`f_number`, `block`, `hz`, `note`), `algorithm`, `feedback`, `pan_left`, `pan_right`,
+  `ams`, `pms`, `muted` and four `operators` (`dt`, `mul`, `tl`, `ks`, `ar`, `d1r`, `d2r`, `d1l`, `rr`, `am`,
+  `ssg_eg`, `key_on`, `envelope_state`, `level_percent`). `get_ym3438_registers` with `part` 0 (04D8h/04DAh) or 1
+  (04DCh/04DEh) lists the registers as last written, with names, and the address latch.
+- `get_rf5c68_status` shows the enable, `channel_bank`, `wave_bank`, `irq_mask`, `irq_flags` and per channel
+  `enabled`, `sounding`, `envelope`, `pan_left`, `pan_right`, `step`, `playback_rate_hz`, `loop_start`, `start`,
+  `address`. The PCM wave RAM memory area holds the 64 KB for `read_memory` and `write_memory`.
+- `get_pcm16_status` shows the 16-bit AD/DA PCM of the later models (`fitted`, direction, format, rate, DMA, buffer
+  stages, errors, level monitors).
+- `get_sound_status` shows the MB87078 volumes (04E0h/04E2h, per channel `gain_db` and `use`), the FM and PCM mutes
+  (04D5h), the output gate and LED (04ECh), the 04E9h-04EBh causes (`cause_fm`, `cause_pcm`, timer flags) and the
+  debugger mutes.
+- `set_audio_mute` mutes `fm` (channel 1-6), `pcm` (1-8), `cdda`, `buzzer` or `pcm16` in the debugger only; the guest
+  never sees it. `write_io_port` plays the chips without a game: the YM3438 (04D8h-04DEh), the volumes (04E0h/04E2h)
+  and the RF5C68 (04F0h-04F8h).
+- Break on the sound interrupt with `set_breakpoint_on_interrupt` and `irq: 13`.
+- Trace `fm.key`, `fm.frequency`, `fm.operators`, `fm.channels`, `fm.global`, `fm.dac`, `fm.timers`, `fm.irqs`,
+  `pcm.channels`, `pcm.key`, `pcm.control`, `pcm.irqs`, `pcm16.registers`, `pcm16.data`, `pcm16.dma`, `pcm16.buffer`,
+  `pcm16.irqs`, `mixer.volume` and `mixer.mute`.

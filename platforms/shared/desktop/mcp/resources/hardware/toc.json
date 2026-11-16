@@ -19,9 +19,21 @@
       "mimeType": "text/markdown"
     },
     {
+      "uri": "x87_fpu",
+      "title": "Intel x87 FPU — What FM Towns Software Relies On",
+      "description": "Which models have an 80387, 487SX card or integrated FPU and the Auto setting, the register stack and tags, control and status words, exceptions and CR0 NE/MP/EM/TS/ET, #NM and #MF with no IRQ13 route, how Towns OS and its runtimes detect the FPU, FSAVE/FSTENV images, instruction groups and precision, timing, with the MCP tools and trace filters that show it",
+      "mimeType": "text/markdown"
+    },
+    {
       "uri": "system",
       "title": "FM Towns System Devices",
       "description": "8259A interrupt controllers, 8253 timers, uPD71071 DMA, MSM58321 clock, system control registers and keyboard",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uri": "input",
+      "title": "FM Towns Input",
+      "description": "Game ports 04D0h/04D2h/04D6h, pad and mouse bit layouts, COM and TRIG strobing, original, Marty and six-button pads, the mouse nibble protocol, device choice and the game database, keyboard pointer",
       "mimeType": "text/markdown"
     },
     {

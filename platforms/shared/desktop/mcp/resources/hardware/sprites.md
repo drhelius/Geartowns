@@ -92,3 +92,23 @@ The halves are at VRAM 40000h (page 0) and 60000h (page 1), two-page order. A tr
 while SPEN is set and the previous transfer has finished; the halves swap, the engine clears the new drawing half by copying its first two lines over the
 rest (32 µs) and then processes each entry (75 µs per entry, visible or not). A full list of 1024 entries takes
 about 77 ms and continues over several frames; busy stays set until the transfer ends.
+
+---
+
+## 7. Driving it from MCP
+
+- `list_sprites` (`start` 0-1023, `count` up to 1024, `filter` `all`, `drawn` or `visible`) shows the engine (`enabled`,
+  `busy`, `first_drawn`, `drawn_count`, `offset_x`, `offset_y`, `display_page`, `draw_page`) and each entry's `x`, `y`,
+  `pattern`, `colors`, `color_table`, `flags`, `drawn`, `visible` and `sprite_ram_address`; `next_start` says more
+  follow. `drawn` starts at the first drawn entry, `visible` also needs the entry shown and inside the page.
+- `get_sprite` with an `index` returns the pattern as an 8x PNG (`format: image`) or the raw entry with its pattern and
+  color table addresses (`format: info`).
+- `get_frame_buffer` with `buffer: sprite_display` or `sprite_draw` decodes the two halves of layer 1 VRAM, the shown
+  page and the page being drawn. The Sprite RAM memory area holds the entries and patterns for `read_memory` and
+  `write_memory`.
+- `write_io_port` reaches the controller (index 0450h, data 0452h); `write_crtc_register` does not.
+- `get_video_output_status` shows `sprite_busy` and `sprite_page` from 044Ch and the `front_layer`; `get_crtc_status`
+  shows layer 1's format and stride, which must be the 32K color, 512 byte surface.
+- Trace `sprite.registers` (register writes, decoded), `sprite.transfers` (start and end of each transfer with the
+  page, the entries and the time in ms) and `sprite.busy` (VSYNC reached while the previous transfer still runs, so
+  that frame starts none).

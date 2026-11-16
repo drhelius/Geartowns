@@ -102,3 +102,26 @@ The Model 1/2 boot ROM reads with DMA mode 54h, writes 10h to 04C6h and polls 04
 Play (04h) streams the audio from the start MSF to the end MSF at 44.1 kHz, 16-bit stereo. Pause (85h) keeps the
 position for resume (87h); stop (84h) ends playback. The status reply (80h) reports 03 while audio is playing. The
 CD audio level is set by electronic volume 2 channels 0 (left) and 1 (right); see the sound resource.
+
+---
+
+## 7. Driving it from MCP
+
+- `get_cdrom_status` shows the controller: `ports` (the 04C0h bits as `sirq`, `dei`, `cpu_transfer`, `dma_transfer`,
+  `status_available`, `command_ready`; the last `command` with its name and flags, `parameters`, the queued status
+  packets, `transfer`), `interrupts` (enables, pending, `irq9`), `drive` (`state`, `head_lba` and `head_msf`, the read
+  range and `sectors_left`), `media` (`ready`, `disc_changed`, tracks, length), CD `audio` (`state`, start, stop and
+  current MSF, `track`, volume in dB) and the `playlist`.
+- `list_cdrom_tracks` gives the TOC: type, MSF and LBA ranges, length, pregap and the track under the head.
+  `read_cdrom_sector` reads an image sector by LBA (MSF minus 00:02:00), `user` for 2048 bytes or `raw` for 2352, and
+  does not move the head.
+- `eject_cdrom`, `load_media` (a CD image) and `insert_playlist_disc` (an index from the `playlist`) change the disc
+  while the machine runs. `debug_reset` with `boot: cdrom` holds C+D through a reset.
+- `get_dma_status` shows channel 3. Break on the controller's IRQ with `set_breakpoint_on_interrupt` and `irq: 9`, or
+  on the ports with `set_breakpoint` in the `io` space over 04C0h-04CDh. The disc is also the CD-ROM media image
+  memory area.
+- `set_audio_mute` with `source: cdda` silences the disc in the debugger only. `get_sound_status` shows electronic
+  volume 2.
+- Trace `cdrom.commands` (each command with its MSF or parameters), `cdrom.status` (every four-byte packet with its
+  name), `cdrom.irqs`, `cdrom.control` (04C0h writes), `cdrom.data` (sector ready, 04C6h transfer, sector end, lost
+  data) and `cdrom.cdda` (play, pause, resume, stop, end, loop).

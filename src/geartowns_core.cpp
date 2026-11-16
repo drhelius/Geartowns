@@ -1249,6 +1249,32 @@ void GeartownsCore::AssignDriveLetters()
     }
 }
 
+void GeartownsCore::DebugWritePort(u16 port, u32 value, int size)
+{
+    GT_Bus_Access_Context context = BeginSlice();
+
+    if (m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_WRITE))
+    {
+        GT_Trace_Entry entry = {};
+        entry.type = TRACE_IO;
+        entry.event = TRACE_IO_WRITE;
+        entry.io.pc = m_i386->GetCurrentLinearPC();
+        entry.io.value = value;
+        entry.io.port = port;
+        entry.io.size = (u8)(size >> 3);
+        m_trace_logger->TraceLog(entry);
+    }
+
+    if (size == 8)
+        m_io->Write8(port, (u8)value, context);
+    else if (size == 16)
+        m_io->Write16(port, (u16)value, context);
+    else
+        m_io->Write32(port, value, context);
+
+    m_memory->InvalidateDebugSnapshot();
+}
+
 void GeartownsCore::KeyPressed(GT_Keys key)
 {
     if (IsValidPointer(m_keyboard))

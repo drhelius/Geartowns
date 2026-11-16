@@ -56,6 +56,46 @@ struct McpInputMacroState
     u64 breakpoint_stops;
 };
 
+enum McpControllerMacroStepType
+{
+    MCP_CONTROLLER_MACRO_PRESS = 0,
+    MCP_CONTROLLER_MACRO_RELEASE,
+    MCP_CONTROLLER_MACRO_WAIT
+};
+
+enum McpControllerMacroDevice
+{
+    MCP_CONTROLLER_MACRO_PAD = 0,
+    MCP_CONTROLLER_MACRO_KEYBOARD
+};
+
+struct McpControllerMacroStep
+{
+    McpControllerMacroStepType type;
+    McpControllerMacroDevice device;
+    int command;
+    int player;
+    std::string button;
+    GT_Keys key;
+    int frames;
+};
+
+struct McpControllerMacroState
+{
+    bool active;
+    json request_id;
+    std::vector<McpControllerMacroStep> steps;
+    std::vector<McpControllerMacroStep> held;
+    size_t step_index;
+    bool waiting;
+    u64 wait_target_frame;
+    int command_count;
+    int frames_waited;
+    bool restore_pause;
+    u64 breakpoint_stops;
+    u32 generation;
+};
+
 struct McpStepFramesState
 {
     bool active;
@@ -67,6 +107,8 @@ struct McpStepFramesState
 };
 
 static const u64 k_mcp_tap_frames = 10;
+static const int k_mcp_macro_tap_frames = 3;
+static const int k_mcp_macro_max_wait_frames = 1000;
 static const int k_mcp_step_wait_max_frames = 1800;
 
 enum McpMouseMotion
@@ -162,6 +204,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_request_id = json();
         reset_input_macro();
+        reset_controller_macro();
         reset_mouse_macro();
         reset_step_frames();
         reset_mouse_motion();
@@ -201,6 +244,7 @@ public:
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
         reset_input_macro();
+        reset_controller_macro();
         reset_mouse_macro();
         reset_step_frames();
         reset_mouse_motion();
@@ -245,6 +289,8 @@ public:
         m_pending_media_load_file_path.clear();
         release_input_macro_keys();
         reset_input_macro();
+        release_controller_macro_held();
+        reset_controller_macro();
         reset_mouse_macro();
         reset_step_frames();
         reset_mouse_motion();
@@ -298,6 +344,12 @@ public:
         if (m_input_macro.active)
         {
             pump_input_macro();
+            return;
+        }
+
+        if (m_controller_macro.active)
+        {
+            pump_controller_macro();
             return;
         }
 
@@ -376,6 +428,27 @@ public:
                 {
                     SafeDelete(response);
                     pump_input_macro();
+                }
+
+                SafeDelete(command);
+                break;
+            }
+
+            if (tool == "controller_macro")
+            {
+                DebugResponse* response = new DebugResponse();
+                response->requestId = command->requestId;
+                response->result = start_controller_macro(command->arguments, command->requestId);
+
+                if (response->result.contains("error"))
+                {
+                    UpdateResponseError(response);
+                    m_response_queue.Push(response);
+                }
+                else
+                {
+                    SafeDelete(response);
+                    pump_controller_macro();
                 }
 
                 SafeDelete(command);
@@ -713,6 +786,398 @@ private:
         response->result = {{"error", error}};
 
         reset_input_macro();
+
+        if (restore_pause)
+            emu_pause();
+
+        m_response_queue.Push(response);
+    }
+
+    void reset_controller_macro()
+    {
+        McpControllerMacroState& macro = m_controller_macro;
+        macro.active = false;
+        macro.request_id = json();
+        macro.steps.clear();
+        macro.held.clear();
+        macro.step_index = 0;
+        macro.waiting = false;
+        macro.wait_target_frame = 0;
+        macro.command_count = 0;
+        macro.frames_waited = 0;
+        macro.restore_pause = false;
+        macro.breakpoint_stops = 0;
+        macro.generation = 0;
+    }
+
+    bool parse_controller_macro_device(const json& value, McpControllerMacroDevice& device, std::string& error) const
+    {
+        std::string name = value.is_string() ? value.get<std::string>() : "";
+
+        if (name == "pad")
+            device = MCP_CONTROLLER_MACRO_PAD;
+        else if (name == "keyboard")
+            device = MCP_CONTROLLER_MACRO_KEYBOARD;
+        else
+        {
+            error = "device must be pad or keyboard";
+            return false;
+        }
+
+        return true;
+    }
+
+    bool parse_controller_macro_player(const json& value, int& player, std::string& error) const
+    {
+        if (!value.is_number_integer())
+        {
+            error = "player must be an integer";
+            return false;
+        }
+
+        player = value.get<int>();
+
+        if ((player < 1) || (player > GT_MAX_GAMEPADS))
+        {
+            error = "player must be 1-2";
+            return false;
+        }
+
+        return true;
+    }
+
+    void append_controller_macro_step(McpControllerMacroStepType type, McpControllerMacroDevice device, int player,
+        const std::string& button, GT_Keys key, int frames)
+    {
+        McpControllerMacroStep step;
+        step.type = type;
+        step.device = device;
+        step.command = m_controller_macro.command_count;
+        step.player = player;
+        step.button = button;
+        step.key = key;
+        step.frames = frames;
+        m_controller_macro.steps.push_back(step);
+    }
+
+    bool append_controller_macro_command(const json& command, McpControllerMacroDevice default_device,
+        int default_player, int tap_frames, std::string& error)
+    {
+        if (!command.is_object())
+        {
+            error = "command must be an object";
+            return false;
+        }
+
+        int actions = 0;
+
+        for (json::const_iterator it = command.begin(); it != command.end(); ++it)
+        {
+            if ((it.key() == "tap") || (it.key() == "press") || (it.key() == "release") || (it.key() == "wait"))
+                actions++;
+            else if ((it.key() != "device") && (it.key() != "player"))
+            {
+                error = "unknown property: " + it.key();
+                return false;
+            }
+        }
+
+        if (actions != 1)
+        {
+            error = "command must contain exactly one of tap, press, release, or wait";
+            return false;
+        }
+
+        McpControllerMacroDevice device = default_device;
+        int player = default_player;
+
+        if (command.contains("device") && !parse_controller_macro_device(command["device"], device, error))
+            return false;
+
+        if (command.contains("player") && !parse_controller_macro_player(command["player"], player, error))
+            return false;
+
+        if (command.contains("wait"))
+        {
+            if (!command["wait"].is_number_integer())
+            {
+                error = "wait must be an integer frame count";
+                return false;
+            }
+
+            int frames = command["wait"].get<int>();
+
+            if ((frames < 1) || (frames > k_mcp_macro_max_wait_frames))
+            {
+                error = "wait must be 1-" + std::to_string(k_mcp_macro_max_wait_frames) + " frames";
+                return false;
+            }
+
+            append_controller_macro_step(MCP_CONTROLLER_MACRO_WAIT, device, player, "", GT_KEY_NONE, frames);
+            return true;
+        }
+
+        std::string action = command.contains("tap") ? "tap" : (command.contains("press") ? "press" : "release");
+
+        if (!command[action].is_string())
+        {
+            error = action + " must be a string";
+            return false;
+        }
+
+        std::string name = command[action].get<std::string>();
+        GT_Keys key = GT_KEY_NONE;
+
+        if (device == MCP_CONTROLLER_MACRO_KEYBOARD)
+        {
+            if (!m_debug_adapter->GetKeyCode(name, key))
+            {
+                error = "Invalid key name '" + name + "'";
+                return false;
+            }
+        }
+        else if (!m_debug_adapter->IsControllerButton(name))
+        {
+            error = "Invalid button name, pad buttons are up, down, left, right, select, run, A, B, C, X, Y, Z and zoom";
+            return false;
+        }
+
+        if (action == "release")
+            append_controller_macro_step(MCP_CONTROLLER_MACRO_RELEASE, device, player, name, key, 0);
+        else
+            append_controller_macro_step(MCP_CONTROLLER_MACRO_PRESS, device, player, name, key, 0);
+
+        if (action == "tap")
+        {
+            append_controller_macro_step(MCP_CONTROLLER_MACRO_WAIT, device, player, "", GT_KEY_NONE, tap_frames);
+            append_controller_macro_step(MCP_CONTROLLER_MACRO_RELEASE, device, player, name, key, 0);
+            append_controller_macro_step(MCP_CONTROLLER_MACRO_WAIT, device, player, "", GT_KEY_NONE, tap_frames);
+        }
+
+        return true;
+    }
+
+    json start_controller_macro(const json& arguments, const json& request_id)
+    {
+        json result;
+
+        if (emu_is_empty())
+        {
+            result["error"] = "Emulator is powered off";
+            return result;
+        }
+
+        McpControllerMacroDevice device = MCP_CONTROLLER_MACRO_PAD;
+        int player = 1;
+        std::string error;
+
+        if ((arguments.contains("device") && !parse_controller_macro_device(arguments["device"], device, error)) ||
+            (arguments.contains("player") && !parse_controller_macro_player(arguments["player"], player, error)))
+        {
+            result["error"] = error;
+            return result;
+        }
+
+        int tap_frames = arguments.value("tap_frames", k_mcp_macro_tap_frames);
+        const json& commands = arguments["commands"];
+
+        reset_controller_macro();
+
+        for (size_t i = 0; i < commands.size(); i++)
+        {
+            m_controller_macro.command_count = (int)i;
+
+            if (!append_controller_macro_command(commands[i], device, player, tap_frames, error))
+            {
+                reset_controller_macro();
+                result["error"] = "Invalid macro command " + std::to_string((int)i) + ": " + error;
+                return result;
+            }
+        }
+
+        McpControllerMacroState& macro = m_controller_macro;
+        macro.request_id = request_id;
+        macro.command_count = (int)commands.size();
+        macro.restore_pause = emu_is_paused() && !emu_is_debug_idle();
+        macro.breakpoint_stops = emu_debug_breakpoint_stops;
+        macro.generation = emu_machine_generation;
+        macro.active = true;
+
+        result["success"] = true;
+        result["pending"] = true;
+        return result;
+    }
+
+    bool apply_controller_macro_step(const McpControllerMacroStep& step, bool pressed, std::string& error)
+    {
+        if (step.device == MCP_CONTROLLER_MACRO_KEYBOARD)
+        {
+            if (pressed)
+                emu_key_pressed(step.key);
+            else
+                emu_key_released(step.key);
+
+            return true;
+        }
+
+        json result = m_debug_adapter->ControllerButton(step.player, step.button, pressed ? "press" : "release");
+
+        if (result.contains("error"))
+        {
+            error = result["error"].get<std::string>();
+            return false;
+        }
+
+        HandleControllerSideEffects(result);
+        return true;
+    }
+
+    void update_controller_macro_held(const McpControllerMacroStep& step)
+    {
+        std::vector<McpControllerMacroStep>& held = m_controller_macro.held;
+
+        for (size_t i = 0; i < held.size(); i++)
+        {
+            if ((held[i].device == step.device) && (held[i].player == step.player) && (held[i].button == step.button) &&
+                (held[i].key == step.key))
+            {
+                held.erase(held.begin() + i);
+                break;
+            }
+        }
+
+        if (step.type == MCP_CONTROLLER_MACRO_PRESS)
+            held.push_back(step);
+    }
+
+    void release_controller_macro_held()
+    {
+        std::vector<McpControllerMacroStep>& held = m_controller_macro.held;
+        std::string error;
+
+        for (size_t i = 0; IsValidPointer(m_debug_adapter) && (i < held.size()); i++)
+            apply_controller_macro_step(held[i], false, error);
+
+        held.clear();
+    }
+
+    void pump_controller_macro()
+    {
+        McpControllerMacroState& macro = m_controller_macro;
+
+        if (emu_is_empty())
+        {
+            finish_controller_macro_error("Emulator is powered off");
+            return;
+        }
+
+        if (emu_machine_generation != macro.generation)
+        {
+            finish_controller_macro_error("Controller macro interrupted by a reset, state load or rewind");
+            return;
+        }
+
+        if (macro.waiting)
+        {
+            if (emu_frame_counter < macro.wait_target_frame)
+            {
+                continue_controller_macro_wait();
+                return;
+            }
+
+            macro.waiting = false;
+        }
+
+        while (macro.step_index < macro.steps.size())
+        {
+            const McpControllerMacroStep& step = macro.steps[macro.step_index];
+            macro.step_index++;
+
+            if (step.type == MCP_CONTROLLER_MACRO_WAIT)
+            {
+                macro.frames_waited += step.frames;
+                macro.wait_target_frame = emu_frame_counter + (u64)step.frames;
+                macro.waiting = true;
+                continue_controller_macro_wait();
+                return;
+            }
+
+            std::string error;
+
+            if (!apply_controller_macro_step(step, step.type == MCP_CONTROLLER_MACRO_PRESS, error))
+            {
+                finish_controller_macro_error("Macro command " + std::to_string(step.command) + ": " + error);
+                return;
+            }
+
+            update_controller_macro_held(step);
+        }
+
+        finish_controller_macro_success();
+    }
+
+    void continue_controller_macro_wait()
+    {
+        McpControllerMacroState& macro = m_controller_macro;
+
+        if (emu_is_debug_idle())
+        {
+            if (emu_debug_breakpoint_stops != macro.breakpoint_stops)
+            {
+                finish_controller_macro_error("Controller macro interrupted by breakpoint");
+                return;
+            }
+
+            u64 frames = macro.wait_target_frame - emu_frame_counter;
+
+            if (frames > (u64)k_mcp_macro_max_wait_frames)
+                frames = k_mcp_macro_max_wait_frames;
+
+            if (frames > 0)
+                emu_debug_step_frames((int)frames);
+        }
+        else if (macro.restore_pause && emu_is_paused())
+            emu_resume();
+        else if (emu_is_paused())
+            finish_controller_macro_error("Controller macro interrupted by a pause");
+    }
+
+    void finish_controller_macro_success()
+    {
+        McpControllerMacroState& macro = m_controller_macro;
+        bool restore_pause = macro.restore_pause;
+
+        DebugResponse* response = new DebugResponse();
+        response->requestId = macro.request_id;
+        response->result = {
+            {"success", true},
+            {"commands", macro.command_count},
+            {"steps", (int)macro.steps.size()},
+            {"frames_waited", macro.frames_waited},
+            {"held", (int)macro.held.size()}
+        };
+
+        reset_controller_macro();
+
+        if (restore_pause)
+            emu_pause();
+
+        m_response_queue.Push(response);
+    }
+
+    void finish_controller_macro_error(const std::string& error)
+    {
+        bool restore_pause = m_controller_macro.restore_pause;
+
+        release_controller_macro_held();
+
+        DebugResponse* response = new DebugResponse();
+        response->requestId = m_controller_macro.request_id;
+        response->isToolError = true;
+        response->errorMessage = error;
+        response->result = {{"error", error}};
+
+        reset_controller_macro();
 
         if (restore_pause)
             emu_pause();
@@ -1381,6 +1846,7 @@ private:
     std::string m_pending_media_load_file_path;
     std::vector<DelayedButtonRelease> m_delayed_releases;
     McpInputMacroState m_input_macro;
+    McpControllerMacroState m_controller_macro;
     McpMouseMacroState m_mouse_macro;
     McpStepFramesState m_step_frames;
     bool m_mouse_motion_held[GT_MAX_GAMEPADS][MCP_MOUSE_MOTION_COUNT];

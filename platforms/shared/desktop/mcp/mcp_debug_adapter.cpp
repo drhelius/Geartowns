@@ -897,6 +897,25 @@ json DebugAdapter::WriteMemory(int area, const std::string& offset_text, const s
         {"bytes_written", data.size()}};
 }
 
+json DebugAdapter::WriteIOPort(u32 port, u32 value, int size)
+{
+    if (emu_is_empty())
+        return {{"error", "Emulator is powered off"}};
+
+    if ((size != 8) && (size != 16) && (size != 32))
+        return {{"error", "size must be 8, 16 or 32"}};
+
+    if (port + (u32)(size / 8) > 0x10000)
+        return {{"error", "port must be 0-FFFF and the write must end by FFFF"}};
+
+    if ((size < 32) && ((value >> size) != 0))
+        return {{"error", "value must fit in " + std::to_string(size) + " bits"}};
+
+    m_core->DebugWritePort((u16)port, value, size);
+
+    return {{"success", true}, {"port", Hex(port, 4)}, {"value", Hex(value, size / 4)}, {"size", size}};
+}
+
 json DebugAdapter::TranslateAddress(const std::string& text)
 {
     McpAddress address;
@@ -1097,7 +1116,7 @@ json DebugAdapter::ListMemoryBookmarks(int area)
     return {{"area", area}, {"bookmarks", items}, {"count", items.size()}};
 }
 
-json DebugAdapter::AddMemoryWatch(int area, u32 address, const std::string& notes, int size)
+json DebugAdapter::AddMemoryWatch(int area, u32 address, const std::string& notes, int size, bool freeze)
 {
     GuiDebugMemoryArea info;
     std::string error;
@@ -1111,11 +1130,14 @@ json DebugAdapter::AddMemoryWatch(int area, u32 address, const std::string& note
     GT_Debug_Memory_Address watch = info.source;
     watch.address = address;
 
-    if (!gui_debug_memory_add_watch(watch, notes.c_str(), size / 8))
+    if (!gui_debug_memory_add_watch(watch, notes.c_str(), size / 8, freeze))
         return {{"error", "Unable to add memory watch, size must be 8, 16, 32 or 64"}};
 
+    if (freeze)
+        config_debug.debug = true;
+
     return {{"success", true}, {"area", area}, {"address", FormatAreaOffset(info, address)}, {"notes", notes},
-        {"size", size}};
+        {"size", size}, {"frozen", freeze}};
 }
 
 json DebugAdapter::RemoveMemoryWatch(int area, u32 address)
@@ -5464,6 +5486,11 @@ u16 DebugAdapter::ButtonMask(const std::string& button) const
     if (name == "zoom") return GT_GAMEPAD_ZOOM;
 
     return 0;
+}
+
+bool DebugAdapter::IsControllerButton(const std::string& button) const
+{
+    return ButtonMask(button) != 0;
 }
 
 json DebugAdapter::ControllerButton(int player, const std::string& button, const std::string& action)

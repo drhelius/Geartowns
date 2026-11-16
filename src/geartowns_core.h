@@ -129,6 +129,7 @@ public:
     GT_Boot_Device GetBootDevice() const;
     void EnableDriveLetterAssignment(bool enabled);
     void LockRAMSize(bool locked);
+    void DebugWritePort(u16 port, u32 value, int size);
 
     void KeyPressed(GT_Keys key);
     void KeyReleased(GT_Keys key);

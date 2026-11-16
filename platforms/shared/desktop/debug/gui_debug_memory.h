@@ -91,7 +91,7 @@ bool gui_debug_memory_get_selection(const GT_Debug_Memory_Address& source, u32& 
 void gui_debug_memory_add_bookmark(const GT_Debug_Memory_Address& address, u32 end, const char* name);
 bool gui_debug_memory_remove_bookmark(const GT_Debug_Memory_Address& address);
 void gui_debug_memory_get_bookmarks(const GT_Debug_Memory_Address& source, std::vector<GuiDebugMemoryBookmark>& bookmarks);
-bool gui_debug_memory_add_watch(const GT_Debug_Memory_Address& address, const char* name, int size);
+bool gui_debug_memory_add_watch(const GT_Debug_Memory_Address& address, const char* name, int size, bool freeze);
 bool gui_debug_memory_remove_watch(const GT_Debug_Memory_Address& address);
 void gui_debug_memory_get_watches(const GT_Debug_Memory_Address& source, std::vector<GuiDebugMemoryWatch>& watches);
 bool gui_debug_memory_search_capture(const GT_Debug_Memory_Address& source, u32 start, u32 size, int width);

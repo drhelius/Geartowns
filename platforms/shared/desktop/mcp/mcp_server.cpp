@@ -732,7 +732,7 @@ json McpServer::BuildToolList()
         {"name", "write_memory"},
         {"title", "Write Memory"},
         {"description", "Write hex bytes to a memory area, repeated to fill a range with repeat. ROMs and I/O PORTS are "
-            "read-only."},
+            "read-only; write_io_port writes a port."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -754,6 +754,34 @@ json McpServer::BuildToolList()
                 }}
             }},
             {"required", json::array({"area", "offset", "bytes"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "write_io_port"},
+        {"title", "Write I/O Port"},
+        {"description", "Write an I/O port as an OUT instruction does, between instructions: the device acts on it and the "
+            "io.writes trace logs it; breakpoints don't stop it. Reading the I/O PORTS area doesn't touch devices."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"port", {
+                    {"type", "string"},
+                    {"description", "Hex port, 0-FFFF, e.g. '4D8'."}
+                }},
+                {"value", {
+                    {"type", "string"},
+                    {"description", "Hex value that fits size."}
+                }},
+                {"size", {
+                    {"type", "integer"},
+                    {"description", "Bits, as OUT DX,AL, AX or EAX. Default 8."},
+                    {"enum", {8, 16, 32}}
+                }}
+            }},
+            {"required", json::array({"port", "value"})},
+            {"additionalProperties", false}
         }}
     });
 
@@ -862,7 +890,8 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "add_memory_watch"},
         {"title", "Add Memory Watch"},
-        {"description", "Add a memory watch, with optional notes and size."},
+        {"description", "Add a memory watch, with optional notes and size. freeze holds the value it reads now, written "
+            "back every frame like a cheat, until remove_memory_watch."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -877,6 +906,10 @@ json McpServer::BuildToolList()
                     {"type", "integer"},
                     {"description", "Bits, little endian. Default 8."},
                     {"enum", {8, 16, 32, 64}}
+                }},
+                {"freeze", {
+                    {"type", "boolean"},
+                    {"description", "Hold the current value. Default false."}
                 }}
             }},
             {"required", json::array({"area", "address"})}
@@ -2513,6 +2546,49 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "controller_macro"},
+        {"title", "Controller Macro"},
+        {"description", "Run a frame-timed input script of tap, press, release and wait commands on the game port pads "
+            "(buttons as controller_button; on a mouse port the directions move it and A/B are its buttons) and the "
+            "JIS keyboard (key names as keyboard_key). A tap holds tap_frames and leaves the same gap. Runs frames, "
+            "kept in rewind; breakpoints stop it and release what it holds."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"player", {
+                    {"type", "integer"},
+                    {"description", "Default game port of the pad commands, 1-2. Default 1."},
+                    {"minimum", 1},
+                    {"maximum", 2}
+                }},
+                {"device", {
+                    {"type", "string"},
+                    {"description", "Default device of the commands. Default pad."},
+                    {"enum", json::array({"pad", "keyboard"})}
+                }},
+                {"tap_frames", {
+                    {"type", "integer"},
+                    {"description", "Frames a tap holds, and the gap after it. Default 3."},
+                    {"minimum", 1},
+                    {"maximum", 60}
+                }},
+                {"commands", {
+                    {"type", "array"},
+                    {"description", "Ordered commands, each with one of tap, press, release (a name) or wait (1-1000 "
+                        "frames), and optionally player or device, e.g. [{\"tap\":\"run\"},{\"wait\":30},"
+                        "{\"press\":\"right\"},{\"wait\":60},{\"release\":\"right\"},"
+                        "{\"tap\":\"RETURN\",\"device\":\"keyboard\"}]."},
+                    {"minItems", 1},
+                    {"items", {{"type", "object"}}}
+                }}
+            }},
+            {"required", json::array({"commands"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "mouse_get_cursor"},
         {"title", "Get Mouse Cursor"},
         {"description", "Read where mouse_move or mouse_click last measured the pointer (screenshot pixels, top-left of "
@@ -3390,6 +3466,19 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
 
         return m_debugAdapter.WriteMemory(arguments["area"], arguments["offset"], data);
     }
+    else if (normalizedTool == "write_io_port")
+    {
+        u32 port = 0;
+        u32 value = 0;
+
+        if (!parse_hex_with_prefix(arguments["port"].get<std::string>(), &port))
+            return {{"error", "Invalid port format"}};
+
+        if (!parse_hex_with_prefix(arguments["value"].get<std::string>(), &value))
+            return {{"error", "Invalid value format"}};
+
+        return m_debugAdapter.WriteIOPort(port, value, arguments.value("size", 8));
+    }
     else if (normalizedTool == "translate_address")
     {
         return m_debugAdapter.TranslateAddress(arguments["address"]);
@@ -3441,7 +3530,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
             return {{"error", "Invalid address format"}};
 
         return m_debugAdapter.AddMemoryWatch(arguments["area"], offset, arguments.value("notes", ""),
-            arguments.value("size", 8));
+            arguments.value("size", 8), arguments.value("freeze", false));
     }
     else if (normalizedTool == "remove_memory_watch")
     {
@@ -3967,7 +4056,8 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         return m_debugAdapter.ControllerSetType(arguments["player"], arguments["type"]);
     }
     else if ((normalizedTool == "keyboard_type") || (normalizedTool == "mouse_move") ||
-        (normalizedTool == "mouse_click") || (normalizedTool == "debug_step_frame"))
+        (normalizedTool == "mouse_click") || (normalizedTool == "debug_step_frame") ||
+        (normalizedTool == "controller_macro"))
     {
         return {{"error", normalizedTool + " must be handled by the MCP manager"}};
     }

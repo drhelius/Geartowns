@@ -2586,7 +2586,7 @@ void gui_debug_memory_get_bookmarks(const GT_Debug_Memory_Address& source, std::
     }
 }
 
-bool gui_debug_memory_add_watch(const GT_Debug_Memory_Address& address, const char* name, int size)
+bool gui_debug_memory_add_watch(const GT_Debug_Memory_Address& address, const char* name, int size, bool freeze)
 {
     int size_index = size == 2 ? 1 : size == 4 ? 2 : size == 8 ? 3 : size == 1 ? 0 : -1;
 
@@ -2600,6 +2600,7 @@ bool gui_debug_memory_add_watch(const GT_Debug_Memory_Address& address, const ch
     watch.valid = read_value(watch.address, size, watch.endian, watch.value, status);
     watch.previous = watch.value;
     watch.frozen_value = watch.value;
+    watch.freeze = freeze;
 
     if (IsValidPointer(name) && name[0] != 0)
         strncpy_fit(watch.name, name, sizeof(watch.name));

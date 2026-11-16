@@ -194,13 +194,14 @@ public:
     bool GetMemoryArea(int area, GuiDebugMemoryArea& info, std::string& error);
     json ReadMemory(int area, const std::string& offset, size_t size);
     json WriteMemory(int area, const std::string& offset, const std::vector<u8>& data);
+    json WriteIOPort(u32 port, u32 value, int size);
     json TranslateAddress(const std::string& address);
     json SelectMemoryRange(int area, u32 start_address, u32 end_address);
     json GetMemorySelection(int area);
     json AddMemoryBookmark(int area, u32 address, const std::string& name);
     json RemoveMemoryBookmark(int area, u32 address);
     json ListMemoryBookmarks(int area);
-    json AddMemoryWatch(int area, u32 address, const std::string& notes, int size);
+    json AddMemoryWatch(int area, u32 address, const std::string& notes, int size, bool freeze);
     json RemoveMemoryWatch(int area, u32 address);
     json ListMemoryWatches(int area);
     json MemorySearchCapture(int area, const json& arguments);
@@ -317,6 +318,7 @@ public:
     json ControllerSetType(int player, const std::string& type);
     json ControllerGetType(int player);
     bool IsMouseController(int player) const;
+    bool IsControllerButton(const std::string& button) const;
     bool ApplyMouseMotion(int player, int delta_x, int delta_y);
     int FindMousePlayer() const;
     bool IsMouseMotionPending(int player) const;

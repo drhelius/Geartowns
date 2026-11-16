@@ -197,7 +197,7 @@ static const McpToolCategory kMcpToolCategories[] =
 {
     {"execution", "Execution Control", "Pause, resume, step, frame-step, reset, run-to-address, and fast-forward emulator execution."},
     {"breakpoints", "Breakpoints", "Set, clear, enable, disable and list Intel 80386 execute, read, write and I/O breakpoints by address or range, and interrupt breakpoints by vector or IRQ line."},
-    {"memory", "Memory", "List memory areas, read/write bytes, translate addresses, fill ranges, select ranges, search memory, and manage watches/bookmarks."},
+    {"memory", "Memory", "List memory areas, read/write bytes, write I/O ports, translate addresses, fill ranges, select ranges, search memory, and manage watches/bookmarks and frozen values."},
     {"cpu", "CPU", "Inspect Intel 80386 registers, flags, mode, segments, descriptor tables, control and debug registers, and write register values."},
     {"disassembly", "Disassembly", "Decode Intel 80386 code, inspect the call stack, and manage disassembly bookmarks."},
     {"symbols", "Symbols", "Add, remove, load, list and look up user symbols and automatic labels."},
@@ -211,7 +211,7 @@ static const McpToolCategory kMcpToolCategories[] =
     {"capture", "Capture", "Capture current screenshots and record AVI video."},
     {"state", "Save States", "List save slots, and save or load emulator state in a slot or a file."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
-    {"input", "Input", "Press pad buttons, move and click the mouse, set each game port's device, inspect pressed buttons and held keys, and control the FM Towns keyboard."},
+    {"input", "Input", "Press pad buttons, move and click the mouse, set each game port's device, inspect pressed buttons and held keys, control the FM Towns keyboard, and run frame-timed input macros."},
     {"trace", "Trace Logger", "Record executed instructions and hardware events (interrupts, I/O, PIC, timers, DMA, video, sprites, sound, CD-ROM, FDC, SCSI, keyboard, game ports, system) and read the trace."},
     {"profiler", "Profiler", "Profile CPU cycles and call counts per function and interrupt vector."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
@@ -231,7 +231,7 @@ static const char* const kMcpBreakpointTools[] =
 
 static const char* const kMcpMemoryTools[] =
 {
-    "list_memory_areas", "read_memory", "write_memory", "translate_address", "select_memory_range",
+    "list_memory_areas", "read_memory", "write_memory", "write_io_port", "translate_address", "select_memory_range",
     "get_memory_selection", "add_memory_bookmark", "remove_memory_bookmark", "list_memory_bookmarks", "add_memory_watch", "remove_memory_watch",
     "list_memory_watches", "memory_search_capture", "memory_search", "memory_find"
 };
@@ -311,7 +311,7 @@ static const char* const kMcpRewindTools[] =
 static const char* const kMcpInputTools[] =
 {
     "controller_button", "controller_set_type", "get_input_state",
-    "keyboard_key", "keyboard_type", "mouse_get_cursor", "mouse_move", "mouse_click",
+    "keyboard_key", "keyboard_type", "controller_macro", "mouse_get_cursor", "mouse_move", "mouse_click",
     "get_key_map", "set_key_binding", "set_key_mapping", "host_key", "open_key_mapper", "close_key_mapper"
 };
 
@@ -726,6 +726,10 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
         aliases += " cpu 80386 x86 registers eax eip eflags cr0 segments";
     if (StringContains(name, "translate"))
         aliases += " paging pde pte physical linear logical segment";
+    if (StringContains(name, "macro"))
+        aliases += " input script sequence pad gamepad joypad keyboard key mouse button tap press release wait";
+    if (StringContains(name, "io_port"))
+        aliases += " out port poke hardware register";
 
     return aliases;
 }

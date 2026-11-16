@@ -46,6 +46,8 @@ public:
         u64 clocks;
         u64 events[SCHEDULER_EVENT_COUNT];
         u32 cycle_remainder;
+        u64 cycles;
+        u32 clock_remainder;
     };
 
 public:
@@ -56,6 +58,7 @@ public:
     void SetCPUClockRate(u32 rate);
     u32 GetCPUClockRate() const;
     u64 GetClocks() const;
+    const u64* GetCyclesPointer() const;
     void AddClocks(u32 clocks);
     void AddCycles(u32 cycles);
     u32 GetSliceClocks(u64 limit) const;
@@ -68,11 +71,11 @@ public:
     u64 GetNextEventClocks() const;
     Scheduler_State* GetState();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version = GT_SAVESTATE_VERSION);
 
 private:
     void UpdateNextEvent();
-    void Serialize(StateSerializer& serializer);
+    void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 
 private:

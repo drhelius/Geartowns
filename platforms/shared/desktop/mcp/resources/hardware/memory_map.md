@@ -56,7 +56,7 @@ Address spaces:
 
 Only one 512 KB VRAM exists; both VRAM ranges are views of it.
 
-The MA and MX have 1 MiB of VRAM for the high-resolution CRTC, and these on top. The compatibility views above keep reaching
+The MA, MX and HC have 1 MiB of VRAM for the high-resolution CRTC, and these on top. The compatibility views above keep reaching
 the first 512 KB:
 
 | Range | Size | Use |

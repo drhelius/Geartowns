@@ -1050,7 +1050,8 @@ json McpServer::BuildToolList()
         {"title", "Get Intel 80386 Status"},
         {"description", "Read the CPU: registers, EFLAGS, CS:EIP with linear and physical PC, CR0-CR3, mode, CPL, IOPL, "
             "code and stack size, last exception, segment caches, GDTR/IDTR/LDTR/TR, debug and test registers, the 486's "
-            "AC, CR0 bits and TR3-TR5 on a 486, and the 80387 (stack, CW, SW, tags, last instruction) when one is fitted."},
+            "AC, CR0 bits and TR3-TR5 on a 486, CR4, the TSC and the MSRs on a Pentium, and the x87 (stack, CW, SW, tags, "
+            "last instruction) when one is fitted."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1118,9 +1119,9 @@ json McpServer::BuildToolList()
             {"properties", {
                 {"name", {
                     {"type", "string"},
-                    {"description", "EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, "
-                        "TR3-TR5 (486), TR6, TR7, CS, DS, ES, FS, GS, SS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or "
-                        "IDTR_LIMIT."}
+                    {"description", "EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, EIP, EFLAGS, CR0, CR2, CR3, CR4 (Pentium), "
+                        "DR0-DR7, TR3-TR5 (486), TR6, TR7, CS, DS, ES, FS, GS, SS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, "
+                        "IDTR_BASE or IDTR_LIMIT."}
                 }},
                 {"value", {
                     {"type", "string"},
@@ -1464,7 +1465,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_hires_crtc_status"},
         {"title", "Get High-Res CRTC Status"},
-        {"description", "Read the high-resolution CRTC of the MA and MX: selected and running, clock, timing, display window, "
+        {"description", "Read the high-resolution CRTC of the MA, MX and HC: selected and running, clock, timing, display window, "
             "beam position, layout, both pages' window, format, display start, zoom and key, the palette select, the hardware "
             "cursor and the second gateway."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
@@ -1478,7 +1479,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "write_hires_crtc_register"},
         {"title", "Write High-Res CRTC Register"},
-        {"description", "Write an indirect register of the high-resolution CRTC of the MA and MX through 0472/0474 like the CPU, "
+        {"description", "Write an indirect register of the high-resolution CRTC of the MA, MX and HC through 0472/0474 like the CPU, "
             "byte by byte, so 004h starts and stops it, 133h writes a color and 209h a pattern byte. Keeps the address selected."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
@@ -1542,12 +1543,12 @@ json McpServer::BuildToolList()
                 }},
                 {"offset", {
                     {"type", "string"},
-                    {"description", "custom: hex offset in the VRAM as stored, 0-7FFFF, 0-FFFFF on the MA and MX."}
+                    {"description", "custom: hex offset in the VRAM as stored, 0-7FFFF, 0-FFFFF on the MA, MX and HC."}
                 }},
                 {"format", {
                     {"type", "string"},
                     {"enum", json::array({"16_colors", "256_colors", "32k_colors", "16m_colors"})},
-                    {"description", "custom: default 16_colors. 16m_colors only on the MA and MX."}
+                    {"description", "custom: default 16_colors. 16m_colors only on the MA, MX and HC."}
                 }},
                 {"width", {
                     {"type", "integer"},

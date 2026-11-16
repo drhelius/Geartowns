@@ -52,6 +52,7 @@ enum I386RegId
     I386RegId_CR0,
     I386RegId_CR2,
     I386RegId_CR3,
+    I386RegId_CR4,
 
     I386RegId_DR0,
     I386RegId_DR1,
@@ -305,6 +306,7 @@ static void I386WriteCallback32(u16 reg_id, u32 value, void* user_data)
                 state.cr3 = value;
                 pc_changed = true;
                 break;
+            case I386RegId_CR4: state.cr4 = value & k_i386_cr4_writable; break;
             case I386RegId_DR0: state.debug_registers[0] = value; break;
             case I386RegId_DR1: state.debug_registers[1] = value; break;
             case I386RegId_DR2: state.debug_registers[2] = value; break;
@@ -635,7 +637,7 @@ static void draw_debug_registers(I386* cpu, const I386_State& state)
         for (int i = 0; i < 11; i++)
         {
             ImGui::TableNextColumn();
-            ImGui::BeginDisabled(i >= 6 && i <= 8 && !cpu->IsI486());
+            ImGui::BeginDisabled((i >= 6 && i <= 8 && !cpu->IsI486()) || (i >= 6 && cpu->IsI586()));
             ImGui::TextColored(violet, "%s", k_names[i]);
             ImGui::SameLine();
             EditableRegister32(NULL, NULL, k_ids[i], values[i], I386WriteCallback32, cpu, EditableRegisterFlags_None);
@@ -644,6 +646,59 @@ static void draw_debug_registers(I386* cpu, const I386_State& state)
 
         ImGui::EndTable();
     }
+
+    draw_section_title("MODEL-SPECIFIC REGISTERS");
+
+    static const char* k_msr_names[I386_MSR_COUNT] =
+    {
+        "MC ADDRESS", "MC TYPE", "TR1", NULL, "TR2", "TR3", "TR4", "TR5", "TR6", "TR7", NULL, "TR9", "TR10", "TR11",
+        "TR12", NULL, "TSC", "CESR", "CTR0", "CTR1"
+    };
+
+    if (ImGui::BeginTable("i386_msrs", 2, flags))
+    {
+        ImGui::BeginDisabled(!cpu->IsI586());
+
+        for (u32 i = 0; i < I386_MSR_COUNT; i++)
+        {
+            u64 value = 0;
+
+            if (!IsValidPointer(k_msr_names[i]))
+                continue;
+
+            ImGui::TableNextColumn();
+            ImGui::TextColored(violet, "%02Xh %-10s", i, k_msr_names[i]);
+            ImGui::SameLine();
+
+            if (cpu->IsI586() && cpu->PeekMSR(i, value))
+                ImGui::Text("%08X%08X", (u32)(value >> 32), (u32)value);
+            else
+                ImGui::TextColored(gray, "%-16s", "--");
+        }
+
+        ImGui::EndDisabled();
+        ImGui::EndTable();
+    }
+}
+
+const char* gui_debug_i386_cpu_name(void)
+{
+    static char name[32];
+    snprintf(name, sizeof(name), "Intel %s", k_machine_cpus[emu_get_core()->GetMachineConfig().cpu].name);
+    return name;
+}
+
+const char* gui_debug_i386_fpu_name(void)
+{
+    const GT_Machine_CPU_Info& cpu = k_machine_cpus[emu_get_core()->GetMachineConfig().cpu];
+
+    if (cpu.family == 3)
+        return "Intel 80387";
+
+    if (cpu.family == 4)
+        return cpu.fpu ? "Intel 80486 FPU" : "Intel 80487SX";
+
+    return "Intel Pentium FPU";
 }
 
 void gui_debug_window_i386(void)
@@ -651,7 +706,9 @@ void gui_debug_window_i386(void)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(6.0f, gui_main_menu_height + 6.0f), ImGuiCond_FirstUseEver);
 
-    ImGui::Begin("Intel 80386", &config_debug.show_processor, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize);
+    char title[64];
+    snprintf(title, sizeof(title), "%s###i386", gui_debug_i386_cpu_name());
+    ImGui::Begin(title, &config_debug.show_processor, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize);
 
     ImGui::PushFont(gui_default_font);
 
@@ -754,6 +811,9 @@ void gui_debug_window_i386(void)
             draw_register(cpu, "CR0", I386RegId_CR0, state.cr0, violet);
             draw_register(cpu, "CR2", I386RegId_CR2, state.cr2, violet);
             draw_register(cpu, "CR3", I386RegId_CR3, state.cr3, violet);
+            ImGui::BeginDisabled(!cpu->IsI586());
+            draw_register(cpu, "CR4", I386RegId_CR4, state.cr4, violet);
+            ImGui::EndDisabled();
 
             ImGui::EndTable();
         }
@@ -828,10 +888,11 @@ void gui_debug_window_i386_details(void)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(105, 235), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(566, 436), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(566, 616), ImGuiCond_FirstUseEver);
 
-    bool visible = ImGui::Begin("Intel 80386 System Registers", &config_debug.show_processor_details,
-        ImGuiWindowFlags_HorizontalScrollbar);
+    char title[64];
+    snprintf(title, sizeof(title), "%s System Registers###i386_details", gui_debug_i386_cpu_name());
+    bool visible = ImGui::Begin(title, &config_debug.show_processor_details, ImGuiWindowFlags_HorizontalScrollbar);
 
     if (visible)
     {

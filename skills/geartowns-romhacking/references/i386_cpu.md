@@ -4,7 +4,9 @@
 
 The FM Towns Model 1/2 uses an Intel 80386DX at 16 MHz; an 80387 coprocessor is optional. The 80386 has no
 on-chip cache. The FM Towns II HR uses an 80486SX at 20 MHz, which adds BSWAP, XADD, CMPXCHG, INVD, WBINVD and
-INVLPG, alignment checks and the bits marked 486 below; a 487SX card is optional. The system ROM starts in real mode. Towns OS combines MS-DOS with a 386 DOS extender: DOS runs in
+INVLPG, alignment checks and the bits marked 486 below; a 487SX card is optional. The FM Towns II HC uses a Pentium
+at 90 MHz with its FPU built in, which adds CPUID, RDTSC, CMPXCHG8B, RDMSR, WRMSR, CR4 and the model-specific
+registers. The system ROM starts in real mode. Towns OS combines MS-DOS with a 386 DOS extender: DOS runs in
 real mode and applications run as 32-bit protected-mode `.EXP` programs, one at a time, without using
 virtual-8086 mode as their environment. This reference covers the system architecture a debugger user needs; it is
 not an instruction set reference.

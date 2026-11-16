@@ -4,7 +4,9 @@
 
 The FM Towns Model 1/2 uses an Intel 80386DX at 16 MHz; an 80387 coprocessor is optional. The 80386 has no
 on-chip cache. The FM Towns II HR uses an 80486SX at 20 MHz, which adds BSWAP, XADD, CMPXCHG, INVD, WBINVD and
-INVLPG, alignment checks and the bits marked 486 below; a 487SX card is optional. The system ROM starts in real mode. Towns OS combines MS-DOS with a 386 DOS extender: DOS runs in
+INVLPG, alignment checks and the bits marked 486 below; a 487SX card is optional. The FM Towns II HC uses a Pentium
+at 90 MHz with its FPU built in, which adds CPUID, RDTSC, CMPXCHG8B, RDMSR, WRMSR, CR4 and the model-specific
+registers. The system ROM starts in real mode. Towns OS combines MS-DOS with a 386 DOS extender: DOS runs in
 real mode and applications run as 32-bit protected-mode `.EXP` programs, one at a time, without using
 virtual-8086 mode as their environment. This reference covers the system architecture a debugger user needs; it is
 not an instruction set reference.
@@ -249,8 +251,8 @@ single step (BS) and task switch (BT). The debugger's own breakpoints are separa
 
 - `get_i386_status` shows the registers and EFLAGS, `cs_eip` with `linear_pc` and `physical_pc`, CR0-CR3 with the CR0
   flags, `mode`, `cpl`, `iopl`, code and stack size, `last_exception`, the segment caches, GDTR, IDTR, LDTR, TR, the
-  debug and test registers, the 486's extras and the `fpu` when one is fitted. `write_i386_register` (`name`, hex
-  `value`) loads a register like the CPU does, failing on an invalid descriptor.
+  debug and test registers, the 486's extras, `cr4`, `tsc` and `msrs` on a Pentium and the `fpu` when one is fitted.
+  `write_i386_register` (`name`, hex `value`) loads a register like the CPU does, failing on an invalid descriptor.
 - `get_i386_descriptors` (`table` `gdt`, `ldt` or `idt`, `start`, `count`) decodes entries with gate targets and
   symbols; in real and VM86 mode `idt` is the IVT. `get_page_directory` and `translate_address` walk the paging of
   section 5.

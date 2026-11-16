@@ -47,6 +47,7 @@
 #include "rewind.h"
 #include "events.h"
 #include "game_focus.h"
+#include "debug/gui_debug_i386.h"
 #include "hotkeys.h"
 #include "input_macro.h"
 
@@ -482,7 +483,7 @@ static void menu_cdrom(void)
         {
             ImGui::BeginTooltip();
             ImGui::Text("Auto reads at the speed of the model's drive: 2x on");
-            ImGui::Text("the ME, MA, MX and MF/Fresh in high-speed mode, 1x on the rest.");
+            ImGui::Text("the ME, MA, MX, MF/Fresh and HC in high-speed mode, 1x on the rest.");
             ImGui::Text("Faster speeds may break software that doesn't expect them.");
             ImGui::EndTooltip();
         }
@@ -1178,7 +1179,7 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
         ImGui::BeginTooltip();
         ImGui::Text("It is recommended to leave this option on Auto.");
         ImGui::Text("Auto fits an 80387 or a 487SX if the game database asks for one");
-        ImGui::Text("or keeps the model's original: none, or the MX's built-in one.");
+        ImGui::Text("or keeps the model's original: none, or the built-in one of the MX and HC.");
         ImGui::Text("Reset the emulator to apply changes.");
         ImGui::EndTooltip();
     }
@@ -2168,7 +2169,10 @@ static void menu_debug(void)
 
         ImGui::Separator();
 
-        if (ImGui::BeginMenu("Intel 80386", config_debug.debug))
+        char cpu_menu[64];
+        snprintf(cpu_menu, sizeof(cpu_menu), "%s###debug_cpu", gui_debug_i386_cpu_name());
+
+        if (ImGui::BeginMenu(cpu_menu, config_debug.debug))
         {
             ImGui::MenuItem("Show Status", "", &config_debug.show_processor);
             ImGui::MenuItem("Show System Registers", "", &config_debug.show_processor_details);
@@ -2180,7 +2184,10 @@ static void menu_debug(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Intel 80387", config_debug.debug))
+        char fpu_menu[64];
+        snprintf(fpu_menu, sizeof(fpu_menu), "%s###debug_fpu", gui_debug_i386_fpu_name());
+
+        if (ImGui::BeginMenu(fpu_menu, config_debug.debug))
         {
             ImGui::MenuItem("Show Status", "", &config_debug.show_x87);
             ImGui::EndMenu();

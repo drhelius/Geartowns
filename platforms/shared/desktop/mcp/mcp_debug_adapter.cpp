@@ -1400,6 +1400,13 @@ json DebugAdapter::GetI386Status()
     status["cr2"] = Hex32(state.cr2);
     status["cr3"] = Hex32(state.cr3);
 
+    if (cpu->IsI586())
+    {
+        u64 tsc = cpu->GetTimeStamp();
+        status["cr4"] = Hex32(state.cr4);
+        status["tsc"] = Hex32((u32)(tsc >> 32)) + Hex32((u32)tsc);
+    }
+
     json cr0_flags;
 
     for (size_t i = 0; i < sizeof(k_mcp_cr0_flags) / sizeof(k_mcp_cr0_flags[0]); i++)
@@ -1472,12 +1479,28 @@ json DebugAdapter::GetI386Status()
     };
     status["test_registers"] = {{"tr6", Hex32(state.test_registers[0])}, {"tr7", Hex32(state.test_registers[1])}};
 
-    if (cpu->IsI486())
+    if (cpu->IsI486() && !cpu->IsI586())
     {
         const u32* cache = cpu->GetCacheTestRegisters();
         status["test_registers"]["tr3"] = Hex32(cache[0]);
         status["test_registers"]["tr4"] = Hex32(cache[1]);
         status["test_registers"]["tr5"] = Hex32(cache[2]);
+    }
+
+    if (cpu->IsI586())
+    {
+        status["test_registers"] = json();
+        json msrs = json::object();
+
+        for (u32 i = 0; i < I386_MSR_COUNT; i++)
+        {
+            u64 value = 0;
+
+            if (cpu->PeekMSR(i, value))
+                msrs[Hex(i, 2)] = Hex32((u32)(value >> 32)) + Hex32((u32)value);
+        }
+
+        status["msrs"] = msrs;
     }
     status["fpu"] = m_core->GetMachineConfig().fpu ? GetX87Status() : json();
 
@@ -1588,6 +1611,8 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
         state.cr3 = value;
         pc_changed = true;
     }
+    else if (reg == "CR4" && cpu->IsI586())
+        state.cr4 = value & k_i386_cr4_writable;
     else if (reg.size() == 3 && reg[0] == 'D' && reg[1] == 'R' && reg[2] >= '0' && reg[2] <= '7')
         state.debug_registers[reg[2] - '0'] = value;
     else if (reg == "TR6" || reg == "TR7")
@@ -1613,8 +1638,9 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
             return {{"error", text}};
     }
     else
-        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR3-TR5 "
-            "(486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits are 16-bit)"}};
+        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, CR4 (Pentium), "
+            "DR0-DR7, TR3-TR5 (486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits "
+            "are 16-bit)"}};
 
     state.repeat.active = false;
     cpu->SetState(state);
@@ -2679,7 +2705,7 @@ json DebugAdapter::GetHiresCRTCStatus()
     Video* video = m_core->GetVideo();
 
     if (!video->HasHiresCRTC())
-        return {{"error", "This machine has no high-resolution CRTC, only the MA and MX do"}};
+        return {{"error", "This machine has no high-resolution CRTC, only the MA, MX and HC do"}};
 
     HiresCRTC* crtc = video->GetHiresCRTC();
     const HiresCRTC::HiresCRTC_State* state = crtc->GetState();
@@ -2738,7 +2764,7 @@ json DebugAdapter::WriteHiresCRTCRegister(int reg, u32 value)
     Video* video = m_core->GetVideo();
 
     if (!video->HasHiresCRTC())
-        return {{"error", "This machine has no high-resolution CRTC, only the MA and MX do"}};
+        return {{"error", "This machine has no high-resolution CRTC, only the MA, MX and HC do"}};
 
     if (reg < 0 || reg >= HIRES_CRTC_REGISTER_COUNT)
         return {{"error", "Register must be 0-2FF"}};
@@ -2962,7 +2988,7 @@ json DebugAdapter::GetFrameBuffer(const std::string& buffer, const json& argumen
         request.height = arguments.value("height", 256);
 
         if (request.format == 0)
-            return {{"error", "format must be 16_colors, 256_colors, 32k_colors, or 16m_colors on the MA and MX"}};
+            return {{"error", "format must be 16_colors, 256_colors, 32k_colors, or 16m_colors on the MA, MX and HC"}};
 
         if (request.palette < 0)
             return {{"error", "palette must be layer0, layer1 or 256"}};

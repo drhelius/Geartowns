@@ -32,15 +32,26 @@ INLINE u64 Scheduler::GetClocks() const
     return m_state.clocks;
 }
 
+INLINE const u64* Scheduler::GetCyclesPointer() const
+{
+    return &m_state.cycles;
+}
+
 INLINE void Scheduler::AddClocks(u32 clocks)
 {
     m_state.clocks += clocks;
+
+    u64 scaled = ((u64)clocks * m_cpu_clock_rate) + m_state.clock_remainder;
+    m_state.cycles += scaled / GT_MACHINE_CLOCK_RATE;
+    m_state.clock_remainder = (u32)(scaled % GT_MACHINE_CLOCK_RATE);
 }
 
 // CPU cycles become machine clocks at the configured CPU speed
 // The remainder carries over so no cycle is lost between slices
 INLINE void Scheduler::AddCycles(u32 cycles)
 {
+    m_state.cycles += cycles;
+
     if (m_cpu_clock_rate == GT_MACHINE_CLOCK_RATE)
     {
         m_state.clocks += cycles;

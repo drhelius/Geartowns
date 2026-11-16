@@ -11,7 +11,7 @@ The x87 is the floating point unit behind the ESC opcodes D8h–DFh and WAIT (9B
 | HR, ME, MA, MF/Fresh | 80486SX | 487SX (ODP) card, optional |
 | UR | 80486SX | None, no socket |
 | MX | 80486DX2 | Integrated, always present |
-| HC | Pentium | Not emulated |
+| HC | Pentium | Integrated, always present |
 
 - **Setting:** `fpu` is `auto`, `none` or `80387` (a 487SX on the 486SX models), from `--fpu`, the machine menu or
   the settings, applied at the next reset (`reset_pending` in `get_system_status`). **Auto fits none**, except where the

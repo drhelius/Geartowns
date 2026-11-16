@@ -27,6 +27,7 @@
 #include "../gui.h"
 #include "../config.h"
 #include "../emu.h"
+#include "gui_debug_i386.h"
 
 struct X87BitDefinition
 {
@@ -62,7 +63,9 @@ void gui_debug_window_x87(void)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(80, 160), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(418, 557), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Intel 80387", &config_debug.show_x87);
+    char title[64];
+    snprintf(title, sizeof(title), "%s###x87", gui_debug_i386_fpu_name());
+    ImGui::Begin(title, &config_debug.show_x87);
 
     ImGui::PushFont(gui_default_font);
 

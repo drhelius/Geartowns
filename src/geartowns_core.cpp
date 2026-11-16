@@ -262,6 +262,7 @@ void GeartownsCore::Init()
         m_keyboard, m_input, m_rtc, m_dma, m_memory_card);
     m_i386->Init(m_memory, m_io);
     m_i386->SetDecodedPorts(m_io->GetDecodedPorts());
+    m_i386->SetTimeStampSource(m_scheduler->GetCyclesPointer());
     m_video->GetSprite()->SetBusCycleCounts(m_i386->GetBusCycleCounts());
     m_input->Init();
     m_key_map->Init(&GeartownsCore::KeyMapCallback, this);
@@ -1786,7 +1787,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
         return false;
     }
 
-    m_scheduler->LoadState(stream);
+    m_scheduler->LoadState(stream, header.version);
     m_memory->LoadState(stream, header.version);
     m_i386->LoadState(stream, header.version);
     m_audio->LoadState(stream, header.version);
@@ -2538,7 +2539,8 @@ void GeartownsCore::ApplyBusTiming()
 
     u32 microsecond = cpu_clock_rate / 1000000;
     u32 cycle = 2 + m_i386->GetBusPortWait(true);
-    m_system_control->SetWriteWait(!m_i386->IsBusTimed() ? microsecond : microsecond > cycle ? microsecond - cycle : 0);
+    bool port_waits = m_i386->IsBusTimed() || m_i386->IsI586();
+    m_system_control->SetWriteWait(!port_waits ? microsecond : microsecond > cycle ? microsecond - cycle : 0);
 }
 
 void GeartownsCore::ApplyCdRomSpeed()

@@ -41,12 +41,12 @@ Standard formats and the line pitch the BIOS modes use:
 | 0450h/0452h | Sprite register index and data |
 | 0458h | VRAM write mask register index (bits 1-0) |
 | 045Ah/045Bh | VRAM write mask, low and high byte of the selected register |
-| 0470h | MA and MX: bit 7 clear means the high-resolution CRTC is built in, bits 6-0 read 1 (section 9) |
-| 0471h | MA and MX: VRAM in MiB, 1 |
-| 0472h/0473h | MA and MX: high-resolution CRTC register address, reads back |
-| 0474h-0477h | MA and MX: register data, by byte (section 9) |
-| 047Ah/047Bh | MA and MX: second gateway address |
-| 047Ch-047Fh | MA and MX: second gateway data, only register 0 exists: bit 2 is pack mode |
+| 0470h | MA, MX and HC: bit 7 clear means the high-resolution CRTC is built in, bits 6-0 read 1 (section 9) |
+| 0471h | MA, MX and HC: VRAM in MiB, 1 |
+| 0472h/0473h | MA, MX and HC: high-resolution CRTC register address, reads back |
+| 0474h-0477h | MA, MX and HC: register data, by byte (section 9) |
+| 047Ah/047Bh | MA, MX and HC: second gateway address |
+| 047Ch-047Fh | MA, MX and HC: second gateway data, only register 0 exists: bit 2 is pack mode |
 | 05C8h | Read: bit 7 text VRAM written (the read clears it) |
 | 05CAh | Write: clears the VSYNC interrupt (IRQ11) |
 | FD90h | Palette index |
@@ -175,7 +175,7 @@ layers; the text RAM at C8000h is held in Sprite RAM. See the memory_map resourc
 
 ---
 
-## 9. High-Resolution CRTC (MA and MX)
+## 9. High-Resolution CRTC (MA, MX and HC)
 
 A second CRTC with 1 MiB of VRAM, reached through 0472h and 0474h. It's on while register 000h bit 0 and 004h bit 0 are both
 set: frames, VSYNC, the interrupt and the sync status then follow it, and the compatibility output stops. The ROM selects and
@@ -216,7 +216,7 @@ Pixels are linear: 4 bpp starts in the low nibble, 16 bpp is GRB 5:5:5, 24 bpp i
   `vsync_irq_pending` and each layer's format, window, VRAM start, stride, zoom and visible size. `get_crtc_registers`
   lists the 32 registers with names and the 0440h index; `write_crtc_register` (`register` 0-31, 16-bit hex `value`)
   writes through 0440h/0442h like the CPU. `get_hires_crtc_status` and `write_hires_crtc_register` do the same for the
-  MA and MX of section 9.
+  MA, MX and HC of section 9.
 - `get_video_output_status` shows 0448h/044Ah (`mode`, `layer0_format`, `layer1_format`, `front_layer`,
   `palette_select`), the FDA0h layer enables, 044Ch status, the VRAM write mask and the FM-R display.
 - `get_palettes` (`all`, `layer0`, `layer1`, `256`, `digital`, `hires`) gives RGB888 colors; `in_use` tells which ones

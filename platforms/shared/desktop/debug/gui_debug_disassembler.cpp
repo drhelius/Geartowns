@@ -35,6 +35,7 @@
 #include "../gui_notifications.h"
 #include "gui_debug.h"
 #include "gui_debug_constants.h"
+#include "gui_debug_i386.h"
 #include "gui_debug_i386_tables.h"
 #include "../gui_colors.h"
 
@@ -514,7 +515,9 @@ void gui_debug_window_disassembler(void)
     ImGui::SetNextWindowPos(ImVec2(239.0f, gui_main_menu_height + 6.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(534, 575), ImGuiCond_FirstUseEver);
 
-    ImGui::Begin("Intel 80386 Disassembler", &config_debug.show_disassembler, ImGuiWindowFlags_MenuBar);
+    char title[64];
+    snprintf(title, sizeof(title), "%s Disassembler###i386_disassembler", gui_debug_i386_cpu_name());
+    ImGui::Begin(title, &config_debug.show_disassembler, ImGuiWindowFlags_MenuBar);
 
     disassembler_menu();
 
@@ -2011,7 +2014,9 @@ void gui_debug_window_call_stack(void)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
     ImGui::SetNextWindowPos(ImVec2(223, 101), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(450, 141), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Intel 80386 Call Stack", &config_debug.show_call_stack);
+    char title[64];
+    snprintf(title, sizeof(title), "%s Call Stack###i386_call_stack", gui_debug_i386_cpu_name());
+    ImGui::Begin(title, &config_debug.show_call_stack);
 
     I386* cpu = emu_get_core()->GetI386();
     const std::vector<I386_CallStackEntry>& stack = cpu->GetDisassemblerCallStack();

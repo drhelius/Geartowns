@@ -28,6 +28,8 @@
 
 EXTERN void gui_debug_window_i386(void);
 EXTERN void gui_debug_window_i386_details(void);
+EXTERN const char* gui_debug_i386_cpu_name(void);
+EXTERN const char* gui_debug_i386_fpu_name(void);
 
 #undef GUI_DEBUG_I386_IMPORT
 #undef EXTERN

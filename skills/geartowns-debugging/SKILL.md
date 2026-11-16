@@ -174,8 +174,8 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 
 ### CPU (Intel 80386)
 
-- `get_i386_status` — full CPU state: registers, EFLAGS, CR0/CR2/CR3, mode, CPL, IOPL, descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers, and the 80387 when fitted
-- `write_i386_register` — modify a register live (EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, CS-GS). Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode
+- `get_i386_status` — full CPU state: registers, EFLAGS, CR0/CR2/CR3, mode, CPL, IOPL, descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers, CR4, the TSC and the MSRs on a Pentium, and the FPU when fitted
+- `write_i386_register` — modify a register live (EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, CR4 on a Pentium, DR0-DR7, CS-GS). Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode
 - `get_i386_descriptors` — decode `gdt`, `ldt` or `idt` entries (`table`, `start`, `count`)
 - `get_page_directory` — present page-directory entries, or with `index` the present pages of that page table
 
@@ -192,7 +192,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 
 - `get_crtc_status` — dot clock, line and frame timing, beam position, the VSYNC IRQ, and per layer format, windows, VRAM start, stride, zoom and visible size
 - `get_crtc_registers` — the 32 CRTC registers R00-R1F with names
-- `get_hires_crtc_status` — the high-resolution CRTC of the MA and MX: timing, both pages, cursor, second gateway
+- `get_hires_crtc_status` — the high-resolution CRTC of the MA, MX and HC: timing, both pages, cursor, second gateway
 - `write_hires_crtc_register` — write one of its indirect registers (0-2FF)
 - `write_crtc_register` — write a CRTC register (0-31)
 - `get_video_output_status` — output controller: mode, layer formats, front layer, palette select, layer enables, VRAM write mask
@@ -206,7 +206,7 @@ Tracing is essential for understanding timing-sensitive code, interrupt handlers
 - `get_ym3438_status` — YM3438 FM: LFO, channel 3 mode, DAC, timers, per channel frequency, algorithm, feedback, pan and the four operators (optional `channel` 1-6)
 - `get_ym3438_registers` — the register file of one part (`part` 0 or 1)
 - `get_rf5c68_status` — RF5C68 PCM: sound enable, banks, IRQ mask, and each channel's envelope, pan, step, loop and play address
-- `get_pcm16_status` — 16-bit AD/DA PCM of the ME, MA, MX and MF/Fresh: direction, format, rate, DMA addresses and counts, buffer, IRQ route and causes, monitors
+- `get_pcm16_status` — 16-bit AD/DA PCM of the ME, MA, MX, MF/Fresh and HC: direction, format, rate, DMA addresses and counts, buffer, IRQ route and causes, monitors
 - `get_sound_status` — electronic volumes, FM and PCM mutes, output gate, sound interrupt causes and mask
 - `set_audio_mute` — mute `fm`, `pcm`, `cdda`, `buzzer` or `pcm16` (or one `channel`) in the debugger without changing emulated state; useful to isolate a sound source
 

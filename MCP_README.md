@@ -372,8 +372,8 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`; optional `speed` (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
 
 ### CPU & Registers
-- `get_i386_status` - Get the complete Intel 80386 status: general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode, CPL, IOPL, code and stack size, the last exception the CPU raised with its error code and return address (interrupts and `INT n` don't replace it), segment descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers, and on a 486 the AC flag, the CR0 bits CD, NW, AM, WP and NE, and TR3-TR5
-- `write_i386_register` - Write a register: EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, DR0-DR7, TR3-TR5 (486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE, IDTR_LIMIT. Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode; LDTR and TR load their LDT or TSS descriptor from the GDT
+- `get_i386_status` - Get the complete Intel 80386 status: general registers, EIP, EFLAGS bits, CS:EIP with linear and physical PC, CR0/CR2/CR3, mode, CPL, IOPL, code and stack size, the last exception the CPU raised with its error code and return address (interrupts and `INT n` don't replace it), segment descriptor caches, GDTR/IDTR/LDTR/TR, debug and test registers, on a 486 the AC flag, the CR0 bits CD, NW, AM, WP and NE, and TR3-TR5, and on a Pentium CR4, the time stamp counter and the model-specific registers
+- `write_i386_register` - Write a register: EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, CR4 (Pentium), DR0-DR7, TR3-TR5 (486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE, IDTR_LIMIT. Segment writes reload base and limit in real and VM86 mode and load the descriptor in protected mode; LDTR and TR load their LDT or TSS descriptor from the GDT
 - `get_i386_descriptors` - Decode `table` (`gdt`, `ldt`, `idt`) entries from `start`, up to `count`: selector, base, limit, type, DPL, flags, or gate targets with symbols; in real mode the IDT is the IVT, VM86 mode still uses the protected-mode gates
 - `get_page_directory` - List the present page-directory entries, or with `index` the present pages of that page table, with linear and physical addresses and flags
 
@@ -545,7 +545,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Video Hardware
 - `get_crtc_status` - Get the CRTC: dot clock, line and frame timing (rates are null while the CRTC is stopped), interlace, sync widths, beam line, dot, field and H/V state, the VSYNC IRQ, and per layer format, H/V windows, VRAM start (with the FA register), stride, HAJ, field offset, zoom and visible size
 - `get_crtc_registers` - Get the 32 CRTC registers R00-R1F with names and the selected index
-- `get_hires_crtc_status` - Get the high-resolution CRTC of the MA and MX: selected and running, clock, timing, display window, beam position, both pages, the palette select, the hardware cursor and the second gateway
+- `get_hires_crtc_status` - Get the high-resolution CRTC of the MA, MX and HC: selected and running, clock, timing, display window, beam position, both pages, the palette select, the hardware cursor and the second gateway
 - `write_hires_crtc_register` - Write an indirect register of the high-resolution CRTC through 0472/0474 like the CPU, byte by byte
 - `write_crtc_register` - Write a CRTC register (0-31) through the port path like a CPU write, so timing updates and the trace logger records it, restoring the index
 - `get_video_output_status` - Get the output controller (mode, layer formats, front layer, palette select), FDA0 layer enables, 044C status, the VRAM write mask and the FM-R display state
@@ -560,7 +560,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_ym3438_status` - Get the YM3438: LFO, channel 3 mode, DAC, timers, status, and per channel frequency and note, algorithm, feedback, pan, AMS, PMS and the four operators with envelope state and level; optional `channel` (1-6)
 - `get_ym3438_registers` - Get one part's register file as last written with register names, and the address latch; `part` (0 or 1)
 - `get_rf5c68_status` - Get the RF5C68: sound enable, channel and wave banks, IRQ mask and flags, and each channel's envelope, pan, step and playback rate, loop start, start and play address
-- `get_pcm16_status` - Get the 16-bit AD/DA PCM of the ME, MA, MX and MF/Fresh (0510-051F): direction, format, sample rate, transfer mode, A/D and D/A ready, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level and peak monitors, trigger level, volume 1 channel 2 and 3 gains and the raw registers
+- `get_pcm16_status` - Get the 16-bit AD/DA PCM of the ME, MA, MX, MF/Fresh and HC (0510-051F): direction, format, sample rate, transfer mode, A/D and D/A ready, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level and peak monitors, trigger level, volume 1 channel 2 and 3 gains and the raw registers
 - `get_sound_status` - Get both electronic volumes with gain, the 04D5 FM and PCM mutes and the 04EC output gate, the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes
 - `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`, `pcm16`) or one `channel` of it in the debugger; emulated state is unchanged
 

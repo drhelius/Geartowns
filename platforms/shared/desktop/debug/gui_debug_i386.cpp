@@ -341,7 +341,7 @@ static void draw_binary32(u32 value)
         BYTE_TO_BINARY((value >> 8) & 0xFF), BYTE_TO_BINARY(value & 0xFF));
 }
 
-static void draw_register_tooltip(const char* name, u32 value)
+static void draw_register_tooltip(const char* name, u32 value, ImVec4 color)
 {
     char ascii[5];
 
@@ -354,10 +354,10 @@ static void draw_register_tooltip(const char* name, u32 value)
     ascii[4] = 0;
 
     ImGui::BeginTooltip();
-    ImGui::TextColored(cyan, "%s", name);
-    ImGui::TextColored(cyan, "Hex: $%08X", value);
-    ImGui::TextColored(cyan, "Dec: %u (%d)", value, (s32)value);
-    ImGui::TextColored(cyan, "ASCII: %s", ascii);
+    ImGui::TextColored(color, "%s", name);
+    ImGui::TextColored(color, "Hex: $%08X", value);
+    ImGui::TextColored(color, "Dec: %u (%d)", value, (s32)value);
+    ImGui::TextColored(color, "ASCII: %s", ascii);
     draw_binary32(value);
     ImGui::EndTooltip();
 }
@@ -372,7 +372,7 @@ static void draw_register(I386* cpu, const char* name, u16 reg_id, u32 value, Im
     ImGui::EndGroup();
 
     if (ImGui::IsItemHovered())
-        draw_register_tooltip(name, value);
+        draw_register_tooltip(name, value, color);
 }
 
 static void draw_flags(u16 reg_id, u32 value, const I386FlagDefinition* flags, int count, I386* cpu)
@@ -753,7 +753,7 @@ void gui_debug_window_i386(void)
         EditableRegister32(NULL, NULL, I386RegId_EIP, state.eip, I386WriteCallback32, cpu, EditableRegisterFlags_None);
 
         if (ImGui::IsItemHovered())
-            draw_register_tooltip("EIP", state.eip);
+            draw_register_tooltip("EIP", state.eip, yellow);
 
         GT_Debug_Memory_Translation pc = { };
         cpu->DebugTranslateLogical(I386_SEGMENT_CS, state.eip, pc);
@@ -794,7 +794,7 @@ void gui_debug_window_i386(void)
             EditableRegisterFlags_None);
 
         if (ImGui::IsItemHovered())
-            draw_register_tooltip("ESP", state.registers[I386_REG_ESP].value);
+            draw_register_tooltip("ESP", state.registers[I386_REG_ESP].value, yellow);
 
         ImGui::PopID();
 

@@ -41,6 +41,7 @@
     <ClCompile Include="..\..\src\i386\i386_task.cpp" />
     <ClCompile Include="..\..\src\i386\exec_memory.cpp" />
     <ClCompile Include="..\..\src\i386\x87.cpp" />
+    <ClCompile Include="..\..\src\i386\x87_fast.cpp" />
     <ClCompile Include="..\..\src\media\media.cpp" />
     <ClCompile Include="..\..\src\media\media_file.cpp" />
     <ClCompile Include="..\..\src\media\media_file_native.cpp" />

@@ -211,6 +211,9 @@
     <ClCompile Include="..\..\src\i386\x87.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\i386\x87_fast.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\i386\i386_encoding.cpp">
       <Filter>src</Filter>
     </ClCompile>

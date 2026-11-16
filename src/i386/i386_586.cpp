@@ -946,7 +946,7 @@ void I386::UpdateBus586(const BusTiming& bus)
     }
 }
 
-void I386::Apply586Clocks()
+void I386::Apply586Clocks(const Static586* known)
 {
     const InstructionContext& c = m_instruction;
     u32 pending = m_586_wait;
@@ -959,14 +959,15 @@ void I386::Apply586Clocks()
     {
         u32 element = port ? (u32)m_step.clocks : Get586StringElement(c.opcode);
         m_586_pair = 0;
-        m_step.clocks = element + Fold586Memory(Get586Accesses(c) * m_586_memory_wait) + pending;
+        u32 accesses = IsValidPointer(known) ? known->accesses : Get586Accesses(c);
+        m_step.clocks = element + Fold586Memory(accesses * m_586_memory_wait) + pending;
         return;
     }
 
     bool escape = form.kind == I586_ESCAPE;
     bool jump = form.kind == I586_JUMP || form.kind == I586_LOOP;
     bool taken = jump && Is486Taken(c);
-    u32 prefixes = port ? 0 : Count586Prefixes(c, m_486_prefixes);
+    u32 prefixes = port ? 0 : IsValidPointer(known) ? known->prefixes : Count586Prefixes(c, m_486_prefixes);
     u32 busy = 0;
     u32 clocks = 0;
 
@@ -989,13 +990,16 @@ void I386::Apply586Clocks()
         }
     }
 
-    u32 pairing = Get586Pairing(c, m_486_prefixes);
-    u32 written = Get486Written(c);
+    u32 pairing = IsValidPointer(known) ? known->pairing : Get586Pairing(c, m_486_prefixes);
+    u32 written = IsValidPointer(known) ? known->written : Get486Written(c);
+    u32 named = IsValidPointer(known) ? known->named : Get586Named(c);
+    u32 address = IsValidPointer(known) ? known->address : Get586Address(c);
+    u32 accesses = IsValidPointer(known) ? known->accesses : Get586Accesses(c);
     u32 implicit = (pairing & (k_i586_push | k_i586_pop)) != 0 ? 1U << I386_REG_ESP : 0;
     u32 charged = 0;
-    u32 state = Pair586(m_586_pair, pairing, written | implicit, clocks, Get586Named(c), charged);
+    u32 state = Pair586(m_586_pair, pairing, written | implicit, clocks, named, charged);
     bool paired = (state & k_i586_paired) != 0;
-    u32 stalls = prefixes + ((m_486_written & Get586Address(c)) != 0 ? 1 : 0);
+    u32 stalls = prefixes + ((m_486_written & address) != 0 ? 1 : 0);
 
     if (jump && taken != Is586Backward(c))
         stalls += paired && form.kind == I586_JUMP ? 4 : 3;
@@ -1003,7 +1007,7 @@ void I386::Apply586Clocks()
     if (escape && !Is586FPUFree(c))
         stalls += Wait586FPU(m_io_start_cycles, busy);
 
-    stalls += Fold586Memory(Get586Accesses(c) * m_586_memory_wait);
+    stalls += Fold586Memory(accesses * m_586_memory_wait);
 
     m_486_written = m_step.exception ? 0 : (u8)(paired ? m_486_written | written : written);
     m_586_pair = m_step.exception ? 0 : state & ~k_i586_paired;

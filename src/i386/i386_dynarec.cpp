@@ -942,7 +942,7 @@ void I386::CoolDynarecPages()
 // and the slice budget covers every instruction up to the next check
 template<bool i486>
 uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-    uintptr_t settle, uintptr_t revert, uintptr_t memory)
+    uintptr_t settle, uintptr_t revert, uintptr_t memory, uintptr_t pairing, uintptr_t packed)
 {
     StepState& step = cpu->m_step;
     u16 old_task = cpu->m_state.task_register.selector;
@@ -976,7 +976,16 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
     if (unlikely(!cpu->ExecuteOPCode()))
         cpu->CompleteFault(old_task);
     else if (i486 && cpu->m_i586_timing && (step.instruction_completed || cpu->m_state.repeat.active))
-        cpu->Apply586Clocks();
+    {
+        Static586 known;
+        known.pairing = (u32)pairing;
+        known.named = (u32)packed & 0xFF;
+        known.address = ((u32)packed >> 8) & 0xFF;
+        known.written = (u8)(packed >> 16);
+        known.accesses = ((u32)packed >> 24) & 0xF;
+        known.prefixes = ((u32)packed >> 28) & 0xF;
+        cpu->Apply586Clocks((u32)pairing != k_i586_unknown ? &known : NULL);
+    }
     else if (i486 && (step.instruction_completed || cpu->m_state.repeat.active))
     {
         cpu->Apply486Clocks();
@@ -1037,9 +1046,9 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
 }
 
 template uintptr_t I386::DynarecStep<false>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-    uintptr_t settle, uintptr_t revert, uintptr_t memory);
+    uintptr_t settle, uintptr_t revert, uintptr_t memory, uintptr_t pairing, uintptr_t packed);
 template uintptr_t I386::DynarecStep<true>(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-    uintptr_t settle, uintptr_t revert, uintptr_t memory);
+    uintptr_t settle, uintptr_t revert, uintptr_t memory, uintptr_t pairing, uintptr_t packed);
 
 bool I386::Pairs586Entry(const DynarecBlock& block) const
 {

@@ -439,6 +439,11 @@ bool X87::Execute(const X87_Operation& operation, u8* operand)
     if (!control)
         UpdatePointers(operation);
 
+    return ExecuteDirect(operation, operand);
+}
+
+bool X87::ExecuteDirect(const X87_Operation& operation, u8* operand)
+{
     if (operation.memory)
         return ExecuteMemory(operation, operand);
 
@@ -1009,13 +1014,20 @@ void X87::Arithmetic(int operation, int destination, int source, bool pop)
         return;
     }
 
-    softfloat_status_t status = MakeStatus(m_state.control, false);
-    floatx80 result = Operate(operation, ToFloat(Read(destination)), ToFloat(Read(source)), status);
+    X87_Register result;
+    u32 flags = 0;
 
-    if (RaiseExceptions(status.softfloat_exceptionFlags) != 0)
+    if (!FastOperate(operation, Read(destination), Read(source), result, flags))
+    {
+        softfloat_status_t status = MakeStatus(m_state.control, false);
+        result = FromFloat(Operate(operation, ToFloat(Read(destination)), ToFloat(Read(source)), status));
+        flags = status.softfloat_exceptionFlags;
+    }
+
+    if (RaiseExceptions(flags) != 0)
         return;
 
-    Write(FromFloat(result), destination);
+    Write(result, destination);
 
     if (pop)
         Pop();
@@ -1031,15 +1043,25 @@ void X87::ArithmeticReal(int operation, u32 size, const u8* operand)
         return;
     }
 
-    softfloat_status_t status = MakeStatus(m_state.control, false);
-    floatx80 a = ToFloat(Read(0));
-    floatx80 result;
+    X87_Register value;
+    X87_Register fast;
+    u32 flags = 0;
 
-    if (!HandleNaN(a, size, operand, result, status))
-        result = Operate(operation, a, LoadRealOperand(size, operand, status), status);
+    if (!FastLoadReal(size, operand, value) || !FastOperate(operation, Read(0), value, fast, flags))
+    {
+        softfloat_status_t status = MakeStatus(m_state.control, false);
+        floatx80 a = ToFloat(Read(0));
+        floatx80 result;
 
-    if (RaiseExceptions(status.softfloat_exceptionFlags) == 0)
-        Write(FromFloat(result), 0);
+        if (!HandleNaN(a, size, operand, result, status))
+            result = Operate(operation, a, LoadRealOperand(size, operand, status), status);
+
+        fast = FromFloat(result);
+        flags = status.softfloat_exceptionFlags;
+    }
+
+    if (RaiseExceptions(flags) == 0)
+        Write(fast, 0);
 }
 
 void X87::ArithmeticInteger(int operation, s32 value)
@@ -1052,11 +1074,20 @@ void X87::ArithmeticInteger(int operation, s32 value)
         return;
     }
 
-    softfloat_status_t status = MakeStatus(m_state.control, false);
-    floatx80 result = Operate(operation, ToFloat(Read(0)), i32_to_extF80(value), status);
+    X87_Register operand;
+    X87_Register result;
+    u32 flags = 0;
+    FastLoadInteger(value, operand);
 
-    if (RaiseExceptions(status.softfloat_exceptionFlags) == 0)
-        Write(FromFloat(result), 0);
+    if (!FastOperate(operation, Read(0), operand, result, flags))
+    {
+        softfloat_status_t status = MakeStatus(m_state.control, false);
+        result = FromFloat(Operate(operation, ToFloat(Read(0)), i32_to_extF80(value), status));
+        flags = status.softfloat_exceptionFlags;
+    }
+
+    if (RaiseExceptions(flags) == 0)
+        Write(result, 0);
 }
 
 void X87::Compare(int source, int pops, bool quiet)
@@ -1074,11 +1105,19 @@ void X87::Compare(int source, int pops, bool quiet)
         return;
     }
 
-    softfloat_status_t status = MakeStatus(m_state.control, false);
-    int relation = extF80_compare(ToFloat(Read(0)), ToFloat(Read(source)), quiet ? 1 : 0, &status);
+    int relation = 0;
+    u32 flags = 0;
+
+    if (!FastCompare(Read(0), Read(source), relation))
+    {
+        softfloat_status_t status = MakeStatus(m_state.control, false);
+        relation = extF80_compare(ToFloat(Read(0)), ToFloat(Read(source)), quiet ? 1 : 0, &status);
+        flags = status.softfloat_exceptionFlags;
+    }
+
     SetConditionCodes(CompareCodes(relation));
 
-    if (RaiseExceptions(status.softfloat_exceptionFlags) != 0)
+    if (RaiseExceptions(flags) != 0)
         return;
 
     for (int i = 0; i < pops; i++)
@@ -1100,19 +1139,28 @@ void X87::CompareReal(u32 size, const u8* operand, bool pop)
         return;
     }
 
-    softfloat_status_t status = MakeStatus(m_state.control, false);
-    floatx80 a = ToFloat(Read(0));
-    bool b_nan = size == 4 ? f32_isNaN(LoadDword(operand)) : f64_isNaN(LoadQword(operand));
+    X87_Register value;
     int relation = softfloat_relation_unordered;
+    u32 flags = 0;
 
-    if (extF80_isNaN(a) || extF80_isUnsupported(a) || b_nan)
-        softfloat_raiseFlags(&status, softfloat_flag_invalid);
-    else
-        relation = extF80_compare(a, LoadRealOperand(size, operand, status), &status);
+    if (!FastLoadReal(size, operand, value) || !FastCompare(Read(0), value, relation))
+    {
+        softfloat_status_t status = MakeStatus(m_state.control, false);
+        floatx80 a = ToFloat(Read(0));
+        bool b_nan = size == 4 ? f32_isNaN(LoadDword(operand)) : f64_isNaN(LoadQword(operand));
+        relation = softfloat_relation_unordered;
+
+        if (extF80_isNaN(a) || extF80_isUnsupported(a) || b_nan)
+            softfloat_raiseFlags(&status, softfloat_flag_invalid);
+        else
+            relation = extF80_compare(a, LoadRealOperand(size, operand, status), &status);
+
+        flags = status.softfloat_exceptionFlags;
+    }
 
     SetConditionCodes(CompareCodes(relation));
 
-    if (RaiseExceptions(status.softfloat_exceptionFlags) == 0 && pop)
+    if (RaiseExceptions(flags) == 0 && pop)
         Pop();
 }
 
@@ -1131,11 +1179,21 @@ void X87::CompareInteger(s32 value, bool pop)
         return;
     }
 
-    softfloat_status_t status = MakeStatus(m_state.control, false);
-    int relation = extF80_compare(ToFloat(Read(0)), i32_to_extF80(value), &status);
+    X87_Register operand;
+    int relation = 0;
+    u32 flags = 0;
+    FastLoadInteger(value, operand);
+
+    if (!FastCompare(Read(0), operand, relation))
+    {
+        softfloat_status_t status = MakeStatus(m_state.control, false);
+        relation = extF80_compare(ToFloat(Read(0)), i32_to_extF80(value), &status);
+        flags = status.softfloat_exceptionFlags;
+    }
+
     SetConditionCodes(CompareCodes(relation));
 
-    if (RaiseExceptions(status.softfloat_exceptionFlags) == 0 && pop)
+    if (RaiseExceptions(flags) == 0 && pop)
         Pop();
 }
 
@@ -1356,11 +1414,17 @@ bool X87::StoreReal(u32 size, u8* operand, bool pop)
     }
     else
     {
-        softfloat_status_t status = MakeStatus(m_state.control, false);
-        floatx80 source = ToFloat(Read(0));
-        value = size == 4 ? (u64)extF80_to_f32(source, &status) : (u64)extF80_to_f64(source, &status);
+        u32 flags = 0;
 
-        if (RaiseExceptions(status.softfloat_exceptionFlags, true) != 0)
+        if (!FastStoreReal(size, value, flags))
+        {
+            softfloat_status_t status = MakeStatus(m_state.control, false);
+            floatx80 source = ToFloat(Read(0));
+            value = size == 4 ? (u64)extF80_to_f32(source, &status) : (u64)extF80_to_f64(source, &status);
+            flags = status.softfloat_exceptionFlags;
+        }
+
+        if (RaiseExceptions(flags, true) != 0)
             return false;
     }
 
@@ -1412,17 +1476,24 @@ bool X87::StoreInteger(u32 size, u8* operand, bool pop)
     }
     else
     {
-        softfloat_status_t status = MakeStatus(m_state.control, false);
-        floatx80 source = ToFloat(Read(0));
+        u32 flags = 0;
 
-        if (size == 2)
-            value = extF80_to_i16(source, &status);
-        else if (size == 4)
-            value = extF80_to_i32(source, &status);
-        else
-            value = extF80_to_i64(source, &status);
+        if (!FastStoreInteger(size, value, flags))
+        {
+            softfloat_status_t status = MakeStatus(m_state.control, false);
+            floatx80 source = ToFloat(Read(0));
 
-        if (RaiseExceptions(status.softfloat_exceptionFlags, true) != 0)
+            if (size == 2)
+                value = extF80_to_i16(source, &status);
+            else if (size == 4)
+                value = extF80_to_i32(source, &status);
+            else
+                value = extF80_to_i64(source, &status);
+
+            flags = status.softfloat_exceptionFlags;
+        }
+
+        if (RaiseExceptions(flags, true) != 0)
             return false;
     }
 

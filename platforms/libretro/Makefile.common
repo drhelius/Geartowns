@@ -64,6 +64,7 @@ SOURCES_CXX :=  $(DEPS_DIR)/bochs_fpu/bochs_fpu.cpp \
                 $(SOURCE_DIR)/i386/i386_task.cpp \
                 $(SOURCE_DIR)/i386/exec_memory.cpp \
                 $(SOURCE_DIR)/i386/x87.cpp \
+                $(SOURCE_DIR)/i386/x87_fast.cpp \
                 $(SOURCE_DIR)/input/input.cpp \
                 $(SOURCE_DIR)/input/keyboard.cpp \
                 $(SOURCE_DIR)/input/key_map.cpp \

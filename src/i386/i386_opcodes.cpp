@@ -2637,6 +2637,17 @@ void I386::Dynarec586Wait(I386* cpu, uintptr_t before, uintptr_t weight, uintptr
     cpu->m_dynarec_clocks += cpu->Wait586FPU(cpu->m_io_start_cycles, (u32)busy);
 }
 
+void I386::DynarecX87Direct(I386* cpu, uintptr_t host, uintptr_t form)
+{
+    X87_Operation operation = {};
+    operation.opcode = (u8)form;
+    operation.modrm = (u8)(form >> 8);
+    operation.memory = (form & (1 << 16)) != 0;
+    operation.operand32 = (form & (1 << 17)) != 0;
+    operation.protected_mode = (form & (1 << 18)) != 0;
+    cpu->m_x87->ExecuteDirect(operation, (u8*)host);
+}
+
 // EscapeCoprocessor past its checks, with the operand at host, its offset in the first temp, and the x87's clocks past
 // the fewest the block counted. form: the opcode, ModR/M from bit 8, the operand size from bit 16, 32-bit operands at
 // bit 20, protected mode at bit 21, a store at bit 22, clocks that depend on the data at bit 23 and the segment from

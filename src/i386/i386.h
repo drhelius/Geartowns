@@ -646,6 +646,16 @@ private:
 #endif
     };
 
+    struct Static586
+    {
+        u32 pairing;
+        u32 named;
+        u32 address;
+        u32 accesses;
+        u32 prefixes;
+        u8 written;
+    };
+
     struct StringContext
     {
         u8 width;
@@ -943,7 +953,7 @@ private:
     static uintptr_t DynarecFits(I386* cpu, uintptr_t block);
     template<bool i486>
     static uintptr_t DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks, uintptr_t before,
-        uintptr_t settle, uintptr_t revert, uintptr_t memory);
+        uintptr_t settle, uintptr_t revert, uintptr_t memory, uintptr_t pairing, uintptr_t packed);
     bool Pairs586Entry(const DynarecBlock& block) const;
     void Fold586To(u32 weight);
     s32 GetDynarecBusTime(const DynarecBusRun& run, u32 level) const;
@@ -961,6 +971,7 @@ private:
     static void DynarecDivide(I386* cpu, uintptr_t value, uintptr_t form);
     static void DynarecEscape(I386* cpu, uintptr_t host, uintptr_t form, uintptr_t eip, uintptr_t fewest);
     static void Dynarec586Wait(I386* cpu, uintptr_t before, uintptr_t weight, uintptr_t busy, uintptr_t first_mask);
+    static void DynarecX87Direct(I386* cpu, uintptr_t host, uintptr_t form);
     void GetEscapeClocks(const InstructionContext& c, u32& fewest, u32& most) const;
     template<bool i486>
     static uintptr_t DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site);
@@ -1123,7 +1134,7 @@ private:
     void Capture486Step();
     void Apply486Clocks();
     static void Init486Forms();
-    void Apply586Clocks();
+    void Apply586Clocks(const Static586* known = NULL);
     static void Init586Forms();
     u32 Get586Clocks(const InstructionContext& c, bool taken) const;
     u32 Get586EscapeClocks(const InstructionContext& c, u32& busy) const;
@@ -1789,6 +1800,7 @@ static const u32 k_i586_np = 0;
 static const u32 k_i586_uv = 1;
 static const u32 k_i586_pu = 2;
 static const u32 k_i586_pv = 3;
+static const u32 k_i586_unknown = 0xFFFFFFFFU;
 static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
 static const u8 k_i386_tlb_dirty = 0x08;

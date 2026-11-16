@@ -143,6 +143,8 @@ private:
         u32 pair_after;
         u32 weight_before;
         u32 weight_after;
+        u32 static_pairing;
+        u32 static_packed;
     };
 
     bool Decode(u32 available, u32 instruction_limit);
@@ -213,7 +215,7 @@ private:
     void ExitTo(u32 target, int steps, u32 clocks, int slot, const BusRun* run);
     void StoreEIP(u32 eip);
     void CallStep(const I386::DynarecCheck* check, u32 native_clocks, u32 before,
-        const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert, u32 memory = 0);
+        const I386::DynarecBusRun* settle, const I386::DynarecBusRun* revert, u32 memory, const Instruction& instruction);
     const I386::DynarecBusRun* AddBusRun(const BusRun& run);
     intptr_t Offset(const void* member) const;
     intptr_t RegisterOffset(int index, int width) const;
@@ -255,6 +257,10 @@ private:
     bool IsX87Store(const I386::InstructionContext& c) const;
     void EmitX87Store(Instruction& instruction, u32 first_mask);
     void EmitX87Wait(Instruction& instruction, u32 first_mask);
+    bool IsX87Direct(const I386::InstructionContext& c) const;
+    void EmitX87Direct(Instruction& instruction, u32 first_mask);
+    void EmitX87DirectCall(Instruction& instruction, u32 first_mask, u8 segment, int host);
+    void EmitX87Pointers(const I386::InstructionContext& c, u8 segment);
     void EmitX87Ready(jit_node* fallback);
     void EmitLoadControlWord(Instruction& instruction);
     bool IsX87Move(const I386::InstructionContext& c) const;

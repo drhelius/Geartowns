@@ -79,6 +79,7 @@ public:
     u16 GetStatusWord() const;
     u16 GetTagWord() const;
     bool Execute(const X87_Operation& operation, u8* operand);
+    bool ExecuteDirect(const X87_Operation& operation, u8* operand);
     u32 GetClocks(const X87_Operation& operation, const u8* operand) const;
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream);
@@ -118,6 +119,12 @@ private:
     void StackUnderflow(int index, bool pop);
     void UpdateErrorSummary();
 
+    bool FastOperate(int operation, const X87_Register& a, const X87_Register& b, X87_Register& result, u32& flags) const;
+    static bool FastCompare(const X87_Register& a, const X87_Register& b, int& relation);
+    static bool FastLoadReal(u32 size, const u8* operand, X87_Register& value);
+    static void FastLoadInteger(s32 value, X87_Register& result);
+    bool FastStoreInteger(u32 size, s64& value, u32& flags) const;
+    bool FastStoreReal(u32 size, u64& value, u32& flags) const;
     void Arithmetic(int operation, int destination, int source, bool pop);
     void ArithmeticReal(int operation, u32 size, const u8* operand);
     void ArithmeticInteger(int operation, s32 value);

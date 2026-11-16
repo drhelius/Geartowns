@@ -2265,7 +2265,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "list_save_state_slots"},
         {"title", "List Save State Slots"},
-        {"description", "List the 5 save state slots: media name, timestamp and screenshot."},
+        {"description", "List the 5 save state slots: media name, timestamp and whether it has a screenshot."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},

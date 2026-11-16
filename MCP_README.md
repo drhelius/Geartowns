@@ -59,6 +59,7 @@ These MCP Bundles (`.mcpb`) package Geartowns with its MCP server configuration 
 - **Storage Inspection**: CD-ROM TOC, CD audio and disc sectors; floppy drives, track sector lists and sector data; SCSI hard disks and their sectors
 - **Symbol Support**: Add, remove, load, list, and look up user symbols, plus automatic labels
 - **Input State**: Inspect effective pressed buttons, held keyboard keys and pending tap releases
+- **Input Macros**: Frame-timed scripts of pad buttons, mouse moves and clicks and keyboard keys
 - **Key Map**: Read and change the host key map and its per-game bindings, press host keys through it, and open or close the keyboard mapper
 - **Bookmarks**: Memory and disassembler bookmarks for navigation
 - **Call Stack**: View calls, interrupts and exceptions with their vectors
@@ -90,7 +91,7 @@ Media and machine can be set at launch too, for example `--cd game.cue --fd1 dis
 
 ### Pause When Inactive
 
-While the MCP server is running, the emulator keeps running when its window loses focus, even with **Pause When Inactive** enabled in the **Emulator** menu. The setting keeps its value and applies again once the server stops. Tools that wait for frames to run (`debug_step_frame`, `mouse_move`, `mouse_click`, `keyboard_type`) end with an error if emulation is paused from the GUI while they wait.
+While the MCP server is running, the emulator keeps running when its window loses focus, even with **Pause When Inactive** enabled in the **Emulator** menu. The setting keeps its value and applies again once the server stops. Tools that wait for frames to run (`debug_step_frame`, `mouse_move`, `mouse_click`, `keyboard_type`, `controller_macro`) end with an error if emulation is paused from the GUI while they wait.
 
 ### Concurrent Clients
 
@@ -328,6 +329,7 @@ Once configured, you can ask your AI assistant:
 - "Insert /path/to/disk.d77 in drive 0 and list the sectors of cylinder 0"
 - "Record a video of the next 600 frames to /path/to/clip.avi"
 - "Tap the A button on pad 1"
+- "Hold right on pad 1 for a second, then press A and B together"
 - "Type DIR and Return at the DOS prompt"
 
 ### Advanced Debugging Workflows
@@ -335,7 +337,7 @@ Once configured, you can ask your AI assistant:
 - "Find the IRQ11 VSYNC handler through the IDT, analyze what it does, and bookmark the routines it calls"
 - "Break when the game writes sprite entry 0 in Sprite RAM and show me the code that writes it"
 - "The game switches to protected mode during boot. Stop right after it loads the GDT and decode every descriptor"
-- "Find where this game keeps the player's lives in RAM using value-change searches, then add a watch on it"
+- "Find where this game keeps the player's lives in RAM using value-change searches, then freeze it"
 - "Follow a CD-ROM read: break on the READ command, inspect the DMA channel 3 address and the sectors that arrive"
 - "Disassemble the routine at 000C:00012345 in 32-bit mode with control flow and port names, and explain it"
 - "Trace 2 frames of instructions and I/O, then tell me what the VSYNC handler does"
@@ -379,13 +381,14 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `list_memory_areas` - List memory areas: LINEAR, PHYSICAL, I/O PORTS, and every memory region, with `id`, `name`, `size`, `unit_size`, `flags`, `physical_base`, `group` (`address_space`, `memory`, `rom`, `media`, `cpu_window`) and `description`. An area keeps its `id` when disks are inserted or ejected
 - `read_memory` - Read from a memory area; unmapped or unreadable bytes read as `??`. The LINEAR area takes logical addresses too
 - `write_memory` - Write hex `bytes` to a memory area; optional `repeat` writes them back to back that many times to fill a range, up to 1 MB in total. ROMs and I/O PORTS are read-only
+- `write_io_port` - Write an I/O `port` (hex, 0-FFFF) with a hex `value` as an OUT instruction does, between instructions: `size` 8 (default), 16 or 32. The device acts on it and the `io.writes` trace logs it, breakpoints don't stop it. It reaches every chip, such as the YM3438 (04D8-04DE), the electronic volumes (04E0/04E2), the output controller (0448/044A), the sprite controller (0450/0452) and the palette (FD90 onwards); reading the I/O PORTS area stays side-effect free
 - `translate_address` - Translate a logical or linear address: logical, linear, PDE and PTE with their indexes, page flags, physical, bus, region and offset, or the reason it fails
 - `get_memory_selection` - Get current memory selection range
 - `select_memory_range` - Select a range of memory addresses
 - `add_memory_bookmark` - Add bookmark in memory area
 - `remove_memory_bookmark` - Remove memory bookmark
 - `list_memory_bookmarks` - List all bookmarks in memory area
-- `add_memory_watch` - Add watch (tracked memory location), 8, 16, 32 or 64 bits
+- `add_memory_watch` - Add watch (tracked memory location), 8, 16, 32 or 64 bits; `freeze` holds the value it has now, written back every frame like a cheat until `remove_memory_watch`, and turns the debugger on, which runs the freeze
 - `remove_memory_watch` - Remove memory watch
 - `list_memory_watches` - List all watches in memory area with their values
 - `memory_search_capture` - Capture memory snapshot for search comparison; optional `start`, `size` (needed for areas over 64 MB) and `width` (8, 16, 32)
@@ -596,6 +599,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `insert_playlist_disc` - Insert playlist disc `index` (from the `get_cdrom_status` playlist) into the empty drive, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector
 - `insert_floppy` - Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, .mfm, an .m3u list or a .zip) in `drive`; optional `write_protected`
+- `create_blank_floppy` - Create a blank floppy image at an absolute `file_path` and insert it in `drive`, like New Blank Disk; an existing file is never replaced. `type` `2hd_1232kb` (default), `2dd_640kb`, `2dd_720kb` or `2hd_1440kb`; `formatted` true (default) makes an empty FAT12 disk, false an unformatted one (.d77 only). `.d77`, or `.hdm`, `.img` or `.xdf` for a raw image
 - `eject_floppy` - Eject the disk in `drive`, keeping its changes in the working copy
 - `swap_floppies` - Swap the disks in drives 0 and 1
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`
@@ -611,6 +615,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_input_state` - Get each port's device `type`, its `setting` (auto or a device), its `source` (explicit, database, default or fallback), `database_type` when an explicit choice contradicts the game database, effective pressed buttons, held keyboard keys and pending tap releases
 - `keyboard_key` - Press, release or tap a key of the JIS keyboard by name (RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, KP_ENTER, HIRAGANA...)
 - `keyboard_type` - Type ASCII text (up to 256 characters) through a frame macro on the JIS layout; optional `frames_per_key`
+- `controller_macro` - Run a frame-timed script of `commands`, each one of `tap`, `press` or `release` (a pad button as `controller_button` takes it, or a key name as `keyboard_key` takes it) or `wait` (1-1000 frames), optionally with its own `player` or `device`. `player` (1-2, default 1) and `device` (`pad`, default, or `keyboard`) set the defaults. A tap holds `tap_frames` (1-60, default 3) and leaves the same gap after. On a mouse port the directions move the mouse and A/B click, as with `controller_button`. It answers when the script ends with `commands`, `steps`, `frames_waited` and `held` (buttons and keys still pressed). It runs emulated frames, kept in rewind; a breakpoint, a pause from the GUI, a reset, state load or rewind stops it with an error and releases what it holds. For example `[{"tap":"run"},{"wait":30},{"press":"right"},{"wait":60},{"release":"right"},{"tap":"RETURN","device":"keyboard"}]`
 - `host_key` - Press, release or tap a host key through the key map, as the host keyboard would; while the keyboard mapper is open it goes to the mapper instead. Host keys are USB HID names (`a`, `up`, `kp_8`, `left_ctrl`, `f13`...); `press_and_release` releases after some frames
 - `get_key_map` - Get the key map of the running content: `enabled` (key mapping on), `mapper_open`, the per-game `.keys` `file`, the `user` bindings, `remapped` host keys with what they drive now, and the `unreachable` Towns keys no host key reaches
 - `set_key_binding` - Bind a `host` key to `keys` for this game and save its `.keys` file, as the keyboard mapper does: one Towns key, up to 4 joined with `+`, `none`, or `default` to drop the binding
@@ -634,7 +639,9 @@ Complete technical reference documentation for all FM Towns hardware components:
 - **FM Towns Memory Map** (`geartowns://hardware/memory_map`)
 - **FM Towns I/O Port Map** (`geartowns://hardware/io_ports`)
 - **Intel 80386 — What FM Towns Software Relies On** (`geartowns://hardware/i386_cpu`)
+- **Intel x87 FPU — What FM Towns Software Relies On** (`geartowns://hardware/x87_fpu`)
 - **FM Towns System Devices** (`geartowns://hardware/system`)
+- **FM Towns Input** (`geartowns://hardware/input`)
 - **FM Towns Video** (`geartowns://hardware/video`)
 - **FM Towns Sprites** (`geartowns://hardware/sprites`)
 - **FM Towns Sound** (`geartowns://hardware/sound`)

@@ -346,7 +346,7 @@ static void menu_geartowns(void)
             {
                 ImGui::PushItemWidth(190.0f);
                 ImGui::Combo("##video_recording_ratio", &config_video.recording_ratio,
-                    "Follow Screen\0Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0\0");
+                    "Follow Screen\0Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0Wide (16:10 DAR)\0\0");
                 ImGui::PopItemWidth();
                 ImGui::EndMenu();
             }
@@ -1470,7 +1470,7 @@ static void menu_video(void)
         {
             ImGui::PushItemWidth(190.0f);
             ImGui::Combo("##ratio", &config_video.ratio,
-                "Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0\0");
+                "Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0Wide (16:10 DAR)\0\0");
             ImGui::PopItemWidth();
             ImGui::EndMenu();
         }
@@ -2152,7 +2152,7 @@ static void menu_debug(void)
             {
                 ImGui::PushItemWidth(190.0f);
                 ImGui::Combo("##debug_ratio", &config_debug.ratio,
-                    "Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0\0");
+                    "Square Pixels (1:1 PAR)\0Standard (4:3 DAR)\0Wide (16:9 DAR)\0Wide (16:10 DAR)\0\0");
                 ImGui::PopItemWidth();
                 ImGui::EndMenu();
             }

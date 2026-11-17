@@ -1862,7 +1862,10 @@ void I386::SetMagicBreakpoint(bool enabled)
         return;
 
     m_magic_breakpoint = enabled;
+
+#if !defined(GT_DISABLE_DYNAREC)
     FlushDynarec();
+#endif
 }
 
 bool I386::IsMagicBreakpoint() const

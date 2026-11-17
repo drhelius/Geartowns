@@ -119,6 +119,11 @@ public:
 #endif
     u64 GetDebugSnapshotId() const;
     void InvalidateDebugSnapshot();
+    void SetDirtyTracking(bool enabled);
+    bool IsDirtyMapValid() const;
+    const u8* GetDirtyPages() const;
+    u32 GetDirtyPageCount() const;
+    void ClearDirtyPages();
 
     u8* GetWorkingRAM();
     size_t GetWorkingRAMSize() const;
@@ -181,6 +186,9 @@ private:
     void UpdateCPUPage(u32 page);
     void UpdateCPUPage(u32 page, const DebugRegion* region);
     void RemapRange(u32 base, u32 size);
+    void UpdateRAMPage(u32 page);
+    bool AllowsWritePointer(u32 page, const u8* host) const;
+    void MarkDirty(const DebugRegion* region, u32 offset, u32 size);
 #if !defined(GT_DISABLE_DYNAREC)
     void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size, bool changed);
 #endif
@@ -208,6 +216,11 @@ private:
 
     u8* m_working_ram;
     size_t m_working_ram_size;
+    u32 m_working_ram_base;
+    u8* m_dirty_pages;
+    u32 m_dirty_page_count;
+    bool m_dirty_tracking;
+    bool m_dirty_valid;
     u32 m_main_ram_size;
     Memory_State m_state;
 

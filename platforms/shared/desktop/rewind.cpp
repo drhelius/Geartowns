@@ -25,6 +25,7 @@
 #include "events.h"
 #include "geartowns.h"
 #include "common/memory_stream.h"
+#include "system/memory.h"
 #include "system/scheduler.h"
 #include "video/video.h"
 
@@ -82,6 +83,10 @@ static size_t delta_last_header = 0;
 static size_t delta_last_end = 0;
 static bool delta_copy = false;
 static bool delta_failed = false;
+static const u8* dirty_ram = NULL;
+static size_t dirty_ram_size = 0;
+static const u8* dirty_pages = NULL;
+static u32 dirty_page_count = 0;
 static u8 screen_tags[REWIND_SCREENSHOT_HEIGHT];
 static u8 screen_row[REWIND_SCREENSHOT_WIDTH * 2];
 #if defined(REWIND_CHECK)
@@ -114,6 +119,8 @@ static void apply_delta(u8* target, const u8* delta, u32 size);
 static void delta_begin(bool copy);
 static void delta_set_region(size_t position, size_t limit);
 static bool delta_write(const char* data, size_t size);
+static bool delta_compare(const u8* source, size_t position, size_t size);
+static bool delta_compare_dirty(const u8* source, size_t size);
 static bool delta_record(size_t offset, const u8* data, size_t length);
 static bool grow_encode_buffer(size_t needed);
 static u64 read_word(const u8* p);
@@ -140,6 +147,9 @@ void rewind_destroy(void)
 
 void rewind_reset(void)
 {
+    if (IsValidPointer(emu_get_core()))
+        emu_get_core()->GetMemory()->SetDirtyTracking(false);
+
     release_storage();
     frame_accum = 0;
     active = false;
@@ -180,6 +190,13 @@ void rewind_push(bool frame_completed)
     if (!IsValidPointer(newest) && !ensure_storage())
         return;
 
+    Memory* memory = emu_get_core()->GetMemory();
+    memory->SetDirtyTracking(true);
+    dirty_ram = memory->GetMainRAM();
+    dirty_ram_size = memory->GetMainRAMSize();
+    dirty_pages = memory->IsDirtyMapValid() ? memory->GetDirtyPages() : NULL;
+    dirty_page_count = memory->GetDirtyPageCount();
+
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
     size_t screen = get_screen_size(runtime.screen_width, runtime.screen_height);
@@ -198,6 +215,7 @@ void rewind_push(bool frame_completed)
         return;
     }
 
+    memory->ClearDirtyPages();
     screenshot_used = MAX(screenshot_used, screen);
 
     if ((count == slots) && !grow_slots())
@@ -983,10 +1001,51 @@ static bool delta_write(const char* data, size_t size)
         return true;
     }
 
+    bool ok = false;
+
+    if (IsValidPointer(dirty_pages) && (source == dirty_ram) && (size == dirty_ram_size))
+        ok = delta_compare_dirty(source, size);
+    else
+        ok = delta_compare(source, delta_position, size);
+
+    delta_position += size;
+    return ok;
+}
+
+static bool delta_compare_dirty(const u8* source, size_t size)
+{
+    for (u32 page = 0; page < dirty_page_count; page++)
+    {
+        size_t start = (size_t)page << 12;
+
+        if (start >= size)
+            break;
+
+        size_t length = MIN(size - start, (size_t)0x1000);
+        bool dirty = dirty_pages[page] != 0;
+
+#if defined(REWIND_CHECK)
+        if (!dirty && (memcmp(newest + delta_position + start, source + start, length) != 0))
+        {
+            dirty = true;
+            check_failed++;
+            Log("Rewind check: main RAM page %u changed without being marked", page);
+        }
+#endif
+
+        if (dirty && !delta_compare(source + start, delta_position + start, length))
+            return false;
+    }
+
+    return true;
+}
+
+static bool delta_compare(const u8* source, size_t position, size_t size)
+{
     for (size_t i = 0; i < size; i += REWIND_DIFF_CHUNK)
     {
         size_t length = MIN(size - i, (size_t)REWIND_DIFF_CHUNK);
-        const u8* reference = newest + delta_position + i;
+        const u8* reference = newest + position + i;
         const u8* chunk = source + i;
 
         if (memcmp(reference, chunk, length) == 0)
@@ -1018,12 +1077,11 @@ static bool delta_write(const char* data, size_t size)
             while (reference[last - 1] == chunk[last - 1])
                 last--;
 
-            if (!delta_record(delta_position + i + first, chunk + first, last - first))
+            if (!delta_record(position + i + first, chunk + first, last - first))
                 return false;
         }
     }
 
-    delta_position += size;
     return true;
 }
 

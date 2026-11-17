@@ -5717,8 +5717,8 @@ static bool IsMovedPointerPixel(const u32* before, const u32* out, int width, in
 static void FindPointerShift(const u32* before, const u32* out, int width, int height, const std::vector<int>& changed,
     int counts_x, int counts_y, int& shift_x, int& shift_y)
 {
-    int range_x = (abs(counts_x) * 2) + 8;
-    int range_y = (abs(counts_y) * 2) + 8;
+    int range_x = (int)(abs(counts_x) * k_mcp_mouse_max_scale) + 8;
+    int range_y = (int)(abs(counts_y) * k_mcp_mouse_max_scale) + 8;
     int sign_x = counts_x < 0 ? -1 : 1;
     int sign_y = counts_y < 0 ? -1 : 1;
     size_t stride = 1 + ((changed.size() * (size_t)(range_x + 1) * (size_t)(range_y + 1)) / k_mcp_mouse_max_search);

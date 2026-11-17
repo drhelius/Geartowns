@@ -124,6 +124,7 @@ enum McpMouseMotion
 static const int k_mcp_mouse_wiggle_counts = 32;
 static const int k_mcp_mouse_wiggle_max_counts = 128;
 static const int k_mcp_mouse_wiggle_tries = 3;
+static const double k_mcp_mouse_wiggle_gain = 4.0;
 static const int k_mcp_mouse_unseen_frames = 30;
 static const int k_mcp_mouse_settle_frames = 3;
 static const int k_mcp_mouse_stall_frames = 60;
@@ -1532,11 +1533,14 @@ private:
         bool known = m_debug_adapter->IsMousePointerKnown(macro.player);
         int x = macro.moves > 0 ? macro.target_x : (known ? pointer.x : 0);
         int y = macro.moves > 0 ? macro.target_y : (known ? pointer.y : 0);
-        int reach = (macro.wiggle_counts * 2) + 32;
+        double gain_x = known ? MAX(pointer.pixels_per_count_x, k_mcp_mouse_wiggle_gain) : k_mcp_mouse_wiggle_gain;
+        double gain_y = known ? MAX(pointer.pixels_per_count_y, k_mcp_mouse_wiggle_gain) : k_mcp_mouse_wiggle_gain;
+        int reach_x = (int)(macro.wiggle_counts * gain_x) + 32;
+        int reach_y = (int)(macro.wiggle_counts * gain_y) + 32;
         int sign = macro.wiggle_flip ? -1 : 1;
 
-        macro.wiggle_x = ((x + reach) < runtime.screen_width ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
-        macro.wiggle_y = ((y + reach) < runtime.screen_height ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
+        macro.wiggle_x = ((x + reach_x) < runtime.screen_width ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
+        macro.wiggle_y = ((y + reach_y) < runtime.screen_height ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
         macro.screen_width = runtime.screen_width;
         macro.screen_height = runtime.screen_height;
         capture_mouse_frame(macro.frame_before);

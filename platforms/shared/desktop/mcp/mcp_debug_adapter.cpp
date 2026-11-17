@@ -5751,6 +5751,67 @@ static void FindPointerShift(const u32* before, const u32* out, int width, int h
     }
 }
 
+static bool SplitPointerRegions(const std::vector<int>& changed, int width, int height, int counts_x, int counts_y,
+    std::vector<int>& pointer, int& shift_x, int& shift_y)
+{
+    int sign_x = counts_x < 0 ? -1 : 1;
+    int sign_y = counts_y < 0 ? -1 : 1;
+    std::vector<int> along(changed.size());
+
+    for (size_t i = 0; i < changed.size(); i++)
+        along[i] = ((changed[i] % width) * sign_x) + ((changed[i] / width) * sign_y);
+
+    std::vector<int> sorted(along);
+    std::sort(sorted.begin(), sorted.end());
+    int gap = 0;
+    int split = 0;
+
+    for (size_t i = 1; i < sorted.size(); i++)
+    {
+        if ((sorted[i] - sorted[i - 1]) > gap)
+        {
+            gap = sorted[i] - sorted[i - 1];
+            split = sorted[i];
+        }
+    }
+
+    if (gap < 2)
+        return false;
+
+    int old_left = width;
+    int old_top = height;
+    int new_left = width;
+    int new_top = height;
+    int new_count = 0;
+    pointer.clear();
+
+    for (size_t i = 0; i < changed.size(); i++)
+    {
+        int x = changed[i] % width;
+        int y = changed[i] / width;
+
+        if (along[i] < split)
+        {
+            pointer.push_back(changed[i]);
+            old_left = MIN(old_left, x);
+            old_top = MIN(old_top, y);
+        }
+        else
+        {
+            new_count++;
+            new_left = MIN(new_left, x);
+            new_top = MIN(new_top, y);
+        }
+    }
+
+    if (((int)pointer.size() < k_mcp_mouse_min_pixels) || (new_count < k_mcp_mouse_min_pixels))
+        return false;
+
+    shift_x = new_left - old_left;
+    shift_y = new_top - old_top;
+    return true;
+}
+
 bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* out, const u32* back, int width,
     int height, int counts_x, int counts_y, McpMouseMiss& miss, std::string& reason)
 {
@@ -5799,7 +5860,30 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
         bottom = MAX(bottom, y);
     }
 
-    if ((int)pointer.size() < k_mcp_mouse_min_pixels)
+    bool weak = ((int)pointer.size() < k_mcp_mouse_min_pixels) || ((pointer.size() * 4) < changed.size());
+    std::vector<int> split;
+    int split_x = 0;
+    int split_y = 0;
+
+    if (weak && SplitPointerRegions(changed, width, height, counts_x, counts_y, split, split_x, split_y))
+    {
+        pointer.swap(split);
+        shift_x = split_x;
+        shift_y = split_y;
+        left = width;
+        top = height;
+        right = -1;
+        bottom = -1;
+
+        for (size_t i = 0; i < pointer.size(); i++)
+        {
+            left = MIN(left, pointer[i] % width);
+            top = MIN(top, pointer[i] / width);
+            right = MAX(right, pointer[i] % width);
+            bottom = MAX(bottom, pointer[i] / width);
+        }
+    }
+    else if ((int)pointer.size() < k_mcp_mouse_min_pixels)
     {
         reason = "no group of pixels moved together";
         return false;

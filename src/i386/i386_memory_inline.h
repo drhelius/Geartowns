@@ -44,7 +44,7 @@ INLINE void I386::StoreHost(u8* data, u32 value, int width)
 }
 
 // Every entry point that can access guest memory refreshes the host page pointers first
-// The memory map can only change between CPU calls or through I/O, which ends the batch
+// The memory map can only change between CPU calls or through I/O and memory handlers, which end the batch
 INLINE void I386::SetBusContext(GT_Bus_Access_Context& context)
 {
     m_bus_context = &context;

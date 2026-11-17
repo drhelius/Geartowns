@@ -582,10 +582,15 @@ void Memory::Write16Physical(u32 physical, u16 value, GT_Bus_Access_Context& con
             if (IsValidPointer(region->write16))
             {
                 GT_Bus_Access_Context* outer = m_access_context;
+                u32 generation = m_map_generation;
                 m_access_context = &context;
                 region->write16(region->device, offset, value);
                 m_access_context = outer;
                 m_debug_snapshot_id += 2;
+
+                if (m_map_generation != generation)
+                    context.end_batch = true;
+
                 return;
             }
         }
@@ -622,10 +627,15 @@ void Memory::Write32Physical(u32 physical, u32 value, GT_Bus_Access_Context& con
             if (IsValidPointer(region->write32))
             {
                 GT_Bus_Access_Context* outer = m_access_context;
+                u32 generation = m_map_generation;
                 m_access_context = &context;
                 region->write32(region->device, offset, value);
                 m_access_context = outer;
                 m_debug_snapshot_id += 4;
+
+                if (m_map_generation != generation)
+                    context.end_batch = true;
+
                 return;
             }
         }
@@ -1469,9 +1479,13 @@ void Memory::WriteBus(u32 bus_address, u8 value, GT_Bus_Access_Context& context)
     if (IsValidPointer(region->write8))
     {
         GT_Bus_Access_Context* outer = m_access_context;
+        u32 generation = m_map_generation;
         m_access_context = &context;
         region->write8(region->device, offset, value);
         m_access_context = outer;
+
+        if (m_map_generation != generation)
+            context.end_batch = true;
     }
     else if (!IsProtectedSpan(region, offset, 1))
     {

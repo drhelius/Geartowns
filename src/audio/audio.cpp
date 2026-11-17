@@ -722,6 +722,7 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
 
 void Audio::SaveState(std::ostream& stream)
 {
+    m_rf5c68->Synchronize();
     StateSerializer serializer(stream);
     Serialize(serializer, GT_SAVESTATE_VERSION);
     m_ym3438->SaveState(stream);

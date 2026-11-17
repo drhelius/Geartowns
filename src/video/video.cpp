@@ -2257,12 +2257,16 @@ void Video::SanitizeState()
     m_state.fmr_display_planes &= 0x0F;
     m_state.kanji_high &= 0x7F;
     m_state.kanji_row &= 0x0F;
-    m_state.frame_line_clocks = MAX(m_state.frame_line_clocks, k_video_min_line_clocks);
-    m_state.frame_half_lines = MAX(m_state.frame_half_lines, k_video_min_half_lines);
-    m_state.event_half_line = MIN(m_state.event_half_line, m_state.frame_half_lines - 1);
 
-    if (m_state.frame_clock_rate == 0)
-        m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
+    if (m_state.running || (m_state.frame_line_clocks != 0))
+    {
+        m_state.frame_line_clocks = MAX(m_state.frame_line_clocks, k_video_min_line_clocks);
+        m_state.frame_half_lines = MAX(m_state.frame_half_lines, k_video_min_half_lines);
+        m_state.event_half_line = MIN(m_state.event_half_line, m_state.frame_half_lines - 1);
+
+        if (m_state.frame_clock_rate == 0)
+            m_state.frame_clock_rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
+    }
 
     m_canvas_zoom_x = CLAMP(m_canvas_zoom_x, 1U, 16U);
     m_canvas_zoom_y = CLAMP(m_canvas_zoom_y, 1U, 16U);

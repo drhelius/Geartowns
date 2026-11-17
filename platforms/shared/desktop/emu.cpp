@@ -77,7 +77,6 @@ static u8* rgba_frame_buffer = NULL;
 static bool audio_enabled = true;
 static McpManager* mcp_manager = NULL;
 static Uint64 rewind_last_counter = 0;
-static double rewind_pop_accumulator = 0.0;
 static bool video_recording_output = false;
 static bool emu_debug_step_start = false;
 static bool ffwd_loads = false;
@@ -101,7 +100,7 @@ static void reset_run_state(void);
 static const char* get_configurated_dir(int option, const char* path);
 static void get_video_recording_size(const GT_Runtime_Info& runtime, int* width, int* height);
 static void reset_rewind_timing(void);
-static int get_rewind_pop_budget(void);
+static double get_rewind_pop_seconds(void);
 static bool unload_media(void);
 static bool get_floppy_state_path(int index, char* path, size_t path_size);
 static void restore_state_frame(const char* path, int index);
@@ -289,9 +288,9 @@ void emu_update(void)
 
     if (rewind_is_active())
     {
-        int to_pop = get_rewind_pop_budget();
+        double seconds = get_rewind_pop_seconds();
 
-        if ((to_pop > 0) && rewind_pop(to_pop))
+        if ((seconds > 0.0) && rewind_pop(seconds))
             emu_video_frame_counter++;
 
         int silence_count = GT_AUDIO_QUEUE_SIZE;
@@ -395,7 +394,7 @@ void emu_update(void)
             emu_memory_card_update();
         }
 
-        rewind_push();
+        rewind_push(frame_completed);
 
         if (video_recorder_is_recording())
         {
@@ -2441,17 +2440,16 @@ static void stop_physical_cdrom_after_error(void)
 static void reset_rewind_timing(void)
 {
     rewind_last_counter = 0;
-    rewind_pop_accumulator = 0.0;
 }
 
-static int get_rewind_pop_budget(void)
+static double get_rewind_pop_seconds(void)
 {
     Uint64 now = SDL_GetPerformanceCounter();
 
     if (rewind_last_counter == 0)
     {
         rewind_last_counter = now;
-        return 0;
+        return 0.0;
     }
 
     double elapsed = (double)(now - rewind_last_counter) / (double)SDL_GetPerformanceFrequency();
@@ -2462,20 +2460,7 @@ static int get_rewind_pop_budget(void)
     else if (elapsed > 0.25)
         elapsed = 0.25;
 
-    int frames_per_snapshot = rewind_get_frames_per_snapshot();
-
-    if (frames_per_snapshot < 1)
-        frames_per_snapshot = 1;
-
-    double snapshots_per_second = (60.0 * (double)config_rewind.speed) / (double)frames_per_snapshot;
-    rewind_pop_accumulator += elapsed * snapshots_per_second;
-
-    int to_pop = (int)rewind_pop_accumulator;
-
-    if (to_pop > 0)
-        rewind_pop_accumulator -= (double)to_pop;
-
-    return to_pop;
+    return elapsed * (double)config_rewind.speed;
 }
 
 static bool init_debug(void)

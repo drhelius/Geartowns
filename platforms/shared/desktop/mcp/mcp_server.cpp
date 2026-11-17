@@ -2305,7 +2305,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_rewind_status"},
         {"title", "Get Rewind Status"},
-        {"description", "Read the rewind buffer: snapshots, capacity, buffered seconds, memory and settings."},
+        {"description", "Read the rewind buffer: snapshots, recorded seconds, memory use and budget, and settings."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

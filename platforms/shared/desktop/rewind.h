@@ -28,27 +28,34 @@
     #define EXTERN extern
 #endif
 
-#define REWIND_MAX_SNAPSHOTS        600
-#define REWIND_MAX_MEMORY_SIZE      (1024 * 1024 * 1024)
-#define REWIND_KEYFRAME_INTERVAL    60
-#define REWIND_KEYFRAME_POOL        2
-#define REWIND_DIFF_CHUNK           256
-#define REWIND_SCREENSHOT_WIDTH     GT_MAX_FRAME_BUFFER_WIDTH
-#define REWIND_SCREENSHOT_HEIGHT    GT_MAX_FRAME_BUFFER_HEIGHT
+#define REWIND_KEYFRAME_STATES          4
+#define REWIND_DIFF_CHUNK               256
+#define REWIND_ENCODE_INITIAL_SIZE      (1024 * 1024)
+#define REWIND_INITIAL_SLOTS            256
+#define REWIND_MEMORY_STEP_MB           128
+#define REWIND_MAX_FRAMES_PER_SNAPSHOT  60
+#define REWIND_SCREENSHOT_WIDTH         GT_MAX_FRAME_BUFFER_WIDTH
+#define REWIND_SCREENSHOT_HEIGHT        GT_MAX_FRAME_BUFFER_HEIGHT
+#define REWIND_CLOCK_RATE               GT_MACHINE_CLOCK_RATE
 
 EXTERN bool rewind_init(void);
 EXTERN void rewind_destroy(void);
 EXTERN void rewind_reset(void);
-EXTERN void rewind_push(void);
-EXTERN bool rewind_pop(int count);
+EXTERN void rewind_push(bool frame_completed);
+EXTERN bool rewind_pop(double seconds);
 EXTERN bool rewind_seek(int age);
 EXTERN void rewind_commit_seek(void);
 EXTERN void rewind_set_active(bool a);
 EXTERN bool rewind_is_active(void);
 EXTERN int rewind_get_snapshot_count(void);
-EXTERN int rewind_get_capacity(void);
+EXTERN int rewind_get_seek_age(void);
 EXTERN int rewind_get_frames_per_snapshot(void);
+EXTERN double rewind_get_recorded_seconds(void);
+EXTERN double rewind_get_age_seconds(int age);
 EXTERN size_t rewind_get_memory_usage(void);
+EXTERN size_t rewind_get_memory_budget(void);
+EXTERN int rewind_get_max_memory_mb(void);
+EXTERN int rewind_get_required_memory_mb(void);
 
 #undef REWIND_IMPORT
 #undef EXTERN

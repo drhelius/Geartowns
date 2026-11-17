@@ -27,8 +27,6 @@
 #include "../emu.h"
 #include "../rewind.h"
 
-static int seek_position = 0;
-
 static void draw_transport_bar(void);
 static void draw_timeline(void);
 
@@ -55,6 +53,7 @@ void gui_debug_window_rewind(void)
 static void draw_transport_bar(void)
 {
     int snapshot_count = rewind_get_snapshot_count();
+    int seek_position = MAX(rewind_get_seek_age(), 0);
     bool has_snapshots = snapshot_count > 0;
     bool is_empty = emu_is_empty();
     bool is_paused = emu_is_paused() || emu_is_debug_idle();
@@ -73,7 +72,6 @@ static void draw_transport_bar(void)
                 emu_debug_continue();
             else
                 emu_resume();
-            seek_position = 0;
         }
     }
     else
@@ -84,7 +82,6 @@ static void draw_transport_bar(void)
                 emu_debug_break();
             else
                 emu_pause();
-            seek_position = 0;
         }
     }
 
@@ -148,19 +145,12 @@ static void draw_timeline(void)
     }
 
     int max_age = snapshot_count - 1;
-
-    if (seek_position > max_age)
-        seek_position = max_age;
-
+    int seek_position = MIN(MAX(rewind_get_seek_age(), 0), max_age);
     int slider_val = max_age - seek_position;
 
-    int fps = rewind_get_frames_per_snapshot();
-    if (fps < 1)
-        fps = 1;
-
-    float age_seconds = (float)((double)(seek_position * fps) / emu_get_frame_rate());
     char label[64];
-    snprintf(label, sizeof(label), "%.1fs ago  (snapshot %d / %d)", age_seconds, slider_val + 1, snapshot_count);
+    snprintf(label, sizeof(label), "%.1fs ago  (snapshot %d / %d)", rewind_get_age_seconds(seek_position),
+        slider_val + 1, snapshot_count);
 
     ImGui::SetNextItemWidth(-1);
     if (ImGui::SliderInt("##rw_timeline", &slider_val, 0, max_age, label))
@@ -175,9 +165,5 @@ bool gui_debug_rewind_seek(int age)
     if (age < 0 || age >= snapshot_count)
         return false;
 
-    if (!rewind_seek(age))
-        return false;
-
-    seek_position = age;
-    return true;
+    return rewind_seek(age);
 }

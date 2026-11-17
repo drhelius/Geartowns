@@ -164,8 +164,8 @@ struct config_Audio
 struct config_Rewind
 {
     bool enabled;
-    int buffer_seconds;
     int frames_per_snapshot;
+    int memory_mb;
     float speed;
 };
 

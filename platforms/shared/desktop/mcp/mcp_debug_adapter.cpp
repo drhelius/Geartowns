@@ -6239,16 +6239,12 @@ json DebugAdapter::GetRewindStatus()
 {
     json result;
     result["enabled"] = config_rewind.enabled;
+    result["debug_mode"] = config_debug.debug;
     result["snapshot_count"] = rewind_get_snapshot_count();
-    result["capacity"] = rewind_get_capacity();
     result["frames_per_snapshot"] = rewind_get_frames_per_snapshot();
-    result["buffer_seconds"] = config_rewind.buffer_seconds;
-    result["memory_usage"] = rewind_get_memory_usage();
-
-    int fps = rewind_get_frames_per_snapshot();
-    if (fps < 1) fps = 1;
-    result["buffered_seconds"] = (double)(rewind_get_snapshot_count() * fps) / 60.0;
-
+    result["recorded_seconds"] = rewind_get_recorded_seconds();
+    result["memory_usage"] = (u64)rewind_get_memory_usage();
+    result["memory_budget"] = (u64)rewind_get_memory_budget();
     return result;
 }
 
@@ -6276,14 +6272,11 @@ json DebugAdapter::RewindSeek(int snapshot)
     I386_Debug_State state;
     cpu->CopyDebugState(state);
 
-    int fps = rewind_get_frames_per_snapshot();
-    if (fps < 1) fps = 1;
-
     json result;
     result["success"] = true;
     result["snapshot"] = snapshot;
     result["total"] = count;
-    result["age_seconds"] = (double)(age * fps) / 60.0;
+    result["age_seconds"] = rewind_get_age_seconds(age);
     result["cs"] = Hex(state.segment[I386_SEGMENT_CS].selector, 4);
     result["eip"] = Hex32(state.eip);
     result["linear_pc"] = Hex32(cpu->GetCurrentLinearPC());

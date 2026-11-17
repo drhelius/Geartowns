@@ -75,6 +75,11 @@ else
     LDFLAGS += -O3 -flto=auto
 endif
 
+REWIND_CHECK ?= 0
+ifeq ($(REWIND_CHECK), 1)
+    CPPFLAGS += -DREWIND_CHECK
+endif
+
 SANITIZE ?= 0
 ifeq ($(SANITIZE), 1)
     CPPFLAGS += -fsanitize=address,undefined -fno-sanitize-recover=all

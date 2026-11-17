@@ -305,7 +305,10 @@ static const char* const kMcpStateTools[] =
 
 static const char* const kMcpRewindTools[] =
 {
-    "get_rewind_status", "rewind_seek"
+    "get_rewind_status", "rewind_seek",
+#if defined(REWIND_CHECK)
+    "rewind_check",
+#endif
 };
 
 static const char* const kMcpInputTools[] =

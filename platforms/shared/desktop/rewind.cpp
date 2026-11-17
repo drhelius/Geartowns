@@ -43,6 +43,10 @@ struct Rewind_Snapshot
     int screen_height;
     int display_width;
     int display_height;
+#if defined(REWIND_CHECK)
+    u64 state_hash;
+    u64 screen_hash;
+#endif
     Video::Video_Frame_Info frame_info;
 };
 
@@ -77,6 +81,11 @@ static size_t delta_last_header = 0;
 static size_t delta_last_end = 0;
 static bool delta_copy = false;
 static bool delta_failed = false;
+#if defined(REWIND_CHECK)
+static u8* check_buffer = NULL;
+static int check_passed = 0;
+static int check_failed = 0;
+#endif
 
 static int slot_at(int age);
 static int get_frames_per_snapshot(void);
@@ -93,7 +102,7 @@ static void drop_newest(void);
 static void update_keyframe_debt(void);
 static size_t get_range_size(int from, int to);
 static void decode_snapshot(int age);
-static bool load_snapshot(const u8* blob, int index);
+static bool load_snapshot(const u8* blob, int age);
 static void apply_delta(u8* target, const u8* delta, u32 size);
 static void delta_begin(bool copy);
 static void delta_set_region(size_t position, size_t limit);
@@ -101,6 +110,11 @@ static bool delta_write(const char* data, size_t size);
 static bool delta_record(size_t offset, const u8* data, size_t length);
 static bool grow_encode_buffer(size_t needed);
 static u64 read_word(const u8* p);
+#if defined(REWIND_CHECK)
+static u64 check_hash(const u8* data, size_t size);
+static void check_blob(const char* what, const u8* blob, int age);
+static void check_round_trip(const u8* blob, int age);
+#endif
 
 bool rewind_init(void)
 {
@@ -219,6 +233,11 @@ void rewind_push(bool frame_completed)
     else
         call_stacks[head].clear();
 
+#if defined(REWIND_CHECK)
+    snapshot->state_hash = check_hash(newest, size);
+    snapshot->screen_hash = check_hash(newest + state_capacity, screen);
+#endif
+
     size_t used = get_used_size();
 
     if (config_debug.debug && (keyframe_debt >= (used * REWIND_KEYFRAME_STATES)))
@@ -264,7 +283,11 @@ bool rewind_pop(double seconds)
     for (int i = 1; i < pops; i++)
         drop_newest();
 
-    bool ok = load_snapshot(newest, slot_at(0));
+#if defined(REWIND_CHECK)
+    check_blob("Pop", newest, 0);
+#endif
+
+    bool ok = load_snapshot(newest, 0);
     drop_newest();
     update_keyframe_debt();
     return ok;
@@ -291,6 +314,10 @@ void rewind_commit_seek(void)
             u8* previous = newest;
             newest = work;
             work = previous;
+
+#if defined(REWIND_CHECK)
+            check_blob("Resume", newest, 0);
+#endif
         }
         else
         {
@@ -368,6 +395,14 @@ int rewind_get_required_memory_mb(void)
     return required_memory_mb;
 }
 
+#if defined(REWIND_CHECK)
+void rewind_get_check_counts(int* passed, int* failed)
+{
+    *passed = check_passed;
+    *failed = check_failed;
+}
+#endif
+
 bool rewind_seek(int age)
 {
     if (age < 0 || age >= count)
@@ -387,7 +422,11 @@ bool rewind_seek(int age)
         blob = work;
     }
 
-    bool ok = load_snapshot(blob, slot_at(age));
+#if defined(REWIND_CHECK)
+    check_blob("Seek", blob, age);
+#endif
+
+    bool ok = load_snapshot(blob, age);
 
     if (ok)
         seek_age = age;
@@ -487,6 +526,18 @@ static bool ensure_storage(void)
 
     memset(newest, 0, blob_size);
 
+#if defined(REWIND_CHECK)
+    check_buffer = new (std::nothrow) u8[state_capacity];
+
+    if (!IsValidPointer(check_buffer))
+    {
+        Log("Rewind: failed to allocate the %zu byte check buffer", state_capacity);
+        release_storage();
+        storage_failed_budget = budget;
+        return false;
+    }
+#endif
+
     Log("Rewind: %.1f MB snapshots, %d MB of memory", (double)blob_size / (1024.0 * 1024.0),
         (int)(budget / (1024 * 1024)));
     return true;
@@ -505,6 +556,9 @@ static void release_storage(void)
     SafeDeleteArray(newest);
     SafeDeleteArray(work);
     SafeDeleteArray(encode_buffer);
+#if defined(REWIND_CHECK)
+    SafeDeleteArray(check_buffer);
+#endif
     slots = 0;
     encode_capacity = 0;
     encode_limit = 0;
@@ -622,6 +676,10 @@ static void drop_newest(void)
     stored_size -= previous->delta_size;
     SafeDeleteArray(previous->delta);
     previous->delta_size = 0;
+
+#if defined(REWIND_CHECK)
+    check_blob("Drop", newest, 0);
+#endif
 }
 
 static void update_keyframe_debt(void)
@@ -731,13 +789,18 @@ static void decode_snapshot(int age)
     work_age = age;
 }
 
-static bool load_snapshot(const u8* blob, int index)
+static bool load_snapshot(const u8* blob, int age)
 {
+    int index = slot_at(age);
     Rewind_Snapshot* snapshot = &snapshots[index];
     bool ok = emu_get_core()->LoadState(blob, snapshot->state_size);
 
     if (ok)
     {
+#if defined(REWIND_CHECK)
+        check_round_trip(blob, age);
+#endif
+
         size_t screen = MIN((size_t)snapshot->screen_width * snapshot->screen_height * 4, screenshot_size);
         emu_debug_state_restored();
         emu_hard_disk_state_loaded(true);
@@ -916,3 +979,68 @@ static u64 read_word(const u8* p)
     memcpy(&value, p, 8);
     return value;
 }
+
+#if defined(REWIND_CHECK)
+static u64 check_hash(const u8* data, size_t size)
+{
+    u64 hash = 0xCBF29CE484222325ULL;
+    size_t i = 0;
+
+    for (; (i + 8) <= size; i += 8)
+        hash = (hash ^ read_word(data + i)) * 0x100000001B3ULL;
+
+    for (; i < size; i++)
+        hash = (hash ^ data[i]) * 0x100000001B3ULL;
+
+    return hash ^ size;
+}
+
+static void check_blob(const char* what, const u8* blob, int age)
+{
+    Rewind_Snapshot* snapshot = &snapshots[slot_at(age)];
+    size_t screen = MIN((size_t)snapshot->screen_width * snapshot->screen_height * 4, screenshot_size);
+    bool state = check_hash(blob, snapshot->state_size) == snapshot->state_hash;
+    bool picture = check_hash(blob + state_capacity, screen) == snapshot->screen_hash;
+
+    if (state && picture)
+    {
+        check_passed++;
+        return;
+    }
+
+    check_failed++;
+    Log("Rewind check: %s, snapshot %d of %d (%.4f s old): the %s differs", what, count - age, count,
+        rewind_get_age_seconds(age), state ? "screen" : (picture ? "state" : "state and the screen"));
+}
+
+static void check_round_trip(const u8* blob, int age)
+{
+    Rewind_Snapshot* snapshot = &snapshots[slot_at(age)];
+    size_t size = state_capacity;
+
+    if (!emu_get_core()->SaveState(check_buffer, size, false, false) || (size != snapshot->state_size))
+    {
+        check_failed++;
+        Log("Rewind check: snapshot %d of %d saves %zu bytes after loading, not %u", count - age, count, size,
+            snapshot->state_size);
+        return;
+    }
+
+    size_t compared = size - MIN(size, (size_t)REWIND_CHECK_HEADER_SIZE);
+
+    if (memcmp(check_buffer, blob, compared) == 0)
+    {
+        check_passed++;
+        return;
+    }
+
+    size_t offset = 0;
+
+    while (check_buffer[offset] == blob[offset])
+        offset++;
+
+    check_failed++;
+    Log("Rewind check: snapshot %d of %d saves differently after loading, first at byte %zu of %zu (%02X, was %02X)",
+        count - age, count, offset, size, check_buffer[offset], blob[offset]);
+}
+#endif

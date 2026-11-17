@@ -56,6 +56,10 @@ EXTERN size_t rewind_get_memory_usage(void);
 EXTERN size_t rewind_get_memory_budget(void);
 EXTERN int rewind_get_max_memory_mb(void);
 EXTERN int rewind_get_required_memory_mb(void);
+#if defined(REWIND_CHECK)
+#define REWIND_CHECK_HEADER_SIZE        sizeof(GT_SaveState_Header)
+EXTERN void rewind_get_check_counts(int* passed, int* failed);
+#endif
 
 #undef REWIND_IMPORT
 #undef EXTERN

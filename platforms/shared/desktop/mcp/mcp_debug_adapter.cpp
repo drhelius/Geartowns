@@ -6284,6 +6284,42 @@ json DebugAdapter::RewindSeek(int snapshot)
     return result;
 }
 
+#if defined(REWIND_CHECK)
+json DebugAdapter::RewindCheck(bool normal_mode, double pop_seconds)
+{
+    if (normal_mode)
+    {
+        config_debug.debug = false;
+        emu_resume();
+    }
+
+    bool popped = false;
+
+    if (pop_seconds > 0.0)
+    {
+        if (!emu_is_paused())
+            emu_pause();
+
+        rewind_set_active(true);
+        popped = rewind_pop(pop_seconds);
+        rewind_set_active(false);
+    }
+
+    int passed = 0;
+    int failed = 0;
+    rewind_get_check_counts(&passed, &failed);
+
+    json result;
+    result["popped"] = popped;
+    result["debug_mode"] = config_debug.debug;
+    result["snapshot_count"] = rewind_get_snapshot_count();
+    result["recorded_seconds"] = rewind_get_recorded_seconds();
+    result["check_passed"] = passed;
+    result["check_failed"] = failed;
+    return result;
+}
+#endif
+
 void DebugAdapter::ApplyControllerState(int player)
 {
     GT_GamePad_State state = {m_buttons[player - 1]};

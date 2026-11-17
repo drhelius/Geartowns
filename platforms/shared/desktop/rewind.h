@@ -34,6 +34,9 @@
 #define REWIND_INITIAL_SLOTS            256
 #define REWIND_MEMORY_STEP_MB           128
 #define REWIND_MAX_FRAMES_PER_SNAPSHOT  60
+#define REWIND_ROW_RAW                  0
+#define REWIND_ROW_SAME                 1
+#define REWIND_ROW_DOUBLED              2
 #define REWIND_SCREENSHOT_WIDTH         GT_MAX_FRAME_BUFFER_WIDTH
 #define REWIND_SCREENSHOT_HEIGHT        GT_MAX_FRAME_BUFFER_HEIGHT
 #define REWIND_CLOCK_RATE               GT_MACHINE_CLOCK_RATE

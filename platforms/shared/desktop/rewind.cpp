@@ -46,6 +46,7 @@ struct Rewind_Snapshot
 #if defined(REWIND_CHECK)
     u64 state_hash;
     u64 screen_hash;
+    u64 picture_hash;
 #endif
     Video::Video_Frame_Info frame_info;
 };
@@ -81,6 +82,8 @@ static size_t delta_last_header = 0;
 static size_t delta_last_end = 0;
 static bool delta_copy = false;
 static bool delta_failed = false;
+static u8 screen_tags[REWIND_SCREENSHOT_HEIGHT];
+static u8 screen_row[REWIND_SCREENSHOT_WIDTH * 2];
 #if defined(REWIND_CHECK)
 static u8* check_buffer = NULL;
 static int check_passed = 0;
@@ -90,6 +93,10 @@ static int check_failed = 0;
 static int slot_at(int age);
 static int get_frames_per_snapshot(void);
 static size_t get_used_size(void);
+static size_t get_screen_size(int width, int height);
+static bool write_screen(int width, int height);
+static void read_screen(const u8* blob, int width, int height);
+static bool is_row_doubled(const u8* row, int width);
 static bool ensure_storage(void);
 static void release_storage(void);
 static bool grow_slots(void);
@@ -114,6 +121,7 @@ static u64 read_word(const u8* p);
 static u64 check_hash(const u8* data, size_t size);
 static void check_blob(const char* what, const u8* blob, int age);
 static void check_round_trip(const u8* blob, int age);
+static void check_picture(int age);
 #endif
 
 bool rewind_init(void)
@@ -174,7 +182,7 @@ void rewind_push(bool frame_completed)
 
     GT_Runtime_Info runtime;
     emu_get_runtime(runtime);
-    size_t screen = MIN((size_t)runtime.screen_width * runtime.screen_height * 4, screenshot_size);
+    size_t screen = get_screen_size(runtime.screen_width, runtime.screen_height);
     callback_stream stream(delta_write);
     size_t size = 0;
     delta_begin(count == 0);
@@ -182,10 +190,7 @@ void rewind_push(bool frame_completed)
     bool saved = emu_get_core()->SaveState(stream, size, false, false);
 
     if (saved)
-    {
-        delta_set_region(state_capacity, blob_size);
-        saved = delta_write((const char*)emu_frame_buffer, screen);
-    }
+        saved = write_screen(runtime.screen_width, runtime.screen_height);
 
     if (!saved || delta_failed)
     {
@@ -236,6 +241,7 @@ void rewind_push(bool frame_completed)
 #if defined(REWIND_CHECK)
     snapshot->state_hash = check_hash(newest, size);
     snapshot->screen_hash = check_hash(newest + state_capacity, screen);
+    snapshot->picture_hash = check_hash(emu_frame_buffer, (size_t)runtime.screen_width * runtime.screen_height * 4);
 #endif
 
     size_t used = get_used_size();
@@ -481,6 +487,108 @@ static size_t get_used_size(void)
     return state_capacity + screenshot_used;
 }
 
+static size_t get_screen_size(int width, int height)
+{
+    if ((width <= 0) || (height <= 0) || (width > REWIND_SCREENSHOT_WIDTH) || (height > REWIND_SCREENSHOT_HEIGHT))
+        return 0;
+
+    return (((size_t)height + 7) & ~(size_t)7) + ((size_t)width * height * 4);
+}
+
+static bool write_screen(int width, int height)
+{
+    size_t size = get_screen_size(width, height);
+
+    if (size == 0)
+        return true;
+
+    size_t row_size = (size_t)width * 4;
+    size_t rows = state_capacity + size - (row_size * height);
+    const u8* frame = emu_frame_buffer;
+
+    for (int y = 0; y < height; y++)
+    {
+        const u8* row = frame + (row_size * y);
+
+        if ((y > 0) && (memcmp(row, row - row_size, row_size) == 0))
+            screen_tags[y] = REWIND_ROW_SAME;
+        else if (is_row_doubled(row, width))
+            screen_tags[y] = REWIND_ROW_DOUBLED;
+        else
+            screen_tags[y] = REWIND_ROW_RAW;
+    }
+
+    delta_set_region(state_capacity, rows);
+
+    if (!delta_write((const char*)screen_tags, height))
+        return false;
+
+    for (int y = 0; y < height; y++)
+    {
+        const u8* row = frame + (row_size * y);
+        delta_set_region(rows + (row_size * y), blob_size);
+
+        if (screen_tags[y] == REWIND_ROW_DOUBLED)
+        {
+            for (int x = 0; x < (width / 2); x++)
+                memcpy(screen_row + (x * 4), row + (x * 8), 4);
+
+            if (!delta_write((const char*)screen_row, row_size / 2))
+                return false;
+        }
+        else if ((screen_tags[y] == REWIND_ROW_RAW) && !delta_write((const char*)row, row_size))
+            return false;
+    }
+
+    return true;
+}
+
+static void read_screen(const u8* blob, int width, int height)
+{
+    size_t size = get_screen_size(width, height);
+
+    if (size == 0)
+        return;
+
+    size_t row_size = (size_t)width * 4;
+    const u8* tags = blob + state_capacity;
+    const u8* rows = tags + size - (row_size * height);
+    u8* frame = emu_frame_buffer;
+
+    for (int y = 0; y < height; y++)
+    {
+        u8* out = frame + (row_size * y);
+        const u8* in = rows + (row_size * y);
+
+        if ((tags[y] == REWIND_ROW_SAME) && (y > 0))
+            memcpy(out, out - row_size, row_size);
+        else if (tags[y] == REWIND_ROW_DOUBLED)
+        {
+            for (int x = 0; x < (width / 2); x++)
+            {
+                memcpy(out + (x * 8), in + (x * 4), 4);
+                memcpy(out + (x * 8) + 4, in + (x * 4), 4);
+            }
+        }
+        else
+            memcpy(out, in, row_size);
+    }
+}
+
+static bool is_row_doubled(const u8* row, int width)
+{
+    if ((width & 1) != 0)
+        return false;
+
+    for (int x = 0; x < width; x += 2)
+    {
+        if (memcmp(row + (x * 4), row + (x * 4) + 4, 4) != 0)
+            return false;
+    }
+
+    return true;
+}
+
 static bool ensure_storage(void)
 {
     size_t budget = rewind_get_memory_budget();
@@ -497,7 +605,7 @@ static bool ensure_storage(void)
     }
 
     state_capacity = (state_size + 7) & ~(size_t)7;
-    screenshot_size = (size_t)REWIND_SCREENSHOT_WIDTH * REWIND_SCREENSHOT_HEIGHT * 4;
+    screenshot_size = get_screen_size(REWIND_SCREENSHOT_WIDTH, REWIND_SCREENSHOT_HEIGHT);
     blob_size = state_capacity + screenshot_size;
 
     if ((blob_size * 2) > budget)
@@ -801,7 +909,6 @@ static bool load_snapshot(const u8* blob, int age)
         check_round_trip(blob, age);
 #endif
 
-        size_t screen = MIN((size_t)snapshot->screen_width * snapshot->screen_height * 4, screenshot_size);
         emu_debug_state_restored();
         emu_hard_disk_state_loaded(true);
         emu_memory_card_state_loaded(true);
@@ -809,7 +916,10 @@ static bool load_snapshot(const u8* blob, int age)
         emu_get_core()->GetVideo()->SetFrameSize(snapshot->screen_width, snapshot->screen_height,
             snapshot->display_width, snapshot->display_height);
         emu_get_core()->GetVideo()->SetFrameInfo(snapshot->frame_info);
-        memcpy(emu_frame_buffer, blob + state_capacity, screen);
+        read_screen(blob, snapshot->screen_width, snapshot->screen_height);
+#if defined(REWIND_CHECK)
+        check_picture(age);
+#endif
         events_sync_input();
         emu_reset_load_ffwd();
     }
@@ -998,7 +1108,7 @@ static u64 check_hash(const u8* data, size_t size)
 static void check_blob(const char* what, const u8* blob, int age)
 {
     Rewind_Snapshot* snapshot = &snapshots[slot_at(age)];
-    size_t screen = MIN((size_t)snapshot->screen_width * snapshot->screen_height * 4, screenshot_size);
+    size_t screen = get_screen_size(snapshot->screen_width, snapshot->screen_height);
     bool state = check_hash(blob, snapshot->state_size) == snapshot->state_hash;
     bool picture = check_hash(blob + state_capacity, screen) == snapshot->screen_hash;
 
@@ -1042,5 +1152,25 @@ static void check_round_trip(const u8* blob, int age)
     check_failed++;
     Log("Rewind check: snapshot %d of %d saves differently after loading, first at byte %zu of %zu (%02X, was %02X)",
         count - age, count, offset, size, check_buffer[offset], blob[offset]);
+}
+
+static void check_picture(int age)
+{
+    Rewind_Snapshot* snapshot = &snapshots[slot_at(age)];
+
+    if (get_screen_size(snapshot->screen_width, snapshot->screen_height) == 0)
+        return;
+
+    size_t size = (size_t)snapshot->screen_width * snapshot->screen_height * 4;
+
+    if (check_hash(emu_frame_buffer, size) == snapshot->picture_hash)
+    {
+        check_passed++;
+        return;
+    }
+
+    check_failed++;
+    Log("Rewind check: snapshot %d of %d (%.4f s old): the picture differs", count - age, count,
+        rewind_get_age_seconds(age));
 }
 #endif

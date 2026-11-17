@@ -17,7 +17,6 @@
  *
  */
 
-#include <SDL3/SDL.h>
 #include "emu.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
@@ -70,7 +69,6 @@ static int slots = 0;
 static int head = 0;
 static int count = 0;
 static int frame_accum = 0;
-static int max_memory_mb = 0;
 static int required_memory_mb = 0;
 static bool active = false;
 static int seek_age = -1;
@@ -186,6 +184,12 @@ void rewind_push(bool frame_completed)
     }
 
     frame_accum = 0;
+
+    if (IsValidPointer(newest) && ((blob_size * 2) > rewind_get_memory_budget()))
+    {
+        emu_get_core()->GetMemory()->SetDirtyTracking(false);
+        release_storage();
+    }
 
     if (!IsValidPointer(newest) && !ensure_storage())
         return;
@@ -397,21 +401,12 @@ size_t rewind_get_memory_usage(void)
 
 size_t rewind_get_memory_budget(void)
 {
-    int max = rewind_get_max_memory_mb();
-    int mb = CLAMP(config_rewind.memory_mb, REWIND_MEMORY_STEP_MB, max);
+    if (config_debug.debug)
+        return (size_t)REWIND_DEBUG_MEMORY_MB * 1024 * 1024;
+
+    int mb = CLAMP(config_rewind.memory_mb, REWIND_MEMORY_STEP_MB, REWIND_MEMORY_MAX_MB);
     mb -= mb % REWIND_MEMORY_STEP_MB;
     return (size_t)mb * 1024 * 1024;
-}
-
-int rewind_get_max_memory_mb(void)
-{
-    if (max_memory_mb == 0)
-    {
-        int half = SDL_GetSystemRAM() / 2;
-        max_memory_mb = MAX(half - (half % REWIND_MEMORY_STEP_MB), REWIND_MEMORY_STEP_MB);
-    }
-
-    return max_memory_mb;
 }
 
 int rewind_get_required_memory_mb(void)

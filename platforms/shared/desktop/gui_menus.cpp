@@ -380,7 +380,7 @@ static void menu_geartowns(void)
 
 static void menu_rewind(void)
 {
-    if (ImGui::MenuItem("Enabled", config_hotkeys[config_HotkeyIndex_Rewind].str, &config_rewind.enabled))
+    if (ImGui::MenuItem("Enabled", NULL, &config_rewind.enabled))
     {
         rewind_reset();
     }
@@ -388,12 +388,14 @@ static void menu_rewind(void)
     if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
+        if (config_hotkeys[config_HotkeyIndex_Rewind].str[0] != 0)
+            ImGui::Text("Hold %s to rewind.", config_hotkeys[config_HotkeyIndex_Rewind].str);
         ImGui::Text("Rewind uses save states while it runs, which costs performance.");
         ImGui::Text("If you don't use rewind, keep it disabled.");
         ImGui::EndTooltip();
     }
 
-    int max_steps = rewind_get_max_memory_mb() / REWIND_MEMORY_STEP_MB;
+    int max_steps = REWIND_MEMORY_MAX_MB / REWIND_MEMORY_STEP_MB;
     int steps = CLAMP(config_rewind.memory_mb / REWIND_MEMORY_STEP_MB, 1, max_steps);
     char memory_format[32];
     snprintf(memory_format, sizeof(memory_format), "%d MB", steps * REWIND_MEMORY_STEP_MB);
@@ -402,6 +404,15 @@ static void menu_rewind(void)
 
     ImGui::PushItemWidth(ImGui::CalcTextSize("Every 60 frames").x + (ImGui::GetStyle().FramePadding.x * 4.0f));
     ImGui::SliderFloat("Speed", &config_rewind.speed, 1.0f, 8.0f, "%.0fx");
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("How fast time goes back while rewinding.");
+        ImGui::Text("At 2x, each second held rewinds two seconds of play.");
+        ImGui::EndTooltip();
+    }
+
     ImGui::SliderInt("Rate", &config_rewind.frames_per_snapshot, 1, REWIND_MAX_FRAMES_PER_SNAPSHOT, rate_format, flags);
 
     if (ImGui::IsItemHovered())
@@ -421,6 +432,7 @@ static void menu_rewind(void)
         ImGui::BeginTooltip();
         ImGui::Text("The most memory rewind can use.");
         ImGui::Text("When it fills up, the oldest snapshots go.");
+        ImGui::Text("Debug mode always uses %d MB.", REWIND_DEBUG_MEMORY_MB);
         ImGui::EndTooltip();
     }
 

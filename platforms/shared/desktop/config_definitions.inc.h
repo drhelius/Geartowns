@@ -330,8 +330,8 @@ static inline void process(config_Operation operation)
     //**************************************
 
     CONFIG_BOOL("Rewind", "Enabled", config_rewind.enabled, false);
-    CONFIG_INT_RANGE("Rewind", "FramesPerSnapshot", config_rewind.frames_per_snapshot, 1, 1, 60);
-    CONFIG_INT_MIN("Rewind", "Memory", config_rewind.memory_mb, 1024, 128);
+    CONFIG_INT_RANGE("Rewind", "FramesPerSnapshot", config_rewind.frames_per_snapshot, 4, 1, 60);
+    CONFIG_INT_RANGE("Rewind", "Memory", config_rewind.memory_mb, 256, 128, 2048);
     CONFIG_FLOAT_RANGE("Rewind", "Speed", config_rewind.speed, 2.0f, 1.0f, 8.0f);
 
     //**************************************

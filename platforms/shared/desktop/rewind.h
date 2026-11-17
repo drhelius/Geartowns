@@ -33,6 +33,8 @@
 #define REWIND_ENCODE_INITIAL_SIZE      (1024 * 1024)
 #define REWIND_INITIAL_SLOTS            256
 #define REWIND_MEMORY_STEP_MB           128
+#define REWIND_MEMORY_MAX_MB            2048
+#define REWIND_DEBUG_MEMORY_MB          1024
 #define REWIND_MAX_FRAMES_PER_SNAPSHOT  60
 #define REWIND_ROW_RAW                  0
 #define REWIND_ROW_SAME                 1
@@ -57,7 +59,6 @@ EXTERN double rewind_get_recorded_seconds(void);
 EXTERN double rewind_get_age_seconds(int age);
 EXTERN size_t rewind_get_memory_usage(void);
 EXTERN size_t rewind_get_memory_budget(void);
-EXTERN int rewind_get_max_memory_mb(void);
 EXTERN int rewind_get_required_memory_mb(void);
 #if defined(REWIND_CHECK)
 #define REWIND_CHECK_HEADER_SIZE        sizeof(GT_SaveState_Header)

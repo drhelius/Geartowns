@@ -377,7 +377,7 @@ The emulator continuously records snapshots into a ring buffer during gameplay. 
 
 ### Workflow
 
-1. **Check availability**: `get_rewind_status` — returns snapshot count, capacity, buffered seconds
+1. **Check availability**: `get_rewind_status` — returns snapshot count, recorded seconds, memory use and budget
 2. **Pause**: `debug_pause` — the emulator must be paused before seeking
 3. **Seek**: `rewind_seek` with a snapshot number (1 = oldest, snapshot_count = newest)
 4. **Inspect**: `get_i386_status`, `get_disassembly`, `get_screenshot`, `read_memory`, etc.
@@ -388,7 +388,7 @@ The emulator continuously records snapshots into a ring buffer during gameplay. 
 
 | Tool | Description |
 |---|---|
-| `get_rewind_status` | Snapshot count, capacity, buffered seconds, configuration |
+| `get_rewind_status` | Snapshot count, recorded seconds, memory use and budget, configuration |
 | `rewind_seek` | Jump to snapshot N (1=oldest, count=newest). Non-destructive — can seek repeatedly |
 
 ### Key Details

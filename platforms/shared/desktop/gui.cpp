@@ -990,7 +990,19 @@ static void main_window(void)
     ImVec2 image_min = gui_snap_to_physical_pixel(ImGui::GetCursorScreenPos());
     ImVec2 image_max = image_min + image_size;
 
-    ImGui::Dummy(image_size);
+    if (image_w > 0.0f && image_h > 0.0f)
+    {
+        ImGui::InvisibleButton("##output_image", image_size, ImGuiButtonFlags_MouseButtonLeft |
+            ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+
+        if (ImGui::IsItemActive())
+            gui_main_window_hovered = true;
+
+        if (ImGui::GetCurrentContext()->ActiveIdPreviousFrame == ImGui::GetItemID())
+            gui_main_window_active = true;
+    }
+    else
+        ImGui::Dummy(image_size);
 
     if (window_visible)
     {

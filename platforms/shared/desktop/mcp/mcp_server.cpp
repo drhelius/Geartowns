@@ -2431,8 +2431,9 @@ json McpServer::BuildToolList()
         {"name", "keyboard_key"},
         {"title", "Keyboard Key"},
         {"description", "Press, release or tap a JIS keyboard key by name, e.g. RETURN, SPACE, A, 1, PF1, SHIFT, CTRL, "
-            "ESCAPE, UP, KP_ENTER, HIRAGANA. A press the keyboard can't queue returns dropped true with the reason. "
-            "Keys stay held until released, even when the window loses focus."},
+            "ESCAPE, UP, KP_ENTER, HIRAGANA, alone or with modifiers for a combination such as Ctrl+C or Shift+PF1. A "
+            "press the keyboard can't queue returns dropped true with the reason. Keys stay held until released, even "
+            "when the window loses focus."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2445,6 +2446,13 @@ json McpServer::BuildToolList()
                     {"type", "string"},
                     {"description", "press_and_release releases after some frames."},
                     {"enum", json::array({"press", "release", "press_and_release"})}
+                }},
+                {"modifiers", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"maxItems", 4},
+                    {"description", "Keys held around the key, e.g. [\"CTRL\"] or [\"CTRL\", \"SHIFT\"]: pressed in order "
+                        "before it, released in reverse after it. A release releases them too."}
                 }}
             }},
             {"required", json::array({"key", "action"})}
@@ -4106,7 +4114,8 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "keyboard_key")
     {
-        return m_debugAdapter.KeyboardKey(arguments["key"], arguments["action"]);
+        return m_debugAdapter.KeyboardKey(arguments["key"], arguments["action"],
+            arguments.contains("modifiers") ? arguments["modifiers"] : json());
     }
     else if (normalizedTool == "get_key_map")
     {

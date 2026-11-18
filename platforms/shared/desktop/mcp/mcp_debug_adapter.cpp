@@ -6079,9 +6079,11 @@ bool DebugAdapter::GetKeyCode(const std::string& name, GT_Keys& key) const
     return false;
 }
 
-json DebugAdapter::KeyboardKey(const std::string& key, const std::string& action)
+json DebugAdapter::KeyboardKey(const std::string& key, const std::string& action, const json& modifiers)
 {
     GT_Keys code = GT_KEY_NONE;
+    GT_Keys held_with[k_mcp_max_modifiers];
+    int count = 0;
 
     if (!GetKeyCode(key, code))
         return {{"error", "Invalid key name '" + key + "'"}};
@@ -6089,21 +6091,79 @@ json DebugAdapter::KeyboardKey(const std::string& key, const std::string& action
     if (action != "press" && action != "release" && action != "press_and_release")
         return {{"error", "Invalid action"}};
 
+    if (!modifiers.is_null() && (!modifiers.is_array() || modifiers.size() > (size_t)k_mcp_max_modifiers))
+        return {{"error", "modifiers must be a list of up to 4 key names"}};
+
+    for (size_t i = 0; i < modifiers.size(); i++)
+    {
+        GT_Keys modifier = GT_KEY_NONE;
+
+        if (!modifiers[i].is_string() || !GetKeyCode(modifiers[i].get<std::string>(), modifier))
+            return {{"error", "Invalid modifier " + modifiers[i].dump()}};
+
+        bool repeated = modifier == code;
+
+        for (int j = 0; j < count; j++)
+            repeated = repeated || held_with[j] == modifier;
+
+        if (repeated)
+            return {{"error", "A key appears twice in the combination"}};
+
+        held_with[count++] = modifier;
+    }
+
     json result = {{"success", true}, {"key", gui_debug_key_name(code)}, {"action", action}};
+
+    if (count > 0)
+    {
+        json names = json::array();
+
+        for (int i = 0; i < count; i++)
+            names.push_back(gui_debug_key_name(held_with[i]));
+
+        result["modifiers"] = names;
+    }
 
     if (action == "release")
     {
         ReleaseKey(code);
+
+        for (int i = count - 1; i >= 0; i--)
+            ReleaseKey(held_with[i]);
+
         return result;
     }
 
-    bool held = PressKey(code);
+    int pressed = 0;
+    bool held = true;
+
+    while (held && pressed < count)
+        held = PressKey(held_with[pressed++]);
+
+    if (held)
+        held = PressKey(code);
+    else
+        pressed--;
+
     result["dropped"] = !held;
 
     if (!held)
+    {
+        for (int i = pressed - 1; i >= 0; i--)
+            ReleaseKey(held_with[i]);
+
         result["reason"] = "The keyboard buffer is full: nothing has read port 0600h, so the press was lost";
+    }
     else if (action == "press_and_release")
-        result["__delayed_key_release"] = true;
+    {
+        json releases = json::array();
+        releases.push_back(gui_debug_key_name(code));
+
+        for (int i = count - 1; i >= 0; i--)
+            releases.push_back(gui_debug_key_name(held_with[i]));
+
+        result["__delayed_keys"] = releases;
+    }
 
     return result;
 }

@@ -122,14 +122,16 @@ enum McpMouseMotion
 };
 
 static const int k_mcp_mouse_wiggle_counts = 32;
-static const int k_mcp_mouse_wiggle_max_counts = 128;
-static const int k_mcp_mouse_wiggle_tries = 3;
+static const int k_mcp_mouse_wiggle_max_counts = 1024;
+static const int k_mcp_mouse_wiggle_tries = 6;
 static const double k_mcp_mouse_wiggle_gain = 4.0;
 static const int k_mcp_mouse_unseen_frames = 30;
 static const int k_mcp_mouse_settle_frames = 3;
 static const int k_mcp_mouse_stall_frames = 60;
-static const int k_mcp_mouse_max_moves = 6;
-static const int k_mcp_mouse_max_move_counts = 1024;
+static const int k_mcp_mouse_max_moves = 16;
+static const int k_mcp_mouse_locate_frames = 10;
+static const int k_mcp_mouse_max_misses = 3;
+static const int k_mcp_mouse_max_move_counts = 8192;
 static const int k_mcp_mouse_button_frames = 4;
 
 enum McpMousePhase
@@ -140,6 +142,7 @@ enum McpMousePhase
     MCP_MOUSE_PHASE_RETRY,
     MCP_MOUSE_PHASE_MOVE,
     MCP_MOUSE_PHASE_DRAG,
+    MCP_MOUSE_PHASE_LOCATE,
     MCP_MOUSE_PHASE_BUTTONS
 };
 
@@ -166,12 +169,19 @@ struct McpMouseMacroState
     int send_y;
     int settle;
     int stall;
+    int step;
+    int origin_x;
+    int origin_y;
+    int sent_x;
+    int sent_y;
+    int locate_frames;
     int wiggle_counts;
     int wiggle_x;
     int wiggle_y;
     int wiggle_tries;
     bool wiggle_flip;
     int moves;
+    int misses;
     int last_distance;
     int screen_width;
     int screen_height;
@@ -1264,12 +1274,19 @@ private:
         macro.send_y = 0;
         macro.settle = 0;
         macro.stall = 0;
+        macro.step = k_mcp_mouse_motion_step;
+        macro.origin_x = 0;
+        macro.origin_y = 0;
+        macro.sent_x = 0;
+        macro.sent_y = 0;
+        macro.locate_frames = 0;
         macro.wiggle_counts = k_mcp_mouse_wiggle_counts;
         macro.wiggle_x = 0;
         macro.wiggle_y = 0;
         macro.wiggle_tries = 0;
         macro.wiggle_flip = false;
         macro.moves = 0;
+        macro.misses = 0;
         macro.last_distance = 0;
         macro.screen_width = 0;
         macro.screen_height = 0;
@@ -1470,7 +1487,7 @@ private:
                 if (macro.absolute && macro.held)
                     begin_mouse_drag(macro.target_x, macro.target_y);
                 else if (macro.absolute)
-                    begin_mouse_wiggle();
+                    begin_mouse_locate(false);
                 else if (!macro.click)
                 {
                     m_debug_adapter->MoveMousePointerEstimate(macro.player, macro.delta_x, macro.delta_y);
@@ -1507,9 +1524,12 @@ private:
                     break;
 
                 if (macro.absolute)
-                    begin_mouse_wiggle();
+                    begin_mouse_locate(true);
                 else
                     finish_mouse_macro_success();
+                break;
+            case MCP_MOUSE_PHASE_LOCATE:
+                step_mouse_locate();
                 break;
             case MCP_MOUSE_PHASE_DRAG:
                 if (!feed_mouse_motion())
@@ -1548,8 +1568,7 @@ private:
 
         if ((macro.send_x != 0) || (macro.send_y != 0))
         {
-            int steps = (MAX(abs(macro.send_x), abs(macro.send_y)) + k_mcp_mouse_motion_step - 1) /
-                k_mcp_mouse_motion_step;
+            int steps = (MAX(abs(macro.send_x), abs(macro.send_y)) + macro.step - 1) / macro.step;
             int step_x = ((macro.send_x * 2) + (macro.send_x < 0 ? -steps : steps)) / (steps * 2);
             int step_y = ((macro.send_y * 2) + (macro.send_y < 0 ? -steps : steps)) / (steps * 2);
             m_debug_adapter->ApplyMouseMotion(macro.player, step_x, step_y);
@@ -1595,6 +1614,8 @@ private:
         macro.wiggle_y = ((y + reach_y) < runtime.screen_height ? macro.wiggle_counts : -macro.wiggle_counts) * sign;
         macro.screen_width = runtime.screen_width;
         macro.screen_height = runtime.screen_height;
+        macro.step = known ? pointer_motion_step() :
+            CLAMP(macro.wiggle_counts / 8, k_mcp_mouse_motion_step, k_mcp_mouse_max_motion_step);
         capture_mouse_frame(macro.frame_before);
         macro.send_x = macro.wiggle_x;
         macro.send_y = macro.wiggle_y;
@@ -1640,6 +1661,53 @@ private:
         }
 
         macro.wiggle_tries = 0;
+        steer_mouse_pointer();
+    }
+
+    void begin_mouse_locate(bool moved)
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+
+        if (!m_debug_adapter->IsMousePointerKnown(macro.player))
+        {
+            begin_mouse_wiggle();
+            return;
+        }
+
+        if (!moved)
+        {
+            const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
+            macro.origin_x = pointer.x;
+            macro.origin_y = pointer.y;
+            macro.sent_x = 0;
+            macro.sent_y = 0;
+        }
+
+        macro.locate_frames = k_mcp_mouse_locate_frames;
+        macro.phase = MCP_MOUSE_PHASE_LOCATE;
+        step_mouse_locate();
+    }
+
+    void step_mouse_locate()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
+        GT_Runtime_Info runtime;
+        emu_get_runtime(runtime);
+
+        if (m_debug_adapter->LocateMousePointer(macro.player, (const u32*)emu_frame_buffer, runtime.screen_width,
+            runtime.screen_height, macro.origin_x, macro.origin_y, macro.sent_x, macro.sent_y))
+        {
+            steer_mouse_pointer();
+            return;
+        }
+
+        if (--macro.locate_frames <= 0)
+            begin_mouse_wiggle();
+    }
+
+    void steer_mouse_pointer()
+    {
+        McpMouseMacroState& macro = m_mouse_macro;
         const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
         int error_x = macro.target_x - pointer.x;
         int error_y = macro.target_y - pointer.y;
@@ -1655,7 +1723,12 @@ private:
 
         int distance = abs(error_x) + abs(error_y);
         bool closest = (counts_x == 0) && (counts_y == 0);
-        bool stuck = (macro.moves >= k_mcp_mouse_max_moves) || ((macro.moves > 0) && (distance >= macro.last_distance));
+        if ((macro.moves > 0) && (distance >= macro.last_distance))
+            macro.misses++;
+        else
+            macro.misses = 0;
+
+        bool stuck = (macro.moves >= k_mcp_mouse_max_moves) || (macro.misses >= k_mcp_mouse_max_misses);
 
         if (closest || stuck)
         {
@@ -1678,7 +1751,26 @@ private:
 
         macro.last_distance = distance;
         macro.moves++;
+        macro.origin_x = pointer.x;
+        macro.origin_y = pointer.y;
+        macro.sent_x = counts_x;
+        macro.sent_y = counts_y;
+        m_debug_adapter->MoveMousePointerEstimate(macro.player, counts_x, counts_y);
         begin_mouse_move(counts_x, counts_y);
+    }
+
+    // Software that turns many counts into a pixel gets bigger steps, so the pointer still crosses the screen in a
+    // couple of seconds; a pointer near a pixel per count keeps the small steps drivers don't speed up. Software that
+    // drops what's left of a division between its reads moves less with small steps, which the next measure raises
+    int pointer_motion_step()
+    {
+        if (!m_debug_adapter->IsMousePointerKnown(m_mouse_macro.player))
+            return k_mcp_mouse_motion_step;
+
+        const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(m_mouse_macro.player);
+        double gain = MAX(MIN(fabs(pointer.pixels_per_count_x), fabs(pointer.pixels_per_count_y)), 1.0 / 1024.0);
+        int step = (int)(k_mcp_mouse_pixels_per_frame / gain);
+        return CLAMP(step, k_mcp_mouse_motion_step, k_mcp_mouse_max_motion_step);
     }
 
     int pixels_to_counts(int pixels, double pixels_per_count)
@@ -1689,6 +1781,7 @@ private:
 
     void begin_mouse_move(int counts_x, int counts_y)
     {
+        m_mouse_macro.step = pointer_motion_step();
         m_mouse_macro.send_x = counts_x;
         m_mouse_macro.send_y = counts_y;
         m_mouse_macro.phase = MCP_MOUSE_PHASE_MOVE;
@@ -1710,6 +1803,7 @@ private:
         int counts_y = pixels_to_counts(y - pointer.y, pointer.pixels_per_count_y);
 
         m_debug_adapter->MoveMousePointerEstimate(macro.player, counts_x, counts_y);
+        macro.step = pointer_motion_step();
         macro.send_x = counts_x;
         macro.send_y = counts_y;
         macro.phase = MCP_MOUSE_PHASE_DRAG;

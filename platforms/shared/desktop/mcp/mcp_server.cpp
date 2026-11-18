@@ -2645,9 +2645,10 @@ json McpServer::BuildToolList()
         {"name", "mouse_move"},
         {"title", "Mouse Move"},
         {"description", "Move the pointer to screenshot pixel x, y (top-left of its image) or by dx, dy counts. x, y finds "
-            "the pointer with a 32-count move out and back, then moves 4 counts per frame (Towns OS speeds up bigger "
-            "steps) until it's there; with a button held it moves straight from the last known position instead. "
-            "Runs frames, kept in rewind; breakpoints stop it."},
+            "the pointer by its image when it was seen before, or with a move out and back (32 counts, up to 1024 for "
+            "software that turns many counts into a pixel), then moves about 4 pixels per frame (4 to 64 counts) and "
+            "checks again until it's there; with a button held it moves straight from the last known position instead. "
+            "dx, dy use the same pace once the pointer was measured. Runs frames, kept in rewind; breakpoints stop it."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

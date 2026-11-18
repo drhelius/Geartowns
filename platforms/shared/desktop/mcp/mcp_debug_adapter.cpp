@@ -5698,8 +5698,12 @@ static const int k_mcp_mouse_max_changed = 16384;
 static const size_t k_mcp_mouse_max_search = 40000000;
 static const int k_mcp_mouse_min_pixels = 4;
 static const int k_mcp_mouse_min_size = 3;
-static const double k_mcp_mouse_min_scale = 0.125;
+static const int k_mcp_mouse_max_size = 48;
+static const double k_mcp_mouse_min_scale = 1.0 / 64.0;
 static const double k_mcp_mouse_max_scale = 8.0;
+static const int k_mcp_mouse_gain_counts = 16;
+static const int k_mcp_mouse_gain_pixels = 4;
+static const int k_mcp_mouse_template_pixels = 8;
 
 static bool IsMovedPointerPixel(const u32* before, const u32* out, int width, int height, int index, int shift_x,
     int shift_y)
@@ -5911,6 +5915,12 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
         return false;
     }
 
+    if ((pointer_width > k_mcp_mouse_max_size) || (pointer_height > k_mcp_mouse_max_size))
+    {
+        reason = "a " + box + " box moved, too big for a pointer";
+        return false;
+    }
+
     double gain_x = (double)shift_x / counts_x;
     double gain_y = (double)shift_y / counts_y;
     bool edge_x = counts_x > 0 ? ((right + shift_x) >= (width - 1)) : ((left + shift_x) <= 0);
@@ -5956,6 +5966,98 @@ bool DebugAdapter::FindMousePointer(int player, const u32* before, const u32* ou
     }
 
     miss = MCP_MOUSE_MISS_NONE;
+    return true;
+}
+
+// The pointer's own image, found where all of it is drawn and nowhere else, and each axis that moved enough counts
+// measures its gain again, for software whose pointer speed isn't constant
+bool DebugAdapter::LocateMousePointer(int player, const u32* frame, int width, int height, int origin_x, int origin_y,
+    int counts_x, int counts_y)
+{
+    if (!IsMousePointerKnown(player))
+        return false;
+
+    McpMousePointer& pointer = m_mouse_pointers[player - 1];
+
+    if ((pointer.screen_width != width) || (pointer.screen_height != height) || pointer.pixels.empty() ||
+        (pointer.width < k_mcp_mouse_min_size) || (pointer.height < k_mcp_mouse_min_size) ||
+        (pointer.width > k_mcp_mouse_max_size) || (pointer.height > k_mcp_mouse_max_size))
+        return false;
+
+    std::vector<int> offsets;
+    std::vector<u32> colors;
+
+    for (int y = 0; y < pointer.height; y++)
+    {
+        for (int x = 0; x < pointer.width; x++)
+        {
+            int index = (y * pointer.width) + x;
+
+            if (pointer.mask[index] == 0)
+                continue;
+
+            offsets.push_back((y * width) + x);
+            colors.push_back(pointer.pixels[index]);
+        }
+    }
+
+    if ((int)offsets.size() < k_mcp_mouse_template_pixels)
+        return false;
+
+    int best_x = -1;
+    int best_y = -1;
+    int matches = 0;
+
+    for (int y = 0; y <= (height - pointer.height); y++)
+    {
+        for (int x = 0; x <= (width - pointer.width); x++)
+        {
+            const u32* base = frame + (y * width) + x;
+            size_t i = 0;
+
+            while ((i < offsets.size()) && (base[offsets[i]] == colors[i]))
+                i++;
+
+            if (i < offsets.size())
+                continue;
+
+            best_x = x;
+            best_y = y;
+
+            if (++matches > 1)
+                return false;
+        }
+    }
+
+    if (matches == 0)
+        return false;
+
+    int shift_x = best_x - origin_x;
+    int shift_y = best_y - origin_y;
+
+    bool edge_x = (best_x <= 0) || ((best_x + pointer.width) >= width);
+    bool edge_y = (best_y <= 0) || ((best_y + pointer.height) >= height);
+
+    if (!edge_x && (abs(counts_x) >= k_mcp_mouse_gain_counts) && (abs(shift_x) >= k_mcp_mouse_gain_pixels))
+    {
+        double gain = (double)shift_x / counts_x;
+
+        if ((gain >= k_mcp_mouse_min_scale) && (gain <= k_mcp_mouse_max_scale))
+            pointer.pixels_per_count_x = gain;
+    }
+
+    if (!edge_y && (abs(counts_y) >= k_mcp_mouse_gain_counts) && (abs(shift_y) >= k_mcp_mouse_gain_pixels))
+    {
+        double gain = (double)shift_y / counts_y;
+
+        if ((gain >= k_mcp_mouse_min_scale) && (gain <= k_mcp_mouse_max_scale))
+            pointer.pixels_per_count_y = gain;
+    }
+
+    pointer.x = best_x;
+    pointer.y = best_y;
+    pointer.frame = emu_frame_counter;
+    pointer.estimated = false;
     return true;
 }
 

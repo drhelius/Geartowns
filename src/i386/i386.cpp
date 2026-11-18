@@ -352,6 +352,7 @@ void I386::Reset()
     m_debug_step = false;
     m_step_slow = false;
     m_slow_memory = false;
+    m_low_limit_segments = 0;
     m_user_mode = false;
     m_write_protect = false;
     m_alignment_check = false;

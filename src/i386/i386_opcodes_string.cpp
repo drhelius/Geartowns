@@ -354,10 +354,13 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     int segment = m_state.repeat.segment_override == 0xFF ? (u8)I386_SEGMENT_DS : m_state.repeat.segment_override;
     s64 destination_end = (s64)((u64)destination + size - 1);
 
-    if (destination_end > m_write_limits[I386_SEGMENT_ES])
+    u32 destination_low = m_low_limits[I386_SEGMENT_ES];
+    u32 source_low = m_low_limits[segment];
+
+    if (destination_end > m_write_limits[I386_SEGMENT_ES] || destination < destination_low)
         return 0;
 
-    if (move && (s64)((u64)source + size - 1) > m_read_limits[segment])
+    if (move && ((s64)((u64)source + size - 1) > m_read_limits[segment] || source < source_low))
         return 0;
 
     u32 destination_linear = m_state.segments[I386_SEGMENT_ES].base + destination;
@@ -391,12 +394,12 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     if (reverse)
     {
         elements = MIN(elements, (destination_linear & 0xFFF) / size + 1);
-        elements = (u32)MIN((u64)elements, (u64)destination / size + 1);
+        elements = (u32)MIN((u64)elements, (u64)(destination - destination_low) / size + 1);
 
         if (move)
         {
             elements = MIN(elements, (source_linear & 0xFFF) / size + 1);
-            elements = (u32)MIN((u64)elements, (u64)source / size + 1);
+            elements = (u32)MIN((u64)elements, (u64)(source - source_low) / size + 1);
         }
     }
     else

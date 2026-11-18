@@ -202,7 +202,7 @@ INLINE bool I386::ReadMemory(int segment, u32 offset, int width, GT_Bus_Access_C
 {
     u32 size = (u32)width >> 3;
 
-    if (likely((s64)((u64)offset + size - 1) <= m_read_limits[segment]))
+    if (likely((s64)((u64)offset + size - 1) <= m_read_limits[segment] && offset >= m_low_limits[segment]))
     {
         const u8* data = GetReadHost(m_state.segments[segment].base + offset, size);
 
@@ -220,7 +220,7 @@ INLINE bool I386::WriteMemory(int segment, u32 offset, int width, u32 value, GT_
 {
     u32 size = (u32)width >> 3;
 
-    if (likely((s64)((u64)offset + size - 1) <= m_write_limits[segment]))
+    if (likely((s64)((u64)offset + size - 1) <= m_write_limits[segment] && offset >= m_low_limits[segment]))
     {
         u8* data = GetWriteHost(m_state.segments[segment].base + offset, size);
 
@@ -239,7 +239,7 @@ INLINE u8* I386::GetRMWHost(int segment, u32 offset, int width)
     u32 size = (u32)width >> 3;
     s64 end = (s64)((u64)offset + size - 1);
 
-    if (end > m_read_limits[segment] || end > m_write_limits[segment])
+    if (end > m_read_limits[segment] || end > m_write_limits[segment] || offset < m_low_limits[segment])
         return NULL;
 
     u32 linear = m_state.segments[segment].base + offset;

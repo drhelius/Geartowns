@@ -1556,6 +1556,8 @@ private:
     s64 m_code_limit;
     s64 m_read_limits[I386_SEGMENT_COUNT];
     s64 m_write_limits[I386_SEGMENT_COUNT];
+    u32 m_low_limits[I386_SEGMENT_COUNT];
+    u8 m_low_limit_segments;
     GT_Bus_Access_Context* m_bus_context;
     StepState m_step;
 

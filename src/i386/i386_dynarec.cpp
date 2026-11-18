@@ -460,7 +460,7 @@ INLINE I386::DynarecBlock* I386::FindDynarecBlock(u8 entry, bool fetch)
     u64 key = ((u64)m_state.segments[I386_SEGMENT_CS].limit << 8) |
         (m_default_size == 4 ? k_dynarec_key_default32 : 0) |
         ((m_state.cr0 & 0x80000000U) != 0 ? k_dynarec_key_paging : 0) | (m_stack32 ? k_dynarec_key_stack32 : 0) |
-        (u8)(m_state.execution_mode << 3);
+        (m_low_limit_segments != 0 ? k_dynarec_key_low_limits : 0) | (u8)(m_state.execution_mode << 3);
     u32 index = LookupDynarecBlock(host, eip, key);
 
     if (index == k_dynarec_none)

@@ -30,6 +30,7 @@ struct jit_state;
 static const u8 k_dynarec_key_default32 = 0x01;
 static const u8 k_dynarec_key_paging = 0x02;
 static const u8 k_dynarec_key_stack32 = 0x04;
+static const u8 k_dynarec_key_low_limits = 0x80;
 
 // Blocks leave to the dispatcher with these flags: the m clocks of a transfer to count, a return for the debugger
 // call stack, an exit at the natural end of the block and a static exit the dispatcher can link

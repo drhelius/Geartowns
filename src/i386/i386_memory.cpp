@@ -111,9 +111,11 @@ void I386::UpdateSegmentFastPath(int index)
 {
     const I386_Segment& segment = m_state.segments[index];
     bool executable = (segment.attributes & I386_SEGMENT_EXECUTABLE) != 0;
+    bool low_limits = m_low_limit_segments != 0;
 
     m_read_limits[index] = -1;
     m_write_limits[index] = -1;
+    m_low_limits[index] = 0;
 
     if (!m_slow_memory && (segment.attributes & I386_SEGMENT_PRESENT) != 0)
     {
@@ -130,7 +132,32 @@ void I386::UpdateSegmentFastPath(int index)
             if (!executable && (segment.attributes & I386_SEGMENT_WRITABLE) != 0)
                 m_write_limits[index] = segment.limit;
         }
+        else if ((segment.attributes & I386_SEGMENT_SYSTEM) == 0 && !executable)
+        {
+            u32 upper = (segment.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 0xFFFFFFFFU : 0xFFFFU;
+
+            if (segment.limit < upper)
+            {
+                m_low_limits[index] = segment.limit + 1;
+                m_read_limits[index] = upper;
+
+                if ((segment.attributes & I386_SEGMENT_WRITABLE) != 0)
+                    m_write_limits[index] = upper;
+            }
+        }
     }
+
+    if (m_low_limits[index] != 0)
+        m_low_limit_segments |= (u8)(1 << index);
+    else
+        m_low_limit_segments &= (u8)~(1 << index);
+
+#if !defined(GT_DISABLE_DYNAREC)
+    if (low_limits != (m_low_limit_segments != 0))
+        m_dynarec_dirty = true;
+#else
+    UNUSED(low_limits);
+#endif
 
     u8 access_flags = 0;
     u16 flat_mask = I386_SEGMENT_PRESENT | I386_SEGMENT_SYSTEM | I386_SEGMENT_EXPAND_DOWN;
@@ -263,7 +290,8 @@ bool I386::ReadMemorySlow(int segment, u32 offset, int width, GT_Bus_Access_Cont
     u32 linear = 0;
     u32 bytes = (u32)width >> 3;
 
-    if ((m_state.cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_read_limits[segment])
+    if ((m_state.cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_read_limits[segment] &&
+        offset >= m_low_limits[segment])
     {
         linear = m_state.segments[segment].base + offset;
 
@@ -338,7 +366,8 @@ bool I386::WriteMemorySlow(int segment, u32 offset, int width, u32 value, GT_Bus
     u32 linear = 0;
     u32 bytes = (u32)width >> 3;
 
-    if ((m_state.cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_write_limits[segment])
+    if ((m_state.cr0 & 0x80000000U) != 0 && (s64)((u64)offset + bytes - 1) <= m_write_limits[segment] &&
+        offset >= m_low_limits[segment])
     {
         linear = m_state.segments[segment].base + offset;
 

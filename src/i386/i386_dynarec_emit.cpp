@@ -2890,6 +2890,12 @@ void DynarecEmitter::EmitHostAddress(int r, int t1, int t2, int t3, u8 segment, 
     intptr_t read_limit = Offset(&m_cpu->m_read_limits[segment]);
     intptr_t write_limit = Offset(&m_cpu->m_write_limits[segment]);
 
+    if ((m_key & k_dynarec_key_low_limits) != 0)
+    {
+        LoadU32(t2, DR_CPU, Offset(&m_cpu->m_low_limits[segment]));
+        jit_patch_at(jit_bltr_u(r, t2), fallback);
+    }
+
 #if __WORDSIZE == 64
     jit_addi(t1, r, (jit_word_t)(size - 1));
 

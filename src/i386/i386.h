@@ -598,6 +598,7 @@ public:
     void EnableDynarec(bool enable);
     bool IsDynarecEnabled() const;
     void GetDynarecInfo(I386_Dynarec_Info& info) const;
+    void BeginDynarecFrame();
     void SetDynarecTuning(u32 threshold, u32 block_limit);
 
 private:
@@ -1646,6 +1647,8 @@ private:
     u32 m_dynarec_block_limit;
     u32 m_dynarec_flushes;
     u32 m_dynarec_invalidations;
+    u32 m_dynarec_frame_compiles;
+    u32 m_dynarec_frame_limit;
     u64 m_dynarec_cool_clocks;
     u32 m_dynarec_current;
     u32 m_dynarec_steps;

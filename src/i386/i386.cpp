@@ -245,6 +245,8 @@ I386::I386()
     m_dynarec_block_limit = 0;
     m_dynarec_flushes = 0;
     m_dynarec_invalidations = 0;
+    m_dynarec_frame_compiles = 0;
+    m_dynarec_frame_limit = 0xFFFFFFFFU;
     m_dynarec_cool_clocks = 0;
     m_dynarec_current = 0xFFFFFFFFU;
     m_dynarec_steps = 0;

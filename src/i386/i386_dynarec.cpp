@@ -52,6 +52,7 @@ static const u32 k_dynarec_checks = GT_DYNAREC_MAX_BLOCKS * 4;
 static const u32 k_dynarec_max_checks = 64;
 static const u32 k_dynarec_default_threshold = 8;
 static const u32 k_dynarec_default_block_limit = 64;
+static const u32 k_dynarec_frame_compiles = 500;
 
 // A RAM page whose code keeps being rewritten, or whose data is written very often through its checked path, runs in
 // the interpreter for k_dynarec_cool_periods cooling periods, which gives it its fast writes back
@@ -141,6 +142,12 @@ void I386::EnableDynarec(bool enable)
 bool I386::IsDynarecEnabled() const
 {
     return m_dynarec_enabled;
+}
+
+void I386::BeginDynarecFrame()
+{
+    m_dynarec_frame_compiles = 0;
+    m_dynarec_frame_limit = k_dynarec_frame_compiles;
 }
 
 void I386::GetDynarecInfo(I386_Dynarec_Info& info) const
@@ -490,8 +497,10 @@ INLINE I386::DynarecBlock* I386::FindDynarecBlock(u8 entry, bool fetch)
 
     if (unlikely(block.state != k_dynarec_compiled))
     {
+        // Code loaded in bursts compiles over several frames, the blocks over a frame's budget wait in the interpreter
         if (block.state == k_dynarec_counting && entry != k_dynarec_entry_none &&
-            (++block.hits >= m_dynarec_threshold || entry == k_dynarec_entry_hot))
+            (++block.hits >= m_dynarec_threshold || entry == k_dynarec_entry_hot) &&
+            m_dynarec_frame_compiles < m_dynarec_frame_limit)
             CompileDynarecBlock(block, m_code_window_size - offset);
 
         m_dynarec_keep_entry = block.state == k_dynarec_interpret;
@@ -551,6 +560,8 @@ NO_INLINE void I386::CompileDynarecBlock(DynarecBlock& block, u32 available)
         block.state = k_dynarec_interpret;
         return;
     }
+
+    m_dynarec_frame_compiles++;
 
     if (m_dynarec_code_used + k_dynarec_block_code > m_dynarec_memory->GetSize() ||
         m_dynarec_bytes_used + k_dynarec_max_watch_bytes > GT_DYNAREC_MAX_BLOCKS * k_dynarec_block_bytes ||
@@ -1129,6 +1140,10 @@ void I386::EnableDynarec(bool enable)
 bool I386::IsDynarecEnabled() const
 {
     return false;
+}
+
+void I386::BeginDynarecFrame()
+{
 }
 
 void I386::GetDynarecInfo(I386_Dynarec_Info& info) const

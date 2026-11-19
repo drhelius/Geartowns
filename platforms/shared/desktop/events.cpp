@@ -93,7 +93,8 @@ void events_emu(const SDL_Event* event, bool shortcut_consumed)
 
             if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
                 mouse_buttons &= (u16)~button;
-            else if ((game_focus_pointer_captured() || gui_main_window_hovered) && !emu_key_mapper_is_open())
+            else if ((game_focus_pointer_captured() || (gui_main_window_hovered && (gui_main_window_focused || !config_debug.debug))) &&
+                !emu_key_mapper_is_open())
                 mouse_buttons |= button;
 
             input_update(true);

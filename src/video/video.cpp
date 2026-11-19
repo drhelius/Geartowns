@@ -63,6 +63,7 @@ Video::Video()
     m_partial_x = 0;
     m_native_resolution = true;
     m_canvas_h_start = 0;
+    m_canvas_grid_start = 0;
     m_canvas_v_start = 0;
     m_canvas_clocks = GT_FRAME_BUFFER_WIDTH;
     m_canvas_width = GT_FRAME_BUFFER_WIDTH;
@@ -1410,10 +1411,10 @@ void Video::UpdateGeometry()
 
     m_canvas_interlaced = (m_state.frame_half_lines & 0x01) != 0;
 
-    u32 h_start = 0xFFFFFFFF;
-    u32 h_end = 0;
-    u32 v_start = 0xFFFFFFFF;
-    u32 v_end = 0;
+    u32 window_h_start = 0xFFFFFFFF;
+    u32 window_h_end = 0;
+    u32 window_v_start = 0xFFFFFFFF;
+    u32 window_v_end = 0;
     int layers = IsTwoPage() ? 2 : 1;
 
     // A window reaching into HSYNC or past the end of the line only shows the part in between
@@ -1427,19 +1428,59 @@ void Video::UpdateGeometry()
         if (hde <= hds || vde <= vds)
             continue;
 
-        h_start = MIN(h_start, hds);
-        h_end = MAX(h_end, hde);
-        v_start = MIN(v_start, vds);
-        v_end = MAX(v_end, vde);
+        window_h_start = MIN(window_h_start, hds);
+        window_h_end = MAX(window_h_end, hde);
+        window_v_start = MIN(window_v_start, vds);
+        window_v_end = MAX(window_v_end, vde);
     }
 
-    u32 zoom_x = m_canvas_zoom_x;
-    u32 zoom_y = m_canvas_zoom_y;
+    u32 h_start = 0;
+    u32 h_end = 0;
+    u32 v_start = 0;
+    u32 v_end = 0;
+    GetRaster(&h_start, &h_end, &v_start, &v_end);
+
+    if (h_end <= h_start || v_end <= v_start)
+    {
+        h_start = window_h_start;
+        h_end = window_h_end;
+        v_start = window_v_start;
+        v_end = window_v_end;
+    }
+    else
+    {
+        h_start = MIN(h_start, window_h_start);
+        h_end = MAX(h_end, window_h_end);
+        v_start = MIN(v_start, window_v_start);
+        v_end = MAX(v_end, window_v_end);
+    }
+
+    u32 zoom_x = 1;
+    u32 zoom_y = 1;
+    bool zoom_found = GetLayerZoom(&zoom_x, &zoom_y);
     m_canvas_zoom_key = GetLayerZoomKey();
+
+    // The raster edges follow the windows' pixel grid, as the native divider expects
+    if (window_h_end > window_h_start)
+    {
+        u32 h_shift = (window_h_start - h_start) % zoom_x;
+        u32 v_shift = (window_v_start - v_start) % (m_canvas_interlaced ? 2 : zoom_y * 2);
+        h_start += h_shift;
+        h_end += h_shift;
+        v_start += v_shift;
+        v_end += v_shift;
+    }
+
+    if (!zoom_found)
+    {
+        zoom_x = m_canvas_zoom_x;
+        zoom_y = m_canvas_zoom_y;
+    }
 
     if (!m_state.running || h_end <= h_start || v_end <= v_start)
     {
         m_canvas_h_start = 0;
+        m_canvas_grid_start = 0;
         m_canvas_v_start = 0;
         m_canvas_clocks = GT_FRAME_BUFFER_WIDTH;
         m_canvas_width = GT_FRAME_BUFFER_WIDTH;
@@ -1448,13 +1489,14 @@ void Video::UpdateGeometry()
         return;
     }
 
-    // The canvas covers both display windows, sampled at a whole number of CRTC clocks per output pixel
+    // The canvas covers the raster and the windows, sampled at a whole number of CRTC clocks per output pixel
     u32 rows = (v_end - v_start) / 2;
 
     if (m_canvas_interlaced)
         rows *= 2;
 
     m_canvas_h_start = h_start;
+    m_canvas_grid_start = window_h_end > window_h_start ? window_h_start : h_start;
     m_canvas_v_start = v_start;
     m_canvas_clocks = h_end - h_start;
     m_canvas_height = CLAMP((int)rows, 1, GT_MAX_FRAME_BUFFER_HEIGHT);
@@ -1464,8 +1506,28 @@ void Video::UpdateGeometry()
     if (!m_native_resolution)
         return;
 
-    GetLayerZoom(&zoom_x, &zoom_y);
     SetCanvasZoom(zoom_x, zoom_y);
+}
+
+void Video::GetRaster(u32* h_start, u32* h_end, u32* v_start, u32* v_end) const
+{
+    u32 rate = k_video_clock_rates[m_state.crtc[k_video_crtc_cr1] & 0x03];
+    u32 line = m_state.frame_line_clocks;
+    u64 line_ns = ((u64)line * 1000000000ULL) / rate;
+    int mode = 0;
+
+    while (mode < k_video_raster_modes - 1 && line_ns > k_video_raster_line_ns[mode])
+        mode++;
+
+    u64 reference = k_video_raster_clock_rates[mode];
+    u32 vst1 = m_state.crtc[k_video_crtc_vst1];
+
+    *h_start = (u32)(((u64)k_video_raster_h_start[mode] * rate + reference / 2) / reference);
+    *h_end = (u32)(((u64)k_video_raster_h_end[mode] * rate + reference / 2) / reference);
+    *h_start = MAX(*h_start, (u32)m_state.crtc[k_video_crtc_hsw1]);
+    *h_end = MIN(*h_end, line);
+    *v_start = vst1 + k_video_raster_v_start[mode];
+    *v_end = MIN(vst1 + k_video_raster_v_end[mode], vst1 + m_state.frame_half_lines);
 }
 
 // A layer whose HAJ is part of a pixel away from the canvas start needs a finer zoom
@@ -1582,7 +1644,7 @@ bool Video::GetLayerZoom(u32* zoom_x, u32* zoom_y) const
     return found;
 }
 
-// Clocks from the canvas start to the pixel grid of the visible layers
+// Clocks from the windows' start to the pixel grid of the visible layers
 u32 Video::GetLayerOffset() const
 {
     int layers = IsTwoPage() ? 2 : 1;
@@ -1594,7 +1656,7 @@ u32 Video::GetLayerOffset() const
             continue;
 
         u32 haj = m_state.latched_haj[layer];
-        offset = Gcd(offset, haj > m_canvas_h_start ? haj - m_canvas_h_start : m_canvas_h_start - haj);
+        offset = Gcd(offset, haj > m_canvas_grid_start ? haj - m_canvas_grid_start : m_canvas_grid_start - haj);
     }
 
     return offset;

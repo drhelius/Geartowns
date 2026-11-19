@@ -199,6 +199,7 @@ private:
     void DelaySpriteByFetch(u32 half_line);
     void CompleteFrame(u64 clocks);
     void UpdateGeometry();
+    void GetRaster(u32* h_start, u32* h_end, u32* v_start, u32* v_end) const;
     void LatchFrameInfo();
     void ResetFrameInfo();
     void UpdateCanvasZoom();
@@ -299,6 +300,7 @@ private:
     int m_partial_x;
     bool m_native_resolution;
     u32 m_canvas_h_start;
+    u32 m_canvas_grid_start;
     u32 m_canvas_v_start;
     u32 m_canvas_clocks;
     int m_canvas_width;
@@ -331,6 +333,14 @@ static const u64 k_video_ntsc_field_clocks = ((u64)k_video_ntsc_field_half_lines
 static const u64 k_video_ntsc_crtc_start_clocks = (22ULL * k_video_ntsc_line_dots * GT_MACHINE_CLOCK_RATE +
     k_video_ntsc_clock_rate - 1) / k_video_ntsc_clock_rate;
 static const u32 k_video_ntsc_vga_palette_lead = 34;
+// Data Book presets 1, 2 and 5 at 31, 24 and 15 kHz
+static const int k_video_raster_modes = 3;
+static const u32 k_video_raster_line_ns[k_video_raster_modes] = { 36000, 52000, 0xFFFFFFFF };
+static const u32 k_video_raster_clock_rates[k_video_raster_modes] = { 25175000, 21052500, 24545455 };
+static const u32 k_video_raster_h_start[k_video_raster_modes] = { 138, 156, 231 };
+static const u32 k_video_raster_h_end[k_video_raster_modes] = { 778, 796, 1511 };
+static const u32 k_video_raster_v_start[k_video_raster_modes] = { 70, 64, 36 };
+static const u32 k_video_raster_v_end[k_video_raster_modes] = { 1030, 864, 516 };
 static const u32 k_video_transparent = 0x00010000;
 static const u32 k_video_no_wrap = 0x7FFFFFFF;
 

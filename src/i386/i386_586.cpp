@@ -18,6 +18,7 @@
  */
 
 #include "i386.h"
+#include "../common/trace_logger.h"
 #include "i386_opcodes_inline.h"
 #include "x87.h"
 
@@ -76,6 +77,9 @@ bool I386::OPCodes0F_RDTSC()
     u64 stamp = ReadTimeStamp();
     m_state.registers[I386_REG_EAX].value = (u32)stamp;
     m_state.registers[I386_REG_EDX].value = (u32)(stamp >> 32);
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_MSR)))
+        TraceCPUEvent(TRACE_CPU_INTERRUPT_MSR, TRACE_CPU_CAUSE_RDTSC, 0x10, (u32)stamp, (u32)(stamp >> 32));
     CommitEIP(m_instruction);
     return true;
 }
@@ -100,14 +104,31 @@ bool I386::OPCodes0F_MSR()
     {
         u64 value = ((u64)m_state.registers[I386_REG_EDX].value << 32) | m_state.registers[I386_REG_EAX].value;
 
-        if (!WriteMSR(index, value))
+        bool written = WriteMSR(index, value);
+
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_MSR)))
+        {
+            GT_Trace_Entry* entry = TraceCPUEvent(TRACE_CPU_INTERRUPT_MSR, TRACE_CPU_CAUSE_WRMSR, index, (u32)value,
+                (u32)(value >> 32));
+            entry->flags |= written ? 0 : TRACE_CPU_FLAG_FAILED;
+        }
+
+        if (!written)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
     }
     else
     {
         u64 value = 0;
+        bool read = ReadMSR(index, value);
 
-        if (!ReadMSR(index, value))
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_MSR)))
+        {
+            GT_Trace_Entry* entry = TraceCPUEvent(TRACE_CPU_INTERRUPT_MSR, TRACE_CPU_CAUSE_RDMSR, index, (u32)value,
+                (u32)(value >> 32));
+            entry->flags |= read ? 0 : TRACE_CPU_FLAG_FAILED;
+        }
+
+        if (!read)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
         m_state.registers[I386_REG_EAX].value = (u32)value;

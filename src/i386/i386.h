@@ -39,6 +39,7 @@
 class Memory;
 class Profiler;
 class TraceLogger;
+struct GT_Trace_Entry;
 class IO;
 class ExecMemory;
 class DynarecEmitter;
@@ -315,11 +316,16 @@ struct I386_Decode_State
     bool invalid_lock;
 };
 
-struct I386_Trace_Entry
+struct I386_Trace_Source
 {
-    I386_Decode_State instruction;
-    I386_State before;
-    I386_State after;
+    u32 eip;
+    u32 eflags;
+    u32 ds_base;
+    u16 cs;
+    u16 ds;
+    u16 es;
+    u8 mode;
+    u8 cpl;
 };
 
 struct I386_Disassembler_Record
@@ -513,10 +519,10 @@ public:
 
     u8 GetLastExceptionVector() const;
     const I386_Exception_Info& GetLastException() const;
+#if defined(GT_TESTS)
     bool CopyDecodeState(I386_Decode_State& state);
+#endif
 
-    void SetTraceEnabled(bool enabled);
-    int CopyTraceEntries(I386_Trace_Entry* entries, int capacity) const;
     void SetTraceLogger(TraceLogger* trace_logger);
     void SetProfiler(Profiler* profiler);
 
@@ -577,6 +583,12 @@ public:
     bool CheckDebuggerBreakpoints(bool regular, bool run_to);
     bool IsDebuggerHitPending() const;
     bool NeedsDebuggerSteps() const;
+    bool HasDebuggerMemoryChecks() const;
+    const u32* GetCodeBasePointer() const;
+    const u32* GetEIPPointer() const;
+    u64 GetTraceClocks() const;
+    bool FormatInstruction(const u8* bytes, u32 size, u16 cs, u32 eip, u32 linear, u8 mode, bool default32, char* text,
+        size_t text_size);
     bool AcceptDebuggerHit();
     void DiscardDebuggerHit();
     void SetMagicBreakpoint(bool enabled);
@@ -996,12 +1008,11 @@ private:
     void CopyStepException(I386_Run_Result& total) const;
     void CountInterruptShadow();
     void SkipPolling(u16 port, int width);
+    void TracePoll(u16 port, int width, u32 count, u32 cycles);
     bool IsPollingLoop(u32 port, u32& steps);
     void UpdateStepMode();
     bool ExecuteOPCode();
     bool ExecuteOPCodeDebug(const I386_State& before);
-    void CaptureCheckedBytes();
-    void RecordTrace(const I386_State& before);
 
     void SetRealModeSegment(I386_Segment_Register segment, u16 selector);
     void SetVM86Segment(I386_Segment_Register segment, u16 selector);
@@ -1278,8 +1289,15 @@ private:
     void ResetVBlankWatch();
     void RecordDebuggerIO(u16 port, u32 value, u32 size, bool write);
     void RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 from, bool has_error_code, u32 error_code);
+    void SaveTraceSource();
+    NO_INLINE GT_Trace_Entry* TraceCPUEvent(u8 event, u8 cause, u32 old_value, u32 new_value, u32 extra);
+    NO_INLINE void TraceDeniedIO(u16 port, int width, bool write);
+    NO_INLINE GT_Trace_Entry* TraceException(u8 event, const I386_Pending_Exception& exception, u32 return_eip,
+        u8 next_vector);
+    bool ExecuteIRET();
+    void TraceInterrupt(u8 vector, u8 event, u8 line, u32 from, bool has_error_code, u32 error_code);
+    void TraceInterruptText(u8 vector, GT_Trace_Entry* entry) const;
     void TraceInstruction();
-    NO_INLINE void TraceStep(I386_State& before);
     void RecordDebuggerHit(bool interrupt, u8 type, u8 space, u32 address, u32 size, u8 vector, u8 source,
         u8 line = 0xFF, bool dma = false);
     bool IsRunToStackReached() const;
@@ -1584,20 +1602,13 @@ private:
     Memory* m_memory;
     IO* m_io;
 
-    bool m_trace_enabled;
-
-    u32 m_checked_eip;
-    u8 m_checked_bytes[GT_I386_MAX_INSTRUCTION_LENGTH];
-    u8 m_checked_count;
-    bool m_checked_valid;
+#if defined(GT_TESTS)
     bool m_instruction_restored;
-
+#endif
     const u8* m_passive_bytes;
     u32 m_passive_count;
     u32 m_passive_index;
 
-    I386_Trace_Entry* m_trace;
-    int m_trace_count;
     I386_Run_Result m_step_exception;
 
     mutable I386_Debug_State m_debug_state;
@@ -1680,6 +1691,8 @@ private:
     bool m_debugger_memory_checks;
     bool m_debugger_io_checks;
     bool m_debugger_interrupt_checks;
+    bool m_debugger_io_breaks;
+    bool m_debugger_interrupt_breaks;
     bool m_debugger_exec_checks;
     bool m_execute_filter_all;
     u8 m_execute_filter[32];
@@ -1687,9 +1700,9 @@ private:
     bool m_magic_breakpoint;
     I386_Exception_Info m_last_exception;
     TraceLogger* m_trace_logger;
+    I386_Trace_Source m_trace_source;
     Profiler* m_profiler;
     u32 m_reset_edx;
-    bool m_trace_internal;
     bool m_trace_cpu;
     bool m_profiler_active;
     bool m_vblank_watch_read;

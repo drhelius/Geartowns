@@ -120,6 +120,8 @@ GeartownsCore::GeartownsCore()
     m_debug_step = GT_DEBUG_STEP_NONE;
     m_debug_step_resume = false;
     m_debug_interrupt_deferred = false;
+    m_trace_stopped = false;
+    m_trace_frame = 0xFFFFFFFF;
 }
 
 GeartownsCore::~GeartownsCore()
@@ -268,6 +270,7 @@ void GeartownsCore::Init()
     m_key_map->Init(&GeartownsCore::KeyMapCallback, this);
     m_key_mapper->Init(m_key_map);
     m_trace_logger->Init(&m_scheduler->GetState()->clocks);
+    m_trace_logger->SetPCSource(m_i386->GetCodeBasePointer(), m_i386->GetEIPPointer());
     m_profiler->Init(&m_scheduler->GetState()->clocks);
     m_i386->SetTraceLogger(m_trace_logger);
     m_i386->SetProfiler(m_profiler);
@@ -335,9 +338,25 @@ GT_Run_Result GeartownsCore::RunToFrameTemplate(u8* frame_buffer, s16* sample_bu
 
     bool debugging = debugger && IsValidPointer(debug);
     m_trace_logger->SetActive(debugging);
+
+    if (unlikely(m_trace_logger->IsRecording()))
+    {
+        if (m_trace_stopped && !debug->step_debugger && !debug->step_over)
+        {
+            m_trace_logger->Mark(TRACE_MARK_CONTINUE, frame_start);
+            m_trace_stopped = false;
+        }
+
+        if (m_video->GetState()->frame_count != m_trace_frame)
+        {
+            m_trace_frame = m_video->GetState()->frame_count;
+            m_trace_logger->Mark(TRACE_MARK_FRAME, m_trace_frame);
+        }
+    }
     m_profiler->SetActive(debugging);
     m_i386->EnableDebuggerChecks(debugging);
-    m_dma->SetDebugCallback(debugging ? &GeartownsCore::DMADebugCallback : NULL, m_i386);
+    m_dma->SetDebugCallback(debugging && m_i386->HasDebuggerMemoryChecks() ? &GeartownsCore::DMADebugCallback : NULL,
+        m_i386);
 
     if (debugging)
     {
@@ -582,6 +601,12 @@ NO_INLINE bool GeartownsCore::AcceptDebuggerHit(GT_Debug_Run* debug)
 
 void GeartownsCore::StopDebugger(GT_Debug_Run* debug, bool breakpoint)
 {
+    if (breakpoint || (!debug->step_debugger && !debug->step_over))
+    {
+        m_trace_logger->Mark(TRACE_MARK_STOP, m_scheduler->GetClocks(), 0, breakpoint ? 1 : 0);
+        m_trace_stopped = true;
+    }
+
     debug->stopped = true;
     debug->breakpoint_hit = breakpoint;
     m_debug_step = GT_DEBUG_STEP_NONE;
@@ -618,6 +643,7 @@ INLINE GT_Bus_Access_Context GeartownsCore::BeginSlice()
     context.synchronize = &GeartownsCore::SynchronizeIOCallback;
     context.synchronize_memory = &GeartownsCore::SynchronizeMemoryCallback;
     context.poll_port = &GeartownsCore::PollPortCallback;
+    context.trace_clocks = &GeartownsCore::TraceClocksCallback;
     context.synchronize_context = this;
     return context;
 }
@@ -688,6 +714,11 @@ u32 GeartownsCore::PollPortCallback(void* core, u16 port, int width)
     return scheduler->GetCyclesBefore(MIN(stable, scheduler->GetNextEventClocks()));
 }
 
+u64 GeartownsCore::TraceClocksCallback(void* core, u32 cycles)
+{
+    return ((GeartownsCore*)core)->m_scheduler->GetClocksAfter(cycles);
+}
+
 // A halted CPU idles through the slice
 // Events due by the end of the slice run before the CPU samples INTR at its boundary
 // The debugger holds the IRQ back when the slice hit a breakpoint, so it stops right after the instruction
@@ -745,6 +776,8 @@ INLINE bool GeartownsCore::EnterPendingInterrupt(GT_Bus_Access_Context& context)
 
 INLINE void GeartownsCore::DispatchEvents()
 {
+    m_trace_logger->SetDispatching(true);
+
     while (m_scheduler->IsEventDue())
     {
         u64 clocks = m_scheduler->GetClocks();
@@ -780,6 +813,8 @@ INLINE void GeartownsCore::DispatchEvents()
                 break;
         }
     }
+
+    m_trace_logger->SetDispatching(false);
 }
 
 bool GeartownsCore::PowerOn()
@@ -1255,16 +1290,13 @@ void GeartownsCore::DebugWritePort(u16 port, u32 value, int size)
 {
     GT_Bus_Access_Context context = BeginSlice();
 
-    if (m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_WRITE))
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_WRITE)))
     {
-        GT_Trace_Entry entry = {};
-        entry.type = TRACE_IO;
-        entry.event = TRACE_IO_WRITE;
-        entry.io.pc = m_i386->GetCurrentLinearPC();
-        entry.io.value = value;
-        entry.io.port = port;
-        entry.io.size = (u8)(size >> 3);
-        m_trace_logger->TraceLog(entry);
+        GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_IO, TRACE_IO_WRITE);
+        entry->flags |= TRACE_ENTRY_DEBUGGER;
+        entry->io.value = value;
+        entry->io.port = port;
+        entry->io.size = (u8)(size >> 3);
     }
 
     if (size == 8)
@@ -1829,6 +1861,7 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
 
     ApplyBusTiming();
     ApplyCdRomSpeed();
+    m_trace_logger->Mark(TRACE_MARK_STATE_LOAD, m_scheduler->GetClocks());
     return true;
 }
 
@@ -2227,6 +2260,7 @@ void GeartownsCore::Reset()
 // Only the CPU restarts and the low memory view returns to its boot setup, memory and devices keep their state
 void GeartownsCore::ResetCPU()
 {
+    m_trace_logger->Mark(TRACE_MARK_RESET, m_scheduler->GetClocks(), 0, 1);
     m_system_control->AcknowledgeCPUReset();
     m_memory->ResetMapping();
     m_video->ResetFMRView();

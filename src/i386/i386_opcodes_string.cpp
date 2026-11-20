@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "i386.h"
+#include "../common/trace_logger.h"
 #include "i386_opcodes_inline.h"
 #include "../system/io.h"
 
@@ -211,7 +212,12 @@ bool I386::ExecuteStringElement(bool& repeat)
             return false;
 
         if (!allowed)
+        {
+            if (unlikely(m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_DENIED)))
+                TraceDeniedIO(m_state.registers[I386_REG_EDX].low, width, opcode >= 0x6E);
+
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+        }
 
         AddBusPortWait(m_state.registers[I386_REG_EDX].low, opcode >= 0x6E ? 1 : 0);
 
@@ -337,7 +343,7 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
     u8 opcode = m_state.repeat.opcode;
     bool move = opcode == 0xA4 || opcode == 0xA5;
 
-    if ((!move && opcode != 0xAA && opcode != 0xAB) || m_trace_enabled || (m_state.debug_registers[7] & 0xFF) != 0 ||
+    if ((!move && opcode != 0xAA && opcode != 0xAB) || (m_state.debug_registers[7] & 0xFF) != 0 ||
         (m_state.eflags & I386_FLAG_TF) != 0 || IsValidPointer(m_bus_context->observe_memory_write) ||
         m_bus_context->end_batch)
         return 0;

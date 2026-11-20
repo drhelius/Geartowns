@@ -217,8 +217,8 @@ void UPD71071::SetRequest(int channel, bool active)
 {
     u8 bit = (u8)(1 << (channel & 0x03));
 
-    if (active && (m_state.request_levels & bit) == 0 && IsValidPointer(m_trace_logger) &&
-        m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_REQUEST))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_REQUEST)) &&
+        active && (m_state.request_levels & bit) == 0)
         TraceEvent(TRACE_DMA_REQUEST, channel & 0x03, 0, 0, false);
 
     if (active)
@@ -416,7 +416,7 @@ void UPD71071::FinishService(int channel, bool terminal_count)
     UPD71071_Channel& state = m_state.channels[channel];
     u8 bit = (u8)(1 << channel);
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_END))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_DMA, TRACE_DMA_END)))
         TraceEvent(TRACE_DMA_END, channel, 0, 0, terminal_count);
 
     m_state.status_tc |= bit;

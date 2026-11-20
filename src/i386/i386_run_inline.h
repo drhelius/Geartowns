@@ -58,19 +58,16 @@ INLINE u32 I386::RunCheckedStep()
 #endif
 
     m_debug_step = false;
-    m_checked_valid = m_trace_enabled;
 
-    if (unlikely(m_checked_valid))
-        CaptureCheckedBytes();
+    if (unlikely(m_trace_cpu) && !m_state.repeat.active)
+        TraceInstruction();
 
     u16 old_task = m_state.task_register.selector;
     bool debug_active = unlikely((m_state.debug_registers[7] & 0xFF) != 0 ||
         (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0);
     I386_State before;
 
-    if (unlikely(m_trace_enabled))
-        TraceStep(before);
-    else if (debug_active)
+    if (debug_active)
         before.eflags = m_state.eflags;
 
     bool continuation = m_state.repeat.active;
@@ -107,9 +104,6 @@ INLINE u32 I386::RunCheckedStep()
 
     result.steps = 1;
     result.end_batch = result.end_batch || context.end_batch || m_state.halted || m_state.shutdown;
-
-    if (unlikely(m_trace_enabled))
-        RecordTrace(before);
 
     return (u32)result.clocks;
 }

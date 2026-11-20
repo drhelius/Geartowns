@@ -206,6 +206,7 @@ private:
     static GT_Synchronize_Result SynchronizeIOCallback(void* core, GT_Bus_Access_Context& context, u32 start_cycles, u32 access_cycles);
     static void SynchronizeMemoryCallback(void* core, GT_Bus_Access_Context& context);
     static u32 PollPortCallback(void* core, u16 port, int width);
+    static u64 TraceClocksCallback(void* core, u32 cycles);
     static void DMADebugCallback(void* cpu, u32 address, u32 size, bool write);
     void DispatchEvents();
     void Reset();
@@ -284,6 +285,8 @@ private:
     bool m_paused;
     bool m_host_hotkeys;
     GT_Debug_Step m_debug_step;
+    bool m_trace_stopped;
+    u32 m_trace_frame;
     bool m_debug_step_resume;
     bool m_debug_interrupt_deferred;
 

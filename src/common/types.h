@@ -122,6 +122,7 @@ typedef GT_Synchronize_Result (*GT_Synchronize_Hardware_Fn)(void* core, GT_Bus_A
     u32 start_cycles, u32 access_cycles);
 typedef void (*GT_Synchronize_Memory_Fn)(void* core, GT_Bus_Access_Context& context);
 typedef u32 (*GT_Poll_Port_Fn)(void* core, u16 port, int width);
+typedef u64 (*GT_Trace_Clocks_Fn)(void* core, u32 cycles);
 typedef void (*GT_Observe_Memory_Write_Fn)(void* observer, u32 bus_address, u8 previous, u8 value);
 
 struct GT_Bus_Access_Context
@@ -133,6 +134,7 @@ struct GT_Bus_Access_Context
     GT_Synchronize_Hardware_Fn synchronize;
     GT_Synchronize_Memory_Fn synchronize_memory;
     GT_Poll_Port_Fn poll_port;
+    GT_Trace_Clocks_Fn trace_clocks;
     void* synchronize_context;
     GT_Observe_Memory_Write_Fn observe_memory_write;
     void* memory_write_context;

@@ -88,7 +88,7 @@ void CdRom::NotifyMediaChanged()
 {
     m_state.disc_changed = true;
     m_state.drive_state = 0x00;
-    StopCDDA();
+    StopCDDA(m_cdrom_media->IsReady() ? TRACE_CDDA_STOP_INSERT : TRACE_CDDA_STOP_EJECT);
     InvalidateBuffer();
 
     bool reading = (m_state.transfer != CDROM_TRANSFER_NONE) || (m_state.event == CDROM_EVENT_SECTOR) ||
@@ -494,7 +494,7 @@ void CdRom::SetReadCallback(void* context, GT_Read_Callback callback)
 
 void CdRom::ExecuteCommand(u64 clocks)
 {
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_COMMAND))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_COMMAND)))
         TraceEvent(TRACE_CDROM_COMMAND, 0);
 
     u8 code = m_state.active_command & k_cdrom_command_mask;
@@ -1155,7 +1155,7 @@ void CdRom::LostData()
 {
     Debug("CDROM: sector %u not transferred in time", m_state.read_lba);
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_LOST_DATA))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_LOST_DATA)))
         TraceEvent(TRACE_CDROM_LOST_DATA, 0);
 
     InvalidateBuffer();
@@ -1219,9 +1219,9 @@ void CdRom::EndCDDA()
         RaiseSIRQ(true);
 }
 
-void CdRom::StopCDDA()
+void CdRom::StopCDDA(u8 cause)
 {
-    m_cdrom_audio->Stop();
+    m_cdrom_audio->Stop(cause);
     m_state.cdda_end_clocks = 0;
     m_state.cdda_end_remaining = 0;
 }

@@ -144,7 +144,7 @@ void MB8877::WriteCommand(u8 value, u64 clocks)
 {
     SetINTRQ(false);
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_FDC, TRACE_FDC_COMMAND))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_FDC, TRACE_FDC_COMMAND)))
         TraceEvent(TRACE_FDC_COMMAND, value);
 
     if ((value & 0xF0) == 0xD0)
@@ -917,7 +917,7 @@ void MB8877::End()
     m_state.event_clocks = GT_NO_EVENT;
     m_state.status &= ~k_mb8877_busy;
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_FDC, TRACE_FDC_END))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_FDC, TRACE_FDC_END)))
         TraceEvent(TRACE_FDC_END, m_state.command);
 
     if (m_state.drq && (m_state.status & k_mb8877_lost_data) != 0)

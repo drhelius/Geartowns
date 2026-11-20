@@ -18,6 +18,7 @@
  */
 
 #include "i386.h"
+#include "../common/trace_logger.h"
 #include "i386_opcodes_inline.h"
 
 bool I386::OPCode0F_0x00()
@@ -626,6 +627,10 @@ INLINE bool I386::LoadDescriptorTable(InstructionContext& instruction, GT_Bus_Ac
 
     I386_Descriptor_Table& table = !interrupt_table ? m_state.gdtr : m_state.idtr;
 
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_TABLES)))
+        TraceCPUEvent(TRACE_CPU_INTERRUPT_TABLES, interrupt_table ? TRACE_CPU_CAUSE_LIDT : TRACE_CPU_CAUSE_LGDT,
+            table.base, base, limit)->cpu_event.extra2 = table.limit;
+
     table.limit = (u16)limit;
     table.base = base;
 
@@ -675,9 +680,14 @@ INLINE bool I386::OPCodes_LMSW()
         return false;
 
     u32 old_pe = m_state.cr0 & 1;
+    u32 old_cr0 = m_state.cr0;
 
     m_state.cr0 = (m_state.cr0 & ~0x0FU) | (value & 0x0F) | old_pe;
     UpdateExecutionMode();
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_MODE)) &&
+        old_cr0 != m_state.cr0)
+        TraceCPUEvent(TRACE_CPU_INTERRUPT_MODE, TRACE_CPU_CAUSE_LMSW, old_cr0, m_state.cr0, 0);
 
     if (old_pe == 0 && (m_state.cr0 & 1) != 0)
     {
@@ -698,7 +708,12 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
         else if ((value & ~k_i386_cr4_writable) != 0)
             return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
         else
+        {
+            if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_PAGING)))
+                TraceCPUEvent(TRACE_CPU_INTERRUPT_PAGING, TRACE_CPU_CAUSE_MOV_CR4, m_state.cr4, value, 0);
+
             m_state.cr4 = value;
+        }
 
         return true;
     }
@@ -731,7 +746,22 @@ INLINE bool I386::MoveControlRegister(u8 special_index, u8 general_index, bool w
             }
         }
         else
+        {
+            if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_PAGING)) &&
+                special_index == 3)
+                TraceCPUEvent(TRACE_CPU_INTERRUPT_PAGING, TRACE_CPU_CAUSE_MOV_CR3, m_state.cr3, value, m_state.cr0);
+
             *control_register = value;
+        }
+
+        if (unlikely(m_trace_logger->IsEnabled(TRACE_CPU_INTERRUPT)) && special_index == 0 && old_cr0 != m_state.cr0)
+        {
+            bool paging = ((old_cr0 ^ m_state.cr0) & 0x80000000U) != 0;
+            u8 event = ((old_cr0 ^ m_state.cr0) & 1) == 0 && paging ? TRACE_CPU_INTERRUPT_PAGING : TRACE_CPU_INTERRUPT_MODE;
+
+            if (m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, event))
+                TraceCPUEvent(event, TRACE_CPU_CAUSE_MOV_CR0, old_cr0, m_state.cr0, m_state.cr3);
+        }
 
         // The 386 keeps its TLB across CR0 writes, even when paging is turned on or off
         if (special_index == 3)

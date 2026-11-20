@@ -22,7 +22,11 @@
 
 #include "common.h"
 
-#define GT_TRACE_NAME_SIZE 56
+#define GT_TRACE_HEADER_SIZE 16
+#define GT_TRACE_ENTRY_SIZE 96
+#define GT_TRACE_FILTER_RANGES 4
+#define GT_TRACE_FILTER_FUNCTIONS 8
+#define GT_TRACE_INTERRUPT_TEXT_SIZE 27
 
 enum GT_Trace_Type : u8
 {
@@ -44,6 +48,7 @@ enum GT_Trace_Type : u8
     TRACE_KEYBOARD,
     TRACE_INPUT,
     TRACE_SYSTEM,
+    TRACE_MARK,
     TRACE_TYPE_COUNT
 };
 
@@ -67,44 +72,117 @@ static_assert(TRACE_TYPE_COUNT < 32, "Trace category flags exceed 32 bits");
 #define TRACE_FLAG_KEYBOARD         (1U << TRACE_KEYBOARD)
 #define TRACE_FLAG_INPUT            (1U << TRACE_INPUT)
 #define TRACE_FLAG_SYSTEM           (1U << TRACE_SYSTEM)
+#define TRACE_FLAG_MARK             (1U << TRACE_MARK)
+
+#define TRACE_ENTRY_NEXT_PC         0x0001
+#define TRACE_ENTRY_IGNORED         0x0002
+#define TRACE_ENTRY_DEBUGGER        0x0004
+#define TRACE_ENTRY_UNMAPPED        0x0008
+#define TRACE_ENTRY_TYPE_SHIFT      8
+
+enum GT_Trace_Mark_Event : u8
+{
+    TRACE_MARK_START = 0,
+    TRACE_MARK_FRAME,
+    TRACE_MARK_STOP,
+    TRACE_MARK_CONTINUE,
+    TRACE_MARK_STATE_LOAD,
+    TRACE_MARK_REWIND,
+    TRACE_MARK_RESET,
+    TRACE_MARK_POWER,
+    TRACE_MARK_MEDIA,
+    TRACE_MARK_DEBUGGER_OFF,
+    TRACE_MARK_LOST
+};
 
 enum GT_Trace_CPU_Interrupt_Event : u8
 {
     TRACE_CPU_INTERRUPT_HARDWARE = 0,
     TRACE_CPU_INTERRUPT_EXCEPTION,
-    TRACE_CPU_INTERRUPT_SOFTWARE
+    TRACE_CPU_INTERRUPT_SOFTWARE,
+    TRACE_CPU_INTERRUPT_RAISE,
+    TRACE_CPU_INTERRUPT_SHUTDOWN,
+    TRACE_CPU_INTERRUPT_RETURN,
+    TRACE_CPU_INTERRUPT_MODE,
+    TRACE_CPU_INTERRUPT_PAGING,
+    TRACE_CPU_INTERRUPT_TASK,
+    TRACE_CPU_INTERRUPT_TABLES,
+    TRACE_CPU_INTERRUPT_MSR
+};
+
+enum GT_Trace_CPU_Cause : u8
+{
+    TRACE_CPU_CAUSE_MOV_CR0 = 0,
+    TRACE_CPU_CAUSE_LMSW,
+    TRACE_CPU_CAUSE_MOV_CR3,
+    TRACE_CPU_CAUSE_MOV_CR4,
+    TRACE_CPU_CAUSE_INVLPG,
+    TRACE_CPU_CAUSE_LGDT,
+    TRACE_CPU_CAUSE_LIDT,
+    TRACE_CPU_CAUSE_CPUID,
+    TRACE_CPU_CAUSE_RDTSC,
+    TRACE_CPU_CAUSE_RDMSR,
+    TRACE_CPU_CAUSE_WRMSR,
+    TRACE_CPU_CAUSE_TASK_JUMP,
+    TRACE_CPU_CAUSE_TASK_CALL,
+    TRACE_CPU_CAUSE_TASK_IRET,
+    TRACE_CPU_CAUSE_TASK_INTERRUPT
 };
 
 #define TRACE_CPU_INTERRUPT_EVENT_IRQS       (1U << TRACE_CPU_INTERRUPT_HARDWARE)
-#define TRACE_CPU_INTERRUPT_EVENT_EXCEPTIONS (1U << TRACE_CPU_INTERRUPT_EXCEPTION)
+#define TRACE_CPU_INTERRUPT_EVENT_EXCEPTIONS ((1U << TRACE_CPU_INTERRUPT_EXCEPTION) | (1U << TRACE_CPU_INTERRUPT_RAISE) | \
+    (1U << TRACE_CPU_INTERRUPT_SHUTDOWN))
 #define TRACE_CPU_INTERRUPT_EVENT_SOFTWARE   (1U << TRACE_CPU_INTERRUPT_SOFTWARE)
-#define TRACE_CPU_INTERRUPT_EVENT_DEFAULT    (TRACE_CPU_INTERRUPT_EVENT_IRQS | TRACE_CPU_INTERRUPT_EVENT_EXCEPTIONS)
-#define TRACE_CPU_INTERRUPT_EVENT_ALL        (TRACE_CPU_INTERRUPT_EVENT_DEFAULT | TRACE_CPU_INTERRUPT_EVENT_SOFTWARE)
+#define TRACE_CPU_INTERRUPT_EVENT_RETURNS    (1U << TRACE_CPU_INTERRUPT_RETURN)
+#define TRACE_CPU_INTERRUPT_EVENT_MODES      ((1U << TRACE_CPU_INTERRUPT_MODE) | (1U << TRACE_CPU_INTERRUPT_PAGING) | \
+    (1U << TRACE_CPU_INTERRUPT_TASK) | (1U << TRACE_CPU_INTERRUPT_TABLES))
+#define TRACE_CPU_INTERRUPT_EVENT_MSRS       (1U << TRACE_CPU_INTERRUPT_MSR)
+#define TRACE_CPU_INTERRUPT_EVENT_DEFAULT    (TRACE_CPU_INTERRUPT_EVENT_IRQS | TRACE_CPU_INTERRUPT_EVENT_EXCEPTIONS | \
+    TRACE_CPU_INTERRUPT_EVENT_MODES)
+#define TRACE_CPU_INTERRUPT_EVENT_ALL        (TRACE_CPU_INTERRUPT_EVENT_DEFAULT | TRACE_CPU_INTERRUPT_EVENT_SOFTWARE | \
+    TRACE_CPU_INTERRUPT_EVENT_RETURNS | TRACE_CPU_INTERRUPT_EVENT_MSRS)
+
+#define TRACE_CPU_FLAG_FAILED                (1U << TRACE_ENTRY_TYPE_SHIFT)
 
 enum GT_Trace_IO_Event : u8
 {
     TRACE_IO_READ = 0,
-    TRACE_IO_WRITE
+    TRACE_IO_WRITE,
+    TRACE_IO_POLL,
+    TRACE_IO_DENIED
 };
 
 #define TRACE_IO_EVENT_READS  (1U << TRACE_IO_READ)
 #define TRACE_IO_EVENT_WRITES (1U << TRACE_IO_WRITE)
-#define TRACE_IO_EVENT_ALL    (TRACE_IO_EVENT_READS | TRACE_IO_EVENT_WRITES)
+#define TRACE_IO_EVENT_POLLS  (1U << TRACE_IO_POLL)
+#define TRACE_IO_EVENT_DENIED (1U << TRACE_IO_DENIED)
+#define TRACE_IO_EVENT_ALL    (TRACE_IO_EVENT_READS | TRACE_IO_EVENT_WRITES | TRACE_IO_EVENT_POLLS | \
+    TRACE_IO_EVENT_DENIED)
+
+#define TRACE_IO_FLAG_INS     (1U << TRACE_ENTRY_TYPE_SHIFT)
 
 enum GT_Trace_PIC_Event : u8
 {
     TRACE_PIC_REQUEST = 0,
     TRACE_PIC_MASK,
     TRACE_PIC_COMMAND,
-    TRACE_PIC_INIT
+    TRACE_PIC_INIT,
+    TRACE_PIC_SPURIOUS,
+    TRACE_PIC_LINE_LOW
 };
 
 #define TRACE_PIC_EVENT_REQUESTS (1U << TRACE_PIC_REQUEST)
 #define TRACE_PIC_EVENT_MASK     (1U << TRACE_PIC_MASK)
 #define TRACE_PIC_EVENT_COMMANDS (1U << TRACE_PIC_COMMAND)
 #define TRACE_PIC_EVENT_INIT     (1U << TRACE_PIC_INIT)
-#define TRACE_PIC_EVENT_ALL      (TRACE_PIC_EVENT_REQUESTS | TRACE_PIC_EVENT_MASK | TRACE_PIC_EVENT_COMMANDS | \
-    TRACE_PIC_EVENT_INIT)
+#define TRACE_PIC_EVENT_SPURIOUS (1U << TRACE_PIC_SPURIOUS)
+#define TRACE_PIC_EVENT_LINE_LOW (1U << TRACE_PIC_LINE_LOW)
+#define TRACE_PIC_EVENT_DEFAULT  (TRACE_PIC_EVENT_REQUESTS | TRACE_PIC_EVENT_MASK | TRACE_PIC_EVENT_COMMANDS | \
+    TRACE_PIC_EVENT_INIT | TRACE_PIC_EVENT_SPURIOUS)
+#define TRACE_PIC_EVENT_ALL      (TRACE_PIC_EVENT_DEFAULT | TRACE_PIC_EVENT_LINE_LOW)
+
+#define TRACE_PIC_FLAG_COALESCED  (1U << TRACE_ENTRY_TYPE_SHIFT)
+#define TRACE_PIC_FLAG_IN_SERVICE (2U << TRACE_ENTRY_TYPE_SHIFT)
 
 enum GT_Trace_Timer_Event : u8
 {
@@ -258,7 +336,15 @@ enum GT_Trace_CDROM_Event : u8
     TRACE_CDROM_CDDA_RESUME,
     TRACE_CDROM_CDDA_STOP,
     TRACE_CDROM_CDDA_END,
-    TRACE_CDROM_CDDA_LOOP
+    TRACE_CDROM_CDDA_LOOP,
+    TRACE_CDROM_CDDA_REJECT
+};
+
+enum GT_Trace_CDDA_Stop : u8
+{
+    TRACE_CDDA_STOP_COMMAND = 0,
+    TRACE_CDDA_STOP_INSERT,
+    TRACE_CDDA_STOP_EJECT
 };
 
 #define TRACE_CDROM_EVENT_COMMANDS (1U << TRACE_CDROM_COMMAND)
@@ -269,7 +355,7 @@ enum GT_Trace_CDROM_Event : u8
     (1U << TRACE_CDROM_SECTOR_END) | (1U << TRACE_CDROM_LOST_DATA))
 #define TRACE_CDROM_EVENT_CDDA     ((1U << TRACE_CDROM_CDDA_PLAY) | (1U << TRACE_CDROM_CDDA_PAUSE) | \
     (1U << TRACE_CDROM_CDDA_RESUME) | (1U << TRACE_CDROM_CDDA_STOP) | (1U << TRACE_CDROM_CDDA_END) | \
-    (1U << TRACE_CDROM_CDDA_LOOP))
+    (1U << TRACE_CDROM_CDDA_LOOP) | (1U << TRACE_CDROM_CDDA_REJECT))
 #define TRACE_CDROM_EVENT_ALL      (TRACE_CDROM_EVENT_COMMANDS | TRACE_CDROM_EVENT_STATUS | TRACE_CDROM_EVENT_IRQS | \
     TRACE_CDROM_EVENT_CONTROL | TRACE_CDROM_EVENT_DATA | TRACE_CDROM_EVENT_CDDA)
 
@@ -356,13 +442,15 @@ enum GT_Trace_System_Event : u8
     TRACE_SYSTEM_EVENT_MEMORY_CARD)
 #define TRACE_SYSTEM_EVENT_ALL         (TRACE_SYSTEM_EVENT_DEFAULT | TRACE_SYSTEM_EVENT_RTC)
 
-static_assert(TRACE_VIDEO_HIRES < 32 && TRACE_CDROM_CDDA_LOOP < 32, "Trace event filters exceed 32 bits");
+static_assert(TRACE_VIDEO_HIRES < 32 && TRACE_CDROM_CDDA_REJECT < 32, "Trace event filters exceed 32 bits");
 
 struct GT_Trace_Entry
 {
     u64 cycle;
+    u32 pc;
     GT_Trace_Type type;
     u8 event;
+    u16 flags;
     union
     {
         struct
@@ -378,9 +466,10 @@ struct GT_Trace_Entry
             u16 fs;
             u16 gs;
             u8 mode;
+            u8 cpl;
+            u8 default32;
             u8 size;
             u8 opcodes[GT_I386_MAX_INSTRUCTION_LENGTH];
-            char name[GT_TRACE_NAME_SIZE];
         } cpu;
 
         struct
@@ -388,19 +477,61 @@ struct GT_Trace_Entry
             u32 from;
             u32 to;
             u32 error_code;
+            u32 eflags;
+            u32 from_eip;
+            u32 to_eip;
             u16 ax;
+            u16 bx;
+            u16 cx;
+            u16 dx;
+            u16 si;
+            u16 di;
+            u16 ds;
+            u16 es;
+            u16 from_cs;
+            u16 to_cs;
             u8 vector;
             u8 line;
             u8 has_error_code;
+            u8 modes;
+            u8 cpls;
+            char text[GT_TRACE_INTERRUPT_TEXT_SIZE];
         } interrupt;
 
         struct
         {
-            u32 pc;
             u32 value;
+            u32 count;
+            u32 cycles;
             u16 port;
             u8 size;
+            u8 reason;
         } io;
+
+        struct
+        {
+            u32 old_value;
+            u32 new_value;
+            u32 extra;
+            u32 extra2;
+            u32 eip;
+            u32 to_eip;
+            u16 cs;
+            u16 to_cs;
+            u16 selector;
+            u8 cause;
+            u8 vector;
+            u8 vector2;
+            u8 modes;
+            u8 has_error_code;
+        } cpu_event;
+
+        struct
+        {
+            u64 value;
+            u32 detail;
+            u8 cause;
+        } mark;
 
         struct
         {
@@ -413,6 +544,7 @@ struct GT_Trace_Entry
             u8 isr;
             u8 imr;
             u8 step;
+            u8 previous_isr;
         } pic;
 
         struct
@@ -573,21 +705,71 @@ struct GT_Trace_Entry
     };
 };
 
-static_assert(sizeof(GT_Trace_Entry) <= 144, "GT_Trace_Entry exceeds its memory budget");
+static_assert(sizeof(GT_Trace_Entry) == GT_TRACE_ENTRY_SIZE, "GT_Trace_Entry must fill one slot");
+
+struct GT_Trace_Range
+{
+    u32 first;
+    u32 last;
+    u32 events;
+};
+
+struct GT_Trace_Function
+{
+    u8 vector;
+    u8 match;
+    u16 value;
+};
+
+enum GT_Trace_Function_Match : u8
+{
+    TRACE_FUNCTION_ANY = 0,
+    TRACE_FUNCTION_AH,
+    TRACE_FUNCTION_AX
+};
+
+struct GT_Trace_Filters
+{
+    GT_Trace_Range code_include[GT_TRACE_FILTER_RANGES];
+    GT_Trace_Range code_exclude[GT_TRACE_FILTER_RANGES];
+    GT_Trace_Range port_include[GT_TRACE_FILTER_RANGES];
+    GT_Trace_Range port_exclude[GT_TRACE_FILTER_RANGES];
+    GT_Trace_Function functions[GT_TRACE_FILTER_FUNCTIONS];
+    u32 vectors[8];
+    u8 code_include_count;
+    u8 code_exclude_count;
+    u8 port_include_count;
+    u8 port_exclude_count;
+    u8 function_count;
+};
 
 class TraceLogger
 {
 public:
     TraceLogger();
     ~TraceLogger();
+    static TraceLogger* GetDisabled();
     void Init(const u64* clocks);
+    void SetPCSource(const u32* base, const u32* offset);
     void Reset();
     bool SetCapacity(u32 capacity);
     void SetActive(bool active);
     INLINE bool IsEnabled(GT_Trace_Type type) const;
-    INLINE bool IsAnyEnabled() const;
     INLINE bool IsEventEnabled(GT_Trace_Type type, u8 event) const;
+    INLINE bool IsRecording() const;
+    INLINE bool IsCodeTraced(u32 linear) const;
+    INLINE bool IsPortTraced(u16 port, u8 event) const;
+    INLINE bool IsSoftwareInterruptTraced(u8 vector, u16 ax) const;
+    void SetFilters(const GT_Trace_Filters& filters);
+    const GT_Trace_Filters& GetFilters() const;
+    static void ClearFilters(GT_Trace_Filters& filters);
+    INLINE GT_Trace_Entry* Begin(GT_Trace_Type type, u8 event);
+    INLINE GT_Trace_Entry* Begin(GT_Trace_Type type, u8 event, u64 clocks);
+    INLINE GT_Trace_Entry* BeginRaw(GT_Trace_Type type, u8 event, u64 clocks);
     INLINE void TraceLog(const GT_Trace_Entry& entry);
+    INLINE void SetDispatching(bool dispatching);
+    INLINE u64 GetClocks() const;
+    void Mark(u8 event, u64 value, u32 detail = 0, u8 cause = 0);
     void SetEnabledFlags(u32 flags);
     void SetEventFilter(GT_Trace_Type type, u32 filter);
     u32 GetEnabledFlags() const;
@@ -596,23 +778,34 @@ public:
     u32 GetCapacity() const;
     u64 GetTotalLogged() const;
     u64 GetSequence() const;
+    u64 GetOverwritten() const;
     const GT_Trace_Entry& GetEntry(u32 index) const;
 
 private:
     void UpdateEnabled();
+    bool MatchesCode(u32 linear) const;
+    bool MatchesPort(u16 port, u8 event) const;
+    bool MatchesFunction(u8 vector, u16 ax) const;
 
 private:
     GT_Trace_Entry* m_buffer;
     const u64* m_clocks;
+    const u32* m_pc_base;
+    const u32* m_pc_offset;
     u32 m_position;
     u32 m_count;
     u32 m_capacity;
     u32 m_enabled_flags;
     u32 m_active_flags;
     bool m_active;
+    bool m_dispatching;
     u32 m_event_filters[TRACE_TYPE_COUNT];
     u64 m_total_logged;
     u64 m_sequence;
+    GT_Trace_Filters m_filters;
+    bool m_code_filtered;
+    bool m_port_filtered;
+    bool m_vector_filtered;
 };
 
 // Events are only recorded while the debugger runs the machine
@@ -622,15 +815,6 @@ INLINE bool TraceLogger::IsEnabled(GT_Trace_Type type) const
     return IS_SET_BIT(m_active_flags, type);
 #else
     UNUSED(type);
-    return false;
-#endif
-}
-
-INLINE bool TraceLogger::IsAnyEnabled() const
-{
-#if !defined(GT_DISABLE_DISASSEMBLER)
-    return m_active_flags != 0;
-#else
     return false;
 #endif
 }
@@ -646,11 +830,46 @@ INLINE bool TraceLogger::IsEventEnabled(GT_Trace_Type type, u8 event) const
 #endif
 }
 
-INLINE void TraceLogger::TraceLog(const GT_Trace_Entry& entry)
+INLINE bool TraceLogger::IsRecording() const
 {
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    m_buffer[m_position] = entry;
-    m_buffer[m_position].cycle = *m_clocks;
+    return m_active_flags != 0;
+#else
+    return false;
+#endif
+}
+
+INLINE bool TraceLogger::IsCodeTraced(u32 linear) const
+{
+    return !m_code_filtered || MatchesCode(linear);
+}
+
+INLINE bool TraceLogger::IsPortTraced(u16 port, u8 event) const
+{
+    return !m_port_filtered || MatchesPort(port, event);
+}
+
+INLINE bool TraceLogger::IsSoftwareInterruptTraced(u8 vector, u16 ax) const
+{
+    return !m_vector_filtered || MatchesFunction(vector, ax);
+}
+
+INLINE GT_Trace_Entry* TraceLogger::Begin(GT_Trace_Type type, u8 event)
+{
+    return Begin(type, event, *m_clocks);
+}
+
+INLINE GT_Trace_Entry* TraceLogger::Begin(GT_Trace_Type type, u8 event, u64 clocks)
+{
+    GT_Trace_Entry* entry = BeginRaw(type, event, clocks);
+    memset((u8*)entry + GT_TRACE_HEADER_SIZE, 0, GT_TRACE_ENTRY_SIZE - GT_TRACE_HEADER_SIZE);
+    return entry;
+}
+
+INLINE GT_Trace_Entry* TraceLogger::BeginRaw(GT_Trace_Type type, u8 event, u64 clocks)
+{
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    GT_Trace_Entry* entry = &m_buffer[m_position];
     m_position = m_position + 1 == m_capacity ? 0 : m_position + 1;
 
     if (m_count < m_capacity)
@@ -658,9 +877,38 @@ INLINE void TraceLogger::TraceLog(const GT_Trace_Entry& entry)
 
     m_total_logged++;
     m_sequence++;
+
+    entry->cycle = clocks;
+    entry->pc = *m_pc_base + *m_pc_offset;
+    entry->type = type;
+    entry->event = event;
+    entry->flags = m_dispatching ? TRACE_ENTRY_NEXT_PC : 0;
+    return entry;
 #else
-    UNUSED(entry);
+    static GT_Trace_Entry k_scratch;
+    UNUSED(type);
+    UNUSED(event);
+    UNUSED(clocks);
+    return &k_scratch;
 #endif
+}
+
+INLINE void TraceLogger::TraceLog(const GT_Trace_Entry& entry)
+{
+    GT_Trace_Entry* slot = BeginRaw(entry.type, entry.event, *m_clocks);
+    slot->flags |= entry.flags;
+    memcpy((u8*)slot + GT_TRACE_HEADER_SIZE, (const u8*)&entry + GT_TRACE_HEADER_SIZE,
+        GT_TRACE_ENTRY_SIZE - GT_TRACE_HEADER_SIZE);
+}
+
+INLINE void TraceLogger::SetDispatching(bool dispatching)
+{
+    m_dispatching = dispatching;
+}
+
+INLINE u64 TraceLogger::GetClocks() const
+{
+    return *m_clocks;
 }
 
 #endif /* TRACE_LOGGER_H */

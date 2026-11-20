@@ -21,39 +21,54 @@
 
 void PIC::Init()
 {
-    InitPointer(m_trace_logger);
+    m_trace_logger = TraceLogger::GetDisabled();
     m_master.Init(true);
     m_slave.Init(false);
 }
 
 void PIC::SetTraceLogger(TraceLogger* trace_logger)
 {
-    m_trace_logger = trace_logger;
+    m_trace_logger = IsValidPointer(trace_logger) ? trace_logger : TraceLogger::GetDisabled();
 }
 
 // Only a rising input is a new request
-void PIC::TraceRequest(int irq)
+void PIC::SetIRQLineTraced(int irq, bool high)
 {
     I8259::I8259_State* state = irq >= 8 ? m_slave.GetState() : m_master.GetState();
     u8 bit = (u8)(1 << (irq & 7));
+    bool rising = high && (state->input_levels & bit) == 0;
+    bool falling = !high && (state->input_levels & bit) != 0;
+    bool coalesced = (state->irr & bit) != 0;
+    bool in_service = (state->isr & bit) != 0;
 
-    if ((state->input_levels & bit) != 0)
+    ApplyIRQLine(irq, high);
+
+    u8 event = rising ? TRACE_PIC_REQUEST : TRACE_PIC_LINE_LOW;
+
+    if ((!rising && !falling) || !m_trace_logger->IsEventEnabled(TRACE_PIC, event))
         return;
 
-    GT_Trace_Entry entry = {};
-    entry.type = TRACE_PIC;
-    entry.event = TRACE_PIC_REQUEST;
-    entry.pic.chip = irq >= 8 ? 1 : 0;
-    entry.pic.line = (u8)irq;
-    entry.pic.vector = (u8)((state->icw2 & 0xF8) | (irq & 7));
-    entry.pic.irr = state->irr;
-    entry.pic.isr = state->isr;
-    entry.pic.imr = state->imr;
-    m_trace_logger->TraceLog(entry);
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_PIC, event);
+    entry->flags |= (coalesced && rising ? TRACE_PIC_FLAG_COALESCED : 0) | (in_service ? TRACE_PIC_FLAG_IN_SERVICE : 0);
+    entry->pic.chip = irq >= 8 ? 1 : 0;
+    entry->pic.line = (u8)irq;
+    entry->pic.vector = (u8)((state->icw2 & 0xF8) | (irq & 7));
+    entry->pic.irr = state->irr;
+    entry->pic.isr = state->isr;
+    entry->pic.imr = state->imr;
 }
 
-void PIC::TraceWrite(int chip, int a0, u8 value, u8 previous_mask, u8 previous_step)
+void PIC::WriteTraced(u16 port, u8 value)
 {
+    int a0 = (port >> 1) & 0x01;
+    int chip = (port >> 4) & 0x01;
+    I8259::I8259_State* state = chip != 0 ? m_slave.GetState() : m_master.GetState();
+    u8 previous_mask = state->imr;
+    u8 previous_isr = state->isr;
+    u8 previous_step = (u8)state->init_step;
+
+    ApplyWrite(chip, a0, value);
+
     u8 event = TRACE_PIC_COMMAND;
 
     if ((a0 == 0 && (value & k_i8259_icw1_init) != 0) || (a0 != 0 && previous_step != I8259::I8259_INIT_READY))
@@ -64,18 +79,27 @@ void PIC::TraceWrite(int chip, int a0, u8 value, u8 previous_mask, u8 previous_s
     if (!m_trace_logger->IsEventEnabled(TRACE_PIC, event))
         return;
 
-    I8259::I8259_State* state = chip != 0 ? m_slave.GetState() : m_master.GetState();
-    GT_Trace_Entry entry = {};
-    entry.type = TRACE_PIC;
-    entry.event = event;
-    entry.pic.chip = (u8)chip;
-    entry.pic.value = value;
-    entry.pic.previous = previous_mask;
-    entry.pic.irr = state->irr;
-    entry.pic.isr = state->isr;
-    entry.pic.imr = state->imr;
-    entry.pic.step = a0 == 0 ? (u8)I8259::I8259_INIT_READY : previous_step;
-    m_trace_logger->TraceLog(entry);
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_PIC, event);
+    entry->pic.chip = (u8)chip;
+    entry->pic.value = value;
+    entry->pic.previous = previous_mask;
+    entry->pic.previous_isr = previous_isr;
+    entry->pic.irr = state->irr;
+    entry->pic.isr = state->isr;
+    entry->pic.imr = state->imr;
+    entry->pic.step = a0 == 0 ? (u8)I8259::I8259_INIT_READY : previous_step;
+}
+
+void PIC::TraceSpurious(int line)
+{
+    I8259::I8259_State* state = line >= 8 ? m_slave.GetState() : m_master.GetState();
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_PIC, TRACE_PIC_SPURIOUS);
+    entry->pic.chip = line >= 8 ? 1 : 0;
+    entry->pic.line = (u8)line;
+    entry->pic.vector = (u8)((state->icw2 & 0xF8) | 7);
+    entry->pic.irr = state->irr;
+    entry->pic.isr = state->isr;
+    entry->pic.imr = state->imr;
 }
 
 void PIC::Reset()
@@ -98,12 +122,17 @@ u8 PIC::Read(u16 port)
 
 void PIC::Write(u16 port, u8 value)
 {
-    int a0 = (port >> 1) & 0x01;
-    int chip = (port >> 4) & 0x01;
-    I8259::I8259_State* state = chip != 0 ? m_slave.GetState() : m_master.GetState();
-    u8 previous_mask = state->imr;
-    u8 previous_step = (u8)state->init_step;
+    if (unlikely(m_trace_logger->IsEnabled(TRACE_PIC)))
+    {
+        WriteTraced(port, value);
+        return;
+    }
 
+    ApplyWrite((port >> 4) & 0x01, (port >> 1) & 0x01, value);
+}
+
+void PIC::ApplyWrite(int chip, int a0, u8 value)
+{
     if (chip == 0)
         m_master.Write(a0, value);
     else
@@ -111,9 +140,6 @@ void PIC::Write(u16 port, u8 value)
         m_slave.Write(a0, value);
         UpdateCascade();
     }
-
-    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEnabled(TRACE_PIC)))
-        TraceWrite(chip, a0, value, previous_mask, previous_step);
 }
 
 u8 PIC::AcknowledgeInterrupt()
@@ -134,9 +160,18 @@ u8 PIC::AcknowledgeInterrupt(int& line)
         line = 7;
 
         if (!m_master.IsCascadeLine(line))
+        {
+            if (unlikely(m_trace_logger->IsEventEnabled(TRACE_PIC, TRACE_PIC_SPURIOUS)))
+                TraceSpurious(line);
+
             return m_master.GetVector(line);
+        }
 
         line = 8 + 7;
+
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_PIC, TRACE_PIC_SPURIOUS)))
+            TraceSpurious(line);
+
         return m_slave.GetVector(7);
     }
 
@@ -150,6 +185,9 @@ u8 PIC::AcknowledgeInterrupt(int& line)
     {
         Debug("PIC: spurious slave interrupt acknowledge");
         slave_line = 7;
+
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_PIC, TRACE_PIC_SPURIOUS)))
+            TraceSpurious(8 + slave_line);
     }
 
     line = 8 + slave_line;

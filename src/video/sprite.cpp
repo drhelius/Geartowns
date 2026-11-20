@@ -127,7 +127,8 @@ void Sprite::StartTransfer(u64 clocks)
 // The previous transfer still runs, so this frame starts none and the shown half stays the same
 void Sprite::TraceBusyAtVSync()
 {
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_SPRITE, TRACE_SPRITE_BUSY_AT_VSYNC))
+    if (unlikely(IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_SPRITE,
+        TRACE_SPRITE_BUSY_AT_VSYNC)))
         TraceEvent(TRACE_SPRITE_BUSY_AT_VSYNC, 0);
 }
 

@@ -1587,16 +1587,13 @@ void I386::UpdateVBlankWatch()
     m_vblank_watch_hit = false;
     m_vblank_watch_misses = missed ? m_vblank_watch_misses + 1 : 0;
 
-    if (!missed || !IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_MISSED_VBLANK))
+    if (!missed || !m_trace_logger->IsEventEnabled(TRACE_VIDEO, TRACE_VIDEO_MISSED_VBLANK))
         return;
 
-    GT_Trace_Entry entry = {};
-    entry.type = TRACE_VIDEO;
-    entry.event = TRACE_VIDEO_MISSED_VBLANK;
-    entry.video.param = m_vblank_watch_address;
-    entry.video.value = (u16)MIN(m_vblank_watch_misses, 0xFFFFU);
-    entry.video.raw = (m_vblank_watch_read ? 0x01 : 0x00) | (m_vblank_watch_write ? 0x02 : 0x00);
-    m_trace_logger->TraceLog(entry);
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_VIDEO, TRACE_VIDEO_MISSED_VBLANK);
+    entry->video.param = m_vblank_watch_address;
+    entry->video.value = (u16)MIN(m_vblank_watch_misses, 0xFFFFU);
+    entry->video.raw = (m_vblank_watch_read ? 0x01 : 0x00) | (m_vblank_watch_write ? 0x02 : 0x00);
 }
 
 void I386::ResetVBlankWatch()
@@ -1610,14 +1607,15 @@ void I386::ResetVBlankWatch()
 // Without enabled data, I/O or interrupt breakpoints every check stays off and memory keeps its fast paths
 void I386::EnableDebuggerChecks(bool enable)
 {
-    bool trace = enable && IsValidPointer(m_trace_logger);
+    bool trace = enable;
 
     m_debugger_checks = enable;
     m_debugger_memory_checks = enable && (m_vblank_watch_read || m_vblank_watch_write);
     m_debugger_io_checks = trace && m_trace_logger->IsEnabled(TRACE_IO);
     m_debugger_interrupt_checks = trace && m_trace_logger->IsEnabled(TRACE_CPU_INTERRUPT);
+    m_debugger_io_breaks = false;
+    m_debugger_interrupt_breaks = false;
     m_trace_cpu = trace && m_trace_logger->IsEnabled(TRACE_CPU);
-    m_trace_enabled = m_trace_internal || m_trace_cpu;
     m_profiler_active = enable && IsValidPointer(m_profiler) && m_profiler->IsEnabled();
 
     UpdateExecuteFilter();
@@ -1633,7 +1631,7 @@ void I386::EnableDebuggerChecks(bool enable)
             continue;
 
         if (breakpoint.space == I386_BREAKPOINT_IO)
-            m_debugger_io_checks = true;
+            m_debugger_io_breaks = true;
         else
             m_debugger_memory_checks = true;
     }
@@ -1641,11 +1639,14 @@ void I386::EnableDebuggerChecks(bool enable)
     for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)
     {
         if (m_interrupt_breakpoints[i].enabled)
-            m_debugger_interrupt_checks = true;
+            m_debugger_interrupt_breaks = true;
     }
 
     if ((m_irq_breakpoints & ~m_irq_breakpoints_disabled) != 0)
-        m_debugger_interrupt_checks = true;
+        m_debugger_interrupt_breaks = true;
+
+    m_debugger_io_checks = m_debugger_io_checks || m_debugger_io_breaks;
+    m_debugger_interrupt_checks = m_debugger_interrupt_checks || m_debugger_interrupt_breaks;
 }
 
 // A halted CPU starts no instruction, and the elements of a REP after the first belong to the instruction already checked
@@ -1735,8 +1736,33 @@ bool I386::CheckExecuteBreakpoints(bool regular, bool run_to)
 bool I386::NeedsDebuggerSteps() const
 {
     return m_breakpoint_hit || m_debugger_hit_pending || m_debugger_exec_checks || m_debugger_memory_checks ||
-        m_debugger_io_checks || m_debugger_interrupt_checks || m_trace_enabled || m_profiler_active ||
-        (IsValidPointer(m_trace_logger) && m_trace_logger->IsAnyEnabled());
+        m_debugger_io_breaks || m_debugger_interrupt_breaks || m_trace_cpu || m_profiler_active;
+}
+
+bool I386::HasDebuggerMemoryChecks() const
+{
+    return m_debugger_memory_checks;
+}
+
+const u32* I386::GetCodeBasePointer() const
+{
+    return &m_state.segments[I386_SEGMENT_CS].base;
+}
+
+const u32* I386::GetEIPPointer() const
+{
+    return &m_state.eip;
+}
+
+u64 I386::GetTraceClocks() const
+{
+    const GT_Bus_Access_Context* context = m_bus_context;
+
+    if (!m_poll_active || !IsValidPointer(context) || !IsValidPointer(context->trace_clocks))
+        return m_trace_logger->GetClocks();
+
+    u32 cycles = m_io_start_cycles > context->synchronized_cycles ? m_io_start_cycles - context->synchronized_cycles : 0;
+    return context->trace_clocks(context->synchronize_context, cycles);
 }
 
 void I386::UpdateExecuteFilter()
@@ -1959,16 +1985,15 @@ void I386::RecordDebuggerIO(u16 port, u32 value, u32 size, bool write)
     u8 type = write ? I386_BREAKPOINT_WRITE : I386_BREAKPOINT_READ;
     u8 event = write ? TRACE_IO_WRITE : TRACE_IO_READ;
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_IO, event))
+    if (m_trace_logger->IsEventEnabled(TRACE_IO, event) && m_trace_logger->IsPortTraced(port, event))
     {
-        GT_Trace_Entry entry = {};
-        entry.type = TRACE_IO;
-        entry.event = event;
-        entry.io.pc = GetCurrentLinearPC();
-        entry.io.value = value;
-        entry.io.port = port;
-        entry.io.size = (u8)size;
-        m_trace_logger->TraceLog(entry);
+        GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_IO, event);
+        entry->io.value = value;
+        entry->io.port = port;
+        entry->io.size = (u8)size;
+
+        if (IsValidPointer(m_bus_decoded_ports) && !IS_SET_BIT(m_bus_decoded_ports[port >> 3], port & 7))
+            entry->flags |= TRACE_ENTRY_UNMAPPED;
     }
 
     for (size_t i = 0; i < m_breakpoints.size(); i++)
@@ -1993,20 +2018,9 @@ void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 
 
     u8 event = software ? TRACE_CPU_INTERRUPT_SOFTWARE : external ? TRACE_CPU_INTERRUPT_HARDWARE : TRACE_CPU_INTERRUPT_EXCEPTION;
 
-    if (IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, event))
-    {
-        GT_Trace_Entry entry = {};
-        entry.type = TRACE_CPU_INTERRUPT;
-        entry.event = event;
-        entry.interrupt.from = from;
-        entry.interrupt.to = GetCurrentLinearPC();
-        entry.interrupt.error_code = error_code;
-        entry.interrupt.ax = m_state.registers[I386_REG_EAX].low;
-        entry.interrupt.vector = vector;
-        entry.interrupt.line = line;
-        entry.interrupt.has_error_code = has_error_code ? 1 : 0;
-        m_trace_logger->TraceLog(entry);
-    }
+    if (m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, event) &&
+        (!software || m_trace_logger->IsSoftwareInterruptTraced(vector, m_state.registers[I386_REG_EAX].low)))
+        TraceInterrupt(vector, event, line, from, has_error_code, error_code);
 
     for (size_t i = 0; i < m_interrupt_breakpoints.size(); i++)
     {
@@ -2022,6 +2036,167 @@ void I386::RecordDebuggerInterrupt(u8 vector, bool software, bool external, u32 
 
     if (line != 0xFF && IsIRQBreakpointEnabled(line))
         RecordDebuggerHit(true, 0, 0, vector, 0, vector, source, line);
+}
+
+bool I386::FormatInstruction(const u8* bytes, u32 size, u16 cs, u32 eip, u32 linear, u8 mode, bool default32,
+    char* text, size_t text_size)
+{
+#if !defined(GT_DISABLE_DISASSEMBLER)
+    I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
+
+    if (IsValidPointer(record) && record->size == (int)size && record->eip == eip && record->cs == cs &&
+        (u8)record->mode == mode && record->default32 == default32 && memcmp(record->opcodes, bytes, size) == 0)
+    {
+        FormatDisassemblerRecordText(linear);
+        strncpy_fit(text, record->name, text_size);
+        return true;
+    }
+
+    I386_Decode_State state;
+
+    if (size == 0 || !DecodeInstructionBytes(bytes, size, eip, default32, state))
+        return false;
+
+    I386_Disassembler_Record scratch = I386_Disassembler_Record();
+    scratch.cs = cs;
+    scratch.eip = eip;
+    scratch.linear = linear;
+    scratch.mode = (I386_Execution_Mode)mode;
+    scratch.default32 = default32;
+    scratch.size = state.length;
+    FormatDisassemblerText(state, scratch, linear - eip);
+    strncpy_fit(text, scratch.name, text_size);
+    return true;
+#else
+    UNUSED(bytes);
+    UNUSED(size);
+    UNUSED(cs);
+    UNUSED(eip);
+    UNUSED(linear);
+    UNUSED(mode);
+    UNUSED(default32);
+    UNUSED(text);
+    UNUSED(text_size);
+    return false;
+#endif
+}
+
+GT_Trace_Entry* I386::TraceCPUEvent(u8 event, u8 cause, u32 old_value, u32 new_value, u32 extra)
+{
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_CPU_INTERRUPT, event, GetTraceClocks());
+    entry->cpu_event.old_value = old_value;
+    entry->cpu_event.new_value = new_value;
+    entry->cpu_event.extra = extra;
+    entry->cpu_event.cause = cause;
+    entry->cpu_event.cs = m_state.segments[I386_SEGMENT_CS].selector;
+    entry->cpu_event.eip = m_state.eip;
+    entry->cpu_event.modes = (u8)m_state.execution_mode | (u8)(m_state.current_privilege_level << 4);
+    return entry;
+}
+
+GT_Trace_Entry* I386::TraceException(u8 event, const I386_Pending_Exception& exception, u32 return_eip, u8 next_vector)
+{
+    GT_Trace_Entry* entry = TraceCPUEvent(event, exception.exception_class, exception.error_code, m_state.cr2,
+        m_state.registers[I386_REG_ESP].value);
+    entry->cpu_event.eip = return_eip;
+    entry->cpu_event.vector = exception.vector;
+    entry->cpu_event.vector2 = next_vector;
+    entry->cpu_event.has_error_code = exception.has_error_code ? 1 : 0;
+    return entry;
+}
+
+void I386::TraceDeniedIO(u16 port, int width, bool write)
+{
+    if (!m_trace_logger->IsPortTraced(port, TRACE_IO_DENIED))
+        return;
+
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_IO, TRACE_IO_DENIED, GetTraceClocks());
+    entry->io.port = port;
+    entry->io.size = (u8)(width >> 3);
+    entry->io.reason = (u8)((write ? 0x01 : 0x00) | (m_state.execution_mode == I386_MODE_VM86 ||
+        (m_state.execution_mode == I386_MODE_PROTECTED && m_state.current_privilege_level > GetIOPrivilegeLevel()) ?
+        0x02 : 0x00));
+}
+
+void I386::SaveTraceSource()
+{
+    m_trace_source.eip = m_state.eip;
+    m_trace_source.eflags = m_state.eflags;
+    m_trace_source.ds_base = m_state.segments[I386_SEGMENT_DS].base;
+    m_trace_source.cs = m_state.segments[I386_SEGMENT_CS].selector;
+    m_trace_source.ds = m_state.segments[I386_SEGMENT_DS].selector;
+    m_trace_source.es = m_state.segments[I386_SEGMENT_ES].selector;
+    m_trace_source.mode = (u8)m_state.execution_mode;
+    m_trace_source.cpl = m_state.current_privilege_level;
+}
+
+void I386::TraceInterrupt(u8 vector, u8 event, u8 line, u32 from, bool has_error_code, u32 error_code)
+{
+    const I386_Trace_Source& source = m_trace_source;
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_CPU_INTERRUPT, event, GetTraceClocks());
+
+    entry->pc = from;
+    entry->interrupt.from = from;
+    entry->interrupt.to = GetCurrentLinearPC();
+    entry->interrupt.error_code = error_code;
+    entry->interrupt.eflags = source.eflags;
+    entry->interrupt.from_eip = source.eip;
+    entry->interrupt.to_eip = m_state.eip;
+    entry->interrupt.ax = m_state.registers[I386_REG_EAX].low;
+    entry->interrupt.bx = m_state.registers[I386_REG_EBX].low;
+    entry->interrupt.cx = m_state.registers[I386_REG_ECX].low;
+    entry->interrupt.dx = m_state.registers[I386_REG_EDX].low;
+    entry->interrupt.si = m_state.registers[I386_REG_ESI].low;
+    entry->interrupt.di = m_state.registers[I386_REG_EDI].low;
+    entry->interrupt.ds = source.ds;
+    entry->interrupt.es = source.es;
+    entry->interrupt.from_cs = source.cs;
+    entry->interrupt.to_cs = m_state.segments[I386_SEGMENT_CS].selector;
+    entry->interrupt.vector = vector;
+    entry->interrupt.line = line;
+    entry->interrupt.has_error_code = has_error_code ? 1 : 0;
+    entry->interrupt.modes = (u8)(source.mode | ((u8)m_state.execution_mode << 4));
+    entry->interrupt.cpls = (u8)(source.cpl | (m_state.current_privilege_level << 4));
+
+    if (event == TRACE_CPU_INTERRUPT_SOFTWARE)
+        TraceInterruptText(vector, entry);
+}
+
+void I386::TraceInterruptText(u8 vector, GT_Trace_Entry* entry) const
+{
+    if (vector != 0x21)
+        return;
+
+    u8 function = (u8)(entry->interrupt.ax >> 8);
+    u16 offset = entry->interrupt.dx;
+    u8 terminator = 0;
+
+    switch (function)
+    {
+        case 0x09:
+            terminator = '$';
+            break;
+        case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x41: case 0x43: case 0x4B: case 0x4E: case 0x56:
+        case 0x5A: case 0x5B:
+            break;
+        case 0x6C:
+            offset = entry->interrupt.si;
+            break;
+        default:
+            return;
+    }
+
+    u32 linear = m_trace_source.ds_base + offset;
+
+    for (int i = 0; i < GT_TRACE_INTERRUPT_TEXT_SIZE - 1; i++)
+    {
+        u8 value = 0;
+
+        if (!TryPeekLinear(linear + i, value) || value == terminator)
+            break;
+
+        entry->interrupt.text[i] = (char)(value >= 0x20 && value < 0x7F ? value : '.');
+    }
 }
 
 const std::vector<I386_CallStackEntry>& I386::GetDisassemblerCallStack() const

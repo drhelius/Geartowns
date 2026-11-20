@@ -18,6 +18,7 @@
  */
 
 #include "i386.h"
+#include "../common/trace_logger.h"
 #include "i386_opcodes_inline.h"
 
 bool I386::OPCodes_PUSH_Segment()
@@ -427,6 +428,33 @@ bool I386::OPCodes_INT()
 }
 
 bool I386::OPCodes_IRET()
+{
+    if (likely(!m_debugger_interrupt_checks) ||
+        !m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_RETURN))
+        return ExecuteIRET();
+
+    u16 cs = m_state.segments[I386_SEGMENT_CS].selector;
+    u32 eip = m_state.eip;
+    u8 modes = (u8)m_state.execution_mode | (u8)(m_state.current_privilege_level << 4);
+    u32 eflags = m_state.eflags;
+    bool done = ExecuteIRET();
+
+    if (done && !m_exception.pending)
+    {
+        GT_Trace_Entry* entry = TraceCPUEvent(TRACE_CPU_INTERRUPT_RETURN, 0, eflags, m_state.eflags,
+            (u32)m_disassembler_call_stack.size());
+        entry->cpu_event.to_cs = entry->cpu_event.cs;
+        entry->cpu_event.to_eip = entry->cpu_event.eip;
+        entry->cpu_event.cs = cs;
+        entry->cpu_event.eip = eip;
+        entry->cpu_event.vector2 = entry->cpu_event.modes;
+        entry->cpu_event.modes = modes;
+    }
+
+    return done;
+}
+
+bool I386::ExecuteIRET()
 {
     if (!DecodeAndStart(false, 0, 22, 22))
         return false;

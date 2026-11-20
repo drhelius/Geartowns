@@ -187,7 +187,7 @@ private:
     void ReadError();
     bool TOCEntry();
     void EndCDDA();
-    void StopCDDA();
+    void StopCDDA(u8 cause = 0);
     u8 EndCDDACommand();
     void PushDoneStatus(u8 code);
     bool LoadSector(u64 clocks);

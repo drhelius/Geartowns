@@ -18,6 +18,7 @@
  */
 
 #include "i386.h"
+#include "../common/trace_logger.h"
 #include "i386_opcodes_inline.h"
 #include "x87.h"
 
@@ -163,6 +164,10 @@ bool I386::OPCodes0F_CPUID()
     m_state.registers[I386_REG_EBX].value = ebx;
     m_state.registers[I386_REG_ECX].value = ecx;
     m_state.registers[I386_REG_EDX].value = edx;
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_MSR)))
+        TraceCPUEvent(TRACE_CPU_INTERRUPT_MSR, TRACE_CPU_CAUSE_CPUID, function, eax, ebx)->cpu_event.extra2 = edx;
+
     CommitEIP(m_instruction);
     return true;
 }
@@ -266,8 +271,12 @@ bool I386::OPCodes_INVLPG()
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
 
     m_step.clocks = 12 + m_address_clocks;
+    u32 linear = m_state.segments[m_instruction.segment].base + m_instruction.effective_offset;
 
-    if (!InvalidateTLBPage(m_state.segments[m_instruction.segment].base + m_instruction.effective_offset))
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_PAGING)))
+        TraceCPUEvent(TRACE_CPU_INTERRUPT_PAGING, TRACE_CPU_CAUSE_INVLPG, linear, linear, m_state.cr3);
+
+    if (!InvalidateTLBPage(linear))
         m_step.clocks--;
 
     CommitEIP(m_instruction);

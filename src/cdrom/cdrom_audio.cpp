@@ -30,7 +30,7 @@ static const s64 k_cdrom_deemphasis_a1 = 40003;
 CdRomAudio::CdRomAudio(CdRomMedia* cdrom_media)
 {
     m_cdrom_media = cdrom_media;
-    InitPointer(m_trace_logger);
+    m_trace_logger = TraceLogger::GetDisabled();
     memset(&m_state, 0, sizeof(m_state));
     memset(m_sector_cache, 0, sizeof(m_sector_cache));
     m_sector_cache_lba = 0;
@@ -51,7 +51,7 @@ void CdRomAudio::Init()
 
 void CdRomAudio::SetTraceLogger(TraceLogger* trace_logger)
 {
-    m_trace_logger = trace_logger;
+    m_trace_logger = IsValidPointer(trace_logger) ? trace_logger : TraceLogger::GetDisabled();
 }
 
 void CdRomAudio::Reset()
@@ -93,12 +93,18 @@ void CdRomAudio::Play(u32 start_lba, u32 end_lba, bool repeat, u64 seek_clocks, 
     if (start_lba >= end_lba)
     {
         m_state.play_state = CDROM_AUDIO_IDLE;
+
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_CDDA_REJECT)))
+            TraceEvent(TRACE_CDROM_CDDA_REJECT, 0, 0);
+
         return;
     }
 
     m_state.play_state = CDROM_AUDIO_PLAYING;
     m_cdrom_media->SetCurrentSector(start_lba);
-    TraceEvent(TRACE_CDROM_CDDA_PLAY, seek_ms);
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_CDDA_PLAY)))
+        TraceEvent(TRACE_CDROM_CDDA_PLAY, seek_ms, 0);
 
     s32 track = m_cdrom_media->FindTrackFromLBA(start_lba);
 
@@ -114,7 +120,9 @@ void CdRomAudio::Pause()
         return;
 
     m_state.play_state = CDROM_AUDIO_PAUSED;
-    TraceEvent(TRACE_CDROM_CDDA_PAUSE, 0);
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_CDDA_PAUSE)))
+        TraceEvent(TRACE_CDROM_CDDA_PAUSE, 0, 0);
 }
 
 void CdRomAudio::Resume()
@@ -123,13 +131,16 @@ void CdRomAudio::Resume()
         return;
 
     m_state.play_state = CDROM_AUDIO_PLAYING;
-    TraceEvent(TRACE_CDROM_CDDA_RESUME, 0);
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_CDDA_RESUME)))
+        TraceEvent(TRACE_CDROM_CDDA_RESUME, 0, 0);
 }
 
-void CdRomAudio::Stop()
+void CdRomAudio::Stop(u8 cause)
 {
-    if (m_state.play_state != CDROM_AUDIO_IDLE)
-        TraceEvent(TRACE_CDROM_CDDA_STOP, 0);
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CDROM, TRACE_CDROM_CDDA_STOP)) &&
+        m_state.play_state != CDROM_AUDIO_IDLE)
+        TraceEvent(TRACE_CDROM_CDDA_STOP, 0, cause);
 
     m_state.play_state = CDROM_AUDIO_IDLE;
     m_state.seek_samples = 0;
@@ -220,27 +231,27 @@ void CdRomAudio::NextSector()
         else
             m_state.play_state = CDROM_AUDIO_IDLE;
 
-        TraceEvent(m_state.repeat ? TRACE_CDROM_CDDA_LOOP : TRACE_CDROM_CDDA_END, 0);
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CDROM, m_state.repeat ? TRACE_CDROM_CDDA_LOOP :
+            TRACE_CDROM_CDDA_END)))
+            TraceEvent(m_state.repeat ? TRACE_CDROM_CDDA_LOOP : TRACE_CDROM_CDDA_END, 0, 0);
     }
 
     m_cdrom_media->SetCurrentSector(m_state.current_lba);
 }
 
 // The range end is reached while the mixer catches up, so END and LOOP carry the clock of that catch-up
-void CdRomAudio::TraceEvent(u8 event, u32 seek_ms)
+void CdRomAudio::TraceEvent(u8 event, u32 seek_ms, u8 cause)
 {
-    if (!IsValidPointer(m_trace_logger) || !m_trace_logger->IsEventEnabled(TRACE_CDROM, event))
-        return;
-
-    GT_Trace_Entry entry = {};
-    entry.type = TRACE_CDROM;
-    entry.event = event;
-    entry.cdrom.lba = m_state.current_lba;
-    entry.cdrom.end_lba = m_state.end_lba;
-    entry.cdrom.size = (u16)MIN(seek_ms, 0xFFFFU);
-    entry.cdrom.value = (u8)m_state.play_state;
-    entry.cdrom.flags = m_state.repeat ? 0x01 : 0x00;
-    m_trace_logger->TraceLog(entry);
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_CDROM, event);
+    s32 track = m_cdrom_media->FindTrackFromLBA(m_state.current_lba);
+    entry->cdrom.lba = event == TRACE_CDROM_CDDA_PLAY || event == TRACE_CDROM_CDDA_REJECT ? m_state.start_lba :
+        m_state.current_lba;
+    entry->cdrom.end_lba = m_state.end_lba;
+    entry->cdrom.size = (u16)MIN(seek_ms, 0xFFFFU);
+    entry->cdrom.value = (u8)m_state.play_state;
+    entry->cdrom.flags = m_state.repeat ? 0x01 : 0x00;
+    entry->cdrom.bytes[0] = track >= 0 ? (u8)(track + 1) : 0;
+    entry->cdrom.bytes[1] = cause;
 }
 
 void CdRomAudio::SaveState(std::ostream& stream)

@@ -19,6 +19,7 @@
 
 #include <limits.h>
 #include "i386.h"
+#include "../common/trace_logger.h"
 #include "i386_opcodes_inline.h"
 #include "x87.h"
 #include "../system/io.h"
@@ -2256,7 +2257,12 @@ bool I386::OPCodes_IN()
         m_step.clocks += m_486_prefixes;
 
     if (!allowed)
+    {
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_DENIED)))
+            TraceDeniedIO(port, width, false);
+
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+    }
 
     AddBusPortWait(port, 0);
 
@@ -2318,7 +2324,12 @@ bool I386::OPCodes_OUT()
         m_step.clocks += m_486_prefixes;
 
     if (!allowed)
+    {
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_DENIED)))
+            TraceDeniedIO(port, width, true);
+
         return RaiseException(13, I386_EXCEPTION_FAULT, true, 0);
+    }
 
     AddBusPortWait(port, 1);
 

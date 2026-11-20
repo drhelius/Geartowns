@@ -91,9 +91,6 @@ I386::I386()
 {
     InitPointer(m_memory);
     InitPointer(m_io);
-    InitPointer(m_trace);
-    m_trace_enabled = false;
-    m_trace_count = 0;
 
 #if defined(GT_DISABLE_DISASSEMBLER)
     InitPointer(m_disassembler_pages);
@@ -117,6 +114,8 @@ I386::I386()
     m_debugger_memory_checks = false;
     m_debugger_io_checks = false;
     m_debugger_interrupt_checks = false;
+    m_debugger_io_breaks = false;
+    m_debugger_interrupt_breaks = false;
     m_debugger_exec_checks = false;
     m_execute_filter_all = false;
     memset(m_execute_filter, 0, sizeof(m_execute_filter));
@@ -131,7 +130,8 @@ I386::I386()
     m_irq_breakpoints = 0;
     m_irq_breakpoints_disabled = 0;
     m_external_line = -1;
-    InitPointer(m_trace_logger);
+    m_trace_logger = TraceLogger::GetDisabled();
+    memset(&m_trace_source, 0, sizeof(m_trace_source));
     InitPointer(m_profiler);
     m_reset_edx = 0x00000300;
     m_cr0_fixed = 0x7FFFFFE0;
@@ -192,7 +192,6 @@ I386::I386()
     memset(m_bus_cycle_counts, 0, sizeof(m_bus_cycle_counts));
     InitPointer(m_bus_decoded_ports);
     InitPointer(m_bus_page_class);
-    m_trace_internal = false;
     m_trace_cpu = false;
     m_profiler_active = false;
     m_vblank_watch_read = false;
@@ -269,7 +268,6 @@ I386::I386()
 
 I386::~I386()
 {
-    SafeDeleteArray(m_trace);
     ClearDisassemblerPages();
     SafeDeleteArray(m_disassembler_pages);
 #if !defined(GT_DISABLE_DYNAREC)
@@ -347,7 +345,9 @@ void I386::Reset()
     m_instruction_defaults.segment_override = 0xFF;
 
     m_address_clocks = 0;
+#if defined(GT_TESTS)
     m_instruction_restored = false;
+#endif
     InitPointer(m_passive_bytes);
     m_passive_count = 0;
     m_passive_index = 0;
@@ -374,16 +374,11 @@ void I386::Reset()
     memset(m_bus_lines, 0xFF, sizeof(m_bus_lines));
     UpdateBusCode(GT_BUS_NONE, 0);
 
-    m_checked_eip = 0;
-    m_checked_count = 0;
-    m_checked_valid = false;
-
     memset(m_tlb, 0, sizeof(m_tlb));
     m_tlb_fill_count = 0;
     m_tlb_kernel_count = 0;
     memset(m_tlb_test, 0, sizeof(m_tlb_test));
     memset(m_tlb_test_plru, 0, sizeof(m_tlb_test_plru));
-    m_trace_count = 0;
 
     // Decoded rows are debugger history and survive a machine reset
     m_disassembler_call_stack.clear();
@@ -582,7 +577,6 @@ I386_Run_Result I386::RunTimed(u32 cycle_budget, GT_Bus_Access_Context& context,
     total.instruction_completed = true;
     total.exception_vector = 0xFF;
 
-    m_checked_valid = false;
     SetBusContext(context);
     UpdateStepMode();
 
@@ -690,7 +684,7 @@ void I386::CopyStepException(I386_Run_Result& total) const
 
 void I386::UpdateStepMode()
 {
-    m_step_slow = m_state.halted || m_state.shutdown || m_trace_enabled || (m_state.debug_registers[7] & 0xFF) != 0;
+    m_step_slow = m_state.halted || m_state.shutdown || m_trace_cpu || (m_state.debug_registers[7] & 0xFF) != 0;
 }
 
 // 8-bit encodings 4-7 are AH, CH, DH and BH
@@ -757,7 +751,7 @@ void I386::SkipPolling(u16 port, int width)
         return;
     }
 
-    if (context.end_batch || m_step.end_batch || m_step_slow || m_debugger_io_checks ||
+    if (context.end_batch || m_step.end_batch || m_step_slow || m_debugger_io_breaks ||
         (m_state.eflags & (I386_FLAG_TF | I386_FLAG_RF)) != 0 || m_state.interrupt_shadow_steps != 0 ||
         !IsValidPointer(context.poll_port))
         return;
@@ -809,6 +803,9 @@ void I386::SkipPolling(u16 port, int width)
     m_step.clocks += (u64)count * period;
     m_poll_steps += count * steps;
     poll.start_cycles = start + count * period;
+
+    if (unlikely(m_debugger_io_checks))
+        TracePoll(port, width, count, count * period);
 }
 
 // Runs the loop on the current registers: register operands only, no exit taken, one backward branch to the IN
@@ -1081,7 +1078,12 @@ u32 I386::EnterExternalInterrupt(u8 vector, GT_Bus_Access_Context& context, int 
         return (u32)result.cycles;
     }
     else
+    {
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_SHUTDOWN)))
+            TraceCPUEvent(TRACE_CPU_INTERRUPT_SHUTDOWN, 0, 0, m_state.cr2, m_state.registers[I386_REG_ESP].value);
+
         m_state.shutdown = true;
+    }
 
     return (u32)clocks;
 }
@@ -1276,9 +1278,10 @@ void I386::SanitizeState()
         m_instruction.segment_override = m_state.repeat.segment_override;
     }
 
+#if defined(GT_TESTS)
     // A restored REP continuation has no fetched bytes to report until the next decode
     m_instruction_restored = m_state.repeat.active;
-    m_checked_valid = false;
+#endif
     m_fetch_remaining = 0;
     m_address_clocks = 0;
     CloseCodeWindow();
@@ -1350,42 +1353,20 @@ const I386_Exception_Info& I386::GetLastException() const
     return m_last_exception;
 }
 
-// Passive copy of the bytes at CS:EIP before a single step executes them
-void I386::CaptureCheckedBytes()
-{
-    u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_state.eip;
-
-    m_checked_eip = m_state.eip;
-    m_checked_count = 0;
-
-    while (m_checked_count < GT_I386_MAX_INSTRUCTION_LENGTH &&
-        TryPeekLinear(linear + m_checked_count, m_checked_bytes[m_checked_count]))
-        m_checked_count++;
-}
-
+#if defined(GT_TESTS)
 bool I386::CopyDecodeState(I386_Decode_State& state)
 {
     u8 bytes[GT_I386_MAX_INSTRUCTION_LENGTH];
     u32 length = m_instruction_restored ? 0 : m_instruction.next_eip - m_instruction.start_eip;
+    u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
     length = MIN(length, (u32)GT_I386_MAX_INSTRUCTION_LENGTH);
 
-    // A single step captured its bytes before executing, otherwise they are read back through the current CS
-    if (m_checked_valid && m_instruction.start_eip == m_checked_eip)
+    for (u32 i = 0; i < length; i++)
     {
-        length = MIN(length, (u32)m_checked_count);
-        memcpy(bytes, m_checked_bytes, length);
-    }
-    else
-    {
-        u32 linear = m_state.segments[I386_SEGMENT_CS].base + m_instruction.start_eip;
-
-        for (u32 i = 0; i < length; i++)
+        if (!TryPeekLinear(linear + i, bytes[i]))
         {
-            if (!TryPeekLinear(linear + i, bytes[i]))
-            {
-                length = i;
-                break;
-            }
+            length = i;
+            break;
         }
     }
 
@@ -1424,16 +1405,7 @@ bool I386::CopyDecodeState(I386_Decode_State& state)
     FillDecodeState(decoded, bytes, length, state);
     return state.length != 0;
 }
-
-void I386::SetTraceEnabled(bool enabled)
-{
-    if (enabled && !IsValidPointer(m_trace))
-        m_trace = new I386_Trace_Entry[GT_I386_TRACE_SIZE]();
-
-    m_trace_internal = enabled;
-    m_trace_enabled = m_trace_internal || m_trace_cpu;
-    m_trace_count = 0;
-}
+#endif
 
 void I386::SetCPU(const GT_Machine_CPU_Info& info)
 {
@@ -1481,26 +1453,12 @@ void I386::SetFPUErrorCallback(void* context, I386_FPU_Error_Fn callback)
 
 void I386::SetTraceLogger(TraceLogger* trace_logger)
 {
-    m_trace_logger = trace_logger;
+    m_trace_logger = IsValidPointer(trace_logger) ? trace_logger : TraceLogger::GetDisabled();
 }
 
 void I386::SetProfiler(Profiler* profiler)
 {
     m_profiler = profiler;
-}
-
-int I386::CopyTraceEntries(I386_Trace_Entry* entries, int capacity) const
-{
-    if (!IsValidPointer(entries) || capacity <= 0)
-        return 0;
-
-    int count = MIN(capacity, m_trace_count);
-    int first = m_trace_count - count;
-
-    for (int i = 0; i < count; i++)
-        entries[i] = m_trace[first + i];
-
-    return count;
 }
 
 void I386::SetRealModeSegment(I386_Segment_Register segment, u16 selector)
@@ -1688,6 +1646,10 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
 
         u64 entry_clocks = k_i386_real_interrupt_entry_clocks;
         u16 return_cs = m_state.segments[I386_SEGMENT_CS].selector;
+
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_RAISE)))
+            TraceException(TRACE_CPU_INTERRUPT_RAISE, current, current_return_eip, 0xFF);
+
         bool ok = EnterInterrupt(current.vector, current_return_eip, context, false, current.has_error_code,
             current.error_code, current.exception_class == I386_EXCEPTION_FAULT, false, &entry_clocks, &result);
 
@@ -1710,6 +1672,9 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
 
         if (!m_exception.pending)
         {
+            if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_SHUTDOWN)))
+                TraceException(TRACE_CPU_INTERRUPT_SHUTDOWN, current, current_return_eip, 0xFF);
+
             m_state.shutdown = true;
             return false;
         }
@@ -1720,9 +1685,16 @@ bool I386::DeliverException(const I386_Pending_Exception& exception, u32 return_
         // A #PF while delivering #PF shuts the 386 down instead of raising #DF
         if (current.vector == 8 || (current.vector == 14 && next.vector == 14))
         {
+            if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_SHUTDOWN)))
+                TraceException(TRACE_CPU_INTERRUPT_SHUTDOWN, current, current_return_eip, next.vector);
+
             m_state.shutdown = true;
             return false;
         }
+
+        if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_RAISE)))
+            TraceException(TRACE_CPU_INTERRUPT_RAISE, current, current_return_eip, next.vector)->flags |=
+                TRACE_CPU_FLAG_FAILED;
 
         if (CausesDoubleFault(current.vector, next.vector))
         {
@@ -1762,6 +1734,9 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
     u16 return_cs = m_state.segments[I386_SEGMENT_CS].selector;
     u32 return_base = m_state.segments[I386_SEGMENT_CS].base;
     u32 source_eip = m_state.eip;
+
+    if (unlikely(m_debugger_interrupt_checks))
+        SaveTraceSource();
 
     if (m_state.execution_mode != I386_MODE_REAL)
     {
@@ -1838,76 +1813,64 @@ bool I386::EnterInterrupt(u8 vector, u32 return_eip, GT_Bus_Access_Context& cont
 #endif
 
     if (unlikely(m_debugger_interrupt_checks))
-        RecordDebuggerInterrupt(vector, software, external, return_base + source_eip, has_error_code, error_code);
+        RecordDebuggerInterrupt(vector, software, external, return_base + source_eip, false, 0);
 
     return true;
-}
-
-// The trace logger gets each instruction once, the internal capture keeps full states before and after
-void I386::TraceStep(I386_State& before)
-{
-    if (m_trace_cpu && !m_state.repeat.active)
-        TraceInstruction();
-
-    if (m_trace_internal)
-        CopyState(before);
-    else
-        before.eflags = m_state.eflags;
 }
 
 void I386::TraceInstruction()
 {
     const I386_Segment& code = m_state.segments[I386_SEGMENT_CS];
     u32 linear = code.base + m_state.eip;
-    GT_Trace_Entry entry = {};
 
-    entry.type = TRACE_CPU;
-    entry.cpu.linear = linear;
-    entry.cpu.eip = m_state.eip;
-    entry.cpu.eflags = m_state.eflags;
-    entry.cpu.cs = code.selector;
-    entry.cpu.ds = m_state.segments[I386_SEGMENT_DS].selector;
-    entry.cpu.es = m_state.segments[I386_SEGMENT_ES].selector;
-    entry.cpu.ss = m_state.segments[I386_SEGMENT_SS].selector;
-    entry.cpu.fs = m_state.segments[I386_SEGMENT_FS].selector;
-    entry.cpu.gs = m_state.segments[I386_SEGMENT_GS].selector;
-    entry.cpu.mode = (u8)m_state.execution_mode;
+    if (!m_trace_logger->IsCodeTraced(linear))
+        return;
+
+    GT_Trace_Entry* entry = m_trace_logger->BeginRaw(TRACE_CPU, 0, m_trace_logger->GetClocks());
+    entry->cpu.linear = linear;
+    entry->cpu.eip = m_state.eip;
+    entry->cpu.eflags = m_state.eflags;
+    entry->cpu.cs = code.selector;
+    entry->cpu.ds = m_state.segments[I386_SEGMENT_DS].selector;
+    entry->cpu.es = m_state.segments[I386_SEGMENT_ES].selector;
+    entry->cpu.ss = m_state.segments[I386_SEGMENT_SS].selector;
+    entry->cpu.fs = m_state.segments[I386_SEGMENT_FS].selector;
+    entry->cpu.gs = m_state.segments[I386_SEGMENT_GS].selector;
+    entry->cpu.mode = (u8)m_state.execution_mode;
+    entry->cpu.cpl = m_state.current_privilege_level;
+    entry->cpu.default32 = (code.attributes & I386_SEGMENT_DEFAULT_32) != 0 ? 1 : 0;
+    entry->cpu.size = 0;
 
     for (int i = 0; i < I386_REG_COUNT; i++)
-        entry.cpu.registers[i] = m_state.registers[i].value;
+        entry->cpu.registers[i] = m_state.registers[i].value;
 
 #if !defined(GT_DISABLE_DISASSEMBLER)
-    FormatDisassemblerRecordText(linear);
-
     const I386_Disassembler_Record* record = GetDisassemblerRecord(linear);
 
     if (IsValidPointer(record) && record->size > 0)
     {
-        entry.cpu.size = (u8)MIN(record->size, GT_I386_MAX_INSTRUCTION_LENGTH);
-        memcpy(entry.cpu.opcodes, record->opcodes, entry.cpu.size);
-        strncpy_fit(entry.cpu.name, record->name, sizeof(entry.cpu.name));
+        entry->cpu.size = (u8)MIN(record->size, GT_I386_MAX_INSTRUCTION_LENGTH);
+        memcpy(entry->cpu.opcodes, record->opcodes, entry->cpu.size);
+        return;
     }
 #endif
 
-    m_trace_logger->TraceLog(entry);
+    while (entry->cpu.size < GT_I386_MAX_INSTRUCTION_LENGTH &&
+        TryPeekLinear(linear + entry->cpu.size, entry->cpu.opcodes[entry->cpu.size]))
+        entry->cpu.size++;
 }
 
-void I386::RecordTrace(const I386_State& before)
+void I386::TracePoll(u16 port, int width, u32 count, u32 cycles)
 {
-    if (!m_trace_internal)
+    if (!m_trace_logger->IsEventEnabled(TRACE_IO, TRACE_IO_POLL) || !m_trace_logger->IsPortTraced(port, TRACE_IO_POLL))
         return;
 
-    if (m_trace_count == GT_I386_TRACE_SIZE)
-    {
-        memmove(&m_trace[0], &m_trace[1], sizeof(I386_Trace_Entry) * (GT_I386_TRACE_SIZE - 1));
-        m_trace_count--;
-    }
-
-    I386_Trace_Entry& entry = m_trace[m_trace_count++];
-
-    CopyDecodeState(entry.instruction);
-    entry.before = before;
-    CopyState(entry.after);
+    GT_Trace_Entry* entry = m_trace_logger->Begin(TRACE_IO, TRACE_IO_POLL, GetTraceClocks());
+    entry->io.value = GetRegister(I386_REG_EAX, width);
+    entry->io.port = port;
+    entry->io.size = (u8)(width >> 3);
+    entry->io.count = count;
+    entry->io.cycles = cycles;
 }
 
 bool I386::CopyDebugState(I386_Debug_State& state) const

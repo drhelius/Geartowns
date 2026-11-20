@@ -63,6 +63,14 @@ INLINE void Scheduler::AddCycles(u32 cycles)
     m_state.cycle_remainder = (u32)(scaled % m_cpu_clock_rate);
 }
 
+INLINE u64 Scheduler::GetClocksAfter(u32 cycles) const
+{
+    if (m_cpu_clock_rate == GT_MACHINE_CLOCK_RATE)
+        return m_state.clocks + cycles;
+
+    return m_state.clocks + (((u64)cycles * GT_MACHINE_CLOCK_RATE) + m_state.cycle_remainder) / m_cpu_clock_rate;
+}
+
 // Clocks to run before returning: a whole slice, cut short by the next event or the limit, never zero
 INLINE u32 Scheduler::GetSliceClocks(u64 limit) const
 {

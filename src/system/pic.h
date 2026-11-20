@@ -46,8 +46,11 @@ public:
 
 private:
     void UpdateCascade();
-    void TraceRequest(int irq);
-    void TraceWrite(int chip, int a0, u8 value, u8 previous_mask, u8 previous_step);
+    void ApplyIRQLine(int irq, bool high);
+    NO_INLINE void SetIRQLineTraced(int irq, bool high);
+    NO_INLINE void WriteTraced(u16 port, u8 value);
+    void ApplyWrite(int chip, int a0, u8 value);
+    NO_INLINE void TraceSpurious(int line);
 
 private:
     I8259 m_master;

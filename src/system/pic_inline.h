@@ -25,9 +25,17 @@
 
 INLINE void PIC::SetIRQLine(int irq, bool high)
 {
-    if (unlikely(high && IsValidPointer(m_trace_logger) && m_trace_logger->IsEventEnabled(TRACE_PIC, TRACE_PIC_REQUEST)))
-        TraceRequest(irq);
+    if (unlikely(m_trace_logger->IsEnabled(TRACE_PIC)))
+    {
+        SetIRQLineTraced(irq, high);
+        return;
+    }
 
+    ApplyIRQLine(irq, high);
+}
+
+INLINE void PIC::ApplyIRQLine(int irq, bool high)
+{
     if (irq >= 8)
     {
         m_slave.SetInputLine(irq - 8, high);

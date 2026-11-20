@@ -18,6 +18,7 @@
  */
 
 #include "i386.h"
+#include "../common/trace_logger.h"
 
 static const u32 k_tss32_register_offsets[I386_REG_COUNT] = { 0x28, 0x2C, 0x30, 0x34, 0x38, 0x3C, 0x40, 0x44 };
 static const u32 k_tss32_segment_offsets[I386_SEGMENT_COUNT] = { 0x48, 0x4C, 0x50, 0x54, 0x58, 0x5C };
@@ -364,6 +365,9 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
     GT_Bus_Access_Context& context, u64& clocks, bool via_gate, bool has_error_code, u32 error_code, bool fault)
 {
     TaskState new_state;
+    u16 from_task = m_state.task_register.selector;
+    u32 from_eip = m_state.eip;
+    u16 from_cs = m_state.segments[I386_SEGMENT_CS].selector;
 
     if (!ReadTaskState(descriptor, new_state, context))
     {
@@ -441,6 +445,17 @@ bool I386::TaskSwitch(u16 selector, const Descriptor& descriptor, int switch_typ
     // From here a task CALL is in the new task even if loading it faults or traps
     m_task_call_entered = switch_type == I386_TASK_SWITCH_CALL;
 #endif
+
+    if (unlikely(m_trace_logger->IsEventEnabled(TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_TASK)))
+    {
+        GT_Trace_Entry* entry = TraceCPUEvent(TRACE_CPU_INTERRUPT_TASK, (u8)(TRACE_CPU_CAUSE_TASK_JUMP + switch_type),
+            from_task, selector, m_state.cr3);
+        entry->cpu_event.to_eip = m_state.eip;
+        entry->cpu_event.to_cs = new_state.segments[I386_SEGMENT_CS];
+        entry->cpu_event.eip = from_eip;
+        entry->cpu_event.cs = from_cs;
+        entry->cpu_event.selector = via_gate ? 1 : 0;
+    }
 
     bool ok = LoadTaskSegments(new_state, context);
     UpdateAlignmentCheck();

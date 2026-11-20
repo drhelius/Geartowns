@@ -63,7 +63,7 @@ public:
     void Play(u32 start_lba, u32 end_lba, bool repeat, u64 seek_clocks, u64 loop_clocks);
     void Pause();
     void Resume();
-    void Stop();
+    void Stop(u8 cause = 0);
     bool IsPlaying() const;
     bool IsPaused() const;
     u32 GetCurrentLBA() const;
@@ -76,7 +76,7 @@ private:
     void LoadSector();
     void Deemphasize();
     void NextSector();
-    void TraceEvent(u8 event, u32 seek_ms);
+    NO_INLINE void TraceEvent(u8 event, u32 seek_ms, u8 cause);
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 

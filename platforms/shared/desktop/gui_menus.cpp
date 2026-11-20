@@ -843,8 +843,23 @@ static void menu_emulator(void)
         ImGui::Separator();
 
         //ImGui::MenuItem("Show Media Info", "", &config_emulator.show_info);
-        ImGui::MenuItem("Show Notifications", "", &config_emulator.show_notifications);
-        ImGui::MenuItem("Show Drive Activity", "", &config_emulator.show_drive_activity);
+
+        if (ImGui::BeginMenu("Notifications"))
+        {
+            ImGui::MenuItem("Enabled", "", &config_emulator.show_notifications);
+
+            if (ImGui::BeginMenu("Duration"))
+            {
+                ImGui::SliderInt("##notification_duration", &config_emulator.notification_duration, 3, 10, "Seconds = %d",
+                    ImGuiSliderFlags_AlwaysClamp);
+                ImGui::EndMenu();
+            }
+
+            ImGui::Separator();
+            ImGui::MenuItem("Drive Activity", "", &config_emulator.show_drive_activity);
+
+            ImGui::EndMenu();
+        }
 
         ImGui::Separator();
 

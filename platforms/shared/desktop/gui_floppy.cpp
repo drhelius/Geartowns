@@ -456,7 +456,7 @@ static bool perform(bool discard_changes)
         if ((pending_action == Floppy_Action_Insert) && (config_emulator.floppy_changes == config_FloppyChanges_Image) &&
             info.working_path[0] && (strcmp(info.working_path, info.path) != 0))
             gui_notify(gui_NotificationInfo, ICON_MD_SAVE, "This image can't be written, changes go to a working copy",
-                info.working_path);
+                info.working_path, NULL, gui_NotificationDurationLong);
 
         Emu_FloppyInfo second;
 

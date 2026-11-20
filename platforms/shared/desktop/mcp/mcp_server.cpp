@@ -1937,7 +1937,7 @@ json McpServer::BuildToolList()
         {"name", "insert_floppy"},
         {"title", "Insert Floppy"},
         {"description", "Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, .mfm, .m3u or .zip); the previous disk's "
-            "changes stay in its working copy."},
+            "changes are saved first."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", true}}},
         {"inputSchema", {
             {"type", "object"},
@@ -1988,7 +1988,7 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "eject_floppy"},
         {"title", "Eject Floppy"},
-        {"description", "Eject a drive's disk; its changes stay in the working copy."},
+        {"description", "Eject a drive's disk; its changes are saved first."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},

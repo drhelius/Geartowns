@@ -120,8 +120,8 @@ data mark.
   deleted mark, status and hex data. Without `sector` it lists the track in disk order, which shows interleave and
   copy protection layouts.
 - `insert_floppy`, `create_blank_floppy` (`2hd_1232kb`, `2dd_640kb`, `2dd_720kb`, `2hd_1440kb`), `eject_floppy`,
-  `swap_floppies` and `set_floppy_write_protect` change disks while the machine runs; a disk's changes stay in its
-  working copy. `debug_reset` with `boot: floppy1` or `floppy2` holds F+0 or F+1.
+  `swap_floppies` and `set_floppy_write_protect` change disks while the machine runs; a disk's changes are saved
+  first, where Remember Changes says. `debug_reset` with `boot: floppy1` or `floppy2` holds F+0 or F+1.
 - The Floppy 0 Image and Floppy 1 Image memory areas hold the D77 images of section 5 for `read_memory`.
 - `get_dma_status` shows channel 0. Break on IRQ6 with `set_breakpoint_on_interrupt` and `irq: 6`, or on the ports with
   `set_breakpoint` in the `io` space over 0200h-020Eh.

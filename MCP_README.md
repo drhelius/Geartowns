@@ -613,7 +613,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector
 - `insert_floppy` - Insert a floppy image (.d77, .d88, .hdm, .img, .xdf, .mfm, an .m3u list or a .zip) in `drive`; optional `write_protected`
 - `create_blank_floppy` - Create a blank floppy image at an absolute `file_path` and insert it in `drive`, like New Blank Disk; an existing file is never replaced. `type` `2hd_1232kb` (default), `2dd_640kb`, `2dd_720kb` or `2hd_1440kb`; `formatted` true (default) makes an empty FAT12 disk, false an unformatted one (.d77 only). `.d77`, or `.hdm`, `.img` or `.xdf` for a raw image
-- `eject_floppy` - Eject the disk in `drive`, keeping its changes in the working copy
+- `eject_floppy` - Eject the disk in `drive`, saving its changes first
 - `swap_floppies` - Swap the disks in drives 0 and 1
 - `set_floppy_write_protect` - Set the write protect tab of the disk in `drive`
 - `list_save_state_slots` - List all 5 save state slots with information (media name, timestamp, validity)

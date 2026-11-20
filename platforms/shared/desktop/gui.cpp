@@ -710,6 +710,11 @@ void gui_center_next_window(void)
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 }
 
+float gui_get_combo_width(float text_width)
+{
+    return text_width + (ImGui::GetStyle().FramePadding.x * 2.0f) + ImGui::GetFrameHeight();
+}
+
 bool gui_has_open_window(void)
 {
     ImGuiContext* context = ImGui::GetCurrentContext();

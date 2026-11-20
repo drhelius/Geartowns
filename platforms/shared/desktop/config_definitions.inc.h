@@ -234,7 +234,7 @@ static inline void process(config_Operation operation)
     }
 
     // Floppy drives
-    CONFIG_BOOL("Floppy", "RememberChanges", config_emulator.floppy_persistence, true);
+    CONFIG_INT_RANGE("Floppy", "RememberChanges", config_emulator.floppy_changes, 2, 0, 2);
     CONFIG_BOOL("Floppy", "Drive1WriteProtected", config_emulator.floppy_write_protected[0], false);
     CONFIG_BOOL("Floppy", "Drive2WriteProtected", config_emulator.floppy_write_protected[1], false);
     CONFIG_STRING_ARRAY("Floppy", "Recent%d", config_emulator.recent_floppies, config_max_recent_floppies, "");

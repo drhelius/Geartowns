@@ -59,6 +59,14 @@ enum config_KeyboardMode
     config_KeyboardMode_Towns = 1
 };
 
+enum config_FloppyChanges
+{
+    config_FloppyChanges_Off = 0,
+    config_FloppyChanges_Image = 1,
+    config_FloppyChanges_Copy = 2,
+    config_FloppyChanges_Count = 3
+};
+
 struct config_Emulator
 {
     bool maximized;
@@ -99,7 +107,7 @@ struct config_Emulator
     int mcp_tcp_port;
     std::string mcp_http_address;
     int mouse_sensitivity;
-    bool floppy_persistence;
+    int floppy_changes;
     bool floppy_write_protected[config_floppy_drives];
     std::string recent_floppies[config_max_recent_floppies];
     int hard_disk_write_protected[GT_MAX_HARD_DISKS];

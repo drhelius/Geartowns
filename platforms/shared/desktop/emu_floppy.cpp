@@ -31,6 +31,7 @@
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
 #include "media/crc.h"
+#include "media/media_file.h"
 
 struct Floppy_Entry
 {
@@ -71,6 +72,7 @@ static int find_boot_entry(const std::vector<Floppy_Entry>& entries);
 static bool insert_entries(int drive, const std::vector<Floppy_Entry>& entries, int index, bool discard_changes);
 static std::string make_working_path(const char* source_path, u32 base_crc, int copy);
 static bool is_raw_name(const char* path);
+static bool can_write_image(const char* path, const std::vector<u8>& file);
 static bool write_disk(FloppyDisk* disk, const char* path, bool report_errors = true);
 static bool write_working_copy(int drive, bool report_errors = true);
 static bool mount(int drive, int index, bool discard_changes);
@@ -752,6 +754,24 @@ static bool is_raw_name(const char* path)
         ends_with_no_case(path, ".bin");
 }
 
+static bool can_write_image(const char* path, const std::vector<u8>& file)
+{
+    const u8* data = file.data();
+    u32 size = (u32)file.size();
+    bool d77 = FloppyImage::IsD77(data, size);
+    bool raw = is_raw_name(path) && !d77 && FloppyImage::IsRaw(data, size);
+    bool single = (ends_with_no_case(path, ".d77") || ends_with_no_case(path, ".d88")) && d77 &&
+        (FloppyImage::GetDiskCount(data, size) == 1);
+
+    if (!raw && !single)
+        return false;
+
+    MediaFile* probe = MediaFile::OpenFile(path, true);
+    bool writable = IsValidPointer(probe);
+    SafeDelete(probe);
+    return writable;
+}
+
 // Raw names get a raw image when every track has the standard layout, anything else is written as D77
 // The file is replaced only once it is fully written
 static bool write_disk(FloppyDisk* disk, const char* path, bool report_errors)
@@ -822,7 +842,7 @@ static bool write_working_copy(int drive, bool report_errors)
     return true;
 }
 
-// The working copy of a disk, when there is one, holds its changes and loads in place of the original
+// Changes go into the image itself or into its working copy, which loads in place of the original
 // Without remembered changes the disk is write protected, so nothing can be lost
 static bool mount(int drive, int index, bool discard_changes)
 {
@@ -852,10 +872,16 @@ static bool mount(int drive, int index, bool discard_changes)
     }
 
     u32 base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
-    bool persistence = config_emulator.floppy_persistence;
+    int changes = config_emulator.floppy_changes;
+    bool in_place = (changes == config_FloppyChanges_Image) && can_write_image(entry.path.c_str(), file);
+    bool use_copy = (changes != config_FloppyChanges_Off) && !in_place;
 
     int number = FloppyImage::HasEarlierCopy(file.data(), (u32)file.size(), entry.disk) ? entry.disk + 1 : 0;
-    std::string working = persistence ? make_working_path(entry.path.c_str(), base_crc, number) : std::string();
+    std::string working = in_place ? entry.path : std::string();
+
+    if (use_copy)
+        working = make_working_path(entry.path.c_str(), base_crc, number);
+
     other = find_file(drive, working);
 
     if (other >= 0)
@@ -870,7 +896,7 @@ static bool mount(int drive, int index, bool discard_changes)
     u32 source_size = size;
     u32 data_crc = 0;
 
-    if (persistence && read_file(working.c_str(), copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+    if (use_copy && read_file(working.c_str(), copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
     {
         Log("Loading floppy working copy: %s", working.c_str());
         data_crc = FloppyImage::CalculateDataCRC(data, size);
@@ -878,7 +904,7 @@ static bool mount(int drive, int index, bool discard_changes)
         size = (u32)copy.size();
     }
 
-    bool write_protected = !persistence || config_emulator.floppy_write_protected[drive];
+    bool write_protected = (changes == config_FloppyChanges_Off) || config_emulator.floppy_write_protected[drive];
 
     if (!emu_get_core()->InsertFloppy(drive, data, size, write_protected, base_crc, data_crc, source, source_size))
     {

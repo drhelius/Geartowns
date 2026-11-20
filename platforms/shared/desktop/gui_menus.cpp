@@ -91,7 +91,6 @@ static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text
 static void menu_boot_device(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
-static float get_combo_width(float text_width);
 static void menu_video(void);
 static void menu_input(void);
 static void menu_input_controller(int port);
@@ -999,7 +998,7 @@ static bool menu_machine_model(void)
     else
         snprintf(preview, sizeof(preview), "%s", k_machine_profiles[config_machine.model].name);
 
-    ImGui::PushItemWidth(get_combo_width(MAX(cpu_column + cpu_width, ImGui::CalcTextSize(preview).x)));
+    ImGui::PushItemWidth(gui_get_combo_width(MAX(cpu_column + cpu_width, ImGui::CalcTextSize(preview).x)));
 
     if (ImGui::BeginCombo("##machine_model", preview))
     {
@@ -1076,7 +1075,7 @@ static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
             preview = labels[i];
     }
 
-    ImGui::PushItemWidth(get_combo_width(text_width));
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
     if (ImGui::BeginCombo("##machine_cpu_speed", preview))
     {
@@ -1143,7 +1142,7 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
     if ((config_machine.ram_mb != GT_MACHINE_AUTO) && (config_machine.ram_mb != in_use))
         snprintf(preview, sizeof(preview), "%d MB, %d MB on the %s", config_machine.ram_mb, in_use, profile.name);
 
-    ImGui::PushItemWidth(get_combo_width(MAX(text_width, ImGui::CalcTextSize(preview).x)));
+    ImGui::PushItemWidth(gui_get_combo_width(MAX(text_width, ImGui::CalcTextSize(preview).x)));
 
     if (ImGui::BeginCombo("##machine_ram", preview))
     {
@@ -1203,7 +1202,7 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
         snprintf(preview, sizeof(preview), "None, built into the %s", profile.name);
 
     float text_width = MAX(ImGui::CalcTextSize(labels[0]).x, ImGui::CalcTextSize(preview).x);
-    ImGui::PushItemWidth(get_combo_width(text_width));
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
     if (ImGui::BeginCombo("##machine_fpu", preview))
     {
@@ -1268,7 +1267,7 @@ static bool menu_machine_speed_mode(const GT_Machine_Profile& profile)
         snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
 
     float text_width = MAX(ImGui::CalcTextSize(auto_label).x, ImGui::CalcTextSize(preview).x);
-    ImGui::PushItemWidth(get_combo_width(text_width));
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
     if (ImGui::BeginCombo("##machine_speed_mode", preview))
     {
@@ -1458,11 +1457,6 @@ static void get_machine_summary(const GT_Machine_Config& config, char* text, siz
     snprintf(text, text_size, "%s · %s %u MHz%s%s · %u MB", k_machine_profiles[config.model].name,
         k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, card ? " + " : "",
         card ? get_machine_fpu_name(config.cpu) : "", config.ram_size / (1024 * 1024));
-}
-
-static float get_combo_width(float text_width)
-{
-    return text_width + (ImGui::GetStyle().FramePadding.x * 2.0f) + ImGui::GetFrameHeight();
 }
 
 static void menu_video(void)
@@ -2727,7 +2721,7 @@ static void gamepad_device_selector(int player)
     char label[32];
     snprintf(label, sizeof(label), "##device_player%d", player + 1);
 
-    ImGui::PushItemWidth(get_combo_width(text_width));
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
     if (ImGui::Combo(label, &selected, items.c_str()))
     {

@@ -4373,7 +4373,26 @@ json DebugAdapter::EjectMemoryCard(bool discard_changes)
     return result;
 }
 
-json DebugAdapter::GetTraceLog(s64 start, int count)
+bool DebugAdapter::SetTraceCaptureFilters(const std::string& code, const std::string& ports, const std::string& interrupts)
+{
+    GT_Trace_Filters filters;
+
+    if (!trace_log_parse_filters(code.c_str(), ports.c_str(), interrupts.c_str(), filters))
+        return false;
+
+    config_debug.trace_filter_code = code;
+    config_debug.trace_filter_ports = ports;
+    config_debug.trace_filter_interrupts = interrupts;
+    return gui_debug_trace_logger_apply_filters();
+}
+
+void DebugAdapter::SetTraceKeepAcrossResets(bool keep)
+{
+    config_debug.trace_keep_across_resets = keep;
+}
+
+json DebugAdapter::GetTraceLog(s64 start, int count, u32 types, const std::string& contains, u32 pc_first, u32 pc_last,
+    bool compact)
 {
     json result;
     const char* stop_reason = gui_debug_trace_logger_get_stop_reason();
@@ -4425,40 +4444,58 @@ json DebugAdapter::GetTraceLog(s64 start, int count)
         return result;
     }
 
-    u32 actual_count = (u32)count;
-
-    if ((u64)actual_count > total - actual_start)
-        actual_count = (u32)(total - actual_start);
-
-    u32 buffer_start = (u32)(actual_start - oldest);
+    bool filtered = types != 0 || !contains.empty() || pc_first != 0 || pc_last != 0xFFFFFFFFU;
+    u64 scan_limit = filtered ? 500000 : (u64)count;
+    u64 sequence = actual_start;
+    u64 scanned = 0;
     json lines = json::array();
+    json sequences = json::array();
 
-    for (u32 i = 0; i < actual_count; i++)
+    for (; sequence < total && lines.size() < (size_t)count && scanned < scan_limit; sequence++, scanned++)
     {
-        const GT_Trace_Entry& entry = tl->GetEntry(buffer_start + i);
-        char buf[GT_TRACE_FORMAT_BUFFER_SIZE];
+        u32 index = (u32)(sequence - oldest);
+        const GT_Trace_Entry& entry = tl->GetEntry(index);
 
+        if ((types != 0 && !IS_SET_BIT(types, entry.type)) || entry.pc < pc_first || entry.pc > pc_last)
+            continue;
+
+        char buf[GT_TRACE_FORMAT_BUFFER_SIZE];
         GT_Trace_Format_Options options = {};
-        options.linear = true;
-        options.registers = true;
-        options.segments = true;
-        options.flags = true;
-        options.bytes = true;
+        options.linear = !compact;
+        options.registers = !compact;
+        options.segments = !compact;
+        options.flags = !compact;
+        options.bytes = !compact;
         options.cycles = true;
-        options.previous_cycle_valid = (buffer_start + i) > 0;
-        options.previous_cycle = options.previous_cycle_valid ? tl->GetEntry(buffer_start + i - 1).cycle : 0;
+        options.previous_cycle_valid = index > 0;
+        options.previous_cycle = options.previous_cycle_valid ? tl->GetEntry(index - 1).cycle : 0;
         trace_logger_format_entry(entry, options, buf, sizeof(buf));
+
+        if (!contains.empty() && strstr(buf, contains.c_str()) == NULL)
+            continue;
+
         lines.push_back(buf);
+
+        if (filtered)
+            sequences.push_back(sequence);
     }
 
     result["total_entries"] = retained;
     result["total_logged"] = total;
     result["oldest_sequence"] = oldest;
+    result["overwritten"] = tl->GetOverwritten();
     result["start"] = actual_start;
-    result["next_sequence"] = actual_start + actual_count;
-    result["count"] = actual_count;
+    result["next_sequence"] = sequence;
+    result["count"] = lines.size();
     result["overrun"] = overrun;
     result["lines"] = lines;
+
+    if (filtered)
+    {
+        result["scanned"] = scanned;
+        result["sequences"] = sequences;
+    }
+
     return result;
 }
 

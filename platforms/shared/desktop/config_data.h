@@ -281,6 +281,8 @@ struct config_Debug
     bool show_trace_logger;
     bool show_profiler;
     bool trace_counter;
+    bool trace_time;
+    bool trace_keep_across_resets;
     bool trace_cycles;
     bool trace_linear;
     bool trace_registers;
@@ -329,6 +331,9 @@ struct config_Debug
     int trace_disk_dir_option;
     int trace_disk_size;
     std::string trace_disk_path;
+    std::string trace_filter_code;
+    std::string trace_filter_ports;
+    std::string trace_filter_interrupts;
     bool show_breakpoints;
     bool show_symbols;
     bool show_rewind;

@@ -57,6 +57,7 @@ static void format_scsi(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_keyboard(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_input(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_system(const GT_Trace_Entry& entry, char* buffer, size_t size);
+static void format_mark(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_bit_list(u8 bits, int base, char* buffer, size_t size);
 static void format_msf(u32 lba, char* buffer, size_t size);
 static void format_buttons(u16 buttons, char* buffer, size_t size);
@@ -106,7 +107,8 @@ void trace_log_format_cycle_prefix(const GT_Trace_Entry& entry, bool previous_cy
         snprintf(buffer, buffer_size, "@%012llu +%-12llu ", (unsigned long long)entry.cycle,
             (unsigned long long)(entry.cycle - previous_cycle));
     else if (previous_cycle_valid)
-        snprintf(buffer, buffer_size, "@%012llu RESET         ", (unsigned long long)entry.cycle);
+        snprintf(buffer, buffer_size, "@%012llu -%-12llu ", (unsigned long long)entry.cycle,
+            (unsigned long long)(previous_cycle - entry.cycle));
     else
         snprintf(buffer, buffer_size, "@%012llu               ", (unsigned long long)entry.cycle);
 }
@@ -121,8 +123,7 @@ void trace_logger_format_entry(const GT_Trace_Entry& entry,
         char body[GT_TRACE_FORMAT_BUFFER_SIZE];
         char prefix[64];
         trace_logger_format_entry(entry, body_options, body, sizeof(body));
-        trace_log_format_cycle_prefix(entry, options.previous_cycle_valid, options.previous_cycle, prefix,
-            sizeof(prefix));
+        trace_log_format_cycle_prefix(entry, options.previous_cycle_valid, options.previous_cycle, prefix, sizeof(prefix));
         snprintf(buffer, buffer_size, "%s%s", prefix, body);
         return;
     }
@@ -183,6 +184,9 @@ void trace_logger_format_entry(const GT_Trace_Entry& entry,
         case TRACE_SYSTEM:
             format_system(entry, buffer, buffer_size);
             break;
+        case TRACE_MARK:
+            format_mark(entry, buffer, buffer_size);
+            break;
         default:
             snprintf(buffer, buffer_size, "  [TRACE]  UNKNOWN TYPE:$%02X", entry.type);
             break;
@@ -241,32 +245,146 @@ static void format_cpu(const GT_Trace_Entry& entry, const GT_Trace_Format_Option
     if (options.bytes)
         trace_log_format_cpu_bytes(entry, bytes, sizeof(bytes));
 
-    const char* name = entry.cpu.name[0] != 0 ? entry.cpu.name : "???";
-
-    if (strlen(entry.cpu.name) == GT_TRACE_NAME_SIZE - 1)
-    {
-        emu_get_core()->GetI386()->FormatDisassemblerRecordText(entry.cpu.linear);
-
-        const I386_Disassembler_Record* record = emu_get_core()->GetI386()->GetDisassemblerRecord(entry.cpu.linear);
-
-        if (IsValidPointer(record) && record->size == entry.cpu.size &&
-            memcmp(record->opcodes, entry.cpu.opcodes, entry.cpu.size) == 0)
-            name = record->name;
-    }
+    char name[128];
+    trace_log_format_cpu_instruction(entry, name, sizeof(name));
 
     snprintf(buffer, size, "%s%s  %s%s%s%-*s %s", linear, address, registers, segments, flags,
         GT_TRACE_INSTRUCTION_WIDTH, name, bytes);
 }
 
+void trace_log_format_cpu_instruction(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size)
+{
+    u32 count = MIN((u32)entry.cpu.size, (u32)GT_I386_MAX_INSTRUCTION_LENGTH);
+
+    if (!emu_get_core()->GetI386()->FormatInstruction(entry.cpu.opcodes, count, entry.cpu.cs, entry.cpu.eip,
+        entry.cpu.linear, entry.cpu.mode, entry.cpu.default32 != 0, buffer, buffer_size))
+        snprintf(buffer, buffer_size, "???");
+}
+
+static void format_far_address(u16 cs, u32 eip, u8 mode, char* buffer, size_t size)
+{
+    if (mode == I386_MODE_PROTECTED)
+        snprintf(buffer, size, "%04X:%08X", cs, eip);
+    else
+        snprintf(buffer, size, "%04X:%04X", cs, eip & 0xFFFF);
+}
+
+static void format_cpu_event(const GT_Trace_Entry& entry, char* buffer, size_t size)
+{
+    static const char* const k_modes[3] = { "REAL", "PM", "V86" };
+    static const char* const k_causes[15] = { "MOV CR0", "LMSW", "MOV CR3", "MOV CR4", "INVLPG", "LGDT", "LIDT", "CPUID",
+        "RDTSC", "RDMSR", "WRMSR", "JMP", "CALL", "IRET", "INTERRUPT" };
+    static const char* const k_classes[3] = { "FAULT", "TRAP", "ABORT" };
+    char at[24];
+    char to[24];
+    u8 mode = MIN(entry.cpu_event.modes & 0x0F, 2);
+    u8 to_mode = MIN(entry.cpu_event.vector2 & 0x0F, 2);
+    const char* cause = k_causes[MIN(entry.cpu_event.cause, (u8)14)];
+    u32 old_value = entry.cpu_event.old_value;
+    u32 new_value = entry.cpu_event.new_value;
+
+    format_far_address(entry.cpu_event.cs, entry.cpu_event.eip, mode, at, sizeof(at));
+    format_far_address(entry.cpu_event.to_cs, entry.cpu_event.to_eip, to_mode, to, sizeof(to));
+
+    switch (entry.event)
+    {
+        case TRACE_CPU_INTERRUPT_RAISE:
+        case TRACE_CPU_INTERRUPT_SHUTDOWN:
+        {
+            char name[16];
+            char description[64];
+            char error[24] = "";
+            char cr2[24] = "";
+            char next[40] = "";
+            u8 vector = entry.cpu_event.vector;
+
+            gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description), false);
+
+            if (entry.cpu_event.has_error_code)
+                snprintf(error, sizeof(error), "  Error:$%04X", old_value);
+
+            if (vector == 14)
+                snprintf(cr2, sizeof(cr2), "  CR2:$%08X", new_value);
+
+            if (entry.cpu_event.vector2 != 0xFF)
+                snprintf(next, sizeof(next), "  Then #%02X while delivering", entry.cpu_event.vector2);
+
+            if (entry.event == TRACE_CPU_INTERRUPT_SHUTDOWN)
+                format_event(buffer, size, "CPU", "SHUTDOWN", "Triple fault  %s%s%s%s  At:%s  ESP:$%08X",
+                    vector == 0xFF ? "No vector" : name, error, cr2, next, at, entry.cpu_event.extra);
+            else
+                format_event(buffer, size, "CPU", "EXCEPTION", "%s %s %s%s%s  At:%s%s%s", name, description,
+                    k_classes[MIN(entry.cpu_event.cause, (u8)2)], error, cr2, at,
+                    (entry.flags & TRACE_CPU_FLAG_FAILED) != 0 ? "  NOT DELIVERED" : "", next);
+            break;
+        }
+        case TRACE_CPU_INTERRUPT_RETURN:
+            format_event(buffer, size, "CPU", "IRET", "From:%s  To:%s  %s:%u->%s:%u  EFLAGS:$%08X  Calls:%u", at, to,
+                k_modes[mode], entry.cpu_event.modes >> 4, k_modes[to_mode], entry.cpu_event.vector2 >> 4, new_value,
+                entry.cpu_event.extra);
+            break;
+        case TRACE_CPU_INTERRUPT_MODE:
+            format_event(buffer, size, "CPU", "MODE", "%s  CR0:$%08X->$%08X  PE:%u->%u PG:%u->%u  Now %s  At:%s", cause,
+                old_value, new_value, old_value & 1, new_value & 1, old_value >> 31, new_value >> 31, k_modes[mode], at);
+            break;
+        case TRACE_CPU_INTERRUPT_PAGING:
+            if (entry.cpu_event.cause == TRACE_CPU_CAUSE_INVLPG)
+                format_event(buffer, size, "CPU", "PAGING", "INVLPG $%08X  CR3:$%08X  At:%s", new_value,
+                    entry.cpu_event.extra, at);
+            else if (entry.cpu_event.cause == TRACE_CPU_CAUSE_MOV_CR0)
+                format_event(buffer, size, "CPU", "PAGING", "Paging %s  CR0:$%08X  CR3:$%08X  At:%s",
+                    (new_value & 0x80000000U) != 0 ? "ON" : "OFF", new_value, entry.cpu_event.extra, at);
+            else
+                format_event(buffer, size, "CPU", "PAGING", "%s $%08X -> $%08X  At:%s", cause, old_value, new_value, at);
+            break;
+        case TRACE_CPU_INTERRUPT_TASK:
+            format_event(buffer, size, "CPU", "TASK", "%s  TR:$%04X -> $%04X%s  From:%s  To:%s  CR3:$%08X", cause,
+                old_value, new_value, entry.cpu_event.selector != 0 ? " via gate" : "", at, to, entry.cpu_event.extra);
+            break;
+        case TRACE_CPU_INTERRUPT_TABLES:
+            format_event(buffer, size, "CPU", "TABLES", "%s  Base:$%08X -> $%08X  Limit:$%04X -> $%04X  At:%s", cause,
+                old_value, new_value, entry.cpu_event.extra2, entry.cpu_event.extra, at);
+            break;
+        default:
+            if (entry.cpu_event.cause == TRACE_CPU_CAUSE_CPUID)
+                format_event(buffer, size, "CPU", "CPUID", "EAX:$%08X -> EAX:$%08X EBX:$%08X EDX:$%08X  At:%s", old_value,
+                    new_value, entry.cpu_event.extra, entry.cpu_event.extra2, at);
+            else if (entry.cpu_event.cause == TRACE_CPU_CAUSE_RDTSC)
+                format_event(buffer, size, "CPU", "RDTSC", "$%08X%08X  At:%s", entry.cpu_event.extra, new_value, at);
+            else
+                format_event(buffer, size, "CPU", cause, "MSR $%08X %s $%08X%08X%s  At:%s", old_value,
+                    entry.cpu_event.cause == TRACE_CPU_CAUSE_WRMSR ? "<-" : "->", entry.cpu_event.extra, new_value,
+                    (entry.flags & TRACE_CPU_FLAG_FAILED) != 0 ? "  #GP" : "", at);
+            break;
+    }
+}
+
 static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t size)
 {
+    if (entry.event >= TRACE_CPU_INTERRUPT_RAISE)
+    {
+        format_cpu_event(entry, buffer, size);
+        return;
+    }
+
+    static const char* const k_modes[3] = { "REAL", "PM", "V86" };
     char name[16];
     char description[64];
+    char from[24];
+    char to[24];
+    char change[32] = "";
     u8 vector = entry.interrupt.vector;
-    u32 from = entry.interrupt.from;
-    u32 to = entry.interrupt.to;
+    u8 from_mode = MIN(entry.interrupt.modes & 0x0F, 2);
+    u8 to_mode = MIN(entry.interrupt.modes >> 4, 2);
+    u8 from_cpl = entry.interrupt.cpls & 0x0F;
+    u8 to_cpl = entry.interrupt.cpls >> 4;
 
     gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description), false);
+    format_far_address(entry.interrupt.from_cs, entry.interrupt.from_eip, from_mode, from, sizeof(from));
+    format_far_address(entry.interrupt.to_cs, entry.interrupt.to_eip, to_mode, to, sizeof(to));
+
+    if (from_mode != to_mode || from_cpl != to_cpl)
+        snprintf(change, sizeof(change), "  %s:%u->%s:%u", k_modes[from_mode], from_cpl, k_modes[to_mode], to_cpl);
 
     switch (entry.event)
     {
@@ -275,11 +393,11 @@ static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t s
             u8 line = entry.interrupt.line;
 
             if (line < 16)
-                format_event(buffer, size, "INT", "IRQ", "IRQ%u %s  Vector:$%02X  From:$%08X  To:$%08X", line,
-                    k_debug_irq_sources[line], vector, from, to);
+                format_event(buffer, size, "INT", "IRQ", "IRQ%u %s  Vector:$%02X  From:%s  To:%s%s", line,
+                    k_debug_irq_sources[line], vector, from, to, change);
             else
-                format_event(buffer, size, "INT", "IRQ", "%s  Vector:$%02X  From:$%08X  To:$%08X", description,
-                    vector, from, to);
+                format_event(buffer, size, "INT", "IRQ", "%s  Vector:$%02X  From:%s  To:%s%s", description, vector,
+                    from, to, change);
             break;
         }
         case TRACE_CPU_INTERRUPT_EXCEPTION:
@@ -289,17 +407,24 @@ static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t s
             if (entry.interrupt.has_error_code)
                 snprintf(error, sizeof(error), "  Error:$%04X", entry.interrupt.error_code);
 
-            format_event(buffer, size, "INT", "EXCEPTION", "%s %s  Vector:$%02X%s  From:$%08X  To:$%08X", name,
-                description, vector, error, from, to);
+            format_event(buffer, size, "INT", "EXCEPTION", "%s %s  Vector:$%02X%s  At:%s  To:%s%s", name, description,
+                vector, error, from, to, change);
             break;
         }
         default:
         {
             const char* function = gui_debug_i386_interrupt_function(vector, entry.interrupt.ax);
             bool named = IsValidPointer(function);
+            char text[GT_TRACE_INTERRUPT_TEXT_SIZE + 8] = "";
 
-            format_event(buffer, size, "INT", "SOFTWARE", "INT $%02X %s%s%s  AX:$%04X  From:$%08X  To:$%08X", vector,
-                description, named ? ": " : "", named ? function : "", entry.interrupt.ax, from, to);
+            if (entry.interrupt.text[0] != 0)
+                snprintf(text, sizeof(text), "  \"%.*s\"", GT_TRACE_INTERRUPT_TEXT_SIZE, entry.interrupt.text);
+
+            format_event(buffer, size, "INT", "SOFTWARE",
+                "INT $%02X %s%s%s  AX:%04X BX:%04X CX:%04X DX:%04X SI:%04X DI:%04X DS:%04X ES:%04X%s  From:%s  To:%s%s",
+                vector, description, named ? ": " : "", named ? function : "", entry.interrupt.ax, entry.interrupt.bx,
+                entry.interrupt.cx, entry.interrupt.dx, entry.interrupt.si, entry.interrupt.di, entry.interrupt.ds,
+                entry.interrupt.es, text, from, to, change);
             break;
         }
     }
@@ -308,12 +433,69 @@ static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t s
 static void format_io(const GT_Trace_Entry& entry, char* buffer, size_t size)
 {
     const char* label = gui_debug_port_label(entry.io.port);
-    int digits = MIN((int)entry.io.size, 4) * 2;
+    const char* name = IsValidPointer(label) ? label : "";
+    int digits = MAX(MIN((int)entry.io.size, 4), 1) * 2;
     u32 mask = digits >= 8 ? 0xFFFFFFFFU : BIT_MASK(digits * 4);
     bool write = entry.event == TRACE_IO_WRITE;
+    const char* tags = (entry.flags & TRACE_ENTRY_DEBUGGER) != 0 ? "  DEBUGGER" :
+        (entry.flags & TRACE_ENTRY_UNMAPPED) != 0 ? "  UNMAPPED" : "";
 
-    format_event(buffer, size, "I/O", write ? "OUT" : "IN", "$%04X %-18s %s $%0*X  PC:$%08X", entry.io.port,
-        IsValidPointer(label) ? label : "", write ? "<-" : "->", digits, entry.io.value & mask, entry.io.pc);
+    switch (entry.event)
+    {
+        case TRACE_IO_POLL:
+            format_event(buffer, size, "I/O", "POLL", "$%04X %-18s -> $%0*X  x%u  %u cycles", entry.io.port, name,
+                digits, entry.io.value & mask, entry.io.count, entry.io.cycles);
+            break;
+        case TRACE_IO_DENIED:
+            format_event(buffer, size, "I/O", "DENIED", "$%04X %-18s %s %u-bit  %s", entry.io.port, name,
+                (entry.io.reason & 0x01) != 0 ? "OUT" : "IN", entry.io.size * 8,
+                (entry.io.reason & 0x02) != 0 ? "I/O bitmap" : "IOPL");
+            break;
+        default:
+            format_event(buffer, size, "I/O", write ? "OUT" : "IN", "$%04X %-18s %s $%0*X%s", entry.io.port, name,
+                write ? "<-" : "->", digits, entry.io.value & mask, tags);
+            break;
+    }
+}
+
+static void format_mark(const GT_Trace_Entry& entry, char* buffer, size_t size)
+{
+    switch (entry.event)
+    {
+        case TRACE_MARK_START:
+            format_event(buffer, size, "MARK", "START", "Recording started");
+            break;
+        case TRACE_MARK_FRAME:
+            format_event(buffer, size, "MARK", "FRAME", "%llu", (unsigned long long)entry.mark.value);
+            break;
+        case TRACE_MARK_STOP:
+            format_event(buffer, size, "MARK", "STOP", "Debugger stopped");
+            break;
+        case TRACE_MARK_CONTINUE:
+            format_event(buffer, size, "MARK", "CONTINUE", "Debugger continued");
+            break;
+        case TRACE_MARK_STATE_LOAD:
+            format_event(buffer, size, "MARK", "STATE LOAD", "Machine time jumps");
+            break;
+        case TRACE_MARK_REWIND:
+            format_event(buffer, size, "MARK", "REWIND", "Machine time jumps back");
+            break;
+        case TRACE_MARK_RESET:
+            format_event(buffer, size, "MARK", "RESET", "%s", entry.mark.cause != 0 ? "CPU reset" : "Machine reset");
+            break;
+        case TRACE_MARK_POWER:
+            format_event(buffer, size, "MARK", "POWER", "%s", entry.mark.cause != 0 ? "Power on" : "Power off");
+            break;
+        case TRACE_MARK_MEDIA:
+            format_event(buffer, size, "MARK", "MEDIA", "Media changed");
+            break;
+        case TRACE_MARK_DEBUGGER_OFF:
+            format_event(buffer, size, "MARK", "DEBUG OFF", "The debugger stopped running the machine");
+            break;
+        default:
+            format_event(buffer, size, "MARK", "LOST", "%llu entries", (unsigned long long)entry.mark.value);
+            break;
+    }
 }
 
 static void format_pic(const GT_Trace_Entry& entry, char* buffer, size_t size)
@@ -328,14 +510,22 @@ static void format_pic(const GT_Trace_Entry& entry, char* buffer, size_t size)
     switch (entry.event)
     {
         case TRACE_PIC_REQUEST:
+        case TRACE_PIC_LINE_LOW:
         {
             u8 line = entry.pic.line & 0x0F;
             bool masked = ((entry.pic.imr >> (line & 7)) & 0x01) != 0;
+            bool low = entry.event == TRACE_PIC_LINE_LOW;
 
-            format_event(buffer, size, "PIC", "REQUEST", "IRQ%u %s  Vector:$%02X%s  %s", line,
-                k_debug_irq_sources[line], entry.pic.vector, masked ? "  MASKED" : "", state);
+            format_event(buffer, size, "PIC", low ? "LINE LOW" : "REQUEST", "IRQ%u %s  Vector:$%02X%s%s%s  %s", line,
+                k_debug_irq_sources[line], entry.pic.vector, masked ? "  MASKED" : "",
+                (entry.flags & TRACE_PIC_FLAG_COALESCED) != 0 ? "  ALREADY PENDING" : "",
+                (entry.flags & TRACE_PIC_FLAG_IN_SERVICE) != 0 ? "  IN SERVICE" : "", state);
             break;
         }
+        case TRACE_PIC_SPURIOUS:
+            format_event(buffer, size, "PIC", "SPURIOUS", "%s IR7  Vector:$%02X  No request at acknowledge  %s", chip,
+                entry.pic.vector, state);
+            break;
         case TRACE_PIC_MASK:
         {
             char unmasked[48];
@@ -367,12 +557,24 @@ static void format_pic(const GT_Trace_Entry& entry, char* buffer, size_t size)
             bool eoi = (operation & 0x01) != 0;
             bool specific = operation == 3 || operation >= 6;
 
+            u8 cleared = (u8)(entry.pic.previous_isr & ~entry.pic.isr);
+
             if (specific)
-                format_event(buffer, size, "PIC", eoi ? "EOI" : "OCW2", "%s $%02X %s IRQ%d  %s", chip, value,
-                    k_ocw2_names[operation], base + (value & 0x07), state);
+                format_event(buffer, size, "PIC", eoi ? "EOI" : "OCW2", "%s $%02X %s IRQ%d%s  %s", chip, value,
+                    k_ocw2_names[operation], base + (value & 0x07), eoi && cleared == 0 ? "  NOT IN SERVICE" : "", state);
+            else if (eoi && cleared != 0)
+            {
+                int bit = 0;
+
+                while (bit < 7 && IS_NOT_SET_BIT(cleared, bit))
+                    bit++;
+
+                format_event(buffer, size, "PIC", "EOI", "%s $%02X %s  Cleared IRQ%d  %s", chip, value,
+                    k_ocw2_names[operation], base + bit, state);
+            }
             else
-                format_event(buffer, size, "PIC", eoi ? "EOI" : "OCW2", "%s $%02X %s  %s", chip, value,
-                    k_ocw2_names[operation], state);
+                format_event(buffer, size, "PIC", eoi ? "EOI" : "OCW2", "%s $%02X %s%s  %s", chip, value,
+                    k_ocw2_names[operation], eoi ? "  NOTHING IN SERVICE" : "", state);
             break;
         }
         default:
@@ -1027,20 +1229,27 @@ static void format_cdrom(const GT_Trace_Entry& entry, char* buffer, size_t size)
             format_event(buffer, size, "CDROM", "LOST DATA", "LBA:%u  MSF %s  Not transferred in time", lba, msf);
             break;
         case TRACE_CDROM_CDDA_PLAY:
-            format_event(buffer, size, "CDROM", "CDDA PLAY", "LBA:%u-%u  MSF %s-%s  Seek:%u ms%s", lba,
+            format_event(buffer, size, "CDROM", "CDDA PLAY", "Track %u  LBA:%u-%u  MSF %s-%s  Seek:%u ms%s", b[0], lba,
                 entry.cdrom.end_lba, msf, end_msf, entry.cdrom.size, (entry.cdrom.flags & 0x01) != 0 ? "  REPEAT" : "");
             break;
+        case TRACE_CDROM_CDDA_REJECT:
+            format_event(buffer, size, "CDROM", "CDDA PLAY", "REJECTED  LBA:%u-%u  Empty range", lba, entry.cdrom.end_lba);
+            break;
         case TRACE_CDROM_CDDA_PAUSE:
-            format_event(buffer, size, "CDROM", "CDDA PAUSE", "LBA:%u  MSF %s", lba, msf);
+            format_event(buffer, size, "CDROM", "CDDA PAUSE", "Track %u  LBA:%u  MSF %s", b[0], lba, msf);
             break;
         case TRACE_CDROM_CDDA_RESUME:
-            format_event(buffer, size, "CDROM", "CDDA RESUME", "LBA:%u  MSF %s", lba, msf);
+            format_event(buffer, size, "CDROM", "CDDA RESUME", "Track %u  LBA:%u  MSF %s", b[0], lba, msf);
             break;
         case TRACE_CDROM_CDDA_STOP:
-            format_event(buffer, size, "CDROM", "CDDA STOP", "LBA:%u  MSF %s", lba, msf);
+        {
+            static const char* const k_causes[3] = { "Command", "Disc inserted", "Disc ejected" };
+            format_event(buffer, size, "CDROM", "CDDA STOP", "Track %u  LBA:%u  MSF %s  %s", b[0], lba, msf,
+                k_causes[MIN(b[1], (u8)2)]);
             break;
+        }
         case TRACE_CDROM_CDDA_END:
-            format_event(buffer, size, "CDROM", "CDDA END", "LBA:%u  MSF %s", lba, msf);
+            format_event(buffer, size, "CDROM", "CDDA END", "Track %u  LBA:%u  MSF %s", b[0], lba, msf);
             break;
         default:
             format_event(buffer, size, "CDROM", "CDDA LOOP", "Back to LBA:%u  MSF %s  End:%u", lba, msf,
@@ -1380,4 +1589,167 @@ static void format_buttons(u16 buttons, char* buffer, size_t size)
 
     if (length == 0)
         snprintf(buffer, size, "-");
+}
+
+static bool parse_hex_token(const char* text, size_t length, u32* value)
+{
+    if (length == 0 || length > 8)
+        return false;
+
+    u32 result = 0;
+
+    for (size_t i = 0; i < length; i++)
+    {
+        char c = text[i];
+        int digit = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ?
+            c - 'A' + 10 : -1;
+
+        if (digit < 0)
+            return false;
+
+        result = (result << 4) | (u32)digit;
+    }
+
+    *value = result;
+    return true;
+}
+
+static bool parse_range_token(const char* text, size_t length, bool ports, GT_Trace_Range& range, bool& exclude)
+{
+    exclude = length > 0 && text[0] == '!';
+
+    if (exclude)
+    {
+        text++;
+        length--;
+    }
+
+    range.events = ports ? (TRACE_IO_EVENT_ALL) : 0;
+
+    if (ports && length > 2 && text[length - 2] == ':')
+    {
+        char kind = text[length - 1];
+        range.events = kind == 'r' || kind == 'R' ? TRACE_IO_EVENT_READS | TRACE_IO_EVENT_POLLS :
+            kind == 'w' || kind == 'W' ? TRACE_IO_EVENT_WRITES : 0;
+        length -= 2;
+
+        if (range.events == 0)
+            return false;
+    }
+
+    const char* dash = (const char*)memchr(text, '-', length);
+
+    if (dash == NULL)
+    {
+        if (!parse_hex_token(text, length, &range.first))
+            return false;
+
+        range.last = range.first;
+        return true;
+    }
+
+    size_t first_length = (size_t)(dash - text);
+    return parse_hex_token(text, first_length, &range.first) &&
+        parse_hex_token(dash + 1, length - first_length - 1, &range.last) && range.first <= range.last;
+}
+
+static bool parse_ranges(const char* text, bool ports, GT_Trace_Range* include, u8* include_count,
+    GT_Trace_Range* exclude, u8* exclude_count)
+{
+    *include_count = 0;
+    *exclude_count = 0;
+
+    while (*text != 0)
+    {
+        while (*text == ' ' || *text == ',')
+            text++;
+
+        size_t length = 0;
+
+        while (text[length] != 0 && text[length] != ' ' && text[length] != ',')
+            length++;
+
+        if (length == 0)
+            break;
+
+        GT_Trace_Range range;
+        bool excluded = false;
+
+        if (!parse_range_token(text, length, ports, range, excluded))
+            return false;
+
+        if (excluded && *exclude_count < GT_TRACE_FILTER_RANGES)
+            exclude[(*exclude_count)++] = range;
+        else if (!excluded && *include_count < GT_TRACE_FILTER_RANGES)
+            include[(*include_count)++] = range;
+        else
+            return false;
+
+        text += length;
+    }
+
+    return true;
+}
+
+bool trace_log_parse_filters(const char* code, const char* ports, const char* interrupts, GT_Trace_Filters& filters)
+{
+    TraceLogger::ClearFilters(filters);
+
+    if (!parse_ranges(code, false, filters.code_include, &filters.code_include_count, filters.code_exclude,
+        &filters.code_exclude_count))
+        return false;
+
+    if (!parse_ranges(ports, true, filters.port_include, &filters.port_include_count, filters.port_exclude,
+        &filters.port_exclude_count))
+        return false;
+
+    bool any = false;
+
+    while (*interrupts != 0)
+    {
+        while (*interrupts == ' ' || *interrupts == ',')
+            interrupts++;
+
+        size_t length = 0;
+
+        while (interrupts[length] != 0 && interrupts[length] != ' ' && interrupts[length] != ',')
+            length++;
+
+        if (length == 0)
+            break;
+
+        const char* colon = (const char*)memchr(interrupts, ':', length);
+        size_t vector_length = colon != NULL ? (size_t)(colon - interrupts) : length;
+        u32 vector = 0;
+
+        if (!parse_hex_token(interrupts, vector_length, &vector) || vector > 0xFF ||
+            filters.function_count >= GT_TRACE_FILTER_FUNCTIONS)
+            return false;
+
+        if (!any)
+        {
+            memset(filters.vectors, 0, sizeof(filters.vectors));
+            any = true;
+        }
+
+        filters.vectors[vector >> 5] |= 1U << (vector & 31);
+
+        if (colon != NULL)
+        {
+            u32 value = 0;
+            size_t value_length = length - vector_length - 1;
+
+            if (!parse_hex_token(colon + 1, value_length, &value) || value > 0xFFFF)
+                return false;
+
+            GT_Trace_Function& function = filters.functions[filters.function_count++];
+            function.vector = (u8)vector;
+            function.match = value_length <= 2 ? TRACE_FUNCTION_AH : TRACE_FUNCTION_AX;
+            function.value = (u16)value;
+        }
+
+        interrupts += length;
+    }
+
+    return true;
 }

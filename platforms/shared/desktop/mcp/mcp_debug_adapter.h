@@ -47,12 +47,19 @@ static const McpTraceFilter k_mcp_trace_filters[] =
     { "cpu.irqs", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_IRQS },
     { "cpu.exceptions", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_EXCEPTIONS },
     { "cpu.software_ints", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_SOFTWARE },
+    { "cpu.modes", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_MODES },
+    { "cpu.returns", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_RETURNS },
+    { "cpu.msrs", TRACE_CPU_INTERRUPT, TRACE_CPU_INTERRUPT_EVENT_MSRS },
     { "io.reads", TRACE_IO, TRACE_IO_EVENT_READS },
     { "io.writes", TRACE_IO, TRACE_IO_EVENT_WRITES },
+    { "io.polls", TRACE_IO, TRACE_IO_EVENT_POLLS },
+    { "io.denied", TRACE_IO, TRACE_IO_EVENT_DENIED },
     { "pic.requests", TRACE_PIC, TRACE_PIC_EVENT_REQUESTS },
     { "pic.mask", TRACE_PIC, TRACE_PIC_EVENT_MASK },
     { "pic.commands", TRACE_PIC, TRACE_PIC_EVENT_COMMANDS },
     { "pic.init", TRACE_PIC, TRACE_PIC_EVENT_INIT },
+    { "pic.spurious", TRACE_PIC, TRACE_PIC_EVENT_SPURIOUS },
+    { "pic.line_low", TRACE_PIC, TRACE_PIC_EVENT_LINE_LOW },
     { "timer.timeouts", TRACE_TIMER, TRACE_TIMER_EVENT_TIMEOUTS },
     { "timer.counters", TRACE_TIMER, TRACE_TIMER_EVENT_COUNTERS },
     { "timer.interrupt_control", TRACE_TIMER, TRACE_TIMER_EVENT_INTERRUPT },
@@ -286,7 +293,10 @@ public:
     json EjectMemoryCard(bool discard_changes);
 
     // Trace and profiler
-    json GetTraceLog(s64 start, int count);
+    bool SetTraceCaptureFilters(const std::string& code, const std::string& ports, const std::string& interrupts);
+    void SetTraceKeepAcrossResets(bool keep);
+    json GetTraceLog(s64 start, int count, u32 types, const std::string& contains, u32 pc_first, u32 pc_last,
+        bool compact);
     json SetTraceLog(bool enabled, u32 flags, const std::string& output, const std::string& memory_size,
         const std::string& disk_size, const std::string& output_path, const u32* event_filters,
         const std::string& vblank_watch_address, const std::string& vblank_watch_operation);

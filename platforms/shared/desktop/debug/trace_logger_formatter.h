@@ -38,6 +38,8 @@ struct GT_Trace_Format_Options
 };
 
 void trace_log_format_cpu_address(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);
+void trace_log_format_cpu_instruction(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);
+bool trace_log_parse_filters(const char* code, const char* ports, const char* interrupts, GT_Trace_Filters& filters);
 void trace_log_format_cpu_flags(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);
 void trace_log_format_cpu_bytes(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);
 void trace_log_format_cycle_prefix(const GT_Trace_Entry& entry, bool previous_cycle_valid,

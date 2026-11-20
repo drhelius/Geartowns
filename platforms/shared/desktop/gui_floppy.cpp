@@ -72,7 +72,8 @@ static void draw_blank_popup(void);
 static void draw_quit_popup(void);
 static void draw_second_popup(void);
 static int machine_drives(void);
-static void drive_menu(int drive, int drives);
+static void drive_menu(int drive);
+static void changes_menu(void);
 
 void gui_floppy_menu(int drives)
 {
@@ -80,12 +81,26 @@ void gui_floppy_menu(int drives)
         return;
 
     for (int i = 0; i < drives; i++)
-        drive_menu(i, drives);
+        drive_menu(i);
+
+    ImGui::Separator();
+    changes_menu();
+
+    if (drives > 1)
+    {
+        Emu_FloppyInfo first;
+        Emu_FloppyInfo second;
+        emu_floppy_get_info(0, &first);
+        emu_floppy_get_info(1, &second);
+
+        if ((first.inserted || second.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
+            emu_floppy_swap();
+    }
 
     ImGui::EndMenu();
 }
 
-static void drive_menu(int drive, int drives)
+static void drive_menu(int drive)
 {
     char label[16];
     snprintf(label, sizeof(label), "Drive %d", drive + 1);
@@ -204,6 +219,11 @@ static void drive_menu(int drive, int drives)
         ImGui::EndMenu();
     }
 
+    ImGui::EndMenu();
+}
+
+static void changes_menu(void)
+{
     if (ImGui::BeginMenu("Remember Changes"))
     {
         static const char* const k_changes[config_FloppyChanges_Count] = { "Off", "Original Image", "Working Copy" };
@@ -245,20 +265,6 @@ static void drive_menu(int drive, int drives)
 
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Where floppy writes go.\nApplies from the next disk inserted.");
-
-    if (drives > 1)
-    {
-        Emu_FloppyInfo other;
-        emu_floppy_get_info(drive ^ 1, &other);
-
-        if ((info.inserted || other.inserted) && ImGui::MenuItem("Swap Floppy 1 and 2"))
-        {
-            ImGui::Separator();
-            emu_floppy_swap();
-        }
-    }
-
-    ImGui::EndMenu();
 }
 
 void gui_floppy_popups(void)

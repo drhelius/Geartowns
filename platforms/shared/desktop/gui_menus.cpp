@@ -95,8 +95,7 @@ static void menu_video(void);
 static void menu_input(void);
 static void menu_input_controller(int port);
 static void menu_audio(void);
-static void menu_audio_source_mute(const char* label, int source);
-static void menu_audio_source_volume(const char* label, const char* id, int source, float* volume);
+static void menu_audio_source(const char* label, const char* id, int source, float* volume);
 static void menu_debug(void);
 static void menu_about(void);
 static void draw_background_color_menu(const char* label, int theme);
@@ -566,15 +565,6 @@ static void menu_cdrom(void)
         ImGui::EndTooltip();
     }
 
-    ImGui::MenuItem("Show Fast Forward Notification", "", &config_emulator.ffwd_loads_notification, config_emulator.ffwd_loads);
-
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::BeginTooltip();
-        ImGui::Text("Show an icon while a CD-ROM load runs at maximum speed.");
-        ImGui::EndTooltip();
-    }
-
     ImGui::Separator();
 
     if (loading)
@@ -857,6 +847,14 @@ static void menu_emulator(void)
 
             ImGui::Separator();
             ImGui::MenuItem("Drive Activity", "", &config_emulator.show_drive_activity);
+            ImGui::MenuItem("Fast Forward Loads", "", &config_emulator.ffwd_loads_notification, config_emulator.ffwd_loads);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Show an icon while a CD-ROM load runs at maximum speed.");
+                ImGui::Text("Needs Drives > CD-ROM > Fast Forward Loads.");
+                ImGui::EndTooltip();
+            }
 
             ImGui::EndMenu();
         }
@@ -2038,19 +2036,11 @@ static void menu_audio(void)
 
         ImGui::Separator();
 
-        menu_audio_source_mute("Mute FM", Audio::AUDIO_SOURCE_FM);
-        menu_audio_source_mute("Mute PCM", Audio::AUDIO_SOURCE_PCM);
-        menu_audio_source_mute("Mute CD-DA", Audio::AUDIO_SOURCE_CDDA);
-        menu_audio_source_mute("Mute Buzzer", Audio::AUDIO_SOURCE_BUZZER);
-        menu_audio_source_mute("Mute 16-bit PCM", Audio::AUDIO_SOURCE_PCM16);
-
-        ImGui::Separator();
-
-        menu_audio_source_volume("FM Volume", "##fm_volume", Audio::AUDIO_SOURCE_FM, &config_audio.fm_volume);
-        menu_audio_source_volume("PCM Volume", "##pcm_volume", Audio::AUDIO_SOURCE_PCM, &config_audio.pcm_volume);
-        menu_audio_source_volume("CD-DA Volume", "##cdda_volume", Audio::AUDIO_SOURCE_CDDA, &config_audio.cdda_volume);
-        menu_audio_source_volume("Buzzer Volume", "##buzzer_volume", Audio::AUDIO_SOURCE_BUZZER, &config_audio.buzzer_volume);
-        menu_audio_source_volume("16-bit PCM Volume", "##pcm16_volume", Audio::AUDIO_SOURCE_PCM16, &config_audio.pcm16_volume);
+        menu_audio_source("FM Volume", "##fm_volume", Audio::AUDIO_SOURCE_FM, &config_audio.fm_volume);
+        menu_audio_source("PCM Volume", "##pcm_volume", Audio::AUDIO_SOURCE_PCM, &config_audio.pcm_volume);
+        menu_audio_source("CD-DA Volume", "##cdda_volume", Audio::AUDIO_SOURCE_CDDA, &config_audio.cdda_volume);
+        menu_audio_source("Buzzer Volume", "##buzzer_volume", Audio::AUDIO_SOURCE_BUZZER, &config_audio.buzzer_volume);
+        menu_audio_source("16-bit PCM Volume", "##pcm16_volume", Audio::AUDIO_SOURCE_PCM16, &config_audio.pcm16_volume);
 
         ImGui::Separator();
 
@@ -2105,18 +2095,16 @@ static void menu_audio(void)
     }
 }
 
-static void menu_audio_source_mute(const char* label, int source)
-{
-    bool mute = emu_audio_is_source_muted(source);
-
-    if (ImGui::MenuItem(label, "", &mute, config_audio.enable))
-        emu_audio_set_source_mute(source, mute);
-}
-
-static void menu_audio_source_volume(const char* label, const char* id, int source, float* volume)
+static void menu_audio_source(const char* label, const char* id, int source, float* volume)
 {
     if (ImGui::BeginMenu(label, config_audio.enable))
     {
+        bool mute = emu_audio_is_source_muted(source);
+
+        if (ImGui::MenuItem("Mute", "", &mute))
+            emu_audio_set_source_mute(source, mute);
+
+        ImGui::Separator();
         ImGui::PushItemWidth(200.0f);
 
         if (ImGui::SliderFloat(id, volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))

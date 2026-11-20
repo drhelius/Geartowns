@@ -26,10 +26,10 @@
 
 static const int config_version = 10;
 static const int config_minimum_version = 5;
-static const int config_max_recent_roms = 15;
-static const int config_max_recent_floppies = 5;
-static const int config_max_recent_hard_disks = 5;
-static const int config_max_recent_memory_cards = 5;
+static const int config_max_recent_roms = 10;
+static const int config_max_recent_floppies = 10;
+static const int config_max_recent_hard_disks = 10;
+static const int config_max_recent_memory_cards = 10;
 static const int config_floppy_drives = 2;
 static const int config_ControllerType_Auto = -1;
 

@@ -38,6 +38,7 @@ public:
         int y;
         int width;
         u16 usage;
+        bool layout;
     };
 
 public:
@@ -74,12 +75,16 @@ private:
     void DrawLegend();
     void DrawInfo();
     void DrawChips(int y);
+    bool DrawLayoutChips(u16 usage, int start, int* x, int* y, int* row);
+    void AddChip(const std::string& text, u8 fill, u16 usage, bool layout, int start, int* x, int* y, int* row);
     void DrawButtons();
     void DrawButton(int x, int y, int width, const char* text);
     void GetResetRect(int* x, int* y, int* width, int* height) const;
     void GetCloseRect(int* x, int* y, int* width, int* height) const;
     bool IsPointerIn(int x, int y, int width, int height) const;
     std::string DescribeHostKey(u16 usage) const;
+    std::string DescribeHostKeyAction(u16 usage) const;
+    std::string DescribeLayoutTarget(const GT_Key_Map_Char& target, int level) const;
     std::string DescribeOwnHostKeys(GT_Keys key) const;
     std::string DescribeTargets(const GT_Key_Map_Entry& entry) const;
 

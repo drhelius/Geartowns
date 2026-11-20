@@ -18,10 +18,9 @@
  */
 
 #include <algorithm>
-#include <ctype.h>
-#include <string.h>
 #include <vector>
 #include "emu.h"
+#include "input/keyboard_chars.h"
 
 #define INPUT_MACRO_IMPORT
 #include "input_macro.h"
@@ -49,7 +48,6 @@ static Input_Macro_Owner macro_owner = Input_Macro_Owner_None;
 static int macro_dropped = 0;
 
 static int typed_key(const char* text, GT_Keys* key, bool* shift);
-static void ascii_key(char character, GT_Keys* key, bool* shift);
 static void add_step(Input_Macro_Step_Type type, GT_Keys key, int frames);
 static void reset(void);
 
@@ -223,7 +221,7 @@ static int typed_key(const char* text, GT_Keys* key, bool* shift)
             size++;
 
         if (size == 2 && bytes[0] == 0xC2 && bytes[1] == 0xA5)
-            *key = GT_KEY_YEN;
+            keyboard_char_key(0xA5, key, shift);
 
         return size;
     }
@@ -234,90 +232,8 @@ static int typed_key(const char* text, GT_Keys* key, bool* shift)
         return 2;
     }
 
-    ascii_key(text[0], key, shift);
+    keyboard_char_key(bytes[0], key, shift);
     return 1;
-}
-
-static void ascii_key(char character, GT_Keys* key, bool* shift)
-{
-    static const char* k_rows[3] = { "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
-    static const GT_Keys k_row_start[3] = { GT_KEY_Q, GT_KEY_A, GT_KEY_Z };
-    static const char* k_shifted_digits = "!\"#$%&'()";
-    static const char k_symbols[] = "-^\\@[;:],./ ";
-    static const GT_Keys k_symbol_keys[] =
-    {
-        GT_KEY_MINUS, GT_KEY_CARET, GT_KEY_YEN, GT_KEY_AT, GT_KEY_LEFT_BRACKET, GT_KEY_SEMICOLON, GT_KEY_COLON,
-        GT_KEY_RIGHT_BRACKET, GT_KEY_COMMA, GT_KEY_PERIOD, GT_KEY_SLASH, GT_KEY_SPACE
-    };
-    static const char k_shifted_symbols[] = "=~|`{+*}<>?_";
-    static const GT_Keys k_shifted_symbol_keys[] =
-    {
-        GT_KEY_MINUS, GT_KEY_CARET, GT_KEY_YEN, GT_KEY_AT, GT_KEY_LEFT_BRACKET, GT_KEY_SEMICOLON, GT_KEY_COLON,
-        GT_KEY_RIGHT_BRACKET, GT_KEY_COMMA, GT_KEY_PERIOD, GT_KEY_SLASH, GT_KEY_UNDERSCORE
-    };
-
-    *shift = false;
-
-    if (character >= '1' && character <= '9')
-    {
-        *key = (GT_Keys)(GT_KEY_1 + (character - '1'));
-        return;
-    }
-
-    if (character == '0')
-    {
-        *key = GT_KEY_0;
-        return;
-    }
-
-    if (character == '\n' || character == '\r')
-    {
-        *key = GT_KEY_RETURN;
-        return;
-    }
-
-    if (character == '\t' || character == '\b')
-    {
-        *key = character == '\t' ? GT_KEY_TAB : GT_KEY_BACKSPACE;
-        return;
-    }
-
-    for (int row = 0; row < 3; row++)
-    {
-        const char* found = strchr(k_rows[row], toupper((unsigned char)character));
-
-        if (isalpha((unsigned char)character) && IsValidPointer(found))
-        {
-            *key = (GT_Keys)(k_row_start[row] + (found - k_rows[row]));
-            *shift = isupper((unsigned char)character) != 0;
-            return;
-        }
-    }
-
-    const char* digit = strchr(k_shifted_digits, character);
-
-    if (character != 0 && IsValidPointer(digit))
-    {
-        *key = (GT_Keys)(GT_KEY_1 + (digit - k_shifted_digits));
-        *shift = true;
-        return;
-    }
-
-    const char* symbol = strchr(k_symbols, character);
-
-    if (character != 0 && IsValidPointer(symbol))
-    {
-        *key = k_symbol_keys[symbol - k_symbols];
-        return;
-    }
-
-    const char* shifted = strchr(k_shifted_symbols, character);
-
-    if (character != 0 && IsValidPointer(shifted))
-    {
-        *key = k_shifted_symbol_keys[shifted - k_shifted_symbols];
-        *shift = true;
-    }
 }
 
 static void add_step(Input_Macro_Step_Type type, GT_Keys key, int frames)

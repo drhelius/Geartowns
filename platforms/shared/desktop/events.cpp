@@ -136,6 +136,39 @@ void events_sync_input(void)
     input_update(false);
 }
 
+void events_update_keyboard_layout(void)
+{
+    static u32 chars[GT_HOST_KEY_COUNT][GT_KEY_MAP_LEVELS];
+#if defined(__APPLE__)
+    static const SDL_Keymod k_level_mod = SDL_KMOD_ALT;
+    static const u16 k_level_keys[] = { SDL_SCANCODE_LALT, SDL_SCANCODE_RALT };
+#else
+    static const SDL_Keymod k_level_mod = SDL_KMOD_MODE;
+    static const u16 k_level_keys[] = { SDL_SCANCODE_RALT };
+#endif
+    static const SDL_Keymod k_mods[GT_KEY_MAP_LEVELS] = { SDL_KMOD_NONE, SDL_KMOD_SHIFT, k_level_mod,
+        (SDL_Keymod)(k_level_mod | SDL_KMOD_SHIFT) };
+
+    memset(chars, 0, sizeof(chars));
+
+    for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
+    {
+        if (!KeyMap::IsLayoutHostKey((u16)usage))
+            continue;
+
+        for (int level = 0; level < GT_KEY_MAP_LEVELS; level++)
+        {
+            SDL_Keycode key = SDL_GetKeyFromScancode((SDL_Scancode)usage, k_mods[level], false);
+
+            if ((key & SDLK_SCANCODE_MASK) == 0)
+                chars[usage][level] = (u32)key;
+        }
+    }
+
+    emu_set_host_chars(&chars[0][0], k_level_keys, (int)(sizeof(k_level_keys) / sizeof(k_level_keys[0])));
+    emu_set_keyboard_layout(config_input.keyboard_layout);
+}
+
 void events_release_keyboard(void)
 {
     memset(keyboard_scancode_down, 0, sizeof(keyboard_scancode_down));

@@ -156,6 +156,11 @@ Keys type on the FM Towns keyboard while the window has focus. Geartowns keeps o
 
 Every hotkey can be changed in **Emulator → Hotkeys**, and its **Reset to Defaults** brings these back.
 
+**Input → Keyboard → Layout** picks how letter, digit and symbol keys type:
+
+- **Host Layout**, the default: each key types what it shows on your keyboard, in any layout. When the Towns has that character on the other shift, Geartowns presses or lifts the Towns SHIFT for that key, so on a US keyboard `Shift+2` types `@` and `'` types `'`. On a Japanese keyboard it's the same as Japanese Positions, but its `]` key types `]`. AltGr (Option on macOS) types what the layout has there, such as `@`, `#`, `[` and `]` on Spanish, German or French keyboards. On those layouts AltGr still reaches かな漢字: tapped alone, or held with a key it has no character for, it sends かな漢字 (left Option sends ALT the same way on macOS). A character the Towns doesn't have, such as `ñ`, `ç` or `´`, types the Towns key in the same place. `` ` `` stays ESC, so `` ` `` and `~` can't be typed on a US keyboard.
+- **Japanese Positions**: each key types the Towns key in the same place on a Japanese (JIS) keyboard, for kana typing by position. `=`, `[`, `]`, `\` and `'` type `^`, `@`, `[`, `¥` and `:`, and `\ (ISO)`, left of Z, types `_`. The Towns `]` can't be typed this way.
+
 The Towns keys a PC keyboard doesn't have are on these host keys, on desktop and libretro:
 
 | Host key | FM Towns key |
@@ -165,8 +170,6 @@ The Towns keys a PC keyboard doesn't have are on these host keys, on desktop and
 | `` ` `` | ESC |
 | Print Screen | COPY |
 | Page Up / Page Down | 前行 / 次行 |
-| `=` / `[` / `]` / `\` | `^` / `@` / `[` / `¥` |
-| `'` | `:` |
 | Menu | ひらがな |
 | Left Win / Right Win (Cmd on macOS) | 無変換 / 変換 |
 | Right Alt (Option on macOS) | かな漢字 |
@@ -178,7 +181,8 @@ On a Japanese keyboard, its own カタカナ/ひらがな, 変換, 無変換, `�
 Press `Ctrl+F1` (`Cmd+F1` on macOS), or use **Input → Keyboard → Keyboard Mapper...**, to stop the Towns and show its keyboard:
 
 - Click a Towns key, then press the host key that should drive it, on its own. It stays selected for more host keys; click it again to deselect it.
-- Each Towns key lists the host keys that drive it, built-in ones first. Click the **x** on one to remove it, or right click the Towns key to remove all but the built-in ones.
+- Each Towns key lists the host keys that drive it, built-in ones first. With Host Layout, keys that type it are tagged *(layout)* and show the Shift or AltGr they need, such as `2` and `Shift+'` under the Towns `2` on a US keyboard. Click the **x** on one to remove it (a layout key then types nothing at any level), or right click the Towns key to remove all but the built-in ones.
+- With no Towns key selected, pressing a host key shows what it types right now, Shift and AltGr included. Host keys are named after what they show on your keyboard.
 - Red keys are ones no host key reaches, such as 実行, 取消 and the dictionary keys.
 - **Reset All**, clicked twice, drops the game's changes.
 - Press the same hotkey again, or click **Close**, to go back to the game.
@@ -199,8 +203,11 @@ grave = none
 - **Host keys**: `a`-`z`, `0`-`9`, `f1`-`f24`, `return`, `escape`, `backspace`, `tab`, `space`, `minus`, `equals`, `left_bracket`, `right_bracket`, `backslash`, `non_us_hash`, `semicolon`, `apostrophe`, `grave`, `comma`, `period`, `slash`, `non_us_backslash`, `caps_lock`, `print_screen`, `scroll_lock`, `pause`, `insert`, `home`, `page_up`, `delete`, `end`, `page_down`, `up`, `down`, `left`, `right`, `num_lock`, `kp_0`-`kp_9`, `kp_00`, `kp_000`, `kp_divide`, `kp_multiply`, `kp_minus`, `kp_plus`, `kp_enter`, `kp_period`, `kp_equals`, `kp_comma`, `menu`, `help`, `sysreq`, `international1`-`international5`, `lang1`-`lang5`, `left_ctrl`, `left_shift`, `left_alt`, `left_gui`, `right_ctrl`, `right_shift`, `right_alt`, `right_gui`.
 - **FM Towns keys**: `a`-`z`, `0`-`9`, `pf1`-`pf20`, `escape`, `minus`, `caret`, `yen`, `backspace`, `tab`, `at`, `left_bracket`, `return`, `semicolon`, `colon`, `right_bracket`, `comma`, `period`, `slash`, `underscore`, `space`, `kp_0`-`kp_9`, `kp_000`, `kp_multiply`, `kp_divide`, `kp_plus`, `kp_minus`, `kp_equals`, `kp_enter`, `kp_period`, `insert`, `delete`, `home`, `up`, `down`, `left`, `right`, `ctrl`, `shift`, `caps`, `alt`, `hiragana`, `katakana`, `kana_kanji`, `convert`, `no_convert`, `half_full`, `kanji_dictionary`, `delete_word`, `add_word`, `previous`, `next`, `cancel`, `execute`, `break`, `copy`.
 - A host key takes up to four Towns keys joined with `+`, pressed in that order, such as `ctrl + pf1`, or `none` to do nothing.
+- With Host Layout, a line for a letter, digit or symbol key replaces what it types at every Shift and AltGr level.
 
 #### Libretro
+
+The **Keyboard Layout** core option has the same two modes. RetroArch reports keys by their place on the keyboard, so its Host Layout, **Host (US)**, types what a US keyboard shows, without AltGr.
 
 The mapper hotkeys work in libretro too. RetroArch keeps F1 and F2 for itself, so turn on RetroArch's Game Focus (Scroll Lock by default) first; Geartowns reminds you when a game loads. Click keys with the mouse or a touch screen. The `.keys` files go to the save directory.
 

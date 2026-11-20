@@ -19,6 +19,7 @@
 
 #include "key_map.h"
 #include "host_keys.h"
+#include "keyboard_chars.h"
 #include "keyboard_keys.h"
 
 static const GT_Key_Map_Entry k_key_map_empty = { false, 0, { 0, 0, 0, 0 } };
@@ -53,6 +54,13 @@ KeyMap::KeyMap()
     memset(m_host_down, 0, sizeof(m_host_down));
     memset(m_host_deferred, 0, sizeof(m_host_deferred));
     memset(m_references, 0, sizeof(m_references));
+    memset(m_host_chars, 0, sizeof(m_host_chars));
+    memset(m_layout_targets, 0, sizeof(m_layout_targets));
+    memset(m_level_host_keys, 0, sizeof(m_level_host_keys));
+    m_host_levels = false;
+    m_layout = GT_KEY_LAYOUT_CHARACTER;
+    m_shift_owner = 0;
+    m_shift_forced = false;
     m_enabled = true;
     m_blocked = false;
     m_changed = false;
@@ -80,7 +88,10 @@ void KeyMap::HostKeyPressed(u16 usage)
     }
 
     if (usage < k_host_key_first_modifier)
-        FlushDeferredHostKeys();
+    {
+        FlushDeferredHostKeys(usage);
+        ClearShiftOverride();
+    }
 
     PressHostTargets(usage);
 }
@@ -103,6 +114,9 @@ void KeyMap::HostKeyReleased(u16 usage)
         ReleaseKey(targets.keys[i]);
 
     targets = k_key_map_empty;
+
+    if (m_shift_owner == usage)
+        ClearShiftOverride();
 }
 
 void KeyMap::IgnoreHostKey(u16 usage)
@@ -116,8 +130,8 @@ void KeyMap::IgnoreHostKey(u16 usage)
 
 void KeyMap::DiscardDeferredHostKeys()
 {
-    m_host_deferred[k_host_key_left_gui] = false;
-    m_host_deferred[k_host_key_right_gui] = false;
+    for (int i = k_host_key_first_modifier; i < GT_HOST_KEY_COUNT; i++)
+        m_host_deferred[i] = false;
 }
 
 bool KeyMap::IsHostKeyDown(u16 usage) const
@@ -129,15 +143,14 @@ void KeyMap::ReleaseAll()
 {
     for (int i = GT_KEY_NONE + 1; i < GT_KEY_COUNT; i++)
     {
-        if (m_references[i] == 0)
-            continue;
-
+        bool down = IsKeyDown((u8)i);
         m_references[i] = 0;
 
-        if (IsValidPointer(m_callback))
+        if (down && IsValidPointer(m_callback))
             m_callback(m_context, (GT_Keys)i, false);
     }
 
+    m_shift_owner = 0;
     memset(m_host_targets, 0, sizeof(m_host_targets));
     memset(m_host_down, 0, sizeof(m_host_down));
     memset(m_host_deferred, 0, sizeof(m_host_deferred));
@@ -156,6 +169,8 @@ void KeyMap::Suspend()
 
         targets = k_key_map_empty;
     }
+
+    ClearShiftOverride();
 }
 
 void KeyMap::Resync()
@@ -201,6 +216,151 @@ void KeyMap::SetEnabled(bool enabled)
 bool KeyMap::IsEnabled() const
 {
     return m_enabled;
+}
+
+void KeyMap::SetLayout(GT_Key_Layout layout)
+{
+    if (layout == m_layout)
+        return;
+
+    Suspend();
+    m_layout = layout;
+}
+
+GT_Key_Layout KeyMap::GetLayout() const
+{
+    return m_layout;
+}
+
+void KeyMap::SetHostChars(const u32* chars)
+{
+    u32 host_chars[GT_HOST_KEY_COUNT][GT_KEY_MAP_LEVELS];
+    memset(host_chars, 0, sizeof(host_chars));
+
+    for (int usage = 0; IsValidPointer(chars) && (usage < GT_HOST_KEY_COUNT); usage++)
+    {
+        if (!IsLayoutHostKey((u16)usage))
+            continue;
+
+        const u32* levels = chars + (usage * GT_KEY_MAP_LEVELS);
+
+        for (int level = 0; level < GT_KEY_MAP_LEVELS; level++)
+        {
+            u32 c = levels[level];
+            bool ascii = (c > 0x20) && (c < 0x7F);
+
+            if ((level < 2) || (ascii && (c != levels[0]) && (c != levels[1])))
+                host_chars[usage][level] = c;
+        }
+    }
+
+    if (memcmp(host_chars, m_host_chars, sizeof(host_chars)) == 0)
+        return;
+
+    Suspend();
+    memcpy(m_host_chars, host_chars, sizeof(host_chars));
+    BuildLayoutTargets();
+}
+
+u32 KeyMap::GetHostChar(u16 usage, int level) const
+{
+    if (!IsLayoutHostKey(usage) || (level < 0) || (level >= GT_KEY_MAP_LEVELS))
+        return 0;
+
+    return m_host_chars[usage][level];
+}
+
+void KeyMap::SetLevelHostKeys(const u16* usages, int count)
+{
+    bool keys[GT_HOST_KEY_COUNT];
+    memset(keys, 0, sizeof(keys));
+
+    for (int i = 0; IsValidPointer(usages) && (i < count); i++)
+    {
+        if ((usages[i] >= k_host_key_first_modifier) && IsHostKey(usages[i]))
+            keys[usages[i]] = true;
+    }
+
+    if (memcmp(keys, m_level_host_keys, sizeof(keys)) == 0)
+        return;
+
+    Suspend();
+    memcpy(m_level_host_keys, keys, sizeof(keys));
+    BuildLayoutTargets();
+}
+
+bool KeyMap::HasHostLevels() const
+{
+    return m_host_levels && (m_layout == GT_KEY_LAYOUT_CHARACTER);
+}
+
+int KeyMap::GetHostLevel() const
+{
+    int level = (m_host_down[k_host_key_left_shift] || m_host_down[k_host_key_right_shift]) ? 1 : 0;
+
+    for (int i = k_host_key_first_modifier; HasHostLevels() && (i < GT_HOST_KEY_COUNT); i++)
+    {
+        if (m_level_host_keys[i] && m_host_down[i])
+            return level + 2;
+    }
+
+    return level;
+}
+
+bool KeyMap::UsesLayout(u16 usage) const
+{
+    if ((m_layout != GT_KEY_LAYOUT_CHARACTER) || !IsLayoutHostKey(usage))
+        return false;
+
+    return !m_layers[GT_KEY_MAP_GAME][usage].set && !m_layers[GT_KEY_MAP_USER][usage].set;
+}
+
+bool KeyMap::GetLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const
+{
+    if ((m_layout != GT_KEY_LAYOUT_CHARACTER) || !IsLayoutHostKey(usage) || (level < 0) || (level >= GT_KEY_MAP_LEVELS))
+        return false;
+
+    if ((level >= 2) && !m_host_levels)
+        return false;
+
+    *target = m_layout_targets[usage][level];
+    return target->key != GT_KEY_NONE;
+}
+
+bool KeyMap::ResolveLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const
+{
+    return UsesLayout(usage) && FindLayoutTarget(usage, level, target);
+}
+
+void KeyMap::GetReachable(bool* reached) const
+{
+    memset(reached, 0, sizeof(bool) * GT_KEY_COUNT);
+
+    for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
+    {
+        if (!IsValidPointer(GetHostKeyName((u16)usage)))
+            continue;
+
+        const GT_Key_Map_Entry& entry = GetEntry((u16)usage);
+        bool layout = UsesLayout((u16)usage);
+        bool built_in = !layout;
+
+        for (int level = 0; layout && (level < GT_KEY_MAP_LEVELS); level++)
+        {
+            GT_Key_Map_Char target;
+
+            if (GetLayoutTarget((u16)usage, level, &target))
+            {
+                reached[target.key] = true;
+                reached[GT_KEY_SHIFT] = reached[GT_KEY_SHIFT] || (target.shift != 0);
+            }
+            else if (level < 2)
+                built_in = true;
+        }
+
+        for (int i = 0; built_in && (i < entry.count); i++)
+            reached[entry.keys[i]] = true;
+    }
 }
 
 void KeyMap::ResetBuiltIn()
@@ -389,6 +549,13 @@ bool KeyMap::RestoreBuiltIn(u16 usage)
     if (!IsValidPointer(GetHostKeyName(usage)))
         return false;
 
+    if (KeepsUserEntry(usage))
+    {
+        m_layers[GT_KEY_MAP_USER][usage] = k_key_map_empty;
+        m_changed = true;
+        return true;
+    }
+
     GT_Key_Map_Entry entry = m_layers[GT_KEY_MAP_BUILT_IN][usage];
     entry.set = true;
     SetUserEntry(usage, entry);
@@ -408,6 +575,14 @@ void KeyMap::SetChanged(bool changed)
 bool KeyMap::IsHostKey(u16 usage)
 {
     return usage < GT_HOST_KEY_COUNT;
+}
+
+bool KeyMap::IsLayoutHostKey(u16 usage)
+{
+    if ((usage >= 0x04) && (usage <= 0x27))
+        return true;
+
+    return ((usage >= 0x2D) && (usage <= 0x34)) || ((usage >= 0x36) && (usage <= 0x38)) || (usage == 0x64);
 }
 
 int KeyMap::FindHostKey(const char* name)
@@ -573,7 +748,7 @@ const GT_Key_Map_Entry& KeyMap::GetBaseEntry(GT_Key_Map_Layer layer, u16 usage) 
 
 void KeyMap::SetUserEntry(u16 usage, const GT_Key_Map_Entry& entry)
 {
-    if (SameTargets(entry, GetBaseEntry(GT_KEY_MAP_USER, usage)))
+    if (!KeepsUserEntry(usage) && SameTargets(entry, GetBaseEntry(GT_KEY_MAP_USER, usage)))
         m_layers[GT_KEY_MAP_USER][usage] = k_key_map_empty;
     else
         m_layers[GT_KEY_MAP_USER][usage] = entry;
@@ -581,10 +756,76 @@ void KeyMap::SetUserEntry(u16 usage, const GT_Key_Map_Entry& entry)
     m_changed = true;
 }
 
+bool KeyMap::KeepsUserEntry(u16 usage) const
+{
+    return (m_layout == GT_KEY_LAYOUT_CHARACTER) && IsLayoutHostKey(usage);
+}
+
+bool KeyMap::GetActiveLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const
+{
+    if (m_enabled && !UsesLayout(usage))
+        return false;
+
+    return FindLayoutTarget(usage, level, target);
+}
+
+bool KeyMap::FindLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const
+{
+    return GetLayoutTarget(usage, level, target) || ((level >= 2) && GetLayoutTarget(usage, level & 1, target));
+}
+
+void KeyMap::BuildLayoutTargets()
+{
+    memset(m_layout_targets, 0, sizeof(m_layout_targets));
+    bool levels = false;
+
+    for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
+    {
+        for (int level = 0; level < GT_KEY_MAP_LEVELS; level++)
+        {
+            GT_Keys key = GT_KEY_NONE;
+            bool shift = false;
+            u32 c = m_host_chars[usage][level];
+
+            if ((c < 0x20) || !keyboard_char_key(c, &key, &shift))
+                continue;
+
+            m_layout_targets[usage][level].key = (u8)key;
+            m_layout_targets[usage][level].shift = shift ? 1 : 0;
+            levels = levels || (level >= 2);
+        }
+    }
+
+    bool keys = false;
+
+    for (int i = k_host_key_first_modifier; i < GT_HOST_KEY_COUNT; i++)
+        keys = keys || m_level_host_keys[i];
+
+    m_host_levels = levels && keys;
+}
+
 void KeyMap::PressHostTargets(u16 usage)
 {
     if (m_blocked)
         return;
+
+    GT_Key_Map_Char target;
+
+    if (GetActiveLayoutTarget(usage, GetHostLevel(), &target))
+    {
+        bool shift = target.shift != 0;
+
+        if (IsKeyDown(GT_KEY_SHIFT) != shift)
+            SetShiftOverride(usage, shift);
+
+        GT_Key_Map_Entry& targets = m_host_targets[usage];
+        targets = k_key_map_empty;
+        targets.set = true;
+        targets.count = 1;
+        targets.keys[0] = target.key;
+        PressKey(target.key);
+        return;
+    }
 
     const GT_Key_Map_Entry& entry = GetActiveEntry(usage);
     m_host_targets[usage] = entry;
@@ -593,42 +834,89 @@ void KeyMap::PressHostTargets(u16 usage)
         PressKey(entry.keys[i]);
 }
 
-void KeyMap::FlushDeferredHostKeys()
+void KeyMap::FlushDeferredHostKeys(u16 usage)
 {
-    if (m_host_deferred[k_host_key_left_gui])
-    {
-        m_host_deferred[k_host_key_left_gui] = false;
-        PressHostTargets(k_host_key_left_gui);
-    }
+    GT_Key_Map_Char target;
+    int level = GetHostLevel();
+    bool typed = (level >= 2) && (!m_enabled || UsesLayout(usage)) && GetLayoutTarget(usage, level, &target);
 
-    if (m_host_deferred[k_host_key_right_gui])
+    for (int i = k_host_key_first_modifier; i < GT_HOST_KEY_COUNT; i++)
     {
-        m_host_deferred[k_host_key_right_gui] = false;
-        PressHostTargets(k_host_key_right_gui);
+        if (!m_host_deferred[i])
+            continue;
+
+        m_host_deferred[i] = false;
+
+        if (!typed || !IsLevelHostKey((u16)i))
+            PressHostTargets((u16)i);
     }
 }
 
-bool KeyMap::IsDeferredHostKey(u16 usage)
+bool KeyMap::IsDeferredHostKey(u16 usage) const
 {
-    return (usage == k_host_key_left_gui) || (usage == k_host_key_right_gui);
+    return (usage == k_host_key_left_gui) || (usage == k_host_key_right_gui) || IsLevelHostKey(usage);
+}
+
+bool KeyMap::IsLevelHostKey(u16 usage) const
+{
+    return HasHostLevels() && IsHostKey(usage) && m_level_host_keys[usage];
+}
+
+bool KeyMap::IsKeyDown(u8 key) const
+{
+    if ((key == GT_KEY_SHIFT) && (m_shift_owner != 0))
+        return m_shift_forced;
+
+    return m_references[key] > 0;
+}
+
+void KeyMap::SetShiftOverride(u16 usage, bool shift)
+{
+    bool down = IsKeyDown(GT_KEY_SHIFT);
+    m_shift_owner = usage;
+    m_shift_forced = shift;
+
+    if ((down != shift) && IsValidPointer(m_callback))
+        m_callback(m_context, GT_KEY_SHIFT, shift);
+}
+
+void KeyMap::ClearShiftOverride()
+{
+    if (m_shift_owner == 0)
+        return;
+
+    bool down = IsKeyDown(GT_KEY_SHIFT);
+    m_shift_owner = 0;
+
+    if ((down != IsKeyDown(GT_KEY_SHIFT)) && IsValidPointer(m_callback))
+        m_callback(m_context, GT_KEY_SHIFT, !down);
 }
 
 void KeyMap::PressKey(u8 key)
 {
-    if ((m_references[key]++ == 0) && IsValidPointer(m_callback))
+    bool down = IsKeyDown(key);
+    m_references[key]++;
+
+    if (!down && IsKeyDown(key) && IsValidPointer(m_callback))
         m_callback(m_context, (GT_Keys)key, true);
 }
 
 void KeyMap::ReleaseKey(u8 key)
 {
-    if ((m_references[key] > 0) && (--m_references[key] == 0) && IsValidPointer(m_callback))
+    if (m_references[key] == 0)
+        return;
+
+    bool down = IsKeyDown(key);
+    m_references[key]--;
+
+    if (down && !IsKeyDown(key) && IsValidPointer(m_callback))
         m_callback(m_context, (GT_Keys)key, false);
 }
 
 void KeyMap::SyncKey(u8 key)
 {
     if (IsValidPointer(m_callback))
-        m_callback(m_context, (GT_Keys)key, m_references[key] > 0);
+        m_callback(m_context, (GT_Keys)key, IsKeyDown(key));
 }
 
 bool KeyMap::IsModifier(u8 key)

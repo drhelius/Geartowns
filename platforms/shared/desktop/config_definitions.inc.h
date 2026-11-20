@@ -347,6 +347,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Input", "AllowUpDown", config_input.allow_up_down, false);
     CONFIG_BOOL("Input", "AllowSharedGamepads", config_input.allow_shared_gamepads, false);
     CONFIG_INT_RANGE("Input", "MouseSensitivity", config_emulator.mouse_sensitivity, 5, 1, 15);
+    CONFIG_INT_RANGE("Input", "KeyboardLayout", config_input.keyboard_layout, GT_KEY_LAYOUT_CHARACTER, GT_KEY_LAYOUT_CHARACTER, GT_KEY_LAYOUT_POSITION);
 
     // Players
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)

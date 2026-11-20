@@ -6345,11 +6345,38 @@ static json key_map_layer(KeyMap* key_map, GT_Key_Map_Layer layer)
     return entries;
 }
 
+static std::string key_map_layout_target(const GT_Key_Map_Char& target, int level)
+{
+    const char* name = KeyMap::GetKeyName((GT_Keys)target.key);
+    std::string text = IsValidPointer(name) ? name : "none";
+
+    if (target.shift != 0)
+        return "shift + " + text;
+
+    return ((level & 1) != 0) ? text + " (shift off)" : text;
+}
+
+static std::string key_map_drives(KeyMap* key_map, u16 usage, int level, bool active)
+{
+    GT_Key_Map_Char target;
+    bool layout = active ? key_map->GetActiveLayoutTarget(usage, level, &target) :
+        key_map->ResolveLayoutTarget(usage, level, &target);
+
+    if (layout)
+        return key_map_layout_target(target, level);
+
+    return KeyMap::FormatTargets(active ? key_map->GetActiveEntry(usage) : key_map->GetEntry(usage));
+}
+
 json DebugAdapter::GetKeyMap()
 {
     KeyMap* key_map = m_core->GetKeyMap();
-    bool reached[GT_KEY_COUNT] = { };
+    bool reached[GT_KEY_COUNT];
     json remapped = json::object();
+    json layout_keys = json::object();
+    int levels = key_map->HasHostLevels() ? GT_KEY_MAP_LEVELS : 2;
+
+    key_map->GetReachable(reached);
 
     for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
     {
@@ -6357,11 +6384,30 @@ json DebugAdapter::GetKeyMap()
         const GT_Key_Map_Entry& entry = key_map->GetEntry((u16)usage, &layer);
         const char* name = KeyMap::GetHostKeyName((u16)usage);
 
-        for (int i = 0; i < entry.count; i++)
-            reached[entry.keys[i]] = true;
+        if (!IsValidPointer(name))
+            continue;
 
-        if ((layer != GT_KEY_MAP_BUILT_IN) && IsValidPointer(name))
+        if (layer != GT_KEY_MAP_BUILT_IN)
             remapped[name] = KeyMap::FormatTargets(entry);
+
+        if (!key_map->UsesLayout((u16)usage))
+            continue;
+
+        json drives = json::array();
+
+        for (int level = 0; level < levels; level++)
+        {
+            GT_Key_Map_Char target;
+
+            if (level < 2)
+                drives.push_back(key_map_drives(key_map, (u16)usage, level, false));
+            else if (key_map->GetLayoutTarget((u16)usage, level, &target))
+                drives.push_back(key_map_layout_target(target, level));
+            else
+                drives.push_back(json());
+        }
+
+        layout_keys[name] = drives;
     }
 
     json unreachable = json::array();
@@ -6376,10 +6422,12 @@ json DebugAdapter::GetKeyMap()
 
     json result;
     result["enabled"] = key_map->IsEnabled();
+    result["layout"] = key_map->GetLayout() == GT_KEY_LAYOUT_CHARACTER ? "host" : "jis";
     result["mapper_open"] = m_core->GetKeyMapper()->IsOpen();
     result["file"] = emu_key_map_get_path();
     result["user"] = key_map_layer(key_map, GT_KEY_MAP_USER);
     result["remapped"] = remapped;
+    result["layout_keys"] = layout_keys;
     result["unreachable"] = unreachable;
     return result;
 }
@@ -6422,12 +6470,29 @@ json DebugAdapter::SetKeyBinding(const std::string& host, const std::string& key
         {"keys", KeyMap::FormatTargets(key_map->GetEntry(usage))}, {"file", emu_key_map_get_path()}};
 }
 
-json DebugAdapter::SetKeyMapping(bool enabled)
+json DebugAdapter::SetKeyMapping(const json& arguments)
 {
-    if (m_core->GetKeyMap()->IsEnabled() != enabled)
+    bool has_enabled = arguments.contains("enabled") && arguments["enabled"].is_boolean();
+    bool has_layout = arguments.contains("layout") && arguments["layout"].is_string();
+    std::string layout = has_layout ? arguments["layout"].get<std::string>() : "";
+
+    if (!has_enabled && !has_layout)
+        return {{"error", "Give enabled, layout or both"}};
+
+    if (has_layout && (layout != "host") && (layout != "jis"))
+        return {{"error", "layout must be host or jis"}};
+
+    if (has_enabled && (m_core->GetKeyMap()->IsEnabled() != arguments["enabled"].get<bool>()))
         emu_key_mapping_toggle();
 
-    return {{"success", true}, {"enabled", m_core->GetKeyMap()->IsEnabled()}};
+    if (has_layout)
+    {
+        config_input.keyboard_layout = (layout == "jis") ? GT_KEY_LAYOUT_POSITION : GT_KEY_LAYOUT_CHARACTER;
+        emu_set_keyboard_layout(config_input.keyboard_layout);
+    }
+
+    return {{"success", true}, {"enabled", m_core->GetKeyMap()->IsEnabled()},
+        {"layout", m_core->GetKeyMap()->GetLayout() == GT_KEY_LAYOUT_CHARACTER ? "host" : "jis"}};
 }
 
 json DebugAdapter::HostKey(const std::string& key, const std::string& action)
@@ -6438,6 +6503,7 @@ json DebugAdapter::HostKey(const std::string& key, const std::string& action)
         return {{"error", "Unknown host key '" + key + "'"}};
 
     bool delayed_release = false;
+    std::string drives = key_map_drives(m_core->GetKeyMap(), (u16)usage, m_core->GetKeyMap()->GetHostLevel(), true);
 
     if (action == "press")
         emu_host_key_pressed(usage);
@@ -6452,7 +6518,7 @@ json DebugAdapter::HostKey(const std::string& key, const std::string& action)
         return {{"error", "Invalid action"}};
 
     json result = {{"success", true}, {"key", KeyMap::GetHostKeyName((u16)usage)}, {"action", action},
-        {"drives", KeyMap::FormatTargets(m_core->GetKeyMap()->GetEntry((u16)usage))}};
+        {"drives", drives}};
 
     if (delayed_release)
         result["__delayed_host_release"] = usage;

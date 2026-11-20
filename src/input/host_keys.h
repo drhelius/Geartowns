@@ -32,14 +32,17 @@ struct GT_Host_Key_Info
 #if defined(__APPLE__)
 #define GT_HOST_LABEL_ALT(side) side " Option"
 #define GT_HOST_LABEL_GUI(side) side " Cmd"
+#define GT_HOST_LABEL_LEVEL "Option"
 #define GT_HOST_HOTKEY_LABEL(key) "Cmd+" key
 #elif defined(_WIN32)
 #define GT_HOST_LABEL_ALT(side) side " Alt"
 #define GT_HOST_LABEL_GUI(side) side " Win"
+#define GT_HOST_LABEL_LEVEL "AltGr"
 #define GT_HOST_HOTKEY_LABEL(key) "Ctrl+" key
 #else
 #define GT_HOST_LABEL_ALT(side) side " Alt"
 #define GT_HOST_LABEL_GUI(side) side " Super"
+#define GT_HOST_LABEL_LEVEL "AltGr"
 #define GT_HOST_HOTKEY_LABEL(key) "Ctrl+" key
 #endif
 
@@ -129,7 +132,11 @@ static const int k_host_key_count = (int)(sizeof(k_host_keys) / sizeof(k_host_ke
 static const u16 k_host_key_f1 = 0x3A;
 static const u16 k_host_key_f2 = 0x3B;
 static const u16 k_host_key_first_modifier = 0xE0;
+static const u16 k_host_key_left_shift = 0xE1;
+static const u16 k_host_key_left_alt = 0xE2;
 static const u16 k_host_key_left_gui = 0xE3;
+static const u16 k_host_key_right_shift = 0xE5;
+static const u16 k_host_key_right_alt = 0xE6;
 static const u16 k_host_key_right_gui = 0xE7;
 #if defined(__APPLE__)
 static const u16 k_host_key_left_hotkey_mod = 0xE3;

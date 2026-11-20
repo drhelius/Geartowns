@@ -171,6 +171,8 @@ EXTERN bool emu_key_mapping_is_enabled(void);
 EXTERN void emu_key_mapping_toggle(void);
 EXTERN const char* emu_key_map_get_path(void);
 EXTERN void emu_key_map_save(void);
+EXTERN void emu_set_keyboard_layout(int layout);
+EXTERN void emu_set_host_chars(const u32* chars, const u16* level_keys, int level_key_count);
 EXTERN void emu_set_mouse_delta(GT_Controllers controller, int x, int y);
 EXTERN void emu_clear_mouse(GT_Controllers controller);
 EXTERN void emu_pause(void);

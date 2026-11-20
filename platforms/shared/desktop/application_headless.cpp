@@ -22,6 +22,7 @@
 #include "application_headless.h"
 #include "config.h"
 #include "emu.h"
+#include "events.h"
 #include "gui.h"
 #include "debug/gui_debug.h"
 #include "debug/gui_debug_profiler.h"
@@ -57,6 +58,8 @@ int application_headless_init(const ApplicationParams& params)
         Error("Failed to initialize emulator");
         return 2;
     }
+
+    events_update_keyboard_layout();
 
     config_debug.debug = params.mcp_mode >= 0;
     emu_audio_mute(true);

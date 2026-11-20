@@ -55,6 +55,13 @@ static bool is_inside(int px, int py, int x, int y, int width, int height)
     return (px >= x) && (py >= y) && (px < x + width) && (py < y + height);
 }
 
+static std::string level_prefix(int level)
+{
+    static const char* const k_prefixes[GT_KEY_MAP_LEVELS] = { "", "Shift+", GT_HOST_LABEL_LEVEL "+",
+        GT_HOST_LABEL_LEVEL "+Shift+" };
+    return k_prefixes[level];
+}
+
 static bool drives(const GT_Key_Map_Entry& entry, GT_Keys key)
 {
     for (int i = 0; i < entry.count; i++)
@@ -168,7 +175,7 @@ void KeyMapper::HostKey(u16 usage, bool pressed)
         m_held_count++;
         if (m_selected == GT_KEY_NONE)
         {
-            m_message = DescribeHostKey(usage) + " \x1A " + DescribeTargets(m_key_map->GetEntry(usage));
+            m_message = DescribeHostKeyAction(usage);
             m_query_usage = usage;
         }
 
@@ -296,7 +303,7 @@ void KeyMapper::Click(int x, int y)
         if (!is_inside(x, y, chip.x + chip.width - k_chip_close_width, chip.y, k_chip_close_width, k_chip_height))
             continue;
 
-        if (m_key_map->Unbind(chip.usage, m_selected))
+        if (chip.layout ? m_key_map->Bind(chip.usage, NULL, 0) : m_key_map->Unbind(chip.usage, m_selected))
             m_message = "Removed " + DescribeHostKey(chip.usage);
 
         return;
@@ -398,18 +405,29 @@ int KeyMapper::GetKeyboardBottom() const
 
 void KeyMapper::UpdateKeyFlags()
 {
-    memset(m_key_flags, 0, sizeof(m_key_flags));
+    bool reached[GT_KEY_COUNT];
+    int level = m_key_map->GetHostLevel();
+    m_key_map->GetReachable(reached);
+
+    for (int i = 0; i < GT_KEY_COUNT; i++)
+        m_key_flags[i] = reached[i] ? k_key_flag_reachable : 0;
 
     for (int usage = 0; usage < GT_HOST_KEY_COUNT; usage++)
     {
         GT_Key_Map_Layer layer = GT_KEY_MAP_BUILT_IN;
         const GT_Key_Map_Entry& entry = m_key_map->GetEntry((u16)usage, &layer);
-        u8 flags = k_key_flag_reachable;
+        bool pressed = m_held[usage] && (m_selected == GT_KEY_NONE);
+        GT_Key_Map_Char target;
 
-        if (layer != GT_KEY_MAP_BUILT_IN)
-            flags |= k_key_flag_remapped;
+        if (pressed && m_key_map->GetActiveLayoutTarget((u16)usage, level, &target))
+        {
+            m_key_flags[target.key] |= k_key_flag_pressed;
+            continue;
+        }
 
-        if (m_held[usage] && (m_selected == GT_KEY_NONE))
+        u8 flags = (layer != GT_KEY_MAP_BUILT_IN) ? k_key_flag_remapped : 0;
+
+        if (pressed)
             flags |= k_key_flag_pressed;
 
         for (int i = 0; i < entry.count; i++)
@@ -526,6 +544,9 @@ void KeyMapper::DrawInfo()
     y += (k_line_height * 3) + 4;
     m_canvas.DrawText(k_margin, y, "Click a key, press a host key to bind it. Right click clears.", k_color_dim, true);
     y += k_line_height;
+    bool host = m_key_map->GetLayout() == GT_KEY_LAYOUT_CHARACTER;
+    m_canvas.DrawText(k_margin, y, host ? "Layout: Host layout" : "Layout: Japanese positions", k_color_dim, true);
+    y += k_line_height;
     m_canvas.DrawText(k_margin, y, m_message.c_str(), k_color_text, true);
 
     std::string warning;
@@ -559,46 +580,96 @@ void KeyMapper::DrawChips(int y)
             GT_Key_Map_Layer layer = GT_KEY_MAP_BUILT_IN;
             const GT_Key_Map_Entry& entry = m_key_map->GetEntry((u16)usage, &layer);
 
-            if ((layer != l) || !drives(entry, m_selected))
+            if (layer != l)
+                continue;
+
+            if (m_key_map->UsesLayout((u16)usage))
+            {
+                any = DrawLayoutChips((u16)usage, start, &x, &y, &row) || any;
+                continue;
+            }
+
+            if (!drives(entry, m_selected))
                 continue;
 
             any = true;
-            std::string text = DescribeHostKey((u16)usage) + k_tags[l];
-            int width = OsdCanvas::GetTextWidth(text.c_str()) + 8 + k_chip_close_width;
-
-            if ((x + width > k_key_mapper_width - k_margin) && (x > start))
-            {
-                if (++row == 2)
-                    break;
-
-                x = start;
-                y += k_line_height;
-            }
-
-            int close_x = x + width - k_chip_close_width;
-            bool hover = IsPointerIn(close_x, y - 1, k_chip_close_width, k_chip_height);
-
-            m_canvas.FillRect(x, y - 1, width, k_chip_height, k_fills[l]);
-            m_canvas.FrameRect(x, y - 1, width, k_chip_height, k_color_border);
-            m_canvas.DrawText(x + 4, y, text.c_str(), k_color_text, true);
-            m_canvas.FrameRect(close_x, y - 1, k_chip_close_width, k_chip_height, hover ? k_color_hover : k_color_border);
-            m_canvas.DrawText(close_x + 4, y, "x", hover ? k_color_hover : k_color_text, true);
-
-            if (m_chip_count < KEY_MAPPER_CHIPS)
-            {
-                KeyMapper_Chip& chip = m_chips[m_chip_count++];
-                chip.x = x;
-                chip.y = y - 1;
-                chip.width = width;
-                chip.usage = (u16)usage;
-            }
-
-            x += width + 6;
+            AddChip(DescribeHostKey((u16)usage) + k_tags[l], k_fills[l], (u16)usage, false, start, &x, &y, &row);
         }
     }
 
     if (!any)
         m_canvas.DrawText(start, y, "none", k_color_dim, true);
+}
+
+bool KeyMapper::DrawLayoutChips(u16 usage, int start, int* x, int* y, int* row)
+{
+    int levels = m_key_map->HasHostLevels() ? GT_KEY_MAP_LEVELS : 2;
+    int masks[2] = { 0, 0 };
+
+    for (int level = 0; level < levels; level++)
+    {
+        GT_Key_Map_Char target;
+
+        if (m_key_map->GetLayoutTarget(usage, level, &target))
+            masks[0] |= (target.key == (u8)m_selected) ? (1 << level) : 0;
+        else if ((level < 2) && drives(m_key_map->GetEntry(usage), m_selected))
+            masks[1] |= 1 << level;
+    }
+
+    for (int i = 0; (i < 2) && (*row < 2); i++)
+    {
+        const char* tag = (i == 0) ? " (layout)" : " (built in)";
+        int mask = masks[i];
+
+        if ((mask & 3) == 3)
+        {
+            AddChip(DescribeHostKey(usage) + tag, k_color_key, usage, true, start, x, y, row);
+            mask &= ~3;
+        }
+
+        for (int level = 0; (level < GT_KEY_MAP_LEVELS) && (*row < 2); level++)
+        {
+            if ((mask & (1 << level)) != 0)
+                AddChip(level_prefix(level) + DescribeHostKey(usage) + tag, k_color_key, usage, true, start, x, y, row);
+        }
+    }
+
+    return (masks[0] | masks[1]) != 0;
+}
+
+void KeyMapper::AddChip(const std::string& text, u8 fill, u16 usage, bool layout, int start, int* x, int* y, int* row)
+{
+    int width = OsdCanvas::GetTextWidth(text.c_str()) + 8 + k_chip_close_width;
+
+    if ((*x + width > k_key_mapper_width - k_margin) && (*x > start))
+    {
+        if (++(*row) == 2)
+            return;
+
+        *x = start;
+        *y += k_line_height;
+    }
+
+    int close_x = *x + width - k_chip_close_width;
+    bool hover = IsPointerIn(close_x, *y - 1, k_chip_close_width, k_chip_height);
+
+    m_canvas.FillRect(*x, *y - 1, width, k_chip_height, fill);
+    m_canvas.FrameRect(*x, *y - 1, width, k_chip_height, k_color_border);
+    m_canvas.DrawText(*x + 4, *y, text.c_str(), k_color_text, true);
+    m_canvas.FrameRect(close_x, *y - 1, k_chip_close_width, k_chip_height, hover ? k_color_hover : k_color_border);
+    m_canvas.DrawText(close_x + 4, *y, "x", hover ? k_color_hover : k_color_text, true);
+
+    if (m_chip_count < KEY_MAPPER_CHIPS)
+    {
+        KeyMapper_Chip& chip = m_chips[m_chip_count++];
+        chip.x = *x;
+        chip.y = *y - 1;
+        chip.width = width;
+        chip.usage = usage;
+        chip.layout = layout;
+    }
+
+    *x += width + 6;
 }
 
 void KeyMapper::DrawButtons()
@@ -641,6 +712,14 @@ bool KeyMapper::IsPointerIn(int x, int y, int width, int height) const
 
 std::string KeyMapper::DescribeHostKey(u16 usage) const
 {
+    u32 c = m_key_map->GetHostChar(usage, 0);
+
+    if ((c > 0x20) && (c < 0x7F))
+    {
+        char text[2] = { (char)(((c >= 'a') && (c <= 'z')) ? (c - 32) : c), 0 };
+        return text;
+    }
+
     const char* label = KeyMap::GetHostKeyLabel(usage);
 
     if (IsValidPointer(label))
@@ -649,6 +728,28 @@ std::string KeyMapper::DescribeHostKey(u16 usage) const
     char text[16];
     snprintf(text, sizeof(text), "Key %02Xh", usage);
     return text;
+}
+
+std::string KeyMapper::DescribeHostKeyAction(u16 usage) const
+{
+    int level = m_key_map->GetHostLevel();
+    GT_Key_Map_Char target;
+
+    if (m_key_map->GetActiveLayoutTarget(usage, level, &target))
+        return level_prefix(level) + DescribeHostKey(usage) + " \x1A " + DescribeLayoutTarget(target, level);
+
+    return DescribeHostKey(usage) + " \x1A " + DescribeTargets(m_key_map->GetActiveEntry(usage));
+}
+
+std::string KeyMapper::DescribeLayoutTarget(const GT_Key_Map_Char& target, int level) const
+{
+    const char* label = KeyMap::GetKeyLabel((GT_Keys)target.key);
+    std::string text = IsValidPointer(label) ? label : "?";
+
+    if (target.shift != 0)
+        return "SHIFT + " + text;
+
+    return ((level & 1) != 0) ? text + " (SHIFT off)" : text;
 }
 
 std::string KeyMapper::DescribeOwnHostKeys(GT_Keys key) const

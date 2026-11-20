@@ -150,6 +150,20 @@ static const u16 k_gamepad_buttons = GT_GAMEPAD_UP | GT_GAMEPAD_DOWN | GT_GAMEPA
     GT_GAMEPAD_SELECT | GT_GAMEPAD_RUN | GT_GAMEPAD_A | GT_GAMEPAD_B;
 static const u16 k_6_button_buttons = k_gamepad_buttons | GT_GAMEPAD_C | GT_GAMEPAD_X | GT_GAMEPAD_Y | GT_GAMEPAD_Z;
 
+struct HostChar
+{
+    u16 usage;
+    char plain;
+    char shifted;
+};
+
+static const HostChar k_us_host_chars[] = {
+    { 0x1E, '1', '!' }, { 0x1F, '2', '@' }, { 0x20, '3', '#' }, { 0x21, '4', '$' }, { 0x22, '5', '%' },
+    { 0x23, '6', '^' }, { 0x24, '7', '&' }, { 0x25, '8', '*' }, { 0x26, '9', '(' }, { 0x27, '0', ')' },
+    { 0x2D, '-', '_' }, { 0x2E, '=', '+' }, { 0x2F, '[', '{' }, { 0x30, ']', '}' }, { 0x31, '\\', '|' },
+    { 0x33, ';', ':' }, { 0x34, '\'', '"' }, { 0x36, ',', '<' }, { 0x37, '.', '>' }, { 0x38, '/', '?' }
+};
+
 struct DiskSetImage
 {
     std::string path;
@@ -236,6 +250,7 @@ static void apply_mouse(int port);
 static void poll_analog_mouse(bool& left, bool& right);
 static void apply_key_mapper_pointer(void);
 static u16 usage_from_retro_key(unsigned keycode);
+static void key_map_set_host_chars(void);
 static void key_map_load(void);
 static void key_map_save(void);
 static void key_map_update(void);
@@ -1718,12 +1733,33 @@ static void apply_key_mapper_pointer(void)
     mapper->SetPointerButtons(buttons);
 }
 
+static void key_map_set_host_chars(void)
+{
+    static u32 chars[GT_HOST_KEY_COUNT][GT_KEY_MAP_LEVELS];
+    memset(chars, 0, sizeof(chars));
+
+    for (int i = 0; i < 26; i++)
+    {
+        chars[0x04 + i][0] = (u32)('a' + i);
+        chars[0x04 + i][1] = (u32)('A' + i);
+    }
+
+    for (size_t i = 0; i < sizeof(k_us_host_chars) / sizeof(k_us_host_chars[0]); i++)
+    {
+        chars[k_us_host_chars[i].usage][0] = (u32)k_us_host_chars[i].plain;
+        chars[k_us_host_chars[i].usage][1] = (u32)k_us_host_chars[i].shifted;
+    }
+
+    core->GetKeyMap()->SetHostChars(&chars[0][0]);
+}
+
 static void key_map_load(void)
 {
     KeyMap* key_map = core->GetKeyMap();
     std::string error;
     std::vector<u8> data;
 
+    key_map_set_host_chars();
     key_map_path = retro_save_directory;
     append_path_component(key_map_path, (get_save_disk_name(get_file_name(retro_game_path, true)) + ".keys").c_str());
     key_map->SetEnabled(true);
@@ -2010,6 +2046,14 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         allow_up_down = (strcmp(var.value, "Enabled") == 0);
+    }
+
+    var.key = "geartowns_keyboard_layout";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->GetKeyMap()->SetLayout(strcmp(var.value, "jis") == 0 ? GT_KEY_LAYOUT_POSITION : GT_KEY_LAYOUT_CHARACTER);
     }
 
     var.key = "geartowns_mouse_sensitivity";

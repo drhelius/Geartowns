@@ -184,6 +184,7 @@ struct config_Input
     bool allow_shared_gamepads;
     int controller_type[GT_MAX_GAMEPADS];
     int keyboard_mode[GT_MAX_GAMEPADS];
+    int keyboard_layout;
 };
 
 struct config_Input_Keyboard

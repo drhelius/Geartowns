@@ -332,6 +332,7 @@
     <ClInclude Include="..\..\src\input\keyboard.h" />
     <ClInclude Include="..\..\src\input\keyboard_inline.h" />
     <ClInclude Include="..\..\src\input\host_keys.h" />
+    <ClInclude Include="..\..\src\input\keyboard_chars.h" />
     <ClInclude Include="..\..\src\input\keyboard_keys.h" />
     <ClInclude Include="..\..\src\input\key_map.h" />
     <ClInclude Include="..\..\src\osd\osd_font.h" />

@@ -65,6 +65,7 @@ void gui_action_load_defaults(void)
     gui_debug_trace_logger_init();
     update_savestates_data();
     events_sync_input();
+    events_update_keyboard_layout();
     ogl_renderer_unload_shader_preset();
     application_apply_settings();
 

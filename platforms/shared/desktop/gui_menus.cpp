@@ -1793,6 +1793,27 @@ static void menu_input(void)
                 ImGui::EndTooltip();
             }
 
+            if (ImGui::BeginMenu("Layout"))
+            {
+                ImGui::PushItemWidth(170.0f);
+
+                if (ImGui::Combo("##keyboard_layout", &config_input.keyboard_layout, "Host Layout\0Japanese Positions\0\0"))
+                    emu_set_keyboard_layout(config_input.keyboard_layout);
+
+                ImGui::PopItemWidth();
+
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Host Layout: keys type what they show on this keyboard.");
+                    ImGui::Text("Japanese Positions: keys type what a JIS keyboard has in");
+                    ImGui::Text("the same place, for kana typing by position.");
+                    ImGui::EndTooltip();
+                }
+
+                ImGui::EndMenu();
+            }
+
             ImGui::Separator();
 
             if (input_macro_get_owner() == Input_Macro_Owner_GUI)

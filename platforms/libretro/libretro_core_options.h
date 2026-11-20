@@ -49,7 +49,7 @@ struct retro_core_option_v2_category option_cats_us[] = {
     {
         "input",
         "Input",
-        "Configure controller and mouse behavior."
+        "Configure controller, mouse and keyboard behavior."
     },
     {
         "cdrom",
@@ -274,6 +274,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { NULL, NULL }
         },
         "5"
+    },
+    {
+        "geartowns_keyboard_layout",
+        "Keyboard Layout",
+        NULL,
+        "How keyboard keys map to the FM Towns keyboard. Host (US) types the character a US keyboard shows on each key. Japanese positions maps each key to the key in the same place on a Japanese keyboard, for kana typing by position.",
+        NULL,
+        "input",
+        {
+            { "host", "Host (US)" },
+            { "jis",  "Japanese positions" },
+            { NULL, NULL },
+        },
+        "host"
     },
 
     /* CD-ROM */

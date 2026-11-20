@@ -123,6 +123,8 @@ int application_init(const ApplicationParams& params)
         return 3;
     }
 
+    events_update_keyboard_layout();
+
     if (!gui_init())
     {
         Error("Failed to initialize GUI");
@@ -669,6 +671,12 @@ static void sdl_events_app(const SDL_Event* event)
             const char* dropped_filedir = event->drop.data;
             gui_load_rom(dropped_filedir);
             application_refocus_window();
+            break;
+        }
+
+        case SDL_EVENT_KEYMAP_CHANGED:
+        {
+            events_update_keyboard_layout();
             break;
         }
 

@@ -646,6 +646,21 @@ void emu_key_map_save(void)
         save_key_map();
 }
 
+void emu_set_keyboard_layout(int layout)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->GetKeyMap()->SetLayout((GT_Key_Layout)layout);
+}
+
+void emu_set_host_chars(const u32* chars, const u16* level_keys, int level_key_count)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    geartowns->GetKeyMap()->SetHostChars(chars);
+    geartowns->GetKeyMap()->SetLevelHostKeys(level_keys, level_key_count);
+}
+
 void emu_set_mouse_delta(GT_Controllers controller, int x, int y)
 {
     if (IsValidPointer(geartowns))

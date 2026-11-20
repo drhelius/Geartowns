@@ -568,6 +568,7 @@
     <ClInclude Include="..\..\src\input\keyboard.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\keyboard_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\host_keys.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\input\keyboard_chars.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\keyboard_keys.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\input\key_map.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\osd\osd_font.h"><Filter>src</Filter></ClInclude>

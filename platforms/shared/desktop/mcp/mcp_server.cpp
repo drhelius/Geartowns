@@ -2462,9 +2462,11 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "get_key_map"},
         {"title", "Get Key Map"},
-        {"description", "The host key map of the running content: whether mapping is on, whether the keyboard mapper "
-            "is open, the per-game file, the user's bindings, every host key that doesn't drive its built-in key, and the "
-            "Towns keys no host key reaches. Host keys are USB HID key names."},
+        {"description", "The host key map of the running content: whether mapping is on, the layout (host: keys type "
+            "the host layout's characters; jis: keys by position on a JIS keyboard), whether the keyboard mapper is open, "
+            "the per-game file, the user's bindings, every host key that doesn't drive its built-in key, what each "
+            "layout key drives at each level (plain, Shift, then AltGr/Option and AltGr/Option+Shift when the layout has "
+            "them), and the Towns keys no host key reaches. Host keys are USB HID key names."},
         {"annotations", {{"readOnlyHint", true}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -2498,22 +2500,28 @@ json McpServer::BuildToolList()
     tools.push_back({
         {"name", "set_key_mapping"},
         {"title", "Set Key Mapping"},
-        {"description", "Turn the game's key mapping on or off. Off, every host key types its built-in key."},
+        {"description", "Turn the game's key mapping on or off (off, every host key types its built-in key), and set "
+            "the keyboard layout as the Input menu does. At least one of them."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", true}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
-                {"enabled", {{"type", "boolean"}}}
-            }},
-            {"required", json::array({"enabled"})}
+                {"enabled", {{"type", "boolean"}}},
+                {"layout", {
+                    {"type", "string"},
+                    {"description", "host: keys type the host layout's characters. jis: keys by position on a JIS keyboard."},
+                    {"enum", json::array({"host", "jis"})}
+                }}
+            }}
         }}
     });
 
     tools.push_back({
         {"name", "host_key"},
         {"title", "Host Key"},
-        {"description", "Press, release or tap a host key through the key map, as the host keyboard would. While "
-            "the keyboard mapper is open it goes to the mapper instead."},
+        {"description", "Press, release or tap a host key through the key map, as the host keyboard would. drives is "
+            "what it types at the current Shift and AltGr/Option level. While the keyboard mapper is open it goes to the "
+            "mapper instead."},
         {"annotations", {{"readOnlyHint", false}, {"destructiveHint", true}, {"idempotentHint", false}, {"openWorldHint", false}}},
         {"inputSchema", {
             {"type", "object"},
@@ -4219,7 +4227,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "set_key_mapping")
     {
-        return m_debugAdapter.SetKeyMapping(arguments["enabled"]);
+        return m_debugAdapter.SetKeyMapping(arguments);
     }
     else if (normalizedTool == "host_key")
     {

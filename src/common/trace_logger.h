@@ -702,6 +702,8 @@ struct GT_Trace_Entry
             u8 address;
             u8 flags;
         } system;
+
+        u8 raw[GT_TRACE_ENTRY_SIZE - GT_TRACE_HEADER_SIZE];
     };
 };
 

@@ -143,7 +143,6 @@ static int find_line(u32 address);
 static bool is_record_stale(I386* cpu, const I386_Disassembler_Record* record);
 static void set_breakpoint_enabled(u32 address, bool enabled);
 static void prepare_symbol_rows(const char* filter);
-static bool contains_no_case(const char* text, const char* filter);
 static void resolve_logical_symbols(void);
 
 void gui_debug_disassembler_init(void)
@@ -2248,29 +2247,6 @@ static void prepare_symbol_rows(const char* filter)
         row.user = false;
         symbol_rows.push_back(row);
     }
-}
-
-static bool contains_no_case(const char* text, const char* filter)
-{
-    if (filter[0] == 0)
-        return true;
-
-    for (const char* start = text; *start != 0; start++)
-    {
-        const char* t = start;
-        const char* f = filter;
-
-        while (*t != 0 && *f != 0 && toupper((unsigned char)*t) == toupper((unsigned char)*f))
-        {
-            t++;
-            f++;
-        }
-
-        if (*f == 0)
-            return true;
-    }
-
-    return false;
 }
 
 static bool parse_address(const char* text, u32& address)

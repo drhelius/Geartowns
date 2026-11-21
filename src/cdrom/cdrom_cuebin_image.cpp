@@ -251,12 +251,9 @@ static bool FindPathIgnoringCase(const std::string& directory, const std::string
             return false;
 
         const std::vector<std::string>& names = last ? files : folders;
-        size_t i = 0;
+        int i = find_no_case(names, part);
 
-        while ((i < names.size()) && !strings_equal_ignore_case(names[i], part))
-            i++;
-
-        if (i == names.size())
+        if (i < 0)
             return false;
 
         found += "/" + names[i];
@@ -280,8 +277,7 @@ MediaFile* CdRomCueBinImage::ResolveNormalFile(const char* reference, char* reso
     if (!uri)
         std::replace(path.begin(), path.end(), '\\', '/');
 
-    bool relative = !path.empty() && !uri && (path[0] != '/') && ((path.size() < 2) || (path[1] != ':')) &&
-        (strpbrk(image->m_file_path, "/\\") != NULL);
+    bool relative = !path.empty() && !uri && !is_absolute_path(path) && (strpbrk(image->m_file_path, "/\\") != NULL);
     std::string full = relative ? std::string(image->m_file_directory) + "/" + path : path;
 
     strncpy_fit(resolved_path, full.c_str(), resolved_path_size);
@@ -1020,8 +1016,7 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
         if (line.empty() || line[0] == '#')
             continue;
 
-        string lowercase_line = line;
-        transform(lowercase_line.begin(), lowercase_line.end(), lowercase_line.begin(), [](unsigned char c) { return std::tolower(c); });
+        string lowercase_line = to_lower_ascii(line);
 
         if (lowercase_line.find("file") == 0)
         {
@@ -1094,7 +1089,7 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
 
             string type_str;
             track_stream >> type_str;
-            transform(type_str.begin(), type_str.end(), type_str.begin(), [](unsigned char c) { return std::tolower(c); });
+            type_str = to_lower_ascii(type_str);
 
             if (type_str == "audio")
             {

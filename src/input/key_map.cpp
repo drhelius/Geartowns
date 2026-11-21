@@ -24,27 +24,6 @@
 
 static const GT_Key_Map_Entry k_key_map_empty = { false, 0, { 0, 0, 0, 0 } };
 
-static std::string key_map_trim(const std::string& text)
-{
-    size_t start = text.find_first_not_of(" \t\r\n");
-
-    if (start == std::string::npos)
-        return "";
-
-    size_t end = text.find_last_not_of(" \t\r\n");
-    return text.substr(start, end - start + 1);
-}
-
-static std::string key_map_lower(const std::string& text)
-{
-    std::string result(text);
-
-    for (size_t i = 0; i < result.size(); i++)
-        result[i] = ((result[i] >= 'A') && (result[i] <= 'Z')) ? (char)(result[i] + 32) : result[i];
-
-    return result;
-}
-
 KeyMap::KeyMap()
 {
     InitPointer(m_callback);
@@ -388,7 +367,7 @@ bool KeyMap::SetLayer(GT_Key_Map_Layer layer, const char* text, std::string* err
     {
         size_t end = data.find('\n', start);
         end = end == std::string::npos ? data.size() : end;
-        std::string line = key_map_trim(data.substr(start, end - start));
+        std::string line = trim_chars(data.substr(start, end - start));
         start = end + 1;
         number++;
 
@@ -662,7 +641,7 @@ const char* KeyMap::GetKeyLabel(GT_Keys key)
 bool KeyMap::ParseEntry(const std::string& host, const std::string& value, u16* usage, GT_Key_Map_Entry* entry,
     std::string* error)
 {
-    std::string name = key_map_lower(key_map_trim(host));
+    std::string name = to_lower_ascii(trim_chars(host));
     int found = FindHostKey(name.c_str());
 
     if (found < 0)
@@ -674,7 +653,7 @@ bool KeyMap::ParseEntry(const std::string& host, const std::string& value, u16* 
     *usage = (u16)found;
     *entry = k_key_map_empty;
     entry->set = true;
-    std::string targets = key_map_lower(key_map_trim(value));
+    std::string targets = to_lower_ascii(trim_chars(value));
 
     if (targets.empty())
     {
@@ -691,7 +670,7 @@ bool KeyMap::ParseEntry(const std::string& host, const std::string& value, u16* 
     {
         size_t plus = targets.find('+', start);
         plus = plus == std::string::npos ? targets.size() : plus;
-        std::string target = key_map_trim(targets.substr(start, plus - start));
+        std::string target = trim_chars(targets.substr(start, plus - start));
         start = plus + 1;
         int key = FindKey(target.c_str());
 

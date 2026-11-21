@@ -74,7 +74,7 @@ void CdRomMedia::Reset()
 
 bool CdRomMedia::LoadCueFromFile(const char* path, bool preload)
 {
-    bool cdrom_uri_path = IsCdRomUriPath(path);
+    bool cdrom_uri_path = IsCdRomUri(path);
     GT_CdRomCueBinLoadOptions options = cdrom_uri_path ?
         GT_CdRomCueBinStreamingLoadOptions() : GT_CdRomCueBinDefaultLoadOptions();
 
@@ -209,9 +209,4 @@ s32 CdRomMedia::FindTrackFromLBA(u32 lba, bool include_lead_in)
         return m_current_image->FindTrackFromLBA(lba, include_lead_in);
 
     return -1;
-}
-
-bool CdRomMedia::IsCdRomUriPath(const char* path)
-{
-    return IsValidPointer(path) && (strncmp(path, "cdrom://", 8) == 0);
 }

@@ -23,6 +23,7 @@
 
 #if defined(__LIBRETRO__)
 #include "media_file_libretro.h"
+#include "../cdrom/cdrom_common.h"
 #endif
 
 MediaFile::~MediaFile()
@@ -43,7 +44,7 @@ MediaFile* MediaFile::OpenFile(const char* path, bool writable)
         return NULL;
     }
 
-    if (MediaFileLibretro::IsCdRomUriPath(path))
+    if (IsCdRomUri(path))
         return NULL;
 #endif
 

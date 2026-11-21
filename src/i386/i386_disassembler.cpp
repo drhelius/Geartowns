@@ -994,10 +994,7 @@ bool I386::FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I
 
 void I386::FormatDisassemblerText(const I386_Decode_State& state, I386_Disassembler_Record& record, u32 cs_base)
 {
-    size_t byte_length = 0;
-
-    for (int i = 0; i < state.length; i++)
-        append_format(record.bytes, sizeof(record.bytes), byte_length, i == 0 ? "%02X" : " %02X", state.bytes[i]);
+    hex_encode(state.bytes, state.length, record.bytes, sizeof(record.bytes), true, ' ');
 
     I386_Disassembly_Context context;
     context.state = &state;
@@ -2195,7 +2192,7 @@ void I386::TraceInterruptText(u8 vector, GT_Trace_Entry* entry) const
         if (!TryPeekLinear(linear + i, value) || value == terminator)
             break;
 
-        entry->interrupt.text[i] = (char)(value >= 0x20 && value < 0x7F ? value : '.');
+        entry->interrupt.text[i] = printable_char(value);
     }
 }
 

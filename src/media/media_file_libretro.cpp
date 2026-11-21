@@ -22,6 +22,7 @@
 #if defined(__LIBRETRO__)
 
 #include "../common/common.h"
+#include "../cdrom/cdrom_common.h"
 
 const retro_vfs_interface* MediaFileLibretro::s_vfs_interface = NULL;
 unsigned MediaFileLibretro::s_vfs_version = 0;
@@ -95,25 +96,9 @@ bool MediaFileLibretro::RemoveFile(const char* path)
     return remove_file_utf8(path);
 }
 
-bool MediaFileLibretro::IsCdRomUriPath(const char* path)
-{
-    static const char* kCdRomUriPrefix = "cdrom://";
-
-    if (!path)
-        return false;
-
-    for (int index = 0; kCdRomUriPrefix[index]; index++)
-    {
-        if (path[index] != kCdRomUriPrefix[index])
-            return false;
-    }
-
-    return true;
-}
-
 unsigned MediaFileLibretro::GetOpenHints(const char* path)
 {
-    return ((s_vfs_version >= 4) && !IsCdRomUriPath(path)) ?
+    return ((s_vfs_version >= 4) && !IsCdRomUri(path)) ?
         RETRO_VFS_FILE_ACCESS_HINT_FREQUENT_ACCESS : RETRO_VFS_FILE_ACCESS_HINT_NONE;
 }
 

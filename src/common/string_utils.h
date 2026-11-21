@@ -22,8 +22,10 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include <cctype>
 #include <string>
+#include <vector>
 #include "defines.h"
 #include "types.h"
 
@@ -236,6 +238,262 @@ inline bool ends_with_no_case(const char* text, const char* suffix)
     }
 
     return true;
+}
+
+inline bool ends_with_no_case(const std::string& text, const char* suffix)
+{
+    return ends_with_no_case(text.c_str(), suffix);
+}
+
+inline char to_upper_ascii(char c)
+{
+    return ((c >= 'a') && (c <= 'z')) ? (char)(c - 32) : c;
+}
+
+inline char to_lower_ascii(char c)
+{
+    return ((c >= 'A') && (c <= 'Z')) ? (char)(c + 32) : c;
+}
+
+inline std::string to_upper_ascii(const std::string& text)
+{
+    std::string result(text);
+
+    for (size_t i = 0; i < result.size(); i++)
+        result[i] = to_upper_ascii(result[i]);
+
+    return result;
+}
+
+inline std::string to_lower_ascii(const std::string& text)
+{
+    std::string result(text);
+
+    for (size_t i = 0; i < result.size(); i++)
+        result[i] = to_lower_ascii(result[i]);
+
+    return result;
+}
+
+inline bool strings_equal_ignore_case(const char* left, const char* right)
+{
+    if (!left || !right)
+        return false;
+
+    while ((*left != 0) && (*right != 0))
+    {
+        if (to_upper_ascii(*left) != to_upper_ascii(*right))
+            return false;
+
+        left++;
+        right++;
+    }
+
+    return (*left == 0) && (*right == 0);
+}
+
+inline bool starts_with_no_case(const std::string& text, const std::string& prefix)
+{
+    if (text.size() < prefix.size())
+        return false;
+
+    for (size_t i = 0; i < prefix.size(); i++)
+    {
+        if (to_upper_ascii(text[i]) != to_upper_ascii(prefix[i]))
+            return false;
+    }
+
+    return true;
+}
+
+inline bool contains_no_case(const char* text, const char* filter)
+{
+    if (filter[0] == 0)
+        return true;
+
+    for (const char* start = text; *start != 0; start++)
+    {
+        const char* t = start;
+        const char* f = filter;
+
+        while ((*t != 0) && (*f != 0) && (to_upper_ascii(*t) == to_upper_ascii(*f)))
+        {
+            t++;
+            f++;
+        }
+
+        if (*f == 0)
+            return true;
+    }
+
+    return false;
+}
+
+inline int find_no_case(const std::vector<std::string>& list, const std::string& name)
+{
+    for (size_t i = 0; i < list.size(); i++)
+    {
+        if ((list[i].size() == name.size()) && strings_equal_ignore_case(list[i].c_str(), name.c_str()))
+            return (int)i;
+    }
+
+    return -1;
+}
+
+inline std::string trim_chars(const std::string& text, const char* set = " \t\r\n")
+{
+    size_t start = text.find_first_not_of(set);
+
+    if (start == std::string::npos)
+        return "";
+
+    size_t end = text.find_last_not_of(set);
+    return text.substr(start, end - start + 1);
+}
+
+inline void split_string(const std::string& text, char separator, std::vector<std::string>* parts, bool keep_empty = true)
+{
+    size_t start = 0;
+    parts->clear();
+
+    while (start < text.size())
+    {
+        size_t end = text.find(separator, start);
+        end = end == std::string::npos ? text.size() : end;
+
+        if (keep_empty || (end > start))
+            parts->push_back(text.substr(start, end - start));
+
+        start = end + 1;
+    }
+}
+
+inline void hex_encode(const u8* data, size_t size, std::string* out, bool upper = true, char separator = 0)
+{
+    const char* digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
+
+    for (size_t i = 0; i < size; i++)
+    {
+        if ((separator != 0) && (i > 0))
+            *out += separator;
+
+        *out += digits[data[i] >> 4];
+        *out += digits[data[i] & 0x0F];
+    }
+}
+
+inline std::string hex_string(const u8* data, size_t size, bool upper = true, char separator = 0)
+{
+    std::string out;
+    out.reserve(size * (separator != 0 ? 3 : 2));
+    hex_encode(data, size, &out, upper, separator);
+    return out;
+}
+
+inline size_t hex_encode(const u8* data, size_t size, char* buffer, size_t buffer_size, bool upper = true,
+    char separator = 0)
+{
+    const char* digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
+    size_t length = 0;
+
+    if (buffer_size == 0)
+        return 0;
+
+    for (size_t i = 0; i < size; i++)
+    {
+        size_t needed = ((separator != 0) && (i > 0)) ? 3 : 2;
+
+        if (length + needed >= buffer_size)
+            break;
+
+        if (needed == 3)
+            buffer[length++] = separator;
+
+        buffer[length++] = digits[data[i] >> 4];
+        buffer[length++] = digits[data[i] & 0x0F];
+    }
+
+    buffer[length] = 0;
+    return length;
+}
+
+inline bool parse_hex_bytes(const char* text, size_t length, std::vector<u8>* out, const char* skip = NULL)
+{
+    int high = -1;
+    out->clear();
+
+    for (size_t i = 0; i < length; i++)
+    {
+        if (IsValidPointer(skip) && (text[i] != 0) && (strchr(skip, text[i]) != NULL))
+            continue;
+
+        if (!is_hex_digit(text[i]))
+            return false;
+
+        if (high < 0)
+            high = as_hex(text[i]);
+        else
+        {
+            out->push_back((u8)((high << 4) | as_hex(text[i])));
+            high = -1;
+        }
+    }
+
+    return high < 0;
+}
+
+inline bool parse_hex_bytes(const std::string& text, std::vector<u8>* out, const char* skip = NULL)
+{
+    return parse_hex_bytes(text.c_str(), text.size(), out, skip);
+}
+
+inline bool parse_hex_bytes(const char* text, size_t length, std::string* out, const char* skip = NULL)
+{
+    std::vector<u8> bytes;
+
+    if (!parse_hex_bytes(text, length, &bytes, skip))
+    {
+        out->clear();
+        return false;
+    }
+
+    out->assign(bytes.begin(), bytes.end());
+    return true;
+}
+
+inline char printable_char(u8 c, char fallback = '.')
+{
+    return ((c >= 0x20) && (c <= 0x7E)) ? (char)c : fallback;
+}
+
+inline std::string vformat_string(const char* format, va_list args)
+{
+    char buffer[256];
+    va_list copy;
+    va_copy(copy, args);
+    int length = vsnprintf(buffer, sizeof(buffer), format, copy);
+    va_end(copy);
+
+    if (length < 0)
+        return "";
+
+    if ((size_t)length < sizeof(buffer))
+        return std::string(buffer, (size_t)length);
+
+    std::vector<char> text((size_t)length + 1);
+    va_copy(copy, args);
+    vsnprintf(&text[0], text.size(), format, copy);
+    va_end(copy);
+    return std::string(&text[0], (size_t)length);
+}
+
+inline std::string format_string(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    std::string text = vformat_string(format, args);
+    va_end(args);
+    return text;
 }
 
 #endif /* STRING_UTILS_H */

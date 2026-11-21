@@ -70,7 +70,6 @@ public:
     bool PreloadTrack(u32 track_number, u32 lba);
 
 private:
-    bool IsCdRomUriPath(const char* path);
 
 private:
     CdRomImage* m_current_image;

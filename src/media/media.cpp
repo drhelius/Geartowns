@@ -63,24 +63,16 @@ bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t si
     size_t separator = directory.find_last_of("/\\");
     directory = separator == std::string::npos ? "" : directory.substr(0, separator + 1);
     std::string content(text, size);
-    size_t position = content.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;
+    std::vector<std::string> lines;
+    split_string(content.compare(0, 3, "\xEF\xBB\xBF") == 0 ? content.substr(3) : content, '\n', &lines);
 
-    while (position < content.size())
+    for (size_t i = 0; i < lines.size(); i++)
     {
-        size_t end = content.find('\n', position);
+        std::string line = trim_chars(lines[i], " \t\r");
 
-        if (end == std::string::npos)
-            end = content.size();
-
-        std::string line = content.substr(position, end - position);
-        position = end + 1;
-        size_t first = line.find_first_not_of(" \t\r");
-        size_t last = line.find_last_not_of(" \t\r");
-
-        if (first == std::string::npos)
+        if (line.empty())
             continue;
 
-        line = line.substr(first, last - first + 1);
         PlaylistEntry entry;
         entry.has_label = false;
         entry.save_disk = false;
@@ -111,9 +103,7 @@ bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t si
             line.erase(path_end + 1);
         }
 
-        bool absolute = line[0] == '/' || line[0] == '\\' || (line.size() > 1 && line[1] == ':') ||
-            line.compare(0, 8, "cdrom://") == 0;
-        entry.path = absolute ? line : directory + line;
+        entry.path = (is_absolute_path(line) || IsCdRomUri(line.c_str())) ? line : directory + line;
         entries.push_back(entry);
     }
 
@@ -387,7 +377,7 @@ void Media::GatherDataFromPath(const char* path)
 
     std::string full_path(path);
     size_t separator = full_path.find_last_of("/\\");
-    std::string filename = separator == std::string::npos ? full_path : full_path.substr(separator + 1);
+    std::string filename = path_filename(full_path);
 
     if (separator == std::string::npos)
         m_media_info.directory[0] = '\0';
@@ -407,10 +397,7 @@ void Media::GatherDataFromPath(const char* path)
         return;
     }
 
-    std::string extension = filename.substr(dot + 1);
-
-    for (size_t i = 0; i < extension.length(); i++)
-        extension[i] = (char)std::tolower((unsigned char)extension[i]);
+    std::string extension = to_lower_ascii(filename.substr(dot + 1));
 
     strncpy_fit(m_media_info.extension, extension.c_str(), sizeof(m_media_info.extension));
 }

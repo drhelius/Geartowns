@@ -81,4 +81,9 @@ INLINE bool IsValidBcd(u8 bcd)
     return ((bcd >> 4) <= 9) && ((bcd & 0x0F) <= 9);
 }
 
+inline bool IsCdRomUri(const char* path)
+{
+    return IsValidPointer(path) && (strncmp(path, "cdrom://", 8) == 0);
+}
+
 #endif /* CDROM_COMMON_H */

@@ -1884,31 +1884,31 @@ bool I386::GetDebugRegisterValue(const char* name, u32& value) const
 {
     UpdateDebugState();
 
-    if (EqualName(name, "EAX"))
+    if (strings_equal_ignore_case(name, "EAX"))
         value = m_debug_state.eax;
-    else if (EqualName(name, "EBX"))
+    else if (strings_equal_ignore_case(name, "EBX"))
         value = m_debug_state.ebx;
-    else if (EqualName(name, "ECX"))
+    else if (strings_equal_ignore_case(name, "ECX"))
         value = m_debug_state.ecx;
-    else if (EqualName(name, "EDX"))
+    else if (strings_equal_ignore_case(name, "EDX"))
         value = m_debug_state.edx;
-    else if (EqualName(name, "ESI"))
+    else if (strings_equal_ignore_case(name, "ESI"))
         value = m_debug_state.esi;
-    else if (EqualName(name, "EDI"))
+    else if (strings_equal_ignore_case(name, "EDI"))
         value = m_debug_state.edi;
-    else if (EqualName(name, "EBP"))
+    else if (strings_equal_ignore_case(name, "EBP"))
         value = m_debug_state.ebp;
-    else if (EqualName(name, "ESP"))
+    else if (strings_equal_ignore_case(name, "ESP"))
         value = m_debug_state.esp;
-    else if (EqualName(name, "EIP"))
+    else if (strings_equal_ignore_case(name, "EIP"))
         value = m_debug_state.eip;
-    else if (EqualName(name, "EFLAGS"))
+    else if (strings_equal_ignore_case(name, "EFLAGS"))
         value = m_debug_state.eflags;
-    else if (EqualName(name, "CR0"))
+    else if (strings_equal_ignore_case(name, "CR0"))
         value = m_debug_state.cr0;
-    else if (EqualName(name, "CR2"))
+    else if (strings_equal_ignore_case(name, "CR2"))
         value = m_debug_state.cr2;
-    else if (EqualName(name, "CR3"))
+    else if (strings_equal_ignore_case(name, "CR3"))
         value = m_debug_state.cr3;
     else
         return GetDebugPartialRegisterValue(name, value);
@@ -1924,13 +1924,13 @@ bool I386::GetDebugPartialRegisterValue(const char* name, u32& value) const
 
     for (int i = 0; i < I386_REG_COUNT; i++)
     {
-        if (EqualName(name, k_names16[i]))
+        if (strings_equal_ignore_case(name, k_names16[i]))
         {
             value = m_state.registers[i].value & 0xFFFF;
             return true;
         }
 
-        if (EqualName(name, k_names8[i]))
+        if (strings_equal_ignore_case(name, k_names8[i]))
         {
             value = (m_state.registers[i & 3].value >> (i < 4 ? 0 : 8)) & 0xFF;
             return true;
@@ -1939,38 +1939,21 @@ bool I386::GetDebugPartialRegisterValue(const char* name, u32& value) const
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (EqualName(name, k_segments[i]))
+        if (strings_equal_ignore_case(name, k_segments[i]))
         {
             value = m_state.segments[i].selector;
             return true;
         }
     }
 
-    if (EqualName(name, "IP"))
+    if (strings_equal_ignore_case(name, "IP"))
         value = m_state.eip & 0xFFFF;
-    else if (EqualName(name, "FLAGS"))
+    else if (strings_equal_ignore_case(name, "FLAGS"))
         value = m_state.eflags & 0xFFFF;
     else
         return false;
 
     return true;
-}
-
-bool I386::EqualName(const char* left, const char* right)
-{
-    if (!IsValidPointer(left) || !IsValidPointer(right))
-        return false;
-
-    while (*left != 0 && *right != 0)
-    {
-        if (toupper((unsigned char)*left) != toupper((unsigned char)*right))
-            return false;
-
-        left++;
-        right++;
-    }
-
-    return *left == 0 && *right == 0;
 }
 
 void I386::UpdateDebugState() const

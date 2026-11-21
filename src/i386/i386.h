@@ -1022,7 +1022,6 @@ private:
     void UpdateSegmentFastPath(int index);
     void UpdateExecutionMode();
     void UpdateDebugState() const;
-    static bool EqualName(const char* left, const char* right);
 
     u32 GetRegister(int index, int width) const;
     void SetRegister(int index, int width, u32 value);

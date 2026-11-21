@@ -185,24 +185,10 @@ void CdRomImage::GatherPaths(const char* path)
     using namespace std;
 
     string fullpath(path);
-    string directory;
-    string filename;
-    string extension;
-
     size_t pos = fullpath.find_last_of("/\\");
-    if (pos != string::npos)
-    {
-        filename = fullpath.substr(pos + 1);
-        directory = fullpath.substr(0, pos);
-    }
-    else
-    {
-        filename = fullpath;
-        directory = "";
-    }
-
-    extension = fullpath.substr(fullpath.find_last_of(".") + 1);
-    transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return std::tolower(c); });
+    string directory = pos != string::npos ? fullpath.substr(0, pos) : "";
+    string filename = path_filename(fullpath);
+    string extension = to_lower_ascii(fullpath.substr(fullpath.find_last_of(".") + 1));
 
     snprintf(m_file_path, sizeof(m_file_path), "%s", path);
     snprintf(m_file_directory, sizeof(m_file_directory), "%s", directory.c_str());

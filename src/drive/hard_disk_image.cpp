@@ -297,8 +297,7 @@ bool HardDiskImage::Open(const char* path, bool write_protected, const char* wor
     m_path = path;
     m_session = ((u64)time(NULL) << 20) + ++s_sessions;
 
-    size_t separator = m_path.find_last_of("/\\");
-    m_file_name = separator == std::string::npos ? m_path : m_path.substr(separator + 1);
+    m_file_name = path_filename(m_path);
     return true;
 }
 

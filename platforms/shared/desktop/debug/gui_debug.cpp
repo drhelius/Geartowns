@@ -547,21 +547,12 @@ static std::string get_auto_debug_settings_path(void)
     if (cdrom)
         filename = core->GetMedia()->GetFileName();
     else
-    {
-        filename = emu_floppy_get_content_path();
-        std::string::size_type separator = filename.find_last_of("/\\");
-
-        if (separator != std::string::npos)
-            filename = filename.substr(separator + 1);
-    }
+        filename = path_filename(emu_floppy_get_content_path());
 
     if (filename.empty())
         return "";
 
-    std::string::size_type dot = filename.find_last_of('.');
-
-    if (dot != std::string::npos)
-        filename.resize(dot);
+    filename = path_strip_extension(filename);
 
     if (cdrom && core->GetMedia()->GetCRC() != 0)
     {

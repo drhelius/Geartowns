@@ -447,7 +447,7 @@ void gui_debug_window_disk_viewer(void)
                 {
                     u8 value = image[data_offset + offset];
                     ImGui::TextColored(value ? white : gray, "%02X", value);
-                    ascii[i] = (value >= 0x20 && value < 0x7F) ? (char)value : '.';
+                    ascii[i] = printable_char(value);
                 }
                 else
                 {

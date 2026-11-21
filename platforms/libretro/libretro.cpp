@@ -258,7 +258,6 @@ static void keyboard_event(bool down, unsigned keycode, uint32_t character, uint
 static bool update_core_options_display(void);
 static void check_variables(void);
 static void update_floppy_drive(void);
-static bool path_is_cdrom_uri(const char* path);
 static bool path_is_cd_content(const char* path);
 static bool path_is_raw_floppy(const char* path);
 static bool disk_load(const char* path);
@@ -327,18 +326,8 @@ static bool IsJoypadDevice(unsigned device)
 
 static std::string get_file_name(const char* path, bool strip_extension)
 {
-    std::string name(path);
-    size_t separator = name.find_last_of("/\\");
-
-    if (separator != std::string::npos)
-        name = name.substr(separator + 1);
-
-    size_t dot = name.find_last_of('.');
-
-    if (strip_extension && dot != std::string::npos)
-        name = name.substr(0, dot);
-
-    return name;
+    std::string name = path_filename(path);
+    return strip_extension ? path_strip_extension(name) : name;
 }
 
 static std::string get_save_disk_name(const std::string& name)
@@ -2320,14 +2309,9 @@ static void update_floppy_drive(void)
     }
 }
 
-static bool path_is_cdrom_uri(const char* path)
-{
-    return path && (strncmp(path, "cdrom://", 8) == 0);
-}
-
 static bool path_is_cd_content(const char* path)
 {
-    return path_is_cdrom_uri(path) ||
+    return IsCdRomUri(path) ||
         ends_with_no_case(path, ".cue") ||
         ends_with_no_case(path, ".chd") ||
         ends_with_no_case(path, ".iso");
@@ -2431,7 +2415,7 @@ static bool disk_add_images(const char* path, std::vector<DiskSetImage>& images)
         return false;
     }
 
-    if (!path_is_cdrom_uri(path))
+    if (!IsCdRomUri(path))
     {
         MediaFile* file = MediaFile::OpenFile(path);
 

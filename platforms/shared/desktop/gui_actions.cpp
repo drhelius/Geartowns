@@ -215,7 +215,7 @@ void gui_action_save_screenshot(const char* path)
     {
         file_path = path;
 
-        if (file_path.find_last_of('.') == std::string::npos)
+        if (!path_has_extension(file_path))
             file_path += ".png";
     }
     else

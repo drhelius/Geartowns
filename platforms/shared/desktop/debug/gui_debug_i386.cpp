@@ -348,7 +348,7 @@ static void draw_register_tooltip(const char* name, u32 value, ImVec4 color)
     for (int i = 0; i < 4; i++)
     {
         u8 character = (u8)(value >> ((3 - i) * 8));
-        ascii[i] = character >= 32 && character < 127 ? (char)character : '.';
+        ascii[i] = printable_char(character);
     }
 
     ascii[4] = 0;

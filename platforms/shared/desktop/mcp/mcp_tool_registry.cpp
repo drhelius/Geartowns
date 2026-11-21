@@ -20,6 +20,7 @@
 #include "mcp_tool_registry.h"
 #include <cctype>
 #include <sstream>
+#include "common/string_utils.h"
 
 static const char* json_type_name(const json& value)
 {
@@ -570,7 +571,7 @@ int McpToolRegistry::GetCategoryToolCount(const std::string& category) const
 json McpToolRegistry::SearchTools(const std::string& query) const
 {
     json tools = json::array();
-    std::string query_lower = ToLower(query);
+    std::string query_lower = to_lower_ascii(query);
 
     if (query_lower.empty())
         return tools;
@@ -588,7 +589,7 @@ json McpToolRegistry::SearchTools(const std::string& query) const
         haystack += " ";
         haystack += AliasesForTool(name);
 
-        std::string haystack_lower = ToLower(haystack);
+        std::string haystack_lower = to_lower_ascii(haystack);
         std::istringstream terms(query_lower);
         std::string term;
         bool has_terms = false;
@@ -649,16 +650,6 @@ std::string McpToolRegistry::NormalizeToolName(std::string tool_name) const
     }
 
     return tool_name;
-}
-
-std::string McpToolRegistry::ToLower(const std::string& text) const
-{
-    std::string result = text;
-
-    for (size_t i = 0; i < result.size(); i++)
-        result[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(result[i])));
-
-    return result;
 }
 
 bool McpToolRegistry::StringContains(const std::string& text, const std::string& needle) const

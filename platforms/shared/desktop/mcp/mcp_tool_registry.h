@@ -55,7 +55,6 @@ public:
 private:
     bool IsRouterToolName(const std::string& tool_name) const;
     std::string NormalizeToolName(std::string tool_name) const;
-    std::string ToLower(const std::string& text) const;
     bool StringContains(const std::string& text, const std::string& needle) const;
     bool ToolNameInList(const std::string& name, const char* const* tools, size_t count) const;
     bool IsDirectToolName(const std::string& tool_name) const;

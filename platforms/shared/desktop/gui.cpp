@@ -645,14 +645,7 @@ void gui_load_media_symbols(const char* media_path, const char* symbol_path)
         return;
     }
 
-    std::string path(media_path);
-    size_t extension = path.find_last_of('.');
-    size_t separator = path.find_last_of("/\\");
-
-    if (extension != std::string::npos && (separator == std::string::npos || extension > separator))
-        path.resize(extension);
-
-    gui_debug_load_symbols_file((path + ".sym").c_str());
+    gui_debug_load_symbols_file((path_strip_extension(media_path) + ".sym").c_str());
 }
 
 bool gui_is_rom_loading(void)

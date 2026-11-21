@@ -113,24 +113,7 @@ static const int k_mcp_max_symbols = 1000;
 
 static bool parse_hex_text(const std::string& text, u32& value)
 {
-    std::string trimmed = text;
-    trimmed.erase(0, trimmed.find_first_not_of(" \t"));
-    trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
-    return parse_hex_with_prefix(trimmed, &value);
-}
-
-static std::string to_lower(const std::string& text)
-{
-    std::string result = text;
-    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
-    return result;
-}
-
-static std::string to_upper(const std::string& text)
-{
-    std::string result = text;
-    std::transform(result.begin(), result.end(), result.begin(), ::toupper);
-    return result;
+    return parse_hex_with_prefix(trim_chars(text, " \t"), &value);
 }
 
 static std::string trim_text(const char* text)
@@ -383,9 +366,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
     memset(&address, 0, sizeof(address));
     address.segment_register = -1;
 
-    std::string input = text;
-    input.erase(0, input.find_first_not_of(" \t"));
-    input.erase(input.find_last_not_of(" \t") + 1);
+    std::string input = trim_chars(text, " \t");
     size_t colon = input.find(':');
 
     if (colon == std::string::npos)
@@ -399,7 +380,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
         return true;
     }
 
-    std::string segment = to_upper(input.substr(0, colon));
+    std::string segment = to_upper_ascii(input.substr(0, colon));
     u32 offset = 0;
 
     if (!parse_hex_text(input.substr(colon + 1), offset))
@@ -414,7 +395,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (segment != to_upper(k_mcp_segment_names[i]))
+        if (segment != to_upper_ascii(k_mcp_segment_names[i]))
             continue;
 
         address.segment_register = i;
@@ -936,7 +917,7 @@ json DebugAdapter::TranslateAddress(const std::string& text)
         result["logical"] = Hex(address.segment, 4) + ":" + Hex32(address.offset);
 
         if (address.segment_register >= 0)
-            result["segment_register"] = to_upper(k_mcp_segment_names[address.segment_register]);
+            result["segment_register"] = to_upper_ascii(k_mcp_segment_names[address.segment_register]);
     }
 
     result["linear"] = Hex32(address.linear);
@@ -1315,26 +1296,8 @@ json DebugAdapter::MemoryFind(int area, const std::string& value, bool text, boo
     }
     else
     {
-        std::string compact;
-
-        for (size_t i = 0; i < value.size(); i++)
-        {
-            if (!isspace((unsigned char)value[i]))
-                compact += value[i];
-        }
-
-        if (compact.empty() || (compact.size() & 1) != 0)
+        if (!parse_hex_bytes(value.c_str(), value.size(), &pattern, " \t\n\v\f\r") || pattern.empty())
             return {{"error", "hex_bytes must contain valid hex byte pairs"}};
-
-        for (size_t i = 0; i < compact.size(); i += 2)
-        {
-            u8 byte = 0;
-
-            if (!parse_hex_string(compact.c_str() + i, 2, &byte))
-                return {{"error", "hex_bytes must contain valid hex byte pairs"}};
-
-            pattern.push_back(byte);
-        }
 
         case_sensitive = true;
     }
@@ -1453,7 +1416,7 @@ json DebugAdapter::GetI386Status()
         int index = k_mcp_segment_order[i];
         const I386_Segment& segment = state.segments[index];
         segments.push_back({
-            {"name", to_upper(k_mcp_segment_names[index])},
+            {"name", to_upper_ascii(k_mcp_segment_names[index])},
             {"selector", Hex(segment.selector, 4)},
             {"base", Hex32(segment.base)},
             {"limit", Hex32(segment.limit)},
@@ -1525,7 +1488,7 @@ json DebugAdapter::GetX87Status()
         stack.push_back({
             {"st", i},
             {"register", physical},
-            {"tag", to_lower(gui_debug_x87_tag_name(tag))},
+            {"tag", to_lower_ascii(gui_debug_x87_tag_name(tag))},
             {"raw", Hex(value.sign_exponent, 4) + Hex((u32)(value.significand >> 32), 8) + Hex((u32)value.significand, 8)},
             {"value", tag == 3 ? json() : json(text)}
         });
@@ -1538,8 +1501,8 @@ json DebugAdapter::GetX87Status()
         {"control", Hex(control, 4)},
         {"masks", {{"im", (control & 0x01) != 0}, {"dm", (control & 0x02) != 0}, {"zm", (control & 0x04) != 0},
             {"om", (control & 0x08) != 0}, {"um", (control & 0x10) != 0}, {"pm", (control & 0x20) != 0}}},
-        {"precision", to_lower(gui_debug_x87_precision_name(control))},
-        {"rounding", to_lower(gui_debug_x87_rounding_name(control))},
+        {"precision", to_lower_ascii(gui_debug_x87_precision_name(control))},
+        {"rounding", to_lower_ascii(gui_debug_x87_rounding_name(control))},
         {"status", Hex(status, 4)},
         {"top", top},
         {"conditions", {{"c0", (status & 0x0100) != 0}, {"c1", (status & 0x0200) != 0},
@@ -1560,7 +1523,7 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
     I386* cpu = m_core->GetI386();
     I386_State state;
     cpu->CopyState(state);
-    std::string reg = to_upper(name);
+    std::string reg = to_upper_ascii(name);
     std::string error;
     bool pc_changed = false;
     int general = -1;
@@ -1575,7 +1538,7 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (reg == to_upper(k_mcp_segment_names[i]))
+        if (reg == to_upper_ascii(k_mcp_segment_names[i]))
             segment = i;
     }
 
@@ -1873,7 +1836,7 @@ json DebugAdapter::ListDisassemblerBookmarks()
 json DebugAdapter::ListSymbols(const std::string& filter, int start, int count)
 {
     json symbols = json::array();
-    std::string needle = to_lower(filter);
+    std::string needle = to_lower_ascii(filter);
     const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
     std::map<u32, std::string>::const_iterator user;
     int total = 0;
@@ -1883,7 +1846,7 @@ json DebugAdapter::ListSymbols(const std::string& filter, int start, int count)
 
     for (user = users.begin(); user != users.end(); user++)
     {
-        if (!needle.empty() && to_lower(user->second).find(needle) == std::string::npos)
+        if (!needle.empty() && to_lower_ascii(user->second).find(needle) == std::string::npos)
             continue;
 
         if (total >= start && (int)symbols.size() < count)
@@ -1900,7 +1863,7 @@ json DebugAdapter::ListSymbols(const std::string& filter, int start, int count)
         if (record->second.auto_symbol[0] == 0 || users.find(record->first) != users.end())
             continue;
 
-        if (!needle.empty() && to_lower(record->second.auto_symbol).find(needle) == std::string::npos)
+        if (!needle.empty() && to_lower_ascii(record->second.auto_symbol).find(needle) == std::string::npos)
             continue;
 
         if (total >= start && (int)symbols.size() < count)
@@ -1947,13 +1910,13 @@ json DebugAdapter::LoadSymbols(const std::string& file_path)
 json DebugAdapter::LookupSymbolByName(const std::string& name, bool partial)
 {
     json matches = json::array();
-    std::string needle = to_lower(name);
+    std::string needle = to_lower_ascii(name);
     const std::map<u32, std::string>& users = gui_debug_get_user_symbols();
     std::map<u32, std::string>::const_iterator user;
 
     for (user = users.begin(); user != users.end() && (int)matches.size() < k_mcp_max_symbols; user++)
     {
-        bool match = partial ? to_lower(user->second).find(needle) != std::string::npos : name == user->second;
+        bool match = partial ? to_lower_ascii(user->second).find(needle) != std::string::npos : name == user->second;
 
         if (match)
             matches.push_back({{"address", Hex32(user->first)}, {"name", user->second}, {"type", "user"}});
@@ -1967,7 +1930,7 @@ json DebugAdapter::LookupSymbolByName(const std::string& name, bool partial)
         if (record->second.auto_symbol[0] == 0)
             continue;
 
-        bool match = partial ? to_lower(record->second.auto_symbol).find(needle) != std::string::npos :
+        bool match = partial ? to_lower_ascii(record->second.auto_symbol).find(needle) != std::string::npos :
             name == record->second.auto_symbol;
 
         if (match)
@@ -2202,7 +2165,7 @@ json DebugAdapter::GetPICStatus()
             {"buffered", (chip->icw4 & 0x08) != 0},
             {"special_fully_nested", (chip->icw4 & k_i8259_icw4_sfnm) != 0},
             {"init", chip->init_step == I8259::I8259_INIT_READY ? "ready" :
-                std::string("waiting ") + to_lower(k_debug_pic_init_names[chip->init_step & 3])},
+                std::string("waiting ") + to_lower_ascii(k_debug_pic_init_names[chip->init_step & 3])},
             {"read_register", chip->read_isr ? "isr" : "irr"},
             {"special_mask", chip->special_mask},
             {"poll_armed", chip->poll_pending},
@@ -2242,7 +2205,7 @@ json DebugAdapter::GetPITStatus()
         json item = {
             {"channel", channel},
             {"port", Hex((channel < 3 ? 0x0040 : 0x0050) + (channel % 3) * 2, 4)},
-            {"use", to_lower(k_debug_pit_uses[channel])},
+            {"use", to_lower_ascii(k_debug_pit_uses[channel])},
             {"clock_hz", rate},
             {"programmed", counter.programmed}
         };
@@ -2256,8 +2219,8 @@ json DebugAdapter::GetPITStatus()
                 count = counter.bcd ? 10000 : 0x10000;
 
             item["mode"] = counter.mode;
-            item["mode_name"] = to_lower(k_debug_pit_mode_names[counter.mode % 6]);
-            item["access"] = to_lower(k_debug_pit_access_names[counter.access & 3]);
+            item["mode_name"] = to_lower_ascii(k_debug_pit_mode_names[counter.mode % 6]);
+            item["access"] = to_lower_ascii(k_debug_pit_access_names[counter.access & 3]);
             item["bcd"] = counter.bcd;
             item["reload"] = Hex(counter.reload, 4);
             item["count"] = Hex(chip->PeekCount(channel % 3, tick), 4);
@@ -2343,7 +2306,7 @@ json DebugAdapter::GetDMAStatus()
             {"mode", Hex(mode, 2)},
             {"direction", k_debug_dma_direction_names[(mode >> 2) & 3]},
             {"unit", (mode & 0x01) ? "word" : "byte"},
-            {"service", to_lower(k_debug_dma_service_names[(mode >> 6) & 3])},
+            {"service", to_lower_ascii(k_debug_dma_service_names[(mode >> 6) & 3])},
             {"auto_initialize", (mode & 0x10) != 0},
             {"decrement", (mode & 0x20) != 0},
             {"current_address", Hex32(((u32)item.high_address << 24) | item.current_address)},
@@ -3186,7 +3149,7 @@ static json fm_channel_json(YM3438* ym3438, int channel)
             {"am", op.amplitude_modulation_enabled != 0},
             {"ssg_eg", hex_text(op.ssg_envelope, 1)},
             {"key_on", op.key_on != 0},
-            {"envelope_state", to_lower(trim_text(k_debug_ym3438_envelope_names[op.state & 3]))},
+            {"envelope_state", to_lower_ascii(trim_text(k_debug_ym3438_envelope_names[op.state & 3]))},
             {"envelope", hex_text(op.envelope, 3)},
             {"level_percent", (int)((k_ym3438_envelope_max - attenuation) * 100 / k_ym3438_envelope_max)}
         });
@@ -3241,7 +3204,7 @@ json DebugAdapter::GetYM3438Status(int channel)
         {"fm_muted", audio->IsSourceMuted(Audio::AUDIO_SOURCE_FM)},
         {"native_sample_rate_hz", k_mcp_ym3438_sample_rate},
         {"lfo", {{"enabled", state->lfo_enabled != 0}, {"frequency", state->lfo_frequency}, {"rate_hz", lfo_rate}}},
-        {"ch3_mode", to_lower(trim_text(k_debug_ym3438_ch3_mode_names[state->channel_3_mode & 3]))},
+        {"ch3_mode", to_lower_ascii(trim_text(k_debug_ym3438_ch3_mode_names[state->channel_3_mode & 3]))},
         {"dac", {{"enabled", state->dac_enabled != 0}, {"data", hex_text((u8)((state->dac_data / 2) + 128), 2)}}},
         {"timer_a", {
             {"value", state->timer_a_register},
@@ -3542,20 +3505,6 @@ static std::string msf_text(u32 lba)
     return text;
 }
 
-static std::string hex_bytes(const u8* data, u32 size)
-{
-    std::string text;
-    char byte[4];
-
-    for (u32 i = 0; i < size; i++)
-    {
-        snprintf(byte, sizeof(byte), i == 0 ? "%02X" : " %02X", data[i]);
-        text += byte;
-    }
-
-    return text;
-}
-
 json DebugAdapter::GetCDROMStatus()
 {
     CdRom* cdrom = m_core->GetCDROM();
@@ -3576,7 +3525,7 @@ json DebugAdapter::GetCDROMStatus()
     for (int i = 0; i < MIN((int)state->status_count, 4); i++)
         queue.push_back(hex_text(state->status[(state->status_head + i) % CDROM_STATUS_QUEUE_SIZE], 2));
 
-    json drive = {{"state", to_lower(gui_debug_cdrom_drive_state())}};
+    json drive = {{"state", to_lower_ascii(gui_debug_cdrom_drive_state())}};
 
     if (ready)
     {
@@ -3767,7 +3716,7 @@ json DebugAdapter::ReadCDROMSector(u32 lba, const std::string& mode)
         {"mode", mode},
         {"type", audio ? "audio" : "data"},
         {"size", size},
-        {"data", hex_bytes(buffer, size)}
+        {"data", hex_string(buffer, size, true, ' ')}
     };
 
     if (track >= 0)
@@ -3941,7 +3890,7 @@ json DebugAdapter::ListFloppySectors(int drive, int cylinder, int head)
             {"size", sector.size},
             {"density", sector.fm ? "fm" : "mfm"},
             {"deleted", sector.deleted},
-            {"status", to_lower(gui_debug_floppy_status_name(sector.status))},
+            {"status", to_lower_ascii(gui_debug_floppy_status_name(sector.status))},
             {"image_offset", hex_text(sector.header + k_floppy_sector_header_size, 6)}
         });
     }
@@ -3981,10 +3930,10 @@ json DebugAdapter::ReadFloppySector(int drive, int cylinder, int head, int secto
                 {"n", hex_text(entry.id[3], 2)}}},
             {"density", entry.fm ? "fm" : "mfm"},
             {"deleted", entry.deleted},
-            {"status", to_lower(gui_debug_floppy_status_name(entry.status))},
+            {"status", to_lower_ascii(gui_debug_floppy_status_name(entry.status))},
             {"image_offset", hex_text(offset, 6)},
             {"size", size},
-            {"data", hex_bytes(disk->GetImage() + offset, size)}
+            {"data", hex_string(disk->GetImage() + offset, size, true, ' ')}
         };
     }
 
@@ -4091,7 +4040,7 @@ json DebugAdapter::GetSCSIStatus()
 
     ScsiController* scsi = m_core->GetSCSI();
     ScsiController::ScsiController_State* state = scsi->GetState();
-    std::string interface = to_lower(gui_debug_scsi_interface());
+    std::string interface = to_lower_ascii(gui_debug_scsi_interface());
     std::replace(interface.begin(), interface.end(), ' ', '_');
 
     if (!scsi->IsFitted())
@@ -4262,7 +4211,7 @@ json DebugAdapter::ReadHardDiskSector(int id, s64 lba)
     if (!image->ReadBlock((u32)lba, buffer))
         return {{"error", "Unable to read the image file"}};
 
-    return {{"id", id}, {"lba", lba}, {"data", hex_bytes(buffer, k_hard_disk_block_size)}};
+    return {{"id", id}, {"lba", lba}, {"data", hex_string(buffer, k_hard_disk_block_size, true, ' ')}};
 }
 
 json DebugAdapter::SwapFloppies()
@@ -4764,8 +4713,7 @@ json DebugAdapter::GetProfilerData(const std::string& sort, int count, const std
     u64 total = profiler->GetTotalCycles();
     u32 frames = profiler->GetFrames();
 
-    std::string filter_upper = filter;
-    std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), ::toupper);
+    std::string filter_upper = to_upper_ascii(filter);
 
     std::vector<ProfilerEntry> entries;
 
@@ -4795,8 +4743,7 @@ json DebugAdapter::GetProfilerData(const std::string& sort, int count, const std
 
         if (!filter_upper.empty())
         {
-            std::string name_upper = entry.name;
-            std::transform(name_upper.begin(), name_upper.end(), name_upper.begin(), ::toupper);
+            std::string name_upper = to_upper_ascii(entry.name);
 
             char address[16];
             snprintf(address, sizeof(address), "%08X", function.address);
@@ -5533,7 +5480,7 @@ void DebugAdapter::AddMediaStateChanges(json& result)
 
 u16 DebugAdapter::ButtonMask(const std::string& button) const
 {
-    std::string name = to_lower(button);
+    std::string name = to_lower_ascii(button);
 
     if (name == "up") return GT_GAMEPAD_UP;
     if (name == "down") return GT_GAMEPAD_DOWN;
@@ -5642,7 +5589,7 @@ json DebugAdapter::ControllerSetType(int player, const std::string& type)
     if (player < 1 || player > GT_MAX_GAMEPADS)
         return {{"error", "Invalid player number (must be 1-2)"}};
 
-    std::string name = to_lower(type);
+    std::string name = to_lower_ascii(type);
     int setting = -2;
 
     if (name == "auto")
@@ -6199,7 +6146,7 @@ json DebugAdapter::MouseGetCursor(int player)
 
 bool DebugAdapter::GetKeyCode(const std::string& name, GT_Keys& key) const
 {
-    std::string upper = to_upper(name);
+    std::string upper = to_upper_ascii(name);
 
     if (upper == "ENTER")
         upper = "RETURN";
@@ -6497,7 +6444,7 @@ json DebugAdapter::SetKeyMapping(const json& arguments)
 
 json DebugAdapter::HostKey(const std::string& key, const std::string& action)
 {
-    int usage = KeyMap::FindHostKey(to_lower(key).c_str());
+    int usage = KeyMap::FindHostKey(to_lower_ascii(key).c_str());
 
     if (usage < 0)
         return {{"error", "Unknown host key '" + key + "'"}};

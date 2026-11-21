@@ -185,8 +185,8 @@ void single_instance_init(const char* app_name)
     }
 #endif
 
-    s_lock_path = base_path + "/" + k_lock_filename;
-    s_mailbox_path = base_path + "/" + k_mailbox_filename;
+    s_lock_path = path_join(base_path, k_lock_filename);
+    s_mailbox_path = path_join(base_path, k_mailbox_filename);
 
 #if defined(_WIN32)
     s_event_name = std::string(k_event_name_prefix) + app_name;

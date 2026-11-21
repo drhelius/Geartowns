@@ -399,7 +399,7 @@ static void build_rows(const GT_Profiler_Function* functions, u32 count)
     char filter_upper[64] = { };
 
     for (int i = 0; i < 63 && profiler_filter[i]; i++)
-        filter_upper[i] = (char)toupper(profiler_filter[i]);
+        filter_upper[i] = to_upper_ascii(profiler_filter[i]);
 
     profiler_rows.clear();
 
@@ -444,7 +444,7 @@ static bool row_matches_filter(const ProfilerRow& row, const GT_Profiler_Functio
     char name_upper[64] = { };
 
     for (int i = 0; i < 63 && row.name[i]; i++)
-        name_upper[i] = (char)toupper(row.name[i]);
+        name_upper[i] = to_upper_ascii(row.name[i]);
 
     if (strstr(name_upper, filter) != NULL)
         return true;

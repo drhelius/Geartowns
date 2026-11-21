@@ -3303,6 +3303,17 @@ static bool ParseBreakpointType(const json& arguments, u8& type, u8& space, std:
     return true;
 }
 
+static bool ParseHexText(const std::string& text, u32* value)
+{
+    return parse_hex_with_prefix(trim_chars(text, " \t"), value);
+}
+
+static bool ParseHexArgument(const json& arguments, const char* name, u32* value)
+{
+    return arguments.contains(name) && arguments[name].is_string() &&
+        ParseHexText(arguments[name].get<std::string>(), value);
+}
+
 // Linear space takes any i386 address form, physical and io a plain hex value
 static bool ParseBreakpointAddress(DebugAdapter& adapter, const json& value, u8 space, u32& address, std::string& error)
 {
@@ -3317,7 +3328,7 @@ static bool ParseBreakpointAddress(DebugAdapter& adapter, const json& value, u8 
         return true;
     }
 
-    if (!value.is_string() || !parse_hex_with_prefix(value.get<std::string>(), &address))
+    if (!value.is_string() || !ParseHexText(value.get<std::string>(), &address))
     {
         error = "Invalid hex address";
         return false;
@@ -3334,28 +3345,7 @@ static bool ParseBreakpointAddress(DebugAdapter& adapter, const json& value, u8 
 
 static bool ParseHexBytes(const std::string& text, std::vector<u8>& data)
 {
-    std::string compact;
-
-    for (size_t i = 0; i < text.size(); i++)
-    {
-        if (!isspace((unsigned char)text[i]))
-            compact += text[i];
-    }
-
-    if (compact.empty() || (compact.size() & 1) != 0)
-        return false;
-
-    for (size_t i = 0; i < compact.size(); i += 2)
-    {
-        u8 byte = 0;
-
-        if (!parse_hex_string(compact.c_str() + i, 2, &byte))
-            return false;
-
-        data.push_back(byte);
-    }
-
-    return true;
+    return parse_hex_bytes(text.c_str(), text.size(), &data, " \t\n\v\f\r") && !data.empty();
 }
 
 json McpServer::ExecuteCommand(const std::string& toolName, const json& arguments)
@@ -3559,10 +3549,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         u32 port = 0;
         u32 value = 0;
 
-        if (!parse_hex_with_prefix(arguments["port"].get<std::string>(), &port))
+        if (!ParseHexArgument(arguments, "port", &port))
             return {{"error", "Invalid port format"}};
 
-        if (!parse_hex_with_prefix(arguments["value"].get<std::string>(), &value))
+        if (!ParseHexArgument(arguments, "value", &value))
             return {{"error", "Invalid value format"}};
 
         return m_debugAdapter.WriteIOPort(port, value, arguments.value("size", 8));
@@ -3576,10 +3566,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         u32 start_address = 0;
         u32 end_address = 0;
 
-        if (!parse_hex_with_prefix(arguments["start_address"].get<std::string>(), &start_address))
+        if (!ParseHexArgument(arguments, "start_address", &start_address))
             return {{"error", "Invalid start_address format"}};
 
-        if (!parse_hex_with_prefix(arguments["end_address"].get<std::string>(), &end_address))
+        if (!ParseHexArgument(arguments, "end_address", &end_address))
             return {{"error", "Invalid end_address format"}};
 
         return m_debugAdapter.SelectMemoryRange(arguments["area"], start_address, end_address);
@@ -3592,7 +3582,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         u32 offset = 0;
 
-        if (!parse_hex_with_prefix(arguments["address"].get<std::string>(), &offset))
+        if (!ParseHexArgument(arguments, "address", &offset))
             return {{"error", "Invalid address format"}};
 
         return m_debugAdapter.AddMemoryBookmark(arguments["area"], offset, arguments.value("name", ""));
@@ -3601,7 +3591,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         u32 offset = 0;
 
-        if (!parse_hex_with_prefix(arguments["address"].get<std::string>(), &offset))
+        if (!ParseHexArgument(arguments, "address", &offset))
             return {{"error", "Invalid address format"}};
 
         return m_debugAdapter.RemoveMemoryBookmark(arguments["area"], offset);
@@ -3614,7 +3604,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         u32 offset = 0;
 
-        if (!parse_hex_with_prefix(arguments["address"].get<std::string>(), &offset))
+        if (!ParseHexArgument(arguments, "address", &offset))
             return {{"error", "Invalid address format"}};
 
         return m_debugAdapter.AddMemoryWatch(arguments["area"], offset, arguments.value("notes", ""),
@@ -3624,7 +3614,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         u32 offset = 0;
 
-        if (!parse_hex_with_prefix(arguments["address"].get<std::string>(), &offset))
+        if (!ParseHexArgument(arguments, "address", &offset))
             return {{"error", "Invalid address format"}};
 
         return m_debugAdapter.RemoveMemoryWatch(arguments["area"], offset);
@@ -3676,7 +3666,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         u32 value = 0;
 
-        if (!parse_hex_with_prefix(arguments["value"].get<std::string>(), &value))
+        if (!ParseHexArgument(arguments, "value", &value))
             return {{"error", "Invalid value format"}};
 
         return m_debugAdapter.WriteI386Register(arguments["name"], value);
@@ -4050,8 +4040,8 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
             std::string range = arguments.value("pc_range", "");
             size_t dash = range.find('-');
 
-            if (dash == std::string::npos || !parse_hex_with_prefix(range.substr(0, dash), &pc_first) ||
-                !parse_hex_with_prefix(range.substr(dash + 1), &pc_last) || pc_first > pc_last)
+            if (dash == std::string::npos || !ParseHexText(range.substr(0, dash), &pc_first) ||
+                !ParseHexText(range.substr(dash + 1), &pc_last) || pc_first > pc_last)
                 return {{"error", "Invalid pc_range, use start-end in hex"}};
         }
 

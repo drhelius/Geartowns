@@ -85,19 +85,14 @@ void trace_log_format_cpu_flags(const GT_Trace_Entry& entry, char* buffer, size_
 
 void trace_log_format_cpu_bytes(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size)
 {
-    static const char k_hex[] = "0123456789ABCDEF";
-    size_t pos = 0;
     u8 size = MIN(entry.cpu.size, (u8)GT_I386_MAX_INSTRUCTION_LENGTH);
+    size_t length = hex_encode(entry.cpu.opcodes, size, buffer, buffer_size, true, ' ');
 
-    for (u8 i = 0; i < size && pos + 3 < buffer_size; i++)
+    if ((length > 0) && (length + 1 < buffer_size))
     {
-        u8 value = entry.cpu.opcodes[i];
-        buffer[pos++] = k_hex[value >> 4];
-        buffer[pos++] = k_hex[value & 0x0F];
-        buffer[pos++] = ' ';
+        buffer[length] = ' ';
+        buffer[length + 1] = 0;
     }
-
-    buffer[pos] = 0;
 }
 
 void trace_log_format_cycle_prefix(const GT_Trace_Entry& entry, bool previous_cycle_valid,
@@ -1591,29 +1586,6 @@ static void format_buttons(u16 buttons, char* buffer, size_t size)
         snprintf(buffer, size, "-");
 }
 
-static bool parse_hex_token(const char* text, size_t length, u32* value)
-{
-    if (length == 0 || length > 8)
-        return false;
-
-    u32 result = 0;
-
-    for (size_t i = 0; i < length; i++)
-    {
-        char c = text[i];
-        int digit = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ?
-            c - 'A' + 10 : -1;
-
-        if (digit < 0)
-            return false;
-
-        result = (result << 4) | (u32)digit;
-    }
-
-    *value = result;
-    return true;
-}
-
 static bool parse_range_token(const char* text, size_t length, bool ports, GT_Trace_Range& range, bool& exclude)
 {
     exclude = length > 0 && text[0] == '!';
@@ -1641,7 +1613,7 @@ static bool parse_range_token(const char* text, size_t length, bool ports, GT_Tr
 
     if (dash == NULL)
     {
-        if (!parse_hex_token(text, length, &range.first))
+        if (!parse_hex_string(text, length, &range.first))
             return false;
 
         range.last = range.first;
@@ -1649,8 +1621,8 @@ static bool parse_range_token(const char* text, size_t length, bool ports, GT_Tr
     }
 
     size_t first_length = (size_t)(dash - text);
-    return parse_hex_token(text, first_length, &range.first) &&
-        parse_hex_token(dash + 1, length - first_length - 1, &range.last) && range.first <= range.last;
+    return parse_hex_string(text, first_length, &range.first) &&
+        parse_hex_string(dash + 1, length - first_length - 1, &range.last) && range.first <= range.last;
 }
 
 static bool parse_ranges(const char* text, bool ports, GT_Trace_Range* include, u8* include_count,
@@ -1722,7 +1694,7 @@ bool trace_log_parse_filters(const char* code, const char* ports, const char* in
         size_t vector_length = colon != NULL ? (size_t)(colon - interrupts) : length;
         u32 vector = 0;
 
-        if (!parse_hex_token(interrupts, vector_length, &vector) || vector > 0xFF ||
+        if (!parse_hex_string(interrupts, vector_length, &vector) || vector > 0xFF ||
             filters.function_count >= GT_TRACE_FILTER_FUNCTIONS)
             return false;
 
@@ -1739,7 +1711,7 @@ bool trace_log_parse_filters(const char* code, const char* ports, const char* in
             u32 value = 0;
             size_t value_length = length - vector_length - 1;
 
-            if (!parse_hex_token(colon + 1, value_length, &value) || value > 0xFFFF)
+            if (!parse_hex_string(colon + 1, value_length, &value) || value > 0xFFFF)
                 return false;
 
             GT_Trace_Function& function = filters.functions[filters.function_count++];

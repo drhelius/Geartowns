@@ -50,20 +50,6 @@ private:
     bool m_valid;
 };
 
-static bool equal_prefix(const std::string& left, const char* right)
-{
-    if (left.length() != strlen(right))
-        return false;
-
-    for (size_t i = 0; i < left.length(); i++)
-    {
-        if (toupper((unsigned char)left[i]) != toupper((unsigned char)right[i]))
-            return false;
-    }
-
-    return true;
-}
-
 MemEditor::MemEditor()
 {
     InitPointer(m_provider);
@@ -347,37 +333,10 @@ void MemEditor::PasteRange(u32 start, u32 end)
         return;
 
     std::vector<u8> data;
-    std::string compact;
-    bool hexadecimal = true;
+    size_t length = strlen(clipboard);
 
-    for (const char* p = clipboard; *p != 0; p++)
-    {
-        if (is_hex_digit(*p))
-            compact += *p;
-        else if (!isspace((unsigned char)*p) && *p != ',' && *p != '-')
-            hexadecimal = false;
-    }
-
-    if (hexadecimal && !compact.empty() && (compact.length() & 1) == 0)
-    {
-        for (size_t i = 0; i < compact.length(); i += 2)
-        {
-            u8 value = 0;
-
-            if (!parse_hex_string(compact.c_str() + i, 2, &value))
-            {
-                data.clear();
-                break;
-            }
-
-            data.push_back(value);
-        }
-    }
-    else
-    {
-        size_t length = strlen(clipboard);
+    if (!parse_hex_bytes(clipboard, length, &data, " \t\n\v\f\r,-") || data.empty())
         data.assign((u8*)clipboard, (u8*)clipboard + length);
-    }
 
     SDL_free(clipboard);
 
@@ -760,7 +719,7 @@ void MemEditor::DrawGrid()
                 (m_status[offset] == GT_DEBUG_MEMORY_VALID || m_status[offset] == GT_DEBUG_MEMORY_READ_ONLY))
             {
                 u8 value = m_data[offset];
-                text[text_length++] = value >= 32 && value < 127 ? (char)value : '.';
+                text[text_length++] = printable_char(value);
             }
             else
                 text[text_length++] = '.';
@@ -1257,43 +1216,43 @@ bool MemEditor::ParseAddressInput(GT_Debug_Memory_Address& address, char* reason
         std::string prefix = input.substr(0, colon);
         expression = input.substr(colon + 1);
 
-        if (equal_prefix(prefix, "CS"))
+        if (strings_equal_ignore_case(prefix, "CS"))
         {
             address.space = GT_DEBUG_MEMORY_LOGICAL;
             address.segment_register = I386_SEGMENT_CS;
         }
-        else if (equal_prefix(prefix, "SS"))
+        else if (strings_equal_ignore_case(prefix, "SS"))
         {
             address.space = GT_DEBUG_MEMORY_LOGICAL;
             address.segment_register = I386_SEGMENT_SS;
         }
-        else if (equal_prefix(prefix, "DS"))
+        else if (strings_equal_ignore_case(prefix, "DS"))
         {
             address.space = GT_DEBUG_MEMORY_LOGICAL;
             address.segment_register = I386_SEGMENT_DS;
         }
-        else if (equal_prefix(prefix, "ES"))
+        else if (strings_equal_ignore_case(prefix, "ES"))
         {
             address.space = GT_DEBUG_MEMORY_LOGICAL;
             address.segment_register = I386_SEGMENT_ES;
         }
-        else if (equal_prefix(prefix, "FS"))
+        else if (strings_equal_ignore_case(prefix, "FS"))
         {
             address.space = GT_DEBUG_MEMORY_LOGICAL;
             address.segment_register = I386_SEGMENT_FS;
         }
-        else if (equal_prefix(prefix, "GS"))
+        else if (strings_equal_ignore_case(prefix, "GS"))
         {
             address.space = GT_DEBUG_MEMORY_LOGICAL;
             address.segment_register = I386_SEGMENT_GS;
         }
-        else if (equal_prefix(prefix, "LINE") || equal_prefix(prefix, "L"))
+        else if (strings_equal_ignore_case(prefix, "LINE") || strings_equal_ignore_case(prefix, "L"))
             address.space = GT_DEBUG_MEMORY_LINEAR;
-        else if (equal_prefix(prefix, "PHYS") || equal_prefix(prefix, "P"))
+        else if (strings_equal_ignore_case(prefix, "PHYS") || strings_equal_ignore_case(prefix, "P"))
             address.space = GT_DEBUG_MEMORY_PHYSICAL;
-        else if (equal_prefix(prefix, "BUS") || equal_prefix(prefix, "B"))
+        else if (strings_equal_ignore_case(prefix, "BUS") || strings_equal_ignore_case(prefix, "B"))
             address.space = GT_DEBUG_MEMORY_BUS;
-        else if (equal_prefix(prefix, "IO"))
+        else if (strings_equal_ignore_case(prefix, "IO"))
             address.space = GT_DEBUG_MEMORY_IO;
         else
         {

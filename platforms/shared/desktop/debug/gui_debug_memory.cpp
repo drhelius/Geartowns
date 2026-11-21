@@ -290,7 +290,6 @@ static void format_value(u64 value, int size, int format, char* text, size_t tex
 static int watch_size_bytes(int size);
 static void navigate_to(const GT_Debug_Memory_Address& address);
 static bool parse_u32(const char* text, u32& value);
-static bool parse_u64(const char* text, u64& value);
 static bool parse_pattern(const char* text, int type, std::vector<u8>& pattern, std::vector<u8>& mask);
 
 void gui_debug_memory_init(void)
@@ -1097,7 +1096,7 @@ static void draw_inspector(MemEditor& editor)
         char ascii[text_size + 1];
 
         for (int i = 0; i < readable; i++)
-            ascii[i] = text_data[i] >= 32 && text_data[i] < 127 ? (char)text_data[i] : '.';
+            ascii[i] = printable_char(text_data[i]);
 
         ascii[readable] = 0;
 
@@ -1834,7 +1833,7 @@ static bool parse_search_value(const char* text, int type, u64& value)
 
     if (hex)
     {
-        if (!parse_u64(digits, value))
+        if (!parse_hex_with_prefix(std::string(digits), &value))
             return false;
     }
     else
@@ -2258,7 +2257,7 @@ static void format_value(u64 value, int size, int format, char* text, size_t tex
         for (int i = 0; i < length; i++)
         {
             u8 character = (u8)(value >> (i * 8));
-            text[i] = character >= 32 && character < 127 ? character : '.';
+            text[i] = printable_char(character);
         }
 
         text[length] = 0;
@@ -2292,28 +2291,6 @@ static bool parse_u32(const char* text, u32& value)
 
     std::string input(text);
     return parse_hex_with_prefix(input, &value);
-}
-
-static bool parse_u64(const char* text, u64& value)
-{
-    if (!IsValidPointer(text) || text[0] == 0)
-        return false;
-
-    const char* input = text;
-    size_t length = strlen(input);
-
-    if (length >= 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X'))
-    {
-        input += 2;
-        length -= 2;
-    }
-    else if (length > 0 && input[0] == '$')
-    {
-        input++;
-        length--;
-    }
-
-    return parse_hex_string<u64>(input, length, &value, 16);
 }
 
 static bool parse_pattern(const char* text, int type, std::vector<u8>& pattern, std::vector<u8>& mask)

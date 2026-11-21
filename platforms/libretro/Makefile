@@ -321,7 +321,7 @@ else
 	SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
 endif
 
-ifneq (,$(filter unix osx win,$(platform)))
+ifneq (,$(filter unix% osx% win% ios% tvos% classic_armv7_a7,$(platform)))
 	PLATFORM_FLAGS += -DGT_ENABLE_CDROM_CUEBIN_READAHEAD
 endif
 

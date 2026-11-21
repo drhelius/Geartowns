@@ -50,6 +50,7 @@
 #include "video/video.h"
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 #include "cdrom/cdrom_drive.h"
+#include "media/media_file.h"
 #endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -759,13 +760,11 @@ bool emu_cdrom_playlist_load(const char* path, bool* floppies)
 {
     emu_cdrom_playlist_clear();
 
-    std::ifstream file;
-    open_ifstream_utf8(file, path, std::ios::in | std::ios::binary);
+    std::string text;
 
-    if (!file.is_open())
+    if (!MediaFile::ReadFile(path, k_media_file_no_limit, &text, true))
         return false;
 
-    std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     std::vector<Media::PlaylistEntry> entries;
 
     if (!Media::ParsePlaylist(path, text.c_str(), text.size(), entries))
@@ -2175,13 +2174,11 @@ static void update_key_map(void)
     key_map->ClearLayer(GT_KEY_MAP_USER);
     key_map->SetChanged(false);
 
-    std::ifstream file;
-    open_ifstream_utf8(file, path.c_str(), std::ios::in | std::ios::binary);
+    std::string text;
 
-    if (!file.is_open())
+    if (!MediaFile::ReadFile(path.c_str(), k_media_file_no_limit, &text, true))
         return;
 
-    std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     std::string error;
 
     if (!key_map->SetLayer(GT_KEY_MAP_USER, text.c_str(), &error))
@@ -2308,16 +2305,8 @@ static void save_cmos(void)
 
     u8 data[GT_CMOS_FILE_SIZE];
     geartowns->GetMemory()->SaveCMOSFile(data);
-    std::string temporary(path);
-    temporary += ".tmp";
-    std::ofstream file;
-    open_ofstream_utf8(file, temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-    file.write(reinterpret_cast<const char*>(data), GT_CMOS_FILE_SIZE);
-    file.close();
-
-    if (!file.good() || !SDL_RenamePath(temporary.c_str(), path))
+    if (!MediaFile::WriteFileAtomic(path, data, GT_CMOS_FILE_SIZE))
     {
-        SDL_RemovePath(temporary.c_str());
         Error("Unable to save CMOS: %s", path);
         return;
     }

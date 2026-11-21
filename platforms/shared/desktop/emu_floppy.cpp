@@ -57,13 +57,13 @@ struct Floppy_Host
 };
 
 static const int k_idle_flush_frames = 180;
+static const u32 k_floppy_max_file_size = k_floppy_max_image_size * 4;
 static Floppy_Host hosts[config_floppy_drives];
 
 static bool valid_drive(int drive);
 static void clear_host(int drive);
 static int find_disk(int drive, const std::string& path, int image, int disk);
 static int find_file(int drive, const std::string& path);
-static bool read_file(const char* path, std::vector<u8>& data);
 static bool read_playlist(const char* path, std::vector<std::string>& entries);
 static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
 static bool build_entries(const char* path, std::vector<Floppy_Entry>& entries);
@@ -94,7 +94,7 @@ bool emu_floppy_is_image(const char* path)
     if (ends_with_no_case(path, ".bin"))
     {
         std::vector<u8> data;
-        return read_file(path, data) && FloppyImage::IsRaw(data.data(), (u32)data.size());
+        return MediaFile::ReadFile(path, k_floppy_max_file_size, &data) && FloppyImage::IsRaw(data.data(), (u32)data.size());
     }
 
     if (ends_with_no_case(path, ".m3u"))
@@ -117,7 +117,8 @@ bool emu_floppy_is_image(const char* path)
         return false;
 
     std::vector<u8> archive;
-    return read_file(path, archive) && FloppyImage::GetZipImageCount(archive.data(), archive.size()) > 0;
+    return MediaFile::ReadFile(path, k_floppy_max_file_size, &archive) &&
+        FloppyImage::GetZipImageCount(archive.data(), archive.size()) > 0;
 }
 
 bool emu_floppy_insert(int drive, const char* path, bool discard_changes)
@@ -244,7 +245,7 @@ bool emu_floppy_create_blank(int drive, const char* path, int type, bool formatt
     if (created)
     {
         std::vector<u8> written;
-        read_file(path, written);
+        MediaFile::ReadFile(path, k_floppy_max_file_size, &written);
         base_crc = CalculateCRC32(0, written.data(), written.size());
     }
 
@@ -551,7 +552,7 @@ static bool read_playlist(const char* path, std::vector<std::string>& entries)
     std::vector<u8> data;
     std::vector<Media::PlaylistEntry> playlist;
 
-    if (!read_file(path, data) ||
+    if (!MediaFile::ReadFile(path, k_floppy_max_file_size, &data) ||
         !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), playlist))
         return false;
 
@@ -564,28 +565,9 @@ static bool read_playlist(const char* path, std::vector<std::string>& entries)
     return true;
 }
 
-static bool read_file(const char* path, std::vector<u8>& data)
-{
-    std::ifstream file;
-    open_ifstream_utf8(file, path, std::ios::in | std::ios::binary | std::ios::ate);
-
-    if (!file.is_open())
-        return false;
-
-    std::streamoff size = file.tellg();
-
-    if (size <= 0 || size > (std::streamoff)k_floppy_max_image_size * 4)
-        return false;
-
-    data.resize((size_t)size);
-    file.seekg(0, std::ios::beg);
-    file.read(reinterpret_cast<char*>(data.data()), size);
-    return file.gcount() == size;
-}
-
 static bool load_source(const char* path, int image, std::vector<u8>& data, char* name, size_t name_size)
 {
-    if (!read_file(path, data))
+    if (!MediaFile::ReadFile(path, k_floppy_max_file_size, &data))
     {
         Error("Unable to read %s", path);
         return false;
@@ -646,7 +628,8 @@ static bool add_file_entries(const char* path, std::vector<Floppy_Entry>& entrie
     if (ends_with_no_case(path, ".zip"))
     {
         std::vector<u8> archive;
-        images = read_file(path, archive) ? FloppyImage::GetZipImageCount(archive.data(), archive.size()) : 0;
+        images = MediaFile::ReadFile(path, k_floppy_max_file_size, &archive) ?
+            FloppyImage::GetZipImageCount(archive.data(), archive.size()) : 0;
     }
 
     for (int image = 0; image < images; image++)
@@ -798,26 +781,8 @@ static bool write_disk(FloppyDisk* disk, const char* path, bool report_errors)
         size = raw_size;
     }
 
-    std::string temporary(path);
-    temporary += ".tmp";
-    std::ofstream file;
-    open_ofstream_utf8(file, temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-
-    if (!file.is_open())
+    if (!MediaFile::WriteFileAtomic(path, data, size))
     {
-        if (report_errors)
-            Error("Unable to write floppy image: %s", path);
-
-        return false;
-    }
-
-    file.write(reinterpret_cast<const char*>(data), size);
-    file.close();
-
-    if (!file.good() || !SDL_RenamePath(temporary.c_str(), path))
-    {
-        SDL_RemovePath(temporary.c_str());
-
         if (report_errors)
             Error("Unable to write floppy image: %s", path);
 
@@ -896,7 +861,8 @@ static bool mount(int drive, int index, bool discard_changes)
     u32 source_size = size;
     u32 data_crc = 0;
 
-    if (use_copy && read_file(working.c_str(), copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+    if (use_copy && MediaFile::ReadFile(working.c_str(), k_floppy_max_file_size, &copy) &&
+        FloppyImage::IsD77(copy.data(), (u32)copy.size()))
     {
         Log("Loading floppy working copy: %s", working.c_str());
         data_crc = FloppyImage::CalculateDataCRC(data, size);

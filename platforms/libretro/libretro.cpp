@@ -38,7 +38,6 @@
 #include "system/msm58321.h"
 #include "video/video.h"
 #include "libretro_core_options.h"
-#include "libretro_vfs_file.h"
 
 #define RETRO_DEVICE_TOWNS_GAMEPAD    RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
 #define RETRO_DEVICE_TOWNS_6_BUTTON   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 1)
@@ -70,8 +69,6 @@ static retro_input_poll_t input_poll_cb;
 static retro_input_state_t input_state_cb;
 static struct retro_log_callback logging;
 retro_log_printf_t log_cb;
-static const retro_vfs_interface* vfs_interface = NULL;
-static unsigned vfs_version = 0;
 static unsigned message_interface_version = 0;
 static bool libretro_supports_bitmasks = false;
 static bool libretro_supports_dupe = false;
@@ -289,12 +286,7 @@ static bool disk_add_image_index(void);
 static bool disk_set_initial_image(unsigned index, const char* path);
 static bool disk_get_image_path(unsigned index, char* path, size_t len);
 static bool disk_get_image_label(unsigned index, char* label, size_t len);
-static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_size);
 static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
-static bool write_content_file(const char* path, const u8* data, u32 size);
-static bool content_file_exists(const char* path);
-static bool rename_file(const char* from, const char* to, bool vfs);
-static void remove_file(const char* path, bool vfs);
 static bool floppy_load_image(unsigned index, int floppy);
 static bool floppy_flush(int floppy);
 static void floppy_update(void);
@@ -407,13 +399,9 @@ void retro_init(void)
     vfs_interface_info.required_interface_version = 1;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_interface_info) && vfs_interface_info.iface)
-        vfs_interface = vfs_interface_info.iface;
+        MediaFile::SetVfsInterface(vfs_interface_info.iface, vfs_interface_info.required_interface_version);
     else
-        vfs_interface = NULL;
-
-    vfs_version = IsValidPointer(vfs_interface) ? vfs_interface_info.required_interface_version : 0;
-
-    MediaFile::SetVfsInterface(vfs_interface, vfs_interface_info.required_interface_version);
+        MediaFile::SetVfsInterface(NULL);
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &logging))
         log_cb = logging.log;
@@ -468,8 +456,6 @@ void retro_deinit(void)
 
     SafeDeleteArray(frame_buffer);
     SafeDelete(core);
-    vfs_interface = NULL;
-    vfs_version = 0;
     MediaFile::SetVfsInterface(NULL);
 
     message_interface_version = 0;
@@ -1759,7 +1745,7 @@ static void key_map_load(void)
     key_mapping_was_enabled = true;
     core->GetKeyMapper()->SetTitle(get_file_name(retro_game_path, false).c_str());
 
-    if (!read_content_file(key_map_path.c_str(), data, CONTENT_MAX_SIZE))
+    if (!MediaFile::ReadFile(key_map_path.c_str(), CONTENT_MAX_SIZE, &data))
         return;
 
     std::string text(data.begin(), data.end());
@@ -1783,13 +1769,13 @@ static void key_map_save(void)
 
     if (key_map->IsLayerEmpty(GT_KEY_MAP_USER))
     {
-        remove_file(key_map_path.c_str(), IsValidPointer(vfs_interface) && IsValidPointer(vfs_interface->remove));
+        MediaFile::RemoveFile(key_map_path.c_str());
         return;
     }
 
     std::string text = "[keys]\n" + key_map->GetLayer(GT_KEY_MAP_USER);
 
-    if (!write_content_file(key_map_path.c_str(), (const u8*)text.data(), (u32)text.size()))
+    if (!MediaFile::WriteFileAtomic(key_map_path.c_str(), text.data(), text.size()))
     {
         log_cb(RETRO_LOG_ERROR, "Unable to save the key map %s\n", key_map_path.c_str());
         show_message("Unable to save the key map", 3, RETRO_LOG_ERROR);
@@ -2320,7 +2306,7 @@ static bool path_is_cd_content(const char* path)
 static bool path_is_raw_floppy(const char* path)
 {
     std::vector<u8> data;
-    return ends_with_no_case(path, ".bin") && read_content_file(path, data, k_floppy_max_image_size) &&
+    return ends_with_no_case(path, ".bin") && MediaFile::ReadFile(path, k_floppy_max_image_size, &data) &&
         FloppyImage::IsRaw(data.data(), (u32)data.size());
 }
 
@@ -2443,7 +2429,7 @@ static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& image
     std::vector<u8> data;
     std::vector<Media::PlaylistEntry> entries;
 
-    if (!read_content_file(path, data, PLAYLIST_MAX_SIZE) ||
+    if (!MediaFile::ReadFile(path, PLAYLIST_MAX_SIZE, &data) ||
         !Media::ParsePlaylist(path, reinterpret_cast<const char*>(data.data()), data.size(), entries))
         return false;
 
@@ -2491,7 +2477,7 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
     if (ends_with_no_case(path, ".zip"))
     {
         std::vector<u8> archive;
-        members = read_content_file(path, archive, CONTENT_MAX_SIZE) ?
+        members = MediaFile::ReadFile(path, CONTENT_MAX_SIZE, &archive) ?
             FloppyImage::GetZipImageCount(archive.data(), archive.size()) : 0;
     }
 
@@ -2548,7 +2534,7 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
     std::string path(retro_save_directory);
     append_path_component(path, name.c_str());
 
-    if (!content_file_exists(path.c_str()))
+    if (!MediaFile::Exists(path.c_str()))
     {
         u32 size = 0;
         u8* blank = FloppyImage::CreateBlank(FLOPPY_BLANK_2HD_1232, true, &size);
@@ -2556,7 +2542,7 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
         if (IsValidPointer(blank))
             FloppyImage::SetDiskName(blank, size, volume);
 
-        bool created = IsValidPointer(blank) && write_content_file(path.c_str(), blank, size);
+        bool created = IsValidPointer(blank) && MediaFile::WriteFileAtomic(path.c_str(), blank, size);
         SafeDeleteArray(blank);
 
         if (!created)
@@ -3046,29 +3032,9 @@ static bool disk_get_image_label(unsigned index, char* label, size_t len)
     return true;
 }
 
-static bool read_content_file(const char* path, std::vector<u8>& data, s64 max_size)
-{
-    MediaFile* file = MediaFile::OpenFile(path);
-
-    if (!IsValidPointer(file))
-        return false;
-
-    s64 size = file->GetSize();
-    bool ok = size > 0 && size <= max_size;
-
-    if (ok)
-    {
-        data.resize((size_t)size);
-        ok = file->ReadExact(data.data(), (u64)size);
-    }
-
-    SafeDelete(file);
-    return ok;
-}
-
 static bool load_source(const char* path, int image, std::vector<u8>& data, char* name, size_t name_size)
 {
-    if (!read_content_file(path, data, CONTENT_MAX_SIZE))
+    if (!MediaFile::ReadFile(path, CONTENT_MAX_SIZE, &data))
         return false;
 
     if (!ends_with_no_case(path, ".zip"))
@@ -3085,87 +3051,6 @@ static bool load_source(const char* path, int image, std::vector<u8>& data, char
     return true;
 }
 
-static bool write_content_file(const char* path, const u8* data, u32 size)
-{
-    std::string temporary = std::string(path) + ".tmp";
-    std::string backup = std::string(path) + ".bak";
-    bool vfs = IsValidPointer(vfs_interface) && IsValidPointer(vfs_interface->rename) &&
-        IsValidPointer(vfs_interface->remove);
-    bool written = false;
-
-    if (vfs)
-    {
-        LibretroVfsFile file(vfs_interface);
-
-        if (file.Open(temporary.c_str(), RETRO_VFS_FILE_ACCESS_WRITE))
-        {
-            written = file.WriteAll(data, size);
-            written = file.Close() && written;
-        }
-    }
-    else
-    {
-        FILE* file = fopen(temporary.c_str(), "wb");
-
-        if (IsValidPointer(file))
-        {
-            written = fwrite(data, 1, size, file) == size;
-            written = (fclose(file) == 0) && written;
-        }
-    }
-
-    if (!written)
-    {
-        remove_file(temporary.c_str(), vfs);
-        return false;
-    }
-
-    remove_file(backup.c_str(), vfs);
-    bool backed_up = rename_file(path, backup.c_str(), vfs);
-
-    if (!rename_file(temporary.c_str(), path, vfs))
-    {
-        if (backed_up)
-            rename_file(backup.c_str(), path, vfs);
-
-        remove_file(temporary.c_str(), vfs);
-        return false;
-    }
-
-    remove_file(backup.c_str(), vfs);
-    return true;
-}
-
-static bool content_file_exists(const char* path)
-{
-    MediaFile* file = MediaFile::OpenFile(path);
-
-    if (IsValidPointer(file))
-    {
-        SafeDelete(file);
-        return true;
-    }
-
-    if ((vfs_version >= 3) && IsValidPointer(vfs_interface->stat))
-        return (vfs_interface->stat(path, NULL) & RETRO_VFS_STAT_IS_VALID) != 0;
-
-    struct stat info;
-    return stat(path, &info) == 0;
-}
-
-static bool rename_file(const char* from, const char* to, bool vfs)
-{
-    return vfs ? vfs_interface->rename(from, to) == 0 : rename(from, to) == 0;
-}
-
-static void remove_file(const char* path, bool vfs)
-{
-    if (vfs)
-        vfs_interface->remove(path);
-    else
-        remove(path);
-}
-
 static bool floppy_load_image(unsigned index, int floppy)
 {
     const DiskSetImage& image = disk_images[index];
@@ -3180,7 +3065,7 @@ static bool floppy_load_image(unsigned index, int floppy)
 
     if (image.save_disk)
     {
-        if (!read_content_file(image.path.c_str(), file, CONTENT_MAX_SIZE))
+        if (!MediaFile::ReadFile(image.path.c_str(), CONTENT_MAX_SIZE, &file))
             return false;
 
         data = file.data();
@@ -3217,7 +3102,7 @@ static bool floppy_load_image(unsigned index, int floppy)
         source = data;
         source_size = size;
 
-        if (read_content_file(working.c_str(), copy, CONTENT_MAX_SIZE) &&
+        if (MediaFile::ReadFile(working.c_str(), CONTENT_MAX_SIZE, &copy) &&
             FloppyImage::IsD77(copy.data(), (u32)copy.size()))
         {
             log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working.c_str());
@@ -3246,7 +3131,7 @@ static bool floppy_flush(int floppy)
         return true;
 
     if (floppy_working_path[floppy].empty() ||
-        !write_content_file(floppy_working_path[floppy].c_str(), disk->GetImage(), disk->GetImageSize()))
+        !MediaFile::WriteFileAtomic(floppy_working_path[floppy].c_str(), disk->GetImage(), disk->GetImageSize()))
         return false;
 
     disk->ClearDirty();
@@ -3395,9 +3280,9 @@ static void memory_card_load(void)
     std::string path = retro_save_directory;
     append_path_component(path, (name + ".icm").c_str());
     std::vector<u8> data;
-    bool loaded = read_content_file(path.c_str(), data, k_memory_card_max_size);
+    bool loaded = MediaFile::ReadFile(path.c_str(), k_memory_card_max_size, &data);
 
-    if (loaded || content_file_exists(path.c_str()))
+    if (loaded || MediaFile::Exists(path.c_str()))
     {
         if (!loaded || !core->InsertMemoryCard(data.data(), (u32)data.size(), false))
         {
@@ -3411,7 +3296,7 @@ static void memory_card_load(void)
     {
         data.assign(memory_card_size, 0xFF);
 
-        if (!write_content_file(path.c_str(), data.data(), memory_card_size) ||
+        if (!MediaFile::WriteFileAtomic(path.c_str(), data.data(), memory_card_size) ||
             !core->InsertMemoryCard(data.data(), memory_card_size, false))
         {
             log_cb(RETRO_LOG_ERROR, "Unable to create the IC memory card %s\n", path.c_str());
@@ -3433,7 +3318,7 @@ static bool memory_card_flush(void)
     if (!card->IsInserted() || !card->IsDirty())
         return true;
 
-    if (memory_card_path.empty() || !write_content_file(memory_card_path.c_str(), card->GetImage(), card->GetSize()))
+    if (memory_card_path.empty() || !MediaFile::WriteFileAtomic(memory_card_path.c_str(), card->GetImage(), card->GetSize()))
         return false;
 
     card->ClearDirty();
@@ -3486,7 +3371,7 @@ static void cmos_load(void)
     cmos_path = retro_save_directory;
     append_path_component(cmos_path, (name + ".geartowns.cmos").c_str());
 
-    if (cmos_shared_active && read_content_file(cmos_path.c_str(), data, CONTENT_MAX_SIZE))
+    if (cmos_shared_active && MediaFile::ReadFile(cmos_path.c_str(), CONTENT_MAX_SIZE, &data))
     {
         if (memory->LoadCMOSFile(data.data(), data.size(), profile.floppy_drives))
         {
@@ -3509,7 +3394,7 @@ static void cmos_save(void)
         return;
 
     core->GetMemory()->SaveCMOSFile(cmos_file_data);
-    bool saved = write_content_file(cmos_path.c_str(), cmos_file_data, GT_CMOS_FILE_SIZE);
+    bool saved = MediaFile::WriteFileAtomic(cmos_path.c_str(), cmos_file_data, GT_CMOS_FILE_SIZE);
 
     if (saved)
     {

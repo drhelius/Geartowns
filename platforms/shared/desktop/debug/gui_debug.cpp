@@ -48,8 +48,6 @@ static const char* GTDEBUG_MAGIC = "GTDEBUG1";
 static const int GTDEBUG_MAGIC_SIZE = 8;
 
 static std::string get_auto_debug_settings_path(void);
-static bool read_settings_data(std::istream& stream, void* data, size_t size);
-static bool read_settings_count(std::istream& stream, int& count, size_t record_size);
 static void write_settings_string(std::ostream& stream, const std::string& text);
 static bool read_settings_string(std::istream& stream, std::string& text);
 static void save_symbols(std::ostream& stream);
@@ -294,8 +292,9 @@ bool gui_debug_load_settings(const char* file_path)
     std::vector<I386_Breakpoint> breakpoints;
     std::vector<I386_Interrupt_Breakpoint> interrupts;
     std::vector<DisassemblerBookmark> bookmarks;
-    bool valid = read_settings_data(file, magic, sizeof(magic)) && memcmp(magic, GTDEBUG_MAGIC, sizeof(magic)) == 0 &&
-        read_settings_count(file, breakpoint_count, sizeof(I386_Breakpoint));
+    bool valid = gui_debug_read_settings_data(file, magic, sizeof(magic)) &&
+        memcmp(magic, GTDEBUG_MAGIC, sizeof(magic)) == 0 &&
+        gui_debug_read_settings_count(file, breakpoint_count, sizeof(I386_Breakpoint));
 
     if (valid)
     {
@@ -303,13 +302,14 @@ bool gui_debug_load_settings(const char* file_path)
 
         for (int i = 0; valid && i < breakpoint_count; i++)
         {
-            valid = read_settings_data(file, &breakpoints[i], sizeof(breakpoints[i])) && breakpoints[i].type != 0 &&
+            valid = gui_debug_read_settings_data(file, &breakpoints[i], sizeof(breakpoints[i])) &&
+                breakpoints[i].type != 0 &&
                 (breakpoints[i].type & ~(I386_BREAKPOINT_EXECUTE | I386_BREAKPOINT_READ | I386_BREAKPOINT_WRITE)) == 0 &&
                 breakpoints[i].space < I386_BREAKPOINT_SPACE_COUNT;
         }
     }
 
-    valid = valid && read_settings_count(file, interrupt_count, sizeof(I386_Interrupt_Breakpoint));
+    valid = valid && gui_debug_read_settings_count(file, interrupt_count, sizeof(I386_Interrupt_Breakpoint));
 
     if (valid)
     {
@@ -317,15 +317,15 @@ bool gui_debug_load_settings(const char* file_path)
 
         for (int i = 0; valid && i < interrupt_count; i++)
         {
-            valid = read_settings_data(file, &interrupts[i], sizeof(interrupts[i])) &&
+            valid = gui_debug_read_settings_data(file, &interrupts[i], sizeof(interrupts[i])) &&
                 interrupts[i].source < I386_INTERRUPT_SOURCE_COUNT;
         }
     }
 
-    valid = valid && read_settings_data(file, &irq_breakpoints, sizeof(irq_breakpoints)) &&
-        read_settings_data(file, &irq_breakpoints_disabled, sizeof(irq_breakpoints_disabled));
+    valid = valid && gui_debug_read_settings_data(file, &irq_breakpoints, sizeof(irq_breakpoints)) &&
+        gui_debug_read_settings_data(file, &irq_breakpoints_disabled, sizeof(irq_breakpoints_disabled));
 
-    valid = valid && read_settings_count(file, bookmark_count, sizeof(DisassemblerBookmark));
+    valid = valid && gui_debug_read_settings_count(file, bookmark_count, sizeof(DisassemblerBookmark));
 
     if (valid)
     {
@@ -333,7 +333,7 @@ bool gui_debug_load_settings(const char* file_path)
 
         for (int i = 0; valid && i < bookmark_count; i++)
         {
-            valid = read_settings_data(file, &bookmarks[i], sizeof(bookmarks[i]));
+            valid = gui_debug_read_settings_data(file, &bookmarks[i], sizeof(bookmarks[i]));
             bookmarks[i].name[sizeof(bookmarks[i].name) - 1] = 0;
         }
     }
@@ -398,7 +398,8 @@ static bool read_settings_string(std::istream& stream, std::string& text)
     u8 length = 0;
     char buffer[256];
 
-    if (!read_settings_data(stream, &length, sizeof(length)) || !read_settings_data(stream, buffer, length))
+    if (!gui_debug_read_settings_data(stream, &length, sizeof(length)) ||
+        !gui_debug_read_settings_data(stream, buffer, length))
         return false;
 
     text.assign(buffer, length);
@@ -469,7 +470,7 @@ static bool load_symbols(std::istream& stream)
     std::vector<u32> offsets;
     std::vector<std::string> logical_names;
 
-    if (!read_settings_count(stream, count, sizeof(u32) + 1))
+    if (!gui_debug_read_settings_count(stream, count, sizeof(u32) + 1))
         return false;
 
     addresses.resize(count);
@@ -477,11 +478,12 @@ static bool load_symbols(std::istream& stream)
 
     for (int i = 0; i < count; i++)
     {
-        if (!read_settings_data(stream, &addresses[i], sizeof(addresses[i])) || !read_settings_string(stream, names[i]))
+        if (!gui_debug_read_settings_data(stream, &addresses[i], sizeof(addresses[i])) ||
+            !read_settings_string(stream, names[i]))
             return false;
     }
 
-    if (!read_settings_count(stream, logical_count, sizeof(u16) + sizeof(u32) + 1))
+    if (!gui_debug_read_settings_count(stream, logical_count, sizeof(u16) + sizeof(u32) + 1))
         return false;
 
     selectors.resize(logical_count);
@@ -490,8 +492,8 @@ static bool load_symbols(std::istream& stream)
 
     for (int i = 0; i < logical_count; i++)
     {
-        if (!read_settings_data(stream, &selectors[i], sizeof(selectors[i])) ||
-            !read_settings_data(stream, &offsets[i], sizeof(offsets[i])) ||
+        if (!gui_debug_read_settings_data(stream, &selectors[i], sizeof(selectors[i])) ||
+            !gui_debug_read_settings_data(stream, &offsets[i], sizeof(offsets[i])) ||
             !read_settings_string(stream, logical_names[i]))
             return false;
     }
@@ -506,23 +508,30 @@ static bool load_symbols(std::istream& stream)
     return true;
 }
 
-static bool read_settings_data(std::istream& stream, void* data, size_t size)
+bool gui_debug_read_settings_data(std::istream& stream, void* data, size_t size)
 {
     stream.read((char*)data, (std::streamsize)size);
     return !stream.fail() && stream.gcount() == (std::streamsize)size;
 }
 
-static bool read_settings_count(std::istream& stream, int& count, size_t record_size)
+bool gui_debug_read_settings_count(std::istream& stream, int& count, size_t record_size)
 {
-    if (!read_settings_data(stream, &count, sizeof(count)) || count < 0 || count > 0x10000)
+    if (!gui_debug_read_settings_data(stream, &count, sizeof(count)) || count < 0 || count > 0x10000 || record_size == 0)
         return false;
 
     std::streampos position = stream.tellg();
+
+    if (position == std::streampos(-1))
+        return false;
+
     stream.seekg(0, std::ios::end);
     std::streampos end = stream.tellg();
     stream.seekg(position);
 
-    return !stream.fail() && end >= position && (u64)count <= (u64)(end - position) / record_size;
+    if (stream.fail() || end < position)
+        return false;
+
+    return (u64)count <= (u64)(end - position) / record_size;
 }
 
 static std::string get_auto_debug_settings_path(void)

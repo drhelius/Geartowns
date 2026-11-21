@@ -835,6 +835,5 @@ void config_update_hotkey_string(config_Hotkey* hotkey)
     else
         result += "Unknown";
 
-    strncpy(hotkey->str, result.c_str(), sizeof(hotkey->str) - 1);
-    hotkey->str[sizeof(hotkey->str) - 1] = '\0';
+    strncpy_fit(hotkey->str, result.c_str(), sizeof(hotkey->str));
 }

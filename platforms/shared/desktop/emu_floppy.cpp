@@ -245,7 +245,7 @@ bool emu_floppy_create_blank(int drive, const char* path, int type, bool formatt
     {
         std::vector<u8> written;
         read_file(path, written);
-        base_crc = CalculateCRC32(0, written.data(), (int)written.size());
+        base_crc = CalculateCRC32(0, written.data(), written.size());
     }
 
     SafeDeleteArray(image);
@@ -871,7 +871,7 @@ static bool mount(int drive, int index, bool discard_changes)
         return false;
     }
 
-    u32 base_crc = CalculateCRC32(0, file.data() + offset, (int)size);
+    u32 base_crc = CalculateCRC32(0, file.data() + offset, size);
     int changes = config_emulator.floppy_changes;
     bool in_place = (changes == config_FloppyChanges_Image) && can_write_image(entry.path.c_str(), file);
     bool use_copy = (changes != config_FloppyChanges_Off) && !in_place;

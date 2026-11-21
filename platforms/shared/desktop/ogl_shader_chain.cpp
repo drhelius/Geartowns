@@ -138,8 +138,6 @@ static bool preset_frame_rendered = false;
 static OglShaderChainFrameInfo frame_info;
 static double chroma_frame_phase = 0.0;
 
-static void configure_texture_2d(bool filter_linear);
-static void resize_texture_2d(uint32_t texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear);
 static bool check_framebuffer_complete(const char* name);
 static bool resize_framebuffer_texture(uint32_t texture, uint32_t fbo, int width, int height, bool filter_linear, bool float_framebuffer, const char* name);
 static bool ensure_intermediate_texture(int index);
@@ -163,7 +161,6 @@ static void store_pass_feedbacks(void);
 static void store_final_feedback(void);
 static bool copy_texture(uint32_t source, uint32_t target, int width, int height);
 static void clear_texture(uint32_t texture, int width, int height);
-static void set_last_error(const char* message);
 static int scale_dimension(ShaderPresetScaleType scale_type, float scale, int absolute_size, int source_size, int previous_size, int viewport_size);
 static float safe_inverse(int value);
 
@@ -182,10 +179,10 @@ bool ogl_shader_chain_init(const char* name)
     pass_float_framebuffer = false;
 
     glGenTextures(1, &source_texture);
-    resize_texture_2d(source_texture, 1, 1, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL, false);
+    ogl_shader_program_resize_texture(source_texture, 1, 1, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL, false);
 
     glGenTextures(1, &pass_texture);
-    resize_texture_2d(pass_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
+    ogl_shader_program_resize_texture(pass_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
 
     glGenFramebuffers(1, &pass_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, pass_fbo);
@@ -193,20 +190,20 @@ bool ogl_shader_chain_init(const char* name)
     bool pass_complete = check_framebuffer_complete(framebuffer_name);
 
     glGenTextures(1, &feedback_texture);
-    resize_texture_2d(feedback_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
+    ogl_shader_program_resize_texture(feedback_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, NULL, false);
 
     const uint8_t black_pixel[4] = { 0, 0, 0, 0 };
     glGenTextures(1, &black_texture);
-    resize_texture_2d(black_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, black_pixel, false);
+    ogl_shader_program_resize_texture(black_texture, 1, 1, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, black_pixel, false);
 
     const float zero_clock = 0.0f;
     glGenTextures(1, &line_clock_texture);
-    resize_texture_2d(line_clock_texture, 1, 1, GL_R32F, GL_RED, GL_FLOAT, &zero_clock, false);
+    ogl_shader_program_resize_texture(line_clock_texture, 1, 1, GL_R32F, GL_RED, GL_FLOAT, &zero_clock, false);
     line_clock_height = 1;
 
     const uint8_t zero_index[4] = { 0, 0, 0, 0 };
     glGenTextures(1, &index_texture);
-    resize_texture_2d(index_texture, 1, 1, GL_R8, GL_RED, GL_UNSIGNED_BYTE, zero_index, false);
+    ogl_shader_program_resize_texture(index_texture, 1, 1, GL_R8, GL_RED, GL_UNSIGNED_BYTE, zero_index, false);
     index_width = 1;
     index_height = 1;
 
@@ -352,8 +349,8 @@ bool ogl_shader_chain_update_source_texture(const OglShaderChainSourceTexture* t
 
     if (source_width != width || source_height != height)
     {
-        resize_texture_2d(source_texture, width, height, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL,
-            texture->filter_linear);
+        ogl_shader_program_resize_texture(source_texture, width, height, GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
+            NULL, texture->filter_linear);
         source_width = width;
         source_height = height;
         source_filter_linear = texture->filter_linear;
@@ -363,7 +360,7 @@ bool ogl_shader_chain_update_source_texture(const OglShaderChainSourceTexture* t
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, texture->pixels);
     if (source_filter_linear != texture->filter_linear)
     {
-        configure_texture_2d(texture->filter_linear);
+        ogl_shader_program_configure_texture(texture->filter_linear);
         source_filter_linear = texture->filter_linear;
     }
 
@@ -388,14 +385,14 @@ bool ogl_shader_chain_resize_pass_texture(const OglShaderChainFramebufferTexture
         if (pass_filter_linear != texture->filter_linear)
         {
             glBindTexture(GL_TEXTURE_2D, pass_texture);
-            configure_texture_2d(texture->filter_linear);
+            ogl_shader_program_configure_texture(texture->filter_linear);
             pass_filter_linear = texture->filter_linear;
         }
 
         if (feedback_filter_linear != texture->filter_linear)
         {
             glBindTexture(GL_TEXTURE_2D, feedback_texture);
-            configure_texture_2d(texture->filter_linear);
+            ogl_shader_program_configure_texture(texture->filter_linear);
             feedback_filter_linear = texture->filter_linear;
         }
 
@@ -441,7 +438,7 @@ bool ogl_shader_chain_resize_intermediate_texture(int index, const OglShaderChai
         if (intermediate_filter_linears[index] != texture->filter_linear)
         {
             glBindTexture(GL_TEXTURE_2D, intermediate_textures[index]);
-            configure_texture_2d(texture->filter_linear);
+            ogl_shader_program_configure_texture(texture->filter_linear);
             intermediate_filter_linears[index] = texture->filter_linear;
         }
 
@@ -466,7 +463,7 @@ bool ogl_shader_chain_load_preset(const char* path)
 
     if (!shader_preset_load(path, &new_preset, error, sizeof(error)))
     {
-        set_last_error(error);
+        ogl_shader_program_set_error(last_error, sizeof(last_error), error);
         Error("Shader preset load failed: %s", last_error);
         return false;
     }
@@ -474,7 +471,7 @@ bool ogl_shader_chain_load_preset(const char* path)
     memset(new_programs, 0, sizeof(new_programs));
     if (!load_preset_programs(&new_preset, new_programs, error, sizeof(error)))
     {
-        set_last_error(error);
+        ogl_shader_program_set_error(last_error, sizeof(last_error), error);
         Error("Shader preset compile failed: %s", last_error);
         return false;
     }
@@ -725,7 +722,7 @@ bool ogl_shader_chain_update_line_clock_texture(const float* clocks, int count)
 
     if (count != line_clock_height)
     {
-        resize_texture_2d(line_clock_texture, 1, count, GL_R32F, GL_RED, GL_FLOAT, clocks, false);
+        ogl_shader_program_resize_texture(line_clock_texture, 1, count, GL_R32F, GL_RED, GL_FLOAT, clocks, false);
         line_clock_height = count;
     }
     else
@@ -755,7 +752,7 @@ bool ogl_shader_chain_update_index_texture(const uint8_t* indices, int width, in
 
     if (width != index_width || height != index_height)
     {
-        resize_texture_2d(index_texture, width, height, GL_R8, GL_RED, GL_UNSIGNED_BYTE, indices, false);
+        ogl_shader_program_resize_texture(index_texture, width, height, GL_R8, GL_RED, GL_UNSIGNED_BYTE, indices, false);
         index_width = width;
         index_height = height;
     }
@@ -1293,12 +1290,13 @@ static bool resize_pass_history_textures(int index, int width, int height, bool 
 
         if (resize)
         {
-            resize_texture_2d(pass_history_textures[index][i], width, height, internal_format, GL_RGBA, type, NULL, filter_linear);
+            ogl_shader_program_resize_texture(pass_history_textures[index][i], width, height, internal_format, GL_RGBA, type,
+                NULL, filter_linear);
         }
         else if (!same_filter)
         {
             glBindTexture(GL_TEXTURE_2D, pass_history_textures[index][i]);
-            configure_texture_2d(filter_linear);
+            ogl_shader_program_configure_texture(filter_linear);
         }
     }
 
@@ -1355,7 +1353,8 @@ static bool resize_pass_feedback_texture(int index, int width, int height, bool 
     {
         int internal_format = float_framebuffer ? GL_RGBA16F : GL_RGBA8;
         uint32_t type = float_framebuffer ? GL_FLOAT : GL_UNSIGNED_BYTE;
-        resize_texture_2d(pass_feedback_textures[index], width, height, internal_format, GL_RGBA, type, NULL, filter_linear);
+        ogl_shader_program_resize_texture(pass_feedback_textures[index], width, height, internal_format, GL_RGBA, type, NULL,
+            filter_linear);
         pass_feedback_widths[index] = width;
         pass_feedback_heights[index] = height;
         pass_feedback_filter_linears[index] = filter_linear;
@@ -1365,7 +1364,7 @@ static bool resize_pass_feedback_texture(int index, int width, int height, bool 
     else if (pass_feedback_filter_linears[index] != filter_linear)
     {
         glBindTexture(GL_TEXTURE_2D, pass_feedback_textures[index]);
-        configure_texture_2d(filter_linear);
+        ogl_shader_program_configure_texture(filter_linear);
         pass_feedback_filter_linears[index] = filter_linear;
     }
 
@@ -1473,29 +1472,16 @@ static void clear_texture(uint32_t texture, int width, int height)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-static void set_last_error(const char* message)
-{
-    strncpy_fit(last_error, message ? message : "Unknown shader preset error", sizeof(last_error));
-}
-
 static float safe_inverse(int value)
 {
     return value > 0 ? 1.0f / (float)value : 0.0f;
-}
-
-static void configure_texture_2d(bool filter_linear)
-{
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter_linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter_linear ? GL_LINEAR : GL_NEAREST);
 }
 
 static bool resize_framebuffer_texture(uint32_t texture, uint32_t fbo, int width, int height, bool filter_linear, bool float_framebuffer, const char* name)
 {
     int internal_format = float_framebuffer ? GL_RGBA16F : GL_RGBA8;
     uint32_t type = float_framebuffer ? GL_FLOAT : GL_UNSIGNED_BYTE;
-    resize_texture_2d(texture, width, height, internal_format, GL_RGBA, type, NULL, filter_linear);
+    ogl_shader_program_resize_texture(texture, width, height, internal_format, GL_RGBA, type, NULL, filter_linear);
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
@@ -1518,13 +1504,6 @@ static int scale_dimension(ShaderPresetScaleType scale_type, float scale, int ab
         default:
             return (int)((float)viewport_size * scale + 0.5f);
     }
-}
-
-static void resize_texture_2d(uint32_t texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear)
-{
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, pixels);
-    configure_texture_2d(filter_linear);
 }
 
 static bool check_framebuffer_complete(const char* name)

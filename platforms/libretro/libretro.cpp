@@ -2536,7 +2536,7 @@ static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& 
             image.label_suffix = members > 1 ? ": " + file_name : "";
             image.image = member;
             image.disk = i;
-            image.crc = CalculateCRC32(0, data.data() + offset, (int)size);
+            image.crc = CalculateCRC32(0, data.data() + offset, size);
             image.crc_known = true;
             image.cdrom = false;
             image.save_disk = false;
@@ -2589,7 +2589,7 @@ static bool disk_add_save_disk(const std::string& name, const char* label, const
     image.label = label;
     image.image = 0;
     image.disk = 0;
-    image.crc = CalculateCRC32(0, reinterpret_cast<const u8*>(name.c_str()), (int)name.size());
+    image.crc = CalculateCRC32(0, name.c_str(), name.size());
     image.crc_known = true;
     image.cdrom = false;
     image.save_disk = true;

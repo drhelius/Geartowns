@@ -108,22 +108,23 @@ static inline std::string base64_encode(const unsigned char* data, int size)
     return result;
 }
 
-static inline bool get_local_time(time_t timestamp, struct tm* time_info)
+static inline void format_local_time(time_t timestamp, const char* format, char* buffer, size_t size)
 {
-#if defined(_WIN32)
-    return localtime_s(time_info, &timestamp) == 0;
-#else
-    return localtime_r(&timestamp, time_info) != NULL;
-#endif
+    struct tm time_info;
+    if (get_host_time(timestamp, false, &time_info))
+        strftime(buffer, size, format, &time_info);
+    else if (size > 0)
+        buffer[0] = '\0';
 }
 
 static inline void get_date_time_string(time_t timestamp, char* buffer, size_t size)
 {
-    struct tm time_info;
-    if (get_local_time(timestamp, &time_info))
-        strftime(buffer, size, "%Y-%m-%d %H:%M:%S", &time_info);
-    else if (size > 0)
-        buffer[0] = '\0';
+    format_local_time(timestamp, "%Y-%m-%d %H:%M:%S", buffer, size);
+}
+
+static inline void get_file_date_time_string(time_t timestamp, char* buffer, size_t size)
+{
+    format_local_time(timestamp, "%Y-%m-%d %H%M%S", buffer, size);
 }
 
 static inline void get_current_date_time_string(char* buffer, size_t size)

@@ -34,6 +34,7 @@
 #define MINI_CASE_SENSITIVE
 #include "ini.h"
 #include "utils.h"
+#include "ogl_shader_program.h"
 
 #define SHADER_PRESET_IMPORT
 #include "shader_preset.h"
@@ -55,7 +56,6 @@ static bool parse_bool(const std::string& value, bool default_value);
 static int parse_int(const std::string& value, int default_value);
 static float parse_float(const std::string& value, float default_value);
 static ShaderPresetScaleType parse_scale_type(const std::string& value, ShaderPresetScaleType default_value);
-static void set_error(char* error, size_t error_size, const char* message);
 static void set_error_path(char* error, size_t error_size, const char* prefix, const char* path);
 
 static ShaderPresetInfo bundled_presets[SHADER_PRESET_MAX_DISCOVERED];
@@ -72,19 +72,19 @@ bool shader_preset_load(const char* path, ShaderPreset* preset, char* error, siz
 
     if (!path || path[0] == '\0')
     {
-        set_error(error, error_size, "No shader preset path provided");
+        ogl_shader_program_set_error(error, error_size, "No shader preset path provided");
         return false;
     }
 
     if (!shader_preset_is_preset_path(path))
     {
-        set_error(error, error_size, "Shader presets must use the .gshader extension");
+        ogl_shader_program_set_error(error, error_size, "Shader presets must use the .gshader extension");
         return false;
     }
 
     if (!preset)
     {
-        set_error(error, error_size, "Invalid shader preset destination");
+        ogl_shader_program_set_error(error, error_size, "Invalid shader preset destination");
         return false;
     }
 
@@ -338,7 +338,7 @@ static bool load_passes(const mINI::INIStructure& ini, ShaderPreset* preset, cha
         if (shader_path.empty())
         {
             std::string message = section + " does not define Path";
-            set_error(error, error_size, message.c_str());
+            ogl_shader_program_set_error(error, error_size, message.c_str());
             return false;
         }
 
@@ -711,14 +711,6 @@ static ShaderPresetScaleType parse_scale_type(const std::string& value, ShaderPr
         return ShaderPresetScale_Absolute;
 
     return default_value;
-}
-
-static void set_error(char* error, size_t error_size, const char* message)
-{
-    if (!error || error_size == 0)
-        return;
-
-    strncpy_fit(error, message ? message : "Unknown shader preset error", error_size);
 }
 
 static void set_error_path(char* error, size_t error_size, const char* prefix, const char* path)

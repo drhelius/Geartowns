@@ -321,13 +321,15 @@ static void write_u8(u8 value)
 
 static void write_u16(u16 value)
 {
-    u8 data[2] = { (u8)(value & 0xFF), (u8)(value >> 8) };
+    u8 data[2];
+    write_u16_le(data, value);
     write_data(data, 2);
 }
 
 static void write_u32(u32 value)
 {
-    u8 data[4] = { (u8)(value & 0xFF), (u8)((value >> 8) & 0xFF), (u8)((value >> 16) & 0xFF), (u8)(value >> 24) };
+    u8 data[4];
+    write_u32_le(data, value);
     write_data(data, 4);
 }
 
@@ -350,7 +352,8 @@ static void write_zeros(u32 size)
 
 static void patch_u32(u64 at, u32 value)
 {
-    u8 data[4] = { (u8)(value & 0xFF), (u8)((value >> 8) & 0xFF), (u8)((value >> 16) & 0xFF), (u8)(value >> 24) };
+    u8 data[4];
+    write_u32_le(data, value);
     file.seekp((std::streamoff)at);
     file.write((const char*)data, 4);
     file.seekp((std::streamoff)position);

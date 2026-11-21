@@ -416,17 +416,11 @@ bool single_instance_get_pending_load(char* rom_path, int rom_path_size, char* s
 
     s_pending_load = false;
 
-    if (rom_path && rom_path_size > 0)
-    {
-        strncpy(rom_path, s_pending_rom_path, rom_path_size - 1);
-        rom_path[rom_path_size - 1] = '\0';
-    }
+    if (rom_path)
+        strncpy_fit(rom_path, s_pending_rom_path, rom_path_size);
 
-    if (symbol_path && symbol_path_size > 0)
-    {
-        strncpy(symbol_path, s_pending_symbol_path, symbol_path_size - 1);
-        symbol_path[symbol_path_size - 1] = '\0';
-    }
+    if (symbol_path)
+        strncpy_fit(symbol_path, s_pending_symbol_path, symbol_path_size);
 
     s_pending_rom_path[0] = '\0';
     s_pending_symbol_path[0] = '\0';

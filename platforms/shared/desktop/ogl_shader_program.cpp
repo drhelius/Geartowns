@@ -31,7 +31,6 @@
 #include "ogl_shader_program.h"
 
 static bool source_has_version(const char* source);
-static void set_error(char* error, size_t error_size, const char* message);
 
 uint32_t ogl_shader_program_create_fragment(const char* program_name, const char* fragment_source, char* error, size_t error_size)
 {
@@ -40,7 +39,7 @@ uint32_t ogl_shader_program_create_fragment(const char* program_name, const char
 
     if (!fragment_source || fragment_source[0] == '\0')
     {
-        set_error(error, error_size, "Shader source is empty");
+        ogl_shader_program_set_error(error, error_size, "Shader source is empty");
         return 0;
     }
 
@@ -111,7 +110,7 @@ uint32_t ogl_shader_program_compile_shader(uint32_t shader_type, const char* sha
         GLchar info[4096];
         glGetShaderInfoLog(shader, sizeof(info), NULL, info);
         Error("%s shader compile error: %s", shader_name, info);
-        set_error(error, error_size, info);
+        ogl_shader_program_set_error(error, error_size, info);
         glDeleteShader(shader);
         return 0;
     }
@@ -135,7 +134,7 @@ uint32_t ogl_shader_program_link(uint32_t vertex_shader, uint32_t fragment_shade
         GLchar info[4096];
         glGetProgramInfoLog(program, sizeof(info), NULL, info);
         Error("%s program link error: %s", program_name, info);
-        set_error(error, error_size, info);
+        ogl_shader_program_set_error(error, error_size, info);
         glDeleteProgram(program);
         return 0;
     }
@@ -143,7 +142,7 @@ uint32_t ogl_shader_program_link(uint32_t vertex_shader, uint32_t fragment_shade
     return program;
 }
 
-static void set_error(char* error, size_t error_size, const char* message)
+void ogl_shader_program_set_error(char* error, size_t error_size, const char* message)
 {
     if (!error || error_size == 0)
         return;
@@ -152,4 +151,19 @@ static void set_error(char* error, size_t error_size, const char* message)
         message = "Unknown shader error";
 
     strncpy_fit(error, message, error_size);
+}
+
+void ogl_shader_program_configure_texture(bool filter_linear)
+{
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter_linear ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter_linear ? GL_LINEAR : GL_NEAREST);
+}
+
+void ogl_shader_program_resize_texture(uint32_t texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear)
+{
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, pixels);
+    ogl_shader_program_configure_texture(filter_linear);
 }

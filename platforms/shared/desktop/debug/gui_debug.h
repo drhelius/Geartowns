@@ -20,6 +20,7 @@
 #ifndef GUI_DEBUG_H
 #define GUI_DEBUG_H
 
+#include <iostream>
 #include "geartowns.h"
 
 #ifdef GUI_DEBUG_IMPORT
@@ -39,6 +40,8 @@ EXTERN bool gui_debug_save_settings(const char* file_path);
 EXTERN bool gui_debug_load_settings(const char* file_path);
 EXTERN void gui_debug_auto_save_settings(void);
 EXTERN void gui_debug_auto_load_settings(void);
+EXTERN bool gui_debug_read_settings_data(std::istream& stream, void* data, size_t size);
+EXTERN bool gui_debug_read_settings_count(std::istream& stream, int& count, size_t record_size);
 
 #undef GUI_DEBUG_IMPORT
 #undef EXTERN

@@ -396,12 +396,8 @@ void gui_action_toggle_key_mapping(void)
 
 static std::string get_auto_file_path(int dir_option, const std::string& custom_path, const char* extension)
 {
-    time_t now = time(NULL);
-    struct tm time_info;
-    char date_time[32] = { };
-
-    if (get_local_time(now, &time_info))
-        strftime(date_time, sizeof(date_time), "%Y-%m-%d %H%M%S", &time_info);
+    char date_time[32];
+    get_file_date_time_string(time(NULL), date_time, sizeof(date_time));
 
     const char* base_path = config_root_path;
     const char* media_name = "Geartowns";

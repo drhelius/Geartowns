@@ -37,13 +37,13 @@
 #include "../hotkeys.h"
 #include "../shift_jis.h"
 #include "../utils.h"
+#include "gui_debug.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 
 static const int MEMORY_VIEW_COUNT = 8;
 static const float MEMORY_SOURCES_WIDTH = 136.0f;
 static const float MEMORY_INSPECTOR_WIDTH = 173.0f;
-static const int MEMORY_SETTINGS_MAX_RECORDS = 0x10000;
 static const u32 MEMORY_SEARCH_MAX_SIZE = 0x04000000;
 static const u32 MEMORY_IMPORT_CHUNK_SIZE = 0x100000;
 static const int MEMORY_SEARCH_MAX_VISIBLE_RESULTS = 10000;
@@ -292,8 +292,6 @@ static void navigate_to(const GT_Debug_Memory_Address& address);
 static bool parse_u32(const char* text, u32& value);
 static bool parse_u64(const char* text, u64& value);
 static bool parse_pattern(const char* text, int type, std::vector<u8>& pattern, std::vector<u8>& mask);
-static bool read_data(std::istream& stream, void* data, size_t size);
-static bool read_count(std::istream& stream, int& count, size_t record_size);
 
 void gui_debug_memory_init(void)
 {
@@ -2771,7 +2769,7 @@ bool gui_debug_memory_load_settings(std::istream& stream)
 {
     int view_count = 0;
 
-    if (!read_count(stream, view_count, sizeof(MemoryViewSettings)) || view_count > MEMORY_VIEW_COUNT)
+    if (!gui_debug_read_settings_count(stream, view_count, sizeof(MemoryViewSettings)) || view_count > MEMORY_VIEW_COUNT)
         return false;
 
     MemoryViewSettings view_settings[MEMORY_VIEW_COUNT];
@@ -2779,21 +2777,21 @@ bool gui_debug_memory_load_settings(std::istream& stream)
 
     for (int i = 0; i < view_count; i++)
     {
-        if (!read_data(stream, &view_settings[i], sizeof(view_settings[i])) ||
+        if (!gui_debug_read_settings_data(stream, &view_settings[i], sizeof(view_settings[i])) ||
             view_settings[i].source.space < 0 || view_settings[i].source.space >= GT_DEBUG_MEMORY_SPACE_COUNT)
             return false;
     }
 
     int bookmark_count = 0;
 
-    if (!read_count(stream, bookmark_count, sizeof(MemoryBookmark)))
+    if (!gui_debug_read_settings_count(stream, bookmark_count, sizeof(MemoryBookmark)))
         return false;
 
     std::vector<MemoryBookmark> bookmarks(bookmark_count);
 
     for (int i = 0; i < bookmark_count; i++)
     {
-        if (!read_data(stream, &bookmarks[i], sizeof(bookmarks[i])))
+        if (!gui_debug_read_settings_data(stream, &bookmarks[i], sizeof(bookmarks[i])))
             return false;
 
         bookmarks[i].name[sizeof(bookmarks[i].name) - 1] = 0;
@@ -2804,14 +2802,14 @@ bool gui_debug_memory_load_settings(std::istream& stream)
 
     int watch_count = 0;
 
-    if (!read_count(stream, watch_count, sizeof(MemoryWatch)))
+    if (!gui_debug_read_settings_count(stream, watch_count, sizeof(MemoryWatch)))
         return false;
 
     std::vector<MemoryWatch> watches(watch_count);
 
     for (int i = 0; i < watch_count; i++)
     {
-        if (!read_data(stream, &watches[i], sizeof(watches[i])))
+        if (!gui_debug_read_settings_data(stream, &watches[i], sizeof(watches[i])))
             return false;
 
         watches[i].name[sizeof(watches[i].name) - 1] = 0;
@@ -2846,33 +2844,6 @@ bool gui_debug_memory_load_settings(std::istream& stream)
     memory_bookmarks.swap(bookmarks);
     memory_watches.swap(watches);
     return true;
-}
-
-static bool read_data(std::istream& stream, void* data, size_t size)
-{
-    stream.read((char*)data, (std::streamsize)size);
-    return !stream.fail() && stream.gcount() == (std::streamsize)size;
-}
-
-static bool read_count(std::istream& stream, int& count, size_t record_size)
-{
-    if (!read_data(stream, &count, sizeof(count)) || count < 0 || count > MEMORY_SETTINGS_MAX_RECORDS ||
-        record_size == 0)
-        return false;
-
-    std::streampos position = stream.tellg();
-
-    if (position == std::streampos(-1))
-        return false;
-
-    stream.seekg(0, std::ios::end);
-    std::streampos end = stream.tellg();
-    stream.seekg(position);
-
-    if (stream.fail() || end < position)
-        return false;
-
-    return (u64)count <= (u64)(end - position) / record_size;
 }
 
 MemorySearch::MemorySearch()

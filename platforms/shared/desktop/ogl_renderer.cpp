@@ -82,9 +82,7 @@ static void apply_shader_parameter_config(void);
 static bool get_active_shader_preset_file(char* preset_file, size_t preset_file_size);
 static float get_original_aspect(void);
 static float get_framebuffer_scale(void);
-static void configure_texture_2d(bool filter_linear);
 static void create_texture_2d(uint32_t* texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear);
-static void resize_texture_2d(uint32_t texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear);
 
 bool ogl_renderer_init(void)
 {
@@ -716,25 +714,10 @@ static float get_framebuffer_scale(void)
     return scale < 1.0f ? 1.0f : scale;
 }
 
-static void configure_texture_2d(bool filter_linear)
-{
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter_linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter_linear ? GL_LINEAR : GL_NEAREST);
-}
-
 static void create_texture_2d(uint32_t* texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear)
 {
     glGenTextures(1, texture);
-    resize_texture_2d(*texture, width, height, internal_format, format, type, pixels, filter_linear);
-}
-
-static void resize_texture_2d(uint32_t texture, int width, int height, int internal_format, uint32_t format, uint32_t type, const void* pixels, bool filter_linear)
-{
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, pixels);
-    configure_texture_2d(filter_linear);
+    ogl_shader_program_resize_texture(*texture, width, height, internal_format, format, type, pixels, filter_linear);
 }
 
 static bool init_shaders(void)

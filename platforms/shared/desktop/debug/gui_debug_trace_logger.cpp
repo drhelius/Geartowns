@@ -1016,12 +1016,8 @@ static bool trace_logger_start_disk(void)
             break;
     }
 
-    time_t now = time(0);
-    tm local_time;
-    char date_time[32] = {};
-
-    if (get_local_time(now, &local_time))
-        strftime(date_time, sizeof(date_time), "%Y-%m-%d %H%M%S", &local_time);
+    char date_time[32];
+    get_file_date_time_string(time(NULL), date_time, sizeof(date_time));
 
     const char* rom_name = "Geartowns";
 

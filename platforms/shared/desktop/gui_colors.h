@@ -50,9 +50,9 @@ struct GuiTextColor
     }
 };
 
-static inline ImVec4 gui_color(unsigned int rgb)
+static inline ImVec4 gui_color(unsigned int rgb, float alpha = 1.0f)
 {
-    return ImVec4(((rgb >> 16) & 0xFF) / 255.0f, ((rgb >> 8) & 0xFF) / 255.0f, (rgb & 0xFF) / 255.0f, 1.0f);
+    return ImVec4(((rgb >> 16) & 0xFF) / 255.0f, ((rgb >> 8) & 0xFF) / 255.0f, (rgb & 0xFF) / 255.0f, alpha);
 }
 
 static const GuiColor cyan = { gui_color(0x1AE6E6), gui_color(0x007C91) };

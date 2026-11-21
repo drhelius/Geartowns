@@ -1018,8 +1018,8 @@ void CdRom::CommandCDDAPause(u64 clocks)
     u8 state = GetStatusSecondByte();
     bool playing = m_cdrom_audio->IsPlaying();
 
-    // Windows 95's CD driver reads to the end of the disc and stops with a pause, then waits for 12h
-    bool reading = (m_state.drive_state == k_cdrom_state_data) && (m_state.idle_clocks == 0);
+    // A read or the turn held after it ends with 12h: Windows 95's CD driver and Viewpoint's IO.SYS wait for it
+    bool reading = (m_state.drive_state == k_cdrom_state_data);
 
     if (reading)
         m_state.drive_state = k_cdrom_state_ready;

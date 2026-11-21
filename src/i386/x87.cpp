@@ -129,39 +129,6 @@ static X87::X87_Register FromFloat(const floatx80& value)
     return result;
 }
 
-static u16 LoadWord(const u8* data)
-{
-    return (u16)(data[0] | (data[1] << 8));
-}
-
-static u32 LoadDword(const u8* data)
-{
-    return (u32)data[0] | ((u32)data[1] << 8) | ((u32)data[2] << 16) | ((u32)data[3] << 24);
-}
-
-static u64 LoadQword(const u8* data)
-{
-    return (u64)LoadDword(data) | ((u64)LoadDword(data + 4) << 32);
-}
-
-static void StoreWord(u8* data, u16 value)
-{
-    data[0] = (u8)value;
-    data[1] = (u8)(value >> 8);
-}
-
-static void StoreDword(u8* data, u32 value)
-{
-    StoreWord(data, (u16)value);
-    StoreWord(data + 2, (u16)(value >> 16));
-}
-
-static void StoreQword(u8* data, u64 value)
-{
-    StoreDword(data, (u32)value);
-    StoreDword(data + 4, (u32)(value >> 32));
-}
-
 static softfloat_status_t MakeStatus(u16 control, bool extended)
 {
     softfloat_status_t status;
@@ -200,9 +167,9 @@ static floatx80 Operate(int operation, floatx80 a, floatx80 b, softfloat_status_
 static floatx80 LoadRealOperand(u32 size, const u8* operand, softfloat_status_t& status)
 {
     if (size == 4)
-        return f32_to_extF80(LoadDword(operand), &status);
+        return f32_to_extF80(read_u32_le(operand), &status);
 
-    return f64_to_extF80(LoadQword(operand), &status);
+    return f64_to_extF80(read_u64_le(operand), &status);
 }
 
 // The x87 rules for a NaN against a single or double operand, applied before the operand is converted
@@ -217,8 +184,8 @@ static bool HandleNaN(floatx80 a, u32 size, const u8* operand, floatx80& result,
 
     bool a_nan = extF80_isNaN(a);
     bool a_signaling = extF80_isSignalingNaN(a);
-    bool b_nan = size == 4 ? f32_isNaN(LoadDword(operand)) : f64_isNaN(LoadQword(operand));
-    bool b_signaling = size == 4 ? f32_isSignalingNaN(LoadDword(operand)) : f64_isSignalingNaN(LoadQword(operand));
+    bool b_nan = size == 4 ? f32_isNaN(read_u32_le(operand)) : f64_isNaN(read_u64_le(operand));
+    bool b_signaling = size == 4 ? f32_isSignalingNaN(read_u32_le(operand)) : f64_isSignalingNaN(read_u64_le(operand));
 
     if (!a_nan && !b_nan)
         return false;
@@ -467,9 +434,9 @@ u32 X87::GetClocks(const X87_Operation& operation, const u8* operand) const
         u32 clocks = k_x87_memory_clocks[row][reg];
 
         // Loading a single or double zero takes 5 more
-        if (reg == 0 && opcode == 0xD9 && (LoadDword(operand) & 0x7FFFFFFF) == 0)
+        if (reg == 0 && opcode == 0xD9 && (read_u32_le(operand) & 0x7FFFFFFF) == 0)
             clocks += 5;
-        else if (reg == 0 && opcode == 0xDD && (LoadQword(operand) & 0x7FFFFFFFFFFFFFFFULL) == 0)
+        else if (reg == 0 && opcode == 0xDD && (read_u64_le(operand) & 0x7FFFFFFFFFFFFFFFULL) == 0)
             clocks += 5;
 
         return clocks;
@@ -812,7 +779,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
         case 0xDA:
         case 0xDE:
         {
-            s32 value = operation.opcode == 0xDA ? (s32)LoadDword(operand) : (s16)LoadWord(operand);
+            s32 value = operation.opcode == 0xDA ? (s32)read_u32_le(operand) : (s16)read_u16_le(operand);
 
             if (reg == 2 || reg == 3)
                 CompareInteger(value, reg == 3);
@@ -833,7 +800,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
                     LoadEnvironment(operand, operation.protected_mode, operation.operand32);
                     return false;
                 case 5:
-                    m_state.control = (u16)((LoadWord(operand) & ~k_x87_control_reserved) | k_x87_control_fixed);
+                    m_state.control = (u16)((read_u16_le(operand) & ~k_x87_control_reserved) | k_x87_control_fixed);
                     UpdateErrorSummary();
                     return false;
                 case 6:
@@ -842,7 +809,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
                     m_state.status &= ~(k_x87_status_busy | k_x87_status_es);
                     return true;
                 case 7:
-                    StoreWord(operand, m_state.control);
+                    write_u16_le(operand, m_state.control);
                     return true;
                 default:
                     return false;
@@ -851,7 +818,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
             switch (reg)
             {
                 case 0:
-                    LoadInteger((s32)LoadDword(operand));
+                    LoadInteger((s32)read_u32_le(operand));
                     return false;
                 case 2:
                 case 3:
@@ -880,7 +847,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
                     Save(operand, operation.protected_mode, operation.operand32);
                     return true;
                 case 7:
-                    StoreWord(operand, m_state.status);
+                    write_u16_le(operand, m_state.status);
                     return true;
                 default:
                     return false;
@@ -889,7 +856,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
             switch (reg)
             {
                 case 0:
-                    LoadInteger((s16)LoadWord(operand));
+                    LoadInteger((s16)read_u16_le(operand));
                     return false;
                 case 2:
                 case 3:
@@ -898,7 +865,7 @@ bool X87::ExecuteMemory(const X87_Operation& operation, u8* operand)
                     LoadBCD(operand);
                     return false;
                 case 5:
-                    LoadInteger((s64)LoadQword(operand));
+                    LoadInteger((s64)read_u64_le(operand));
                     return false;
                 case 6:
                     return StoreBCD(operand);
@@ -1147,7 +1114,7 @@ void X87::CompareReal(u32 size, const u8* operand, bool pop)
     {
         softfloat_status_t status = MakeStatus(m_state.control, false);
         floatx80 a = ToFloat(Read(0));
-        bool b_nan = size == 4 ? f32_isNaN(LoadDword(operand)) : f64_isNaN(LoadQword(operand));
+        bool b_nan = size == 4 ? f32_isNaN(read_u32_le(operand)) : f64_isNaN(read_u64_le(operand));
         relation = softfloat_relation_unordered;
 
         if (extF80_isNaN(a) || extF80_isUnsupported(a) || b_nan)
@@ -1308,8 +1275,8 @@ void X87::LoadExtended(const u8* operand)
     }
 
     X87_Register value;
-    value.significand = LoadQword(operand);
-    value.sign_exponent = LoadWord(operand + 8);
+    value.significand = read_u64_le(operand);
+    value.sign_exponent = read_u16_le(operand + 8);
     Push();
     Write(value, 0);
 }
@@ -1338,8 +1305,8 @@ void X87::LoadBCD(const u8* operand)
         return;
     }
 
-    u64 digits = LoadQword(operand);
-    u16 high = LoadWord(operand + 8);
+    u64 digits = read_u64_le(operand);
+    u16 high = read_u16_le(operand + 8);
     s64 scale = 1;
     s64 value = 0;
 
@@ -1429,9 +1396,9 @@ bool X87::StoreReal(u32 size, u8* operand, bool pop)
     }
 
     if (size == 4)
-        StoreDword(operand, (u32)value);
+        write_u32_le(operand, (u32)value);
     else
-        StoreQword(operand, value);
+        write_u64_le(operand, value);
 
     if (pop)
         Pop();
@@ -1455,8 +1422,8 @@ bool X87::StoreExtended(u8* operand)
     else
         value = Read(0);
 
-    StoreQword(operand, value.significand);
-    StoreWord(operand + 8, value.sign_exponent);
+    write_u64_le(operand, value.significand);
+    write_u16_le(operand + 8, value.sign_exponent);
     Pop();
     return true;
 }
@@ -1498,11 +1465,11 @@ bool X87::StoreInteger(u32 size, u8* operand, bool pop)
     }
 
     if (size == 2)
-        StoreWord(operand, (u16)value);
+        write_u16_le(operand, (u16)value);
     else if (size == 4)
-        StoreDword(operand, (u32)value);
+        write_u32_le(operand, (u32)value);
     else
-        StoreQword(operand, (u64)value);
+        write_u64_le(operand, (u64)value);
 
     if (pop)
         Pop();
@@ -1558,8 +1525,8 @@ bool X87::StoreBCD(u8* operand)
             return false;
     }
 
-    StoreQword(operand, low);
-    StoreWord(operand + 8, high);
+    write_u64_le(operand, low);
+    write_u16_le(operand + 8, high);
     Pop();
     return true;
 }
@@ -1802,45 +1769,45 @@ u32 X87::StoreEnvironment(u8* buffer, bool protected_mode, bool operand32)
 
     if (operand32)
     {
-        StoreDword(buffer + 0x00, 0xFFFF0000U | m_state.control);
-        StoreDword(buffer + 0x04, 0xFFFF0000U | m_state.status);
-        StoreDword(buffer + 0x08, 0xFFFF0000U | tag);
+        write_u32_le(buffer + 0x00, 0xFFFF0000U | m_state.control);
+        write_u32_le(buffer + 0x04, 0xFFFF0000U | m_state.status);
+        write_u32_le(buffer + 0x08, 0xFFFF0000U | tag);
 
         if (protected_mode)
         {
-            StoreDword(buffer + 0x0C, instruction);
-            StoreDword(buffer + 0x10, m_state.instruction_selector | ((u32)m_state.opcode << 16));
-            StoreDword(buffer + 0x14, operand);
-            StoreDword(buffer + 0x18, 0xFFFF0000U | m_state.operand_selector);
+            write_u32_le(buffer + 0x0C, instruction);
+            write_u32_le(buffer + 0x10, m_state.instruction_selector | ((u32)m_state.opcode << 16));
+            write_u32_le(buffer + 0x14, operand);
+            write_u32_le(buffer + 0x18, 0xFFFF0000U | m_state.operand_selector);
         }
         else
         {
-            StoreDword(buffer + 0x0C, 0xFFFF0000U | (instruction & 0xFFFF));
-            StoreDword(buffer + 0x10, ((instruction & 0xFFFF0000U) >> 4) | m_state.opcode);
-            StoreDword(buffer + 0x14, 0xFFFF0000U | (operand & 0xFFFF));
-            StoreDword(buffer + 0x18, (operand & 0xFFFF0000U) >> 4);
+            write_u32_le(buffer + 0x0C, 0xFFFF0000U | (instruction & 0xFFFF));
+            write_u32_le(buffer + 0x10, ((instruction & 0xFFFF0000U) >> 4) | m_state.opcode);
+            write_u32_le(buffer + 0x14, 0xFFFF0000U | (operand & 0xFFFF));
+            write_u32_le(buffer + 0x18, (operand & 0xFFFF0000U) >> 4);
         }
 
         return 28;
     }
 
-    StoreWord(buffer + 0x00, m_state.control);
-    StoreWord(buffer + 0x02, m_state.status);
-    StoreWord(buffer + 0x04, tag);
+    write_u16_le(buffer + 0x00, m_state.control);
+    write_u16_le(buffer + 0x02, m_state.status);
+    write_u16_le(buffer + 0x04, tag);
 
     if (protected_mode)
     {
-        StoreWord(buffer + 0x06, (u16)instruction);
-        StoreWord(buffer + 0x08, m_state.instruction_selector);
-        StoreWord(buffer + 0x0A, (u16)operand);
-        StoreWord(buffer + 0x0C, m_state.operand_selector);
+        write_u16_le(buffer + 0x06, (u16)instruction);
+        write_u16_le(buffer + 0x08, m_state.instruction_selector);
+        write_u16_le(buffer + 0x0A, (u16)operand);
+        write_u16_le(buffer + 0x0C, m_state.operand_selector);
     }
     else
     {
-        StoreWord(buffer + 0x06, (u16)instruction);
-        StoreWord(buffer + 0x08, (u16)(((instruction & 0xF0000) >> 4) | m_state.opcode));
-        StoreWord(buffer + 0x0A, (u16)operand);
-        StoreWord(buffer + 0x0C, (u16)((operand & 0xF0000) >> 4));
+        write_u16_le(buffer + 0x06, (u16)instruction);
+        write_u16_le(buffer + 0x08, (u16)(((instruction & 0xF0000) >> 4) | m_state.opcode));
+        write_u16_le(buffer + 0x0A, (u16)operand);
+        write_u16_le(buffer + 0x0C, (u16)((operand & 0xF0000) >> 4));
     }
 
     return 14;
@@ -1852,50 +1819,50 @@ u32 X87::LoadEnvironment(const u8* buffer, bool protected_mode, bool operand32)
 
     if (operand32)
     {
-        m_state.control = LoadWord(buffer + 0x00);
-        m_state.status = LoadWord(buffer + 0x04);
-        tag = LoadWord(buffer + 0x08);
+        m_state.control = read_u16_le(buffer + 0x00);
+        m_state.status = read_u16_le(buffer + 0x04);
+        tag = read_u16_le(buffer + 0x08);
 
         if (protected_mode)
         {
-            u32 selector = LoadDword(buffer + 0x10);
-            m_state.instruction_offset = LoadDword(buffer + 0x0C);
+            u32 selector = read_u32_le(buffer + 0x10);
+            m_state.instruction_offset = read_u32_le(buffer + 0x0C);
             m_state.instruction_selector = (u16)selector;
             m_state.opcode = (u16)((selector >> 16) & 0x07FF);
-            m_state.operand_offset = LoadDword(buffer + 0x14);
-            m_state.operand_selector = LoadWord(buffer + 0x18);
+            m_state.operand_offset = read_u32_le(buffer + 0x14);
+            m_state.operand_selector = read_u16_le(buffer + 0x18);
         }
         else
         {
-            u32 opcode = LoadDword(buffer + 0x10);
-            m_state.instruction_offset = ((opcode & 0x0FFFF000U) << 4) | LoadWord(buffer + 0x0C);
+            u32 opcode = read_u32_le(buffer + 0x10);
+            m_state.instruction_offset = ((opcode & 0x0FFFF000U) << 4) | read_u16_le(buffer + 0x0C);
             m_state.instruction_selector = 0;
             m_state.opcode = (u16)(opcode & 0x07FF);
-            m_state.operand_offset = ((LoadDword(buffer + 0x18) & 0x0FFFF000U) << 4) | LoadWord(buffer + 0x14);
+            m_state.operand_offset = ((read_u32_le(buffer + 0x18) & 0x0FFFF000U) << 4) | read_u16_le(buffer + 0x14);
             m_state.operand_selector = 0;
         }
     }
     else
     {
-        m_state.control = LoadWord(buffer + 0x00);
-        m_state.status = LoadWord(buffer + 0x02);
-        tag = LoadWord(buffer + 0x04);
+        m_state.control = read_u16_le(buffer + 0x00);
+        m_state.status = read_u16_le(buffer + 0x02);
+        tag = read_u16_le(buffer + 0x04);
 
         if (protected_mode)
         {
-            m_state.instruction_offset = LoadWord(buffer + 0x06);
-            m_state.instruction_selector = LoadWord(buffer + 0x08);
+            m_state.instruction_offset = read_u16_le(buffer + 0x06);
+            m_state.instruction_selector = read_u16_le(buffer + 0x08);
             m_state.opcode = 0;
-            m_state.operand_offset = LoadWord(buffer + 0x0A);
-            m_state.operand_selector = LoadWord(buffer + 0x0C);
+            m_state.operand_offset = read_u16_le(buffer + 0x0A);
+            m_state.operand_selector = read_u16_le(buffer + 0x0C);
         }
         else
         {
-            u16 opcode = LoadWord(buffer + 0x08);
-            m_state.instruction_offset = ((u32)(opcode & 0xF000) << 4) | LoadWord(buffer + 0x06);
+            u16 opcode = read_u16_le(buffer + 0x08);
+            m_state.instruction_offset = ((u32)(opcode & 0xF000) << 4) | read_u16_le(buffer + 0x06);
             m_state.instruction_selector = 0;
             m_state.opcode = opcode & 0x07FF;
-            m_state.operand_offset = ((u32)(LoadWord(buffer + 0x0C) & 0xF000) << 4) | LoadWord(buffer + 0x0A);
+            m_state.operand_offset = ((u32)(read_u16_le(buffer + 0x0C) & 0xF000) << 4) | read_u16_le(buffer + 0x0A);
             m_state.operand_selector = 0;
         }
     }
@@ -1921,8 +1888,8 @@ void X87::Save(u8* buffer, bool protected_mode, bool operand32)
     for (int i = 0; i < X87_REGISTER_COUNT; i++)
     {
         const X87_Register& value = Read(i);
-        StoreQword(buffer + offset + i * 10, value.significand);
-        StoreWord(buffer + offset + i * 10 + 8, value.sign_exponent);
+        write_u64_le(buffer + offset + i * 10, value.significand);
+        write_u16_le(buffer + offset + i * 10 + 8, value.sign_exponent);
     }
 
     Initialize();
@@ -1935,7 +1902,7 @@ void X87::Restore(const u8* buffer, bool protected_mode, bool operand32)
     for (int i = 0; i < X87_REGISTER_COUNT; i++)
     {
         X87_Register& value = m_state.registers[(GetTop() + i) & 7];
-        value.significand = LoadQword(buffer + offset + i * 10);
-        value.sign_exponent = LoadWord(buffer + offset + i * 10 + 8);
+        value.significand = read_u64_le(buffer + offset + i * 10);
+        value.sign_exponent = read_u16_le(buffer + offset + i * 10 + 8);
     }
 }

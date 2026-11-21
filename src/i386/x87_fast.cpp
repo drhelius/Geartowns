@@ -401,7 +401,7 @@ bool X87::FastLoadReal(u32 size, const u8* operand, X87_Register& value)
 {
     if (size == 4)
     {
-        u32 bits = (u32)operand[0] | ((u32)operand[1] << 8) | ((u32)operand[2] << 16) | ((u32)operand[3] << 24);
+        u32 bits = read_u32_le(operand);
         u32 exp = (bits >> 23) & 0xFF;
         bool sign = (bits >> 31) != 0;
 
@@ -416,10 +416,7 @@ bool X87::FastLoadReal(u32 size, const u8* operand, X87_Register& value)
         return true;
     }
 
-    u64 bits = 0;
-
-    for (int i = 7; i >= 0; i--)
-        bits = (bits << 8) | operand[i];
+    u64 bits = read_u64_le(operand);
 
     u32 exp = (u32)(bits >> 52) & 0x7FF;
     bool sign = (bits >> 63) != 0;

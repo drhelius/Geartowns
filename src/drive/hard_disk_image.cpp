@@ -733,7 +733,7 @@ bool HardDiskImage::GetChdHash(const char* path, u32* hash)
     if (IsValidPointer(hash))
     {
         const u8* sha1 = chd_get_header(chd)->sha1;
-        *hash = ((u32)sha1[0] << 24) | ((u32)sha1[1] << 16) | ((u32)sha1[2] << 8) | sha1[3];
+        *hash = read_u32_be(sha1);
     }
 
     chd_close(chd);

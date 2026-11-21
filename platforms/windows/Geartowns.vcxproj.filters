@@ -484,6 +484,10 @@
     <ClInclude Include="..\..\src\audio\audio_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\bit_ops.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\common.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\byte_order.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\file_utils.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\path_utils.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\common\string_utils.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\crc.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\defines.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\media\firmware.h"><Filter>src</Filter></ClInclude>

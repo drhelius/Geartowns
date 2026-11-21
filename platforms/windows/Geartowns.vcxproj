@@ -258,6 +258,10 @@
     <ClInclude Include="..\..\src\audio\audio_inline.h" />
     <ClInclude Include="..\..\src\common\bit_ops.h" />
     <ClInclude Include="..\..\src\common\common.h" />
+    <ClInclude Include="..\..\src\common\byte_order.h" />
+    <ClInclude Include="..\..\src\common\file_utils.h" />
+    <ClInclude Include="..\..\src\common\path_utils.h" />
+    <ClInclude Include="..\..\src\common\string_utils.h" />
     <ClInclude Include="..\..\src\media\crc.h" />
     <ClInclude Include="..\..\src\common\defines.h" />
     <ClInclude Include="..\..\src\media\firmware.h" />

@@ -662,7 +662,7 @@ u32 FloppyImage::GetDataCRC(const u8* image, u32 size)
 
         for (int i = 0; i < used; i++)
             crc = CalculateCRC32(crc, image + headers[i] + k_floppy_sector_header_size,
-                (int)read_u16_le(image + headers[i] + 14));
+                read_u16_le(image + headers[i] + 14));
     }
 
     return crc;

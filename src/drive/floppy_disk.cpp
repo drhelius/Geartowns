@@ -53,7 +53,7 @@ bool FloppyDisk::Insert(const u8* data, u32 size, bool write_protected, u32 base
     m_state.inserted = true;
     m_state.write_protected = write_protected || (image[0x1A] & 0x10) != 0;
     m_state.dirty = false;
-    m_state.base_crc = base_crc != 0 ? base_crc : CalculateCRC32(0, data, (int)size);
+    m_state.base_crc = base_crc != 0 ? base_crc : CalculateCRC32(0, data, size);
     m_state.size = image_size;
     m_state.data_crc = data_crc != 0 ? data_crc : FloppyImage::GetDataCRC(image, image_size);
     ClearWeakBytes();

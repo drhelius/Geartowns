@@ -325,6 +325,10 @@ ifneq (,$(filter unix% osx% win% ios% tvos% classic_armv7_a7,$(platform)))
 	PLATFORM_FLAGS += -DGT_ENABLE_CDROM_CUEBIN_READAHEAD
 endif
 
+ifneq (,$(filter rs90 retrofw miyoo,$(platform)))
+	PLATFORM_FLAGS += -DGT_LOW_MEMORY
+endif
+
 # The dynarec needs a GNU lightning backend and executable memory, src/i386/dynarec_platform.h lists the providers
 ifneq (,$(filter switch ps3 psl1ght emscripten sf2000 ps2 psp1 ctr wiiu tvos-arm64 ios%,$(platform)))
 	DISABLE_DYNAREC = 1

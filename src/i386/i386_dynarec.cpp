@@ -40,6 +40,7 @@ static const u8 k_dynarec_entry_hot = 2;
 static const u32 k_dynarec_block_bytes = 64;
 static const u32 k_dynarec_max_watch_bytes = 512;
 static const u32 k_dynarec_block_code = 64 * 1024;
+static const u32 k_dynarec_min_code_size = 4 * 1024 * 1024;
 static const u32 k_dynarec_bus_runs = GT_DYNAREC_MAX_BLOCKS * 4;
 // Two per instruction of the longest block
 static const u32 k_dynarec_max_bus_runs = 128;
@@ -93,9 +94,13 @@ void I386::EnableDynarec(bool enable)
         return;
 
     m_dynarec_memory = new ExecMemory();
+    u32 code_size = GT_DYNAREC_CODE_SIZE;
+
+    while (!m_dynarec_memory->Init(code_size) && (code_size > k_dynarec_min_code_size))
+        code_size >>= 1;
 
     // Without executable memory the CPU stays in the interpreter, IsDynarecEnabled tells the frontend
-    if (!m_dynarec_memory->Init(GT_DYNAREC_CODE_SIZE))
+    if (m_dynarec_memory->GetSize() == 0)
     {
         SafeDelete(m_dynarec_memory);
         m_dynarec_failed = true;

@@ -68,15 +68,19 @@
         #define GT_DYNAREC_UNALIGNED
     #endif
 
-    // Code cache size and block records: consoles, handhelds and 32-bit hosts get a smaller cache
-    #if defined(GT_DYNAREC_LIBNX) || defined(GT_DYNAREC_VITA) || defined(GT_DYNAREC_GEKKO) || \
-        defined(__ANDROID__) || !(defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || \
+    // Code cache size and block records, about 1 KB of code per block: 64-bit desktops get the largest cache, the
+    // low memory handhelds and the GameCube the smallest
+    #if defined(GT_LOW_MEMORY) || defined(GT_DYNAREC_GEKKO)
+        #define GT_DYNAREC_CODE_SIZE (4 * 1024 * 1024)
+        #define GT_DYNAREC_MAX_BLOCKS 4096
+    #elif (defined(GT_DYNAREC_WINDOWS) || defined(GT_DYNAREC_APPLE) || defined(GT_DYNAREC_POSIX)) && \
+        !defined(__ANDROID__) && (defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || \
         defined(_M_ARM64) || (defined(__riscv) && __riscv_xlen == 64) || defined(__loongarch64))
-        #define GT_DYNAREC_CODE_SIZE (8 * 1024 * 1024)
-        #define GT_DYNAREC_MAX_BLOCKS 16384
+        #define GT_DYNAREC_CODE_SIZE (256 * 1024 * 1024)
+        #define GT_DYNAREC_MAX_BLOCKS 262144
     #else
         #define GT_DYNAREC_CODE_SIZE (128 * 1024 * 1024)
-        #define GT_DYNAREC_MAX_BLOCKS 65536
+        #define GT_DYNAREC_MAX_BLOCKS 131072
     #endif
 #endif
 

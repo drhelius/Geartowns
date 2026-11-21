@@ -1420,7 +1420,7 @@ bool GeartownsCore::SaveState(const char* path, int index, bool screenshot)
 
     stream.close();
 
-    if (!stream.good() || !MediaFile::ReplaceFile(temp_path.c_str(), full_path.c_str()))
+    if (!stream.good() || !MediaFile::MoveIntoPlace(temp_path.c_str(), full_path.c_str()))
     {
         remove_file_utf8(temp_path.c_str());
         Error("Failed to write save state file: %s", full_path.c_str());

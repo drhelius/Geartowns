@@ -48,9 +48,9 @@
 #include "video/hires_crtc.h"
 #include "video/sprite.h"
 #include "video/video.h"
+#include "media/media_file.h"
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 #include "cdrom/cdrom_drive.h"
-#include "media/media_file.h"
 #endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION

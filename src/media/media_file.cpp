@@ -186,7 +186,7 @@ bool MediaFile::WriteFileAtomic(const char* path, const void* data, u64 size)
     MediaFile* file = OpenNewFile(temporary.c_str());
     bool ok = IsValidPointer(file) && ((size == 0) || file->WriteAt(0, data, size)) && file->Flush();
     SafeDelete(file);
-    ok = ok && ReplaceFile(temporary.c_str(), path);
+    ok = ok && MoveIntoPlace(temporary.c_str(), path);
 
     if (!ok)
         RemoveFile(temporary.c_str());
@@ -194,7 +194,7 @@ bool MediaFile::WriteFileAtomic(const char* path, const void* data, u64 size)
     return ok;
 }
 
-bool MediaFile::ReplaceFile(const char* temporary, const char* path)
+bool MediaFile::MoveIntoPlace(const char* temporary, const char* path)
 {
     if (IsDirectory(path))
         return false;

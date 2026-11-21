@@ -96,6 +96,125 @@ bool MediaFile::ListDirectory(const char* path, std::vector<std::string>& folder
     return MediaFileNative::ListDirectory(path, folders, files);
 }
 
+bool MediaFile::Exists(const char* path)
+{
+    if (!IsValidPointer(path) || (path[0] == '\0'))
+        return false;
+
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsInterface())
+        return MediaFileLibretro::Exists(path);
+#endif
+
+    return MediaFileNative::Exists(path);
+}
+
+bool MediaFile::IsDirectory(const char* path)
+{
+    if (!IsValidPointer(path) || (path[0] == '\0'))
+        return false;
+
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsDirectories())
+        return MediaFileLibretro::IsDirectory(path);
+#endif
+
+    return MediaFileNative::IsDirectory(path);
+}
+
+static MediaFile* open_whole_file(const char* path, u64 max_size, bool allow_empty, u64* size)
+{
+    MediaFile* file = MediaFile::OpenFile(path);
+
+    if (!IsValidPointer(file))
+        return NULL;
+
+    s64 file_size = file->GetSize();
+
+    if ((file_size < 0) || ((u64)file_size > max_size) || ((u64)file_size > (u64)SIZE_MAX) ||
+        ((file_size == 0) && !allow_empty))
+    {
+        SafeDelete(file);
+        return NULL;
+    }
+
+    *size = (u64)file_size;
+    return file;
+}
+
+bool MediaFile::ReadFile(const char* path, u64 max_size, std::vector<u8>* data, bool allow_empty)
+{
+    u64 size = 0;
+    data->clear();
+    MediaFile* file = open_whole_file(path, max_size, allow_empty, &size);
+
+    if (!IsValidPointer(file))
+        return false;
+
+    data->resize((size_t)size);
+    bool ok = (size == 0) || file->ReadExact(&(*data)[0], size);
+    SafeDelete(file);
+
+    if (!ok)
+        data->clear();
+
+    return ok;
+}
+
+bool MediaFile::ReadFile(const char* path, u64 max_size, std::string* data, bool allow_empty)
+{
+    u64 size = 0;
+    data->clear();
+    MediaFile* file = open_whole_file(path, max_size, allow_empty, &size);
+
+    if (!IsValidPointer(file))
+        return false;
+
+    data->resize((size_t)size);
+    bool ok = (size == 0) || file->ReadExact(&(*data)[0], size);
+    SafeDelete(file);
+
+    if (!ok)
+        data->clear();
+
+    return ok;
+}
+
+bool MediaFile::WriteFileAtomic(const char* path, const void* data, u64 size)
+{
+    std::string temporary = std::string(path) + ".tmp";
+    MediaFile* file = OpenNewFile(temporary.c_str());
+    bool ok = IsValidPointer(file) && ((size == 0) || file->WriteAt(0, data, size)) && file->Flush();
+    SafeDelete(file);
+    ok = ok && ReplaceFile(temporary.c_str(), path);
+
+    if (!ok)
+        RemoveFile(temporary.c_str());
+
+    return ok;
+}
+
+bool MediaFile::ReplaceFile(const char* temporary, const char* path)
+{
+    if (IsDirectory(path))
+        return false;
+
+    if (RenameFile(temporary, path))
+        return true;
+
+    std::string old = std::string(path) + ".old";
+    RemoveFile(old.c_str());
+    bool moved = RenameFile(path, old.c_str());
+    bool ok = RenameFile(temporary, path);
+
+    if (ok)
+        RemoveFile(old.c_str());
+    else if (moved)
+        RenameFile(old.c_str(), path);
+
+    return ok;
+}
+
 bool MediaFile::RenameFile(const char* from, const char* to)
 {
 #if defined(__LIBRETRO__)

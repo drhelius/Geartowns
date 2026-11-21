@@ -20,6 +20,7 @@
 #include "media_file_native.h"
 #include "../common/common.h"
 #include <limits>
+#include <sys/stat.h>
 
 MediaFileNative::MediaFileNative()
 {
@@ -88,6 +89,28 @@ bool MediaFileNative::ListDirectory(const char* path, std::vector<std::string>& 
     UNUSED(folders);
     UNUSED(files);
     return false;
+#endif
+}
+
+bool MediaFileNative::Exists(const char* path)
+{
+#if defined(_WIN32)
+    struct _stat64 info;
+    return _wstat64(utf8_to_wstring(path).c_str(), &info) == 0;
+#else
+    struct stat info;
+    return stat(path, &info) == 0;
+#endif
+}
+
+bool MediaFileNative::IsDirectory(const char* path)
+{
+#if defined(_WIN32)
+    struct _stat64 info;
+    return (_wstat64(utf8_to_wstring(path).c_str(), &info) == 0) && ((info.st_mode & _S_IFDIR) != 0);
+#else
+    struct stat info;
+    return (stat(path, &info) == 0) && S_ISDIR(info.st_mode);
 #endif
 }
 

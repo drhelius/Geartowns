@@ -18,6 +18,7 @@
  */
 
 #include "media_file_libretro.h"
+#include "media_file_native.h"
 
 #if defined(__LIBRETRO__)
 
@@ -75,6 +76,39 @@ bool MediaFileLibretro::ListDirectory(const char* path, std::vector<std::string>
         else
             files.push_back(name);
     }
+
+    s_vfs_interface->closedir(dir);
+    return true;
+}
+
+bool MediaFileLibretro::Exists(const char* path)
+{
+    if (IsValidPointer(s_vfs_interface->stat))
+        return (s_vfs_interface->stat(path, NULL) & RETRO_VFS_STAT_IS_VALID) != 0;
+
+    MediaFile* file = MediaFile::OpenFile(path);
+
+    if (IsValidPointer(file))
+    {
+        SafeDelete(file);
+        return true;
+    }
+
+    return MediaFileNative::Exists(path);
+}
+
+bool MediaFileLibretro::IsDirectory(const char* path)
+{
+    if (IsValidPointer(s_vfs_interface->stat))
+    {
+        int flags = s_vfs_interface->stat(path, NULL);
+        return ((flags & RETRO_VFS_STAT_IS_VALID) != 0) && ((flags & RETRO_VFS_STAT_IS_DIRECTORY) != 0);
+    }
+
+    retro_vfs_dir_handle* dir = s_vfs_interface->opendir(path, false);
+
+    if (!IsValidPointer(dir))
+        return false;
 
     s_vfs_interface->closedir(dir);
     return true;

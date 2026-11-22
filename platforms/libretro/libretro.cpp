@@ -2297,10 +2297,7 @@ static void update_floppy_drive(void)
 
 static bool path_is_cd_content(const char* path)
 {
-    return IsCdRomUri(path) ||
-        ends_with_no_case(path, ".cue") ||
-        ends_with_no_case(path, ".chd") ||
-        ends_with_no_case(path, ".iso");
+    return IsCdRomUri(path) || Media::IsCdRomName(path);
 }
 
 static bool path_is_raw_floppy(const char* path)
@@ -2822,19 +2819,12 @@ static bool get_cdrom_crc(const char* path, u32* crc)
 {
     CdRomMedia media;
     media.Init();
-    bool loaded = false;
 
-    if (ends_with_no_case(path, ".chd"))
-        loaded = media.LoadChdFromFile(path, false);
-    else if (ends_with_no_case(path, ".iso"))
-        loaded = media.LoadIsoFromFile(path, false);
-    else
-        loaded = media.LoadCueFromFile(path, false);
+    if (!media.LoadFromFile(path, false))
+        return false;
 
-    if (loaded)
-        *crc = media.GetCRC();
-
-    return loaded;
+    *crc = media.GetCRC();
+    return true;
 }
 
 static void register_disk_control(void)

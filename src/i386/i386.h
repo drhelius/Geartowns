@@ -1706,8 +1706,9 @@ private:
     u64* m_dynarec_page_granules;
     u8* m_dynarec_page_heat;
     u16* m_dynarec_page_writes;
-    u8* m_dynarec_page_cool;
+    u16* m_dynarec_page_cool;
     u8* m_dynarec_page_backoff;
+    u16* m_dynarec_page_quiet;
     u16* m_dynarec_page_live;
     u64* m_dynarec_live_maps;
     u32 m_dynarec_live_maps_used;

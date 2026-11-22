@@ -231,6 +231,7 @@ I386::I386()
     InitPointer(m_dynarec_page_writes);
     InitPointer(m_dynarec_page_cool);
     InitPointer(m_dynarec_page_backoff);
+    InitPointer(m_dynarec_page_quiet);
     InitPointer(m_dynarec_page_live);
     InitPointer(m_dynarec_live_maps);
     m_dynarec_live_maps_used = 0;
@@ -285,6 +286,7 @@ I386::~I386()
     SafeDeleteArray(m_dynarec_page_writes);
     SafeDeleteArray(m_dynarec_page_cool);
     SafeDeleteArray(m_dynarec_page_backoff);
+    SafeDeleteArray(m_dynarec_page_quiet);
     SafeDeleteArray(m_dynarec_page_live);
     SafeDeleteArray(m_dynarec_live_maps);
 #endif

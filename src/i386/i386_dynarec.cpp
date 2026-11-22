@@ -57,11 +57,12 @@ static const u32 k_dynarec_frame_compiles = 500;
 
 // A RAM page whose code keeps being rewritten, or whose data is written very often through its checked path, runs in
 // the interpreter for k_dynarec_cool_periods cooling periods, which gives it its fast writes back
-// Each eviction doubles the next one, up to k_dynarec_max_backoff times, and each quiet period halves it again
+// Each eviction doubles the next one, up to k_dynarec_max_backoff times, and each run of quiet periods with blocks as
+// long as that cooling halves it again
 static const u8 k_dynarec_hot_rewrites = 16;
 static const u16 k_dynarec_hot_writes = 4096;
-static const u8 k_dynarec_cool_periods = 8;
-static const u8 k_dynarec_max_backoff = 4;
+static const u16 k_dynarec_cool_periods = 8;
+static const u8 k_dynarec_max_backoff = 7;
 static const u64 k_dynarec_cool_period_clocks = 1 << 20;
 
 // A page whose code a small write rewrote gets a map from a pool: a bit per rewritten byte (live), then a bit per live
@@ -215,6 +216,7 @@ void I386::CheckDynarecMemory()
     SafeDeleteArray(m_dynarec_page_writes);
     SafeDeleteArray(m_dynarec_page_cool);
     SafeDeleteArray(m_dynarec_page_backoff);
+    SafeDeleteArray(m_dynarec_page_quiet);
     SafeDeleteArray(m_dynarec_page_live);
     SafeDeleteArray(m_dynarec_live_maps);
     m_dynarec_live_maps_used = 0;
@@ -230,8 +232,9 @@ void I386::CheckDynarecMemory()
     m_dynarec_page_granules = new u64[m_dynarec_page_count * 2];
     m_dynarec_page_heat = new u8[m_dynarec_page_count];
     m_dynarec_page_writes = new u16[m_dynarec_page_count];
-    m_dynarec_page_cool = new u8[m_dynarec_page_count];
+    m_dynarec_page_cool = new u16[m_dynarec_page_count];
     m_dynarec_page_backoff = new u8[m_dynarec_page_count];
+    m_dynarec_page_quiet = new u16[m_dynarec_page_count];
     m_dynarec_page_live = new u16[m_dynarec_page_count];
     m_dynarec_live_maps = new u64[k_dynarec_live_maps * k_dynarec_live_words * 2];
     memset(m_dynarec_page_blocks, 0xFF, m_dynarec_page_count * sizeof(u32));
@@ -239,8 +242,9 @@ void I386::CheckDynarecMemory()
     memset(m_dynarec_page_granules, 0, m_dynarec_page_count * 2 * sizeof(u64));
     memset(m_dynarec_page_heat, 0, m_dynarec_page_count);
     memset(m_dynarec_page_writes, 0, m_dynarec_page_count * sizeof(u16));
-    memset(m_dynarec_page_cool, 0, m_dynarec_page_count);
+    memset(m_dynarec_page_cool, 0, m_dynarec_page_count * sizeof(u16));
     memset(m_dynarec_page_backoff, 0, m_dynarec_page_count);
+    memset(m_dynarec_page_quiet, 0, m_dynarec_page_count * sizeof(u16));
 }
 
 // The block's compiled bound first, then near the end of the slice its exact time
@@ -929,7 +933,7 @@ void I386::EvictDynarecPage(u32 page)
 
     m_dynarec_page_granules[page * 2] = 0;
     m_dynarec_page_granules[page * 2 + 1] = 0;
-    m_dynarec_page_cool[page] = (u8)(k_dynarec_cool_periods << m_dynarec_page_backoff[page]);
+    m_dynarec_page_cool[page] = (u16)(k_dynarec_cool_periods << m_dynarec_page_backoff[page]);
     m_memory->SetCodePage(page, false);
 
     if (m_dynarec_page_backoff[page] < k_dynarec_max_backoff)
@@ -942,10 +946,18 @@ void I386::CoolDynarecPages()
 
     for (u32 page = 0; page < m_dynarec_page_count; page++)
     {
+        if (m_dynarec_page_heat[page] != 0 || m_dynarec_page_writes[page] != 0)
+            m_dynarec_page_quiet[page] = 0;
+        else if (m_dynarec_page_cool[page] == 0 && m_dynarec_page_backoff[page] != 0 &&
+            m_dynarec_page_blocks[page] != k_dynarec_none &&
+            ++m_dynarec_page_quiet[page] >= (k_dynarec_cool_periods << m_dynarec_page_backoff[page]))
+        {
+            m_dynarec_page_backoff[page]--;
+            m_dynarec_page_quiet[page] = 0;
+        }
+
         if (m_dynarec_page_cool[page] != 0)
             m_dynarec_page_cool[page]--;
-        else if (m_dynarec_page_backoff[page] != 0 && m_dynarec_page_heat[page] == 0 && m_dynarec_page_writes[page] == 0)
-            m_dynarec_page_backoff[page]--;
 
         m_dynarec_page_heat[page] = 0;
         m_dynarec_page_writes[page] = 0;

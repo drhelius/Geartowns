@@ -404,7 +404,23 @@ u32 I386::RunRepeatBatch(u32 budget, u32& clocks)
             element_clocks += m_586_device_wait[m_bus_page_class[source_physical >> 12]][0];
     }
 
-    u32 elements = m_bus_timed ? count : (u32)MIN((u64)count, ((u64)budget + element_clocks - 1) / element_clocks);
+    u32 elements = count;
+
+    if (!m_bus_timed)
+    {
+        u64 element_weight = (u64)element_clocks << 8;
+        u64 budget_weight = (u64)budget << 8;
+
+        if (m_i586_timing)
+        {
+            u64 charged = ((u64)m_586_wait << 8) + m_586_fraction;
+            element_weight += (move ? 2 : 1) * m_586_memory_wait;
+            budget_weight = budget_weight > charged ? budget_weight - charged : 0;
+        }
+
+        elements = (u32)MIN((u64)count, MAX((budget_weight + element_weight - 1) / element_weight, (u64)1));
+    }
+
     u32 address_mask = address_width == 16 ? 0xFFFFU : 0xFFFFFFFFU;
     bool reverse = (m_state.eflags & I386_FLAG_DF) != 0;
 

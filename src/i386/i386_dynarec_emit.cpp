@@ -291,6 +291,7 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
         instruction.host = block.host + position;
         GetOperandBytes(instruction, instruction.host);
         Classify(instruction);
+        SetLiveRegister(instruction);
 
         // A native that leaves the block through its own exits can't end a shadow that a fallback still needs
         if (m_count > 0 && m_instructions[m_count - 1].shadow && instruction.kind == DYNAREC_NATIVE &&
@@ -374,6 +375,34 @@ bool DynarecEmitter::Decode(u32 available, u32 instruction_limit)
     return m_count != 0;
 }
 
+void DynarecEmitter::SetLiveRegister(Instruction& instruction)
+{
+    const I386::InstructionContext& c = instruction.context;
+    const u8* bytes = instruction.host;
+    const u8* ram = m_cpu->m_dynarec_ram;
+    u8 opcode = c.opcode;
+
+    instruction.live_register = false;
+
+    if (instruction.kind != DYNAREC_NATIVE || c.two_byte || (c.modrm >> 6) != 3 ||
+        !((opcode < 0x40 && (opcode & 7) <= 3) || (opcode >= 0x84 && opcode <= 0x8B)) ||
+        bytes < ram || bytes >= ram + ((size_t)m_cpu->m_dynarec_page_count << 12))
+        return;
+
+    u32 modrm = ((u32)(bytes - ram) & 0xFFF) + instruction.displacement_position - 1;
+
+    if (modrm > 0xFFF || !m_cpu->FindDynarecLive((u32)((bytes - ram) >> 12), modrm, 1))
+        return;
+
+    instruction.kind = DYNAREC_HELPER;
+    instruction.memory = false;
+    instruction.uses = 0;
+    instruction.defs = 0;
+    instruction.clocks = 0;
+    instruction.taken_clocks = 0;
+    instruction.live_register = true;
+}
+
 // Operands with a byte a rewrite of the page touched are read from the code bytes when the instruction runs: helpers
 // decode all their bytes then, natives the immediates EmitImmediate takes and every displacement. A write inside one
 // of them keeps the block, any other rewrite of its bytes removes it
@@ -396,6 +425,9 @@ void DynarecEmitter::SetLiveOperands(Instruction& instruction)
         instruction.live_operands |= k_live_immediate;
         AddLiveOperand(offset + instruction.immediate_position, instruction.immediate_size);
     }
+
+    if (instruction.live_register)
+        m_cpu->m_dynarec_lives[m_block->live + m_block->live_count++] = (u16)((displacement - 1) | k_dynarec_live_register);
 
     if (instruction.displacement_size != 0 && displacement + instruction.displacement_size <= 0x1000 &&
         m_cpu->FindDynarecLive(page, displacement, instruction.displacement_size))
@@ -1334,6 +1366,12 @@ void DynarecEmitter::Set586Clocks(Instruction& instruction)
     instruction.weight_before = m_586_weight;
     instruction.weight_after = m_586_weight + (native ? I386::Get586Accesses(c) * m_cpu->m_586_memory_wait : 0);
     instruction.written = (u8)(paired ? m_586_agi | written : written);
+
+    if (instruction.live_register)
+    {
+        instruction.static_pairing = k_i586_checked;
+        instruction.static_packed = instruction.pair_after;
+    }
 
     if (!native)
         return;

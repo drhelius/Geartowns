@@ -654,7 +654,7 @@ bool I386::VerifyDynarecBlock(DynarecBlock& block)
         for (u32 i = 0; i < block.watch_length && same; i++)
         {
             u32 offset = (u32)(host + i - m_dynarec_ram) & 0xFFF;
-            same = host[i] == copy[i] || IsDynarecLiveWrite(block, offset, offset);
+            same = host[i] == copy[i] || IsDynarecLiveWrite(block, offset, offset, true);
         }
     }
 
@@ -781,7 +781,7 @@ void I386::InvalidateDynarecCode(u32 offset, u32 size, bool changed)
             u32 block_first = (u32)(GetDynarecWatchHost(block.host, block.eip, block.watch_eip) - m_dynarec_ram) & 0xFFF;
             u32 block_last = block_first + block.watch_length - 1;
 
-            if (block_first <= last && first <= block_last && !IsDynarecLiveWrite(block, first, last))
+            if (block_first <= last && first <= block_last && !IsDynarecLiveWrite(block, first, last, true))
             {
                 RemoveDynarecBlock(index);
                 removed = true;
@@ -828,18 +828,31 @@ void I386::UpdateDynarecConflicts(u32 page)
 }
 
 // A write inside one of the block's live operands, page offsets
-bool I386::IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const
+bool I386::IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last, bool values) const
 {
     for (u32 i = 0; i < block.live_count; i++)
     {
         u16 live = m_dynarec_lives[block.live + i];
         u32 start = live & 0xFFF;
 
-        if (first >= start && last <= start + (live >> 12))
+        if ((live & k_dynarec_live_register) == k_dynarec_live_register)
+        {
+            if (values && first == start && last == start && IsDynarecRegisterWrite(block, start))
+                return true;
+        }
+        else if (first >= start && last <= start + (live >> 12))
             return true;
     }
 
     return false;
+}
+
+bool I386::IsDynarecRegisterWrite(const DynarecBlock& block, u32 offset) const
+{
+    const u8* watch = GetDynarecWatchHost(block.host, block.eip, block.watch_eip);
+    u32 index = (offset - ((u32)(watch - m_dynarec_ram) & 0xFFF)) & 0xFFF;
+
+    return index < block.watch_length && ((watch[index] ^ m_dynarec_bytes[block.copy + index]) & 0xF8) == 0;
 }
 
 void I386::AddDynarecLive(u32 page, u32 first, u32 length)
@@ -902,7 +915,7 @@ void I386::AddDynarecConflicts(u32 page, const DynarecBlock& block)
 
         u64 bit = 1ULL << (i & 63);
 
-        if ((live[i >> 6] & bit) != 0 && !IsDynarecLiveWrite(block, i, i))
+        if ((live[i >> 6] & bit) != 0 && !IsDynarecLiveWrite(block, i, i, false))
             conflict[i >> 6] |= bit;
     }
 }
@@ -1011,7 +1024,7 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
         known.written = (u8)(packed >> 16);
         known.accesses = ((u32)packed >> 24) & 0xF;
         known.prefixes = ((u32)packed >> 28) & 0xF;
-        cpu->Apply586Clocks((u32)pairing != k_i586_unknown ? &known : NULL);
+        cpu->Apply586Clocks((u32)pairing < k_i586_checked ? &known : NULL);
     }
     else if (i486 && (step.instruction_completed || cpu->m_state.repeat.active))
     {
@@ -1027,7 +1040,7 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
         cpu->CountInterruptShadow();
 
     if (i486 && cpu->m_i586_timing && ((u32)memory & 0x80000000U) != 0)
-        cpu->m_586_folded += ((u32)pairing != k_i586_unknown ? ((u32)packed >> 24) & 0xF : Get586Accesses(cpu->m_instruction)) *
+        cpu->m_586_folded += ((u32)pairing < k_i586_checked ? ((u32)packed >> 24) & 0xF : Get586Accesses(cpu->m_instruction)) *
             cpu->m_586_memory_wait;
 
     cpu->m_dynarec_clocks += (u32)step.clocks - (u32)native_clocks;
@@ -1047,7 +1060,8 @@ uintptr_t I386::DynarecStep(I386* cpu, uintptr_t check, uintptr_t native_clocks,
     if (step.end_batch || context.end_batch || cpu->m_state.halted || cpu->m_state.shutdown ||
         !step.instruction_completed || cpu->m_state.repeat.active ||
         (cpu->m_state.interrupt_shadow_steps != 0 && cpu->m_dynarec_interrupt_pending) ||
-        cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait || !fits)
+        cpu->m_dynarec_dirty || context.wait_cycles != cpu->m_dynarec_wait || !fits ||
+        ((u32)pairing == k_i586_checked && cpu->m_586_pair != (u32)packed))
         return 1;
 
     // A step can close the code window, as a host page dropped by a privilege change does. The next instruction opens it

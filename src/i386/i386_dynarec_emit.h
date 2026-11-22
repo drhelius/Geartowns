@@ -146,6 +146,7 @@ private:
         u32 weight_after;
         u32 static_pairing;
         u32 static_packed;
+        bool live_register;
     };
 
     bool Decode(u32 available, u32 instruction_limit);
@@ -228,6 +229,7 @@ private:
     void StoreHost(int host, int r, int width, int scratch);
     u8 EmitEffectiveOffset(int r, int t, const Instruction& instruction);
     void EmitImmediate(int r, const Instruction& instruction, u32 value, int width, bool sign);
+    void SetLiveRegister(Instruction& instruction);
     void SetLiveOperands(Instruction& instruction);
     void AddLiveOperand(u32 first, u32 length);
     void GetOperandBytes(Instruction& instruction, const u8* bytes) const;

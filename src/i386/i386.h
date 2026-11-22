@@ -1024,7 +1024,8 @@ private:
     void RemoveDynarecBlock(u32 index);
     void InvalidateDynarecCode(u32 offset, u32 size, bool changed);
     void EvictDynarecPage(u32 page);
-    bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last) const;
+    bool IsDynarecLiveWrite(const DynarecBlock& block, u32 first, u32 last, bool values) const;
+    bool IsDynarecRegisterWrite(const DynarecBlock& block, u32 offset) const;
     bool IsDynarecSafeWrite(u32 page, u32 first, u32 last) const;
     void UpdateDynarecConflicts(u32 page);
     void AddDynarecConflicts(u32 page, const DynarecBlock& block);
@@ -1895,6 +1896,8 @@ static const u32 k_i586_uv = 1;
 static const u32 k_i586_pu = 2;
 static const u32 k_i586_pv = 3;
 static const u32 k_i586_unknown = 0xFFFFFFFFU;
+static const u32 k_i586_checked = 0xFFFFFFFEU;
+static const u16 k_dynarec_live_register = 0xF000;
 static const u8 k_i386_tlb_user = 0x02;
 static const u8 k_i386_tlb_writable = 0x04;
 static const u8 k_i386_tlb_dirty = 0x08;

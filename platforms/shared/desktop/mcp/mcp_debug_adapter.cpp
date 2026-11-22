@@ -129,56 +129,19 @@ static std::string hex_text(u32 value, int digits)
     return text;
 }
 
-static const char* execution_mode_name(I386_Execution_Mode mode)
-{
-    switch (mode)
-    {
-        case I386_MODE_PROTECTED: return "protected";
-        case I386_MODE_VM86: return "vm86";
-        default: return "real";
-    }
-}
-
-static bool is_prefix_word(const std::string& word)
-{
-    return word == "LOCK" || word == "REP" || word == "REPE" || word == "REPNE" || word == "ADDR16" ||
-        word == "ADDR32" || word == "ES" || word == "CS" || word == "SS" || word == "DS" || word == "FS" ||
-        word == "GS";
-}
-
 static void split_instruction(const char* text, std::string& mnemonic, std::string& operands)
 {
-    std::istringstream stream(text);
-    std::string word;
-    mnemonic.clear();
-    operands.clear();
+    char prefixes[128];
+    char name[128];
+    char rest[128];
+    gui_debug_split_instruction(text, prefixes, sizeof(prefixes), name, sizeof(name), rest, sizeof(rest));
+    mnemonic = prefixes;
 
-    while (stream >> word)
-    {
-        if (!mnemonic.empty())
-            mnemonic += " ";
+    if (!mnemonic.empty() && (name[0] != 0))
+        mnemonic += " ";
 
-        mnemonic += word;
-
-        if (!is_prefix_word(word))
-            break;
-    }
-
-    std::getline(stream, operands);
-    operands.erase(0, operands.find_first_not_of(" "));
-}
-
-static bool load_segment(I386_State& state, int index, u32 value, std::string& error)
-{
-    char text[GT_DEBUG_MEMORY_REASON_SIZE];
-
-    if (!gui_debug_i386_load_segment(state, index, value, state.segments[index], text, sizeof(text)))
-    {
-        error = text;
-        return false;
-    }
-
-    return true;
+    mnemonic += name;
+    operands = rest;
 }
 
 DebugAdapter::DebugAdapter(GeartownsCore* core)
@@ -273,7 +236,7 @@ json DebugAdapter::GetDebugStatus()
     result["at_breakpoint"] = at_breakpoint;
     result["pc"] = Hex32(cpu->GetCurrentLinearPC());
     result["logical_pc"] = Hex(cs.selector, 4) + ":" + Hex(state->eip, code32 ? 8 : 4);
-    result["mode"] = execution_mode_name(state->execution_mode);
+    result["mode"] = to_lower_ascii(gui_debug_execution_mode_name(state->execution_mode));
     result["halted"] = state->halted;
 
     if (at_breakpoint)
@@ -347,65 +310,56 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
     memset(&address, 0, sizeof(address));
     address.segment_register = -1;
 
-    std::string input = trim_chars(text, " \t");
-    size_t colon = input.find(':');
+    GT_Debug_Memory_Address parsed;
+    GuiDebugAddressError result = gui_debug_parse_address(text.c_str(), false, parsed);
 
-    if (colon == std::string::npos)
+    if (result == GuiDebugAddressError_Value)
     {
-        if (!parse_hex_text(input, address.linear))
-        {
-            error = "Invalid address '" + text + "'. Use a linear hex address, SR:offset or SSSS:offset";
-            return false;
-        }
-
-        return true;
+        error = "Invalid address '" + text + "'. Use a linear hex address, SR:offset or SSSS:offset";
+        return false;
     }
 
-    std::string segment = to_upper_ascii(input.substr(0, colon));
-    u32 offset = 0;
-
-    if (!parse_hex_text(input.substr(colon + 1), offset))
+    if (result == GuiDebugAddressError_Offset)
     {
         error = "Invalid offset in '" + text + "'";
         return false;
     }
 
-    I386_State* state = m_core->GetI386()->GetState();
-    address.logical = true;
-    address.offset = offset;
-
-    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
-    {
-        if (segment != k_i386_sreg_names[i])
-            continue;
-
-        address.segment_register = i;
-        address.segment = state->segments[i].selector;
-        address.linear = state->segments[i].base + offset;
-        return true;
-    }
-
-    u32 selector = 0;
-
-    if (!parse_hex_text(segment, selector) || selector > 0xFFFF)
+    if (result == GuiDebugAddressError_Prefix)
     {
         error = "Invalid segment in '" + text + "'";
         return false;
+    }
+
+    if (parsed.space == GT_DEBUG_MEMORY_LINEAR)
+    {
+        address.linear = parsed.address;
+        return true;
+    }
+
+    address.logical = true;
+    address.offset = parsed.address;
+    address.segment = parsed.segment;
+
+    if (parsed.segment_register >= 0)
+    {
+        address.segment_register = parsed.segment_register;
+        address.linear = m_core->GetI386()->GetState()->segments[parsed.segment_register].base + parsed.address;
+        return true;
     }
 
     u32 base = 0;
     u32 limit = 0;
     char reason[GT_DEBUG_MEMORY_REASON_SIZE];
 
-    if (!gui_debug_i386_selector_base((u16)selector, base, limit, reason, sizeof(reason)))
+    if (!gui_debug_i386_selector_base(parsed.segment, base, limit, reason, sizeof(reason)))
     {
         error = reason;
         return false;
     }
 
     UNUSED(limit);
-    address.segment = (u16)selector;
-    address.linear = base + offset;
+    address.linear = base + parsed.address;
     return true;
 }
 
@@ -413,10 +367,6 @@ static const char* const k_mcp_breakpoint_spaces[I386_BREAKPOINT_SPACE_COUNT] = 
 static const char* const k_mcp_machine_sources[] = { "user", "model", "default", "database", "floppy", "hard_disk" };
 static const char* const k_mcp_firmware_sources[] = { "none", "model_folder", "own_set", "compatible_set", "unknown",
     "other_set" };
-static const char* const k_mcp_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] =
-{
-    "any", "exception", "hardware", "software"
-};
 
 static const char* breakpoint_type_name(u8 type)
 {
@@ -577,7 +527,7 @@ static int parse_interrupt_source(const std::string& source)
 {
     for (int i = 0; i < I386_INTERRUPT_SOURCE_COUNT; i++)
     {
-        if (source == k_mcp_interrupt_sources[i])
+        if (source == to_lower_ascii(k_debug_interrupt_sources[i]))
             return i;
     }
 
@@ -624,7 +574,7 @@ json DebugAdapter::ListInterruptBreakpoints()
         gui_debug_i386_vector_name(item.vector, name, sizeof(name), description, sizeof(description));
         list.push_back({{"enabled", item.enabled}, {"vector", hex_text(item.vector, 2)}, {"vector_name", name},
             {"vector_description", description},
-            {"source", k_mcp_interrupt_sources[item.source % I386_INTERRUPT_SOURCE_COUNT]}});
+            {"source", to_lower_ascii(k_debug_interrupt_sources[item.source % I386_INTERRUPT_SOURCE_COUNT])}});
     }
 
     return {{"interrupt_breakpoints", list}, {"count", list.size()}};
@@ -677,7 +627,7 @@ json DebugAdapter::GetBreakpointHit()
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
         json result = {{"kind", "interrupt"}, {"vector", hex_text(hit.vector, 2)}, {"vector_name", name},
             {"vector_description", description},
-            {"source", k_mcp_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]}};
+            {"source", to_lower_ascii(k_debug_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT])}};
 
         if (hit.line < 16)
         {
@@ -914,10 +864,7 @@ json DebugAdapter::TranslateAddress(const std::string& text)
             u32 value = 0;
             u8 bytes[4];
             GT_Debug_Memory_Status status[4];
-            GT_Debug_Memory_Address physical = {};
-            physical.space = GT_DEBUG_MEMORY_PHYSICAL;
-            physical.segment_register = -1;
-            physical.address = translation.page_directory_entry;
+            GT_Debug_Memory_Address physical = debug_memory_address(GT_DEBUG_MEMORY_PHYSICAL, translation.page_directory_entry);
             gui_debug_memory_read(physical, bytes, status, 4);
             value = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | ((u32)bytes[3] << 24);
             result["pde_address"] = Hex32(translation.page_directory_entry);
@@ -1359,7 +1306,7 @@ json DebugAdapter::GetI386Status()
         cr0_flags[k_mcp_cr0_486_flags[i].name] = (state.cr0 & k_mcp_cr0_486_flags[i].mask) != 0;
 
     status["cr0_flags"] = cr0_flags;
-    status["mode"] = execution_mode_name(state.execution_mode);
+    status["mode"] = to_lower_ascii(gui_debug_execution_mode_name(state.execution_mode));
     status["cpl"] = state.current_privilege_level;
     status["iopl"] = (state.eflags & I386_FLAG_IOPL) >> 12;
     status["code_size"] = code32 ? 32 : 16;
@@ -1500,94 +1447,56 @@ json DebugAdapter::GetX87Status()
 
 json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
 {
+    struct Named_Register
+    {
+        const char* name;
+        u16 id;
+    };
+
+    static const Named_Register k_registers[] =
+    {
+        { "EIP", I386RegId_EIP }, { "EFLAGS", I386RegId_EFLAGS }, { "CR0", I386RegId_CR0 }, { "CR2", I386RegId_CR2 },
+        { "CR3", I386RegId_CR3 }, { "CR4", I386RegId_CR4 }, { "DR0", I386RegId_DR0 }, { "DR1", I386RegId_DR1 },
+        { "DR2", I386RegId_DR2 }, { "DR3", I386RegId_DR3 }, { "DR4", I386RegId_DR4 }, { "DR5", I386RegId_DR5 },
+        { "DR6", I386RegId_DR6 }, { "DR7", I386RegId_DR7 }, { "TR3", I386RegId_TR3 }, { "TR4", I386RegId_TR4 },
+        { "TR5", I386RegId_TR5 }, { "TR6", I386RegId_TR6 }, { "TR7", I386RegId_TR7 }, { "GDTR_BASE", I386RegId_GDTRBase },
+        { "GDTR_LIMIT", I386RegId_GDTRLimit }, { "IDTR_BASE", I386RegId_IDTRBase },
+        { "IDTR_LIMIT", I386RegId_IDTRLimit }, { "LDTR", I386RegId_LDTRSelector }, { "TR", I386RegId_TRSelector }
+    };
+
     I386* cpu = m_core->GetI386();
-    I386_State state;
-    cpu->CopyState(state);
     std::string reg = to_upper_ascii(name);
-    std::string error;
-    bool pc_changed = false;
-    int general = -1;
-    int segment = -1;
+    int id = -1;
+
     for (int i = 0; i < I386_REG_COUNT; i++)
     {
         if (reg == k_i386_reg32_names[i])
-            general = i;
+            id = I386RegId_EAX + i;
     }
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
         if (reg == k_i386_sreg_names[i])
-            segment = i;
+            id = I386RegId_SegmentSelectorBase + i;
     }
 
-    if (general >= 0)
-        state.registers[general].value = value;
-    else if (segment >= 0)
+    for (size_t i = 0; i < sizeof(k_registers) / sizeof(k_registers[0]); i++)
     {
-        if (!load_segment(state, segment, value, error))
-            return {{"error", error}};
+        if (reg == k_registers[i].name)
+            id = k_registers[i].id;
+    }
 
-        pc_changed = segment == I386_SEGMENT_CS;
-    }
-    else if (reg == "EIP")
-    {
-        state.eip = value;
-        state.halted = false;
-        pc_changed = true;
-    }
-    else if (reg == "EFLAGS")
-    {
-        state.eflags = (value & (0x00037FD5U | (cpu->IsI486() ? I386_FLAG_AC : 0))) | I386_FLAG_FIXED;
-        pc_changed = true;
-    }
-    else if (reg == "CR0")
-    {
-        state.cr0 = value;
-        pc_changed = true;
-    }
-    else if (reg == "CR2")
-        state.cr2 = value;
-    else if (reg == "CR3")
-    {
-        state.cr3 = value;
-        pc_changed = true;
-    }
-    else if (reg == "CR4" && cpu->IsI586())
-        state.cr4 = value & k_i386_cr4_writable;
-    else if (reg.size() == 3 && reg[0] == 'D' && reg[1] == 'R' && reg[2] >= '0' && reg[2] <= '7')
-        state.debug_registers[reg[2] - '0'] = value;
-    else if (reg == "TR6" || reg == "TR7")
-        state.test_registers[reg[2] - '6'] = value;
-    else if ((reg == "TR3" || reg == "TR4" || reg == "TR5") && cpu->IsI486())
-        cpu->SetCacheTestRegister(reg[2] - '3', value);
-    else if (reg == "GDTR_BASE")
-        state.gdtr.base = value;
-    else if (reg == "GDTR_LIMIT" && value <= 0xFFFF)
-        state.gdtr.limit = (u16)value;
-    else if (reg == "IDTR_BASE")
-        state.idtr.base = value;
-    else if (reg == "IDTR_LIMIT" && value <= 0xFFFF)
-        state.idtr.limit = (u16)value;
-    else if (reg == "LDTR" || reg == "TR")
-    {
-        char text[GT_DEBUG_MEMORY_REASON_SIZE];
-        bool task = reg == "TR";
+    bool limit = (id == I386RegId_GDTRLimit) || (id == I386RegId_IDTRLimit);
+    bool cache_test = (id == I386RegId_TR3) || (id == I386RegId_TR4) || (id == I386RegId_TR5);
 
-        // Like LLDT and LTR, the selector loads its descriptor from the GDT
-        if (!gui_debug_i386_load_system_segment(state, task, value, task ? state.task_register : state.ldtr, text,
-            sizeof(text)))
-            return {{"error", text}};
-    }
-    else
-        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, CR4 (Pentium), "
-            "DR0-DR7, TR3-TR5 (486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits "
-            "are 16-bit)"}};
+    if ((id < 0) || ((id == I386RegId_CR4) && !cpu->IsI586()) || (cache_test && !cpu->IsI486()) || (limit && (value > 0xFFFF)))
+        return {{"error", "Invalid register name or value, use EAX-EDI, EIP, EFLAGS, CR0, CR2, CR3, CR4 (Pentium), DR0-DR7, "
+            "TR3-TR5 (486), TR6, TR7, CS-GS, LDTR, TR, GDTR_BASE, GDTR_LIMIT, IDTR_BASE or IDTR_LIMIT (limits are 16-bit)"}};
 
-    state.repeat.active = false;
-    cpu->SetState(state);
+    char error[GT_DEBUG_MEMORY_REASON_SIZE];
 
-    if (pc_changed)
-        emu_debug_pc_changed = true;
+    if (!gui_debug_i386_write_register((u16)id, value, error, sizeof(error)))
+        return {{"error", error}};
 
     return {{"success", true}, {"register", reg}, {"value", Hex32(value)}};
 }
@@ -2047,6 +1956,21 @@ json DebugAdapter::GetI386Descriptors(const std::string& table, int start, int c
     };
 }
 
+static std::vector<std::pair<u32, u32> > present_page_entries(u32 table)
+{
+    std::vector<std::pair<u32, u32> > present;
+
+    for (u32 i = 0; i < 1024; i++)
+    {
+        u32 entry = 0;
+
+        if (gui_debug_i386_read_page_entry(table, i, entry) && ((entry & 1) != 0))
+            present.push_back(std::make_pair(i, entry));
+    }
+
+    return present;
+}
+
 json DebugAdapter::GetPageDirectory(int index)
 {
     I386_State* state = m_core->GetI386()->GetState();
@@ -2060,13 +1984,12 @@ json DebugAdapter::GetPageDirectory(int index)
 
     if (index < 0)
     {
-        for (u32 i = 0; i < 1024; i++)
+        std::vector<std::pair<u32, u32> > present = present_page_entries(directory);
+
+        for (size_t p = 0; p < present.size(); p++)
         {
-            u32 entry = 0;
-
-            if (!gui_debug_i386_read_page_entry(directory, i, entry) || (entry & 1) == 0)
-                continue;
-
+            u32 i = present[p].first;
+            u32 entry = present[p].second;
             gui_debug_i386_page_flags(entry, flags, sizeof(flags));
             entries.push_back({{"index", hex_text(i, 3)}, {"linear_start", Hex32(i << 22)}, {"pde", Hex32(entry)},
                 {"table", Hex32(entry & 0xFFFFF000U)}, {"flags", flags}});
@@ -2083,13 +2006,12 @@ json DebugAdapter::GetPageDirectory(int index)
     if (!gui_debug_i386_read_page_entry(directory, (u32)index, directory_entry) || (directory_entry & 1) == 0)
         return {{"error", "Page-directory entry " + hex_text(index, 3) + " is not present"}};
 
-    for (u32 i = 0; i < 1024; i++)
+    std::vector<std::pair<u32, u32> > present = present_page_entries(directory_entry);
+
+    for (size_t p = 0; p < present.size(); p++)
     {
-        u32 entry = 0;
-
-        if (!gui_debug_i386_read_page_entry(directory_entry, i, entry) || (entry & 1) == 0)
-            continue;
-
+        u32 i = present[p].first;
+        u32 entry = present[p].second;
         gui_debug_i386_page_flags(entry, flags, sizeof(flags));
         entries.push_back({{"index", hex_text(i, 3)}, {"linear", Hex32(((u32)index << 22) | (i << 12))},
             {"physical", Hex32(entry & 0xFFFFF000U)}, {"flags", flags}});
@@ -3622,10 +3544,9 @@ json DebugAdapter::GetCDROMAudioStatus()
     Audio* audio = m_core->GetAudio();
     CdRomAudio::CdRomAudio_State* state = m_core->GetCDROMAudio()->GetState();
     CdRomMedia* media = m_core->GetCDROMMedia();
-    static const char* states[3] = { "idle", "playing", "paused" };
     bool active = state->play_state != CdRomAudio::CDROM_AUDIO_IDLE;
     json result = {
-        {"state", states[state->play_state % 3]},
+        {"state", to_lower_ascii(k_debug_cdda_play_states[state->play_state % 3])},
         {"cdda_muted", audio->IsSourceMuted(Audio::AUDIO_SOURCE_CDDA)}
     };
 
@@ -3827,11 +3748,21 @@ json DebugAdapter::ListFloppyDrives()
     return {{"drives", drives}};
 }
 
+static bool has_floppy_drive(GeartownsCore* core, int drive)
+{
+    return (drive >= 0) && (drive < MIN(FDC_DRIVES, core->GetMachineConfig().floppy_drives));
+}
+
+static std::string no_floppy_drive_text(int drive)
+{
+    return "This machine has no drive " + std::to_string(drive);
+}
+
 static FloppyDisk* get_floppy_disk(GeartownsCore* core, int drive, std::string& error)
 {
-    if (drive < 0 || drive >= MIN(FDC_DRIVES, core->GetMachineConfig().floppy_drives))
+    if (!has_floppy_drive(core, drive))
     {
-        error = "This machine has no drive " + std::to_string(drive);
+        error = no_floppy_drive_text(drive);
         return NULL;
     }
 
@@ -3925,8 +3856,8 @@ json DebugAdapter::ReadFloppySector(int drive, int cylinder, int head, int secto
 
 json DebugAdapter::InsertFloppy(int drive, const std::string& file_path, const json& write_protected)
 {
-    if (drive < 0 || drive >= MIN(FDC_DRIVES, m_core->GetMachineConfig().floppy_drives))
-        return {{"error", "This machine has no drive " + std::to_string(drive)}};
+    if (!has_floppy_drive(m_core, drive))
+        return {{"error", no_floppy_drive_text(drive)}};
 
     if (!emu_floppy_insert(drive, file_path.c_str(), false))
         return {{"error", "Failed to insert the floppy image"}};
@@ -3942,8 +3873,8 @@ static const char* const k_blank_floppy_types[FLOPPY_BLANK_COUNT] = { "2hd_1232k
 
 json DebugAdapter::CreateBlankFloppy(int drive, const std::string& file_path, const std::string& type, bool formatted)
 {
-    if (drive < 0 || drive >= MIN(FDC_DRIVES, m_core->GetMachineConfig().floppy_drives))
-        return {{"error", "This machine has no drive " + std::to_string(drive)}};
+    if (!has_floppy_drive(m_core, drive))
+        return {{"error", no_floppy_drive_text(drive)}};
 
     const char* path = file_path.c_str();
     bool d77 = ends_with_no_case(path, ".d77");
@@ -3980,8 +3911,8 @@ json DebugAdapter::CreateBlankFloppy(int drive, const std::string& file_path, co
 
 json DebugAdapter::EjectFloppy(int drive)
 {
-    if (drive < 0 || drive >= MIN(FDC_DRIVES, m_core->GetMachineConfig().floppy_drives))
-        return {{"error", "This machine has no drive " + std::to_string(drive)}};
+    if (!has_floppy_drive(m_core, drive))
+        return {{"error", no_floppy_drive_text(drive)}};
 
     if (!m_core->GetFDC()->GetDisk(drive)->IsInserted())
         return {{"error", "No disk in drive " + std::to_string(drive)}};

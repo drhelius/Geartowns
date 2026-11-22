@@ -28,6 +28,7 @@
 #include "../config.h"
 #include "../emu.h"
 #include "gui_debug_i386.h"
+#include "gui_debug_widgets.h"
 
 struct X87BitDefinition
 {
@@ -55,7 +56,6 @@ static const char* const k_x87_precision_names[4] = { "24-BIT", "RESERVED", "53-
 static const char* const k_x87_rounding_names[4] = { "NEAREST", "DOWN", "UP", "CHOP" };
 
 static void draw_bits(const X87BitDefinition* bits, int count, u16 value, bool fitted);
-static void draw_label(const char* label);
 static void draw_register(const char* label, u16 value, bool fitted);
 
 void gui_debug_window_x87(void)
@@ -85,7 +85,7 @@ void gui_debug_window_x87(void)
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 10);
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 40);
 
-        draw_label("FITTED");
+        gui_debug_row_label("FITTED");
         const char* name = fitted ? get_machine_fpu_name(emu_get_core()->GetMachineConfig().cpu) : "NONE";
         ImGui::TextColored(fitted ? green : gray, "%s", name);
 
@@ -158,10 +158,10 @@ void gui_debug_window_x87(void)
         ImGui::SameLine();
         draw_bits(k_x87_masks, 6, state->control, fitted);
 
-        draw_label("PRECISION");
+        gui_debug_row_label("PRECISION");
         ImGui::TextColored(fitted ? blue : gray, "%s", fitted ? gui_debug_x87_precision_name(state->control) : "--");
 
-        draw_label("ROUNDING");
+        gui_debug_row_label("ROUNDING");
         ImGui::TextColored(fitted ? blue : gray, "%s", fitted ? gui_debug_x87_rounding_name(state->control) : "--");
 
         ImGui::EndTable();
@@ -184,10 +184,10 @@ void gui_debug_window_x87(void)
         else
             ImGui::TextColored(gray, "--");
 
-        draw_label("CONDITION");
+        gui_debug_row_label("CONDITION");
         draw_bits(k_x87_conditions, 7, state->status, fitted);
 
-        draw_label("EXCEPTION");
+        gui_debug_row_label("EXCEPTION");
         draw_bits(k_x87_exceptions, 6, state->status, fitted);
 
         draw_register("TW", tags, fitted);
@@ -202,21 +202,21 @@ void gui_debug_window_x87(void)
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 10);
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 40);
 
-        draw_label("ADDRESS");
+        gui_debug_row_label("ADDRESS");
 
         if (fitted)
             ImGui::TextColored(white, "$%04X:$%08X", state->instruction_selector, state->instruction_offset);
         else
             ImGui::TextColored(gray, "--");
 
-        draw_label("OPCODE");
+        gui_debug_row_label("OPCODE");
 
         if (fitted)
             ImGui::TextColored(white, "%02X %02X", 0xD8 | ((state->opcode >> 8) & 7), state->opcode & 0xFF);
         else
             ImGui::TextColored(gray, "--");
 
-        draw_label("OPERAND");
+        gui_debug_row_label("OPERAND");
 
         if (fitted)
             ImGui::TextColored(white, "$%04X:$%08X", state->operand_selector, state->operand_offset);
@@ -302,17 +302,9 @@ static void draw_bits(const X87BitDefinition* bits, int count, u16 value, bool f
     }
 }
 
-static void draw_label(const char* label)
-{
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::TextColored(violet, "%s", label);
-    ImGui::TableNextColumn();
-}
-
 static void draw_register(const char* label, u16 value, bool fitted)
 {
-    draw_label(label);
+    gui_debug_row_label(label);
 
     if (fitted)
         ImGui::TextColored(white, "$%04X", value);

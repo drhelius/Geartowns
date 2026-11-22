@@ -33,6 +33,7 @@
 #include "gui_debug_disassembler.h"
 #include "gui_debug_memory.h"
 #include "trace_logger_formatter.h"
+#include "gui_debug_widgets.h"
 
 #define TRACE_DISK_BUFFER_SIZE (1024 * 1024)
 #define TRACE_DISK_STAGING_CAPACITY 500000
@@ -117,6 +118,7 @@ static void trace_logger_format_line(u32 index, char* buffer, size_t size);
 static void trace_logger_find(bool forward);
 static void trace_logger_row_menu(const GT_Trace_Entry& entry, u32 index);
 static void format_time_prefix(const GT_Trace_Entry& entry, char* buffer, size_t size);
+static int format_line_prefix(const GT_Trace_Entry& entry, bool counter, u64 index, bool time, char* buffer, size_t size);
 static void trace_logger_menu_capture(void);
 
 void gui_debug_window_trace_logger(void)
@@ -591,11 +593,9 @@ bool gui_debug_save_log(const char* file_path)
         bool previous_cycle_valid = i > 0;
         u64 previous_cycle = previous_cycle_valid ? tl->GetEntry(i - 1).cycle : 0;
         format_entry_text(entry, config_debug.trace_cycles, previous_cycle_valid, previous_cycle, buf, sizeof(buf));
-
-        if (config_debug.trace_counter)
-            fprintf(file, "%06llu %s\n", (unsigned long long)(oldest + i), buf);
-        else
-            fprintf(file, "%s\n", buf);
+        char prefix[64];
+        format_line_prefix(entry, config_debug.trace_counter, oldest + i, config_debug.trace_time, prefix, sizeof(prefix));
+        fprintf(file, "%s%s\n", prefix, buf);
     }
 
     fclose(file);
@@ -621,13 +621,11 @@ static void trace_logger_menu(void)
         ImGui::MenuItem("Event Counter", "", &config_debug.trace_counter);
         ImGui::MenuItem("Time", "", &config_debug.trace_time);
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Milliseconds since the oldest entry kept, or since recording started on disk");
+        gui_debug_tooltip("Milliseconds since the oldest entry kept, or since recording started on disk");
 
         ImGui::MenuItem("Keep Tracing Across Resets", "", &config_debug.trace_keep_across_resets);
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Reset, power and media changes write a marker and recording goes on");
+        gui_debug_tooltip("Reset, power and media changes write a marker and recording goes on");
 
         ImGui::MenuItem("Machine Clocks", "", &config_debug.trace_cycles);
 
@@ -794,8 +792,7 @@ static void trace_logger_menu_filters(void)
         {
             trace_logger_menu_event_filter("Enabled", &config_debug.trace_video_events, TRACE_VIDEO_EVENT_MISSED_VBLANK);
 
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Logs a missed VBlank if the watched access did not happen during the frame ending at VSYNC");
+            gui_debug_tooltip("Logs a missed VBlank if the watched access did not happen during the frame ending at VSYNC");
 
             float input_x = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Operation").x + ImGui::GetStyle().ItemSpacing.x;
 
@@ -1242,17 +1239,10 @@ static bool trace_logger_flush_disk_entries(void)
         options.previous_cycle_valid = trace_logger_disk_previous_cycle_valid;
         options.previous_cycle = trace_logger_disk_previous_cycle;
         trace_logger_format_entry(entry, options, entry_text, sizeof(entry_text));
-        char time[32] = "";
-        int length;
-
-        if (trace_logger_disk_time)
-            format_time_prefix(entry, time, sizeof(time));
-
-        if (trace_logger_disk_counter)
-            length = snprintf(line, sizeof(line), "%06llu %s%s\n", (unsigned long long)trace_logger_disk_entries, time,
-                entry_text);
-        else
-            length = snprintf(line, sizeof(line), "%s%s\n", time, entry_text);
+        char prefix[64];
+        format_line_prefix(entry, trace_logger_disk_counter, trace_logger_disk_entries, trace_logger_disk_time, prefix,
+            sizeof(prefix));
+        int length = snprintf(line, sizeof(line), "%s%s\n", prefix, entry_text);
 
         if (length < 0)
         {
@@ -1424,7 +1414,7 @@ static void format_entry_text(const GT_Trace_Entry& entry, bool cycles, bool pre
 static void render_cpu_entry_colored(const GT_Trace_Entry& entry, int prefix_length)
 {
     char address[24];
-    trace_log_format_cpu_address(entry, address, sizeof(address));
+    trace_log_format_far_address(entry.cpu.cs, entry.cpu.eip, entry.cpu.mode, true, address, sizeof(address));
 
     if (config_debug.trace_linear)
     {
@@ -1487,11 +1477,11 @@ static void render_cpu_entry_colored(const GT_Trace_Entry& entry, int prefix_len
         char bytes[48];
         trace_log_format_cpu_bytes(entry, bytes, sizeof(bytes));
         float char_width = ImGui::CalcTextSize("A").x;
-        float bytes_column = char_width * (13 + 2 + GT_TRACE_INSTRUCTION_WIDTH + 1);
-        if (config_debug.trace_linear)       bytes_column += char_width * 9;
-        if (config_debug.trace_registers)    bytes_column += char_width * 105;
-        if (config_debug.trace_segments)     bytes_column += char_width * 41;
-        if (config_debug.trace_flags)        bytes_column += char_width * 15;
+        float bytes_column = char_width * (GT_TRACE_ADDRESS_WIDTH + 2 + GT_TRACE_INSTRUCTION_WIDTH + 1);
+        if (config_debug.trace_linear)       bytes_column += char_width * GT_TRACE_LINEAR_WIDTH;
+        if (config_debug.trace_registers)    bytes_column += char_width * GT_TRACE_REGISTERS_WIDTH;
+        if (config_debug.trace_segments)     bytes_column += char_width * GT_TRACE_SEGMENTS_WIDTH;
+        if (config_debug.trace_flags)        bytes_column += char_width * GT_TRACE_FLAGS_WIDTH;
         bytes_column += char_width * prefix_length;
         ImGui::SameLine(bytes_column);
         ImGui::TextColored(gray, "%s", bytes);
@@ -1503,21 +1493,13 @@ static void render_entry_colored(const GT_Trace_Entry& entry, u64 index, bool pr
     char buf[GT_TRACE_FORMAT_BUFFER_SIZE];
     int prefix_length = 0;
 
-    if (config_debug.trace_counter)
-    {
-        char counter[32];
-        snprintf(counter, sizeof(counter), "%06llu ", (unsigned long long)index);
-        prefix_length += (int)strlen(counter);
-        ImGui::TextColored(gray, "%s", counter);
-        ImGui::SameLine(0, 0);
-    }
+    char prefix[64];
+    prefix_length = format_line_prefix(entry, config_debug.trace_counter, index, config_debug.trace_time, prefix,
+        sizeof(prefix));
 
-    if (config_debug.trace_time)
+    if (prefix_length > 0)
     {
-        char time[32];
-        format_time_prefix(entry, time, sizeof(time));
-        prefix_length += (int)strlen(time);
-        ImGui::TextColored(gray, "%s", time);
+        ImGui::TextColored(gray, "%s", prefix);
         ImGui::SameLine(0, 0);
     }
 
@@ -1565,6 +1547,19 @@ static void format_time_prefix(const GT_Trace_Entry& entry, char* buffer, size_t
     double ms = entry.cycle >= trace_logger_first_cycle ?
         (double)(entry.cycle - trace_logger_first_cycle) * 1000.0 / (double)GT_MACHINE_CLOCK_RATE : 0.0;
     snprintf(buffer, size, "%11.3f ", ms);
+}
+
+static int format_line_prefix(const GT_Trace_Entry& entry, bool counter, u64 index, bool time, char* buffer, size_t size)
+{
+    char time_text[32] = "";
+
+    if (time)
+        format_time_prefix(entry, time_text, sizeof(time_text));
+
+    if (counter)
+        return snprintf(buffer, size, "%06llu %s", (unsigned long long)index, time_text);
+
+    return snprintf(buffer, size, "%s", time_text);
 }
 
 static void trace_logger_format_line(u32 index, char* buffer, size_t size)
@@ -1628,10 +1623,7 @@ static void trace_logger_row_menu(const GT_Trace_Entry& entry, u32 index)
 
     if (entry.type == TRACE_DMA && ImGui::MenuItem("Show DMA Address in Memory"))
     {
-        GT_Debug_Memory_Address address = {};
-        address.space = GT_DEBUG_MEMORY_PHYSICAL;
-        address.address = entry.dma.address;
-        address.segment_register = -1;
+        GT_Debug_Memory_Address address = debug_memory_address(GT_DEBUG_MEMORY_PHYSICAL, entry.dma.address);
         gui_debug_memory_goto(address);
     }
 }
@@ -1682,8 +1674,7 @@ static void trace_logger_menu_capture(void)
         ImGui::SetNextItemWidth(260.0f);
         ImGui::InputTextWithHint("##filter", k_hints[i], trace_logger_filter_text[i], sizeof(trace_logger_filter_text[i]));
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", k_tooltips[i]);
+        gui_debug_tooltip(k_tooltips[i]);
 
         if (ImGui::IsItemDeactivatedAfterEdit())
         {

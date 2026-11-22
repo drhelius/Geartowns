@@ -28,6 +28,70 @@
     #define EXTERN extern
 #endif
 
+enum I386RegId
+{
+    I386RegId_EAX = 1,
+    I386RegId_ECX,
+    I386RegId_EDX,
+    I386RegId_EBX,
+    I386RegId_ESP,
+    I386RegId_EBP,
+    I386RegId_ESI,
+    I386RegId_EDI,
+
+    I386RegId_EIP,
+    I386RegId_EFLAGS,
+
+    I386RegId_CR0,
+    I386RegId_CR2,
+    I386RegId_CR3,
+    I386RegId_CR4,
+
+    I386RegId_DR0,
+    I386RegId_DR1,
+    I386RegId_DR2,
+    I386RegId_DR3,
+    I386RegId_DR6,
+    I386RegId_DR7,
+
+    I386RegId_TR3,
+    I386RegId_TR4,
+    I386RegId_TR5,
+    I386RegId_TR6,
+    I386RegId_TR7,
+
+    I386RegId_GDTRBase,
+    I386RegId_IDTRBase,
+    I386RegId_LDTRBase,
+    I386RegId_LDTRLimit,
+    I386RegId_TRBase,
+    I386RegId_TRLimit,
+    I386RegId_GDTRLimit,
+    I386RegId_IDTRLimit,
+    I386RegId_LDTRSelector,
+    I386RegId_LDTRAccess,
+    I386RegId_LDTRDpl,
+    I386RegId_TRSelector,
+    I386RegId_TRAccess,
+    I386RegId_TRDpl,
+    I386RegId_DR4,
+    I386RegId_DR5,
+
+    I386RegId_SegmentSelectorBase = 0x100,
+    I386RegId_SegmentBaseBase = 0x110,
+    I386RegId_SegmentLimitBase = 0x120,
+    I386RegId_SegmentAccessBase = 0x130,
+    I386RegId_SegmentDplBase = 0x140
+};
+
+enum GuiDebugAddressError
+{
+    GuiDebugAddressError_None = 0,
+    GuiDebugAddressError_Value,
+    GuiDebugAddressError_Offset,
+    GuiDebugAddressError_Prefix
+};
+
 enum GuiDebugDescriptorTable
 {
     GuiDebugDescriptorTable_GDT = 0,
@@ -68,11 +132,15 @@ EXTERN u16 gui_debug_i386_segment_attributes(const GuiDebugDescriptor& descripto
 EXTERN bool gui_debug_i386_selector_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size);
 EXTERN bool gui_debug_i386_descriptor_base(u16 selector, u32& base, u32& limit, char* reason, size_t reason_size);
 EXTERN bool gui_debug_i386_idt_is_ivt(void);
+EXTERN bool gui_debug_parse_hex(const char* text, u32& value);
+EXTERN bool gui_debug_parse_address_prefix(const char* prefix, bool spaces, GT_Debug_Memory_Address& address);
+EXTERN GuiDebugAddressError gui_debug_parse_address(const char* text, bool spaces, GT_Debug_Memory_Address& address);
 EXTERN bool gui_debug_i386_parse_linear(const char* text, u32& linear);
 EXTERN bool gui_debug_i386_load_segment(const I386_State& state, int index, u32 selector, I386_Segment& segment,
     char* error, size_t error_size);
 EXTERN bool gui_debug_i386_load_system_segment(const I386_State& state, bool task, u32 selector, I386_Segment& segment,
     char* error, size_t error_size);
+EXTERN bool gui_debug_i386_write_register(u16 reg_id, u32 value, char* error, size_t error_size);
 EXTERN u8 gui_debug_i386_access_byte(const I386_Segment& segment);
 EXTERN u16 gui_debug_i386_access_attributes(u8 access, u16 attributes);
 EXTERN bool gui_debug_i386_read_page_entry(u32 table, u32 index, u32& entry);

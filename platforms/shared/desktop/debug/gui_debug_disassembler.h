@@ -66,6 +66,8 @@ EXTERN bool gui_debug_remove_disassembler_bookmark(u32 address);
 EXTERN void gui_debug_reset_disassembler_bookmarks(void);
 EXTERN std::vector<DisassemblerBookmark>* gui_debug_get_disassembler_bookmarks(void);
 EXTERN void gui_debug_window_disassembler(void);
+EXTERN void gui_debug_split_instruction(const char* instruction, char* prefixes, size_t prefixes_size, char* mnemonic,
+    size_t mnemonic_size, char* operands, size_t operands_size);
 EXTERN void gui_debug_window_call_stack(void);
 EXTERN void gui_debug_window_breakpoints(void);
 EXTERN void gui_debug_window_symbols(void);

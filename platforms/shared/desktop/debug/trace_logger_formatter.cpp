@@ -62,12 +62,12 @@ static void format_bit_list(u8 bits, int base, char* buffer, size_t size);
 static void format_msf(u32 lba, char* buffer, size_t size);
 static void format_buttons(u16 buttons, char* buffer, size_t size);
 
-void trace_log_format_cpu_address(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size)
+void trace_log_format_far_address(u16 cs, u32 eip, u8 mode, bool padded, char* buffer, size_t buffer_size)
 {
-    if (entry.cpu.mode == I386_MODE_PROTECTED)
-        snprintf(buffer, buffer_size, "%04X:%08X", entry.cpu.cs, entry.cpu.eip);
+    if (mode == I386_MODE_PROTECTED)
+        snprintf(buffer, buffer_size, "%04X:%08X", cs, eip);
     else
-        snprintf(buffer, buffer_size, "%04X:%04X    ", entry.cpu.cs, entry.cpu.eip & 0xFFFF);
+        snprintf(buffer, buffer_size, padded ? "%04X:%04X    " : "%04X:%04X", cs, eip & 0xFFFF);
 }
 
 // VM RF NT, IOPL and then the status flags, upper case when set
@@ -216,7 +216,7 @@ static void format_cpu(const GT_Trace_Entry& entry, const GT_Trace_Format_Option
     if (options.linear)
         snprintf(linear, sizeof(linear), "%08X ", entry.cpu.linear);
 
-    trace_log_format_cpu_address(entry, address, sizeof(address));
+    trace_log_format_far_address(entry.cpu.cs, entry.cpu.eip, entry.cpu.mode, true, address, sizeof(address));
 
     if (options.registers)
     {
@@ -256,14 +256,6 @@ void trace_log_format_cpu_instruction(const GT_Trace_Entry& entry, char* buffer,
         snprintf(buffer, buffer_size, "???");
 }
 
-static void format_far_address(u16 cs, u32 eip, u8 mode, char* buffer, size_t size)
-{
-    if (mode == I386_MODE_PROTECTED)
-        snprintf(buffer, size, "%04X:%08X", cs, eip);
-    else
-        snprintf(buffer, size, "%04X:%04X", cs, eip & 0xFFFF);
-}
-
 static void format_cpu_event(const GT_Trace_Entry& entry, char* buffer, size_t size)
 {
     static const char* const k_modes[3] = { "REAL", "PM", "V86" };
@@ -278,8 +270,8 @@ static void format_cpu_event(const GT_Trace_Entry& entry, char* buffer, size_t s
     u32 old_value = entry.cpu_event.old_value;
     u32 new_value = entry.cpu_event.new_value;
 
-    format_far_address(entry.cpu_event.cs, entry.cpu_event.eip, mode, at, sizeof(at));
-    format_far_address(entry.cpu_event.to_cs, entry.cpu_event.to_eip, to_mode, to, sizeof(to));
+    trace_log_format_far_address(entry.cpu_event.cs, entry.cpu_event.eip, mode, false, at, sizeof(at));
+    trace_log_format_far_address(entry.cpu_event.to_cs, entry.cpu_event.to_eip, to_mode, false, to, sizeof(to));
 
     switch (entry.event)
     {
@@ -375,8 +367,8 @@ static void format_interrupt(const GT_Trace_Entry& entry, char* buffer, size_t s
     u8 to_cpl = entry.interrupt.cpls >> 4;
 
     gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description), false);
-    format_far_address(entry.interrupt.from_cs, entry.interrupt.from_eip, from_mode, from, sizeof(from));
-    format_far_address(entry.interrupt.to_cs, entry.interrupt.to_eip, to_mode, to, sizeof(to));
+    trace_log_format_far_address(entry.interrupt.from_cs, entry.interrupt.from_eip, from_mode, false, from, sizeof(from));
+    trace_log_format_far_address(entry.interrupt.to_cs, entry.interrupt.to_eip, to_mode, false, to, sizeof(to));
 
     if (from_mode != to_mode || from_cpl != to_cpl)
         snprintf(change, sizeof(change), "  %s:%u->%s:%u", k_modes[from_mode], from_cpl, k_modes[to_mode], to_cpl);

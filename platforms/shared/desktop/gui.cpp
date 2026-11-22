@@ -697,6 +697,39 @@ void gui_center_next_window(void)
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 }
 
+void gui_close_popup(void)
+{
+    ImGui::CloseCurrentPopup();
+    gui_dialog_in_use = false;
+}
+
+void gui_draw_unsaved_quit_buttons(bool (*retry)(void), const char* error)
+{
+    if (ImGui::Button("Retry", ImVec2(100, 0)))
+    {
+        if (retry())
+        {
+            gui_close_popup();
+            application_confirm_quit();
+        }
+        else
+            gui_set_error_message(error);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Quit Without Saving", ImVec2(160, 0)))
+    {
+        gui_close_popup();
+        application_confirm_quit();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Cancel", ImVec2(100, 0)))
+        gui_close_popup();
+}
+
 float gui_get_combo_width(float text_width)
 {
     return text_width + (ImGui::GetStyle().FramePadding.x * 2.0f) + ImGui::GetFrameHeight();

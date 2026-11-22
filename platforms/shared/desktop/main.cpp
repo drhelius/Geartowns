@@ -195,18 +195,17 @@ int main(int argc, char* argv[])
             }
             else if (strcmp(argv[i], "--mcp-http-port") == 0)
             {
-                if (i + 1 >= argc || argv[i + 1][0] == '-')
-                {
-                    fprintf(stderr, "Missing value for --mcp-http-port\n");
+                const char* value = option_value(argc, argv, &i);
+
+                if (!value)
                     return -1;
-                }
 
                 char* end = NULL;
-                long port = strtol(argv[++i], &end, 10);
+                long port = strtol(value, &end, 10);
 
                 if (!end || *end != '\0' || port <= 0 || port > 65535)
                 {
-                    fprintf(stderr, "Invalid port number: %s\n", argv[i]);
+                    fprintf(stderr, "Invalid port number: %s\n", value);
                     return -1;
                 }
 

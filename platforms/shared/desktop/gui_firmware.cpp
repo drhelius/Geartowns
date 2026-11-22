@@ -30,6 +30,7 @@
 #include "gui_filedialogs.h"
 #include "gui_menus.h"
 #include "utils.h"
+#include "debug/gui_debug_widgets.h"
 
 static const char* const k_component_labels[GT_FIRMWARE_COUNT] = { "SYSTEM", "OS", "FONT", "DICTIONARY", "FONT 20", "SERIAL", "EXTENSION" };
 
@@ -53,7 +54,6 @@ static bool is_loaded(GT_Machine_Model model);
 static bool is_same_source(const GT_Firmware_Source& a, const GT_Firmware_Source& b);
 static float get_button_width(const char* label);
 static void setup_fixed_columns(const int* widths, int count);
-static void draw_grid_label(const char* label);
 
 void gui_firmware_open(void)
 {
@@ -215,7 +215,7 @@ static void draw_source(void)
     setup_fixed_columns(widths, 2);
 
     ImGui::TableNextRow();
-    draw_grid_label("STATUS");
+    gui_debug_grid_label("STATUS");
     ImGui::TextColored(gui_get_firmware_status_color(selected_model), "%s", status);
 
     if (source.type != GT_FIRMWARE_SOURCE_NONE)
@@ -227,17 +227,17 @@ static void draw_source(void)
         };
 
         ImGui::TableNextRow();
-        draw_grid_label("SOURCE");
+        gui_debug_grid_label("SOURCE");
         ImGui::TextColored(white, "%s", sources[source.type]);
 
         ImGui::TableNextRow();
-        draw_grid_label(source.zip ? "ZIP" : "FOLDER");
+        gui_debug_grid_label(source.zip ? "ZIP" : "FOLDER");
         ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)white);
         ImGui::TextWrapped("%s", source.path);
         ImGui::PopStyleColor();
 
         ImGui::TableNextRow();
-        draw_grid_label("SET");
+        gui_debug_grid_label("SET");
 
         if (source.set >= 0)
         {
@@ -248,11 +248,11 @@ static void draw_source(void)
             ImGui::TextColored(gray, "Unknown");
 
         ImGui::TableNextRow();
-        draw_grid_label("SYSTEM CRC");
+        gui_debug_grid_label("SYSTEM CRC");
         ImGui::TextColored(source.crc != 0 ? orange : gray, "%08X", source.crc);
 
         ImGui::TableNextRow();
-        draw_grid_label("LOADED");
+        gui_debug_grid_label("LOADED");
         bool loaded = is_loaded(selected_model);
         ImGui::TextColored(loaded ? green : gray, "%s", loaded ? "YES" : "NO");
     }
@@ -309,7 +309,7 @@ static void draw_component(GT_Firmware_Type type, const GT_Firmware_Info& info)
     bool needed = Firmware::IsRequired(type) ||
         ((type == GT_FIRMWARE_EXTENSION) && (k_machine_maps[k_machine_profiles[selected_model].map].extension_rom != 0));
 
-    draw_grid_label(k_component_labels[type]);
+    gui_debug_grid_label(k_component_labels[type]);
 
     if (info.synthetic && needed)
         ImGui::TextColored(red, "MISSING");
@@ -376,7 +376,7 @@ static void draw_expected_files(void)
     {
         GT_Firmware_Type type = (GT_Firmware_Type)i;
         ImGui::TableNextRow();
-        draw_grid_label(k_component_labels[type]);
+        gui_debug_grid_label(k_component_labels[type]);
         ImGui::TextColored(white, "%s", Firmware::GetFileName(type));
         ImGui::TableNextColumn();
         int size = Firmware::GetExpectedSize(type);
@@ -440,9 +440,3 @@ static void setup_fixed_columns(const int* widths, int count)
     }
 }
 
-static void draw_grid_label(const char* label)
-{
-    ImGui::TableNextColumn();
-    ImGui::TextColored(violet, "%s", label);
-    ImGui::TableNextColumn();
-}

@@ -686,6 +686,52 @@ private:
         }
     }
 
+    DebugResponse* macro_response(const json& request_id, const json& result)
+    {
+        m_reported_breakpoint_stops = emu_debug_breakpoint_stops;
+        DebugResponse* response = new DebugResponse();
+        response->requestId = request_id;
+        response->result = result;
+        return response;
+    }
+
+    DebugResponse* macro_error_response(const json& request_id, const std::string& error)
+    {
+        DebugResponse* response = macro_response(request_id, {{"error", error}});
+        response->isToolError = true;
+        response->errorMessage = error;
+        return response;
+    }
+
+    void push_macro_response(DebugResponse* response, bool restore_pause)
+    {
+        if (restore_pause)
+            emu_pause();
+
+        m_response_queue.Push(response);
+    }
+
+    const char* continue_macro_wait(u64 breakpoint_stops, bool restore_pause, u64 frames)
+    {
+        if (emu_is_debug_idle())
+        {
+            if (emu_debug_breakpoint_stops != breakpoint_stops)
+                return "interrupted by breakpoint";
+
+            if (frames > (u64)k_mcp_macro_max_wait_frames)
+                frames = k_mcp_macro_max_wait_frames;
+
+            if (frames > 0)
+                emu_debug_step_frames((int)frames);
+        }
+        else if (restore_pause && emu_is_paused())
+            emu_resume();
+        else if (emu_is_paused())
+            return "interrupted by a pause";
+
+        return NULL;
+    }
+
     void reset_input_macro()
     {
         m_input_macro.active = false;
@@ -768,26 +814,11 @@ private:
     // Only a breakpoint that stopped the frames this macro ran interrupts it, not the stop it started from
     void continue_input_macro_wait()
     {
-        if (emu_is_debug_idle())
-        {
-            if (emu_debug_breakpoint_stops != m_input_macro.breakpoint_stops)
-            {
-                finish_input_macro_error("Input macro interrupted by breakpoint");
-                return;
-            }
+        const char* stop = continue_macro_wait(m_input_macro.breakpoint_stops, m_input_macro.restore_pause,
+            input_macro_get_frames_left());
 
-            u64 frames = input_macro_get_frames_left();
-
-            if (frames > 1000)
-                frames = 1000;
-
-            if (frames > 0)
-                emu_debug_step_frames((int)frames);
-        }
-        else if (m_input_macro.restore_pause && emu_is_paused())
-            emu_resume();
-        else if (emu_is_paused())
-            finish_input_macro_error("Input macro interrupted by a pause");
+        if (IsValidPointer(stop))
+            finish_input_macro_error(std::string("Input macro ") + stop);
     }
 
     void finish_input_macro_success()
@@ -799,44 +830,24 @@ private:
         }
 
         bool restore_pause = m_input_macro.restore_pause;
-        m_reported_breakpoint_stops = emu_debug_breakpoint_stops;
-
-        DebugResponse* response = new DebugResponse();
-        response->requestId = m_input_macro.request_id;
-        response->result = {
+        DebugResponse* response = macro_response(m_input_macro.request_id, {
             {"success", true},
             {"characters", m_input_macro.command_count},
             {"frames_waited", m_input_macro.frames_waited},
             {"dropped", input_macro_get_dropped()}
-        };
+        });
 
         reset_input_macro();
-
-        if (restore_pause)
-            emu_pause();
-
-        m_response_queue.Push(response);
+        push_macro_response(response, restore_pause);
     }
 
     void finish_input_macro_error(const std::string& error)
     {
         bool restore_pause = m_input_macro.restore_pause;
-        m_reported_breakpoint_stops = emu_debug_breakpoint_stops;
-
         release_input_macro_keys();
-
-        DebugResponse* response = new DebugResponse();
-        response->requestId = m_input_macro.request_id;
-        response->isToolError = true;
-        response->errorMessage = error;
-        response->result = {{"error", error}};
-
+        DebugResponse* response = macro_error_response(m_input_macro.request_id, error);
         reset_input_macro();
-
-        if (restore_pause)
-            emu_pause();
-
-        m_response_queue.Push(response);
+        push_macro_response(response, restore_pause);
     }
 
     void reset_controller_macro()
@@ -1174,27 +1185,11 @@ private:
     void continue_controller_macro_wait()
     {
         McpControllerMacroState& macro = m_controller_macro;
+        const char* stop = continue_macro_wait(macro.breakpoint_stops, macro.restore_pause,
+            macro.wait_target_frame - emu_frame_counter);
 
-        if (emu_is_debug_idle())
-        {
-            if (emu_debug_breakpoint_stops != macro.breakpoint_stops)
-            {
-                finish_controller_macro_error("Controller macro interrupted by breakpoint");
-                return;
-            }
-
-            u64 frames = macro.wait_target_frame - emu_frame_counter;
-
-            if (frames > (u64)k_mcp_macro_max_wait_frames)
-                frames = k_mcp_macro_max_wait_frames;
-
-            if (frames > 0)
-                emu_debug_step_frames((int)frames);
-        }
-        else if (macro.restore_pause && emu_is_paused())
-            emu_resume();
-        else if (emu_is_paused())
-            finish_controller_macro_error("Controller macro interrupted by a pause");
+        if (IsValidPointer(stop))
+            finish_controller_macro_error(std::string("Controller macro ") + stop);
     }
 
     void finish_controller_macro_success()
@@ -1208,46 +1203,26 @@ private:
         }
 
         bool restore_pause = macro.restore_pause;
-        m_reported_breakpoint_stops = emu_debug_breakpoint_stops;
-
-        DebugResponse* response = new DebugResponse();
-        response->requestId = macro.request_id;
-        response->result = {
+        DebugResponse* response = macro_response(macro.request_id, {
             {"success", true},
             {"commands", macro.command_count},
             {"steps", (int)macro.steps.size()},
             {"frames_waited", macro.frames_waited},
             {"held", (int)macro.held.size()},
             {"dropped", macro.dropped}
-        };
+        });
 
         reset_controller_macro();
-
-        if (restore_pause)
-            emu_pause();
-
-        m_response_queue.Push(response);
+        push_macro_response(response, restore_pause);
     }
 
     void finish_controller_macro_error(const std::string& error)
     {
         bool restore_pause = m_controller_macro.restore_pause;
-        m_reported_breakpoint_stops = emu_debug_breakpoint_stops;
-
         release_controller_macro_held();
-
-        DebugResponse* response = new DebugResponse();
-        response->requestId = m_controller_macro.request_id;
-        response->isToolError = true;
-        response->errorMessage = error;
-        response->result = {{"error", error}};
-
+        DebugResponse* response = macro_error_response(m_controller_macro.request_id, error);
         reset_controller_macro();
-
-        if (restore_pause)
-            emu_pause();
-
-        m_response_queue.Push(response);
+        push_macro_response(response, restore_pause);
     }
 
     void reset_mouse_macro()
@@ -1853,7 +1828,6 @@ private:
         }
 
         bool restore_pause = macro.restore_pause;
-        m_reported_breakpoint_stops = emu_debug_breakpoint_stops;
         json result = {{"success", true}, {"player", macro.player}, {"frames", emu_frame_counter - macro.start_frame}};
 
         const McpMousePointer& pointer = m_debug_adapter->GetMousePointer(macro.player);
@@ -1885,16 +1859,9 @@ private:
             result["action"] = macro.action;
         }
 
-        DebugResponse* response = new DebugResponse();
-        response->requestId = macro.request_id;
-        response->result = result;
-
+        DebugResponse* response = macro_response(macro.request_id, result);
         reset_mouse_macro();
-
-        if (restore_pause)
-            emu_pause();
-
-        m_response_queue.Push(response);
+        push_macro_response(response, restore_pause);
     }
 
     void finish_mouse_macro_error(const std::string& error)

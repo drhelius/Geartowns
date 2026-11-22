@@ -30,6 +30,7 @@
 #include "../gui.h"
 #include "../gui_colors.h"
 #include "gui_debug_constants.h"
+#include "gui_debug_widgets.h"
 
 static const char* const k_control_bits[8] = { "RST", "DMAE", "SEL", "W/B", "ATN", NULL, "IMSK", "WEN" };
 static const char* const k_status_bits[8] = { NULL, "INT", NULL, "BUSY", "C/D", "MSG", "I/O", "REQ" };
@@ -325,8 +326,7 @@ static void draw_scsi_disk_row(int id)
     {
         ImGui::TextColored(white, "%.16s", image->GetFileName());
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", image->GetPath());
+        gui_debug_tooltip(image->GetPath());
     }
     else
         ImGui::TextColored(gray, "--");

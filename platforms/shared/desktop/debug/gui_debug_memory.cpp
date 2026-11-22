@@ -40,6 +40,7 @@
 #include "gui_debug.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "gui_debug_widgets.h"
 
 static const int MEMORY_VIEW_COUNT = 8;
 static const float MEMORY_SOURCES_WIDTH = 136.0f;
@@ -255,7 +256,6 @@ static void draw_region_tooltip(const GT_Debug_Memory_Region& region);
 static bool draw_source_item(const char* name, bool selected);
 static void draw_inspector(MemEditor& editor);
 static bool begin_inspector_table(const char* id);
-static void draw_inspector_label(const char* label);
 static void draw_watches_window();
 static void draw_watch_menu(MemoryWatch& watch, int index, int& remove);
 static void draw_search_window();
@@ -345,10 +345,8 @@ void gui_debug_memory_reset(void)
 
         if (memory_provider.GetRegion(0, region))
         {
-            GT_Debug_Memory_Address source = {};
-            source.space = GT_DEBUG_MEMORY_REGION;
+            GT_Debug_Memory_Address source = debug_memory_address(GT_DEBUG_MEMORY_REGION, 0);
             source.region = region.id;
-            source.segment_register = -1;
             memory_editor[0].SetSource(source);
         }
     }
@@ -357,6 +355,11 @@ void gui_debug_memory_reset(void)
 void gui_debug_memory_goto(const GT_Debug_Memory_Address& address)
 {
     navigate_to(address);
+}
+
+void gui_debug_memory_goto(GT_Debug_Memory_Space space, u32 address)
+{
+    gui_debug_memory_goto(debug_memory_address(space, address));
 }
 
 void gui_debug_memory_update(void)
@@ -936,9 +939,7 @@ static void draw_region_group(MemEditor& editor, const char* title, int group)
 
             if (draw_source_item(region.name, selected))
             {
-                GT_Debug_Memory_Address source = {};
-                source.space = GT_DEBUG_MEMORY_REGION;
-                source.segment_register = -1;
+                GT_Debug_Memory_Address source = debug_memory_address(GT_DEBUG_MEMORY_REGION, 0);
                 source.region = region.id;
                 editor.SetFollow(false);
                 editor.SetSource(source);
@@ -1036,7 +1037,7 @@ static void draw_inspector(MemEditor& editor)
             s64 signed_value = size == 1 ? (s64)(s8)value : size == 2 ? (s64)(s16)value : (s64)(s32)value;
 
             ImGui::TableNextRow();
-            draw_inspector_label(labels[i]);
+            gui_debug_grid_label(labels[i]);
 
             if (valid)
                 ImGui::TextColored(white, "$%0*llX", size * 2, (unsigned long long)value);
@@ -1044,7 +1045,7 @@ static void draw_inspector(MemEditor& editor)
                 ImGui::TextColored(gray, "--");
 
             ImGui::TableNextRow();
-            draw_inspector_label("");
+            gui_debug_grid_label("");
 
             if (valid)
                 ImGui::TextColored(white, "%llu", (unsigned long long)value);
@@ -1052,7 +1053,7 @@ static void draw_inspector(MemEditor& editor)
                 ImGui::TextColored(gray, "--");
 
             ImGui::TableNextRow();
-            draw_inspector_label("");
+            gui_debug_grid_label("");
 
             if (valid)
                 ImGui::TextColored(white, "%lld", (long long)signed_value);
@@ -1066,7 +1067,7 @@ static void draw_inspector(MemEditor& editor)
                 memcpy(&floating, &raw, sizeof(floating));
 
                 ImGui::TableNextRow();
-                draw_inspector_label("FLOAT");
+                gui_debug_grid_label("FLOAT");
 
                 if (valid)
                     ImGui::TextColored(white, "%.9g", floating);
@@ -1076,10 +1077,10 @@ static void draw_inspector(MemEditor& editor)
         }
 
         ImGui::TableNextRow();
-        draw_inspector_label("BITS");
+        gui_debug_grid_label("BITS");
 
         if (read_value(address, 1, 0, value, status))
-            ImGui::TextColored(white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY((u8)value));
+            gui_debug_draw_binary((u8)value, 1, white, false);
         else
             ImGui::TextColored(gray, "--");
 
@@ -1101,7 +1102,7 @@ static void draw_inspector(MemEditor& editor)
         ascii[readable] = 0;
 
         ImGui::TableNextRow();
-        draw_inspector_label("ASCII");
+        gui_debug_grid_label("ASCII");
 
         if (readable > 0)
             ImGui::TextColored(white, "%s", ascii);
@@ -1117,7 +1118,7 @@ static void draw_inspector(MemEditor& editor)
         shift_jis_to_utf8(text_data, text_length, shift_jis, sizeof(shift_jis));
 
         ImGui::TableNextRow();
-        draw_inspector_label("SJIS");
+        gui_debug_grid_label("SJIS");
 
         if (text_length > 0)
             ImGui::TextColored(white, "%s", shift_jis);
@@ -1136,7 +1137,7 @@ static void draw_inspector(MemEditor& editor)
     if (begin_inspector_table("##inspector_translation"))
     {
         ImGui::TableNextRow();
-        draw_inspector_label("LOGICAL");
+        gui_debug_grid_label("LOGICAL");
 
         if (translation.logical_valid)
             ImGui::TextColored(white, "%04X:%08X", translation.segment, translation.offset);
@@ -1144,7 +1145,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("SEG BASE");
+        gui_debug_grid_label("SEG BASE");
 
         if (translation.logical_valid)
             ImGui::TextColored(white, "%08X", translation.segment_base);
@@ -1152,7 +1153,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("SEG LIMIT");
+        gui_debug_grid_label("SEG LIMIT");
 
         if (translation.logical_valid)
             ImGui::TextColored(white, "%08X", translation.segment_limit);
@@ -1160,7 +1161,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("LINEAR");
+        gui_debug_grid_label("LINEAR");
 
         if (translation.linear_valid)
             ImGui::TextColored(white, "%08X", translation.linear);
@@ -1168,7 +1169,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("PDE/PTE");
+        gui_debug_grid_label("PDE/PTE");
 
         if (paged)
             ImGui::TextColored(white, "%08X %08X", translation.page_directory_entry, translation.page_table_entry);
@@ -1176,7 +1177,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("PAGE FLAGS");
+        gui_debug_grid_label("PAGE FLAGS");
 
         if (paged)
             ImGui::TextColored(white, "%08X", translation.page_flags);
@@ -1184,7 +1185,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("PHYSICAL");
+        gui_debug_grid_label("PHYSICAL");
 
         if (translation.physical_valid)
             ImGui::TextColored(white, "%08X", translation.physical);
@@ -1192,7 +1193,7 @@ static void draw_inspector(MemEditor& editor)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_inspector_label("BUS");
+        gui_debug_grid_label("BUS");
 
         if (translation.bus_valid)
             ImGui::TextColored(white, "%08X", translation.bus);
@@ -1221,13 +1222,6 @@ static bool begin_inspector_table(const char* id)
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("0").x * 10);
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthStretch);
     return true;
-}
-
-static void draw_inspector_label(const char* label)
-{
-    ImGui::TableNextColumn();
-    ImGui::TextColored(violet, "%s", label);
-    ImGui::TableNextColumn();
 }
 
 static void process_editor_requests(MemEditor& editor)
@@ -1908,8 +1902,7 @@ static void draw_breakpoints_window()
     if (ImGui::Button("Add Selection"))
         add_selection_breakpoint();
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Adds a read and write breakpoint on the selection\nRead and write breakpoints stop after the access");
+    gui_debug_tooltip("Adds a read and write breakpoint on the selection\nRead and write breakpoints stop after the access", ImGuiHoveredFlags_AllowWhenDisabled);
 
     ImGui::EndDisabled();
     ImGui::SameLine();
@@ -1972,11 +1965,9 @@ static void draw_breakpoints_window()
 
             if (!io && ImGui::IsItemClicked())
             {
-                GT_Debug_Memory_Address target = { };
-                target.space = breakpoint.space == I386_BREAKPOINT_LINEAR ? GT_DEBUG_MEMORY_LINEAR : GT_DEBUG_MEMORY_PHYSICAL;
-                target.address = breakpoint.address1;
-                target.segment_register = -1;
-                navigate_to(target);
+                GT_Debug_Memory_Space space = breakpoint.space == I386_BREAKPOINT_LINEAR ? GT_DEBUG_MEMORY_LINEAR :
+                    GT_DEBUG_MEMORY_PHYSICAL;
+                navigate_to(debug_memory_address(space, breakpoint.address1));
             }
 
             draw_row_tooltip(io ? "Right click to remove" : "Click to go to the address, right click to remove");
@@ -2703,7 +2694,7 @@ int gui_debug_memory_find(const GT_Debug_Memory_Address& source, u32 start, u32 
 void gui_debug_memory_save_settings(std::ostream& stream)
 {
     int view_count = active_view_count();
-    stream.write((const char*)&view_count, sizeof(view_count));
+    gui_debug_write_settings_count(stream, view_count);
 
     for (int i = 0; i < MEMORY_VIEW_COUNT; i++)
     {
@@ -2717,26 +2708,26 @@ void gui_debug_memory_save_settings(std::ostream& stream)
             settings.source = memory_editor[i].GetSource();
             settings.source.address = start;
             settings.options = memory_editor[i].GetOptions();
-            stream.write((const char*)&settings, sizeof(settings));
+            gui_debug_write_settings_data(stream, &settings, sizeof(settings));
         }
     }
 
     int bookmark_count = (int)memory_bookmarks.size();
-    stream.write((const char*)&bookmark_count, sizeof(bookmark_count));
+    gui_debug_write_settings_count(stream, bookmark_count);
 
     for (int i = 0; i < bookmark_count; i++)
     {
         const MemoryBookmark& item = memory_bookmarks[i];
-        stream.write((const char*)&item, sizeof(item));
+        gui_debug_write_settings_data(stream, &item, sizeof(item));
     }
 
     int watch_count = (int)memory_watches.size();
-    stream.write((const char*)&watch_count, sizeof(watch_count));
+    gui_debug_write_settings_count(stream, watch_count);
 
     for (int i = 0; i < watch_count; i++)
     {
         const MemoryWatch& item = memory_watches[i];
-        stream.write((const char*)&item, sizeof(item));
+        gui_debug_write_settings_data(stream, &item, sizeof(item));
     }
 }
 

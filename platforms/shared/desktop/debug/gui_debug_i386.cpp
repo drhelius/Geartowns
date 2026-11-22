@@ -35,60 +35,6 @@
 #include "../emu.h"
 #include "../utils.h"
 
-enum I386RegId
-{
-    I386RegId_EAX = 1,
-    I386RegId_ECX,
-    I386RegId_EDX,
-    I386RegId_EBX,
-    I386RegId_ESP,
-    I386RegId_EBP,
-    I386RegId_ESI,
-    I386RegId_EDI,
-
-    I386RegId_EIP,
-    I386RegId_EFLAGS,
-
-    I386RegId_CR0,
-    I386RegId_CR2,
-    I386RegId_CR3,
-    I386RegId_CR4,
-
-    I386RegId_DR0,
-    I386RegId_DR1,
-    I386RegId_DR2,
-    I386RegId_DR3,
-    I386RegId_DR6,
-    I386RegId_DR7,
-
-    I386RegId_TR3,
-    I386RegId_TR4,
-    I386RegId_TR5,
-    I386RegId_TR6,
-    I386RegId_TR7,
-
-    I386RegId_GDTRBase,
-    I386RegId_IDTRBase,
-    I386RegId_LDTRBase,
-    I386RegId_LDTRLimit,
-    I386RegId_TRBase,
-    I386RegId_TRLimit,
-    I386RegId_GDTRLimit,
-    I386RegId_IDTRLimit,
-    I386RegId_LDTRSelector,
-    I386RegId_LDTRAccess,
-    I386RegId_LDTRDpl,
-    I386RegId_TRSelector,
-    I386RegId_TRAccess,
-    I386RegId_TRDpl,
-
-    I386RegId_SegmentSelectorBase = 0x100,
-    I386RegId_SegmentBaseBase = 0x110,
-    I386RegId_SegmentLimitBase = 0x120,
-    I386RegId_SegmentAccessBase = 0x130,
-    I386RegId_SegmentDplBase = 0x140
-};
-
 struct I386FlagDefinition
 {
     const char* name;
@@ -212,43 +158,11 @@ static void I386WriteCallback8(u16 reg_id, u8 value, void* user_data)
 
 static void I386WriteCallback16(u16 reg_id, u16 value, void* user_data)
 {
-    I386* cpu = (I386*)user_data;
-    I386_State state;
-    bool pc_changed = false;
-
-    cpu->CopyState(state);
-
+    UNUSED(user_data);
     char error[GT_DEBUG_MEMORY_REASON_SIZE];
-    bool loaded = true;
 
-    // A selector loads its descriptor, like the instructions that load it
-    if (reg_id >= I386RegId_SegmentSelectorBase && reg_id < I386RegId_SegmentSelectorBase + I386_SEGMENT_COUNT)
-    {
-        int segment = reg_id - I386RegId_SegmentSelectorBase;
-        loaded = gui_debug_i386_load_segment(state, segment, value, state.segments[segment], error, sizeof(error));
-        pc_changed = segment == I386_SEGMENT_CS;
-    }
-    else if (reg_id == I386RegId_LDTRSelector)
-        loaded = gui_debug_i386_load_system_segment(state, false, value, state.ldtr, error, sizeof(error));
-    else if (reg_id == I386RegId_TRSelector)
-        loaded = gui_debug_i386_load_system_segment(state, true, value, state.task_register, error, sizeof(error));
-    else
-    {
-        switch (reg_id)
-        {
-            case I386RegId_GDTRLimit: state.gdtr.limit = value; break;
-            case I386RegId_IDTRLimit: state.idtr.limit = value; break;
-            default: return;
-        }
-    }
-
-    if (!loaded)
-    {
+    if (!gui_debug_i386_write_register(reg_id, value, error, sizeof(error)) && (error[0] != 0))
         gui_notify(gui_NotificationWarning, NULL, "Selector not loaded", error);
-        return;
-    }
-
-    write_state(cpu, state, pc_changed);
 }
 
 static void I386WriteCallback32(u16 reg_id, u32 value, void* user_data)
@@ -257,83 +171,27 @@ static void I386WriteCallback32(u16 reg_id, u32 value, void* user_data)
     I386_State state;
     bool pc_changed = false;
 
-    cpu->CopyState(state);
-
     if (reg_id >= I386RegId_SegmentBaseBase && reg_id < I386RegId_SegmentBaseBase + I386_SEGMENT_COUNT)
     {
+        cpu->CopyState(state);
         int segment = reg_id - I386RegId_SegmentBaseBase;
         state.segments[segment].base = value;
         pc_changed = segment == I386_SEGMENT_CS;
     }
     else if (reg_id >= I386RegId_SegmentLimitBase && reg_id < I386RegId_SegmentLimitBase + I386_SEGMENT_COUNT)
     {
+        cpu->CopyState(state);
         int segment = reg_id - I386RegId_SegmentLimitBase;
         state.segments[segment].limit = value;
         pc_changed = segment == I386_SEGMENT_CS;
     }
     else
     {
-        switch (reg_id)
-        {
-            case I386RegId_EAX: state.registers[I386_REG_EAX].value = value; break;
-            case I386RegId_ECX: state.registers[I386_REG_ECX].value = value; break;
-            case I386RegId_EDX: state.registers[I386_REG_EDX].value = value; break;
-            case I386RegId_EBX: state.registers[I386_REG_EBX].value = value; break;
-            case I386RegId_ESP: state.registers[I386_REG_ESP].value = value; break;
-            case I386RegId_EBP: state.registers[I386_REG_EBP].value = value; break;
-            case I386RegId_ESI: state.registers[I386_REG_ESI].value = value; break;
-            case I386RegId_EDI: state.registers[I386_REG_EDI].value = value; break;
-            case I386RegId_EIP:
-                state.eip = value;
-                state.halted = false;
-                pc_changed = true;
-                break;
-            case I386RegId_EFLAGS:
-                state.eflags = (value & (0x00037FD5U | (cpu->IsI486() ? I386_FLAG_AC : 0))) | I386_FLAG_FIXED;
-                pc_changed = true;
-                break;
-            case I386RegId_CR0:
-                state.cr0 = value;
-                pc_changed = true;
-                break;
-            case I386RegId_CR2: state.cr2 = value; break;
-            case I386RegId_CR3:
-                state.cr3 = value;
-                pc_changed = true;
-                break;
-            case I386RegId_CR4: state.cr4 = value & k_i386_cr4_writable; break;
-            case I386RegId_DR0: state.debug_registers[0] = value; break;
-            case I386RegId_DR1: state.debug_registers[1] = value; break;
-            case I386RegId_DR2: state.debug_registers[2] = value; break;
-            case I386RegId_DR3: state.debug_registers[3] = value; break;
-            case I386RegId_DR6: state.debug_registers[6] = value; break;
-            case I386RegId_DR7: state.debug_registers[7] = value; break;
-            case I386RegId_TR3:
-            case I386RegId_TR4:
-            case I386RegId_TR5:
-                cpu->SetCacheTestRegister(reg_id - I386RegId_TR3, value);
-                return;
-            case I386RegId_TR6: state.test_registers[0] = value; break;
-            case I386RegId_TR7: state.test_registers[1] = value; break;
-            case I386RegId_GDTRBase: state.gdtr.base = value; break;
-            case I386RegId_IDTRBase: state.idtr.base = value; break;
-            case I386RegId_LDTRBase: state.ldtr.base = value; break;
-            case I386RegId_LDTRLimit: state.ldtr.limit = value; break;
-            case I386RegId_TRBase: state.task_register.base = value; break;
-            case I386RegId_TRLimit: state.task_register.limit = value; break;
-            default: return;
-        }
+        gui_debug_i386_write_register(reg_id, value, NULL, 0);
+        return;
     }
 
     write_state(cpu, state, pc_changed);
-}
-
-static void draw_binary32(u32 value)
-{
-    ImGui::TextColored(gray, BYTE_TO_BINARY_PATTERN_SPACED " " BYTE_TO_BINARY_PATTERN_SPACED " "
-        BYTE_TO_BINARY_PATTERN_SPACED " " BYTE_TO_BINARY_PATTERN_SPACED,
-        BYTE_TO_BINARY((value >> 24) & 0xFF), BYTE_TO_BINARY((value >> 16) & 0xFF),
-        BYTE_TO_BINARY((value >> 8) & 0xFF), BYTE_TO_BINARY(value & 0xFF));
 }
 
 static void draw_register_tooltip(const char* name, u32 value, ImVec4 color)
@@ -353,7 +211,7 @@ static void draw_register_tooltip(const char* name, u32 value, ImVec4 color)
     ImGui::TextColored(color, "Hex: $%08X", value);
     ImGui::TextColored(color, "Dec: %u (%d)", value, (s32)value);
     ImGui::TextColored(color, "ASCII: %s", ascii);
-    draw_binary32(value);
+    gui_debug_draw_binary(value, 4, gray, false);
     ImGui::EndTooltip();
 }
 
@@ -401,17 +259,6 @@ static void draw_flags(u16 reg_id, u32 value, const I386FlagDefinition* flags, i
     }
 }
 
-static const char* execution_mode_name(u8 mode)
-{
-    if (mode == I386_MODE_PROTECTED)
-        return "PROTECTED";
-
-    if (mode == I386_MODE_VM86)
-        return "VM86";
-
-    return "REAL";
-}
-
 static void format_segment_attributes(const I386_Segment& segment, char* text, size_t text_size)
 {
     snprintf(text, text_size, "%c %c%c%c %s %c%c%c%c%c",
@@ -429,13 +276,8 @@ static void format_segment_attributes(const I386_Segment& segment, char* text, s
 
 static void goto_memory(GT_Debug_Memory_Space space, u32 address, int segment_register)
 {
-    GT_Debug_Memory_Address target = { };
-
-    target.space = space;
-    target.address = address;
+    GT_Debug_Memory_Address target = debug_memory_address(space, address);
     target.segment_register = (s8)segment_register;
-    target.region = -1;
-
     gui_debug_memory_goto(target);
 }
 
@@ -502,8 +344,7 @@ static void draw_segments(I386* cpu, const I386_State& state)
         EditableRegister8(NULL, NULL, I386RegId_SegmentAccessBase + segment_index, gui_debug_i386_access_byte(segment),
             I386WriteCallback8, cpu, EditableRegisterFlags_None);
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Descriptor access byte: P DPL S TYPE");
+        gui_debug_tooltip("Descriptor access byte: P DPL S TYPE");
         ImGui::TableNextColumn();
         EditableRegister8(NULL, NULL, I386RegId_SegmentDplBase + segment_index, segment.dpl, I386WriteCallback8, cpu,
             EditableRegisterFlags_None);
@@ -822,7 +663,7 @@ void gui_debug_window_i386(void)
         ImGui::TableNextColumn();
         ImGui::TextColored(violet, " MODE:");
         ImGui::SameLine();
-        ImGui::TextColored(blue, "%s", execution_mode_name(state.execution_mode));
+        ImGui::TextColored(blue, "%s", gui_debug_execution_mode_name(state.execution_mode));
 
         ImGui::TextColored(violet, " CODE:");
         ImGui::SameLine();

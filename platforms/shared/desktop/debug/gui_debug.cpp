@@ -27,6 +27,7 @@
 #include "../emu.h"
 #include "video/video.h"
 #include "../emu_floppy.h"
+#include "media/media_file.h"
 #include "gui_debug_audio.h"
 #include "gui_debug_cdrom.h"
 #include "gui_debug_disassembler.h"
@@ -233,37 +234,37 @@ bool gui_debug_save_settings(const char* file_path)
 
     std::vector<I386_Breakpoint>* breakpoints = emu_get_core()->GetI386()->GetBreakpoints();
     int breakpoint_count = (int)breakpoints->size();
-    file.write((const char*)&breakpoint_count, sizeof(breakpoint_count));
+    gui_debug_write_settings_count(file, breakpoint_count);
 
     for (int i = 0; i < breakpoint_count; i++)
     {
         const I386_Breakpoint& breakpoint = (*breakpoints)[i];
-        file.write((const char*)&breakpoint, sizeof(breakpoint));
+        gui_debug_write_settings_data(file, &breakpoint, sizeof(breakpoint));
     }
 
     std::vector<I386_Interrupt_Breakpoint>* interrupts = emu_get_core()->GetI386()->GetInterruptBreakpoints();
     int interrupt_count = (int)interrupts->size();
-    file.write((const char*)&interrupt_count, sizeof(interrupt_count));
+    gui_debug_write_settings_count(file, interrupt_count);
 
     for (int i = 0; i < interrupt_count; i++)
     {
         const I386_Interrupt_Breakpoint& breakpoint = (*interrupts)[i];
-        file.write((const char*)&breakpoint, sizeof(breakpoint));
+        gui_debug_write_settings_data(file, &breakpoint, sizeof(breakpoint));
     }
 
     u16 irq_breakpoints = emu_get_core()->GetI386()->GetIRQBreakpoints();
     u16 irq_breakpoints_disabled = emu_get_core()->GetI386()->GetDisabledIRQBreakpoints();
-    file.write((const char*)&irq_breakpoints, sizeof(irq_breakpoints));
-    file.write((const char*)&irq_breakpoints_disabled, sizeof(irq_breakpoints_disabled));
+    gui_debug_write_settings_data(file, &irq_breakpoints, sizeof(irq_breakpoints));
+    gui_debug_write_settings_data(file, &irq_breakpoints_disabled, sizeof(irq_breakpoints_disabled));
 
     std::vector<DisassemblerBookmark>* bookmarks = gui_debug_get_disassembler_bookmarks();
     int bookmark_count = (int)bookmarks->size();
-    file.write((const char*)&bookmark_count, sizeof(bookmark_count));
+    gui_debug_write_settings_count(file, bookmark_count);
 
     for (int i = 0; i < bookmark_count; i++)
     {
         const DisassemblerBookmark& bookmark = (*bookmarks)[i];
-        file.write((const char*)&bookmark, sizeof(bookmark));
+        gui_debug_write_settings_data(file, &bookmark, sizeof(bookmark));
     }
 
     gui_debug_memory_save_settings(file);
@@ -376,20 +377,16 @@ void gui_debug_auto_load_settings(void)
     if (path.empty())
         return;
 
-    std::ifstream file;
-    open_ifstream_utf8(file, path.c_str(), std::ios::binary);
-
-    if (!file.is_open())
+    if (!MediaFile::Exists(path.c_str()))
         return;
 
-    file.close();
     gui_debug_load_settings(path.c_str());
 }
 
 static void write_settings_string(std::ostream& stream, const std::string& text)
 {
     u8 length = (u8)MIN(text.size(), (size_t)255);
-    stream.write((const char*)&length, sizeof(length));
+    gui_debug_write_settings_data(stream, &length, sizeof(length));
     stream.write(text.c_str(), length);
 }
 
@@ -425,11 +422,11 @@ static void save_symbols(std::ostream& stream)
     }
 
     int count = (int)addresses.size();
-    stream.write((const char*)&count, sizeof(count));
+    gui_debug_write_settings_count(stream, count);
 
     for (int i = 0; i < count; i++)
     {
-        stream.write((const char*)&addresses[i], sizeof(addresses[i]));
+        gui_debug_write_settings_data(stream, &addresses[i], sizeof(addresses[i]));
         write_settings_string(stream, users.find(addresses[i])->second);
     }
 
@@ -441,15 +438,15 @@ static void save_symbols(std::ostream& stream)
             logical_count++;
     }
 
-    stream.write((const char*)&logical_count, sizeof(logical_count));
+    gui_debug_write_settings_count(stream, logical_count);
 
     for (size_t i = 0; i < logical.size(); i++)
     {
         if (logical[i].file)
             continue;
 
-        stream.write((const char*)&logical[i].selector, sizeof(logical[i].selector));
-        stream.write((const char*)&logical[i].offset, sizeof(logical[i].offset));
+        gui_debug_write_settings_data(stream, &logical[i].selector, sizeof(logical[i].selector));
+        gui_debug_write_settings_data(stream, &logical[i].offset, sizeof(logical[i].offset));
         write_settings_string(stream, logical[i].name);
     }
 }
@@ -532,6 +529,16 @@ bool gui_debug_read_settings_count(std::istream& stream, int& count, size_t reco
         return false;
 
     return (u64)count <= (u64)(end - position) / record_size;
+}
+
+void gui_debug_write_settings_data(std::ostream& stream, const void* data, size_t size)
+{
+    stream.write((const char*)data, (std::streamsize)size);
+}
+
+void gui_debug_write_settings_count(std::ostream& stream, int count)
+{
+    stream.write((const char*)&count, sizeof(count));
 }
 
 static std::string get_auto_debug_settings_path(void)

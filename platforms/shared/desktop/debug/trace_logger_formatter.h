@@ -24,6 +24,11 @@
 
 #define GT_TRACE_FORMAT_BUFFER_SIZE 512
 #define GT_TRACE_INSTRUCTION_WIDTH 40
+#define GT_TRACE_LINEAR_WIDTH 9
+#define GT_TRACE_ADDRESS_WIDTH 13
+#define GT_TRACE_REGISTERS_WIDTH 105
+#define GT_TRACE_SEGMENTS_WIDTH 41
+#define GT_TRACE_FLAGS_WIDTH 15
 
 struct GT_Trace_Format_Options
 {
@@ -37,7 +42,7 @@ struct GT_Trace_Format_Options
     u64 previous_cycle;
 };
 
-void trace_log_format_cpu_address(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);
+void trace_log_format_far_address(u16 cs, u32 eip, u8 mode, bool padded, char* buffer, size_t buffer_size);
 void trace_log_format_cpu_instruction(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);
 bool trace_log_parse_filters(const char* code, const char* ports, const char* interrupts, GT_Trace_Filters& filters);
 void trace_log_format_cpu_flags(const GT_Trace_Entry& entry, char* buffer, size_t buffer_size);

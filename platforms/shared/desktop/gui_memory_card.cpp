@@ -269,8 +269,7 @@ static void draw_create_popup(void)
     if (ImGui::Button("Create...", ImVec2(120, 0)))
     {
         create_size = k_create_sizes_kb[create_choice] * 1024;
-        ImGui::CloseCurrentPopup();
-        gui_dialog_in_use = false;
+        gui_close_popup();
         gui_file_dialog_create_memory_card();
     }
 
@@ -279,8 +278,7 @@ static void draw_create_popup(void)
 
     if (ImGui::Button("Cancel", ImVec2(120, 0)))
     {
-        ImGui::CloseCurrentPopup();
-        gui_dialog_in_use = false;
+        gui_close_popup();
     }
 
     ImGui::EndPopup();
@@ -310,8 +308,7 @@ static void draw_unsaved_popup(void)
 
         if (saved)
         {
-            ImGui::CloseCurrentPopup();
-            gui_dialog_in_use = false;
+            gui_close_popup();
 
             if (unsaved_quit)
                 application_confirm_quit();
@@ -326,8 +323,7 @@ static void draw_unsaved_popup(void)
 
     if (ImGui::Button(unsaved_quit ? "Quit Without Saving" : "Eject Without Saving", ImVec2(160, 0)))
     {
-        ImGui::CloseCurrentPopup();
-        gui_dialog_in_use = false;
+        gui_close_popup();
 
         if (unsaved_quit)
             application_confirm_quit();
@@ -342,8 +338,7 @@ static void draw_unsaved_popup(void)
 
     if (ImGui::Button("Cancel", ImVec2(100, 0)))
     {
-        ImGui::CloseCurrentPopup();
-        gui_dialog_in_use = false;
+        gui_close_popup();
     }
 
     ImGui::EndPopup();

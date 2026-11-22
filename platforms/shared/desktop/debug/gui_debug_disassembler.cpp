@@ -38,6 +38,7 @@
 #include "gui_debug_i386.h"
 #include "gui_debug_i386_tables.h"
 #include "../gui_colors.h"
+#include "gui_debug_widgets.h"
 
 struct DisassemblerLine
 {
@@ -114,8 +115,6 @@ static void prepare_drawable_lines(void);
 static void draw_disassembly(void);
 static void draw_instruction(const I386_Disassembler_Record* record, bool breakpoint, bool current_pc, bool stale);
 static void draw_context_menu(DisassemblerLine* line, const I386_Disassembler_Record* record);
-static void split_instruction(const char* instruction, char* prefixes, size_t prefixes_size, char* mnemonic,
-    size_t mnemonic_size, char* operands, size_t operands_size);
 static void draw_operands(const char* operands, bool address_operand, bool override_color, const ImVec4& color,
     const char* label);
 static bool replace_jump_target(const I386_Disassembler_Record* record, char* operands, size_t operands_size);
@@ -124,7 +123,6 @@ static const char* replace_operand_labels(const I386_Disassembler_Record* record
 static void save_full_disassembler(FILE* file);
 static void save_current_disassembler(FILE* file);
 static void save_instruction(FILE* file, const I386_Disassembler_Record* record, bool segment, bool bytes, bool labels);
-static bool parse_address(const char* text, u32& address);
 static bool parse_address_range(const char* text, bool logical, u32& start, u32& end);
 static void request_goto_address(u32 address);
 static void add_bookmark_popup(void);
@@ -353,6 +351,7 @@ bool gui_debug_save_disassembler(const char* file_path, bool full)
     fclose(file);
     return true;
 }
+
 
 int gui_debug_load_symbols(const char* file_path, int* skipped)
 {
@@ -690,8 +689,7 @@ static void disassembler_menu(void)
 
             ImGui::PopItemWidth();
 
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset");
+            gui_debug_tooltip("Linear hex, SR:offset or SEL:offset");
 
             ImGui::SameLine();
 
@@ -897,7 +895,6 @@ static void draw_controls(void)
 static void draw_breakpoints_content(void)
 {
     static const char* k_spaces[I386_BREAKPOINT_SPACE_COUNT] = { "LINEAR", "PHYSICAL", "I/O" };
-    static const char* k_sources[I386_INTERRUPT_SOURCE_COUNT] = { "ANY", "EXCEPTION", "HARDWARE", "SOFTWARE" };
     I386* cpu = emu_get_core()->GetI386();
     I386_Breakpoint_Hit hit;
 
@@ -918,7 +915,8 @@ static void draw_breakpoints_content(void)
         char name[16];
         char description[64];
         gui_debug_i386_vector_name(hit.vector, name, sizeof(name), description, sizeof(description));
-        ImGui::TextColored(yellow, "INT $%02X %s %s", hit.vector, name, k_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]);
+        ImGui::TextColored(yellow, "INT $%02X %s %s", hit.vector, name,
+            k_debug_interrupt_sources[hit.source % I386_INTERRUPT_SOURCE_COUNT]);
 
         const char* function = hit.source == I386_INTERRUPT_SOFTWARE ?
             gui_debug_i386_interrupt_function(hit.vector, hit.ax) : NULL;
@@ -1021,8 +1019,7 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove = (int)i;
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Remove breakpoint");
+        gui_debug_tooltip("Remove breakpoint");
 
         ImGui::SameLine();
 
@@ -1092,18 +1089,16 @@ static void draw_breakpoints_content(void)
         IM_ARRAYSIZE(new_interrupt_buffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal);
     ImGui::PopItemWidth();
 
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Hex vector 00-FF, stops before the handler's first instruction");
+    gui_debug_tooltip("Hex vector 00-FF, stops before the handler's first instruction");
 
     if (ImGui::Button("Add##add_interrupt_button", ImVec2(85, 0)))
         add_interrupt = true;
 
     if (add_interrupt && new_interrupt_buffer[0] != 0)
     {
-        char* end = NULL;
-        unsigned long vector = strtoul(new_interrupt_buffer, &end, 16);
+        u32 vector = 0;
 
-        if (IsValidPointer(end) && *end == 0 && vector <= 0xFF &&
+        if (gui_debug_parse_hex(new_interrupt_buffer, vector) && (vector <= 0xFF) &&
             cpu->AddInterruptBreakpoint((u8)vector, (u8)new_interrupt_source))
             new_interrupt_buffer[0] = 0;
     }
@@ -1127,8 +1122,7 @@ static void draw_breakpoints_content(void)
 
     ImGui::PopItemWidth();
 
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("IRQ line, whatever vector the PIC gives it");
+    gui_debug_tooltip("IRQ line, whatever vector the PIC gives it");
 
     if (ImGui::Button("Add##add_irq_button", ImVec2(85, 0)))
         cpu->SetIRQBreakpoint(new_irq_line, true);
@@ -1152,8 +1146,7 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove_interrupt = (int)i;
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Remove breakpoint");
+        gui_debug_tooltip("Remove breakpoint");
 
         ImGui::SameLine();
 
@@ -1167,7 +1160,8 @@ static void draw_breakpoints_content(void)
         ImGui::BeginGroup();
         ImGui::TextColored(breakpoint.enabled ? cyan : gray, "INT $%02X", breakpoint.vector); ImGui::SameLine();
         ImGui::TextColored(breakpoint.enabled ? orange : gray, "%-14s", name); ImGui::SameLine();
-        ImGui::TextColored(breakpoint.enabled ? violet : gray, "%s", k_sources[breakpoint.source % I386_INTERRUPT_SOURCE_COUNT]);
+        ImGui::TextColored(breakpoint.enabled ? violet : gray, "%s",
+            k_debug_interrupt_sources[breakpoint.source % I386_INTERRUPT_SOURCE_COUNT]);
         ImGui::EndGroup();
 
         if (description[0] != 0 && ImGui::IsItemHovered())
@@ -1199,8 +1193,7 @@ static void draw_breakpoints_content(void)
         if (ImGui::SmallButton("X"))
             remove_irq = line;
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Remove breakpoint");
+        gui_debug_tooltip("Remove breakpoint");
 
         ImGui::SameLine();
 
@@ -1217,8 +1210,7 @@ static void draw_breakpoints_content(void)
         ImGui::TextColored(enabled ? violet : gray, "LINE");
         ImGui::EndGroup();
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Breaks on this IRQ line whatever vector the PIC gives it");
+        gui_debug_tooltip("Breaks on this IRQ line whatever vector the PIC gives it");
 
         ImGui::PopID();
     }
@@ -1592,7 +1584,7 @@ static void draw_instruction(const I386_Disassembler_Record* record, bool breakp
     int vector = -1;
 
     emu_get_core()->GetI386()->FormatDisassemblerRecordText(record->linear);
-    split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
+    gui_debug_split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
 
     const char* operand_label = replace_operand_labels(record, operands, sizeof(operands), vector_name,
         sizeof(vector_name), replaced_jump_target, port, vector);
@@ -1652,7 +1644,7 @@ void gui_debug_disassembler_draw_text(const char* instruction)
     char operands[128];
     float space_width = ImGui::CalcTextSize(" ").x;
 
-    split_instruction(instruction, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
+    gui_debug_split_instruction(instruction, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
 
     if (prefixes[0] != 0)
     {
@@ -1816,7 +1808,7 @@ static void draw_operands(const char* operands, bool address_operand, bool overr
     }
 }
 
-static void split_instruction(const char* instruction, char* prefixes, size_t prefixes_size, char* mnemonic,
+void gui_debug_split_instruction(const char* instruction, char* prefixes, size_t prefixes_size, char* mnemonic,
     size_t mnemonic_size, char* operands, size_t operands_size)
 {
     prefixes[0] = 0;
@@ -2253,23 +2245,6 @@ static void prepare_symbol_rows(const char* filter)
     }
 }
 
-static bool parse_address(const char* text, u32& address)
-{
-    if (!IsValidPointer(text) || text[0] == 0)
-        return false;
-
-    char* end = NULL;
-
-    errno = 0;
-    unsigned long value = strtoul(text, &end, 16);
-
-    if (errno == ERANGE || end == text || *end != 0 || value > 0xFFFFFFFFUL)
-        return false;
-
-    address = (u32)value;
-    return true;
-}
-
 static void save_full_disassembler(FILE* file)
 {
     const std::map<u32, I386_Disassembler_Record>& records = emu_get_core()->GetI386()->GetDisassemblerRecords();
@@ -2324,7 +2299,7 @@ static void save_instruction(FILE* file, const I386_Disassembler_Record* record,
     int vector = -1;
 
     emu_get_core()->GetI386()->FormatDisassemblerRecordText(record->linear);
-    split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
+    gui_debug_split_instruction(record->name, prefixes, sizeof(prefixes), mnemonic, sizeof(mnemonic), operands, sizeof(operands));
 
     if (labels)
         replace_operand_labels(record, operands, sizeof(operands), vector_name, sizeof(vector_name),
@@ -2362,7 +2337,7 @@ static bool parse_address_range(const char* text, bool logical, u32& start, u32&
 
     if (!IsValidPointer(separator))
     {
-        if (!(logical ? gui_debug_i386_parse_linear(text, start) : parse_address(text, start)))
+        if (!(logical ? gui_debug_i386_parse_linear(text, start) : gui_debug_parse_hex(text, start)))
             return false;
 
         end = start;
@@ -2381,7 +2356,7 @@ static bool parse_address_range(const char* text, bool logical, u32& start, u32&
     if (logical)
         return gui_debug_i386_parse_linear(first, start) && gui_debug_i386_parse_linear(separator + 1, end);
 
-    return parse_address(first, start) && parse_address(separator + 1, end);
+    return gui_debug_parse_hex(first, start) && gui_debug_parse_hex(separator + 1, end);
 }
 
 static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate)
@@ -2490,8 +2465,7 @@ static void add_bookmark_popup(void)
 
         ImGui::PopItemWidth();
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset");
+        gui_debug_tooltip("Linear hex, SR:offset or SEL:offset");
 
         ImGui::Separator();
 
@@ -2566,8 +2540,7 @@ static void add_symbol_popup(void)
 
         ImGui::PopItemWidth();
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Linear hex, SR:offset or SEL:offset");
+        gui_debug_tooltip("Linear hex, SR:offset or SEL:offset");
 
         if (symbol_error)
         {
@@ -2689,7 +2662,7 @@ static bool parse_symbol_address(const char* text, u32& address, bool& logical, 
         *colon = 0;
         u32 parsed = 0;
 
-        if (!parse_address(value, parsed) || parsed > 0xFFFF || !parse_address(colon + 1, address))
+        if (!gui_debug_parse_hex(value, parsed) || parsed > 0xFFFF || !gui_debug_parse_hex(colon + 1, address))
             return false;
 
         logical = true;
@@ -2697,17 +2670,7 @@ static bool parse_symbol_address(const char* text, u32& address, bool& logical, 
         return true;
     }
 
-    char* start = value;
-    size_t length = strlen(start);
-
-    if (start[0] == '$')
-        start++;
-    else if (start[0] == '0' && (start[1] == 'x' || start[1] == 'X'))
-        start += 2;
-    else if (length > 1 && (start[length - 1] == 'h' || start[length - 1] == 'H'))
-        start[length - 1] = 0;
-
-    return parse_address(start, address);
+    return gui_debug_parse_hex(value, address);
 }
 
 // A selector that doesn't resolve now hides its symbol until it does

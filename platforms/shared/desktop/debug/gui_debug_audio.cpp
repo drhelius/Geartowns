@@ -35,6 +35,7 @@
 #include "../utils.h"
 #include "gui_debug_constants.h"
 #include "gui_debug_memory.h"
+#include "gui_debug_widgets.h"
 
 static const double k_ym3438_sample_rate = (double)GT_SOUND_CLOCK_RATE / k_ym3438_native_sample_cycles;
 static const double k_rf5c68_sample_rate = (double)GT_SOUND_CLOCK_RATE / k_rf5c68_cycles_per_sample;
@@ -76,7 +77,6 @@ static int get_fm_solo(YM3438* ym3438);
 static int get_pcm_solo(RF5C68* rf5c68);
 static void draw_fm_global(YM3438::YM3438_State* state);
 static void setup_fm_columns(int last);
-static void draw_grid_label(const char* label);
 static void draw_timer_flags(bool load, bool enable, bool flag);
 static void draw_fm_channel(YM3438* ym3438, int channel);
 static void draw_algorithm(int algorithm);
@@ -333,7 +333,7 @@ void gui_debug_window_sound_control(void)
         setup_control_columns();
 
         ImGui::TableNextRow();
-        draw_grid_label("SOURCES");
+        gui_debug_grid_label("SOURCES");
         ImGui::TextColored(white, "$%02X", mute); ImGui::SameLine(0.0f, space);
         ImGui::TextColored((mute & 0x02) ? green : gray, "FM"); ImGui::SameLine(0.0f, space);
         ImGui::TextColored((mute & 0x01) ? green : gray, "PCM");
@@ -341,7 +341,7 @@ void gui_debug_window_sound_control(void)
         ImGui::TextColored(gray, "(04D5)");
 
         ImGui::TableNextRow();
-        draw_grid_label("OUTPUT");
+        gui_debug_grid_label("OUTPUT");
         ImGui::TextColored(white, "$%02X", output); ImGui::SameLine(0.0f, space);
         ImGui::TextColored((output & 0x40) ? green : gray, "%-3s", (output & 0x40) ? "ON" : "OFF");
         ImGui::SameLine(0.0f, space);
@@ -361,25 +361,25 @@ void gui_debug_window_sound_control(void)
         setup_control_columns();
 
         ImGui::TableNextRow();
-        draw_grid_label("CAUSE");
+        gui_debug_grid_label("CAUSE");
         ImGui::TextColored(fm_cause ? yellow : gray, "FM"); ImGui::SameLine(0.0f, space);
         ImGui::TextColored(pcm->irq_flags ? yellow : gray, "PCM");
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(04E9)");
 
         ImGui::TableNextRow();
-        draw_grid_label("FM TIMERS");
+        gui_debug_grid_label("FM TIMERS");
         ImGui::TextColored(fm->timer_a_flag ? yellow : gray, "A"); ImGui::SameLine(0.0f, space);
         ImGui::TextColored(fm->timer_b_flag ? yellow : gray, "B");
 
         ImGui::TableNextRow();
-        draw_grid_label("PCM MASK");
+        gui_debug_grid_label("PCM MASK");
         ImGui::TextColored(white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(pcm->irq_mask));
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(04EA)");
 
         ImGui::TableNextRow();
-        draw_grid_label("PCM FLAGS");
+        gui_debug_grid_label("PCM FLAGS");
         ImGui::TextColored(pcm->irq_flags ? yellow : white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(pcm->irq_flags));
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(04EB)");
@@ -437,7 +437,6 @@ void gui_debug_window_cdrom_audio(void)
 
     ImGui::PushFont(gui_default_font);
 
-    static const char* states[3] = { "IDLE", "PLAYING", "PAUSED" };
     float character = ImGui::CalcTextSize("0").x;
     ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
     s32 track = media->IsReady() && active ? media->FindTrackFromLBA(state->current_lba, true) : -1;
@@ -450,15 +449,15 @@ void gui_debug_window_cdrom_audio(void)
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 8);
 
         ImGui::TableNextRow();
-        draw_grid_label("STATE");
-        ImGui::TextColored(active ? blue : gray, "%s", states[state->play_state % 3]);
+        gui_debug_grid_label("STATE");
+        ImGui::TextColored(active ? blue : gray, "%s", k_debug_cdda_play_states[state->play_state % 3]);
 
         ImGui::TableNextRow();
-        draw_grid_label("END");
+        gui_debug_grid_label("END");
         ImGui::TextColored(active ? white : gray, "%s", state->repeat ? "REPEAT" : "STOP");
 
         ImGui::TableNextRow();
-        draw_grid_label("TRACK");
+        gui_debug_grid_label("TRACK");
 
         if (track >= 0)
             ImGui::TextColored(orange, "%02d", track + 1);
@@ -483,14 +482,14 @@ void gui_debug_window_cdrom_audio(void)
         for (int i = 0; i < 3; i++)
         {
             ImGui::TableNextRow();
-            draw_grid_label(rows[i]);
+            gui_debug_grid_label(rows[i]);
             draw_position(values[i], 150, active);
         }
 
         u32 track_start = track >= 0 ? media->GetTracks()[track].start_lba : 0;
 
         ImGui::TableNextRow();
-        draw_grid_label("TRACK POS");
+        gui_debug_grid_label("TRACK POS");
         draw_position(state->current_lba - MIN(state->current_lba, track_start), 0, track >= 0);
 
         ImGui::EndTable();
@@ -508,7 +507,7 @@ void gui_debug_window_cdrom_audio(void)
             s32 gain = audio->GetVolumeGain(1, channel);
 
             ImGui::TableNextRow();
-            draw_grid_label(channel == 0 ? "LEFT" : "RIGHT");
+            gui_debug_grid_label(channel == 0 ? "LEFT" : "RIGHT");
 
             if (gain > 0)
                 ImGui::TextColored(white, "%.1f dB", 20.0 * log10((double)gain / 32768.0));
@@ -697,34 +696,34 @@ static void draw_fm_global(YM3438::YM3438_State* state)
     setup_fm_columns(17);
 
     ImGui::TableNextRow();
-    draw_grid_label("LFO");
+    gui_debug_grid_label("LFO");
     ImGui::TextColored(state->lfo_enabled ? green : gray, "%-3s", state->lfo_enabled ? "ON" : "OFF");
     ImGui::SameLine(0.0f, space);
     ImGui::TextColored(white, "%.2f Hz", lfo_rate);
-    draw_grid_label("TIMER A");
+    gui_debug_grid_label("TIMER A");
     ImGui::TextColored(white, "%-4d", state->timer_a_register); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(white, "%.3f ms", timer_a);
 
     ImGui::TableNextRow();
-    draw_grid_label("CH3 MODE");
+    gui_debug_grid_label("CH3 MODE");
     ImGui::TextColored(blue, "%s", k_debug_ym3438_ch3_mode_names[state->channel_3_mode & 3]);
-    draw_grid_label("");
+    gui_debug_grid_label("");
     draw_timer_flags(state->timer_a_load, state->timer_a_enable, state->timer_a_flag);
 
     ImGui::TableNextRow();
-    draw_grid_label("DAC");
+    gui_debug_grid_label("DAC");
     ImGui::TextColored(state->dac_enabled ? green : gray, "%-3s", state->dac_enabled ? "ON" : "OFF");
     ImGui::SameLine(0.0f, space);
     ImGui::TextColored(white, "$%02X", (u8)((state->dac_data / 2) + 128));
-    draw_grid_label("TIMER B");
+    gui_debug_grid_label("TIMER B");
     ImGui::TextColored(white, "%-4d", state->timer_b_register); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(white, "%.3f ms", timer_b);
 
     ImGui::TableNextRow();
-    draw_grid_label("STATUS");
+    gui_debug_grid_label("STATUS");
     ImGui::TextColored(white, "$%02X", state->status); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(state->busy_cycles ? yellow : gray, "BUSY");
-    draw_grid_label("");
+    gui_debug_grid_label("");
     draw_timer_flags(state->timer_b_load, state->timer_b_enable, state->timer_b_flag);
 
     ImGui::EndTable();
@@ -739,13 +738,6 @@ static void setup_fm_columns(int last)
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 15);
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 9);
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * last);
-}
-
-static void draw_grid_label(const char* label)
-{
-    ImGui::TableNextColumn();
-    ImGui::TextColored(violet, "%s", label);
-    ImGui::TableNextColumn();
 }
 
 static void draw_timer_flags(bool load, bool enable, bool flag)
@@ -797,7 +789,7 @@ static void draw_fm_channel(YM3438* ym3438, int channel)
         setup_fm_columns(3);
 
         ImGui::TableNextRow();
-        draw_grid_label("KEY ON");
+        gui_debug_grid_label("KEY ON");
 
         for (int i = 0; i < YM3438_OPERATOR_COUNT; i++)
         {
@@ -807,26 +799,26 @@ static void draw_fm_channel(YM3438* ym3438, int channel)
             ImGui::TextColored(ch.operators[i].key_on ? green : gray, "OP%d", i + 1);
         }
 
-        draw_grid_label("ALGORITHM");
+        gui_debug_grid_label("ALGORITHM");
         ImGui::TextColored(white, "%d", ch.algorithm);
 
         ImGui::TableNextRow();
-        draw_grid_label("F-NUMBER");
+        gui_debug_grid_label("F-NUMBER");
         ImGui::TextColored(white, "$%03X", ch.f_number);
-        draw_grid_label("FEEDBACK");
+        gui_debug_grid_label("FEEDBACK");
         ImGui::TextColored(white, "%d", ch.feedback);
 
         ImGui::TableNextRow();
-        draw_grid_label("BLOCK");
+        gui_debug_grid_label("BLOCK");
         ImGui::TextColored(white, "%d", ch.block);
-        draw_grid_label("PAN");
+        gui_debug_grid_label("PAN");
         ImGui::TextColored(ch.pan_left ? green : gray, "L"); ImGui::SameLine(0.0f, space);
         ImGui::TextColored(ch.pan_right ? green : gray, "R");
 
         ImGui::TableNextRow();
-        draw_grid_label("NOTE");
+        gui_debug_grid_label("NOTE");
         draw_frequency(ch.f_number, ch.block, true);
-        draw_grid_label("AMS/PMS");
+        gui_debug_grid_label("AMS/PMS");
         ImGui::TextColored(white, "%d/%d", ch.amplitude_modulation, ch.phase_modulation);
 
         ImGui::EndTable();
@@ -993,20 +985,20 @@ static void draw_pcm_global(RF5C68::RF5C68_State* state)
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 9);
 
     ImGui::TableNextRow();
-    draw_grid_label("SOUND");
+    gui_debug_grid_label("SOUND");
     ImGui::TextColored(state->enabled ? green : gray, "%s", state->enabled ? "ON" : "OFF");
-    draw_grid_label("CHANNEL BANK");
+    gui_debug_grid_label("CHANNEL BANK");
     ImGui::TextColored(white, "%d", state->channel_bank + 1);
-    draw_grid_label("WAVE BANK");
+    gui_debug_grid_label("WAVE BANK");
     ImGui::TextColored(white, "%X", state->wave_bank); ImGui::SameLine(0.0f, character);
     ImGui::TextColored(gray, "($%04X)", state->wave_bank << 12);
 
     ImGui::TableNextRow();
-    draw_grid_label("ENABLES");
+    gui_debug_grid_label("ENABLES");
     ImGui::TextColored(white, BYTE_TO_BINARY_PATTERN_SPACED, BYTE_TO_BINARY(enables));
-    draw_grid_label("IRQ MASK");
+    gui_debug_grid_label("IRQ MASK");
     ImGui::TextColored(white, "$%02X", state->irq_mask);
-    draw_grid_label("IRQ FLAGS");
+    gui_debug_grid_label("IRQ FLAGS");
     ImGui::TextColored(state->irq_flags ? yellow : white, "$%02X", state->irq_flags);
 
     ImGui::EndTable();
@@ -1278,27 +1270,27 @@ static void draw_pcm16_control(Audio* audio)
     setup_pcm16_columns();
 
     ImGui::TableNextRow();
-    draw_grid_label("DEVICE");
+    gui_debug_grid_label("DEVICE");
     ImGui::TextColored(fitted ? green : gray, "%s", fitted ? "FITTED" : "NOT FITTED");
 
     ImGui::TableNextRow();
-    draw_grid_label("DIRECTION");
+    gui_debug_grid_label("DIRECTION");
     ImGui::TextColored(white, "%s", pcm16->IsRecording() ? "RECORD" : "PLAY");
     ImGui::TableNextColumn();
     ImGui::TextColored(gray, "(051A)");
 
     ImGui::TableNextRow();
-    draw_grid_label("FORMAT");
+    gui_debug_grid_label("FORMAT");
     ImGui::TextColored(white, "%s", k_pcm16_format_names[pcm16->GetFormat()]);
     ImGui::TableNextColumn();
     ImGui::TextColored(gray, "(0519)");
 
     ImGui::TableNextRow();
-    draw_grid_label("LEVEL LSB");
+    gui_debug_grid_label("LEVEL LSB");
     ImGui::TextColored(white, "BIT %d", (state->mode & 0x07) + 1);
 
     ImGui::TableNextRow();
-    draw_grid_label("RATE");
+    gui_debug_grid_label("RATE");
 
     if (k_pcm16_rates[state->clock] != 0)
         ImGui::TextColored(white, "%.4f kHz", k_pcm16_rates[state->clock] / 2000.0);
@@ -1309,7 +1301,7 @@ static void draw_pcm16_control(Audio* audio)
     ImGui::TextColored(gray, "(0518)");
 
     ImGui::TableNextRow();
-    draw_grid_label("TRANSFER");
+    gui_debug_grid_label("TRANSFER");
 
     if ((state->transfer_control & 0x01) != 0)
         ImGui::TextColored(gray, "STOPPED");
@@ -1320,18 +1312,18 @@ static void draw_pcm16_control(Audio* audio)
     ImGui::TextColored(gray, "(051C)");
 
     ImGui::TableNextRow();
-    draw_grid_label("DATA PORT");
+    gui_debug_grid_label("DATA PORT");
     ImGui::TextColored(white, "%s", pcm16->IsSoftwareTransfer() ? "TRANSFER" : "LEVEL MONITOR");
     ImGui::TableNextColumn();
     ImGui::TextColored(gray, "(051A)");
 
     ImGui::TableNextRow();
-    draw_grid_label("READY");
+    gui_debug_grid_label("READY");
     ImGui::TextColored((transfer & 0x80) ? gray : green, "A/D"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((transfer & 0x40) ? gray : green, "D/A");
 
     ImGui::TableNextRow();
-    draw_grid_label("INTERRUPT");
+    gui_debug_grid_label("INTERRUPT");
 
     if (line >= 0)
         ImGui::TextColored(orange, "IRQ%d", line);
@@ -1339,7 +1331,7 @@ static void draw_pcm16_control(Audio* audio)
         ImGui::TextColored(gray, "OFF");
 
     ImGui::TableNextRow();
-    draw_grid_label("CAUSES");
+    gui_debug_grid_label("CAUSES");
     ImGui::TextColored((causes & 0x10) ? yellow : gray, "DMA"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((causes & 0x20) ? yellow : gray, "BUFFER"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((causes & 0x40) ? yellow : gray, "INPUT");
@@ -1364,7 +1356,7 @@ static void draw_pcm16_dma(PCM16::PCM16_State* state)
         ImGui::TableHeadersRow();
 
         ImGui::TableNextRow();
-        draw_grid_label("ADDRESS");
+        gui_debug_grid_label("ADDRESS");
         ImGui::TextColored(cyan, "$%08X", state->base_address);
 
         if (ImGui::IsItemClicked())
@@ -1380,7 +1372,7 @@ static void draw_pcm16_dma(PCM16::PCM16_State* state)
         ImGui::TextColored(gray, "(0514)");
 
         ImGui::TableNextRow();
-        draw_grid_label("COUNT");
+        gui_debug_grid_label("COUNT");
         ImGui::TextColored(white, "$%04X", state->base_count);
         ImGui::TableNextColumn();
         ImGui::TextColored(white, "$%04X", state->current_count);
@@ -1396,13 +1388,13 @@ static void draw_pcm16_dma(PCM16::PCM16_State* state)
     setup_pcm16_columns();
 
     ImGui::TableNextRow();
-    draw_grid_label("ACCESS");
+    gui_debug_grid_label("ACCESS");
     ImGui::TextColored(blue, "%s", state->bank != 0 ? "BASE" : "CURRENT");
     ImGui::TableNextColumn();
     ImGui::TextColored(gray, "(0510)");
 
     ImGui::TableNextRow();
-    draw_grid_label("CONTROL");
+    gui_debug_grid_label("CONTROL");
     ImGui::TextColored((state->dma_control & 0x10) ? green : gray, "AUTOINIT"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((state->dma_control & 0x02) ? green : gray, "IRQ"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(state->terminal_count ? yellow : gray, "END");
@@ -1423,23 +1415,23 @@ static void draw_pcm16_buffer(PCM16::PCM16_State* state)
     setup_pcm16_columns();
 
     ImGui::TableNextRow();
-    draw_grid_label("STAGES");
+    gui_debug_grid_label("STAGES");
     ImGui::TextColored(white, "%2d", state->buffer_count); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(gray, "/ %d", PCM16_BUFFER_SIZE);
     ImGui::TableNextColumn();
     ImGui::TextColored(gray, "(051B)");
 
     ImGui::TableNextRow();
-    draw_grid_label("ERRORS");
+    gui_debug_grid_label("ERRORS");
     ImGui::TextColored(state->overrun ? red : gray, "OVERRUN"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(state->underrun ? red : gray, "UNDERRUN");
 
     ImGui::TableNextRow();
-    draw_grid_label("ERROR IRQ");
+    gui_debug_grid_label("ERROR IRQ");
     ImGui::TextColored((state->buffer_control & 0x80) ? green : gray, "%s", (state->buffer_control & 0x80) ? "ON" : "OFF");
 
     ImGui::TableNextRow();
-    draw_grid_label("MASKS");
+    gui_debug_grid_label("MASKS");
     ImGui::TextColored((state->transfer_control & 0x02) ? orange : gray, "DREQ"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((state->transfer_control & 0x01) ? orange : gray, "BUFFER");
     ImGui::TableNextColumn();
@@ -1463,7 +1455,7 @@ static void draw_pcm16_monitors(Audio* audio)
     for (int i = 0; i < 2; i++)
     {
         ImGui::TableNextRow();
-        draw_grid_label(i == 0 ? "LEVEL L" : "LEVEL R");
+        gui_debug_grid_label(i == 0 ? "LEVEL L" : "LEVEL R");
         ImGui::TextColored(white, "$%02X", levels[i] & 0x7F); ImGui::SameLine(0.0f, space);
         ImGui::TextColored((levels[i] & 0x80) ? red : gray, "OVER");
         ImGui::TableNextColumn();
@@ -1471,14 +1463,14 @@ static void draw_pcm16_monitors(Audio* audio)
     }
 
     ImGui::TableNextRow();
-    draw_grid_label("PEAK");
+    gui_debug_grid_label("PEAK");
     ImGui::TextColored(white, "$%02X", state->peak & 0x7F); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((state->peak & 0x80) ? red : gray, "OVER");
     ImGui::TableNextColumn();
     ImGui::TextColored(gray, "(051D)");
 
     ImGui::TableNextRow();
-    draw_grid_label("TRIGGER");
+    gui_debug_grid_label("TRIGGER");
     ImGui::TextColored(white, "$%02X", state->threshold); ImGui::SameLine(0.0f, space);
     ImGui::TextColored(state->input_flag ? yellow : gray, "INPUT"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((state->transfer_control & 0x20) ? green : gray, "IRQ");
@@ -1488,7 +1480,7 @@ static void draw_pcm16_monitors(Audio* audio)
         s32 gain = audio->GetVolumeGain(0, 2 + i);
 
         ImGui::TableNextRow();
-        draw_grid_label(i == 0 ? "VOLUME L" : "VOLUME R");
+        gui_debug_grid_label(i == 0 ? "VOLUME L" : "VOLUME R");
 
         if (gain > 0)
             ImGui::TextColored(white, "%.1f dB", 20.0 * log10((double)gain / 32768.0));

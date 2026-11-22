@@ -43,7 +43,6 @@ static int hires_palette_bank = 0;
 
 static void crtc_write_callback(u16 index, u16 value, void* user_data);
 static void setup_grid_columns(bool layers);
-static void draw_grid_label(const char* label);
 static bool hires_page_shown(HiresCRTC* crtc, int page);
 static void draw_hires_page_row(const char* label, const u32* registers, u16 offset, bool hex, const bool* used);
 static void draw_hires_palette(HiresCRTC* crtc);
@@ -83,15 +82,15 @@ void gui_debug_window_crtc(void)
         setup_grid_columns(false);
 
         ImGui::TableNextRow();
-        draw_grid_label("DOT CLOCK");
+        gui_debug_grid_label("DOT CLOCK");
         ImGui::TextColored(orange, "%.3f MHz", clock);
-        draw_grid_label("RUNNING");
+        gui_debug_grid_label("RUNNING");
         ImGui::TextColored(running ? green : gray, "%s", running ? "ON" : "OFF");
 
         ImGui::TableNextRow();
-        draw_grid_label("LINE");
+        gui_debug_grid_label("LINE");
         ImGui::TextColored(white, "%u DOTS", line_clocks);
-        draw_grid_label("LINE RATE");
+        gui_debug_grid_label("LINE RATE");
 
         if (running)
             ImGui::TextColored(orange, "%.2f kHz", clock * 1000.0 / line_clocks);
@@ -99,9 +98,9 @@ void gui_debug_window_crtc(void)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_grid_label("FRAME");
+        gui_debug_grid_label("FRAME");
         ImGui::TextColored(white, "%u HALF-LINES", half_lines);
-        draw_grid_label("REFRESH");
+        gui_debug_grid_label("REFRESH");
 
         if (running)
             ImGui::TextColored(orange, "%.2f Hz", (clock * 1000000.0 * 2.0) / ((double)half_lines * line_clocks));
@@ -109,23 +108,23 @@ void gui_debug_window_crtc(void)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_grid_label("INTERLACE");
+        gui_debug_grid_label("INTERLACE");
         ImGui::TextColored(interlaced ? green : gray, "%s", interlaced ? "ON" : "OFF");
 
         ImGui::TableNextRow();
-        draw_grid_label("HSW1");
+        gui_debug_grid_label("HSW1");
         ImGui::TextColored(white, "%u", crtc[0x00]);
-        draw_grid_label("HSW2");
+        gui_debug_grid_label("HSW2");
         ImGui::TextColored(white, "%u", crtc[0x01]);
 
         ImGui::TableNextRow();
-        draw_grid_label("VST1");
+        gui_debug_grid_label("VST1");
         ImGui::TextColored(white, "%u", crtc[k_video_crtc_vst1]);
-        draw_grid_label("VST2");
+        gui_debug_grid_label("VST2");
         ImGui::TextColored(white, "%u", crtc[k_video_crtc_vst2]);
 
         ImGui::TableNextRow();
-        draw_grid_label("EET");
+        gui_debug_grid_label("EET");
         ImGui::TextColored(white, "%u", crtc[0x07]);
 
         ImGui::EndTable();
@@ -141,14 +140,14 @@ void gui_debug_window_crtc(void)
         u8 status = running ? video->GetSyncStatus(clocks) : 0;
 
         ImGui::TableNextRow();
-        draw_grid_label("LINE");
+        gui_debug_grid_label("LINE");
 
         if (running)
             ImGui::TextColored(white, "%u", video->GetBeamHalfLine(clocks) / 2);
         else
             ImGui::TextColored(gray, "--");
 
-        draw_grid_label("DOT");
+        gui_debug_grid_label("DOT");
 
         if (running)
             ImGui::TextColored(white, "%u", video->GetBeamClock(clocks));
@@ -156,14 +155,14 @@ void gui_debug_window_crtc(void)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_grid_label("H STATE");
+        gui_debug_grid_label("H STATE");
 
         if (running)
             ImGui::TextColored(blue, "%s", (status & 0x02) ? "SYNC" : (status & 0x30) ? "DISPLAY" : "BLANK");
         else
             ImGui::TextColored(gray, "--");
 
-        draw_grid_label("V STATE");
+        gui_debug_grid_label("V STATE");
 
         if (running)
             ImGui::TextColored(blue, "%s", (status & 0x04) ? "SYNC" : (status & 0xC0) ? "DISPLAY" : "BLANK");
@@ -171,14 +170,14 @@ void gui_debug_window_crtc(void)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_grid_label("FIELD");
+        gui_debug_grid_label("FIELD");
 
         if (running)
             ImGui::TextColored(white, "%d", (status & 0x08) ? 1 : 0);
         else
             ImGui::TextColored(gray, "--");
 
-        draw_grid_label("VSYNC IRQ");
+        gui_debug_grid_label("VSYNC IRQ");
         ImGui::TextColored(state->vsync_irq ? yellow : gray, "%-8s", state->vsync_irq ? "PENDING" : "CLEAR");
         ImGui::SameLine(0.0f, 0.0f);
         ImGui::TextColored(gray, "(05CA)");
@@ -199,7 +198,7 @@ void gui_debug_window_crtc(void)
         for (int row = 0; row < (int)(sizeof(rows) / sizeof(rows[0])); row++)
         {
             ImGui::TableNextRow();
-            draw_grid_label(rows[row]);
+            gui_debug_grid_label(rows[row]);
             draw_layer_column(0, row);
             ImGui::TableNextColumn();
             draw_layer_column(1, row);
@@ -296,21 +295,21 @@ void gui_debug_window_hires_crtc(void)
         setup_grid_columns(false);
 
         ImGui::TableNextRow();
-        draw_grid_label("SELECTED");
+        gui_debug_grid_label("SELECTED");
         ImGui::TextColored(selected ? green : gray, "%s", selected ? "ON" : "OFF");
-        draw_grid_label("RUNNING");
+        gui_debug_grid_label("RUNNING");
         ImGui::TextColored(running ? green : gray, "%s", running ? "ON" : "OFF");
 
         ImGui::TableNextRow();
-        draw_grid_label("DOT CLOCK");
+        gui_debug_grid_label("DOT CLOCK");
         ImGui::TextColored(active ? orange : gray, "%.3f MHz", clock);
-        draw_grid_label("LAYOUT");
+        gui_debug_grid_label("LAYOUT");
         ImGui::TextColored(color, "%s", two_page ? "2 PAGES" : "1 PAGE");
 
         ImGui::TableNextRow();
-        draw_grid_label("LINE");
+        gui_debug_grid_label("LINE");
         ImGui::TextColored(color, "%u DOTS", line_clocks);
-        draw_grid_label("LINE RATE");
+        gui_debug_grid_label("LINE RATE");
 
         if (active)
             ImGui::TextColored(orange, "%.2f kHz", clock * 1000.0 / line_clocks);
@@ -318,9 +317,9 @@ void gui_debug_window_hires_crtc(void)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_grid_label("FRAME");
+        gui_debug_grid_label("FRAME");
         ImGui::TextColored(color, "%u LINES", lines);
-        draw_grid_label("REFRESH");
+        gui_debug_grid_label("REFRESH");
 
         if (active)
             ImGui::TextColored(orange, "%.2f Hz", (clock * 1000000.0) / ((double)lines * line_clocks));
@@ -328,26 +327,26 @@ void gui_debug_window_hires_crtc(void)
             ImGui::TextColored(gray, "--");
 
         ImGui::TableNextRow();
-        draw_grid_label("HSYNC");
+        gui_debug_grid_label("HSYNC");
         ImGui::TextColored(color, "%u DOTS", crtc->GetWord(k_hires_crtc_hsw1));
-        draw_grid_label("VSYNC");
+        gui_debug_grid_label("VSYNC");
         ImGui::TextColored(color, "%u LINES", crtc->GetWord(k_hires_crtc_vsw1));
 
         ImGui::TableNextRow();
-        draw_grid_label("H WINDOW");
+        gui_debug_grid_label("H WINDOW");
         ImGui::TextColored(color, "%u-%u", crtc->GetWord(k_hires_crtc_hds), crtc->GetWord(k_hires_crtc_hde));
-        draw_grid_label("V WINDOW");
+        gui_debug_grid_label("V WINDOW");
         ImGui::TextColored(color, "%u-%u", crtc->GetWord(k_hires_crtc_vds), crtc->GetWord(k_hires_crtc_vde));
 
         ImGui::TableNextRow();
-        draw_grid_label("FRONT PAGE");
+        gui_debug_grid_label("FRONT PAGE");
 
         if (active && two_page)
             ImGui::TextColored(white, "%u", pages & 0x01);
         else
             ImGui::TextColored(gray, "--");
 
-        draw_grid_label("PACK MODE");
+        gui_debug_grid_label("PACK MODE");
         ImGui::TextColored(crtc->IsPackMode() ? green : gray, "%s", crtc->IsPackMode() ? "ON" : "OFF");
 
         ImGui::EndTable();
@@ -414,22 +413,22 @@ void gui_debug_window_hires_crtc(void)
         setup_grid_columns(false);
 
         ImGui::TableNextRow();
-        draw_grid_label("ON");
+        gui_debug_grid_label("ON");
         ImGui::TextColored(on ? green : gray, "%s", on ? "ON" : "OFF");
-        draw_grid_label("ZOOM");
+        gui_debug_grid_label("ZOOM");
         ImGui::TextColored(cursor, "$%04X", crtc->GetWord(k_hires_crtc_cursor_zoom));
 
         ImGui::TableNextRow();
-        draw_grid_label("POSITION");
+        gui_debug_grid_label("POSITION");
         ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_x), crtc->GetWord(k_hires_crtc_cursor_y));
-        draw_grid_label("HOT SPOT");
+        gui_debug_grid_label("HOT SPOT");
         ImGui::TextColored(cursor, "%u,%u", crtc->GetWord(k_hires_crtc_cursor_hot_x),
             crtc->GetWord(k_hires_crtc_cursor_hot_y));
 
         ImGui::TableNextRow();
-        draw_grid_label("BACK");
+        gui_debug_grid_label("BACK");
         ImGui::TextColored(cursor, "$%06X", registers[k_hires_crtc_cursor_back] & 0xFFFFFF);
-        draw_grid_label("FRONT");
+        gui_debug_grid_label("FRONT");
         ImGui::TextColored(cursor, "$%06X", registers[k_hires_crtc_cursor_front] & 0xFFFFFF);
 
         ImGui::EndTable();
@@ -803,13 +802,6 @@ static void draw_hires_palette(HiresCRTC* crtc)
 
         ImGui::EndTable();
     }
-}
-
-static void draw_grid_label(const char* label)
-{
-    ImGui::TableNextColumn();
-    ImGui::TextColored(violet, "%s", label);
-    ImGui::TableNextColumn();
 }
 
 static void draw_layer_column(int layer, int row)

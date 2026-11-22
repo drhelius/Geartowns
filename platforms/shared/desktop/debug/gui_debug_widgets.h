@@ -40,6 +40,75 @@ enum EditableRegisterFlags
     EditableRegisterFlags_Default    = EditableRegisterFlags_ShowAddr | EditableRegisterFlags_ShowName | EditableRegisterFlags_ShowBinary
 };
 
+inline void gui_debug_grid_label(const char* label)
+{
+    ImGui::TableNextColumn();
+    ImGui::TextColored(violet, "%s", label);
+    ImGui::TableNextColumn();
+}
+
+inline void gui_debug_row_label(const char* label)
+{
+    ImGui::TableNextRow();
+    gui_debug_grid_label(label);
+}
+
+inline void gui_debug_fixed_columns(const int* widths, int count)
+{
+    float character = ImGui::CalcTextSize("0").x;
+
+    for (int i = 0; i < count; i++)
+        ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * widths[i]);
+}
+
+inline void gui_debug_tooltip(const char* text, ImGuiHoveredFlags flags = 0)
+{
+    if (ImGui::IsItemHovered(flags))
+        ImGui::SetTooltip("%s", text);
+}
+
+inline void gui_debug_draw_binary(u32 value, int bytes, const ImVec4& color, bool parentheses)
+{
+    char text[40];
+    int length = 0;
+
+    for (int b = bytes - 1; b >= 0; b--)
+    {
+        u8 byte = (u8)(value >> (b * 8));
+
+        for (int bit = 7; bit >= 0; bit--)
+        {
+            text[length++] = ((byte >> bit) & 1) != 0 ? '1' : '0';
+
+            if (bit == 4)
+                text[length++] = ' ';
+        }
+
+        if (b > 0)
+            text[length++] = ' ';
+    }
+
+    text[length] = 0;
+    ImGui::TextColored(color, parentheses ? "(%s)" : "%s", text);
+}
+
+inline void gui_debug_draw_cd_position(u32 lba, u32 lead_in, bool valid)
+{
+    if (!valid)
+    {
+        ImGui::TextColored(gray, "--");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(gray, "--");
+        return;
+    }
+
+    GT_CdRomMSF msf;
+    LbaToMsf(lba + lead_in, &msf);
+    ImGui::TextColored(white, "%u", lba);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(orange, "%02u:%02u:%02u", msf.minutes, msf.seconds, msf.frames);
+}
+
 inline bool EditableRegister1(
     u16 address,
     u8 bit_index,
@@ -169,7 +238,7 @@ inline bool EditableRegister8(
     if (flags & EditableRegisterFlags_ShowBinary)
     {
         ImGui::SameLine();
-        ImGui::TextColored(gray, "(" BYTE_TO_BINARY_PATTERN_SPACED ")", BYTE_TO_BINARY(current_value));
+        gui_debug_draw_binary(current_value, 1, gray, true);
     }
 
     ImGui::PopID();
@@ -270,8 +339,7 @@ inline bool EditableRegister16(
     if (flags & EditableRegisterFlags_ShowBinary)
     {
         ImGui::SameLine();
-        ImGui::TextColored(gray, "(" BYTE_TO_BINARY_PATTERN_SPACED " " BYTE_TO_BINARY_PATTERN_SPACED ")",
-            BYTE_TO_BINARY((current_value >> 8) & 0xFF), BYTE_TO_BINARY(current_value & 0xFF));
+        gui_debug_draw_binary(current_value, 2, gray, true);
     }
 
     ImGui::PopID();
@@ -372,10 +440,7 @@ inline bool EditableRegister32(
     if (flags & EditableRegisterFlags_ShowBinary)
     {
         ImGui::SameLine();
-        ImGui::TextColored(gray, "(" BYTE_TO_BINARY_PATTERN_SPACED " " BYTE_TO_BINARY_PATTERN_SPACED " "
-            BYTE_TO_BINARY_PATTERN_SPACED " " BYTE_TO_BINARY_PATTERN_SPACED ")",
-            BYTE_TO_BINARY((current_value >> 24) & 0xFF), BYTE_TO_BINARY((current_value >> 16) & 0xFF),
-            BYTE_TO_BINARY((current_value >> 8) & 0xFF), BYTE_TO_BINARY(current_value & 0xFF));
+        gui_debug_draw_binary(current_value, 4, gray, true);
     }
 
     ImGui::PopID();

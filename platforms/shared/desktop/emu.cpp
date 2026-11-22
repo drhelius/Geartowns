@@ -105,6 +105,7 @@ static double get_rewind_pop_seconds(void);
 static bool unload_media(void);
 static bool get_floppy_state_path(int index, char* path, size_t path_size);
 static void restore_state_frame(const char* path, int index);
+static void after_state_loaded(const char* path, int index);
 static bool get_cmos_path(int model, char* path, size_t path_size);
 static void load_cmos(int model);
 static void save_cmos(void);
@@ -1087,14 +1088,7 @@ bool emu_load_state_slot(int index)
     if (!geartowns->LoadState(dir, index))
         return false;
 
-    restore_state_frame(dir, index);
-    emu_floppy_reconcile();
-    emu_hard_disk_state_loaded(false);
-    emu_memory_card_state_loaded(false);
-    emu_debug_state_restored();
-    events_sync_input();
-    emu_reset_load_ffwd();
-    rewind_reset();
+    after_state_loaded(dir, index);
     return true;
 }
 
@@ -1111,14 +1105,7 @@ bool emu_load_state_file(const char* file_path)
     if (emu_is_empty() || !geartowns->LoadState(file_path))
         return false;
 
-    restore_state_frame(file_path, -1);
-    emu_floppy_reconcile();
-    emu_hard_disk_state_loaded(false);
-    emu_memory_card_state_loaded(false);
-    emu_debug_state_restored();
-    events_sync_input();
-    emu_reset_load_ffwd();
-    rewind_reset();
+    after_state_loaded(file_path, -1);
     return true;
 }
 
@@ -2097,6 +2084,18 @@ static bool unload_media(void)
     rewind_reset();
     update_savestates_data();
     return true;
+}
+
+static void after_state_loaded(const char* path, int index)
+{
+    restore_state_frame(path, index);
+    emu_floppy_reconcile();
+    emu_hard_disk_state_loaded(false);
+    emu_memory_card_state_loaded(false);
+    emu_debug_state_restored();
+    events_sync_input();
+    emu_reset_load_ffwd();
+    rewind_reset();
 }
 
 static void restore_state_frame(const char* path, int index)

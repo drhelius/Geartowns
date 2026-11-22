@@ -977,4 +977,18 @@ static inline void gui_debug_scsi_command(const u8* command, char* text, size_t 
     }
 }
 
+static const char* const k_debug_interrupt_sources[I386_INTERRUPT_SOURCE_COUNT] = { "ANY", "EXCEPTION", "HARDWARE", "SOFTWARE" };
+static const char* const k_debug_cdda_play_states[3] = { "IDLE", "PLAYING", "PAUSED" };
+
+static inline const char* gui_debug_execution_mode_name(int mode)
+{
+    if (mode == I386_MODE_PROTECTED)
+        return "PROTECTED";
+
+    if (mode == I386_MODE_VM86)
+        return "VM86";
+
+    return "REAL";
+}
+
 #endif /* GUI_DEBUG_CONSTANTS_H */

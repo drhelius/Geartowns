@@ -29,8 +29,8 @@
 #include "../gui.h"
 #include "../gui_colors.h"
 #include "gui_debug_constants.h"
+#include "gui_debug_widgets.h"
 
-static void draw_grid_label(const char* label);
 static void draw_game_port(Input* input, int port);
 static void draw_button(const char* name, u16 mask, u16 buttons, u16 present);
 
@@ -59,19 +59,19 @@ void gui_debug_window_keyboard(void)
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 3);
 
         ImGui::TableNextRow();
-        draw_grid_label("DATA");
+        gui_debug_grid_label("DATA");
         ImGui::TextColored(state->fifo_count ? white : gray, "$%02X", keyboard->Peek(0x0600));
-        draw_grid_label("STATUS");
+        gui_debug_grid_label("STATUS");
         ImGui::TextColored(white, "$%02X", keyboard->Peek(0x0602));
 
         ImGui::TableNextRow();
-        draw_grid_label("IRQ ENABLE");
+        gui_debug_grid_label("IRQ ENABLE");
         ImGui::TextColored(state->irq_enabled ? green : gray, "%s", state->irq_enabled ? "ON" : "OFF");
-        draw_grid_label("KBINT");
+        gui_debug_grid_label("KBINT");
         ImGui::TextColored(state->kbint ? yellow : gray, "%s", state->kbint ? "ON" : "OFF");
 
         ImGui::TableNextRow();
-        draw_grid_label("LAST COMMAND");
+        gui_debug_grid_label("LAST COMMAND");
         ImGui::TextColored(white, "$%02X", state->last_command);
 
         ImGui::EndTable();
@@ -176,7 +176,7 @@ void gui_debug_window_game_ports(void)
         ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 22);
 
         ImGui::TableNextRow();
-        draw_grid_label("OUTPUT");
+        gui_debug_grid_label("OUTPUT");
         ImGui::TextColored(white, "$%02X", state->output);
 
         ImGui::EndTable();
@@ -216,15 +216,15 @@ static void draw_game_port(Input* input, int port)
     ImGui::TableSetupColumn(NULL, ImGuiTableColumnFlags_WidthFixed, character * 22);
 
     ImGui::TableNextRow();
-    draw_grid_label("TYPE");
+    gui_debug_grid_label("TYPE");
     ImGui::TextColored(type == GT_CONTROLLER_NONE ? gray : orange, "%s", k_types[type % 5]);
 
     ImGui::TableNextRow();
-    draw_grid_label("READ");
+    gui_debug_grid_label("READ");
     ImGui::TextColored(white, "$%02X", input->Peek(address));
 
     ImGui::TableNextRow();
-    draw_grid_label("LINES");
+    gui_debug_grid_label("LINES");
     ImGui::TextColored((output & (k_input_com << port)) ? green : gray, "COM"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((output & (0x01 << (port * 2))) ? green : gray, "TRIG1"); ImGui::SameLine(0.0f, space);
     ImGui::TextColored((output & (0x02 << (port * 2))) ? green : gray, "TRIG2");
@@ -243,7 +243,7 @@ static void draw_game_port(Input* input, int port)
         present = GT_GAMEPAD_A | GT_GAMEPAD_B;
 
     ImGui::TableNextRow();
-    draw_grid_label("BUTTONS");
+    gui_debug_grid_label("BUTTONS");
     draw_button("UP", GT_GAMEPAD_UP, buttons, present); ImGui::SameLine(0.0f, space);
     draw_button("DOWN", GT_GAMEPAD_DOWN, buttons, present); ImGui::SameLine(0.0f, space);
     draw_button("LEFT", GT_GAMEPAD_LEFT, buttons, present); ImGui::SameLine(0.0f, space);
@@ -267,7 +267,7 @@ static void draw_game_port(Input* input, int port)
     draw_button("ZOOM", GT_GAMEPAD_ZOOM, buttons, present);
 
     ImGui::TableNextRow();
-    draw_grid_label("PHASE");
+    gui_debug_grid_label("PHASE");
 
     if (mouse)
         ImGui::TextColored(white, "%s", k_phases[state->mouse_phase[port] & 3]);
@@ -275,7 +275,7 @@ static void draw_game_port(Input* input, int port)
         ImGui::TextColored(gray, "--");
 
     ImGui::TableNextRow();
-    draw_grid_label("SAMPLE");
+    gui_debug_grid_label("SAMPLE");
 
     if (mouse)
     {
@@ -288,7 +288,7 @@ static void draw_game_port(Input* input, int port)
         ImGui::TextColored(gray, "--");
 
     ImGui::TableNextRow();
-    draw_grid_label("PENDING");
+    gui_debug_grid_label("PENDING");
 
     if (mouse)
     {
@@ -311,9 +311,3 @@ static void draw_button(const char* name, u16 mask, u16 buttons, u16 present)
     ImGui::TextColored(pressed ? green : (available ? white : gray), "%s", name);
 }
 
-static void draw_grid_label(const char* label)
-{
-    ImGui::TableNextColumn();
-    ImGui::TextColored(violet, "%s", label);
-    ImGui::TableNextColumn();
-}

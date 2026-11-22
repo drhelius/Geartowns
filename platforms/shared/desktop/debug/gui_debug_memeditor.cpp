@@ -31,6 +31,7 @@
 #include "i386/i386.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "gui_debug_i386_tables.h"
 
 class MemoryExpressionParser
 {
@@ -1215,57 +1216,10 @@ bool MemEditor::ParseAddressInput(GT_Debug_Memory_Address& address, char* reason
         std::string prefix = input.substr(0, colon);
         expression = input.substr(colon + 1);
 
-        if (strings_equal_ignore_case(prefix, "CS"))
+        if (!gui_debug_parse_address_prefix(prefix.c_str(), true, address))
         {
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment_register = I386_SEGMENT_CS;
-        }
-        else if (strings_equal_ignore_case(prefix, "SS"))
-        {
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment_register = I386_SEGMENT_SS;
-        }
-        else if (strings_equal_ignore_case(prefix, "DS"))
-        {
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment_register = I386_SEGMENT_DS;
-        }
-        else if (strings_equal_ignore_case(prefix, "ES"))
-        {
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment_register = I386_SEGMENT_ES;
-        }
-        else if (strings_equal_ignore_case(prefix, "FS"))
-        {
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment_register = I386_SEGMENT_FS;
-        }
-        else if (strings_equal_ignore_case(prefix, "GS"))
-        {
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment_register = I386_SEGMENT_GS;
-        }
-        else if (strings_equal_ignore_case(prefix, "LINE") || strings_equal_ignore_case(prefix, "L"))
-            address.space = GT_DEBUG_MEMORY_LINEAR;
-        else if (strings_equal_ignore_case(prefix, "PHYS") || strings_equal_ignore_case(prefix, "P"))
-            address.space = GT_DEBUG_MEMORY_PHYSICAL;
-        else if (strings_equal_ignore_case(prefix, "BUS") || strings_equal_ignore_case(prefix, "B"))
-            address.space = GT_DEBUG_MEMORY_BUS;
-        else if (strings_equal_ignore_case(prefix, "IO"))
-            address.space = GT_DEBUG_MEMORY_IO;
-        else
-        {
-            u16 segment = 0;
-
-            if (!parse_hex_with_prefix(prefix, &segment))
-            {
-                strncpy_fit(reason, "Unknown address-space or segment prefix", reason_size);
-                return false;
-            }
-
-            address.space = GT_DEBUG_MEMORY_LOGICAL;
-            address.segment = segment;
-            address.segment_register = -1;
+            strncpy_fit(reason, "Unknown address-space or segment prefix", reason_size);
+            return false;
         }
     }
 

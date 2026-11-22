@@ -32,6 +32,7 @@
 #include "../gui_colors.h"
 #include "gui_debug_disassembler.h"
 #include "gui_debug_i386_tables.h"
+#include "gui_debug_widgets.h"
 
 enum ProfilerColumn
 {
@@ -225,8 +226,7 @@ static void draw_profiler(Profiler* profiler)
             ImGui::TableHeader(ImGui::TableGetColumnName(column));
             ImGui::PopID();
 
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", k_profiler_column_tooltips[column]);
+            gui_debug_tooltip(k_profiler_column_tooltips[column]);
         }
 
         ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs();

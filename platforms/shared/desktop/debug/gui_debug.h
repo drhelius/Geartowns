@@ -42,6 +42,8 @@ EXTERN void gui_debug_auto_save_settings(void);
 EXTERN void gui_debug_auto_load_settings(void);
 EXTERN bool gui_debug_read_settings_data(std::istream& stream, void* data, size_t size);
 EXTERN bool gui_debug_read_settings_count(std::istream& stream, int& count, size_t record_size);
+EXTERN void gui_debug_write_settings_data(std::ostream& stream, const void* data, size_t size);
+EXTERN void gui_debug_write_settings_count(std::ostream& stream, int count);
 
 #undef GUI_DEBUG_IMPORT
 #undef EXTERN

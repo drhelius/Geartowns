@@ -30,6 +30,7 @@
 #include "../gui.h"
 #include "../gui_colors.h"
 #include "gui_debug_constants.h"
+#include "gui_debug_widgets.h"
 
 static void draw_flag(const char* name, bool value);
 static void draw_flag_tooltip(const char* text);
@@ -358,8 +359,7 @@ static void draw_flag(const char* name, bool value)
 
 static void draw_flag_tooltip(const char* text)
 {
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", text);
+    gui_debug_tooltip(text);
 }
 
 static void draw_lba(u32 lba)

@@ -45,6 +45,7 @@ public:
     static bool IsBootDisk(const char* path, int image, int disk);
     static bool ReadDisk(const char* path, int image, int disk, std::vector<u8>& file, u32* offset, u32* size);
     static bool ReadWorkingCopy(const char* path, std::vector<u8>& copy);
+    static bool IsFloppyFile(const char* path);
 };
 
 static const u32 k_floppy_max_file_size = k_floppy_max_image_size * 4;

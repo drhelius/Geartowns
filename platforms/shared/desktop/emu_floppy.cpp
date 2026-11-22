@@ -85,15 +85,6 @@ bool emu_floppy_is_image(const char* path)
     if (!IsValidPointer(path))
         return false;
 
-    if (FloppyImage::IsImageName(path))
-        return true;
-
-    if (ends_with_no_case(path, ".bin"))
-    {
-        std::vector<u8> data;
-        return MediaFile::ReadFile(path, k_floppy_max_file_size, &data) && FloppyImage::IsRaw(data.data(), (u32)data.size());
-    }
-
     if (ends_with_no_case(path, ".m3u"))
     {
         std::vector<std::string> entries;
@@ -110,12 +101,7 @@ bool emu_floppy_is_image(const char* path)
         return true;
     }
 
-    if (!ends_with_no_case(path, ".zip"))
-        return false;
-
-    std::vector<u8> archive;
-    return MediaFile::ReadFile(path, k_floppy_max_file_size, &archive) &&
-        FloppyImage::GetZipImageCount(archive.data(), archive.size()) > 0;
+    return FloppySet::IsFloppyFile(path);
 }
 
 bool emu_floppy_insert(int drive, const char* path, bool discard_changes)

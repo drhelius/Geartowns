@@ -120,3 +120,23 @@ bool FloppySet::ReadWorkingCopy(const char* path, std::vector<u8>& copy)
 {
     return MediaFile::ReadFile(path, k_floppy_max_file_size, &copy) && FloppyImage::IsD77(copy.data(), (u32)copy.size());
 }
+
+bool FloppySet::IsFloppyFile(const char* path)
+{
+    std::vector<u8> data;
+
+    if (!IsValidPointer(path))
+        return false;
+
+    if (FloppyImage::IsImageName(path))
+        return true;
+
+    if (ends_with_no_case(path, ".bin"))
+        return MediaFile::ReadFile(path, k_floppy_max_file_size, &data) && FloppyImage::IsRaw(data.data(), (u32)data.size());
+
+    if (ends_with_no_case(path, ".zip"))
+        return MediaFile::ReadFile(path, k_floppy_max_file_size, &data) &&
+            (FloppyImage::GetZipImageCount(data.data(), data.size()) > 0);
+
+    return false;
+}

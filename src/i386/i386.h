@@ -70,6 +70,11 @@ enum I386_Segment_Register
     I386_SEGMENT_COUNT
 };
 
+static const char* const k_i386_reg8_names[8] = { "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH" };
+static const char* const k_i386_reg16_names[I386_REG_COUNT] = { "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI" };
+static const char* const k_i386_reg32_names[I386_REG_COUNT] = { "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI" };
+static const char* const k_i386_sreg_names[I386_SEGMENT_COUNT] = { "ES", "CS", "SS", "DS", "FS", "GS" };
+
 enum I386_Execution_Mode
 {
     I386_MODE_REAL = 0,
@@ -356,6 +361,63 @@ struct I386_Disassembler_Record
 
     char auto_symbol[64];
 };
+
+INLINE bool I386IsPrefixByte(u8 value)
+{
+    return (value == 0x26) || (value == 0x2E) || (value == 0x36) || (value == 0x3E) || (value == 0x64) ||
+        (value == 0x65) || (value == 0x66) || (value == 0x67) || (value == 0xF0) || (value == 0xF2) || (value == 0xF3);
+}
+
+inline int I386OpcodeIndex(const I386_Disassembler_Record* record)
+{
+    int index = 0;
+
+    while ((index < record->size) && I386IsPrefixByte(record->opcodes[index]))
+        index++;
+
+    return index;
+}
+
+inline int I386PortOperand(const I386_Disassembler_Record* record, bool& immediate)
+{
+    int index = I386OpcodeIndex(record);
+    immediate = false;
+
+    if (index >= record->size)
+        return -1;
+
+    u8 opcode = record->opcodes[index];
+    immediate = (opcode >= 0xE4) && (opcode <= 0xE7);
+
+    if (immediate)
+        return (index + 1 < record->size) ? record->opcodes[index + 1] : -1;
+
+    bool string_io = (opcode == 0x6C) || (opcode == 0x6D) || (opcode == 0x6E) || (opcode == 0x6F);
+    return (((opcode >= 0xEC) && (opcode <= 0xEF)) || string_io) ? -2 : -1;
+}
+
+// INT n, INT3, INTO and ICEBP, -1 for anything else
+inline int I386InterruptVector(const I386_Disassembler_Record* record)
+{
+    int index = I386OpcodeIndex(record);
+
+    if (index >= record->size)
+        return -1;
+
+    switch (record->opcodes[index])
+    {
+        case 0xCD:
+            return (index + 1 < record->size) ? record->opcodes[index + 1] : -1;
+        case 0xCC:
+            return 3;
+        case 0xCE:
+            return 4;
+        case 0xF1:
+            return 1;
+        default:
+            return -1;
+    }
+}
 
 enum I386_Breakpoint_Type
 {
@@ -1247,6 +1309,8 @@ private:
     bool ReadDescriptor(u16 selector, Descriptor& descriptor, GT_Bus_Access_Context& context, u8 fault_vector = 13);
     bool ReadDescriptorNoFault(u16 selector, Descriptor& descriptor, GT_Bus_Access_Context& context, bool& valid);
     bool ReadGDTDescriptor(u16 selector, Descriptor& descriptor, GT_Bus_Access_Context& context, u8 fault_vector = 13);
+    bool ReadDescriptorWords(u32 address, GT_Bus_Access_Context& context, u32& low, u32& high);
+    bool IsLDTUsable() const;
     void DecodeDescriptor(u16 selector, u32 address, u32 low, u32 high, Descriptor& descriptor) const;
     void LoadDescriptorCache(u16 selector, const Descriptor& descriptor, I386_Segment& segment);
     void ClearSegmentCache(u16 selector, I386_Segment& segment);

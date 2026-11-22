@@ -751,6 +751,7 @@ public:
     TraceLogger();
     ~TraceLogger();
     static TraceLogger* GetDisabled();
+    static TraceLogger* Resolve(TraceLogger* trace_logger);
     void Init(const u64* clocks);
     void SetPCSource(const u32* base, const u32* offset);
     void Reset();

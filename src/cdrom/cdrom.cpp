@@ -820,18 +820,18 @@ bool CdRom::TOCEntry()
     else if (entry == 1)
     {
         PushStatus(0x16, adr, 0xA1, 0x00);
-        PushStatus(0x17, DecToBcd(track_count), 0x00, 0x00);
+        PushStatus(0x17, dec_to_bcd(track_count), 0x00, 0x00);
     }
     else if (entry == 2)
     {
         PushStatus(0x16, adr, 0xA2, 0x00);
-        PushStatus(0x17, DecToBcd(msf.minutes), DecToBcd(msf.seconds), DecToBcd(msf.frames));
+        PushStatus(0x17, dec_to_bcd(msf.minutes), dec_to_bcd(msf.seconds), dec_to_bcd(msf.frames));
     }
     else
     {
         LbaToMsf(tracks[index].start_lba + k_cdrom_lead_in, &msf);
-        PushStatus(0x16, adr, DecToBcd(index + 1), 0x00);
-        PushStatus(0x17, DecToBcd(msf.minutes), DecToBcd(msf.seconds), DecToBcd(msf.frames));
+        PushStatus(0x16, adr, dec_to_bcd(index + 1), 0x00);
+        PushStatus(0x17, dec_to_bcd(msf.minutes), dec_to_bcd(msf.seconds), dec_to_bcd(msf.frames));
     }
 
     m_state.toc_entry++;
@@ -884,10 +884,10 @@ void CdRom::CommandSubQRead()
         LbaToMsf(lba + k_cdrom_lead_in, &absolute);
 
         PushStatus(0x00, GetStatusSecondByte());
-        PushStatus(0x18, (u8)((control << 4) | 0x01), DecToBcd((u8)(track + 1)), (lba >= track_lba) ? 0x01 : 0x00);
-        PushStatus(0x19, DecToBcd(relative.minutes), DecToBcd(relative.seconds), DecToBcd(relative.frames));
-        PushStatus(0x19, 0x00, DecToBcd(absolute.minutes), DecToBcd(absolute.seconds));
-        PushStatus(0x20, DecToBcd(absolute.frames), 0x00, 0x00);
+        PushStatus(0x18, (u8)((control << 4) | 0x01), dec_to_bcd((u8)(track + 1)), (lba >= track_lba) ? 0x01 : 0x00);
+        PushStatus(0x19, dec_to_bcd(relative.minutes), dec_to_bcd(relative.seconds), dec_to_bcd(relative.frames));
+        PushStatus(0x19, 0x00, dec_to_bcd(absolute.minutes), dec_to_bcd(absolute.seconds));
+        PushStatus(0x20, dec_to_bcd(absolute.frames), 0x00, 0x00);
     }
 
     if ((m_state.active_command & k_cdrom_flag_irq) != 0)
@@ -1588,8 +1588,8 @@ bool CdRom::GetRange(u32& start, u32& end) const
             return false;
     }
 
-    GT_CdRomMSF start_msf = { BcdToDec(params[0]), BcdToDec(params[1]), BcdToDec(params[2]) };
-    GT_CdRomMSF end_msf = { BcdToDec(params[3]), BcdToDec(params[4]), BcdToDec(params[5]) };
+    GT_CdRomMSF start_msf = { bcd_to_dec(params[0]), bcd_to_dec(params[1]), bcd_to_dec(params[2]) };
+    GT_CdRomMSF end_msf = { bcd_to_dec(params[3]), bcd_to_dec(params[4]), bcd_to_dec(params[5]) };
 
     if ((start_msf.seconds >= 60) || (start_msf.frames >= 75) || (end_msf.seconds >= 60) || (end_msf.frames >= 75))
         return false;

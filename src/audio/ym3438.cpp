@@ -19,6 +19,7 @@
 
 #include <string.h>
 #include "ym3438.h"
+#include "audio_common.h"
 #include "../common/state_serializer.h"
 
 // Register order is slot 1, 3, 2, 4.
@@ -344,8 +345,8 @@ void YM3438::GenerateNativeSample()
 
     m_state.lfo_phase_changed = 0;
 
-    left = CLAMP(left * 16, -32768, 32767);
-    right = CLAMP(right * 16, -32768, 32767);
+    left = clamp_s16(left * 16);
+    right = clamp_s16(right * 16);
     m_state.left_sample = (s16)left;
     m_state.right_sample = (s16)right;
 

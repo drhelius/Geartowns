@@ -255,6 +255,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\audio\audio.h" />
+    <ClInclude Include="..\..\src\audio\audio_common.h" />
     <ClInclude Include="..\..\src\audio\audio_inline.h" />
     <ClInclude Include="..\..\src\common\bit_ops.h" />
     <ClInclude Include="..\..\src\common\common.h" />

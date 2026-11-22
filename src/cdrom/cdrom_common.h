@@ -67,16 +67,6 @@ INLINE u32 MsfToLba(const GT_CdRomMSF* msf)
     return (msf->minutes * 60 + msf->seconds) * 75 + msf->frames;
 }
 
-INLINE u8 DecToBcd(u8 val)
-{
-    return ((val / 10) << 4) | (val % 10);
-}
-
-INLINE u8 BcdToDec(u8 bcd)
-{
-    return ((bcd >> 4) * 10) + (bcd & 0x0F);
-}
-
 INLINE bool IsValidBcd(u8 bcd)
 {
     return ((bcd >> 4) <= 9) && ((bcd & 0x0F) <= 9);

@@ -42,9 +42,9 @@ bool CdRomImage::ReadRawSector2352(u32 lba, u8* buffer)
 
     memset(buffer, 0, 2352);
     memset(buffer + 1, 0xFF, 10);
-    buffer[12] = DecToBcd(msf.minutes);
-    buffer[13] = DecToBcd(msf.seconds);
-    buffer[14] = DecToBcd(msf.frames);
+    buffer[12] = dec_to_bcd(msf.minutes);
+    buffer[13] = dec_to_bcd(msf.seconds);
+    buffer[14] = dec_to_bcd(msf.frames);
     buffer[15] = 0x01;
 
     return ReadSector(lba, buffer + 16);

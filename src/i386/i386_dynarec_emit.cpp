@@ -436,9 +436,7 @@ void DynarecEmitter::GetOperandBytes(Instruction& instruction, const u8* bytes) 
     u32 position = 0;
     u32 displacement = 0;
 
-    while (position < length && (bytes[position] == 0x26 || bytes[position] == 0x2E || bytes[position] == 0x36 ||
-        bytes[position] == 0x3E || bytes[position] == 0x64 || bytes[position] == 0x65 || bytes[position] == 0x66 ||
-        bytes[position] == 0x67 || bytes[position] == 0xF0 || bytes[position] == 0xF2 || bytes[position] == 0xF3))
+    while (position < length && I386IsPrefixByte(bytes[position]))
         position++;
 
     position += c.two_byte ? 2 : 1;

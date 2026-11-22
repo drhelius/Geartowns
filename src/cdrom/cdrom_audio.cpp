@@ -19,6 +19,7 @@
 
 #include "cdrom_audio.h"
 #include "cdrom_media.h"
+#include "../audio/audio_common.h"
 #include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
@@ -51,7 +52,7 @@ void CdRomAudio::Init()
 
 void CdRomAudio::SetTraceLogger(TraceLogger* trace_logger)
 {
-    m_trace_logger = IsValidPointer(trace_logger) ? trace_logger : TraceLogger::GetDisabled();
+    m_trace_logger = TraceLogger::Resolve(trace_logger);
 }
 
 void CdRomAudio::Reset()
@@ -195,7 +196,7 @@ void CdRomAudio::Deemphasize()
             output = (k_cdrom_deemphasis_b0 * sample) + (k_cdrom_deemphasis_b1 * input) +
                 ((k_cdrom_deemphasis_a1 * output) >> 16);
             input = sample;
-            m_sector_cache[i] = (s16)CLAMP((output + 0x8000) >> 16, -32768, 32767);
+            m_sector_cache[i] = clamp_s16((output + 0x8000) >> 16);
         }
 
         m_deemphasis_end_input[c] = (s32)input;

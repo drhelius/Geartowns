@@ -481,6 +481,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\audio\audio.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\audio_common.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\audio_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\bit_ops.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\common\common.h"><Filter>src</Filter></ClInclude>

@@ -1678,18 +1678,12 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     bool is_desktop_savestate = false;
     GT_SaveState_Header desktop_header = {};
 
-    if (size >= sizeof(desktop_header))
+    if (ReadSaveStateHeader(stream, size, &desktop_header))
     {
-        stream.seekg(size - sizeof(desktop_header), ios::beg);
-        stream.read(reinterpret_cast<char*>(&desktop_header), sizeof(desktop_header));
-
-        if (desktop_header.magic == GT_SAVESTATE_MAGIC)
-        {
-            header.magic = desktop_header.magic;
-            header.version = desktop_header.version;
-            is_desktop_savestate = true;
-            Debug("Loading desktop save state");
-        }
+        header.magic = desktop_header.magic;
+        header.version = desktop_header.version;
+        is_desktop_savestate = true;
+        Debug("Loading desktop save state");
     }
 #endif
 
@@ -1888,29 +1882,12 @@ bool GeartownsCore::GetSaveStateHeader(int index, const char* path, GT_SaveState
 
     stream.seekg(0, ios::end);
     size_t savestate_size = static_cast<size_t>(stream.tellg());
-
-    if (savestate_size < sizeof(GT_SaveState_Header))
-    {
-        Error("Invalid save state file size: %zu", savestate_size);
-        stream.close();
-        return false;
-    }
-
-    stream.seekg(savestate_size - sizeof(GT_SaveState_Header), ios::beg);
-    stream.read(reinterpret_cast<char*>(header), sizeof(GT_SaveState_Header));
-
-    if (stream.fail())
-    {
-        Error("Failed to read save state header from %s", full_path.c_str());
-        stream.close();
-        return false;
-    }
-
+    bool valid = ReadSaveStateHeader(stream, savestate_size, header);
     stream.close();
 
-    if (header->magic != GT_SAVESTATE_MAGIC)
+    if (!valid)
     {
-        Error("Invalid save state magic: 0x%08X", header->magic);
+        Error("Invalid save state header in %s", full_path.c_str());
         return false;
     }
 
@@ -1946,9 +1923,11 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
         return false;
     }
 
+    stream.seekg(0, ios::end);
+    size_t savestate_size = static_cast<size_t>(stream.tellg());
     GT_SaveState_Header header;
 
-    if (!GetSaveStateHeader(index, path, &header))
+    if (!ReadSaveStateHeader(stream, savestate_size, &header) || (header.size != savestate_size))
     {
         Error("Invalid save state header");
         stream.close();
@@ -2070,39 +2049,31 @@ std::string GeartownsCore::GetSaveStatePath(const char* path, int index)
 {
     using namespace std;
 
-    if (index < 0)
-    {
-        if (IsValidPointer(path))
-            return path;
+    if ((index < 0) && IsValidPointer(path))
+        return path;
 
-        string full_path = m_media->GetFilePath();
-        string::size_type dot_index = full_path.rfind('.');
+    string full_path = m_media->GetFilePath();
 
-        if (dot_index != string::npos)
-            full_path.replace(dot_index + 1, full_path.length() - dot_index - 1, "state");
-
-        return full_path;
-    }
-
-    string full_path;
-
-    if (IsValidPointer(path))
+    if ((index >= 0) && IsValidPointer(path))
     {
         full_path = path;
         append_path_component(full_path, m_media->GetFileName());
     }
-    else
-        full_path = m_media->GetFilePath();
 
-    string::size_type dot_index = full_path.rfind('.');
+    if (path_has_extension(full_path))
+        full_path = path_strip_extension(full_path) + ".state";
 
-    if (dot_index != string::npos)
-        full_path.replace(dot_index + 1, full_path.length() - dot_index - 1, "state");
+    return index < 0 ? full_path : full_path + int_to_string(index);
+}
 
-    stringstream ss;
-    ss << index;
-    full_path += ss.str();
-    return full_path;
+bool GeartownsCore::ReadSaveStateHeader(std::istream& stream, size_t size, GT_SaveState_Header* header)
+{
+    if (size < sizeof(GT_SaveState_Header))
+        return false;
+
+    stream.seekg(size - sizeof(GT_SaveState_Header), std::ios::beg);
+    stream.read(reinterpret_cast<char*>(header), sizeof(GT_SaveState_Header));
+    return !stream.fail() && (header->magic == GT_SAVESTATE_MAGIC);
 }
 
 void GeartownsCore::GetRuntimeInfo(GT_Runtime_Info& runtime_info)

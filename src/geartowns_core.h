@@ -232,6 +232,7 @@ private:
     void SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version);
     void SanitizeMachineConfig(GT_Machine_Config& config);
     std::string GetSaveStatePath(const char* path, int index);
+    bool ReadSaveStateHeader(std::istream& stream, size_t size, GT_SaveState_Header* header);
 
 private:
     Audio* m_audio;

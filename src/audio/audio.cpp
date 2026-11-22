@@ -19,6 +19,7 @@
 
 #include <math.h>
 #include "audio.h"
+#include "audio_common.h"
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "pcm16.h"
@@ -693,8 +694,8 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
                 m_buzzer_buffer[i + 1] + m_pcm16_buffer[i + 1];
             left = HighPass(dc_left, left);
             right = HighPass(dc_right, right);
-            sample_buffer[i] = (s16)CLAMP(left, -32768, 32767);
-            sample_buffer[i + 1] = (s16)CLAMP(right, -32768, 32767);
+            sample_buffer[i] = clamp_s16(left);
+            sample_buffer[i + 1] = clamp_s16(right);
         }
     }
     else
@@ -711,8 +712,8 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
                 (float)m_pcm16_buffer[i + 1] * pcm16_volume;
             s32 out_left = (s32)((float)HighPass(dc_left, (s32)left) * m_master_volume);
             s32 out_right = (s32)((float)HighPass(dc_right, (s32)right) * m_master_volume);
-            sample_buffer[i] = (s16)CLAMP(out_left, -32768, 32767);
-            sample_buffer[i + 1] = (s16)CLAMP(out_right, -32768, 32767);
+            sample_buffer[i] = clamp_s16(out_left);
+            sample_buffer[i + 1] = clamp_s16(out_right);
         }
     }
 
@@ -862,8 +863,8 @@ void Audio::SanitizeState()
 {
     m_state.sound_clock_remainder %= k_audio_clocks_per_sound_clock;
     m_state.sample_clock_counter %= GT_MACHINE_CLOCK_RATE;
-    m_state.pcm_lowpass_left = CLAMP(m_state.pcm_lowpass_left, -32768, 32767);
-    m_state.pcm_lowpass_right = CLAMP(m_state.pcm_lowpass_right, -32768, 32767);
+    m_state.pcm_lowpass_left = clamp_s16(m_state.pcm_lowpass_left);
+    m_state.pcm_lowpass_right = clamp_s16(m_state.pcm_lowpass_right);
     m_state.output_dc_left = CLAMP(m_state.output_dc_left, -k_audio_dc_limit, k_audio_dc_limit);
     m_state.output_dc_right = CLAMP(m_state.output_dc_right, -k_audio_dc_limit, k_audio_dc_limit);
 

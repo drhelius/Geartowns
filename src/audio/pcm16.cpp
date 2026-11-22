@@ -18,6 +18,7 @@
  */
 
 #include "pcm16.h"
+#include "audio_common.h"
 #include "../system/memory.h"
 #include "../system/pic.h"
 #include "../common/trace_logger.h"
@@ -346,7 +347,7 @@ void PCM16::Record(u64 time)
             PushWord((u16)right, time);
             break;
         case PCM16_FORMAT_16BIT_MONO:
-            PushWord((u16)CLAMP(left + right, -32768, 32767), time);
+            PushWord((u16)clamp_s16(left + right), time);
             break;
         case PCM16_FORMAT_8BIT_STEREO:
             PushWord((u16)(ConvertSample(left) | (ConvertSample(right) << 8)), time);
@@ -478,8 +479,8 @@ u8 PCM16::GetLevel(s32 sample) const
 
 void PCM16::Input(s32 left, s32 right)
 {
-    m_state.input_left = (s16)CLAMP(left, -32768, 32767);
-    m_state.input_right = (s16)CLAMP(right, -32768, 32767);
+    m_state.input_left = clamp_s16(left);
+    m_state.input_right = clamp_s16(right);
     m_state.level_left = GetLevel(left);
     m_state.level_right = GetLevel(right);
 

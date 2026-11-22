@@ -859,12 +859,6 @@ static void uppercase_intel_identifiers(char* text)
     }
 }
 
-static bool is_prefix(u8 value)
-{
-    return value == 0x26 || value == 0x2E || value == 0x36 || value == 0x3E || value == 0x64 || value == 0x65 ||
-        value == 0x66 || value == 0x67 || value == 0xF0 || value == 0xF2 || value == 0xF3;
-}
-
 static bool set_auto_symbol(I386_Disassembler_Record& record, bool subroutine)
 {
     // A location first reached by a jump becomes a subroutine once something calls it
@@ -980,7 +974,7 @@ bool I386::FormatDisassemblerRecord(const I386_Segment& code_segment, u32 eip, I
 
     u32 position = 0;
 
-    while (position < state.length && is_prefix(state.bytes[position]))
+    while (position < state.length && I386IsPrefixByte(state.bytes[position]))
         position++;
 
     position += (state.two_byte ? 2 : 1) + (state.has_modrm ? 1 : 0) + (state.has_sib ? 1 : 0);

@@ -59,6 +59,11 @@ TraceLogger* TraceLogger::GetDisabled()
     return &k_disabled;
 }
 
+TraceLogger* TraceLogger::Resolve(TraceLogger* trace_logger)
+{
+    return IsValidPointer(trace_logger) ? trace_logger : GetDisabled();
+}
+
 void TraceLogger::Init(const u64* clocks)
 {
     m_clocks = IsValidPointer(clocks) ? clocks : &k_trace_no_clocks;

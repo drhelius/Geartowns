@@ -1373,9 +1373,7 @@ bool I386::CopyDecodeState(I386_Decode_State& state)
     // The default size is recovered from the decoded size and the prefixes actually present
     bool operand_override = false;
 
-    for (u32 i = 0; i < length && (bytes[i] == 0x26 || bytes[i] == 0x2E || bytes[i] == 0x36 || bytes[i] == 0x3E ||
-        bytes[i] == 0x64 || bytes[i] == 0x65 || bytes[i] == 0x66 || bytes[i] == 0x67 || bytes[i] == 0xF0 ||
-        bytes[i] == 0xF2 || bytes[i] == 0xF3); i++)
+    for (u32 i = 0; i < length && I386IsPrefixByte(bytes[i]); i++)
         operand_override = operand_override || bytes[i] == 0x66;
 
     bool default32 = (m_instruction.operand_size == 4) != operand_override;
@@ -1453,7 +1451,7 @@ void I386::SetFPUErrorCallback(void* context, I386_FPU_Error_Fn callback)
 
 void I386::SetTraceLogger(TraceLogger* trace_logger)
 {
-    m_trace_logger = IsValidPointer(trace_logger) ? trace_logger : TraceLogger::GetDisabled();
+    m_trace_logger = TraceLogger::Resolve(trace_logger);
 }
 
 void I386::SetProfiler(Profiler* profiler)
@@ -1918,19 +1916,15 @@ bool I386::GetDebugRegisterValue(const char* name, u32& value) const
 
 bool I386::GetDebugPartialRegisterValue(const char* name, u32& value) const
 {
-    static const char* k_names16[I386_REG_COUNT] = { "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI" };
-    static const char* k_names8[8] = { "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH" };
-    static const char* k_segments[I386_SEGMENT_COUNT] = { "ES", "CS", "SS", "DS", "FS", "GS" };
-
     for (int i = 0; i < I386_REG_COUNT; i++)
     {
-        if (strings_equal_ignore_case(name, k_names16[i]))
+        if (strings_equal_ignore_case(name, k_i386_reg16_names[i]))
         {
             value = m_state.registers[i].value & 0xFFFF;
             return true;
         }
 
-        if (strings_equal_ignore_case(name, k_names8[i]))
+        if (strings_equal_ignore_case(name, k_i386_reg8_names[i]))
         {
             value = (m_state.registers[i & 3].value >> (i < 4 ? 0 : 8)) & 0xFF;
             return true;
@@ -1939,7 +1933,7 @@ bool I386::GetDebugPartialRegisterValue(const char* name, u32& value) const
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (strings_equal_ignore_case(name, k_segments[i]))
+        if (strings_equal_ignore_case(name, k_i386_sreg_names[i]))
         {
             value = m_state.segments[i].selector;
             return true;
@@ -2006,9 +2000,7 @@ void I386::FillDecodeState(const InstructionContext& instruction, const u8* byte
     // ModR/M is only reported when its byte was fetched
     u32 position = 0;
 
-    while (position < length && (bytes[position] == 0x26 || bytes[position] == 0x2E || bytes[position] == 0x36 ||
-        bytes[position] == 0x3E || bytes[position] == 0x64 || bytes[position] == 0x65 || bytes[position] == 0x66 ||
-        bytes[position] == 0x67 || bytes[position] == 0xF0 || bytes[position] == 0xF2 || bytes[position] == 0xF3))
+    while (position < length && I386IsPrefixByte(bytes[position]))
         position++;
 
     position += instruction.two_byte ? 2 : 1;

@@ -113,4 +113,19 @@ inline bool is_pow2(u32 x)
     return x && ((x & (x - 1)) == 0);
 }
 
+INLINE u8 dec_to_bcd(u8 value)
+{
+    return (u8)(((value / 10) << 4) | (value % 10));
+}
+
+INLINE u8 bcd_to_dec(u8 value)
+{
+    return (u8)((((value >> 4) & 0x0F) * 10) + (value & 0x0F));
+}
+
+INLINE u64 div_ceil_u64(u64 value, u64 divisor)
+{
+    return (value + divisor - 1) / divisor;
+}
+
 #endif /* COMMON_H */

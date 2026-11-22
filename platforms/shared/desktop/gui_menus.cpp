@@ -1466,10 +1466,10 @@ static void menu_boot_device(void)
 
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size)
 {
-    bool card = config.fpu && !k_machine_cpus[config.cpu].fpu;
-    snprintf(text, text_size, "%s · %s %u MHz%s%s · %u MB", k_machine_profiles[config.model].name,
-        k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000, card ? " + " : "",
-        card ? get_machine_fpu_name(config.cpu) : "", config.ram_size / (1024 * 1024));
+    char cpu[96];
+    get_machine_cpu_text(config, cpu, sizeof(cpu));
+    snprintf(text, text_size, "%s · %s · %u MB", k_machine_profiles[config.model].name, cpu,
+        config.ram_size / (1024 * 1024));
 }
 
 static void menu_video(void)

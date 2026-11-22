@@ -26,11 +26,9 @@
 #include "config.h"
 #include "utils.h"
 #include "drive/hard_disk_image.h"
+#include "common/idle_flush.h"
 
-static const int k_idle_flush_frames = 120;
-static u32 write_count = 0;
-static int idle_frames = 0;
-static bool flush_failed = false;
+static IdleFlush idle_flush;
 static bool flush_error = false;
 static u32 state_changes = 0;
 static bool rewind_changed = false;
@@ -114,11 +112,9 @@ bool emu_hard_disk_flush(void)
 {
     bool flushed = emu_get_core()->FlushHardDisks();
 
-    if (!flushed && !flush_failed)
+    if (idle_flush.Done(flushed))
         flush_error = true;
 
-    flush_failed = !flushed;
-    idle_frames = 0;
     return flushed;
 }
 
@@ -135,14 +131,7 @@ void emu_hard_disk_update(void)
         unflushed += image->GetUnflushedBlocks();
     }
 
-    if (count != write_count)
-    {
-        write_count = count;
-        idle_frames = 0;
-        return;
-    }
-
-    if ((unflushed != 0) && (++idle_frames >= k_idle_flush_frames))
+    if (idle_flush.Tick(count, unflushed != 0, k_idle_flush_hard_disk_frames))
         emu_hard_disk_flush();
 }
 

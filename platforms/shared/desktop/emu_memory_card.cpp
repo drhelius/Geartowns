@@ -29,12 +29,10 @@
 #include "rewind.h"
 #include "utils.h"
 #include "drive/memory_card.h"
+#include "common/idle_flush.h"
 
-static const int k_idle_flush_frames = 180;
 static std::string card_path;
-static u32 write_count = 0;
-static int idle_frames = 0;
-static bool flush_failed = false;
+static IdleFlush idle_flush;
 static bool flush_error = false;
 static bool state_change = false;
 static bool rewind_changed = false;
@@ -55,15 +53,11 @@ bool emu_memory_card_insert(const char* path, bool write_protected)
     if (!IsValidPointer(path) || !emu_memory_card_flush() || !read_card(path, data))
         return false;
 
-    MemoryCard* card = emu_get_core()->GetMemoryCard();
-
     if (!emu_get_core()->InsertMemoryCard(data.data(), (u32)data.size(), write_protected || !is_writable(path)))
         return false;
 
     card_path = path;
-    write_count = card->GetWriteCount();
-    idle_frames = 0;
-    flush_failed = false;
+    idle_flush.Reset();
     config_push_recent_memory_card(path);
     rewind_reset();
     return true;
@@ -98,7 +92,7 @@ bool emu_memory_card_eject(bool discard_changes)
 
     emu_get_core()->EjectMemoryCard();
     card_path.clear();
-    flush_failed = false;
+    idle_flush.Reset();
     rewind_reset();
     return true;
 }
@@ -122,22 +116,20 @@ bool emu_memory_card_set_write_protected(bool write_protected)
 bool emu_memory_card_flush(void)
 {
     MemoryCard* card = emu_get_core()->GetMemoryCard();
-    idle_frames = 0;
 
     if (!card->IsInserted() || !card->IsDirty())
         return true;
 
-    if (card_path.empty() || !write_card(card_path.c_str(), card->GetImage(), card->GetSize(), !flush_failed))
-    {
-        if (!flush_failed)
-            flush_error = true;
+    bool saved = !card_path.empty() && write_card(card_path.c_str(), card->GetImage(), card->GetSize(),
+        !idle_flush.HasFailed());
 
-        flush_failed = true;
+    if (idle_flush.Done(saved))
+        flush_error = true;
+
+    if (!saved)
         return false;
-    }
 
     card->ClearDirty();
-    flush_failed = false;
     Log("IC memory card changes saved to %s", card_path.c_str());
     return true;
 }
@@ -146,17 +138,7 @@ void emu_memory_card_update(void)
 {
     MemoryCard* card = emu_get_core()->GetMemoryCard();
 
-    if (!card->IsInserted() || !card->IsDirty())
-        return;
-
-    if (card->GetWriteCount() != write_count)
-    {
-        write_count = card->GetWriteCount();
-        idle_frames = 0;
-        return;
-    }
-
-    if (++idle_frames >= k_idle_flush_frames)
+    if (card->IsInserted() && idle_flush.Tick(card->GetWriteCount(), card->IsDirty(), k_idle_flush_memory_card_frames))
         emu_memory_card_flush();
 }
 

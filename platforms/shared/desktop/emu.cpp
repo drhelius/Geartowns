@@ -92,7 +92,6 @@ static Loading_Request_Type loading_request_type = Loading_Request_File;
 static std::vector<std::string> cdrom_playlist;
 static int cdrom_playlist_index = -1;
 static int cmos_model = -1;
-static u8 cmos_saved[GT_CMOS_SIZE];
 static std::string key_map_path;
 
 static void load_media_thread_func(void);
@@ -2169,20 +2168,11 @@ static void update_key_map(void)
 
     save_key_map();
     key_map_path = path;
-    key_map->SetEnabled(true);
-    key_map->ClearLayer(GT_KEY_MAP_USER);
-    key_map->SetChanged(false);
-
-    std::string text;
-
-    if (!MediaFile::ReadFile(path.c_str(), k_media_file_no_limit, &text, true))
-        return;
 
     std::string error;
 
-    if (!key_map->SetLayer(GT_KEY_MAP_USER, text.c_str(), &error))
+    if (!key_map->LoadFiles(path.c_str(), NULL, &error))
     {
-        key_map->ClearLayer(GT_KEY_MAP_USER);
         Log("Ignoring the key map %s: %s", path.c_str(), error.c_str());
         gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Key map ignored", error.c_str(), "key_map");
     }
@@ -2225,27 +2215,7 @@ static std::string get_key_map_path(std::string* title)
 
 static void save_key_map(void)
 {
-    KeyMap* key_map = geartowns->GetKeyMap();
-
-    if (!key_map->IsChanged() || key_map_path.empty())
-        return;
-
-    key_map->SetChanged(false);
-
-    if (key_map->IsLayerEmpty(GT_KEY_MAP_USER))
-    {
-        remove_file_utf8(key_map_path.c_str());
-        return;
-    }
-
-    std::string text = "[keys]\n" + key_map->GetLayer(GT_KEY_MAP_USER);
-    std::ofstream file;
-    open_ofstream_utf8(file, key_map_path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-
-    if (file.is_open())
-        file.write(text.c_str(), (std::streamsize)text.size());
-
-    if (!file.is_open() || file.fail())
+    if (!geartowns->GetKeyMap()->SaveUserFile(key_map_path.c_str()))
     {
         Log("Unable to save the key map %s", key_map_path.c_str());
         gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Unable to save the key map", key_map_path.c_str(), "key_map");
@@ -2266,52 +2236,30 @@ static bool get_cmos_path(int model, char* path, size_t path_size)
 
 static void load_cmos(int model)
 {
-    Memory* memory = geartowns->GetMemory();
-    int floppy_drives = k_machine_profiles[model].floppy_drives;
     char path[GT_MAX_PATH];
-    std::ifstream file;
-
-    memory->ResetCMOS(floppy_drives);
     cmos_model = model;
+    bool has_path = get_cmos_path(model, path, sizeof(path));
+    GT_CMOS_File_Result result = geartowns->LoadCMOSFile(has_path ? path : NULL, k_machine_profiles[model].floppy_drives);
 
-    if (get_cmos_path(model, path, sizeof(path)))
-        open_ifstream_utf8(file, path, std::ios::in | std::ios::binary);
-
-    if (file.is_open())
-    {
-        u8 data[GT_CMOS_FILE_SIZE + 1];
-        file.read(reinterpret_cast<char*>(data), sizeof(data));
-
-        if (!memory->LoadCMOSFile(data, (size_t)file.gcount(), floppy_drives))
-            Error("Invalid CMOS file: %s", path);
-        else
-            Log("CMOS loaded from %s", path);
-    }
-
-    memcpy(cmos_saved, memory->GetCMOS(), GT_CMOS_SIZE);
+    if (result == GT_CMOS_FILE_INVALID)
+        Error("Invalid CMOS file: %s", path);
+    else if (result == GT_CMOS_FILE_LOADED)
+        Log("CMOS loaded from %s", path);
 }
 
 static void save_cmos(void)
 {
-    if (cmos_model < 0)
-        return;
-
-    const u8* cmos = geartowns->GetMemory()->GetCMOS();
     char path[GT_MAX_PATH];
 
-    if (memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0 || !get_cmos_path(cmos_model, path, sizeof(path)))
+    if ((cmos_model < 0) || !get_cmos_path(cmos_model, path, sizeof(path)))
         return;
 
-    u8 data[GT_CMOS_FILE_SIZE];
-    geartowns->GetMemory()->SaveCMOSFile(data);
-    if (!MediaFile::WriteFileAtomic(path, data, GT_CMOS_FILE_SIZE))
-    {
+    GT_CMOS_File_Result result = geartowns->SaveCMOSFileIfChanged(path);
+
+    if (result == GT_CMOS_FILE_FAILED)
         Error("Unable to save CMOS: %s", path);
-        return;
-    }
-
-    memcpy(cmos_saved, cmos, GT_CMOS_SIZE);
-    Log("CMOS saved to %s", path);
+    else if (result == GT_CMOS_FILE_SAVED)
+        Log("CMOS saved to %s", path);
 }
 
 static void notify_machine(void)
@@ -2319,15 +2267,12 @@ static void notify_machine(void)
     const GT_Machine_Config& config = geartowns->GetMachineConfig();
     const GT_Machine_Report& report = geartowns->GetMachineReport();
     bool disk = report.model == GT_MACHINE_SOURCE_FLOPPY;
-    bool model = ((report.model == GT_MACHINE_SOURCE_DATABASE) || disk) && (config.model != GT_MACHINE_MODEL1_2);
-    bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
-    bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
-    bool fpu = report.fpu == GT_MACHINE_SOURCE_DATABASE;
     GT_Floppy_Notice floppy;
     bool floppy_notice = geartowns->GetFloppyNotice(floppy);
     const char* title = IsValidPointer(report.title) ? report.title : "1.44 MB floppy disk";
     const char* origin = IsValidPointer(report.title) ? "game database" : "Auto";
     char value[48];
+    char machine[256];
     std::string ports;
     std::string port_warnings;
 
@@ -2351,34 +2296,15 @@ static void notify_machine(void)
         }
     }
 
-    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && !fpu && (report.warning_count == 0) &&
+    get_machine_choices(config, report, machine, sizeof(machine));
+
+    if ((!IsValidPointer(report.title) && !disk) || ((machine[0] == 0) && (report.warning_count == 0) &&
         !floppy_notice && ports.empty() && port_warnings.empty()))
         return;
 
     char message[256];
-    std::string choices;
+    std::string choices = machine;
     std::string detail;
-
-    if (model)
-        choices = k_machine_profiles[config.model].name;
-
-    if (cpu)
-    {
-        snprintf(value, sizeof(value), "%s%u MHz", choices.empty() ? "" : ", ", config.cpu_clock_rate / 1000000);
-        choices += value;
-    }
-
-    if (ram)
-    {
-        snprintf(value, sizeof(value), "%s%u MB", choices.empty() ? "" : ", ", config.ram_size / (1024 * 1024));
-        choices += value;
-    }
-
-    if (fpu)
-    {
-        snprintf(value, sizeof(value), "%s%s", choices.empty() ? "" : ", ", get_machine_fpu_name(config.cpu));
-        choices += value;
-    }
 
     if (!ports.empty())
         choices += (choices.empty() ? "" : ", ") + ports;

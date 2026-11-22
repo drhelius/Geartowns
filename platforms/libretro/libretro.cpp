@@ -30,9 +30,11 @@
 #include "geartowns.h"
 #include "media/media_file.h"
 #include "media/crc.h"
+#include "common/idle_flush.h"
 #include "drive/fdc.h"
 #include "drive/floppy_disk.h"
 #include "drive/floppy_image.h"
+#include "drive/floppy_set.h"
 #include "drive/hard_disk_image.h"
 #include "drive/memory_card.h"
 #include "system/msm58321.h"
@@ -53,10 +55,6 @@
 #define DISK_DRIVE_FLOPPY_1 1
 #define DISK_DRIVE_FLOPPY_2 2
 #define DISK_DRIVE_COUNT (1 + FDC_DRIVES)
-#define FLOPPY_IDLE_FRAMES 180
-#define HARD_DISK_IDLE_FRAMES 120
-#define MEMORY_CARD_IDLE_FRAMES 180
-#define CMOS_SAVE_FRAMES 180
 #define FFWD_MESSAGE_FRAMES 120
 #define PLAYLIST_MAX_SIZE (1024 * 1024)
 #define CONTENT_MAX_SIZE (k_floppy_max_image_size * 4)
@@ -183,20 +181,14 @@ static int open_entry = -1;
 static unsigned disk_initial_index = 0;
 static std::string disk_initial_path;
 static std::string floppy_working_path[FDC_DRIVES];
-static u32 floppy_write_count[FDC_DRIVES];
-static int floppy_idle_frames[FDC_DRIVES];
-static bool floppy_flush_failed[FDC_DRIVES];
-static u32 hard_disk_write_count = 0;
-static int hard_disk_idle_frames = 0;
-static bool hard_disk_flush_failed = false;
+static IdleFlush floppy_idle_flush[FDC_DRIVES];
+static IdleFlush hard_disk_idle_flush;
 static bool hard_disk_state_warned = false;
 static std::string hard_disk_working_path[GT_MAX_HARD_DISKS];
 static int memory_card_mode = 0;
 static u32 memory_card_size = 1024 * 1024;
 static std::string memory_card_path;
-static u32 memory_card_write_count = 0;
-static int memory_card_idle_frames = 0;
-static bool memory_card_flush_failed = false;
+static IdleFlush memory_card_idle_flush;
 static bool memory_card_state_warned = false;
 static int floppy_drive = 0;
 static bool floppy_multidrive = false;
@@ -205,10 +197,7 @@ static GT_Boot_Device boot_device = GT_BOOT_DEVICE_AUTO;
 static bool cmos_shared = true;
 static bool cmos_shared_active = false;
 static std::string cmos_path;
-static u8 cmos_saved[GT_CMOS_SIZE];
-static u8 cmos_file_data[GT_CMOS_FILE_SIZE];
-static int cmos_frames = 0;
-static bool cmos_save_failed = false;
+static IdleFlush cmos_idle_flush;
 
 static bool load_content(const char* path);
 static void unload_content(void);
@@ -286,7 +275,6 @@ static bool disk_add_image_index(void);
 static bool disk_set_initial_image(unsigned index, const char* path);
 static bool disk_get_image_path(unsigned index, char* path, size_t len);
 static bool disk_get_image_label(unsigned index, char* label, size_t len);
-static bool load_source(const char* path, int image, std::vector<u8>& data, char* name = NULL, size_t name_size = 0);
 static bool floppy_load_image(unsigned index, int floppy);
 static bool floppy_flush(int floppy);
 static void floppy_update(void);
@@ -925,13 +913,10 @@ static void unload_content(void)
         hard_disk_working_path[i].clear();
     }
 
-    hard_disk_write_count = 0;
-    hard_disk_idle_frames = 0;
-    hard_disk_flush_failed = false;
+    hard_disk_idle_flush.Reset();
     hard_disk_state_warned = false;
     memory_card_path.clear();
-    memory_card_idle_frames = 0;
-    memory_card_flush_failed = false;
+    memory_card_idle_flush.Reset();
     memory_card_state_warned = false;
     disk_clear();
     clear_input_state();
@@ -1022,11 +1007,6 @@ static void report_machine(void)
     const GT_Machine_Config& config = core->GetMachineConfig();
     const GT_Machine_Report& report = core->GetMachineReport();
     bool disk = report.model == GT_MACHINE_SOURCE_FLOPPY;
-    bool model = ((report.model == GT_MACHINE_SOURCE_DATABASE) || disk) && (config.model != GT_MACHINE_MODEL1_2);
-    bool cpu = report.cpu_clock == GT_MACHINE_SOURCE_DATABASE;
-    bool ram = report.ram == GT_MACHINE_SOURCE_DATABASE;
-    bool fpu = report.fpu == GT_MACHINE_SOURCE_DATABASE;
-    u32 ram_mb = config.ram_size / (1024 * 1024);
     GT_Floppy_Notice floppy;
     bool floppy_notice = core->GetFloppyNotice(floppy);
     bool warning = (report.warning_count > 0) || floppy.warning;
@@ -1041,10 +1021,10 @@ static void report_machine(void)
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         snprintf(source, sizeof(source), " (Auto: not in the game database)");
 
-    bool card = config.fpu && !k_machine_cpus[config.cpu].fpu;
-    log_cb(RETRO_LOG_INFO, "Machine: %s, %s %u MHz%s%s, %u MB RAM, %d floppy drives%s\n",
-        k_machine_profiles[config.model].name, k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000,
-        card ? " + " : "", card ? get_machine_fpu_name(config.cpu) : "", ram_mb, config.floppy_drives, source);
+    char cpu[96];
+    get_machine_cpu_text(config, cpu, sizeof(cpu));
+    log_cb(RETRO_LOG_INFO, "Machine: %s, %s, %u MB RAM, %d floppy drives%s\n", k_machine_profiles[config.model].name,
+        cpu, config.ram_size / (1024 * 1024), config.floppy_drives, source);
 
     for (int i = 0; i < report.warning_count; i++)
         log_cb(RETRO_LOG_WARN, "%s\n", report.warnings[i]);
@@ -1052,34 +1032,13 @@ static void report_machine(void)
     for (int i = 0; i < floppy.line_count; i++)
         log_cb(floppy.warning ? RETRO_LOG_WARN : RETRO_LOG_INFO, "%s\n", floppy.lines[i]);
 
-    if ((!IsValidPointer(report.title) && !disk) || (!model && !cpu && !ram && !fpu && (report.warning_count == 0) &&
-        !floppy_notice))
+    char choices[256];
+    get_machine_choices(config, report, choices, sizeof(choices));
+
+    if ((!IsValidPointer(report.title) && !disk) || ((choices[0] == 0) && (report.warning_count == 0) && !floppy_notice))
         return;
 
     static char message[1024];
-    char choices[256] = "";
-    char value[32];
-
-    if (model)
-        strncpy_fit(choices, k_machine_profiles[config.model].name, sizeof(choices));
-
-    if (cpu)
-    {
-        snprintf(value, sizeof(value), "%s%u MHz", choices[0] ? ", " : "", config.cpu_clock_rate / 1000000);
-        strncat_fit(choices, value, sizeof(choices));
-    }
-
-    if (ram)
-    {
-        snprintf(value, sizeof(value), "%s%u MB", choices[0] ? ", " : "", ram_mb);
-        strncat_fit(choices, value, sizeof(choices));
-    }
-
-    if (fpu)
-    {
-        snprintf(value, sizeof(value), "%s%s", choices[0] ? ", " : "", get_machine_fpu_name(config.cpu));
-        strncat_fit(choices, value, sizeof(choices));
-    }
 
     if (choices[0])
         snprintf(message, sizeof(message), "%s: %s (%s)", title, choices, origin);
@@ -1730,29 +1689,17 @@ static void key_map_set_host_chars(void)
 
 static void key_map_load(void)
 {
-    KeyMap* key_map = core->GetKeyMap();
     std::string error;
-    std::vector<u8> data;
 
     key_map_set_host_chars();
     key_map_path = retro_save_directory;
     append_path_component(key_map_path, (get_save_disk_name(get_file_name(retro_game_path, true)) + ".keys").c_str());
-    key_map->SetEnabled(true);
-    key_map->ClearLayer(GT_KEY_MAP_GAME);
-    key_map->ClearLayer(GT_KEY_MAP_USER);
-    key_map->SetChanged(false);
     key_mapper_was_open = false;
     key_mapping_was_enabled = true;
     core->GetKeyMapper()->SetTitle(get_file_name(retro_game_path, false).c_str());
 
-    if (!MediaFile::ReadFile(key_map_path.c_str(), CONTENT_MAX_SIZE, &data))
-        return;
-
-    std::string text(data.begin(), data.end());
-
-    if (!key_map->SetLayer(GT_KEY_MAP_USER, text.c_str(), &error))
+    if (!core->GetKeyMap()->LoadFiles(key_map_path.c_str(), NULL, &error))
     {
-        key_map->ClearLayer(GT_KEY_MAP_USER);
         log_cb(RETRO_LOG_ERROR, "Ignoring the key map %s: %s\n", key_map_path.c_str(), error.c_str());
         show_message(("Key map ignored: " + error).c_str(), 4, RETRO_LOG_ERROR);
     }
@@ -1760,22 +1707,7 @@ static void key_map_load(void)
 
 static void key_map_save(void)
 {
-    KeyMap* key_map = core->GetKeyMap();
-
-    if (!key_map->IsChanged() || key_map_path.empty())
-        return;
-
-    key_map->SetChanged(false);
-
-    if (key_map->IsLayerEmpty(GT_KEY_MAP_USER))
-    {
-        MediaFile::RemoveFile(key_map_path.c_str());
-        return;
-    }
-
-    std::string text = "[keys]\n" + key_map->GetLayer(GT_KEY_MAP_USER);
-
-    if (!MediaFile::WriteFileAtomic(key_map_path.c_str(), text.data(), text.size()))
+    if (!core->GetKeyMap()->SaveUserFile(key_map_path.c_str()))
     {
         log_cb(RETRO_LOG_ERROR, "Unable to save the key map %s\n", key_map_path.c_str());
         show_message("Unable to save the key map", 3, RETRO_LOG_ERROR);
@@ -2468,61 +2400,31 @@ static bool disk_add_playlist(const char* path, std::vector<DiskSetImage>& image
 
 static bool disk_add_floppy_images(const char* path, std::vector<DiskSetImage>& images)
 {
-    size_t first = images.size();
-    int members = 1;
+    std::vector<FloppySet_Disk> disks;
 
-    if (ends_with_no_case(path, ".zip"))
+    if (!FloppySet::ListDisks(path, disks))
+        return false;
+
+    for (size_t i = 0; i < disks.size(); i++)
     {
-        std::vector<u8> archive;
-        members = MediaFile::ReadFile(path, CONTENT_MAX_SIZE, &archive) ?
-            FloppyImage::GetZipImageCount(archive.data(), archive.size()) : 0;
+        const FloppySet_Disk& disk = disks[i];
+        std::string file_name = get_file_name(disk.images > 1 ? disk.member.c_str() : path, false);
+        std::string label = FloppySet::GetDiskLabel(disk);
+
+        DiskSetImage image;
+        image.path = path;
+        image.label = file_name + label;
+        image.label_suffix = (disk.images > 1 ? ": " + file_name : "") + label;
+        image.image = disk.image;
+        image.disk = disk.disk;
+        image.crc = disk.crc;
+        image.crc_known = true;
+        image.cdrom = false;
+        image.save_disk = false;
+        images.push_back(image);
     }
 
-    for (int member = 0; member < members; member++)
-    {
-        std::vector<u8> data;
-        char member_name[1024];
-
-        if (!load_source(path, member, data, member_name, sizeof(member_name)))
-            return false;
-
-        int count = FloppyImage::GetDiskCount(data.data(), (u32)data.size());
-        std::string file_name = get_file_name(members > 1 ? member_name : path, false);
-
-        for (int i = 0; i < count; i++)
-        {
-            u32 offset = 0;
-            u32 size = 0;
-
-            if (!FloppyImage::GetDisk(data.data(), (u32)data.size(), i, &offset, &size))
-                return false;
-
-            DiskSetImage image;
-            image.path = path;
-            image.label = file_name;
-            image.label_suffix = members > 1 ? ": " + file_name : "";
-            image.image = member;
-            image.disk = i;
-            image.crc = CalculateCRC32(0, data.data() + offset, size);
-            image.crc_known = true;
-            image.cdrom = false;
-            image.save_disk = false;
-
-            if (count > 1)
-            {
-                char name[32];
-                char suffix[64];
-                FloppyImage::GetDiskName(data.data() + offset, size, name, sizeof(name));
-                snprintf(suffix, sizeof(suffix), name[0] ? " (Disk %d: %s)" : " (Disk %d)", i + 1, name);
-                image.label += suffix;
-                image.label_suffix += suffix;
-            }
-
-            images.push_back(image);
-        }
-    }
-
-    return images.size() > first;
+    return true;
 }
 
 static bool disk_add_save_disk(const std::string& name, const char* label, const char* volume,
@@ -2569,10 +2471,8 @@ static unsigned disk_find_boot_floppy(void)
     for (size_t i = 0; i < disk_images.size(); i++)
     {
         const DiskSetImage& image = disk_images[i];
-        std::vector<u8> data;
 
-        if (!image.cdrom && !image.save_disk && load_source(image.path.c_str(), image.image, data) &&
-            FloppyImage::IsBootDisk(data.data(), (u32)data.size(), image.disk))
+        if (!image.cdrom && !image.save_disk && FloppySet::IsBootDisk(image.path.c_str(), image.image, image.disk))
             return (unsigned)i;
     }
 
@@ -2703,8 +2603,7 @@ static void disk_clear(void)
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         floppy_working_path[i].clear();
-        floppy_idle_frames[i] = 0;
-        floppy_flush_failed[i] = false;
+        floppy_idle_flush[i].Reset();
     }
 }
 
@@ -3022,25 +2921,6 @@ static bool disk_get_image_label(unsigned index, char* label, size_t len)
     return true;
 }
 
-static bool load_source(const char* path, int image, std::vector<u8>& data, char* name, size_t name_size)
-{
-    if (!MediaFile::ReadFile(path, CONTENT_MAX_SIZE, &data))
-        return false;
-
-    if (!ends_with_no_case(path, ".zip"))
-        return true;
-
-    u8* extracted = NULL;
-    u32 size = 0;
-
-    if (!FloppyImage::ExtractFromZip(data.data(), data.size(), image, &extracted, &size, name, name_size))
-        return false;
-
-    data.assign(extracted, extracted + size);
-    SafeDeleteArray(extracted);
-    return true;
-}
-
 static bool floppy_load_image(unsigned index, int floppy)
 {
     const DiskSetImage& image = disk_images[index];
@@ -3065,8 +2945,7 @@ static bool floppy_load_image(unsigned index, int floppy)
     {
         u32 offset = 0;
 
-        if (!load_source(image.path.c_str(), image.image, file) ||
-            !FloppyImage::GetDisk(file.data(), (u32)file.size(), image.disk, &offset, &size))
+        if (!FloppySet::ReadDisk(image.path.c_str(), image.image, image.disk, file, &offset, &size))
             return false;
 
         char suffix[64];
@@ -3092,8 +2971,7 @@ static bool floppy_load_image(unsigned index, int floppy)
         source = data;
         source_size = size;
 
-        if (MediaFile::ReadFile(working.c_str(), CONTENT_MAX_SIZE, &copy) &&
-            FloppyImage::IsD77(copy.data(), (u32)copy.size()))
+        if (FloppySet::ReadWorkingCopy(working.c_str(), copy))
         {
             log_cb(RETRO_LOG_INFO, "Loading floppy working copy: %s\n", working.c_str());
             data_crc = FloppyImage::CalculateDataCRC(data, size);
@@ -3106,8 +2984,7 @@ static bool floppy_load_image(unsigned index, int floppy)
         return false;
 
     floppy_working_path[floppy] = working;
-    floppy_idle_frames[floppy] = 0;
-    floppy_flush_failed[floppy] = false;
+    floppy_idle_flush[floppy].Reset();
     drive_entry[DISK_DRIVE_FLOPPY_1 + floppy] = (int)index;
     log_cb(RETRO_LOG_INFO, "Floppy %d: %s\n", floppy + 1, image.path.c_str());
     return true;
@@ -3135,31 +3012,15 @@ static void floppy_update(void)
     {
         FloppyDisk* disk = core->GetFloppy(i);
 
-        if (!disk->IsInserted() || !disk->IsDirty())
+        if (!disk->IsInserted() ||
+            !floppy_idle_flush[i].Tick(disk->GetWriteCount(), disk->IsDirty(), k_idle_flush_floppy_frames))
             continue;
 
-        if (disk->GetWriteCount() != floppy_write_count[i])
-        {
-            floppy_write_count[i] = disk->GetWriteCount();
-            floppy_idle_frames[i] = 0;
-            continue;
-        }
-
-        if (++floppy_idle_frames[i] != FLOPPY_IDLE_FRAMES)
-            continue;
-
-        bool saved = floppy_flush(i);
-
-        if (!saved && !floppy_flush_failed[i])
+        if (floppy_idle_flush[i].Done(floppy_flush(i)))
         {
             log_cb(RETRO_LOG_ERROR, "Unable to save the floppy %d changes\n", i + 1);
             show_message("Unable to save the floppy disk changes", 3, RETRO_LOG_ERROR);
         }
-
-        if (!saved)
-            floppy_idle_frames[i] = 0;
-
-        floppy_flush_failed[i] = !saved;
     }
 }
 
@@ -3234,33 +3095,20 @@ static void hard_disk_update(void)
         unflushed += image->GetUnflushedBlocks();
     }
 
-    if (count != hard_disk_write_count)
-    {
-        hard_disk_write_count = count;
-        hard_disk_idle_frames = 0;
-        return;
-    }
-
-    if ((unflushed == 0) || (++hard_disk_idle_frames < HARD_DISK_IDLE_FRAMES))
+    if (!hard_disk_idle_flush.Tick(count, unflushed != 0, k_idle_flush_hard_disk_frames))
         return;
 
-    hard_disk_idle_frames = 0;
-    bool saved = core->FlushHardDisks();
-
-    if (!saved && !hard_disk_flush_failed)
+    if (hard_disk_idle_flush.Done(core->FlushHardDisks()))
     {
         log_cb(RETRO_LOG_ERROR, "Unable to save the hard disk changes\n");
         show_message("Unable to save the hard disk changes", 3, RETRO_LOG_ERROR);
     }
-
-    hard_disk_flush_failed = !saved;
 }
 
 static void memory_card_load(void)
 {
     memory_card_path.clear();
-    memory_card_idle_frames = 0;
-    memory_card_flush_failed = false;
+    memory_card_idle_flush.Reset();
     core->EjectMemoryCard();
 
     if (memory_card_mode == 0)
@@ -3297,7 +3145,6 @@ static void memory_card_load(void)
     }
 
     memory_card_path = path;
-    memory_card_write_count = core->GetMemoryCard()->GetWriteCount();
     log_cb(RETRO_LOG_INFO, "IC memory card: %s\n", path.c_str());
 }
 
@@ -3320,91 +3167,60 @@ static void memory_card_update(void)
 {
     MemoryCard* card = core->GetMemoryCard();
 
-    if (!card->IsInserted() || !card->IsDirty())
+    if (!card->IsInserted() ||
+        !memory_card_idle_flush.Tick(card->GetWriteCount(), card->IsDirty(), k_idle_flush_memory_card_frames))
         return;
 
-    if (card->GetWriteCount() != memory_card_write_count)
-    {
-        memory_card_write_count = card->GetWriteCount();
-        memory_card_idle_frames = 0;
-        return;
-    }
-
-    if (++memory_card_idle_frames != MEMORY_CARD_IDLE_FRAMES)
-        return;
-
-    bool saved = memory_card_flush();
-
-    if (!saved && !memory_card_flush_failed)
+    if (memory_card_idle_flush.Done(memory_card_flush()))
     {
         log_cb(RETRO_LOG_ERROR, "Unable to save the IC memory card changes\n");
         show_message("Unable to save the IC memory card changes", 3, RETRO_LOG_ERROR);
     }
-
-    if (!saved)
-        memory_card_idle_frames = 0;
-
-    memory_card_flush_failed = !saved;
 }
 
 static void cmos_load(void)
 {
-    Memory* memory = core->GetMemory();
-    std::vector<u8> data;
     const GT_Machine_Profile& profile = k_machine_profiles[core->GetPendingMachineConfig().model];
     std::string name(profile.key);
 
-    memory->ResetCMOS(profile.floppy_drives);
     cmos_shared_active = cmos_shared;
-    cmos_frames = 0;
-    cmos_save_failed = false;
+    cmos_idle_flush.Reset();
     cmos_path = retro_save_directory;
     append_path_component(cmos_path, (name + ".geartowns.cmos").c_str());
 
-    if (cmos_shared_active && MediaFile::ReadFile(cmos_path.c_str(), CONTENT_MAX_SIZE, &data))
-    {
-        if (memory->LoadCMOSFile(data.data(), data.size(), profile.floppy_drives))
-        {
-            log_cb(RETRO_LOG_INFO, "CMOS loaded from %s\n", cmos_path.c_str());
-        }
-        else
-        {
-            log_cb(RETRO_LOG_ERROR, "Invalid CMOS file: %s\n", cmos_path.c_str());
-        }
-    }
+    GT_CMOS_File_Result result = core->LoadCMOSFile(cmos_shared_active ? cmos_path.c_str() : NULL,
+        profile.floppy_drives);
 
-    memcpy(cmos_saved, memory->GetCMOS(), GT_CMOS_SIZE);
+    if (result == GT_CMOS_FILE_LOADED)
+        log_cb(RETRO_LOG_INFO, "CMOS loaded from %s\n", cmos_path.c_str());
+    else if (result == GT_CMOS_FILE_INVALID)
+        log_cb(RETRO_LOG_ERROR, "Invalid CMOS file: %s\n", cmos_path.c_str());
 }
 
 static void cmos_save(void)
 {
-    const u8* cmos = core->GetMemory()->GetCMOS();
-
-    if (!cmos_shared_active || memcmp(cmos, cmos_saved, GT_CMOS_SIZE) == 0)
+    if (!cmos_shared_active)
         return;
 
-    core->GetMemory()->SaveCMOSFile(cmos_file_data);
-    bool saved = MediaFile::WriteFileAtomic(cmos_path.c_str(), cmos_file_data, GT_CMOS_FILE_SIZE);
+    GT_CMOS_File_Result result = core->SaveCMOSFileIfChanged(cmos_path.c_str());
+
+    if (result == GT_CMOS_FILE_UNCHANGED)
+        return;
+
+    bool saved = result == GT_CMOS_FILE_SAVED;
 
     if (saved)
-    {
-        memcpy(cmos_saved, cmos, GT_CMOS_SIZE);
         log_cb(RETRO_LOG_INFO, "CMOS saved to %s\n", cmos_path.c_str());
-    }
-    else if (!cmos_save_failed)
+
+    if (cmos_idle_flush.Done(saved))
     {
         log_cb(RETRO_LOG_ERROR, "Unable to save the CMOS to %s\n", cmos_path.c_str());
         show_message("Unable to save the CMOS", 3, RETRO_LOG_ERROR);
     }
-
-    cmos_save_failed = !saved;
 }
 
 static void cmos_update(void)
 {
-    if (++cmos_frames < CMOS_SAVE_FRAMES)
-        return;
-
-    cmos_frames = 0;
-    cmos_save();
+    if (cmos_idle_flush.Tick(0, true, k_idle_flush_cmos_frames))
+        cmos_save();
 }

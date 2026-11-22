@@ -120,6 +120,7 @@ public:
     u64 GetDebugSnapshotId() const;
     void InvalidateDebugSnapshot();
     void SetDirtyTracking(bool enabled);
+    void SetHostVideoPages(bool host);
     bool IsDirtyMapValid() const;
     const u8* GetDirtyPages() const;
     u32 GetDirtyPageCount() const;
@@ -220,6 +221,7 @@ private:
     u8* m_dirty_pages;
     u32 m_dirty_page_count;
     bool m_dirty_tracking;
+    bool m_host_video_pages;
     bool m_dirty_valid;
     u32 m_main_ram_size;
     Memory_State m_state;

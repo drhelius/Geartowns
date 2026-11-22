@@ -2575,6 +2575,7 @@ void GeartownsCore::ApplyBusTiming()
     m_i386->SetBoardCache(!cache_control || (state->high_speed && (state->port_00c0 & 0x01) != 0), cacheable);
     const GT_Machine_CPU_Info& cpu = k_machine_cpus[m_machine_config.cpu];
     m_i386->SetBusTiming(timing, waits, cpu.bus_width, cpu_clock_rate, profile.cpu_clock_rate / cpu.bus_ratio);
+    m_memory->SetHostVideoPages(!m_i386->IsI586());
 
     u32 microsecond = cpu_clock_rate / 1000000;
     u32 cycle = 2 + m_i386->GetBusPortWait(true);

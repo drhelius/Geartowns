@@ -162,6 +162,42 @@ static inline const char* get_machine_fpu_name(GT_Machine_CPU cpu)
     return k_machine_cpus[cpu].family >= 4 ? "487SX" : "80387";
 }
 
+static inline void get_machine_cpu_text(const GT_Machine_Config& config, char* text, size_t text_size)
+{
+    bool card = config.fpu && !k_machine_cpus[config.cpu].fpu;
+    snprintf(text, text_size, "%s %u MHz%s%s", k_machine_cpus[config.cpu].name, config.cpu_clock_rate / 1000000,
+        card ? " + " : "", card ? get_machine_fpu_name(config.cpu) : "");
+}
+
+static inline void get_machine_choices(const GT_Machine_Config& config, const GT_Machine_Report& report, char* text,
+    size_t text_size)
+{
+    bool found = (report.model == GT_MACHINE_SOURCE_DATABASE) || (report.model == GT_MACHINE_SOURCE_FLOPPY);
+    char value[32];
+    text[0] = 0;
+
+    if (found && (config.model != GT_MACHINE_MODEL1_2))
+        strncpy_fit(text, k_machine_profiles[config.model].name, text_size);
+
+    if (report.cpu_clock == GT_MACHINE_SOURCE_DATABASE)
+    {
+        snprintf(value, sizeof(value), "%s%u MHz", text[0] ? ", " : "", config.cpu_clock_rate / 1000000);
+        strncat_fit(text, value, text_size);
+    }
+
+    if (report.ram == GT_MACHINE_SOURCE_DATABASE)
+    {
+        snprintf(value, sizeof(value), "%s%u MB", text[0] ? ", " : "", config.ram_size / (1024 * 1024));
+        strncat_fit(text, value, text_size);
+    }
+
+    if (report.fpu == GT_MACHINE_SOURCE_DATABASE)
+    {
+        snprintf(value, sizeof(value), "%s%s", text[0] ? ", " : "", get_machine_fpu_name(config.cpu));
+        strncat_fit(text, value, text_size);
+    }
+}
+
 const GT_Machine_DMA_Window k_machine_dma_windows_24bit[] =
 {
     { 0x800, 1, 0x00A00000U },

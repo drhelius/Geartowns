@@ -115,6 +115,7 @@ GeartownsCore::GeartownsCore()
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
     m_machine_report = m_pending_machine_report;
+    memset(m_cmos_saved, 0, sizeof(m_cmos_saved));
     m_powered = false;
     m_paused = false;
     m_host_hotkeys = false;
@@ -996,6 +997,37 @@ bool GeartownsCore::ReloadFirmware()
         Reset();
 
     return true;
+}
+
+GT_CMOS_File_Result GeartownsCore::LoadCMOSFile(const char* path, int floppy_drives)
+{
+    std::vector<u8> data;
+    GT_CMOS_File_Result result = GT_CMOS_FILE_NONE;
+    m_memory->ResetCMOS(floppy_drives);
+
+    if (IsValidPointer(path) && (path[0] != 0) && MediaFile::ReadFile(path, 0x10000, &data))
+        result = m_memory->LoadCMOSFile(data.data(), data.size(), floppy_drives) ? GT_CMOS_FILE_LOADED :
+            GT_CMOS_FILE_INVALID;
+
+    memcpy(m_cmos_saved, m_memory->GetCMOS(), GT_CMOS_SIZE);
+    return result;
+}
+
+GT_CMOS_File_Result GeartownsCore::SaveCMOSFileIfChanged(const char* path)
+{
+    const u8* cmos = m_memory->GetCMOS();
+
+    if (memcmp(cmos, m_cmos_saved, GT_CMOS_SIZE) == 0)
+        return GT_CMOS_FILE_UNCHANGED;
+
+    u8 data[GT_CMOS_FILE_SIZE];
+    m_memory->SaveCMOSFile(data);
+
+    if (!MediaFile::WriteFileAtomic(path, data, GT_CMOS_FILE_SIZE))
+        return GT_CMOS_FILE_FAILED;
+
+    memcpy(m_cmos_saved, cmos, GT_CMOS_SIZE);
+    return GT_CMOS_FILE_SAVED;
 }
 
 bool GeartownsCore::LoadMedia(const char* file_path)

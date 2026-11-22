@@ -100,6 +100,8 @@ public:
     bool RestoreBuiltIn(u16 usage);
     bool IsChanged() const;
     void SetChanged(bool changed);
+    bool LoadFiles(const char* user_path, const char* game_text, std::string* error);
+    bool SaveUserFile(const char* path);
 
     static bool IsHostKey(u16 usage);
     static bool IsLayoutHostKey(u16 usage);

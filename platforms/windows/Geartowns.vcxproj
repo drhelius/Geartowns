@@ -83,6 +83,7 @@
     <ClCompile Include="..\..\src\drive\hard_disk_image.cpp" />
     <ClCompile Include="..\..\src\drive\floppy_disk.cpp" />
     <ClCompile Include="..\..\src\drive\floppy_image.cpp" />
+    <ClCompile Include="..\..\src\drive\floppy_set.cpp" />
     <ClCompile Include="..\..\src\drive\memory_card.cpp" />
     <ClCompile Include="..\..\src\system\i8253.cpp" />
     <ClCompile Include="..\..\src\video\hires_crtc.cpp" />
@@ -318,6 +319,7 @@
     <ClInclude Include="..\..\src\drive\floppy_disk.h" />
     <ClInclude Include="..\..\src\drive\floppy_disk_inline.h" />
     <ClInclude Include="..\..\src\drive\floppy_image.h" />
+    <ClInclude Include="..\..\src\drive\floppy_set.h" />
     <ClInclude Include="..\..\src\drive\memory_card.h" />
     <ClInclude Include="..\..\src\drive\memory_card_inline.h" />
     <ClInclude Include="..\..\src\system\i8253.h" />
@@ -354,6 +356,7 @@
     <ClInclude Include="..\..\src\audio\ym3438_inline.h" />
     <ClInclude Include="..\..\src\audio\vgm_recorder.h" />
     <ClInclude Include="..\..\src\common\debug_memory.h" />
+    <ClInclude Include="..\..\src\common\idle_flush.h" />
     <ClInclude Include="..\..\src\common\log.h" />
     <ClInclude Include="..\..\src\media\media.h" />
     <ClInclude Include="..\..\src\media\media_inline.h" />

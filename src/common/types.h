@@ -96,6 +96,16 @@ struct GT_Runtime_Info
     int video_mode;
 };
 
+enum GT_CMOS_File_Result
+{
+    GT_CMOS_FILE_NONE = 0,
+    GT_CMOS_FILE_LOADED,
+    GT_CMOS_FILE_INVALID,
+    GT_CMOS_FILE_UNCHANGED,
+    GT_CMOS_FILE_SAVED,
+    GT_CMOS_FILE_FAILED
+};
+
 enum GT_Run_Result
 {
     GT_RUN_FRAME_READY = 0,

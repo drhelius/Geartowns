@@ -162,6 +162,8 @@ public:
     KeyMap* GetKeyMap();
     KeyMapper* GetKeyMapper();
     Memory* GetMemory();
+    GT_CMOS_File_Result LoadCMOSFile(const char* path, int floppy_drives);
+    GT_CMOS_File_Result SaveCMOSFileIfChanged(const char* path);
     I386* GetI386();
     X87* GetX87();
     IO* GetIO();
@@ -235,6 +237,7 @@ private:
     bool ReadSaveStateHeader(std::istream& stream, size_t size, GT_SaveState_Header* header);
 
 private:
+    u8 m_cmos_saved[GT_CMOS_SIZE];
     Audio* m_audio;
     Firmware* m_firmware;
     Input* m_input;

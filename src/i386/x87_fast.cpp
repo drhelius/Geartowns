@@ -37,7 +37,9 @@ static inline u64 FastMultiply(u64 a, u64 b, u64& low)
     low = (u64)product;
     return (u64)(product >> 64);
 #elif defined(_MSC_VER) && defined(_M_X64)
-    return _umul128(a, b, &low);
+    u64 high;
+    low = _umul128(a, b, &high);
+    return high;
 #elif defined(_MSC_VER) && defined(_M_ARM64)
     low = a * b;
     return __umulh(a, b);

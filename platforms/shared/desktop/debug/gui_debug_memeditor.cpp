@@ -1063,8 +1063,7 @@ void MemEditor::UpdateTitle()
 
     if (m_source.space == GT_DEBUG_MEMORY_LOGICAL && m_source.segment_register >= 0)
     {
-        static const char* segments[] = { "ES", "CS", "SS", "DS", "FS", "GS" };
-        const char* segment = m_source.segment_register < I386_SEGMENT_COUNT ? segments[m_source.segment_register] : "?";
+        const char* segment = m_source.segment_register < I386_SEGMENT_COUNT ? k_i386_sreg_names[m_source.segment_register] : "?";
         snprintf(m_title, sizeof(m_title), "Logical %s", segment);
     }
     else

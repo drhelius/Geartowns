@@ -133,10 +133,8 @@ static bool parse_symbol_line(char* line, bool nasm_labels, u32& address, bool& 
     size_t name_size);
 static bool parse_symbol_address(const char* text, u32& address, bool& logical, u16& selector);
 static bool is_symbol_name(const char* text);
-static int opcode_index(const I386_Disassembler_Record* record);
 static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate);
 static void port_tooltip(const I386_Disassembler_Record* record);
-static int get_interrupt_vector(const I386_Disassembler_Record* record);
 static void interrupt_tooltip(const I386_Disassembler_Record* record, int vector);
 static const I386_Disassembler_Record* find_covering_record(u32 address);
 static int find_line(u32 address);
@@ -1696,18 +1694,24 @@ static bool is_identifier_character(char value)
 
 static bool is_register(const char* start, const char* end)
 {
-    static const char* k_register_names[] =
-    {
-        "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH",
-        "AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI",
-        "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
-        "ES", "CS", "SS", "DS", "FS", "GS", "ST",
-        "EIP", "EFLAGS"
-    };
+    static const char* k_other_names[] = { "ST", "EIP", "EFLAGS" };
 
-    for (size_t i = 0; i < sizeof(k_register_names) / sizeof(k_register_names[0]); i++)
+    for (int i = 0; i < I386_REG_COUNT; i++)
     {
-        if (text_equals(start, end, k_register_names[i]))
+        if (text_equals(start, end, k_i386_reg8_names[i]) || text_equals(start, end, k_i386_reg16_names[i]) ||
+            text_equals(start, end, k_i386_reg32_names[i]))
+            return true;
+    }
+
+    for (int i = 0; i < I386_SEGMENT_COUNT; i++)
+    {
+        if (text_equals(start, end, k_i386_sreg_names[i]))
+            return true;
+    }
+
+    for (size_t i = 0; i < sizeof(k_other_names) / sizeof(k_other_names[0]); i++)
+    {
+        if (text_equals(start, end, k_other_names[i]))
             return true;
     }
 
@@ -1903,7 +1907,7 @@ static const char* replace_operand_labels(const I386_Disassembler_Record* record
     else
         operand_label = NULL;
 
-    vector = get_interrupt_vector(record);
+    vector = I386InterruptVector(record);
     vector_name[0] = 0;
     char vector_description[64];
 
@@ -1912,7 +1916,7 @@ static const char* replace_operand_labels(const I386_Disassembler_Record* record
             sizeof(vector_description));
 
     if (vector >= 0 && config_debug.dis_replace_labels && strcmp(vector_name, "INT") != 0 &&
-        record->opcodes[opcode_index(record)] == 0xCD)
+        record->opcodes[I386OpcodeIndex(record)] == 0xCD)
     {
         char vector_text[8];
         snprintf(vector_text, sizeof(vector_text), "0x%02X", vector);
@@ -2380,41 +2384,12 @@ static bool parse_address_range(const char* text, bool logical, u32& start, u32&
     return parse_address(first, start) && parse_address(separator + 1, end);
 }
 
-static int opcode_index(const I386_Disassembler_Record* record)
-{
-    int index = 0;
-
-    while (index < record->size)
-    {
-        u8 byte = record->opcodes[index];
-
-        if (byte != 0x26 && byte != 0x2E && byte != 0x36 && byte != 0x3E && byte != 0x64 && byte != 0x65 &&
-            byte != 0x66 && byte != 0x67 && byte != 0xF0 && byte != 0xF2 && byte != 0xF3)
-            break;
-
-        index++;
-    }
-
-    return index;
-}
-
 static int get_port_operand(const I386_Disassembler_Record* record, bool& immediate)
 {
-    int index = opcode_index(record);
+    int port = I386PortOperand(record, immediate);
 
-    if (index >= record->size)
-        return -1;
-
-    u8 opcode = record->opcodes[index];
-    immediate = opcode >= 0xE4 && opcode <= 0xE7;
-
-    if (immediate)
-        return index + 1 < record->size ? record->opcodes[index + 1] : -1;
-
-    bool string_io = opcode == 0x6C || opcode == 0x6D || opcode == 0x6E || opcode == 0x6F;
-
-    if ((opcode < 0xEC || opcode > 0xEF) && !string_io)
-        return -1;
+    if (port != -2)
+        return port;
 
     I386* cpu = emu_get_core()->GetI386();
 
@@ -2424,29 +2399,6 @@ static int get_port_operand(const I386_Disassembler_Record* record, bool& immedi
     I386_Debug_State state;
     cpu->CopyDebugState(state);
     return (int)(state.edx & 0xFFFF);
-}
-
-// INT n, INT3, INTO and ICEBP, -1 for anything else
-static int get_interrupt_vector(const I386_Disassembler_Record* record)
-{
-    int index = opcode_index(record);
-
-    if (index >= record->size)
-        return -1;
-
-    switch (record->opcodes[index])
-    {
-        case 0xCD:
-            return index + 1 < record->size ? record->opcodes[index + 1] : -1;
-        case 0xCC:
-            return 3;
-        case 0xCE:
-            return 4;
-        case 0xF1:
-            return 1;
-        default:
-            return -1;
-    }
 }
 
 // The function comes from AX, so it only shows on the current instruction

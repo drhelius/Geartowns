@@ -1035,7 +1035,6 @@ static void draw_interrupt_table(void)
 
 static int get_selector_references(u16 selector, bool local, char* text, size_t text_size)
 {
-    static const char* k_registers[I386_SEGMENT_COUNT] = { "ES", "CS", "SS", "DS", "FS", "GS" };
     I386_State* state = emu_get_core()->GetI386()->GetState();
     int count = 0;
     text[0] = 0;
@@ -1048,7 +1047,7 @@ static int get_selector_references(u16 selector, bool local, char* text, size_t 
         if ((state->segments[i].selector & 0xFFFC) == selector)
         {
             size_t length = strlen(text);
-            snprintf(text + length, text_size - length, "%s%s", count > 0 ? " " : "", k_registers[i]);
+            snprintf(text + length, text_size - length, "%s%s", count > 0 ? " " : "", k_i386_sreg_names[i]);
             count++;
         }
     }
@@ -1072,7 +1071,6 @@ static int get_selector_references(u16 selector, bool local, char* text, size_t 
 
 static bool parse_translator_address(const char* text, GT_Debug_Memory_Address& address)
 {
-    static const char* k_registers[I386_SEGMENT_COUNT] = { "ES", "CS", "SS", "DS", "FS", "GS" };
     char buffer[32];
     snprintf(buffer, sizeof(buffer), "%s", text);
     char* colon = strchr(buffer, ':');
@@ -1104,7 +1102,7 @@ static bool parse_translator_address(const char* text, GT_Debug_Memory_Address& 
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (strcmp(buffer, k_registers[i]) == 0)
+        if (strcmp(buffer, k_i386_sreg_names[i]) == 0)
         {
             address.segment_register = (s8)i;
             address.segment = emu_get_core()->GetI386()->GetState()->segments[i].selector;

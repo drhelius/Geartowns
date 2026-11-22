@@ -135,11 +135,6 @@ static const int k_segment_order[I386_SEGMENT_COUNT] =
     I386_SEGMENT_SS, I386_SEGMENT_FS, I386_SEGMENT_GS
 };
 
-static const char* k_segment_names[I386_SEGMENT_COUNT] =
-{
-    "ES", "CS", "SS", "DS", "FS", "GS"
-};
-
 static void write_state(I386* cpu, I386_State& state, bool pc_changed)
 {
     state.repeat.active = false;
@@ -493,7 +488,7 @@ static void draw_segments(I386* cpu, const I386_State& state)
 
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextColored(magenta, "%s", k_segment_names[segment_index]);
+        ImGui::TextColored(magenta, "%s", k_i386_sreg_names[segment_index]);
         ImGui::TableNextColumn();
         EditableRegister16(NULL, NULL, I386RegId_SegmentSelectorBase + segment_index, segment.selector,
             I386WriteCallback16, cpu, EditableRegisterFlags_None);

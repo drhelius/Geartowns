@@ -2212,10 +2212,8 @@ static void format_address(const GT_Debug_Memory_Address& address, char* text, s
 
     if (address.space == GT_DEBUG_MEMORY_LOGICAL)
     {
-        static const char* segments[] = { "ES", "CS", "SS", "DS", "FS", "GS" };
-
         if (address.segment_register >= 0 && address.segment_register < I386_SEGMENT_COUNT)
-            snprintf(text, text_size, "%s:%08X", segments[address.segment_register], address.address);
+            snprintf(text, text_size, "%s:%08X", k_i386_sreg_names[address.segment_register], address.address);
         else
             snprintf(text, text_size, "%04X:%08X", address.segment, address.address);
 

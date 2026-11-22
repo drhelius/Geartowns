@@ -96,7 +96,6 @@ static const McpFlagName k_mcp_cr0_486_flags[] =
     { "ne", 0x00000020 }, { "wp", 0x00010000 }, { "am", 0x00040000 }, { "nw", 0x20000000 }, { "cd", 0x40000000 }
 };
 
-static const char* k_mcp_segment_names[I386_SEGMENT_COUNT] = { "es", "cs", "ss", "ds", "fs", "gs" };
 static const int k_mcp_segment_order[I386_SEGMENT_COUNT] =
 {
     I386_SEGMENT_CS, I386_SEGMENT_DS, I386_SEGMENT_ES, I386_SEGMENT_SS, I386_SEGMENT_FS, I386_SEGMENT_GS
@@ -167,24 +166,6 @@ static void split_instruction(const char* text, std::string& mnemonic, std::stri
 
     std::getline(stream, operands);
     operands.erase(0, operands.find_first_not_of(" "));
-}
-
-static int get_opcode_index(const I386_Disassembler_Record* record)
-{
-    int index = 0;
-
-    while (index < record->size)
-    {
-        u8 byte = record->opcodes[index];
-
-        if (byte != 0x26 && byte != 0x2E && byte != 0x36 && byte != 0x3E && byte != 0x64 && byte != 0x65 &&
-            byte != 0x66 && byte != 0x67 && byte != 0xF0 && byte != 0xF2 && byte != 0xF3)
-            break;
-
-        index++;
-    }
-
-    return index;
 }
 
 static bool load_segment(I386_State& state, int index, u32 value, std::string& error)
@@ -395,7 +376,7 @@ bool DebugAdapter::ParseAddress(const std::string& text, McpAddress& address, st
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (segment != to_upper_ascii(k_mcp_segment_names[i]))
+        if (segment != k_i386_sreg_names[i])
             continue;
 
         address.segment_register = i;
@@ -917,7 +898,7 @@ json DebugAdapter::TranslateAddress(const std::string& text)
         result["logical"] = Hex(address.segment, 4) + ":" + Hex32(address.offset);
 
         if (address.segment_register >= 0)
-            result["segment_register"] = to_upper_ascii(k_mcp_segment_names[address.segment_register]);
+            result["segment_register"] = k_i386_sreg_names[address.segment_register];
     }
 
     result["linear"] = Hex32(address.linear);
@@ -1331,11 +1312,10 @@ json DebugAdapter::GetI386Status()
     const I386_Segment& ss = state.segments[I386_SEGMENT_SS];
     bool code32 = (cs.attributes & I386_SEGMENT_DEFAULT_32) != 0;
     bool stack32 = (ss.attributes & I386_SEGMENT_DEFAULT_32) != 0;
-    static const char* register_names[I386_REG_COUNT] = { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
     json status;
 
     for (int i = 0; i < I386_REG_COUNT; i++)
-        status[register_names[i]] = Hex32(state.registers[i].value);
+        status[to_lower_ascii(k_i386_reg32_names[i])] = Hex32(state.registers[i].value);
 
     status["eip"] = Hex32(state.eip);
     status["eflags"] = Hex32(state.eflags);
@@ -1416,7 +1396,7 @@ json DebugAdapter::GetI386Status()
         int index = k_mcp_segment_order[i];
         const I386_Segment& segment = state.segments[index];
         segments.push_back({
-            {"name", to_upper_ascii(k_mcp_segment_names[index])},
+            {"name", k_i386_sreg_names[index]},
             {"selector", Hex(segment.selector, 4)},
             {"base", Hex32(segment.base)},
             {"limit", Hex32(segment.limit)},
@@ -1528,17 +1508,15 @@ json DebugAdapter::WriteI386Register(const std::string& name, u32 value)
     bool pc_changed = false;
     int general = -1;
     int segment = -1;
-    static const char* register_names[I386_REG_COUNT] = { "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI" };
-
     for (int i = 0; i < I386_REG_COUNT; i++)
     {
-        if (reg == register_names[i])
+        if (reg == k_i386_reg32_names[i])
             general = i;
     }
 
     for (int i = 0; i < I386_SEGMENT_COUNT; i++)
     {
-        if (reg == to_upper_ascii(k_mcp_segment_names[i]))
+        if (reg == k_i386_sreg_names[i])
             segment = i;
     }
 
@@ -1680,7 +1658,7 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
 
         if (detailed)
         {
-            int index = get_opcode_index(record);
+            int index = I386OpcodeIndex(record);
             u8 opcode = index < record->size ? record->opcodes[index] : 0;
             const char* flow = NULL;
 
@@ -1708,9 +1686,12 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
                 line["target"] = target;
             }
 
-            if (opcode >= 0xE4 && opcode <= 0xE7 && index + 1 < record->size)
+            bool immediate_port = false;
+            int port_operand = I386PortOperand(record, immediate_port);
+
+            if (immediate_port && (port_operand >= 0))
             {
-                u16 port = record->opcodes[index + 1];
+                u16 port = (u16)port_operand;
                 const char* label = gui_debug_port_label(port);
                 line["port"] = Hex(port, 4);
 
@@ -1718,9 +1699,11 @@ json DebugAdapter::GetDisassembly(u32 start_address, u32 end_address, int count,
                     line["port_name"] = label;
             }
 
-            if ((opcode == 0xCD && index + 1 < record->size) || opcode == 0xCC || opcode == 0xCE || opcode == 0xF1)
+            int interrupt = I386InterruptVector(record);
+
+            if (interrupt >= 0)
             {
-                u8 vector = opcode == 0xCD ? record->opcodes[index + 1] : opcode == 0xCC ? 3 : opcode == 0xCE ? 4 : 1;
+                u8 vector = (u8)interrupt;
                 char name[16];
                 char description[64];
                 gui_debug_i386_vector_name(vector, name, sizeof(name), description, sizeof(description));

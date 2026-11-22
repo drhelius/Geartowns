@@ -52,6 +52,11 @@ void Media::Reset()
     m_cdrom_media->Reset();
 }
 
+bool Media::IsCdRomName(const char* path)
+{
+    return ends_with_no_case(path, ".cue") || ends_with_no_case(path, ".chd") || ends_with_no_case(path, ".iso");
+}
+
 bool Media::ParsePlaylist(const char* playlist_path, const char* text, size_t size, std::vector<PlaylistEntry>& entries)
 {
     entries.clear();
@@ -131,20 +136,10 @@ bool Media::LoadMedia(const char* file_path)
         return false;
     }
 
-    if (strcmp(extension, "cue") == 0)
+    if (IsCdRomName(file_path))
     {
         m_media_info.cdrom = true;
-        ok = m_cdrom_media->LoadCueFromFile(file_path, m_preload_cdrom);
-    }
-    else if (strcmp(extension, "chd") == 0)
-    {
-        m_media_info.cdrom = true;
-        ok = m_cdrom_media->LoadChdFromFile(file_path, m_preload_cdrom);
-    }
-    else if (strcmp(extension, "iso") == 0)
-    {
-        m_media_info.cdrom = true;
-        ok = m_cdrom_media->LoadIsoFromFile(file_path, m_preload_cdrom);
+        ok = m_cdrom_media->LoadFromFile(file_path, m_preload_cdrom);
     }
     else if (strcmp(extension, "zip") == 0)
         ok = LoadCdRomFromZipFile(file_path) || (!m_media_info.cdrom && LoadFile(file_path));

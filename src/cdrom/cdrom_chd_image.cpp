@@ -19,7 +19,6 @@
 
 #include "cdrom_chd_image.h"
 #include "../media/chd_file_adapter.h"
-#include "../media/crc.h"
 
 CdRomChdImage::CdRomChdImage() : CdRomImage()
 {
@@ -244,33 +243,11 @@ bool CdRomChdImage::ReadRawSector2352(u32 lba, u8* buffer)
 
 bool CdRomChdImage::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
 {
-    if (!m_ready || buffer == NULL)
-    {
-        Error("ReadBytes failed - Media not ready or buffer is NULL");
-        return false;
-    }
-
-    if (lba >= m_toc.sector_count)
-    {
-        Error("ReadBytes failed - LBA %d out of bounds (max: %d)", lba, m_toc.sector_count - 1);
-        return false;
-    }
-
-    s32 track_index = FindTrackFromLBA(lba, true);
+    s32 track_index = FindSamplesTrack(lba, buffer);
     if (track_index < 0)
-    {
-        Error("ReadBytes failed - LBA %d not found in any track", lba);
         return false;
-    }
 
     const Track& track = m_toc.tracks[(size_t)track_index];
-
-    if ((lba < track.start_lba) && !track.lead_in_stored)
-    {
-        Error("ReadBytes failed - LBA %d is in a pregap the image does not store", lba);
-        return false;
-    }
-
     u32 sector_index = (u32)track.file_offset + lba - track.start_lba;
     u32 hunk_index  = sector_index / m_sectors_per_hunk;
     u32 hunk_offset = sector_index % m_sectors_per_hunk;
@@ -293,11 +270,7 @@ bool CdRomChdImage::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
     m_current_sector = lba;
 
 #ifdef GT_LITTLE_ENDIAN
-    for (u32 i = 0; i < count; i++)
-    {
-        u16 u = (u16)buffer[i];
-        buffer[i] = (s16)((u >> 8) | (u << 8));
-    }
+    SwapSamples16(buffer, count);
 #endif
 
     return true;
@@ -507,97 +480,7 @@ bool CdRomChdImage::ReadTOC()
 
     Log("Successfully parsed CHD file with %d tracks", (int)m_toc.tracks.size());
 
-    if (m_toc.tracks.empty())
-    {
-        m_toc.sector_count = 0;
-        m_toc.total_length = {0, 0, 0};
-    }
-    else
-    {
-        if (!checked_add_u32(m_toc.tracks.back().end_lba, 1, &m_toc.sector_count))
-        {
-            Error("Invalid CHD metadata - Total sector count overflow");
-            return false;
-        }
-
-        u32 total_frames = 0;
-        if (!checked_add_u32(m_toc.sector_count, 150, &total_frames))
-        {
-            Error("Invalid CHD metadata - Total length overflow");
-            return false;
-        }
-
-        LbaToMsf(total_frames, &m_toc.total_length);
-    }
-
-    Debug("CD-ROM length: %02d:%02d:%02d, Total sectors: %d",
-        m_toc.total_length.minutes, m_toc.total_length.seconds, m_toc.total_length.frames,
-        m_toc.sector_count);
-
-    return !m_toc.tracks.empty();
-}
-
-void CdRomChdImage::CalculateCRC()
-{
-    m_crc = 0;
-    m_volume_key = 0;
-
-    if (m_toc.tracks.empty())
-    {
-        Log("No tracks to calculate CRC from");
-        return;
-    }
-
-    Track* first_data_track = NULL;
-    size_t track_count = m_toc.tracks.size();
-
-    for (size_t i = 0; i < track_count; i++)
-    {
-        if (m_toc.tracks[i].type == GT_CDROM_DATA_TRACK_MODE1_2048 ||
-            m_toc.tracks[i].type == GT_CDROM_DATA_TRACK_MODE1_2352)
-        {
-            first_data_track = &m_toc.tracks[i];
-            break;
-        }
-    }
-
-    if (!first_data_track)
-    {
-        Log("No data tracks found for CRC calculation");
-        return;
-    }
-
-    if (first_data_track->sector_count == 0)
-    {
-        Log("First data track has no sectors, cannot calculate CRC");
-        return;
-    }
-
-    const u32 sector_data_size = 2048;
-    u8 buffer[sector_data_size];
-    u32 current_sector = m_current_sector;
-
-    u32 sectors_to_crc = 64;
-    u32 first_sector = 1;
-    u32 last_needed = first_sector + sectors_to_crc - 1;
-    u32 max_index = ((first_data_track->sector_count - 1) >= last_needed)
-                     ? last_needed
-                     : (first_data_track->sector_count - 1);
-
-    for (u32 sec = first_sector; sec <= max_index; sec++)
-    {
-        if (!ReadSector(sec + first_data_track->start_lba, buffer))
-        {
-            Error("CRC ReadSector failed for LBA %u", sec + first_data_track->start_lba);
-            m_current_sector = current_sector;
-            return;
-        }
-
-        m_crc = CalculateCRC32(m_crc, buffer, sector_data_size);
-        CheckVolumeDescriptor(sec, buffer);
-    }
-
-    m_current_sector = current_sector;
+    return SetTotalLength() && !m_toc.tracks.empty();
 }
 
 bool CdRomChdImage::InitHunkCache()

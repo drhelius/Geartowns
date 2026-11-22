@@ -73,7 +73,7 @@ private:
 
 private:
     bool ReadTOC();
-    void CalculateCRC();
+    virtual bool ReadCRCSector(u32 lba, u8* buffer) override;
     bool ReadDataSector(u32 lba, u8* buffer);
     bool ReadDataSectorUncached(u32 lba, u8* buffer);
     bool ReadDataBlock(u32 block_lba, u8* buffer);

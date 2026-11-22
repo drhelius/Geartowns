@@ -18,10 +18,10 @@
  */
 
 #include "cdrom_drive.h"
+#include "cdrom_common.h"
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM) && defined(_WIN32)
 
-#include <algorithm>
 #include <stddef.h>
 #include <winioctl.h>
 #include <ntddcdrm.h>
@@ -87,18 +87,6 @@ static bool execute_scsi_read(HANDLE file, ScsiPassThroughDirectWithSense& reque
     return request.pass_through.DataTransferLength == expected_length;
 }
 
-static void init_drive_info(CdRomDriveInfo& info)
-{
-    info.id[0] = 0;
-    info.name[0] = 0;
-    info.has_disc = false;
-}
-
-static bool drive_track_compare(const CdRomDriveTrackInfo& a, const CdRomDriveTrackInfo& b)
-{
-    return a.start_lba < b.start_lba;
-}
-
 static void format_windows_error(DWORD error, char* buffer, size_t buffer_size)
 {
     if (!IsValidPointer(buffer) || (buffer_size == 0))
@@ -158,11 +146,12 @@ static u32 toc_address_to_lba(const UCHAR* address, bool msf)
 {
     if (msf)
     {
-        u32 lba = ((u32)address[1] * 60 * 75) + ((u32)address[2] * 75) + (u32)address[3];
-        if (lba < 150)
+        GT_CdRomMSF value = { address[1], address[2], address[3] };
+        u32 lba = MsfToLba(&value);
+        if (lba < k_cdrom_lead_in)
             return 0;
 
-        return lba - 150;
+        return lba - k_cdrom_lead_in;
     }
 
     return read_u32_be(address);
@@ -304,24 +293,17 @@ bool CdRomDrive::ListDrives(std::vector<CdRomDriveInfo>& drives)
     {
         if (GetDriveTypeA(drive) == DRIVE_CDROM)
         {
-            CdRomDriveInfo info;
-            init_drive_info(info);
-            snprintf(info.id, sizeof(info.id), "%c:", drive[0]);
+            char id[8];
+            snprintf(id, sizeof(id), "%c:", drive[0]);
 
+            char name[256];
             char volume_name[128] = {};
             if (GetVolumeInformationA(drive, volume_name, sizeof(volume_name), NULL, NULL, NULL, NULL, 0) && (volume_name[0] != 0))
-                snprintf(info.name, sizeof(info.name), "%s (%c:)", volume_name, drive[0]);
+                snprintf(name, sizeof(name), "%s (%c:)", volume_name, drive[0]);
             else
-                snprintf(info.name, sizeof(info.name), "%c:", drive[0]);
+                snprintf(name, sizeof(name), "%c:", drive[0]);
 
-            CdRomDrive cdrom_drive;
-            std::vector<CdRomDriveTrackInfo> tracks;
-            u32 lead_out = 0;
-            if (cdrom_drive.Open(info.id))
-                info.has_disc = cdrom_drive.ReadTOC(tracks, &lead_out);
-
-            Debug("Windows physical CD-ROM candidate: id=%s name=%s has_disc=%s", info.id, info.name, info.has_disc ? "true" : "false");
-            drives.push_back(info);
+            CdRomDrive::Probe(id, name, drives);
         }
 
         drive += strlen(drive) + 1;
@@ -333,11 +315,8 @@ bool CdRomDrive::ListDrives(std::vector<CdRomDriveInfo>& drives)
 
 bool CdRomDrive::Eject(const char* device_id)
 {
-    if (!IsValidPointer(device_id) || (device_id[0] == 0))
-    {
-        Error("Invalid physical CD-ROM device id for eject");
+    if (!CheckDeviceId(device_id, true))
         return false;
-    }
 
     Debug("Ejecting physical CD-ROM device %s", device_id);
 
@@ -377,11 +356,8 @@ bool CdRomDrive::Eject(const char* device_id)
 
 bool CdRomDrive::Open(const char* device_id)
 {
-    if (!IsValidPointer(device_id) || (device_id[0] == 0))
-    {
-        Error("Invalid physical CD-ROM device id");
+    if (!CheckDeviceId(device_id, false))
         return false;
-    }
 
     Close();
 
@@ -466,18 +442,7 @@ bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out
         }
     }
 
-    std::sort(tracks.begin(), tracks.end(), drive_track_compare);
-
-    if (tracks.empty() || (*lead_out_lba == 0))
-    {
-        Error("Invalid physical CD-ROM TOC for %s", m_device_id);
-        tracks.clear();
-        *lead_out_lba = 0;
-        return false;
-    }
-
-    Debug("Physical CD-ROM TOC read complete for %s: tracks=%d lead_out=%u", m_device_id, (int)tracks.size(), *lead_out_lba);
-    return true;
+    return ValidateToc(tracks, lead_out_lba);
 }
 
 bool CdRomDrive::ReadRawSectors2352(u32 lba, u32 sector_count, u8* buffer, bool audio, bool report_errors)

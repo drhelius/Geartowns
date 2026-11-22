@@ -41,7 +41,6 @@ public:
 
 private:
     bool ReadTOC();
-    void CalculateCRC();
     bool InitHunkCache();
     void DestroyHunkCache();
     bool LoadHunk(u32 hunk_index);

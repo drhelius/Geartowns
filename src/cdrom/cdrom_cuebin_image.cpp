@@ -27,7 +27,6 @@
 #include "cdrom_common.h"
 #include "../media/media_file.h"
 #include "../media/ogg_vorbis_decoder.h"
-#include "../media/crc.h"
 
 CdRomCueBinImage::CdRomCueBinImage() : CdRomImage()
 {
@@ -414,24 +413,9 @@ bool CdRomCueBinImage::ReadRawSector2352(u32 lba, u8* buffer)
 
 bool CdRomCueBinImage::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
 {
-    if (!m_ready || buffer == NULL)
-    {
-        Error("ReadBytes failed - Media not ready or buffer is NULL");
-        return false;
-    }
-
-    if (lba >= m_toc.sector_count)
-    {
-        Error("ReadBytes failed - LBA %d out of bounds (max: %d)", lba, m_toc.sector_count - 1);
-        return false;
-    }
-
-    s32 track_index = FindTrackFromLBA(lba, true);
+    s32 track_index = FindSamplesTrack(lba, buffer);
     if (track_index < 0)
-    {
-        Error("ReadBytes failed - LBA %d not found in any track", lba);
         return false;
-    }
 
     const Track& track = m_toc.tracks[(size_t)track_index];
     const TrackFile& track_file = m_track_files[(size_t)track_index];
@@ -442,12 +426,6 @@ bool CdRomCueBinImage::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
 
     if (lba < track.start_lba)
     {
-        if (!track.lead_in_stored)
-        {
-            Error("ReadBytes failed - LBA %d is in a pregap the image does not store", lba);
-            return false;
-        }
-
         sector_offset = lba - track.lead_in_lba;
         track_offset -= (u64)(track.start_lba - track.lead_in_lba) * sector_size;
     }
@@ -484,11 +462,7 @@ bool CdRomCueBinImage::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count)
     bool ret = ReadFromImgFile(img_file, byte_offset, (u8*)buffer, size);
 
 #ifdef GT_BIG_ENDIAN
-    for (u32 i = 0; i < count; i++)
-    {
-        u16 u = (u16)buffer[i];
-        buffer[i] = (s16)((u >> 8) | (u << 8));
-    }
+    SwapSamples16(buffer, count);
 #endif
 
     return ret;
@@ -992,6 +966,24 @@ bool CdRomCueBinImage::IsUriPath(const char* path)
     return IsValidPointer(path) && (strstr(path, "://") != NULL);
 }
 
+static bool parse_msf(std::istream& stream, GT_CdRomMSF* msf)
+{
+    int m = 0;
+    int s = 0;
+    int f = 0;
+    char colon1 = 0;
+    char colon2 = 0;
+
+    if (!(stream >> m >> colon1 >> s >> colon2 >> f) || (colon1 != ':') || (colon2 != ':') || (m < 0) || (s < 0) ||
+        (f < 0) || (s >= 60) || (f >= 75) || (m > 99))
+        return false;
+
+    msf->minutes = (u8)m;
+    msf->seconds = (u8)s;
+    msf->frames = (u8)f;
+    return true;
+}
+
 bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
 {
     using namespace std;
@@ -1136,25 +1128,20 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
         }
         else if (lowercase_line.find("pregap") == 0)
         {
-            int m = 0, s = 0, f = 0;
-            char colon1, colon2;
+            GT_CdRomMSF pregap_msf;
             istringstream pregap_stream(line.substr(6));
-            if (!(pregap_stream >> m >> colon1 >> s >> colon2 >> f) ||
-                colon1 != ':' || colon2 != ':' ||
-                m < 0 || s < 0 || f < 0 || s >= 60 || f >= 75 || m > 99)
+
+            if (!parse_msf(pregap_stream, &pregap_msf))
             {
                 Error("Invalid time format in PREGAP entry");
                 continue;
             }
 
-            GT_CdRomMSF pregap_msf;
-            pregap_msf.minutes = (u8)m;
-            pregap_msf.seconds = (u8)s;
-            pregap_msf.frames = (u8)f;
             current_parsed_track.pregap_length = MsfToLba(&pregap_msf);
             current_parsed_track.has_pregap = true;
 
-            Debug("Track %d pregap length %02d:%02d:%02d", current_parsed_track.number, m, s, f);
+            Debug("Track %d pregap length %02d:%02d:%02d", current_parsed_track.number, pregap_msf.minutes,
+                pregap_msf.seconds, pregap_msf.frames);
         }
         else if (lowercase_line.find("index") == 0)
         {
@@ -1168,32 +1155,26 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
             istringstream index_stream(line.substr(5));
             index_stream >> index_number;
 
-            int m = 0, s = 0, f = 0;
-            char colon1, colon2;
+            GT_CdRomMSF msf;
 
-            if (!(index_stream >> m >> colon1 >> s >> colon2 >> f) ||
-                colon1 != ':' || colon2 != ':' ||
-                m < 0 || s < 0 || f < 0 || s >= 60 || f >= 75 || m > 99)
+            if (!parse_msf(index_stream, &msf))
             {
                 Error("Invalid time format in INDEX entry");
                 continue;
             }
 
-            GT_CdRomMSF msf;
-            msf.minutes = (u8)m;
-            msf.seconds = (u8)s;
-            msf.frames = (u8)f;
-
             if (index_number == 0)
             {
                 current_parsed_track.index0_lba = MsfToLba(&msf);
                 current_parsed_track.has_index0 = true;
-                Debug("Track %d lead-in (INDEX 00) at %02d:%02d:%02d", current_parsed_track.number, m, s, f);
+                Debug("Track %d lead-in (INDEX 00) at %02d:%02d:%02d", current_parsed_track.number, msf.minutes,
+                    msf.seconds, msf.frames);
             }
             else if (index_number == 1)
             {
                 current_parsed_track.index1_lba = MsfToLba(&msf);
-                Debug("Track %d starts (INDEX 01) at %02d:%02d:%02d", current_parsed_track.number, m, s, f);
+                Debug("Track %d starts (INDEX 01) at %02d:%02d:%02d", current_parsed_track.number, msf.minutes,
+                    msf.seconds, msf.frames);
             }
         }
     }
@@ -1362,22 +1343,7 @@ bool CdRomCueBinImage::ParseCueFile(const char* cue_content)
 
     Log("Successfully parsed CUE file with %d tracks", (int)m_toc.tracks.size());
 
-    if (m_toc.tracks.empty())
-    {
-        m_toc.sector_count = 0;
-        m_toc.total_length = {0, 0, 0};
-    }
-    else
-    {
-        m_toc.sector_count = m_toc.tracks.back().end_lba + 1;
-        LbaToMsf(m_toc.sector_count + 150, &m_toc.total_length);
-    }
-
-    Debug("CD-ROM length: %02d:%02d:%02d, Total sectors: %d",
-        m_toc.total_length.minutes, m_toc.total_length.seconds, m_toc.total_length.frames,
-        m_toc.sector_count);
-
-    return !m_toc.tracks.empty();
+    return SetTotalLength() && !m_toc.tracks.empty();
 }
 
 bool CdRomCueBinImage::ReadFromImgFile(ImgFile* img_file, u64 offset, u8* buffer, u32 size)
@@ -1817,95 +1783,3 @@ void CdRomCueBinImage::ResetReadAheadQueue()
 }
 #endif
 
-void CdRomCueBinImage::CalculateCRC()
-{
-    m_crc = 0;
-    m_volume_key = 0;
-
-    if (m_toc.tracks.empty())
-    {
-        Log("No tracks to calculate CRC from");
-        return;
-    }
-
-    Track* first_data_track = NULL;
-    TrackFile* first_data_track_file = NULL;
-    size_t track_count = m_toc.tracks.size();
-
-    for (size_t i = 0; i < track_count; i++)
-    {
-        if (m_toc.tracks[i].type == GT_CDROM_DATA_TRACK_MODE1_2048 ||
-            m_toc.tracks[i].type == GT_CDROM_DATA_TRACK_MODE1_2352)
-        {
-            first_data_track = &m_toc.tracks[i];
-            first_data_track_file = &m_track_files[i];
-            break;
-        }
-    }
-
-    if (!first_data_track)
-    {
-        Log("No data tracks found for CRC calculation");
-        return;
-    }
-
-    if (first_data_track->sector_count == 0)
-    {
-        Log("First data track has no sectors, cannot calculate CRC");
-        return;
-    }
-
-    u32 sector_data_size = 2048;
-    u8* buffer = new u8[sector_data_size];
-    ImgFile* img_file = first_data_track_file->img_file;
-
-    if (!IsValidPointer(img_file))
-    {
-        Error("Invalid ImgFile pointer for first data track");
-        SafeDeleteArray(buffer);
-        return;
-    }
-
-    if (!IsValidPointer(img_file->file))
-    {
-        Error("File %s is not open for CRC calculation", img_file->file_path);
-        SafeDeleteArray(buffer);
-        return;
-    }
-
-    u32 sectors_to_crc = 64;
-    u32 first_sector = 1;
-    u32 last_needed = first_sector + sectors_to_crc - 1;
-    u32 max_index = ((first_data_track->sector_count - 1) >= last_needed)
-                     ? last_needed
-                     : (first_data_track->sector_count - 1);
-
-    for (u32 sec = first_sector; sec <= max_index; sec++)
-    {
-        u64 sector_offset;
-        u64 file_offset;
-        if (!checked_multiply_u64(first_data_track->sector_size, sec, &sector_offset) ||
-            !checked_add_u64(first_data_track->file_offset, sector_offset, &file_offset))
-        {
-            Error("CRC file offset overflow for sector %u", sec);
-            break;
-        }
-
-        if (first_data_track->sector_size == 2352)
-        {
-            if (!checked_add_u64(file_offset, 16, &file_offset))
-                break;
-        }
-
-        if (!ReadFromImgFile(img_file, file_offset, buffer, sector_data_size))
-        {
-            Error("CRC read failed for sector %u in file %s", sec, img_file->file_path);
-            break;
-        }
-
-        m_crc = CalculateCRC32(m_crc, buffer, sector_data_size);
-        CheckVolumeDescriptor(sec, buffer);
-    }
-
-    SafeDeleteArray(buffer);
-}

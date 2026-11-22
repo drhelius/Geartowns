@@ -21,7 +21,6 @@
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
 #include <chrono>
-#include "../media/crc.h"
 
 static bool raw_sector_has_mode1_sync(const u8* raw)
 {
@@ -223,9 +222,7 @@ bool CdRomPhysicalImage::ReadSamples(u32 lba, u32 offset, s16* buffer, u32 count
         return false;
 
 #if defined(GT_BIG_ENDIAN)
-    u16* samples = (u16*)buffer;
-    for (u32 i = 0; i < count; i++)
-        samples[i] = (samples[i] >> 8) | (samples[i] << 8);
+    SwapSamples16(buffer, count);
 #endif
 
     SetCurrentSector(lba);
@@ -304,9 +301,8 @@ bool CdRomPhysicalImage::ReadTOC()
         m_toc.tracks.push_back(track);
     }
 
-    m_toc.sector_count = lead_out_lba;
-
-    LbaToMsf(m_toc.sector_count + 150, &m_toc.total_length);
+    if (!SetTotalLength())
+        return false;
 
     for (size_t i = 0; i < m_toc.tracks.size(); i++)
     {
@@ -315,55 +311,16 @@ bool CdRomPhysicalImage::ReadTOC()
             (u32)(i + 1), TrackTypeName(track.type), track.start_lba, track.end_lba, track.sector_count);
     }
 
-    Debug("Physical CD-ROM length: %02u:%02u:%02u, Total sectors: %u",
-        m_toc.total_length.minutes, m_toc.total_length.seconds, m_toc.total_length.frames,
-        m_toc.sector_count);
-
     return true;
 }
 
-void CdRomPhysicalImage::CalculateCRC()
+bool CdRomPhysicalImage::ReadCRCSector(u32 lba, u8* buffer)
 {
-    m_crc = 0;
-    m_volume_key = 0;
-    u32 current_sector = m_current_sector;
+    if (ReadDataSector(lba, buffer))
+        return true;
 
-    for (size_t track_index = 0; track_index < m_toc.tracks.size(); track_index++)
-    {
-        Track& track = m_toc.tracks[track_index];
-        if (track.type == GT_CDROM_AUDIO_TRACK)
-            continue;
-
-        if (track.sector_count <= 1)
-        {
-            m_current_sector = current_sector;
-            return;
-        }
-
-        u8 buffer[CDROM_PHYSICAL_DATA_SECTOR_SIZE];
-        u32 sectors = MIN((u32)64, track.sector_count - 1);
-        Debug("Physical CD-ROM CRC sampling track %u LBAs %u-%u", (u32)(track_index + 1), track.start_lba + 1, track.start_lba + sectors);
-
-        for (u32 i = 1; i <= sectors; i++)
-        {
-            u32 lba = track.start_lba + i;
-            if (!ReadDataSector(lba, buffer))
-            {
-                Error("Physical CD-ROM CRC read failed at LBA %u", lba);
-                m_current_sector = current_sector;
-                return;
-            }
-
-            m_crc = CalculateCRC32(m_crc, buffer, CDROM_PHYSICAL_DATA_SECTOR_SIZE);
-            CheckVolumeDescriptor(i, buffer);
-        }
-
-        Log("Physical CD-ROM CRC calculated from track %u: %08X", (u32)(track_index + 1), m_crc);
-        m_current_sector = current_sector;
-        return;
-    }
-
-    m_current_sector = current_sector;
+    Error("Physical CD-ROM CRC read failed at LBA %u", lba);
+    return false;
 }
 
 bool CdRomPhysicalImage::ReadDataSector(u32 lba, u8* buffer)

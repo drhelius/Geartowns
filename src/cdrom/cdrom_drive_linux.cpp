@@ -18,10 +18,10 @@
  */
 
 #include "cdrom_drive.h"
+#include "cdrom_common.h"
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM) && defined(__linux__)
 
-#include <algorithm>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -34,31 +34,6 @@
 #define CDROM_DRIVE_FIRST_PROBED_SR 0
 #define CDROM_DRIVE_LAST_PROBED_SR 7
 
-static void init_drive_info(CdRomDriveInfo& info)
-{
-    info.id[0] = 0;
-    info.name[0] = 0;
-    info.has_disc = false;
-}
-
-static bool drive_track_compare(const CdRomDriveTrackInfo& a, const CdRomDriveTrackInfo& b)
-{
-    return a.start_lba < b.start_lba;
-}
-
-static bool errno_is_media_unavailable(int error)
-{
-    if ((error == ENODEV) || (error == ENXIO))
-        return true;
-
-#if defined(ENOMEDIUM)
-    if (error == ENOMEDIUM)
-        return true;
-#endif
-
-    return false;
-}
-
 static bool drive_status_is_media_unavailable(int status)
 {
     return (status == CDS_NO_DISC) || (status == CDS_TRAY_OPEN);
@@ -66,7 +41,7 @@ static bool drive_status_is_media_unavailable(int status)
 
 static bool drive_has_unavailable_media(int file, int io_error)
 {
-    if (errno_is_media_unavailable(io_error))
+    if (cdrom_errno_is_media_unavailable(io_error))
         return true;
 
     int status = ioctl(file, CDROM_DRIVE_STATUS, CDSL_CURRENT);
@@ -75,10 +50,11 @@ static bool drive_has_unavailable_media(int file, int io_error)
 
 static void lba_to_msf(u32 lba, cdrom_msf* msf)
 {
-    lba += 150;
-    msf->cdmsf_min0 = (u8)(lba / (60 * 75));
-    msf->cdmsf_sec0 = (u8)((lba / 75) % 60);
-    msf->cdmsf_frame0 = (u8)(lba % 75);
+    GT_CdRomMSF value;
+    LbaToMsf(lba + k_cdrom_lead_in, &value);
+    msf->cdmsf_min0 = value.minutes;
+    msf->cdmsf_sec0 = value.seconds;
+    msf->cdmsf_frame0 = value.frames;
     msf->cdmsf_min1 = 0;
     msf->cdmsf_sec1 = 0;
     msf->cdmsf_frame1 = 0;
@@ -146,19 +122,9 @@ static bool probe_drive_path(const char* path, std::vector<CdRomDriveInfo>& driv
 
     seen_devices.push_back(canonical);
 
-    CdRomDriveInfo info;
-    init_drive_info(info);
-    strncpy_fit(info.id, path, sizeof(info.id));
-    get_drive_name(path, info.name, sizeof(info.name));
-
-    CdRomDrive drive;
-    std::vector<CdRomDriveTrackInfo> tracks;
-    u32 lead_out = 0;
-    if (drive.Open(info.id))
-        info.has_disc = drive.ReadTOC(tracks, &lead_out);
-
-    Debug("Linux physical CD-ROM candidate: id=%s name=%s has_disc=%s", info.id, info.name, info.has_disc ? "true" : "false");
-    drives.push_back(info);
+    char name[256];
+    get_drive_name(path, name, sizeof(name));
+    CdRomDrive::Probe(path, name, drives);
     return true;
 }
 
@@ -190,11 +156,8 @@ bool CdRomDrive::ListDrives(std::vector<CdRomDriveInfo>& drives)
 
 bool CdRomDrive::Eject(const char* device_id)
 {
-    if (!IsValidPointer(device_id) || (device_id[0] == 0))
-    {
-        Error("Invalid physical CD-ROM device id for eject");
+    if (!CheckDeviceId(device_id, true))
         return false;
-    }
 
     Debug("Ejecting physical CD-ROM device %s", device_id);
 
@@ -219,47 +182,6 @@ bool CdRomDrive::Eject(const char* device_id)
 
     Log("Physical CD-ROM ejected: %s", device_id);
     return true;
-}
-
-bool CdRomDrive::Open(const char* device_id)
-{
-    if (!IsValidPointer(device_id) || (device_id[0] == 0))
-    {
-        Error("Invalid physical CD-ROM device id");
-        return false;
-    }
-
-    Close();
-
-    Debug("Opening physical CD-ROM device %s", device_id);
-    m_file = open(device_id, O_RDONLY | O_NONBLOCK);
-    if (m_file < 0)
-    {
-        Error("Failed to open physical CD-ROM device %s: %s", device_id, strerror(errno));
-        return false;
-    }
-
-    if (ioctl(m_file, CDROM_GET_CAPABILITY, 0) < 0)
-    {
-        Error("Physical CD-ROM capability query failed for %s: %s", device_id, strerror(errno));
-        Close();
-        return false;
-    }
-
-    strncpy_fit(m_device_id, device_id, sizeof(m_device_id));
-    Debug("Physical CD-ROM device opened: %s", m_device_id);
-    return true;
-}
-
-void CdRomDrive::Close()
-{
-    if (m_file >= 0)
-    {
-        close(m_file);
-        m_file = -1;
-    }
-
-    m_device_id[0] = 0;
 }
 
 bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out_lba)
@@ -323,18 +245,7 @@ bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out
     *lead_out_lba = clamp_linux_lba(lead_out.cdte_addr.lba);
     Debug("Physical CD-ROM TOC lead-out: lba=%u", *lead_out_lba);
 
-    std::sort(tracks.begin(), tracks.end(), drive_track_compare);
-
-    if (tracks.empty() || (*lead_out_lba == 0))
-    {
-        Error("Invalid physical CD-ROM TOC for %s", m_device_id);
-        tracks.clear();
-        *lead_out_lba = 0;
-        return false;
-    }
-
-    Debug("Physical CD-ROM TOC read complete for %s: tracks=%d lead_out=%u", m_device_id, (int)tracks.size(), *lead_out_lba);
-    return true;
+    return ValidateToc(tracks, lead_out_lba);
 }
 
 bool CdRomDrive::ReadRawSectors2352(u32 lba, u32 sector_count, u8* buffer, bool audio, bool report_errors)

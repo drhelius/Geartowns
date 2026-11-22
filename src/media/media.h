@@ -56,6 +56,7 @@ public:
     ~Media();
     void Init();
     void Reset();
+    static bool IsCdRomName(const char* path);
     static bool ParsePlaylist(const char* playlist_path, const char* text, size_t size,
         std::vector<PlaylistEntry>& entries);
     static const GT_DB_Entry* FindFloppyEntry(u32 crc);

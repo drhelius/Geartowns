@@ -29,38 +29,10 @@
 #include <IOKit/storage/IOCDMediaBSDClient.h>
 #include <IOKit/storage/IOCDTypes.h>
 #include <IOKit/storage/IOMedia.h>
-#include <algorithm>
 #include <errno.h>
-#include <fcntl.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
 
 #define CDROM_DRIVE_RAW_SECTOR_SIZE 2352
-
-static void init_drive_info(CdRomDriveInfo& info)
-{
-    info.id[0] = 0;
-    info.name[0] = 0;
-    info.has_disc = false;
-}
-
-static bool drive_track_compare(const CdRomDriveTrackInfo& a, const CdRomDriveTrackInfo& b)
-{
-    return a.start_lba < b.start_lba;
-}
-
-static bool errno_is_media_unavailable(int error)
-{
-    if ((error == ENODEV) || (error == ENXIO))
-        return true;
-
-#if defined(ENOMEDIUM)
-    if (error == ENOMEDIUM)
-        return true;
-#endif
-
-    return false;
-}
 
 static bool read_cd_ioctl(int file, u32 lba, u32 sector_count, u8 sector_area, u8 sector_type, u8* buffer, bool* media_unavailable)
 {
@@ -77,7 +49,7 @@ static bool read_cd_ioctl(int file, u32 lba, u32 sector_count, u8 sector_area, u
     if (ioctl(file, DKIOCCDREAD, &request) < 0)
     {
         if (IsValidPointer(media_unavailable))
-            *media_unavailable = errno_is_media_unavailable(errno);
+            *media_unavailable = cdrom_errno_is_media_unavailable(errno);
         return false;
     }
 
@@ -128,20 +100,9 @@ bool CdRomDrive::ListDrives(std::vector<CdRomDriveInfo>& drives)
             {
                 if (CFStringGetCString((CFStringRef)bsd_name_ref, bsd_name, sizeof(bsd_name), kCFStringEncodingUTF8))
                 {
-                    CdRomDriveInfo info;
-                    init_drive_info(info);
-                    snprintf(info.id, sizeof(info.id), "/dev/r%s", bsd_name);
-                    snprintf(info.name, sizeof(info.name), "%s", bsd_name);
-
-                    CdRomDrive drive;
-                    std::vector<CdRomDriveTrackInfo> tracks;
-                    u32 lead_out = 0;
-                    if (drive.Open(info.id))
-                        info.has_disc = drive.ReadTOC(tracks, &lead_out);
-
-                    Debug("macOS physical CD-ROM candidate: id=%s name=%s has_disc=%s", info.id, info.name, info.has_disc ? "true" : "false");
-
-                    drives.push_back(info);
+                    char id[256];
+                    snprintf(id, sizeof(id), "/dev/r%s", bsd_name);
+                    CdRomDrive::Probe(id, bsd_name, drives);
                 }
             }
 
@@ -161,11 +122,8 @@ bool CdRomDrive::ListDrives(std::vector<CdRomDriveInfo>& drives)
 
 bool CdRomDrive::Eject(const char* device_id)
 {
-    if (!IsValidPointer(device_id) || (device_id[0] == 0))
-    {
-        Error("Invalid physical CD-ROM device id for eject");
+    if (!CheckDeviceId(device_id, true))
         return false;
-    }
 
     char bsd_name[256] = {};
     get_bsd_name_from_device_id(device_id, bsd_name, sizeof(bsd_name));
@@ -206,40 +164,6 @@ bool CdRomDrive::Eject(const char* device_id)
 
     Log("Physical CD-ROM ejected: %s", device_id);
     return true;
-}
-
-bool CdRomDrive::Open(const char* device_id)
-{
-    if (!IsValidPointer(device_id) || (device_id[0] == 0))
-    {
-        Error("Invalid physical CD-ROM device id");
-        return false;
-    }
-
-    Close();
-
-    Debug("Opening physical CD-ROM device %s", device_id);
-    m_file = open(device_id, O_RDONLY | O_NONBLOCK);
-    if (m_file < 0)
-    {
-        Error("Failed to open physical CD-ROM device %s: %s", device_id, strerror(errno));
-        return false;
-    }
-
-    strncpy_fit(m_device_id, device_id, sizeof(m_device_id));
-    Debug("Physical CD-ROM device opened: %s", m_device_id);
-    return true;
-}
-
-void CdRomDrive::Close()
-{
-    if (m_file >= 0)
-    {
-        close(m_file);
-        m_file = -1;
-    }
-
-    m_device_id[0] = 0;
 }
 
 bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out_lba)
@@ -292,18 +216,7 @@ bool CdRomDrive::ReadTOC(std::vector<CdRomDriveTrackInfo>& tracks, u32* lead_out
         }
     }
 
-    std::sort(tracks.begin(), tracks.end(), drive_track_compare);
-
-    if (tracks.empty() || (*lead_out_lba == 0))
-    {
-        Error("Invalid physical CD-ROM TOC for %s", m_device_id);
-        tracks.clear();
-        *lead_out_lba = 0;
-        return false;
-    }
-
-    Debug("Physical CD-ROM TOC read complete for %s: tracks=%d lead_out=%u", m_device_id, (int)tracks.size(), *lead_out_lba);
-    return true;
+    return ValidateToc(tracks, lead_out_lba);
 }
 
 bool CdRomDrive::ReadRawSectors2352(u32 lba, u32 sector_count, u8* buffer, bool audio, bool report_errors)

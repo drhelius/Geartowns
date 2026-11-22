@@ -56,6 +56,7 @@ public:
     bool IsAudioSector(u32 lba);
     bool IsPlayableAudioSector(u32 lba);
     void SetCurrentSector(u32 sector);
+    bool LoadFromFile(const char* path, bool preload);
     bool LoadCueFromFile(const char* path, bool preload);
     bool LoadChdFromFile(const char* path, bool preload);
     bool LoadIsoFromFile(const char* path, bool preload);

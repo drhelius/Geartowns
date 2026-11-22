@@ -38,7 +38,7 @@ bool CdRomImage::ReadRawSector2352(u32 lba, u8* buffer)
         return false;
 
     GT_CdRomMSF msf;
-    LbaToMsf(lba + 150, &msf);
+    LbaToMsf(lba + k_cdrom_lead_in, &msf);
 
     memset(buffer, 0, 2352);
     memset(buffer + 1, 0xFF, 10);
@@ -208,6 +208,109 @@ void CdRomImage::InitTrack(Track& track)
     track.lead_in_stored = false;
     track.file_offset = 0;
     track.control_flags = 0;
+}
+
+void CdRomImage::CalculateCRC()
+{
+    m_crc = 0;
+    m_volume_key = 0;
+    s32 track_index = -1;
+
+    for (size_t i = 0; i < m_toc.tracks.size(); i++)
+    {
+        if (m_toc.tracks[i].type != GT_CDROM_AUDIO_TRACK)
+        {
+            track_index = (s32)i;
+            break;
+        }
+    }
+
+    if (track_index < 0)
+    {
+        Log("No data tracks found for CRC calculation");
+        return;
+    }
+
+    const Track& track = m_toc.tracks[(size_t)track_index];
+    u32 sectors = (track.sector_count > 1) ? MIN((u32)64, track.sector_count - 1) : 0;
+    u32 current_sector = m_current_sector;
+    u8 buffer[2048];
+
+    for (u32 i = 1; i <= sectors; i++)
+    {
+        if (!ReadCRCSector(track.start_lba + i, buffer))
+            break;
+
+        m_crc = CalculateCRC32(m_crc, buffer, sizeof(buffer));
+        CheckVolumeDescriptor(i, buffer);
+    }
+
+    m_current_sector = current_sector;
+    Debug("CD-ROM CRC calculated from track %d: %08X", track_index + 1, m_crc);
+}
+
+bool CdRomImage::ReadCRCSector(u32 lba, u8* buffer)
+{
+    if (ReadSector(lba, buffer))
+        return true;
+
+    Error("CRC ReadSector failed for LBA %u", lba);
+    return false;
+}
+
+s32 CdRomImage::FindSamplesTrack(u32 lba, const s16* buffer)
+{
+    if (!m_ready || (buffer == NULL))
+    {
+        Error("ReadBytes failed - Media not ready or buffer is NULL");
+        return -1;
+    }
+
+    if (lba >= m_toc.sector_count)
+    {
+        Error("ReadBytes failed - LBA %d out of bounds (max: %d)", lba, m_toc.sector_count - 1);
+        return -1;
+    }
+
+    s32 track_index = FindTrackFromLBA(lba, true);
+    if (track_index < 0)
+    {
+        Error("ReadBytes failed - LBA %d not found in any track", lba);
+        return -1;
+    }
+
+    if ((lba < m_toc.tracks[(size_t)track_index].start_lba) && !m_toc.tracks[(size_t)track_index].lead_in_stored)
+    {
+        Error("ReadBytes failed - LBA %d is in a pregap the image does not store", lba);
+        return -1;
+    }
+
+    return track_index;
+}
+
+bool CdRomImage::SetTotalLength()
+{
+    m_toc.sector_count = 0;
+    m_toc.total_length = {0, 0, 0};
+
+    if (!m_toc.tracks.empty())
+    {
+        u32 total_frames = 0;
+        if (!checked_add_u32(m_toc.tracks.back().end_lba, 1, &m_toc.sector_count) ||
+            !checked_add_u32(m_toc.sector_count, k_cdrom_lead_in, &total_frames))
+        {
+            Error("Invalid CD-ROM table of contents - Total length overflow");
+            return false;
+        }
+
+        LbaToMsf(total_frames, &m_toc.total_length);
+    }
+
+    Debug("CD-ROM length: %02d:%02d:%02d, Total sectors: %d",
+        m_toc.total_length.minutes, m_toc.total_length.seconds, m_toc.total_length.frames,
+        m_toc.sector_count);
+
+    return true;
 }
 
 s32 CdRomImage::FindTrackFromLBA(u32 lba, bool include_lead_in)

@@ -79,6 +79,10 @@ protected:
     void GatherPaths(const char* path);
     void InitTrack(Track& track);
     void CheckVolumeDescriptor(u32 sector, const u8* data);
+    void CalculateCRC();
+    virtual bool ReadCRCSector(u32 lba, u8* buffer);
+    s32 FindSamplesTrack(u32 lba, const s16* buffer);
+    bool SetTotalLength();
 
 protected:
     TableOfContents m_toc;

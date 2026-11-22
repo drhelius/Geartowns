@@ -598,8 +598,8 @@ void CdRom::CommandSeek(u64 clocks)
     m_access_count++;
     m_state.drive_command = m_state.active_command;
 
-    if (GetRange(start, end) && (start >= 150) && ((start - 150) < m_cdrom_media->GetSectorCount()))
-        lba = start - 150;
+    if (GetRange(start, end) && (start >= k_cdrom_lead_in) && ((start - k_cdrom_lead_in) < m_cdrom_media->GetSectorCount()))
+        lba = start - k_cdrom_lead_in;
 
     if (((m_state.active_command & k_cdrom_flag_status) != 0) && !PushErrorStatus())
     {
@@ -667,21 +667,21 @@ void CdRom::CommandRead(u64 clocks)
         RaiseSIRQ(true);
 
     // A start in the lead-in is taken and never answered, and one past the disc fails 2.65 s later, measured on a Marty
-    if (start < 150)
+    if (start < k_cdrom_lead_in)
     {
         m_state.drive_state = k_cdrom_state_data;
         return;
     }
 
-    if ((start - 150) >= m_cdrom_media->GetSectorCount())
+    if ((start - k_cdrom_lead_in) >= m_cdrom_media->GetSectorCount())
     {
         m_state.drive_state = k_cdrom_state_data;
         ScheduleEvent(CDROM_EVENT_READ_ERROR, clocks + k_cdrom_leadout_error_clocks);
         return;
     }
 
-    m_state.read_lba = start - 150;
-    m_state.read_end_lba = end - 150;
+    m_state.read_lba = start - k_cdrom_lead_in;
+    m_state.read_end_lba = end - k_cdrom_lead_in;
     ScheduleEvent(CDROM_EVENT_SECTOR, StartBuffer(clocks));
     m_state.drive_state = k_cdrom_state_data;
 }
@@ -704,7 +704,7 @@ void CdRom::CommandCDDAPlay(u64 clocks)
     m_state.cdda_end_clocks = 0;
     m_state.cdda_end_remaining = 0;
 
-    s32 track = range ? m_cdrom_media->FindTrackFromLBA((start >= 150) ? start - 150 : 0) : -1;
+    s32 track = range ? m_cdrom_media->FindTrackFromLBA((start >= k_cdrom_lead_in) ? start - k_cdrom_lead_in : 0) : -1;
     bool data = (track >= 0) && (m_cdrom_media->GetTracks()[track].type != GT_CDROM_AUDIO_TRACK);
 
     if (data)
@@ -714,8 +714,8 @@ void CdRom::CommandCDDAPlay(u64 clocks)
     }
     else if (m_cdrom_media->IsReady() && range)
     {
-        u32 lba = (start >= 150) ? start - 150 : 0;
-        u32 last = MIN((end >= 150) ? end - 150 : 0, m_cdrom_media->GetSectorCount());
+        u32 lba = (start >= k_cdrom_lead_in) ? start - k_cdrom_lead_in : 0;
+        u32 last = MIN((end >= k_cdrom_lead_in) ? end - k_cdrom_lead_in : 0, m_cdrom_media->GetSectorCount());
         bool repeat = m_state.active_params[6] == 0x01;
         u64 spin = (m_state.drive_state == k_cdrom_state_stopped) ? k_cdrom_cdda_spin_up_clocks : 0;
         u64 first = GetFirstSectorClocks(m_cdrom_media->GetCurrentSector(), lba, clocks, spin);
@@ -829,7 +829,7 @@ bool CdRom::TOCEntry()
     }
     else
     {
-        LbaToMsf(tracks[index].start_lba + 150, &msf);
+        LbaToMsf(tracks[index].start_lba + k_cdrom_lead_in, &msf);
         PushStatus(0x16, adr, DecToBcd(index + 1), 0x00);
         PushStatus(0x17, DecToBcd(msf.minutes), DecToBcd(msf.seconds), DecToBcd(msf.frames));
     }
@@ -881,7 +881,7 @@ void CdRom::CommandSubQRead()
         GT_CdRomMSF relative;
         GT_CdRomMSF absolute;
         LbaToMsf((lba >= track_lba) ? lba - track_lba : track_lba - lba, &relative);
-        LbaToMsf(lba + 150, &absolute);
+        LbaToMsf(lba + k_cdrom_lead_in, &absolute);
 
         PushStatus(0x00, GetStatusSecondByte());
         PushStatus(0x18, (u8)((control << 4) | 0x01), DecToBcd((u8)(track + 1)), (lba >= track_lba) ? 0x01 : 0x00);

@@ -161,7 +161,6 @@ private:
     bool KeepAliveFile();
     void ResetReadAheadQueue();
 #endif
-    void CalculateCRC();
 
 private:
     std::vector<ImgFile*> m_img_files;

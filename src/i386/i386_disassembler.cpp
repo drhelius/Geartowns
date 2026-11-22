@@ -1006,8 +1006,27 @@ void I386::FormatDisassemblerText(const I386_Decode_State& state, I386_Disassemb
 
 bool I386::UpdateDisassemblerRecordBytes(I386_Disassembler_Record& record, const u8* bytes)
 {
-    if (record.jump || record.subroutine || record.returns || memcmp(bytes, record.opcodes, record.operands_offset) != 0)
+    if (record.jump || record.subroutine || record.returns)
         return false;
+
+    if (memcmp(bytes, record.opcodes, record.operands_offset) != 0)
+    {
+        u32 modrm = (u32)record.operands_offset - 1;
+        u32 position = 0;
+        I386_Decode_State state;
+
+        if (memcmp(bytes, record.opcodes, modrm) != 0 || (bytes[modrm] & 0xC0) != 0xC0 ||
+            ((bytes[modrm] ^ record.opcodes[modrm]) & 0xF8) != 0 ||
+            !DecodeInstructionBytes(bytes, (u32)record.size, record.eip, record.default32, state) ||
+            state.length != record.size || !state.has_modrm)
+            return false;
+
+        while (position < state.length && I386IsPrefixByte(state.bytes[position]))
+            position++;
+
+        if (position + (state.two_byte ? 2 : 1) != modrm)
+            return false;
+    }
 
     memcpy(record.opcodes, bytes, (size_t)record.size);
     record.text_pending = true;

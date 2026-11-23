@@ -5117,9 +5117,6 @@ json DebugAdapter::StartInsertPlaylistDisc(int index)
     if (gui_is_rom_loading() || emu_is_media_loading())
         return {{"error", "Another media load is already in progress"}};
 
-    if (m_core->GetMedia()->IsReady())
-        return {{"error", "Eject the CD first, as the CD-ROM menu does"}};
-
     if (!gui_load_playlist_disc(index))
         return {{"error", "Failed to load the playlist disc"}};
 

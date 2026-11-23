@@ -295,7 +295,7 @@ void gui_hotkey(config_HotkeyIndex hotkey, bool pressed)
     switch (hotkey)
     {
     case config_HotkeyIndex_OpenROM:
-        if (!emu_get_core()->GetMedia()->IsReady())
+        if (!loading_rom_active && !emu_get_core()->GetMedia()->IsPhysicalCdRom())
             gui_shortcut_open_rom = true;
         break;
     case config_HotkeyIndex_ReloadROM:
@@ -523,6 +523,12 @@ bool gui_load_rom(const char* path, const char* symbol_path)
         }
 
         return gui_floppy_open(path, symbol_path);
+    }
+
+    if (core->GetMedia()->IsPhysicalCdRom())
+    {
+        gui_set_error_message("Eject the physical disc first.");
+        return false;
     }
 
     const char* media_path = path;

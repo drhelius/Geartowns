@@ -1502,7 +1502,7 @@ json McpServer::BuildToolList()
         empty_schema()));
 
     tools.push_back(make_tool("insert_playlist_disc", "Insert Playlist Disc",
-        "Insert a playlist disc into the empty drive, keeping the machine running; eject_cdrom first.",
+        "Insert a playlist disc, ejecting the current one, keeping the machine running.",
         k_mcp_tool_write_world,
         {
             {"type", "object"},

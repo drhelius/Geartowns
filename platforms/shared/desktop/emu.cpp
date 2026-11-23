@@ -454,6 +454,10 @@ void emu_load_media_async(const char* file_path)
 
     gui_debug_trace_logger_reset("media_change");
     strncpy_fit(loading_file_path, file_path, sizeof(loading_file_path));
+
+    if (geartowns->GetMedia()->IsReady())
+        geartowns->EjectMedia();
+
     loading_request_type = Loading_Request_File;
     loading_result = false;
     loading_state.store(Loading_State_Loading);
@@ -506,20 +510,16 @@ bool emu_finish_media_loading(void)
     }
 
     loading_state.store(Loading_State_None);
-
-    if (!loading_result)
-    {
-#if defined(GT_ENABLE_PHYSICAL_CDROM)
-        if (loading_request_type == Loading_Request_PhysicalCdRom)
-            Debug("Physical CD-ROM async load failed: %s", loading_file_path);
-#endif
-        return false;
-    }
-
     emu_audio_reset();
     update_savestates_data();
     rewind_reset();
-    return true;
+
+#if defined(GT_ENABLE_PHYSICAL_CDROM)
+    if (!loading_result && (loading_request_type == Loading_Request_PhysicalCdRom))
+        Debug("Physical CD-ROM async load failed: %s", loading_file_path);
+#endif
+
+    return loading_result;
 }
 
 void emu_set_gamepad_state(GT_Controllers controller, const GT_GamePad_State& state)

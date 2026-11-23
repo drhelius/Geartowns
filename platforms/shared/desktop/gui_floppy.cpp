@@ -112,12 +112,11 @@ static void drive_menu(int drive)
     Emu_FloppyInfo info;
     emu_floppy_get_info(drive, &info);
     bool loading = gui_is_rom_loading() || emu_is_media_loading();
-    bool can_insert = !loading && !info.inserted;
 
-    if (ImGui::MenuItem("Insert...", NULL, false, can_insert))
+    if (ImGui::MenuItem("Insert...", NULL, false, !loading))
         gui_file_dialog_open_floppy(drive);
 
-    if (ImGui::MenuItem("New Blank Disk...", NULL, false, can_insert))
+    if (ImGui::MenuItem("New Blank Disk...", NULL, false, !loading))
     {
         dialog_drive = drive;
         open_blank = true;
@@ -197,7 +196,7 @@ static void drive_menu(int drive)
 
     ImGui::Separator();
 
-    if (ImGui::BeginMenu("Recent", can_insert))
+    if (ImGui::BeginMenu("Recent", !loading))
     {
         for (int i = 0; i < config_max_recent_floppies; i++)
         {

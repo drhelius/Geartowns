@@ -206,6 +206,9 @@ bool emu_floppy_create_blank(int drive, const char* path, int type, bool formatt
         return false;
     }
 
+    if (!discard_changes && !write_working_copy(drive))
+        return false;
+
     u32 size = 0;
     u8* image = FloppyImage::CreateBlank((FloppyImage_Blank)type, formatted, &size);
 

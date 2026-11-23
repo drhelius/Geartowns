@@ -478,7 +478,7 @@ static void menu_cdrom(void)
     Media* media = emu_get_core()->GetMedia();
     bool loading = gui_is_rom_loading() || emu_is_media_loading();
     bool inserted = !loading && media->IsReady();
-    bool can_insert = !loading && !media->IsReady();
+    bool can_insert = !loading && !media->IsPhysicalCdRom();
 
     if (ImGui::MenuItem("Insert Image...", config_hotkeys[config_HotkeyIndex_OpenROM].str, false, can_insert))
     {
@@ -486,7 +486,7 @@ static void menu_cdrom(void)
     }
 
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
-    if (ImGui::MenuItem("Insert Physical Disc...", NULL, false, can_insert))
+    if (ImGui::MenuItem("Insert Physical Disc...", NULL, false, !loading && !inserted))
     {
         open_physical_cdrom = true;
     }
@@ -501,12 +501,17 @@ static void menu_cdrom(void)
 
     if ((discs > 0) && ImGui::BeginMenu("Disc in Playlist", can_insert))
     {
+        int selected = inserted ? emu_cdrom_playlist_get_index() : -1;
+
         for (int i = 0; i < discs; i++)
         {
             ImGui::PushID(i);
 
-            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i)))
-                gui_load_playlist_disc(i);
+            if (ImGui::MenuItem(emu_cdrom_playlist_get_name(i), NULL, i == selected) && (i != selected))
+            {
+                loading = gui_load_playlist_disc(i);
+                can_insert = !loading;
+            }
 
             ImGui::PopID();
         }

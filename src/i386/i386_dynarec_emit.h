@@ -304,6 +304,7 @@ private:
     void EmitLoop(Instruction& instruction, int index, s32 displacement);
     void EmitJump(Instruction& instruction, int index, s32 displacement);
     void EmitCall(Instruction& instruction, int index, int width);
+    void EmitIndirectTransfer(Instruction& instruction, int index, int width, bool call);
     void EmitReturn(Instruction& instruction, int index, int width, u16 release);
 
 private:

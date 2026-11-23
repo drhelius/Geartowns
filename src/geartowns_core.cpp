@@ -111,6 +111,7 @@ GeartownsCore::GeartownsCore()
     m_memory_card_state_changed = false;
     m_boot_device = GT_BOOT_DEVICE_AUTO;
     m_drive_letter_assignment = true;
+    m_fast_hard_disk_timing = false;
     m_ram_size_locked = false;
     ResolveMachineConfig();
     m_machine_config = m_pending_machine_config;
@@ -1209,6 +1210,17 @@ GT_Boot_Device GeartownsCore::GetBootDevice() const
 void GeartownsCore::EnableDriveLetterAssignment(bool enabled)
 {
     m_drive_letter_assignment = enabled;
+}
+
+void GeartownsCore::EnableFastHardDiskTiming(bool enabled)
+{
+    m_fast_hard_disk_timing = enabled;
+    ApplyHardDiskTiming();
+}
+
+bool GeartownsCore::IsFastHardDiskTimingEnabled() const
+{
+    return m_fast_hard_disk_timing;
 }
 
 void GeartownsCore::LockRAMSize(bool locked)
@@ -2546,9 +2558,7 @@ void GeartownsCore::ApplyBusTiming()
     if (!IsValidPointer(m_i386) || !IsValidPointer(m_system_control))
         return;
 
-    if (IsValidPointer(m_dma))
-        m_dma->SetUnitClocks(k_scsi_dma_channel, m_system_control->GetState()->high_speed ? k_scsi_fast_dma_fifths :
-            k_upd71071_unit_fifths);
+    ApplyHardDiskTiming();
 
     const GT_Machine_Profile& profile = k_machine_profiles[m_machine_config.model];
     const GT_Machine_Bus_Timing* timing = profile.bus_timing;
@@ -2591,6 +2601,16 @@ void GeartownsCore::ApplyCdRomSpeed()
     const SystemControl::SystemControl_State* state = m_system_control->GetState();
     bool drive = (k_machine_profiles[m_machine_config.model].features & GT_MACHINE_FEATURE_CD_DOUBLE_SPEED) != 0;
     m_cdrom->SetDoubleSpeed(drive && state->high_speed && ((state->port_04c8 & 0x01) != 0));
+}
+
+void GeartownsCore::ApplyHardDiskTiming()
+{
+    if (!IsValidPointer(m_scsi) || !IsValidPointer(m_dma) || !IsValidPointer(m_system_control))
+        return;
+
+    u32 unit = m_system_control->GetState()->high_speed ? k_scsi_high_speed_dma_fifths : k_upd71071_unit_fifths;
+    m_scsi->SetFastTiming(m_fast_hard_disk_timing);
+    m_dma->SetUnitClocks(k_scsi_dma_channel, m_fast_hard_disk_timing ? k_scsi_fast_timing_dma_fifths : unit);
 }
 
 void GeartownsCore::BusModeCallback(void* context)

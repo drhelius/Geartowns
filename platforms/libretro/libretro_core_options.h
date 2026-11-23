@@ -546,6 +546,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "Enabled"
     },
     {
+        "geartowns_hard_disk_fast_timing",
+        "Fast Hard Disk Timing",
+        NULL,
+        "Shortens hard disk bus phases and transfers, so the machine waits about a quarter of the time for the disk when it loads, saves or installs. When disabled, hard disks run at the machine's pace.",
+        NULL,
+        "system",
+        {
+            { "Disabled", NULL },
+            { "Enabled",  NULL },
+            { NULL, NULL },
+        },
+        "Disabled"
+    },
+    {
         "geartowns_memory_card",
         "IC Memory Card (restart)",
         NULL,

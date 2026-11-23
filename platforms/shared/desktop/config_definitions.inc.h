@@ -244,6 +244,7 @@ static inline void process(config_Operation operation)
     CONFIG_INT_ARRAY("HardDisk", "WriteProtected%d", config_emulator.hard_disk_write_protected, GT_MAX_HARD_DISKS, 0);
     CONFIG_STRING_ARRAY("HardDisk", "Recent%d", config_emulator.recent_hard_disks, config_max_recent_hard_disks, "");
     CONFIG_BOOL("HardDisk", "AssignDriveLetters", config_emulator.hard_disk_drive_letters, true);
+    CONFIG_BOOL("HardDisk", "FastTiming", config_emulator.hard_disk_fast_timing, false);
 
     // IC memory card
     CONFIG_BOOL("MemoryCard", "WriteProtected", config_emulator.memory_card_write_protected, false);

@@ -85,6 +85,7 @@ public:
     void SetFitted(bool fitted);
     bool IsFitted() const;
     void SetFeatures(u32 features);
+    void SetFastTiming(bool enabled);
     void SetReadCallback(void* context, GT_Read_Callback callback);
     bool Decodes(u16 port) const;
     void Reset();
@@ -136,6 +137,7 @@ private:
     bool m_fitted;
     bool m_word_dma;
     bool m_word_port;
+    u64 m_phase_clocks;
     void* m_read_context;
     GT_Read_Callback m_read_callback;
 };
@@ -167,7 +169,9 @@ static const u8 k_scsi_message_identify = 0x80;
 
 static const u64 k_scsi_busy_clocks = GT_MACHINE_CLOCK_RATE / 200000;
 static const u64 k_scsi_phase_clocks = GT_MACHINE_CLOCK_RATE / 2000;
-static const u32 k_scsi_fast_dma_fifths = (u32)(((u64)GT_MACHINE_CLOCK_RATE * 165 * 5) / 100000000);
+static const u64 k_scsi_fast_phase_clocks = GT_MACHINE_CLOCK_RATE / 10000;
+static const u32 k_scsi_high_speed_dma_fifths = (u32)(((u64)GT_MACHINE_CLOCK_RATE * 165 * 5) / 100000000);
+static const u32 k_scsi_fast_timing_dma_fifths = 30;
 static const u8 k_scsi_word_port = 0x7F;
 
 #include "scsi_controller_inline.h"

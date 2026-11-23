@@ -47,6 +47,7 @@ ScsiController::ScsiController()
     m_fitted = false;
     m_word_dma = false;
     m_word_port = false;
+    m_phase_clocks = k_scsi_phase_clocks;
     InitPointer(m_read_context);
     InitPointer(m_read_callback);
 }
@@ -87,6 +88,11 @@ void ScsiController::SetFeatures(u32 features)
 {
     m_word_dma = (features & GT_MACHINE_FEATURE_SCSI_WORD_DMA) != 0;
     m_word_port = (features & GT_MACHINE_FEATURE_SCSI_WORD_PORT) != 0;
+}
+
+void ScsiController::SetFastTiming(bool enabled)
+{
+    m_phase_clocks = enabled ? k_scsi_fast_phase_clocks : k_scsi_phase_clocks;
 }
 
 bool ScsiController::Decodes(u16 port) const
@@ -263,7 +269,7 @@ void ScsiController::EndSelection(u64 clocks)
     bool attention = (GetBusOutputs(m_state.control) & k_scsi_control_atn) != 0;
     m_state.command_count = 0;
     ScheduleEvent(SCSI_EVENT_PHASE, attention ? SCSI_PHASE_MESSAGE_OUT : SCSI_PHASE_COMMAND,
-        clocks + k_scsi_phase_clocks);
+        clocks + m_phase_clocks);
 }
 
 void ScsiController::EnterPhase(u8 phase, u64 clocks)
@@ -332,16 +338,16 @@ u8 ScsiController::InputByte(u64 clocks)
             SetREQ(false);
             m_state.message = k_scsi_message_command_complete;
             m_state.after_message = SCSI_PHASE_BUS_FREE;
-            ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_MESSAGE_IN, clocks + k_scsi_phase_clocks);
+            ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_MESSAGE_IN, clocks + m_phase_clocks);
             break;
         case SCSI_PHASE_MESSAGE_IN:
             SetREQ(false);
             m_state.command_count = 0;
 
             if (m_state.after_message == SCSI_PHASE_BUS_FREE)
-                ScheduleEvent(SCSI_EVENT_BUS_FREE, SCSI_PHASE_BUS_FREE, clocks + k_scsi_phase_clocks);
+                ScheduleEvent(SCSI_EVENT_BUS_FREE, SCSI_PHASE_BUS_FREE, clocks + m_phase_clocks);
             else
-                ScheduleEvent(SCSI_EVENT_PHASE, m_state.after_message, clocks + k_scsi_phase_clocks);
+                ScheduleEvent(SCSI_EVENT_PHASE, m_state.after_message, clocks + m_phase_clocks);
             break;
         default:
             break;
@@ -361,7 +367,7 @@ void ScsiController::OutputByte(u8 value, u64 clocks)
             SetREQ(false);
 
             if (m_state.command_count < GetCommandLength())
-                ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_COMMAND, clocks + k_scsi_phase_clocks);
+                ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_COMMAND, clocks + m_phase_clocks);
             else
                 ExecuteCommand(clocks);
             break;
@@ -404,7 +410,7 @@ void ScsiController::ExecuteCommand(u64 clocks)
     else if (data == SCSI_DATA_OUT)
         phase = SCSI_PHASE_DATA_OUT;
 
-    ScheduleEvent(SCSI_EVENT_PHASE, phase, clocks + k_scsi_phase_clocks);
+    ScheduleEvent(SCSI_EVENT_PHASE, phase, clocks + m_phase_clocks);
 }
 
 void ScsiController::HandleMessage(u8 value, u64 clocks)
@@ -420,26 +426,26 @@ void ScsiController::HandleMessage(u8 value, u64 clocks)
         if (value == k_scsi_message_device_reset)
             m_disks[m_state.target].Reset();
 
-        ScheduleEvent(SCSI_EVENT_BUS_FREE, SCSI_PHASE_BUS_FREE, clocks + k_scsi_phase_clocks);
+        ScheduleEvent(SCSI_EVENT_BUS_FREE, SCSI_PHASE_BUS_FREE, clocks + m_phase_clocks);
         return;
     }
     else if (value != k_scsi_message_no_operation)
     {
         m_state.message = k_scsi_message_reject;
         m_state.after_message = next;
-        ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_MESSAGE_IN, clocks + k_scsi_phase_clocks);
+        ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_MESSAGE_IN, clocks + m_phase_clocks);
         return;
     }
 
     m_state.command_count = 0;
-    ScheduleEvent(SCSI_EVENT_PHASE, next, clocks + k_scsi_phase_clocks);
+    ScheduleEvent(SCSI_EVENT_PHASE, next, clocks + m_phase_clocks);
 }
 
 void ScsiController::EndData(u64 clocks)
 {
     SetREQ(false);
     Trace(TRACE_SCSI_DATA_END, 0);
-    ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_STATUS, clocks + k_scsi_phase_clocks);
+    ScheduleEvent(SCSI_EVENT_PHASE, SCSI_PHASE_STATUS, clocks + m_phase_clocks);
 }
 
 void ScsiController::ScheduleEvent(u8 event, u8 phase, u64 clocks)

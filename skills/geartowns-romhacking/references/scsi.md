@@ -67,6 +67,10 @@ Without DMAE, data moves one byte per 0C30h access while REQ is set. With ATN se
 to Message Out first: IDENTIFY (80h + LUN) selects the LUN, ABORT and BUS DEVICE RESET free the bus, NO OPERATION is
 taken, and other messages get MESSAGE REJECT.
 
+After selection every step, a REQ for the next command byte or a phase change, takes 500 µs, and a SCSI DMA cycle the
+2.0 or 1.65 µs of section 2. With Fast Disk Timing on (Drives, Hard Disks menu; off by default) a step takes 100 µs
+and a DMA cycle 0.375 µs, high speed or not.
+
 ---
 
 ## 4. Hard Disk Commands

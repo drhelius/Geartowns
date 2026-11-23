@@ -114,6 +114,7 @@ struct config_Emulator
     int hard_disk_write_protected[GT_MAX_HARD_DISKS];
     std::string recent_hard_disks[config_max_recent_hard_disks];
     bool hard_disk_drive_letters;
+    bool hard_disk_fast_timing;
     bool memory_card_write_protected;
     std::string recent_memory_cards[config_max_recent_memory_cards];
 };

@@ -1471,9 +1471,9 @@ json McpServer::BuildToolList()
         }));
 
     tools.push_back(make_tool("get_scsi_status", "Get SCSI Status",
-        "Read the SCSI host interface: control and status bits, data, bus phase, target and LUN, last "
-        "message, DRQ, IRQ8 and word DMA, the 0C34h flag on the UG and HG, the command in progress (CDB, status, bytes "
-        "moved) and each disk's sense.", k_mcp_tool_read, empty_schema()));
+        "Read the SCSI host interface: whether Fast Disk Timing is on, control and status bits, data, bus phase, target "
+        "and LUN, last message, DRQ, IRQ8 and word DMA, the 0C34h flag on the UG and HG, the command in progress (CDB, "
+        "status, bytes moved) and each disk's sense.", k_mcp_tool_read, empty_schema()));
 
     // Media tools
     tools.push_back(make_tool("get_media_info", "Get Media Info",

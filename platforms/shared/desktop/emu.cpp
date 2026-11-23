@@ -940,6 +940,12 @@ void emu_set_drive_letter_assignment(bool enabled)
         geartowns->EnableDriveLetterAssignment(enabled);
 }
 
+void emu_set_fast_hard_disk_timing(bool enabled)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->EnableFastHardDiskTiming(enabled);
+}
+
 void emu_apply_machine_settings(void)
 {
     if (!IsValidPointer(geartowns))

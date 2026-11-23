@@ -78,6 +78,20 @@ void gui_hard_disks_menu(void)
         ImGui::EndTooltip();
     }
 
+    if (ImGui::MenuItem("Fast Disk Timing", "", &config_emulator.hard_disk_fast_timing))
+    {
+        emu_set_fast_hard_disk_timing(config_emulator.hard_disk_fast_timing);
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Shortens hard disk bus phases and transfers, so the machine waits about a");
+        ImGui::Text("quarter of the time for the disk when it loads, saves or installs.");
+        ImGui::Text("When disabled, hard disks run at the machine's pace.");
+        ImGui::EndTooltip();
+    }
+
     ImGui::Separator();
 
     GT_Machine_Model model = current_model();

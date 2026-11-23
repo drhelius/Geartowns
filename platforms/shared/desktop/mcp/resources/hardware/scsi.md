@@ -67,6 +67,10 @@ Without DMAE, data moves one byte per 0C30h access while REQ is set. With ATN se
 to Message Out first: IDENTIFY (80h + LUN) selects the LUN, ABORT and BUS DEVICE RESET free the bus, NO OPERATION is
 taken, and other messages get MESSAGE REJECT.
 
+After selection every step, a REQ for the next command byte or a phase change, takes 500 µs, and a SCSI DMA cycle the
+2.0 or 1.65 µs of section 2. With Fast Disk Timing on (Drives, Hard Disks menu; off by default) a step takes 100 µs
+and a DMA cycle 0.375 µs, high speed or not.
+
 ---
 
 ## 4. Hard Disk Commands
@@ -126,9 +130,9 @@ CD-ROMs). A CHD is read-only: writes go to a raw working copy, made at the first
 
 ## 7. Driving it from MCP
 
-- `get_scsi_status` shows the `interface`, the `registers` (control and status with decoded bits, data, the 0C34h flag),
-  the `bus` (`phase`, `target`, `lun`, `message`, `signals`), `drq`, `irq8`, `word_dma`, the `command` in progress
-  (`cdb`, `decoded`, `status_name`, `transferred_bytes`, `length_bytes`) and each disk's sense key and code.
+- `get_scsi_status` shows the `interface`, `fast_timing`, the `registers` (control and status with decoded bits, data,
+  the 0C34h flag), the `bus` (`phase`, `target`, `lun`, `message`, `signals`), `drq`, `irq8`, `word_dma`, the `command`
+  in progress (`cdb`, `decoded`, `status_name`, `transferred_bytes`, `length_bytes`) and each disk's sense key and code.
 - `list_hard_disks` shows IDs 0-6 with image, size, write protect, blocks not yet written and changes waiting for the
   next reset. `attach_hard_disk` (`id`, `file_path`, `write_protected`, or `create_size_mb` with `formatted`),
   `detach_hard_disk`, `flush_hard_disks` and `load_media` with a disk image change them; a running machine takes the

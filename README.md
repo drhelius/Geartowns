@@ -249,6 +249,9 @@ Towns OS V2.1 needs 4 MB of RAM to start from a hard disk. **Main RAM** on Auto 
 - To boot the disk with a CD inserted, pick it in **Geartowns → Reset and Boot From**. This holds the system ROM's boot keys (H and the SCSI ID) through the reset.
 - The Model 1/2 and Marty ROMs don't read these keys.
 
+#### Fast Disk Timing
+Hard disks run at the real machine's pace by default. **Fast Disk Timing** (**Drives → Hard Disks**, **Fast Hard Disk Timing** in libretro) shortens the SCSI bus phases and transfers, so the machine waits about a quarter of the time for the disk when it loads, saves or installs. It takes effect at once. Programs that time the disk can tell. Turn it off if one misbehaves.
+
 #### Drive Letters
 Towns OS keeps hard disk drive letters in the model's CMOS, not on the disk, and only uses the partitions that have one.
 

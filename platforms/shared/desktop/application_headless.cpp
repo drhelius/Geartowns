@@ -73,6 +73,7 @@ int application_headless_init(const ApplicationParams& params)
     }
 
     emu_set_drive_letter_assignment(config_emulator.hard_disk_drive_letters);
+    emu_set_fast_hard_disk_timing(config_emulator.hard_disk_fast_timing);
     emu_apply_machine_settings();
     emu_power_on();
 

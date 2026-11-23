@@ -2158,6 +2158,14 @@ static void check_variables(void)
         core->EnableDriveLetterAssignment(strcmp(var.value, "Enabled") == 0);
     }
 
+    var.key = "geartowns_hard_disk_fast_timing";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->EnableFastHardDiskTiming(strcmp(var.value, "Enabled") == 0);
+    }
+
     var.key = "geartowns_memory_card";
     var.value = NULL;
 

@@ -128,6 +128,8 @@ public:
     void SetBootDevice(GT_Boot_Device device);
     GT_Boot_Device GetBootDevice() const;
     void EnableDriveLetterAssignment(bool enabled);
+    void EnableFastHardDiskTiming(bool enabled);
+    bool IsFastHardDiskTimingEnabled() const;
     void LockRAMSize(bool locked);
     void DebugWritePort(u16 port, u32 value, int size);
 
@@ -221,6 +223,7 @@ private:
     bool LoadMachineFirmware(bool force, bool report);
     void ApplyMachineConfig();
     void ApplyBusTiming();
+    void ApplyHardDiskTiming();
     void ApplyCdRomSpeed();
     static void BusModeCallback(void* context);
     static void BootReadCallback(void* context);
@@ -284,6 +287,7 @@ private:
     bool m_memory_card_state_changed;
     GT_Boot_Device m_boot_device;
     bool m_drive_letter_assignment;
+    bool m_fast_hard_disk_timing;
     bool m_ram_size_locked;
     bool m_powered;
     bool m_paused;

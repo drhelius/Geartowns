@@ -3993,6 +3993,7 @@ json DebugAdapter::GetSCSIStatus()
 
     json result = {
         {"interface", interface},
+        {"fast_timing", m_core->IsFastHardDiskTimingEnabled()},
         {"registers", {
             {"control", hex_text(state->control, 2)},
             {"control_bits", control_bits},

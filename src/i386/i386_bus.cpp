@@ -871,10 +871,10 @@ template uintptr_t I386::DynarecBusAccess<true>(I386* cpu, uintptr_t linear, uin
     uintptr_t first_mask);
 
 // A native store to a page without host memory, at the linear address the block left in m_dynarec_slow_linear: DRAM
-// with blocks or VRAM behind its handlers, and only where the interpreter's write couldn't fault or touch a page table.
-// The handler sees the access at the time DynarecStep would give it, the bus time is DynarecBusAccess's. Returns 0,
-// 1 when the block must leave after the instruction, 2 when nothing was done and the instruction falls back, with the
-// 486 clocks the block added for it taken back. access: DynarecBusAccess's flags, 80h with bus timing
+// with blocks, VRAM behind its handlers or MMIO, and only where the interpreter's write couldn't fault or touch a page
+// table. The handler sees the access at the time DynarecStep would give it, the bus time is DynarecBusAccess's.
+// Returns 0, 1 when the block must leave after the instruction, 2 when nothing was done and the instruction falls
+// back, with the 486 clocks the block added for it taken back. access: DynarecBusAccess's flags, 80h with bus timing
 template<bool i486>
 uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
 {
@@ -901,7 +901,7 @@ uintptr_t I386::DynarecSlowStore(I386* cpu, uintptr_t value, uintptr_t site)
 
     u8 bus_class = fits ? cpu->m_bus_page_class[physical >> 12] : (u8)GT_BUS_NONE;
 
-    if (bus_class != GT_BUS_DRAM && bus_class != GT_BUS_VRAM)
+    if (bus_class != GT_BUS_DRAM && bus_class != GT_BUS_VRAM && bus_class != GT_BUS_MMIO)
     {
         cpu->m_dynarec_clocks -= extra;
         return 2;

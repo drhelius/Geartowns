@@ -91,7 +91,8 @@ enum Dynarec_Cold
     DYNAREC_COLD_NO_PAGE,
     DYNAREC_COLD_SLOW_STORE,
     DYNAREC_COLD_LINE,
-    DYNAREC_COLD_MISALIGNED
+    DYNAREC_COLD_MISALIGNED,
+    DYNAREC_COLD_LEAVE
 };
 
 enum Dynarec_Access
@@ -2050,6 +2051,11 @@ void DynarecEmitter::EmitColdPath(const ColdPath& cold)
             m_leave_used = true;
             jit_patch_at(jit_jmpi(), m_leave);
             return;
+        case DYNAREC_COLD_LEAVE:
+            EmitMaterialize((int)cold.value);
+            m_leave_used = true;
+            jit_patch_at(jit_jmpi(), m_leave);
+            return;
         case DYNAREC_COLD_LINE:
         {
             intptr_t fraction = Offset(&m_cpu->m_bus_fraction);
@@ -3821,9 +3827,9 @@ void DynarecEmitter::EmitGroup3(Instruction& instruction, int width)
     }
 }
 
-// A store whose page has no host memory (DRAM with blocks, VRAM behind its handlers) calls DynarecSlowStore, which
-// counts and makes it as the interpreter would, or falls back before anything changes. A write that ends the batch or
-// removes this block leaves after the instruction
+// A store whose page has no host memory (DRAM with blocks, VRAM behind its handlers, MMIO) calls DynarecSlowStore,
+// which counts and makes it as the interpreter would, or falls back before anything changes. A write that ends the
+// batch or removes this block leaves after the instruction
 void DynarecEmitter::StoreOrSlow(Instruction& instruction, int width)
 {
     if (!m_slow_store)
@@ -4178,13 +4184,17 @@ void DynarecEmitter::EmitX87Store(Instruction& instruction, u32 first_mask)
     intptr_t tag = state + (intptr_t)offsetof(X87::X87_State, tag);
     intptr_t significand = (intptr_t)offsetof(X87::X87_Register, significand);
     intptr_t exponent = (intptr_t)offsetof(X87::X87_Register, sign_exponent);
-    bool pop = c.reg == 3;
     bool wide = c.opcode == 0xDD;
     int mantissa_bits = wide ? 52 : 23;
     jit_word_t bias = wide ? 16383 - 1023 : 16383 - 127;
     jit_word_t largest = wide ? 2046 : 254;
+    bool slow_store = m_slow_ok && !wide;
+    m_slow_store = slow_store;
     u8 segment = EmitEscapeOperand(instruction, wide ? 8 : 4, DYNAREC_WRITE);
+    m_slow_store = false;
     jit_node* slow = jit_forward();
+    jit_node* slow_host = slow_store ? jit_forward() : NULL;
+    jit_node* done = jit_forward();
 
     StoreTemp(3, DR_T0);
     jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
@@ -4224,6 +4234,10 @@ void DynarecEmitter::EmitX87Store(Instruction& instruction, u32 first_mask)
         EmitX87Wait(instruction, first_mask);
 
     LoadTemp(DR_T0, 3);
+
+    if (slow_store)
+        jit_patch_at(jit_beqi(DR_T0, 0), slow_host);
+
     StoreHost(DR_T0, DR_X1, 32, DR_T1);
 
     if (wide)
@@ -4232,6 +4246,37 @@ void DynarecEmitter::EmitX87Store(Instruction& instruction, u32 first_mask)
         jit_addi(DR_T0, DR_T0, 4);
         StoreHost(DR_T0, DR_T2, 32, DR_T1);
     }
+
+    EmitX87StoreState(c, segment);
+    jit_patch_at(jit_jmpi(), done);
+    jit_link(slow);
+
+    if (slow_store)
+    {
+        LoadTemp(DR_T0, 3);
+        jit_node* host = jit_bnei(DR_T0, 0);
+        EmitX87SlowStore(instruction, first_mask, segment, true, done);
+        jit_patch(host);
+    }
+
+    EmitX87DirectCall(instruction, first_mask, segment, 3);
+
+    if (slow_store)
+    {
+        jit_patch_at(jit_jmpi(), done);
+        jit_link(slow_host);
+        EmitX87SlowStore(instruction, first_mask, segment, false, done);
+    }
+
+    jit_link(done);
+}
+
+void DynarecEmitter::EmitX87StoreState(const I386::InstructionContext& c, u8 segment)
+{
+    intptr_t state = (intptr_t)((const u8*)m_cpu->m_x87->GetState() - (const u8*)m_cpu->m_x87);
+    intptr_t status = state + (intptr_t)offsetof(X87::X87_State, status);
+    intptr_t tag = state + (intptr_t)offsetof(X87::X87_State, tag);
+    bool pop = c.reg == 3;
 
     jit_ldxi(DR_T0, DR_CPU, Offset(&m_cpu->m_x87));
     jit_ldxi_us(DR_T1, DR_T0, status);
@@ -4265,10 +4310,55 @@ void DynarecEmitter::EmitX87Store(Instruction& instruction, u32 first_mask)
     jit_stxi_s(state + (intptr_t)offsetof(X87::X87_State, operand_selector), DR_T0, DR_T1);
     LoadTemp(DR_T1, 0);
     jit_stxi_i(state + (intptr_t)offsetof(X87::X87_State, operand_offset), DR_T0, DR_T1);
-    jit_node* done = jit_jmpi();
-    jit_link(slow);
-    EmitX87DirectCall(instruction, first_mask, segment, 3);
-    jit_patch(done);
+}
+
+void DynarecEmitter::EmitX87SlowStore(Instruction& instruction, u32 first_mask, u8 segment, bool direct, jit_node* done)
+{
+    const I386::InstructionContext& c = instruction.context;
+    I386::DynarecSite& site = *GetSite(instruction);
+    site.access = (u32)(GetBusAccessFlags(4, DYNAREC_WRITE) | (m_timed ? 0x80 : 0));
+    site.first_mask = m_slow_first_mask;
+
+    if (direct && m_i586 && !I386::Is586FPUFree(c))
+        EmitX87Wait(instruction, first_mask);
+
+    if (direct)
+        jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecX87SlowStore<true> :
+            (jit_word_t)(uintptr_t)&I386::DynarecX87SlowStore<false>);
+    else
+        jit_movi(DR_T2, m_i486 ? (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<true> :
+            (jit_word_t)(uintptr_t)&I386::DynarecSlowStore<false>);
+
+    jit_prepare();
+    jit_pushargr(DR_CPU);
+
+    if (direct)
+        jit_pushargi((jit_word_t)GetX87Form(c));
+    else
+        jit_pushargr(DR_X1);
+
+    jit_pushargi((jit_word_t)(uintptr_t)&site);
+    jit_finishr(DR_T2);
+    jit_retval(DR_T0);
+    jit_patch_at(jit_beqi(DR_T0, 2), instruction.fallback);
+    StoreTemp(2, DR_T0);
+
+    if (direct)
+        EmitX87Pointers(c, segment);
+    else
+        EmitX87StoreState(c, segment);
+
+    ColdPath& cold = *AddColdPath(DYNAREC_COLD_LEAVE, NULL);
+    cold.value = (u32)(m_slow_index + 1);
+    LoadTemp(DR_T0, 2);
+    jit_patch_at(jit_bnei(DR_T0, 0), cold.entry);
+    jit_patch_at(jit_jmpi(), done);
+}
+
+u32 DynarecEmitter::GetX87Form(const I386::InstructionContext& c) const
+{
+    return c.opcode | ((u32)c.modrm << 8) | (c.memory_operand ? 1U << 16 : 0) | (c.operand_size == 4 ? 1U << 17 : 0) |
+        (m_cpu->m_state.execution_mode == I386_MODE_PROTECTED ? 1U << 18 : 0);
 }
 
 void DynarecEmitter::EmitX87Wait(Instruction& instruction, u32 first_mask)
@@ -4355,13 +4445,10 @@ void DynarecEmitter::EmitX87DirectCall(Instruction& instruction, u32 first_mask,
     else
         jit_movi(DR_T1, 0);
 
-    u32 form = c.opcode | ((u32)c.modrm << 8) | (c.memory_operand ? 1U << 16 : 0) |
-        (c.operand_size == 4 ? 1U << 17 : 0) | (m_cpu->m_state.execution_mode == I386_MODE_PROTECTED ? 1U << 18 : 0);
-
     jit_prepare();
     jit_pushargr(DR_CPU);
     jit_pushargr(DR_T1);
-    jit_pushargi((jit_word_t)form);
+    jit_pushargi((jit_word_t)GetX87Form(c));
     jit_finishi((jit_pointer_t)&I386::DynarecX87Direct);
 }
 

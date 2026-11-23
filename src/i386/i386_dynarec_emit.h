@@ -259,6 +259,9 @@ private:
     void EmitX87Load(Instruction& instruction, u32 first_mask);
     bool IsX87Store(const I386::InstructionContext& c) const;
     void EmitX87Store(Instruction& instruction, u32 first_mask);
+    void EmitX87StoreState(const I386::InstructionContext& c, u8 segment);
+    void EmitX87SlowStore(Instruction& instruction, u32 first_mask, u8 segment, bool direct, jit_node* done);
+    u32 GetX87Form(const I386::InstructionContext& c) const;
     void EmitX87Wait(Instruction& instruction, u32 first_mask);
     bool IsX87Direct(const I386::InstructionContext& c) const;
     void EmitX87Direct(Instruction& instruction, u32 first_mask);

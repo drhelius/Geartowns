@@ -2665,6 +2665,30 @@ void I386::DynarecX87Direct(I386* cpu, uintptr_t host, uintptr_t form)
     cpu->m_x87->ExecuteDirect(operation, (u8*)host);
 }
 
+template<bool i486>
+uintptr_t I386::DynarecX87SlowStore(I386* cpu, uintptr_t form, uintptr_t site)
+{
+    X87_Operation operation = {};
+    operation.opcode = (u8)form;
+    operation.modrm = (u8)(form >> 8);
+    operation.memory = true;
+    operation.operand32 = (form & (1 << 17)) != 0;
+    operation.protected_mode = (form & (1 << 18)) != 0;
+
+    X87::X87_State saved = *cpu->m_x87->GetState();
+    u8 operand[4] = { 0, 0, 0, 0 };
+    cpu->m_x87->ExecuteDirect(operation, operand);
+    uintptr_t result = DynarecSlowStore<i486>(cpu, read_u32_le(operand), site);
+
+    if (result == 2)
+        *cpu->m_x87->GetState() = saved;
+
+    return result;
+}
+
+template uintptr_t I386::DynarecX87SlowStore<false>(I386* cpu, uintptr_t form, uintptr_t site);
+template uintptr_t I386::DynarecX87SlowStore<true>(I386* cpu, uintptr_t form, uintptr_t site);
+
 // EscapeCoprocessor past its checks, with the operand at host, its offset in the first temp, and the x87's clocks past
 // the fewest the block counted. form: the opcode, ModR/M from bit 8, the operand size from bit 16, 32-bit operands at
 // bit 20, protected mode at bit 21, a store at bit 22, clocks that depend on the data at bit 23 and the segment from

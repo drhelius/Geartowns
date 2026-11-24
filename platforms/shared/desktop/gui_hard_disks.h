@@ -30,6 +30,7 @@ EXTERN void gui_hard_disks_menu(void);
 EXTERN void gui_hard_disks_popups(void);
 EXTERN void gui_hard_disks_update(void);
 EXTERN bool gui_hard_disks_load(const char* path);
+EXTERN bool gui_hard_disks_attach(int id, const char* path);
 EXTERN bool gui_hard_disks_is_pending(void);
 EXTERN void gui_hard_disks_dialog_attach(int id, const char* path);
 EXTERN void gui_hard_disks_dialog_create(int id, const char* path);

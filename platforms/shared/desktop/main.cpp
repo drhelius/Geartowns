@@ -35,6 +35,7 @@ extern bool g_mcp_router_enabled;
 static bool option_has_value(const char* option);
 static const char* option_value(int argc, char* argv[], int* i);
 static int machine_option(const char* option);
+static int hard_disk_option(const char* option);
 static void print_wrapped(const char* label, const std::string& text);
 static void print_usage(const char* program);
 
@@ -130,6 +131,13 @@ int main(int argc, char* argv[])
                     app_params.state_slot = value[0] - '0';
                 else
                     app_params.state_file = value;
+            }
+            else if (hard_disk_option(argv[i]) >= 0)
+            {
+                int id = hard_disk_option(argv[i]);
+
+                if (!(app_params.hard_disk_files[id] = option_value(argc, argv, &i)))
+                    return -1;
             }
             else if (machine_option(argv[i]) >= 0)
             {
@@ -301,7 +309,7 @@ static bool option_has_value(const char* option)
             return true;
     }
 
-    return machine_option(option) >= 0;
+    return (machine_option(option) >= 0) || (hard_disk_option(option) >= 0);
 }
 
 static int machine_option(const char* option)
@@ -315,6 +323,13 @@ static int machine_option(const char* option)
     }
 
     return -1;
+}
+
+static int hard_disk_option(const char* option)
+{
+    bool valid = (strncmp(option, "--hd", 4) == 0) && (option[4] >= '0') && (option[4] < '0' + GT_MAX_HARD_DISKS) &&
+        (option[5] == 0);
+    return valid ? option[4] - '0' : -1;
 }
 
 static const char* option_value(int argc, char* argv[], int* i)
@@ -397,6 +412,7 @@ static void print_usage(const char* program)
     print_wrapped("      --cd FILE", "CD-ROM image or .m3u playlist");
     print_wrapped("      --fd1 FILE", "Floppy image in drive 1");
     print_wrapped("      --fd2 FILE", "Floppy image in drive 2");
+    print_wrapped("      --hd0 FILE", "Hard disk image at SCSI ID 0, up to --hd6");
     print_wrapped("      --card FILE", "IC memory card image");
     print_wrapped("      --load-state SLOT", "Load save state slot 1-5, or a state file, once the media is loaded");
     printf("\nMachine (for this run only, over the saved and per-game settings):\n");

@@ -23,6 +23,7 @@
 #include "geartowns.h"
 #include "config.h"
 #include "gui.h"
+#include "gui_actions.h"
 #include "gui_filedialogs.h"
 #include "gui_floppy.h"
 #include "debug/gui_debug.h"
@@ -320,9 +321,24 @@ void application_update_title_with_rom(const char* rom)
 
 void application_load_media(const ApplicationParams& params)
 {
+    bool hard_disks = false;
     bool floppy_media = IsValidPointer(params.rom_file) && !emu_hard_disk_is_image(params.rom_file) &&
         emu_floppy_is_image(params.rom_file);
     Emu_FloppyInfo floppies[2];
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        if (!IsValidPointer(params.hard_disk_files[i]))
+            continue;
+
+        Log("Hard disk ID %d argument: %s", i, params.hard_disk_files[i]);
+
+        if (!gui_hard_disks_attach(i, params.hard_disk_files[i]))
+            continue;
+
+        emu_game_lock_disk(Emu_Game_Disk_HardDisk + i);
+        hard_disks = true;
+    }
 
     for (int i = 0; i < 2; i++)
     {
@@ -350,6 +366,12 @@ void application_load_media(const ApplicationParams& params)
 
         emu_game_lock_disk(Emu_Game_Disk_MemoryCard);
     }
+
+    if (emu_is_powered_on() && gui_hard_disks_is_pending())
+        emu_reset();
+    else if (hard_disks && emu_is_empty() && !IsValidPointer(params.rom_file) && !IsValidPointer(params.cd_file) &&
+        emu_get_core()->GetFirmware()->IsReady())
+        gui_action_power_on();
 
     bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
     bool symbol_file_argument = IsValidPointer(params.symbol_file) && (strlen(params.symbol_file) > 0);

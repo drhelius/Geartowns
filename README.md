@@ -320,6 +320,7 @@ Media:
       --cd FILE             CD-ROM image or .m3u playlist
       --fd1 FILE            Floppy image in drive 1
       --fd2 FILE            Floppy image in drive 2
+      --hd0 FILE            Hard disk image at SCSI ID 0, up to --hd6
       --card FILE           IC memory card image
       --load-state SLOT     Load save state slot 1-5, or a state file, once the
                             media is loaded

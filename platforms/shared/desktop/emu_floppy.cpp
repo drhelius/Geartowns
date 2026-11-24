@@ -405,6 +405,10 @@ bool emu_floppy_get_info(int drive, Emu_FloppyInfo* info)
     info->state_owned = host.state_owned;
     info->disk_count = (int)host.entries.size();
     info->disk_index = host.entry;
+
+    for (int i = 0; i < host.entry; i++)
+        info->file_index += host.entries[i].path == host.source_path ? 1 : 0;
+
     strncpy_fit(info->path, host.source_path.c_str(), sizeof(info->path));
     strncpy_fit(info->working_path, host.working_path.c_str(), sizeof(info->working_path));
     return true;

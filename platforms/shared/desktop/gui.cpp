@@ -59,6 +59,7 @@ static char error_message[4096] = "";
 static bool loading_rom_active = false;
 static int pending_state_slot = 0;
 static std::string pending_state_path;
+static std::string pending_floppies[config_floppy_drives];
 static char loading_rom_path[4096] = "";
 static char loading_symbol_path[4096] = "";
 static bool loading_physical_cdrom = false;
@@ -80,6 +81,7 @@ static void update_key_mapper_pointer(const ImVec2& min, const ImVec2& max);
 static void select_save_slot(int slot);
 static bool finish_loading_rom(void);
 static void load_pending_state(void);
+static void insert_pending_floppies(void);
 static void start_loading_rom(const char* path, const char* symbol_path);
 static void notify_firmware(void);
 static void update_window_visibility_padding(void);
@@ -669,6 +671,8 @@ bool gui_finish_loading_rom(void)
     gui_dialog_in_use = false;
     bool success = emu_finish_media_loading();
 
+    insert_pending_floppies();
+
     if (success)
         success = finish_loading_rom();
     else
@@ -690,6 +694,14 @@ void gui_load_state_after_media(int slot, const char* path)
 
     if (!loading_rom_active)
         load_pending_state();
+}
+
+void gui_insert_floppy_after_media(int drive, const char* path)
+{
+    pending_floppies[drive] = path;
+
+    if (!loading_rom_active)
+        insert_pending_floppies();
 }
 
 void gui_set_error_message(const char* message)
@@ -1237,6 +1249,18 @@ static void load_pending_state(void)
 
     pending_state_slot = 0;
     pending_state_path.clear();
+}
+
+static void insert_pending_floppies(void)
+{
+    for (int i = 0; i < config_floppy_drives; i++)
+    {
+        std::string path = pending_floppies[i];
+        pending_floppies[i].clear();
+
+        if (!path.empty())
+            gui_floppy_insert(i, path.c_str());
+    }
 }
 
 static void show_error_window(void)

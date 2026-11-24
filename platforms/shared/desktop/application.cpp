@@ -77,6 +77,7 @@ static void run_emulator(void);
 static void update_load_ffwd(void);
 static void apply_window_settings(void);
 static void save_window_size(void);
+static void insert_floppy_argument(const ApplicationParams& params, int drive);
 
 #if defined(__APPLE__)
 static void* macos_fullscreen_observer = NULL;
@@ -318,14 +319,22 @@ void application_update_title_with_rom(const char* rom)
 
 void application_load_media(const ApplicationParams& params)
 {
+    bool floppy_media = IsValidPointer(params.rom_file) && !emu_hard_disk_is_image(params.rom_file) &&
+        emu_floppy_is_image(params.rom_file);
+    Emu_FloppyInfo floppies[2];
+
     for (int i = 0; i < 2; i++)
     {
         if (!IsValidPointer(params.floppy_files[i]))
             continue;
 
-        Log("Floppy drive %d argument: %s", i + 1, params.floppy_files[i]);
-        gui_floppy_insert(i, params.floppy_files[i]);
+        // Opening a floppy also sets drive 2, so its argument goes in later
+        if (!floppy_media || (i == 0))
+            insert_floppy_argument(params, i);
     }
+
+    for (int i = 0; i < 2; i++)
+        emu_floppy_get_info(i, &floppies[i]);
 
     if (IsValidPointer(params.memory_card_file))
     {
@@ -350,6 +359,9 @@ void application_load_media(const ApplicationParams& params)
         gui_load_rom(params.rom_file, params.symbol_file);
     }
 
+    if (floppy_media && IsValidPointer(params.floppy_files[1]))
+        insert_floppy_argument(params, 1);
+
     if (!rom_file_argument && symbol_file_argument)
     {
         Log("Symbol file argument: %s", params.symbol_file);
@@ -361,6 +373,17 @@ void application_load_media(const ApplicationParams& params)
     {
         Log("CD-ROM argument: %s", params.cd_file);
         gui_load_rom(params.cd_file);
+    }
+
+    // A playlist's floppies may have taken the drives of the arguments
+    for (int i = 0; gui_is_rom_loading() && (i < 2); i++)
+    {
+        Emu_FloppyInfo info;
+        emu_floppy_get_info(i, &info);
+
+        if (IsValidPointer(params.floppy_files[i]) && floppies[i].inserted &&
+            ((strcmp(info.path, floppies[i].path) != 0) || (info.file_index != floppies[i].file_index)))
+            gui_insert_floppy_after_media(i, params.floppy_files[i]);
     }
 
     if ((params.state_slot > 0) || IsValidPointer(params.state_file))
@@ -388,6 +411,12 @@ bool application_check_single_instance(const char* rom_file, const char* symbol_
     }
 
     return true;
+}
+
+static void insert_floppy_argument(const ApplicationParams& params, int drive)
+{
+    Log("Floppy drive %d argument: %s", drive + 1, params.floppy_files[drive]);
+    gui_floppy_insert(drive, params.floppy_files[drive]);
 }
 
 static bool sdl_init(void)

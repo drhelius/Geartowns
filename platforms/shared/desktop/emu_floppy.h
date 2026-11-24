@@ -36,6 +36,7 @@ struct Emu_FloppyInfo
     bool state_owned;
     int disk_count;
     int disk_index;
+    int file_index;
     char path[GT_MAX_PATH];
     char working_path[GT_MAX_PATH];
 };

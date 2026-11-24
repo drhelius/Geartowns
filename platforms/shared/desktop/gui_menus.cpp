@@ -48,6 +48,7 @@
 #include "geartowns.h"
 #include "drive/hard_disk_image.h"
 #include "drive/memory_card.h"
+#include "system/system_control.h"
 #include "video/video.h"
 #include "rewind.h"
 #include "events.h"
@@ -98,8 +99,9 @@ static void menu_machine_fpu(const GT_Machine_Profile& profile);
 static void menu_machine_speed_mode(const GT_Machine_Profile& profile);
 static void menu_machine_midi_card(const GT_Machine_Profile& profile);
 static const char* get_machine_fpu_text(const GT_Machine_Profile& profile);
-static void menu_machine_hardware(GT_Machine_Model model);
-static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size);
+static void menu_machine_hardware(const GT_Machine_Config& config);
+static void get_machine_hardware(const GT_Machine_Config& config, char* text, size_t text_size);
+static void add_machine_line(char* text, size_t text_size, const char* format, ...);
 static void menu_boot_device(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
@@ -109,6 +111,7 @@ static void menu_input_controller(int port);
 static void menu_audio(void);
 static void menu_audio_source(const char* label, const char* id, int source, float* volume);
 static void menu_audio_synth_volume(const char* label, const char* id, int engine, float* volume);
+static bool volume_slider(const char* id, float* volume);
 static void menu_audio_midi(void);
 static void menu_audio_midi_out(const char* label, int synth, int* out, std::string* port);
 static void menu_audio_midi_port(const char* id, std::string* port);
@@ -981,7 +984,7 @@ static void menu_machine(void)
     menu_machine_fpu(profile);
     menu_machine_speed_mode(profile);
     menu_machine_midi_card(profile);
-    menu_machine_hardware(core->GetPendingMachineConfig().model);
+    menu_machine_hardware(machine);
 
     ImGui::Separator();
 
@@ -1420,13 +1423,19 @@ static const char* get_machine_fpu_text(const GT_Machine_Profile& profile)
     return profile.cpu == GT_MACHINE_CPU_80486SX ? "487SX card, optional" : "80387 card, optional";
 }
 
-static void menu_machine_hardware(GT_Machine_Model model)
+static void menu_machine_hardware(const GT_Machine_Config& config)
 {
     if (!ImGui::BeginMenu("Summary"))
         return;
 
-    char hardware[1024];
-    get_machine_hardware(model, hardware, sizeof(hardware));
+    if (!emu_is_empty() && emu_get_core()->IsMachineConfigPending())
+    {
+        ImGui::TextColored(machine_warning_color, "Reset the emulator to apply the pending changes");
+        ImGui::Separator();
+    }
+
+    char hardware[4096];
+    get_machine_hardware(config, hardware, sizeof(hardware));
     ImVec2 size = ImGui::CalcTextSize(hardware);
     ImVec2 padding = ImGui::GetStyle().FramePadding;
 
@@ -1436,29 +1445,113 @@ static void menu_machine_hardware(GT_Machine_Model model)
     ImGui::EndMenu();
 }
 
-static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size)
+static void get_machine_hardware(const GT_Machine_Config& config, char* text, size_t text_size)
 {
-    const GT_Machine_Profile& profile = k_machine_profiles[model];
+    GeartownsCore* core = emu_get_core();
+    const GT_Machine_Profile& profile = k_machine_profiles[config.model];
     char firmware[GT_MAX_PATH];
-    gui_get_firmware_status(model, firmware, sizeof(firmware));
+    gui_get_firmware_status(config.model, firmware, sizeof(firmware));
     u32 registers = profile.features & ~(u32)GT_MACHINE_FEATURE_SCSI;
+    u32 mhz = config.cpu_clock_rate / 1000000;
+    u32 original_mhz = profile.cpu_clock_rate / 1000000;
+    int ram_mb = (int)(config.ram_size / (1024 * 1024));
+    int max_ram_mb = profile.ram_default_mb;
+    bool optional_fpu = profile.fpu == GT_MACHINE_FPU_SOCKET;
+    bool hires = (profile.features & GT_MACHINE_FEATURE_HIRES_CRTC) != 0;
+    text[0] = 0;
 
-    snprintf(text, text_size, "CPU: %s at %d MHz\nFPU: %s\nMemory map: %s\nMachine ID: %04Xh\nFloppy drives: %d%s\n"
-        "SCSI: %s\nFirmware: %s\nTowns II registers:%s", k_machine_cpus[profile.cpu].name,
-        (int)(profile.cpu_clock_rate / 1000000), get_machine_fpu_text(profile), k_machine_maps[profile.map].name,
-        profile.machine_id, profile.floppy_drives, profile.three_mode_floppy ? ", three-mode" : "",
-        (profile.features & GT_MACHINE_FEATURE_SCSI) != 0 ? "built in" :
-        (model == GT_MACHINE_MODEL1_2) ? "card, fitted while a hard disk is attached" : "none", firmware,
-        registers == 0 ? " none" : "");
+    for (int i = 0; profile.ram_sizes_mb[i] != 0; i++)
+        max_ram_mb = MAX(max_ram_mb, (int)profile.ram_sizes_mb[i]);
+
+    add_machine_line(text, text_size, "Model: %s", profile.name);
+    add_machine_line(text, text_size, "Machine ID: %04Xh", profile.machine_id);
+
+    if (mhz == original_mhz)
+        add_machine_line(text, text_size, "CPU: %s at %u MHz", k_machine_cpus[config.cpu].name, mhz);
+    else
+        add_machine_line(text, text_size, "CPU: %s at %u MHz, originally %u MHz", k_machine_cpus[config.cpu].name, mhz,
+            original_mhz);
+
+    if (optional_fpu && config.fpu)
+        add_machine_line(text, text_size, "FPU: %s card", get_machine_fpu_name(config.cpu));
+    else
+        add_machine_line(text, text_size, "FPU: %s%s", optional_fpu ? "none, " : "", get_machine_fpu_text(profile));
+
+    if ((profile.features & GT_MACHINE_FEATURE_SPEED_CONTROL) == 0)
+        add_machine_line(text, text_size, "Speed mode: compatible only");
+    else if (!emu_is_empty())
+        add_machine_line(text, text_size, "Speed mode: %s",
+            core->GetSystemControl()->GetState()->high_speed ? "high speed" : "compatible");
+    else
+        add_machine_line(text, text_size, "Speed mode: %s", config.speed_mode == GT_MACHINE_AUTO ? "from CMOS" :
+            config.speed_mode != 0 ? "high speed" : "compatible");
+
+    if (ram_mb == profile.ram_default_mb)
+        add_machine_line(text, text_size, "Main RAM: %d MB, up to %d MB", ram_mb, max_ram_mb);
+    else
+        add_machine_line(text, text_size, "Main RAM: %d MB, originally %d MB, up to %d MB", ram_mb,
+            profile.ram_default_mb, max_ram_mb);
+
+    add_machine_line(text, text_size, "Video RAM: %d KB",
+        (hires ? VIDEO_HIRES_VRAM_SIZE : VIDEO_VRAM_SIZE) / 1024);
+    add_machine_line(text, text_size, "Memory map: %s", k_machine_maps[profile.map].name);
+    add_machine_line(text, text_size, "16-bit PCM: %s",
+        (profile.features & GT_MACHINE_FEATURE_PCM16) != 0 ? "built in" : "none");
+    add_machine_line(text, text_size, "MIDI card: %s", config.midi_card ? "FMT-402" :
+        config.model == GT_MACHINE_MARTY ? "none, no slot" : "none");
+    add_machine_line(text, text_size, "CD-ROM drive: %s",
+        (profile.features & GT_MACHINE_FEATURE_CD_DOUBLE_SPEED) != 0 ? "1x, 2x in high-speed mode" : "1x");
+    add_machine_line(text, text_size, "Floppy drives: %d%s", config.floppy_drives,
+        profile.three_mode_floppy ? ", three-mode" : "");
+    add_machine_line(text, text_size, "SCSI: %s", (profile.features & GT_MACHINE_FEATURE_SCSI) != 0 ? "built in" :
+        (config.model != GT_MACHINE_MODEL1_2) ? "none" : config.scsi ? "card" :
+        "none, a card is fitted while a hard disk is attached");
+
+    char disks[64] = "";
+
+    for (int i = 0; i < GT_MAX_HARD_DISKS; i++)
+    {
+        if (!core->GetHardDisk(i)->IsOpen())
+            continue;
+
+        char id[16];
+        snprintf(id, sizeof(id), "%s%d", disks[0] != 0 ? ", " : "ID ", i);
+        strncat_fit(disks, id, sizeof(disks));
+    }
+
+    add_machine_line(text, text_size, "Hard disks: %s", disks[0] != 0 ? disks : "none");
+
+    u32 card_size = core->GetMemoryCard()->IsInserted() ? core->GetMemoryCard()->GetSize() / 1024 : 0;
+
+    if (card_size == 0)
+        add_machine_line(text, text_size, "IC memory card: none");
+    else if ((card_size % 1024) != 0)
+        add_machine_line(text, text_size, "IC memory card: %u KB", card_size);
+    else
+        add_machine_line(text, text_size, "IC memory card: %u MB", card_size / 1024);
+
+    add_machine_line(text, text_size, "Firmware: %s", firmware);
+    add_machine_line(text, text_size, "Towns II registers:%s", registers == 0 ? " none" : "");
 
     for (int i = 0; i < GT_MACHINE_FEATURE_COUNT; i++)
     {
         if (IS_SET_BIT(registers, i))
-        {
-            strncat_fit(text, "\n  ", text_size);
-            strncat_fit(text, k_machine_feature_names[i], text_size);
-        }
+            add_machine_line(text, text_size, "  %s", k_machine_feature_names[i]);
     }
+}
+
+static void add_machine_line(char* text, size_t text_size, const char* format, ...)
+{
+    char line[GT_MAX_PATH + 32];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+
+    if (text[0] != 0)
+        strncat_fit(text, "\n", text_size);
+
+    strncat_fit(text, line, text_size);
 }
 
 static void draw_machine_profile_tooltip(GT_Machine_Model model)
@@ -2096,7 +2189,7 @@ static void menu_audio(void)
         {
             ImGui::PushItemWidth(200.0f);
 
-            if (ImGui::SliderFloat("##master_volume", &config_audio.master_volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))
+            if (volume_slider("##master_volume", &config_audio.master_volume))
             {
                 emu_audio_set_master_volume(config_audio.master_volume);
             }
@@ -2106,7 +2199,7 @@ static void menu_audio(void)
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
-                ImGui::Text("Anything above 1.00 may cause clipping.");
+                ImGui::Text("Anything above 100%% may cause clipping.");
                 ImGui::EndTooltip();
             }
 
@@ -2194,7 +2287,7 @@ static void menu_audio_source(const char* label, const char* id, int source, flo
         ImGui::Separator();
         ImGui::PushItemWidth(200.0f);
 
-        if (ImGui::SliderFloat(id, volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))
+        if (volume_slider(id, volume))
             emu_audio_set_source_volume(source, *volume);
 
         ImGui::PopItemWidth();
@@ -2202,7 +2295,7 @@ static void menu_audio_source(const char* label, const char* id, int source, flo
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
-            ImGui::Text("Anything above 1.00 may cause clipping.");
+            ImGui::Text("Anything above 100%% may cause clipping.");
             ImGui::EndTooltip();
         }
 
@@ -2223,7 +2316,7 @@ static void menu_audio_synth_volume(const char* label, const char* id, int engin
     ImGui::Separator();
     ImGui::PushItemWidth(200.0f);
 
-    if (ImGui::SliderFloat(id, volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))
+    if (volume_slider(id, volume))
         emu_audio_set_synth_volume(engine, *volume);
 
     ImGui::PopItemWidth();
@@ -2231,11 +2324,22 @@ static void menu_audio_synth_volume(const char* label, const char* id, int engin
     if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
-        ImGui::Text("Anything above 1.00 may cause clipping.");
+        ImGui::Text("Anything above 100%% may cause clipping.");
         ImGui::EndTooltip();
     }
 
     ImGui::EndMenu();
+}
+
+static bool volume_slider(const char* id, float* volume)
+{
+    int percent = (int)((*volume * 100.0f) + 0.5f);
+
+    if (!ImGui::SliderInt(id, &percent, 0, 200, "Volume = %d%%", ImGuiSliderFlags_AlwaysClamp))
+        return false;
+
+    *volume = (float)percent / 100.0f;
+    return true;
 }
 
 static void menu_audio_midi(void)

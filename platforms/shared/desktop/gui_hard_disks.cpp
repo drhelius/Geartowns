@@ -286,6 +286,8 @@ static void disk_menu(int id)
         !emu_hard_disk_set_write_protected(id, write_protected))
         gui_notify(gui_NotificationError, NULL, "Unable to change the write protection of this disk");
 
+    gui_game_keep_disk_item(Emu_Game_Disk_HardDisk + id);
+
     ImGui::Separator();
 
     if (ImGui::BeginMenu("Recent", !loading))

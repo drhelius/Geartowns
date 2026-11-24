@@ -21,11 +21,13 @@
 #include "emu_game.h"
 
 #include <string>
+#include <SDL3/SDL.h>
 #define MINI_CASE_SENSITIVE
 #include "ini.h"
 #include "emu.h"
 #include "emu_floppy.h"
 #include "emu_hard_disk.h"
+#include "emu_memory_card.h"
 #include "events.h"
 #include "gui_notifications.h"
 #include "utils.h"
@@ -48,11 +50,18 @@ struct Game_Content
     std::string path;
 };
 
+struct Game_Disk
+{
+    std::string path;
+    int index;
+};
+
 struct Game_State
 {
     Game_Content content;
     bool changed[Emu_Game_Setting_Count];
     int values[Emu_Game_Setting_Count];
+    Game_Disk disks[Emu_Game_Disk_Count];
 };
 
 static const int k_game_max_values = 32;
@@ -66,6 +75,7 @@ static bool last_powered = false;
 static bool latch_pending = false;
 static bool session_set[Emu_Game_Setting_Count] = { };
 static int session_values[Emu_Game_Setting_Count] = { };
+static bool locked_disks[Emu_Game_Disk_Count] = { };
 static bool applied = false;
 static int applied_keyboards[GT_MAX_GAMEPADS] = { };
 
@@ -74,7 +84,7 @@ static bool is_in_database(const Game_Content& content);
 static bool keeps_game(const Game_Content& content, bool restart);
 static bool is_attached(const std::string& path);
 static std::string get_section_name(const char* file_name);
-static void open_game(const Game_Content& content, bool latch);
+static bool open_game(const Game_Content& content, bool latch);
 static void clear_game(void);
 static std::string get_games_path(void);
 static bool has_section(const std::string& key);
@@ -87,6 +97,13 @@ static int get_user(int setting);
 static void set_user(int setting, int value);
 static int get_values(int setting, int* values);
 static std::string get_value_text(int setting, int value);
+static std::string get_disk_key(int disk);
+static std::string get_disk_label(int disk);
+static std::string get_absolute_path(const char* path);
+static bool get_inserted_disk(int disk, Game_Disk* inserted);
+static bool is_own_disk(int disk);
+static bool insert_disk(int disk, const Game_Disk& kept);
+static bool restore_disks(bool* floppies_changed);
 
 void emu_game_update(void)
 {
@@ -101,13 +118,14 @@ void emu_game_update(void)
         open_game(content, latch_pending);
 }
 
-bool emu_game_open(void)
+bool emu_game_open(bool* hard_disks_changed)
 {
     Game_Content content = find_content();
     bool powered = emu_is_powered_on();
     bool same = powered && (content.key == game.content.key);
     last_key = content.key;
     latch_pending = powered && !same && emu_game_has_overrides() && !has_section(content.key) && !is_in_database(content);
+    *hard_disks_changed = false;
 
     if (latch_pending)
         return false;
@@ -115,7 +133,7 @@ bool emu_game_open(void)
     if (same)
         emu_get_core()->LatchAutoMedia();
     else
-        open_game(content, true);
+        *hard_disks_changed = open_game(content, true);
 
     return true;
 }
@@ -237,6 +255,12 @@ bool emu_game_has_overrides(void)
             return true;
     }
 
+    for (int i = 0; i < Emu_Game_Disk_Count; i++)
+    {
+        if (!game.disks[i].path.empty())
+            return true;
+    }
+
     return false;
 }
 
@@ -252,6 +276,47 @@ bool emu_game_reset_settings(void)
 
     emu_game_apply();
     return true;
+}
+
+const char* emu_game_get_kept_disk(int disk)
+{
+    return game.disks[disk].path.c_str();
+}
+
+bool emu_game_is_disk_kept(int disk)
+{
+    const Game_Disk& kept = game.disks[disk];
+    Game_Disk inserted;
+
+    if (kept.path.empty())
+        return false;
+
+    return !get_inserted_disk(disk, &inserted) || ((inserted.path == kept.path) && (inserted.index == kept.index));
+}
+
+bool emu_game_can_keep_disk(int disk)
+{
+    Game_Disk inserted;
+    return emu_game_is_open() && !is_own_disk(disk) && (!game.disks[disk].path.empty() || get_inserted_disk(disk, &inserted));
+}
+
+void emu_game_keep_disk(int disk, bool keep)
+{
+    if (!emu_game_can_keep_disk(disk))
+        return;
+
+    if (!keep || !get_inserted_disk(disk, &game.disks[disk]))
+    {
+        game.disks[disk].path.clear();
+        game.disks[disk].index = 0;
+    }
+
+    save_changes();
+}
+
+void emu_game_lock_disk(int disk)
+{
+    locked_disks[disk] = true;
 }
 
 static Game_Content find_content(void)
@@ -366,8 +431,10 @@ static std::string get_section_name(const char* file_name)
     return name;
 }
 
-static void open_game(const Game_Content& content, bool latch)
+static bool open_game(const Game_Content& content, bool latch)
 {
+    bool floppies_changed = false;
+
     clear_game();
     game.content = content;
     latch_pending = false;
@@ -376,12 +443,25 @@ static void open_game(const Game_Content& content, bool latch)
 
     if (latch)
         emu_get_core()->LatchAutoMedia();
+
+    bool hard_disks_changed = restore_disks(&floppies_changed);
+
+    if (latch && floppies_changed)
+        emu_get_core()->LatchAutoMedia();
+
+    return hard_disks_changed;
 }
 
 static void clear_game(void)
 {
     for (int i = 0; i < Emu_Game_Setting_Count; i++)
         game.changed[i] = false;
+
+    for (int i = 0; i < Emu_Game_Disk_Count; i++)
+    {
+        game.disks[i].path.clear();
+        game.disks[i].index = 0;
+    }
 }
 
 static std::string get_games_path(void)
@@ -414,6 +494,13 @@ static void load_game(void)
             game.changed[i] = emu_game_parse(i, section[k_game_setting_keys[i]].c_str(), &game.values[i]);
     }
 
+    for (int i = 0; i < Emu_Game_Disk_Count; i++)
+    {
+        std::string key = get_disk_key(i);
+        game.disks[i].path = section.get(key);
+        game.disks[i].index = atoi(section.get(key + "Disk").c_str());
+    }
+
     Log("Settings loaded for %s", game.content.name.c_str());
 }
 
@@ -438,6 +525,19 @@ static bool save_game(void)
             section[k_game_setting_keys[i]] = get_value_text(i, game.values[i]);
         else
             section.remove(k_game_setting_keys[i]);
+    }
+
+    for (int i = 0; i < Emu_Game_Disk_Count; i++)
+    {
+        std::string key = get_disk_key(i);
+        section.remove(key);
+        section.remove(key + "Disk");
+
+        if (!game.disks[i].path.empty())
+            section[key] = game.disks[i].path;
+
+        if (game.disks[i].index > 0)
+            section[key + "Disk"] = std::to_string(game.disks[i].index);
     }
 
     return file.write(ini, true);
@@ -600,4 +700,135 @@ static std::string get_value_text(int setting, int value)
         default:
             return value != 0 ? "true" : "false";
     }
+}
+
+static std::string get_disk_key(int disk)
+{
+    if (disk < Emu_Game_Disk_Floppy)
+        return "HardDisk" + std::to_string(disk);
+
+    return disk < Emu_Game_Disk_MemoryCard ? "Floppy" + std::to_string(disk - Emu_Game_Disk_Floppy + 1) : "MemoryCard";
+}
+
+static std::string get_disk_label(int disk)
+{
+    if (disk < Emu_Game_Disk_Floppy)
+        return "SCSI ID " + std::to_string(disk);
+
+    return disk < Emu_Game_Disk_MemoryCard ? "Floppy " + std::to_string(disk - Emu_Game_Disk_Floppy + 1) : "IC memory card";
+}
+
+static std::string get_absolute_path(const char* path)
+{
+    if ((path[0] == 0) || is_absolute_path(path))
+        return path;
+
+    char* directory = SDL_GetCurrentDirectory();
+    std::string absolute = IsValidPointer(directory) ? directory : "";
+    SDL_free(directory);
+    return absolute + path;
+}
+
+static bool get_inserted_disk(int disk, Game_Disk* inserted)
+{
+    inserted->path.clear();
+    inserted->index = 0;
+
+    if (disk < Emu_Game_Disk_Floppy)
+    {
+        Emu_HardDiskInfo info;
+        emu_hard_disk_get_info(disk, &info);
+        inserted->path = get_absolute_path(info.pending ? info.pending_path : info.path);
+    }
+    else if (disk < Emu_Game_Disk_MemoryCard)
+    {
+        Emu_FloppyInfo info;
+        emu_floppy_get_info(disk - Emu_Game_Disk_Floppy, &info);
+        inserted->path = get_absolute_path(info.path);
+        inserted->index = info.file_index;
+    }
+    else
+    {
+        Emu_MemoryCardInfo info;
+        emu_memory_card_get_info(&info);
+        inserted->path = get_absolute_path(info.path);
+    }
+
+    return !inserted->path.empty();
+}
+
+static bool is_own_disk(int disk)
+{
+    if (disk < Emu_Game_Disk_Floppy)
+    {
+        Emu_HardDiskInfo info;
+        emu_hard_disk_get_info(disk, &info);
+        return (game.content.media == Game_Media_HardDisk) && (game.content.path == (info.pending ? info.pending_path : info.path));
+    }
+
+    if ((disk == Emu_Game_Disk_MemoryCard) || (game.content.media != Game_Media_Floppy))
+        return false;
+
+    Emu_FloppyInfo info;
+    emu_floppy_get_info(disk - Emu_Game_Disk_Floppy, &info);
+    return (disk == Emu_Game_Disk_Floppy) || (game.content.path == info.path);
+}
+
+static bool insert_disk(int disk, const Game_Disk& kept)
+{
+    const char* path = kept.path.c_str();
+
+    if (!path_exists(path))
+        return false;
+
+    if (disk < Emu_Game_Disk_Floppy)
+        return emu_hard_disk_attach(disk, path, config_emulator.hard_disk_write_protected[disk] != 0);
+
+    if (disk < Emu_Game_Disk_MemoryCard)
+        return emu_floppy_insert(disk - Emu_Game_Disk_Floppy, path, false) &&
+            emu_floppy_select_disk(disk - Emu_Game_Disk_Floppy, kept.index, false);
+
+    return emu_memory_card_insert(path, config_emulator.memory_card_write_protected);
+}
+
+static bool restore_disks(bool* floppies_changed)
+{
+    int floppy_drives = emu_get_core()->GetPendingMachineConfig().floppy_drives;
+    std::string inserted;
+    std::string failed;
+    bool pending = false;
+
+    for (int i = 0; emu_game_is_open() && (i < Emu_Game_Disk_Count); i++)
+    {
+        const Game_Disk& kept = game.disks[i];
+        bool missing_drive = (i >= Emu_Game_Disk_Floppy) && (i < Emu_Game_Disk_MemoryCard) &&
+            (i - Emu_Game_Disk_Floppy >= floppy_drives);
+
+        if (kept.path.empty() || locked_disks[i] || missing_drive || is_own_disk(i))
+            continue;
+
+        Game_Disk current;
+        bool ready = get_inserted_disk(i, &current) && (current.path == kept.path) && (current.index == kept.index);
+
+        if (!ready)
+        {
+            ready = insert_disk(i, kept);
+            std::string& list = ready ? inserted : failed;
+            list += (list.empty() ? "" : "\n") + get_disk_label(i) + ": " + get_filename(kept.path.c_str());
+            *floppies_changed = *floppies_changed || (i >= Emu_Game_Disk_Floppy);
+        }
+
+        Emu_HardDiskInfo info;
+        pending = pending || (ready && (i < Emu_Game_Disk_Floppy) && emu_hard_disk_get_info(i, &info) && info.pending);
+    }
+
+    if (!inserted.empty())
+        gui_notify(gui_NotificationInfo, ICON_MD_VIDEOGAME_ASSET, ("Disks kept with " + game.content.name).c_str(),
+            inserted.c_str());
+
+    if (!failed.empty())
+        gui_notify(gui_NotificationError, NULL, ("Unable to insert the disks kept with " + game.content.name).c_str(),
+            failed.c_str());
+
+    return pending;
 }

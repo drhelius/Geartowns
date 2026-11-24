@@ -68,6 +68,30 @@ bool gui_begin_game_combo(const char* id, const char* preview, int setting)
     return open;
 }
 
+void gui_game_keep_disk_item(int disk)
+{
+    bool kept = emu_game_is_disk_kept(disk);
+
+    if (ImGui::MenuItem("Keep with This Game", NULL, kept, emu_game_can_keep_disk(disk)))
+        emu_game_keep_disk(disk, !kept);
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+        const char* path = emu_game_get_kept_disk(disk);
+        ImGui::BeginTooltip();
+
+        if (emu_game_is_open())
+            ImGui::Text("Goes in this drive each time %s is opened.", emu_game_get_name());
+        else
+            ImGui::Text("Goes in this drive each time the game is opened. No game is open.");
+
+        if (path[0] != 0)
+            ImGui::TextColored(game_change_color, "Kept: %s", path);
+
+        ImGui::EndTooltip();
+    }
+}
+
 void gui_game_forget_item(void)
 {
     if (ImGui::MenuItem("Forget This Game's Changes", NULL, false, emu_game_has_overrides()))
@@ -79,6 +103,6 @@ void gui_game_forget_item(void)
     }
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Forgets the machine, FM Towns Ports, CD-ROM read speed and\n"
-            "Fast Disk Timing kept for this game. The key map is kept.");
+        ImGui::SetTooltip("Forgets the machine, FM Towns Ports, CD-ROM read speed, Fast Disk Timing\n"
+            "and disks kept for this game. The key map is kept.");
 }

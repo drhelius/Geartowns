@@ -25,11 +25,13 @@
 #include "gui.h"
 #include "gui_colors.h"
 #include "gui_filedialogs.h"
+#include "gui_game.h"
 #include "gui_notifications.h"
 #include "application.h"
 #include "config.h"
 #include "emu.h"
 #include "emu_floppy.h"
+#include "emu_game.h"
 #include "emu_memory_card.h"
 #include "utils.h"
 #include "debug/gui_debug.h"
@@ -173,6 +175,8 @@ static void drive_menu(int drive)
         else if (!emu_floppy_set_write_protected(drive, write_protected))
             gui_notify(gui_NotificationError, NULL, "Unable to change the write protection of this disk");
     }
+
+    gui_game_keep_disk_item(Emu_Game_Disk_Floppy + drive);
 
     if (ImGui::MenuItem("Save Changes", NULL, false, info.dirty && info.working_path[0]))
     {

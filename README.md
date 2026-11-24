@@ -144,7 +144,8 @@ With a game inserted, the settings you change are saved for that game only, and 
 
 - **Saved**: **Machine** (model, CPU speed, RAM, FPU and speed mode), **Input → FM Towns Ports**, the CD-ROM **Read Speed** and **Fast Disk Timing**. The menus show them in orange.
 - **General settings**: with nothing inserted, the same menus change the settings used by every game without its own. Choosing the general value again for a game removes its change.
-- **Forget**: **Machine → Forget This Game's Changes** removes the changes.
+- **Disks**: **Keep with This Game**, in the menu of each floppy drive, hard disk and the IC memory card, puts the disk in that drive back each time the game is opened. A hard disk that goes in while the machine is on resets it.
+- **Forget**: **Machine → Forget This Game's Changes** removes the changes and the kept disks.
 - **Multi-disc games**: use an `m3u` playlist, so every disc shares the first one's settings. A disc inserted on its own while the machine is on keeps the current settings until the next reset, unless it has its own or is in the game database.
 
 They are stored in `games.ini`, next to `config.ini`. CDs are recognized by their contents, so renaming or converting an image keeps its settings. Floppies and hard disks are recognized by file name.

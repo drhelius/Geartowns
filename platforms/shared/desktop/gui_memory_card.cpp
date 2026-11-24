@@ -26,11 +26,13 @@
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "gui_filedialogs.h"
+#include "gui_game.h"
 #include "gui_notifications.h"
 #include "application.h"
 #include "config.h"
 #include "emu.h"
 #include "emu_floppy.h"
+#include "emu_game.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
 #include "utils.h"
@@ -97,6 +99,8 @@ void gui_memory_card_menu(void)
     if (ImGui::MenuItem("Write Protected", NULL, &write_protected) &&
         !emu_memory_card_set_write_protected(write_protected))
         gui_notify(gui_NotificationError, NULL, "Unable to change the write protection of this card");
+
+    gui_game_keep_disk_item(Emu_Game_Disk_MemoryCard);
 
     if (ImGui::MenuItem("Save Changes", NULL, false, info.dirty))
     {

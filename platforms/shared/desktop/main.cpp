@@ -236,6 +236,7 @@ int main(int argc, char* argv[])
     {
         app_params.rom_file = app_params.floppy_files[0];
         app_params.floppy_files[0] = NULL;
+        emu_game_lock_disk(Emu_Game_Disk_Floppy);
     }
 
     config_init(portable);

@@ -45,6 +45,14 @@ enum Emu_Game_Setting
     Emu_Game_Setting_Count
 };
 
+enum Emu_Game_Disk
+{
+    Emu_Game_Disk_HardDisk = 0,
+    Emu_Game_Disk_Floppy = GT_MAX_HARD_DISKS,
+    Emu_Game_Disk_MemoryCard = Emu_Game_Disk_Floppy + config_floppy_drives,
+    Emu_Game_Disk_Count
+};
+
 enum Emu_Game_Source
 {
     Emu_Game_Source_User = 0,
@@ -53,7 +61,7 @@ enum Emu_Game_Source
 };
 
 EXTERN void emu_game_update(void);
-EXTERN bool emu_game_open(void);
+EXTERN bool emu_game_open(bool* hard_disks_changed);
 EXTERN void emu_game_restart(void);
 EXTERN bool emu_game_is_open(void);
 EXTERN const char* emu_game_get_name(void);
@@ -66,6 +74,11 @@ EXTERN bool emu_game_parse(int setting, const char* text, int* value);
 EXTERN void emu_game_apply(void);
 EXTERN bool emu_game_has_overrides(void);
 EXTERN bool emu_game_reset_settings(void);
+EXTERN const char* emu_game_get_kept_disk(int disk);
+EXTERN bool emu_game_is_disk_kept(int disk);
+EXTERN bool emu_game_can_keep_disk(int disk);
+EXTERN void emu_game_keep_disk(int disk, bool keep);
+EXTERN void emu_game_lock_disk(int disk);
 
 #undef EMU_GAME_IMPORT
 #undef EXTERN

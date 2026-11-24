@@ -29,6 +29,7 @@
 #include "ogl_renderer.h"
 #include "emu.h"
 #include "emu_floppy.h"
+#include "emu_game.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
 #include "gui_hard_disks.h"
@@ -328,6 +329,8 @@ void application_load_media(const ApplicationParams& params)
         if (!IsValidPointer(params.floppy_files[i]))
             continue;
 
+        emu_game_lock_disk(Emu_Game_Disk_Floppy + i);
+
         // Opening a floppy also sets drive 2, so its argument goes in later
         if (!floppy_media || (i == 0))
             insert_floppy_argument(params, i);
@@ -344,6 +347,8 @@ void application_load_media(const ApplicationParams& params)
             gui_memory_card_insert(params.memory_card_file);
         else
             gui_memory_card_load(params.memory_card_file);
+
+        emu_game_lock_disk(Emu_Game_Disk_MemoryCard);
     }
 
     bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);

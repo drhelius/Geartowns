@@ -970,7 +970,9 @@ bool emu_latch_auto_media(void)
     if (!IsValidPointer(geartowns))
         return false;
 
-    if (!emu_game_open())
+    bool hard_disks_changed = false;
+
+    if (!emu_game_open(&hard_disks_changed))
         return false;
 
     emu_update_pad_types();
@@ -978,7 +980,7 @@ bool emu_latch_auto_media(void)
     if (!geartowns->IsPoweredOn())
         return false;
 
-    if (geartowns->IsMachineConfigPending())
+    if (geartowns->IsMachineConfigPending() || hard_disks_changed)
         return true;
 
     notify_machine();

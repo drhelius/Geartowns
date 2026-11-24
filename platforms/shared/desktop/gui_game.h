@@ -30,6 +30,7 @@ EXTERN bool gui_push_game_source_color(int setting);
 EXTERN void gui_draw_game_source_tooltip(int setting);
 EXTERN bool gui_begin_game_menu(const char* label, int setting);
 EXTERN bool gui_begin_game_combo(const char* id, const char* preview, int setting);
+EXTERN void gui_game_keep_disk_item(int disk);
 EXTERN void gui_game_forget_item(void);
 
 #undef GUI_GAME_IMPORT

@@ -25,6 +25,7 @@ static void process_machine_model(config_Operation operation, int* model);
 static void process_machine_value(config_Operation operation, const char* key, int* value, const int* values, int count);
 static void process_machine_fpu(config_Operation operation, int* fpu);
 static void process_machine_speed_mode(config_Operation operation, int* speed_mode);
+static void process_machine_midi_card(config_Operation operation, int* midi_card);
 
 static inline void process(config_Operation operation)
 {
@@ -76,6 +77,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "YM3438Registers", config_debug.show_ym3438_registers, false);
     CONFIG_BOOL("Debug", "RF5C68", config_debug.show_rf5c68, false);
     CONFIG_BOOL("Debug", "PCM16", config_debug.show_pcm16, false);
+    CONFIG_BOOL("Debug", "MIDI", config_debug.show_midi, false);
     CONFIG_BOOL("Debug", "SoundControl", config_debug.show_sound_control, false);
     CONFIG_INT_RANGE("Debug", "RF5C68WaveBank", config_debug.rf5c68_wave_bank, 0, 0, 15);
     CONFIG_BOOL("Debug", "CDROM", config_debug.show_cdrom, false);
@@ -112,6 +114,7 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("Debug", "TraceFm", config_debug.trace_fm, false);
     CONFIG_BOOL("Debug", "TracePcm", config_debug.trace_pcm, false);
     CONFIG_BOOL("Debug", "TracePcm16", config_debug.trace_pcm16, false);
+    CONFIG_BOOL("Debug", "TraceMidi", config_debug.trace_midi, false);
     CONFIG_BOOL("Debug", "TraceMixer", config_debug.trace_mixer, false);
     CONFIG_BOOL("Debug", "TraceCdrom", config_debug.trace_cdrom, false);
     CONFIG_BOOL("Debug", "TraceFdc", config_debug.trace_fdc, false);
@@ -138,6 +141,8 @@ static inline void process(config_Operation operation)
         TRACE_PCM_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TracePcm16Events", config_debug.trace_pcm16_events, TRACE_PCM16_EVENT_DEFAULT, 0,
         TRACE_PCM16_EVENT_ALL);
+    CONFIG_INT_RANGE("Debug", "TraceMidiEvents", config_debug.trace_midi_events, TRACE_MIDI_EVENT_DEFAULT, 0,
+        TRACE_MIDI_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceMixerEvents", config_debug.trace_mixer_events, TRACE_MIXER_EVENT_ALL, 0,
         TRACE_MIXER_EVENT_ALL);
     CONFIG_INT_RANGE("Debug", "TraceCdromEvents", config_debug.trace_cdrom_events, TRACE_CDROM_EVENT_ALL, 0,
@@ -270,6 +275,7 @@ static inline void process(config_Operation operation)
     process_machine_value(operation, "RAM", &config_machine.ram_mb, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT);
     process_machine_fpu(operation, &config_machine.fpu);
     process_machine_speed_mode(operation, &config_machine.speed_mode);
+    process_machine_midi_card(operation, &config_machine.midi_card);
 
     //**************************************
     // Video
@@ -330,6 +336,18 @@ static inline void process(config_Operation operation)
     CONFIG_FLOAT_RANGE("Audio", "CDDAVolume", config_audio.cdda_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_FLOAT_RANGE("Audio", "BuzzerVolume", config_audio.buzzer_volume, 1.0f, 0.0f, 2.0f);
     CONFIG_FLOAT_RANGE("Audio", "PCM16Volume", config_audio.pcm16_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "MT32Volume", config_audio.mt32_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_FLOAT_RANGE("Audio", "GMVolume", config_audio.gm_volume, 1.0f, 0.0f, 2.0f);
+    CONFIG_INT_RANGE("Audio", "MIDIGMOut", config_audio.midi_gm_out, GT_MIDI_OUT_BUILTIN, 0, GT_MIDI_OUT_COUNT - 1);
+    CONFIG_STRING("Audio", "MIDIGMPort", config_audio.midi_gm_port, "");
+    CONFIG_INT_RANGE("Audio", "MIDIMT32Out", config_audio.midi_mt32_out, GT_MIDI_OUT_BUILTIN, 0, GT_MIDI_OUT_COUNT - 1);
+    CONFIG_STRING("Audio", "MIDIMT32Port", config_audio.midi_mt32_port, "");
+    CONFIG_INT_RANGE("Audio", "MIDIMusic", config_audio.midi_music, 0, 0, GT_MIDI_SYNTH_COUNT);
+    CONFIG_INT_RANGE("Audio", "MT32ROMDirOption", config_audio.mt32_rom_dir_option, 0, 0, 1);
+    CONFIG_STRING("Audio", "MT32ROMPath", config_audio.mt32_rom_path, "");
+    CONFIG_INT_RANGE("Audio", "MT32Model", config_audio.mt32_model, GT_MT32_MODEL_AUTO, 0, GT_MT32_MODEL_COUNT - 1);
+    CONFIG_INT_RANGE("Audio", "SoundFontOption", config_audio.soundfont_option, 0, 0, 1);
+    CONFIG_STRING("Audio", "SoundFont", config_audio.soundfont, "");
     CONFIG_INT("Audio", "BufferCount", config_audio.buffer_count, 3);
 
     //**************************************
@@ -654,6 +672,13 @@ static void process_machine_speed_mode(config_Operation operation, int* speed_mo
     std::string text = *speed_mode < 0 ? "auto" : *speed_mode == 0 ? "compatible" : "high";
     process_string(operation, "Machine", "SpeedMode", &text, "auto", false);
     *speed_mode = text == "compatible" ? 0 : text == "high" ? 1 : GT_MACHINE_AUTO;
+}
+
+static void process_machine_midi_card(config_Operation operation, int* midi_card)
+{
+    std::string text = *midi_card < 0 ? "auto" : *midi_card == 0 ? "none" : "fitted";
+    process_string(operation, "Machine", "MIDICard", &text, "auto", false);
+    *midi_card = text == "none" ? 0 : text == "fitted" ? 1 : GT_MACHINE_AUTO;
 }
 
 static void sync_shader_preset_parameter_defaults(void)

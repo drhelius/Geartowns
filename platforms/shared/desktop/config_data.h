@@ -138,6 +138,7 @@ struct config_Machine
     int ram_mb;
     int fpu;
     int speed_mode;
+    int midi_card;
     std::string firmware_paths[GT_MACHINE_COUNT];
 };
 
@@ -168,6 +169,18 @@ struct config_Audio
     float cdda_volume;
     float buzzer_volume;
     float pcm16_volume;
+    float mt32_volume;
+    float gm_volume;
+    int midi_gm_out;
+    std::string midi_gm_port;
+    int midi_mt32_out;
+    std::string midi_mt32_port;
+    int midi_music;
+    int mt32_rom_dir_option;
+    std::string mt32_rom_path;
+    int mt32_model;
+    int soundfont_option;
+    std::string soundfont;
     int buffer_count;
 };
 
@@ -311,6 +324,7 @@ struct config_Debug
     bool trace_fm;
     bool trace_pcm;
     bool trace_pcm16;
+    bool trace_midi;
     bool trace_mixer;
     bool trace_cdrom;
     bool trace_fdc;
@@ -328,6 +342,7 @@ struct config_Debug
     int trace_fm_events;
     int trace_pcm_events;
     int trace_pcm16_events;
+    int trace_midi_events;
     int trace_mixer_events;
     int trace_cdrom_events;
     int trace_fdc_events;
@@ -376,6 +391,7 @@ struct config_Debug
     bool show_ym3438_registers;
     bool show_rf5c68;
     bool show_pcm16;
+    bool show_midi;
     bool show_sound_control;
     int rf5c68_wave_bank;
     bool show_cdrom;

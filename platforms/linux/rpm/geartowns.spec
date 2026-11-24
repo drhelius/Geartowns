@@ -13,9 +13,11 @@ BuildRequires:  make
 BuildRequires:  pkgconf-pkg-config
 BuildRequires:  mesa-libGL-devel
 BuildRequires:  SDL3-devel
+BuildRequires:  alsa-lib-devel
 
 Requires:       mesa-libGL
 Requires:       SDL3
+Requires:       alsa-lib
 Requires:       shared-mime-info
 
 %description

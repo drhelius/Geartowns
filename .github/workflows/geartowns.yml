@@ -44,7 +44,7 @@ jobs:
       run: sudo apt-get update -qq
     - name: Install Ubuntu SDL3 dependencies
       if: startsWith(matrix.os, 'ubuntu-26.04')
-      run: sudo apt-get install -y build-essential pkg-config libsdl3-dev libgl-dev
+      run: sudo apt-get install -y build-essential pkg-config libsdl3-dev libgl-dev libasound2-dev
     - name: Install SDL3 build dependencies
       if: ${{ !startsWith(matrix.os, 'ubuntu-26.04') }}
       run: |

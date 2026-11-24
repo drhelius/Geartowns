@@ -194,8 +194,12 @@ void gui_apply_settings(void)
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_CDDA, config_audio.cdda_volume);
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_BUZZER, config_audio.buzzer_volume);
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_PCM16, config_audio.pcm16_volume);
+    emu_audio_set_synth_volume(GT_MIDI_ENGINE_MT32, config_audio.mt32_volume);
+    emu_audio_set_synth_volume(GT_MIDI_ENGINE_SOUNDFONT, config_audio.gm_volume);
 
     strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
+    strncpy_fit(gui_mt32_path, config_audio.mt32_rom_path.c_str(), sizeof(gui_mt32_path));
+    strncpy_fit(gui_soundfont_path, config_audio.soundfont.c_str(), sizeof(gui_soundfont_path));
     strncpy_fit(gui_savefiles_path, config_emulator.savefiles_path.c_str(), sizeof(gui_savefiles_path));
     strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
     strncpy_fit(gui_video_recordings_path, config_emulator.video_recordings_path.c_str(), sizeof(gui_video_recordings_path));

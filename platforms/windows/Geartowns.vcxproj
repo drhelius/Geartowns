@@ -331,6 +331,11 @@
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
       <ExcludedFromBuild Condition="'$(DisableSoundFont)' == 'true'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\emu_midi.cpp" />
+    <ClCompile Include="..\shared\desktop\emu_synth.cpp" />
+    <ClCompile Include="..\shared\desktop\midi_port.cpp" />
+    <ClCompile Include="..\shared\desktop\midi_port_win32.cpp" />
+    <ClCompile Include="..\shared\desktop\midi_queue.cpp" />
     <ClCompile Include="..\..\src\audio\midi_card.cpp" />
     <ClCompile Include="..\..\src\system\i8251.cpp" />
     <ClCompile Include="..\..\src\audio\pcm16.cpp" />
@@ -630,6 +635,10 @@
     <ClInclude Include="..\..\src\system\memory_inline.h" />
     <ClInclude Include="..\..\src\audio\midi_out.h" />
     <ClInclude Include="..\..\src\audio\midi_out_inline.h" />
+    <ClInclude Include="..\shared\desktop\emu_midi.h" />
+    <ClInclude Include="..\shared\desktop\emu_synth.h" />
+    <ClInclude Include="..\shared\desktop\midi_port.h" />
+    <ClInclude Include="..\shared\desktop\midi_queue.h" />
     <ClInclude Include="..\..\src\audio\midi_card.h" />
     <ClInclude Include="..\..\src\audio\midi_synth.h" />
     <ClInclude Include="..\..\src\audio\midi_synth_inline.h" />
@@ -889,7 +898,7 @@
       <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>dependencies\SDL3\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <DataExecutionPrevention>true</DataExecutionPrevention>
       <GenerateDebugInformation>false</GenerateDebugInformation>
@@ -934,7 +943,7 @@
       <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>dependencies\SDL3\lib\arm64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <DataExecutionPrevention>true</DataExecutionPrevention>
       <GenerateDebugInformation>false</GenerateDebugInformation>
@@ -978,7 +987,7 @@
       <ProgramDataBaseFileName>$(IntDir)vc$(PlatformToolsetVersion).pdb</ProgramDataBaseFileName>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>dependencies\SDL3\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <DataExecutionPrevention>true</DataExecutionPrevention>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -1018,7 +1027,7 @@
       <ProgramDataBaseFileName>$(IntDir)vc$(PlatformToolsetVersion).pdb</ProgramDataBaseFileName>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;opengl32.lib;glu32.lib;Shell32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>dependencies\SDL3\lib\arm64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <DataExecutionPrevention>true</DataExecutionPrevention>
       <GenerateDebugInformation>true</GenerateDebugInformation>

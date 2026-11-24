@@ -77,7 +77,11 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
     }
 
     // Run the speculative frames with the same input, discarding their audio
-    // and keeping only the last rendered frame.
+    // and MIDI and keeping only the last rendered frame.
+    MidiOut* midi = core->GetAudio()->GetMidiOut();
+    MidiOut::MidiOut_Capture capture = midi->GetCapture();
+    midi->SetCapture(MidiOut::MIDI_OUT_CAPTURE_OFF);
+
     for (int i = 0; i < frames; i++)
     {
         int discarded_samples = 0;
@@ -86,7 +90,10 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
     }
 
     if (!core->IsPoweredOn())
+    {
+        midi->SetCapture(capture);
         return;
+    }
 
     // Roll back to the authoritative frame. If restoring ever fails, the
     // authoritative state is unrecoverable, so keep the (valid) speculative
@@ -98,6 +105,8 @@ void runahead_run(int frames, u8* frame_buffer, s16* sample_buffer, int* sample_
         Log("Run-ahead: failed to restore state, disabling run-ahead");
         config_emulator.runahead = 0;
     }
+
+    midi->SetCapture(capture);
 }
 
 static bool ensure_buffer(void)

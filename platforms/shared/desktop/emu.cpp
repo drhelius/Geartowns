@@ -36,6 +36,8 @@
 #include "emu_game.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
+#include "emu_midi.h"
+#include "emu_synth.h"
 #include "events.h"
 #include "gui_notifications.h"
 #include "input_macro.h"
@@ -169,6 +171,8 @@ bool emu_init(void)
     emu_floppy_init();
 
     sound_queue_init();
+    emu_midi_init();
+    emu_synth_init();
 
     for (int i = 0; i < 5; i++)
         InitPointer(emu_savestates_screenshots[i].data);
@@ -188,6 +192,7 @@ bool emu_init(void)
     {
         runahead_destroy();
         rewind_destroy();
+        emu_midi_destroy();
         sound_queue_destroy();
         SafeDelete(geartowns);
         SafeDeleteArray(audio_buffer);
@@ -236,6 +241,7 @@ void emu_destroy(void)
     runahead_destroy();
     rewind_destroy();
     SafeDelete(mcp_manager);
+    emu_midi_destroy();
     sound_queue_destroy();
     SafeDelete(geartowns);
     SafeDeleteArray(audio_buffer);
@@ -269,6 +275,7 @@ void emu_update(void)
     {
         geartowns->GetKeyMapper()->Close();
         update_key_map();
+        emu_midi_idle();
         return;
     }
 
@@ -281,6 +288,7 @@ void emu_update(void)
         emu_frame_stale = false;
         memset(audio_buffer, 0, GT_AUDIO_QUEUE_SIZE * sizeof(s16));
         sound_queue_write(audio_buffer, GT_AUDIO_QUEUE_SIZE, false);
+        emu_midi_idle();
         return;
     }
 
@@ -292,6 +300,7 @@ void emu_update(void)
 
     if (rewind_is_active())
     {
+        emu_midi_rewind();
         double seconds = get_rewind_pop_seconds();
 
         if ((seconds > 0.0) && rewind_pop(seconds))
@@ -329,6 +338,7 @@ void emu_update(void)
             debug_run.stopped = false;
             debug_run.breakpoint_hit = false;
 
+            emu_midi_begin_frame();
             rewind_commit_seek();
 
             GT_Run_Result result = geartowns->RunToFrame(emu_frame_buffer, audio_buffer, &sample_count, &debug_run);
@@ -366,6 +376,7 @@ void emu_update(void)
     }
     else if (!geartowns->IsPaused())
     {
+        emu_midi_begin_frame();
         rewind_commit_seek();
 
         GT_Run_Result result = GT_RUN_NOT_READY;
@@ -429,6 +440,11 @@ void emu_update(void)
         memset(audio_buffer, 0, silence_count * sizeof(s16));
         sound_queue_write(audio_buffer, silence_count, false);
     }
+
+    if (frame_executed)
+        emu_midi_end_frame(sample_count);
+    else
+        emu_midi_idle();
 
     if (config_debug.debug)
         emu_debug_update();
@@ -962,6 +978,7 @@ void emu_apply_machine_settings(void)
     settings.ram_mb = emu_game_get(Emu_Game_Setting_RAM);
     settings.fpu = emu_game_get(Emu_Game_Setting_FPU);
     settings.speed_mode = emu_game_get(Emu_Game_Setting_SpeedMode);
+    settings.midi_card = emu_game_get(Emu_Game_Setting_MidiCard);
     geartowns->SetMachineSettings(settings);
 }
 
@@ -1030,6 +1047,17 @@ void emu_audio_set_source_volume(int source, float volume)
         default:
             break;
     }
+}
+
+void emu_audio_set_synth_volume(int engine, float volume)
+{
+    if (!IsValidPointer(geartowns))
+        return;
+
+    if (engine == GT_MIDI_ENGINE_MT32)
+        geartowns->GetAudio()->SetMT32Volume(volume);
+    else
+        geartowns->GetAudio()->SetGMVolume(volume);
 }
 
 void emu_audio_set_source_mute(int source, bool mute)
@@ -2111,6 +2139,7 @@ static void after_state_loaded(const char* path, int index)
     events_sync_input();
     emu_reset_load_ffwd();
     rewind_reset();
+    emu_midi_state_loaded();
 }
 
 static void restore_state_frame(const char* path, int index)

@@ -66,7 +66,7 @@ struct Game_State
 
 static const int k_game_max_values = 32;
 static const char* const k_game_setting_keys[Emu_Game_Setting_Count] = { "Model", "CPUSpeed", "RAM", "FPU", "SpeedMode",
-    "Port1", "Port2", "Port1Keyboard", "Port2Keyboard", "CDROMSpeed", "FastDiskTiming" };
+    "MIDICard", "Port1", "Port2", "Port1Keyboard", "Port2Keyboard", "CDROMSpeed", "FastDiskTiming", "MIDIMusic" };
 
 static Game_State game = { };
 static Game_Content playlist = { };
@@ -591,6 +591,8 @@ static int* get_user_value(int setting)
             return &config_machine.fpu;
         case Emu_Game_Setting_SpeedMode:
             return &config_machine.speed_mode;
+        case Emu_Game_Setting_MidiCard:
+            return &config_machine.midi_card;
         case Emu_Game_Setting_Port1:
         case Emu_Game_Setting_Port2:
             return &config_input.controller_type[setting - Emu_Game_Setting_Port1];
@@ -599,6 +601,8 @@ static int* get_user_value(int setting)
             return &config_input.keyboard_mode[setting - Emu_Game_Setting_Keyboard1];
         case Emu_Game_Setting_CDROMSpeed:
             return &config_emulator.cdrom_speed;
+        case Emu_Game_Setting_MidiMusic:
+            return &config_audio.midi_music;
         default:
             return NULL;
     }
@@ -654,6 +658,7 @@ static int get_values(int setting, int* values)
             return count;
         case Emu_Game_Setting_FPU:
         case Emu_Game_Setting_SpeedMode:
+        case Emu_Game_Setting_MidiCard:
             first = GT_MACHINE_AUTO;
             break;
         case Emu_Game_Setting_Port1:
@@ -663,6 +668,9 @@ static int get_values(int setting, int* values)
             break;
         case Emu_Game_Setting_CDROMSpeed:
             last = 4;
+            break;
+        case Emu_Game_Setting_MidiMusic:
+            last = GT_MIDI_SYNTH_COUNT;
             break;
         default:
             break;
@@ -689,6 +697,8 @@ static std::string get_value_text(int setting, int value)
             return value < 0 ? "auto" : value == 0 ? "none" : "80387";
         case Emu_Game_Setting_SpeedMode:
             return value < 0 ? "auto" : value == 0 ? "compatible" : "high";
+        case Emu_Game_Setting_MidiCard:
+            return value < 0 ? "auto" : value == 0 ? "none" : "fitted";
         case Emu_Game_Setting_Port1:
         case Emu_Game_Setting_Port2:
             return value < 0 ? "auto" : k_ports[value];
@@ -697,6 +707,8 @@ static std::string get_value_text(int setting, int value)
             return value == config_KeyboardMode_Towns ? "towns" : "gamepad";
         case Emu_Game_Setting_CDROMSpeed:
             return value <= 0 ? "auto" : std::to_string(1 << (value - 1));
+        case Emu_Game_Setting_MidiMusic:
+            return value <= 0 ? "auto" : k_midi_synths[value - 1].id;
         default:
             return value != 0 ? "true" : "false";
     }

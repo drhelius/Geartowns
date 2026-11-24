@@ -31,6 +31,8 @@ EXTERN void gui_file_dialog_load_state(void);
 EXTERN void gui_file_dialog_save_state(void);
 EXTERN void gui_file_dialog_choose_savestate_path(void);
 EXTERN void gui_file_dialog_choose_savefiles_path(void);
+EXTERN void gui_file_dialog_choose_mt32_path(void);
+EXTERN void gui_file_dialog_choose_soundfont(void);
 EXTERN void gui_file_dialog_open_floppy(int drive);
 EXTERN void gui_file_dialog_save_floppy(int drive);
 EXTERN void gui_file_dialog_new_floppy(int drive);

@@ -38,6 +38,9 @@
 #include "sound_queue.h"
 #include "emu.h"
 #include "emu_game.h"
+#include "emu_midi.h"
+#include "emu_synth.h"
+#include "midi_port.h"
 #include "ogl_renderer.h"
 #include "ogl_shader_chain.h"
 #include "shader_preset.h"
@@ -63,6 +66,12 @@ static bool save_vgm = false;
 static bool save_video = false;
 static bool choose_savestates_path = false;
 static bool choose_savefiles_path = false;
+static bool choose_mt32_path = false;
+static bool choose_soundfont = false;
+static std::vector<MidiPortInfo> midi_ports;
+static bool midi_ports_pending = false;
+static const GuiColor& midi_playing_color = green;
+static const GuiColor& midi_stopped_color = red;
 static bool choose_screenshots_path = false;
 static bool choose_video_recordings_path = false;
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
@@ -87,6 +96,7 @@ static void menu_machine_cpu_speed(const GT_Machine_Profile& profile);
 static void menu_machine_ram(const GT_Machine_Profile& profile);
 static void menu_machine_fpu(const GT_Machine_Profile& profile);
 static void menu_machine_speed_mode(const GT_Machine_Profile& profile);
+static void menu_machine_midi_card(const GT_Machine_Profile& profile);
 static const char* get_machine_fpu_text(const GT_Machine_Profile& profile);
 static void menu_machine_hardware(GT_Machine_Model model);
 static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size);
@@ -98,6 +108,19 @@ static void menu_input(void);
 static void menu_input_controller(int port);
 static void menu_audio(void);
 static void menu_audio_source(const char* label, const char* id, int source, float* volume);
+static void menu_audio_synth_volume(const char* label, const char* id, int engine, float* volume);
+static void menu_audio_midi(void);
+static void menu_audio_midi_out(const char* label, int synth, int* out, std::string* port);
+static void menu_audio_midi_port(const char* id, std::string* port);
+static void menu_audio_midi_game_music(void);
+static void menu_audio_synths(void);
+static void menu_audio_synth_mt32(void);
+static void menu_audio_synth_mt32_model(void);
+static void menu_audio_synth_gm(void);
+static void draw_synth_location_tooltip(int engine, int option, const char* custom, const char* about);
+static const char* get_builtin_label(int engine);
+static int find_midi_port(const char* port);
+static void update_midi_ports(void);
 static void menu_debug(void);
 static void menu_about(void);
 static void draw_background_color_menu(const char* label, int theme);
@@ -130,6 +153,8 @@ void gui_main_menu(void)
     save_video = false;
     choose_savestates_path = false;
     choose_savefiles_path = false;
+    choose_mt32_path = false;
+    choose_soundfont = false;
     choose_screenshots_path = false;
     choose_video_recordings_path = false;
 #if defined(GT_ENABLE_PHYSICAL_CDROM)
@@ -955,6 +980,7 @@ static void menu_machine(void)
     menu_machine_ram(profile);
     menu_machine_fpu(profile);
     menu_machine_speed_mode(profile);
+    menu_machine_midi_card(profile);
     menu_machine_hardware(core->GetPendingMachineConfig().model);
 
     ImGui::Separator();
@@ -1315,6 +1341,67 @@ static void menu_machine_speed_mode(const GT_Machine_Profile& profile)
         ImGui::Text("Some software misbehaves in high-speed mode.");
         ImGui::Text("Reset the emulator to apply changes.");
         gui_draw_game_source_tooltip(Emu_Game_Setting_SpeedMode);
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+}
+
+static void menu_machine_midi_card(const GT_Machine_Profile& profile)
+{
+    if (!gui_begin_game_menu("MIDI Card", Emu_Game_Setting_MidiCard))
+        return;
+
+    int midi_card = emu_game_get(Emu_Game_Setting_MidiCard);
+    bool in_use = emu_get_core()->GetPendingMachineConfig().midi_card;
+    bool slots = &profile != &k_machine_profiles[GT_MACHINE_MARTY];
+    const char* labels[2] = { "None", "FMT-402" };
+    char auto_label[32];
+    char preview[96];
+    snprintf(auto_label, sizeof(auto_label), "Auto (%s)", labels[in_use ? 1 : 0]);
+    snprintf(preview, sizeof(preview), "%s", midi_card == GT_MACHINE_AUTO ? auto_label : labels[midi_card != 0 ? 1 : 0]);
+
+    if ((midi_card > 0) && !in_use)
+        snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
+
+    float text_width = MAX(ImGui::CalcTextSize(auto_label).x, ImGui::CalcTextSize(preview).x);
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
+
+    if (gui_begin_game_combo("##machine_midi_card", preview, Emu_Game_Setting_MidiCard))
+    {
+        if (ImGui::Selectable(auto_label, midi_card == GT_MACHINE_AUTO))
+        {
+            emu_game_set(Emu_Game_Setting_MidiCard, GT_MACHINE_AUTO);
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Selectable(labels[0], midi_card == 0))
+        {
+            emu_game_set(Emu_Game_Setting_MidiCard, 0);
+        }
+
+        ImGui::BeginDisabled(!slots);
+
+        if (ImGui::Selectable(labels[1], midi_card > 0))
+        {
+            emu_game_set(Emu_Game_Setting_MidiCard, 1);
+        }
+
+        ImGui::EndDisabled();
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("It is recommended to leave this option on Auto.");
+        ImGui::Text("Auto fits a MIDI card only for the games that need one.");
+        ImGui::Text("Other games with MIDI music offer it in their own options with a card fitted.");
+        ImGui::Text("A card changes the music tempo source of many games, with or without MIDI.");
+        ImGui::Text("The Marty has no slot for it.");
+        ImGui::Text("Reset the emulator to apply changes.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_MidiCard);
         ImGui::EndTooltip();
     }
 
@@ -2033,6 +2120,14 @@ static void menu_audio(void)
         menu_audio_source("CD-DA Volume", "##cdda_volume", Audio::AUDIO_SOURCE_CDDA, &config_audio.cdda_volume);
         menu_audio_source("Buzzer Volume", "##buzzer_volume", Audio::AUDIO_SOURCE_BUZZER, &config_audio.buzzer_volume);
         menu_audio_source("16-bit PCM Volume", "##pcm16_volume", Audio::AUDIO_SOURCE_PCM16, &config_audio.pcm16_volume);
+        menu_audio_synth_volume("Built-in MT-32 Volume", "##mt32_volume", GT_MIDI_ENGINE_MT32, &config_audio.mt32_volume);
+        menu_audio_synth_volume("Built-in General MIDI Volume", "##gm_volume", GT_MIDI_ENGINE_SOUNDFONT,
+            &config_audio.gm_volume);
+
+        ImGui::Separator();
+
+        menu_audio_midi();
+        menu_audio_synths();
 
         ImGui::Separator();
 
@@ -2112,6 +2207,457 @@ static void menu_audio_source(const char* label, const char* id, int source, flo
         }
 
         ImGui::EndMenu();
+    }
+}
+
+static void menu_audio_synth_volume(const char* label, const char* id, int engine, float* volume)
+{
+    if (!ImGui::BeginMenu(label, config_audio.enable && emu_synth_is_compiled(engine)))
+        return;
+
+    bool mute = emu_audio_is_source_muted(Audio::AUDIO_SOURCE_MIDI);
+
+    if (ImGui::MenuItem("Mute", "", &mute))
+        emu_audio_set_source_mute(Audio::AUDIO_SOURCE_MIDI, mute);
+
+    ImGui::Separator();
+    ImGui::PushItemWidth(200.0f);
+
+    if (ImGui::SliderFloat(id, volume, 0.0f, 2.0f, "Volume = %.2f", ImGuiSliderFlags_AlwaysClamp))
+        emu_audio_set_synth_volume(engine, *volume);
+
+    ImGui::PopItemWidth();
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Anything above 1.00 may cause clipping.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::EndMenu();
+}
+
+static void menu_audio_midi(void)
+{
+    bool builtin = emu_synth_is_compiled(GT_MIDI_ENGINE_MT32) || emu_synth_is_compiled(GT_MIDI_ENGINE_SOUNDFONT);
+
+    if (!ImGui::BeginMenu("MIDI Out", MidiPort::IsSupported() || builtin))
+        return;
+
+    emu_midi_prepare();
+
+    menu_audio_midi_out("General MIDI", GT_MIDI_SYNTH_GM, &config_audio.midi_gm_out, &config_audio.midi_gm_port);
+    menu_audio_midi_out("MT-32", GT_MIDI_SYNTH_MT32, &config_audio.midi_mt32_out, &config_audio.midi_mt32_port);
+    ImGui::Separator();
+    menu_audio_midi_game_music();
+    ImGui::Separator();
+
+    MidiSynth* synth = emu_get_core()->GetAudio()->GetMidiSynth();
+    const char* port = emu_midi_get_port();
+    const char* wanted = emu_midi_get_wanted_port();
+
+    if (!emu_get_core()->GetAudio()->GetMidiCard()->IsFitted())
+        ImGui::TextColored(midi_stopped_color, "No MIDI card, choose one in Machine > MIDI Card");
+    else if (synth->IsActive())
+        ImGui::TextColored(midi_playing_color, "Playing on %s", emu_synth_get_label(synth->GetEngine()));
+    else if (port[0] != 0)
+        ImGui::TextColored(midi_playing_color, "Playing on %s", port);
+    else if (wanted[0] != 0)
+        ImGui::TextColored(midi_stopped_color, "%s not found", wanted);
+    else
+        ImGui::TextColored(midi_stopped_color, "No MIDI output");
+
+    ImGui::EndMenu();
+}
+
+static void menu_audio_midi_out(const char* label, int synth, int* out, std::string* port)
+{
+    if (!ImGui::BeginMenu(label))
+        return;
+
+    int engine = emu_synth_get_engine(synth);
+    bool mt32 = synth == GT_MIDI_SYNTH_MT32;
+    bool shown[GT_MIDI_OUT_COUNT] = { emu_synth_is_compiled(engine), MidiPort::IsSupported(), true };
+    const char* labels[GT_MIDI_OUT_COUNT] = { get_builtin_label(engine), k_midi_outs[GT_MIDI_OUT_EXTERNAL],
+        k_midi_outs[GT_MIDI_OUT_NONE] };
+    int current = CLAMP(*out, 0, GT_MIDI_OUT_COUNT - 1);
+    float text_width = 0.0f;
+
+    if (!shown[current])
+        current = GT_MIDI_OUT_NONE;
+
+    for (int i = 0; i < GT_MIDI_OUT_COUNT; i++)
+    {
+        if (shown[i])
+            text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
+    }
+
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
+
+    if (ImGui::BeginCombo(mt32 ? "##midi_mt32_out" : "##midi_gm_out", labels[current]))
+    {
+        for (int i = 0; i < GT_MIDI_OUT_COUNT; i++)
+        {
+            if (shown[i] && ImGui::Selectable(labels[i], current == i))
+            {
+                *out = i;
+                emu_midi_update_port();
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Where %s music plays.", mt32 ? "MT-32" : "General MIDI");
+        ImGui::Text("External Port: a synth outside Geartowns.");
+        ImGui::Text("None or no %s: the %s output plays it.", mt32 ? "ROMs" : "sound bank",
+            mt32 ? "General MIDI" : "MT-32");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+
+    if (current == GT_MIDI_OUT_EXTERNAL)
+        menu_audio_midi_port(mt32 ? "##midi_mt32_port" : "##midi_gm_port", port);
+
+    ImGui::EndMenu();
+}
+
+// The list is read again each time the submenu opens, so a synth started after Geartowns shows up
+static void menu_audio_midi_port(const char* id, std::string* port)
+{
+    if (!ImGui::BeginMenu("Port"))
+        return;
+
+    update_midi_ports();
+
+    char missing[MIDI_PORT_NAME_SIZE + 16];
+    const char* preview = k_midi_outs[GT_MIDI_OUT_NONE];
+    float text_width = ImGui::CalcTextSize(preview).x;
+    int selected = find_midi_port(port->c_str());
+
+    for (int i = 0; i < (int)midi_ports.size(); i++)
+        text_width = MAX(text_width, ImGui::CalcTextSize(midi_ports[i].id).x);
+
+    if (selected >= 0)
+        preview = midi_ports[selected].id;
+    else if (!port->empty())
+    {
+        snprintf(missing, sizeof(missing), "%s (not found)", port->c_str());
+        preview = missing;
+        text_width = MAX(text_width, ImGui::CalcTextSize(missing).x);
+    }
+
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
+
+    if (ImGui::BeginCombo(id, preview))
+    {
+        if (ImGui::Selectable(k_midi_outs[GT_MIDI_OUT_NONE], port->empty()))
+        {
+            port->clear();
+            emu_midi_update_port();
+        }
+
+        for (int i = 0; i < (int)midi_ports.size(); i++)
+        {
+            ImGui::PushID(i);
+
+            if (ImGui::Selectable(midi_ports[i].id, i == selected))
+            {
+                *port = midi_ports[i].id;
+                emu_midi_update_port();
+            }
+
+            ImGui::PopID();
+        }
+
+        if (!port->empty() && (selected < 0))
+            ImGui::Selectable(missing, true, ImGuiSelectableFlags_Disabled);
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("A synth outside Geartowns.");
+        ImGui::Text("Start it before opening this menu.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+}
+
+static void menu_audio_midi_game_music(void)
+{
+    if (!gui_begin_game_menu("Game Music", Emu_Game_Setting_MidiMusic))
+        return;
+
+    const char* labels[GT_MIDI_SYNTH_COUNT + 1] = { "Auto", k_midi_synths[GT_MIDI_SYNTH_GM].name,
+        k_midi_synths[GT_MIDI_SYNTH_MT32].name };
+    int music = emu_game_get(Emu_Game_Setting_MidiMusic);
+    int known = emu_midi_get_known_synth();
+    char preview[64];
+    float text_width = 0.0f;
+    snprintf(preview, sizeof(preview), "%s", labels[music]);
+
+    if ((music == 0) && (known >= 0))
+        snprintf(preview, sizeof(preview), "Auto (%s)", k_midi_synths[known].name);
+
+    for (int i = 0; i <= GT_MIDI_SYNTH_COUNT; i++)
+        text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
+
+    ImGui::PushItemWidth(gui_get_combo_width(MAX(text_width, ImGui::CalcTextSize(preview).x)));
+
+    if (gui_begin_game_combo("##midi_game_music", preview, Emu_Game_Setting_MidiMusic))
+    {
+        for (int i = 0; i <= GT_MIDI_SYNTH_COUNT; i++)
+        {
+            if (ImGui::Selectable(labels[i], music == i))
+            {
+                emu_game_set(Emu_Game_Setting_MidiMusic, i);
+                emu_midi_update_port();
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("The game's music: General MIDI or MT-32.");
+        ImGui::Text("Auto: from the game database or detected from what the game sends.");
+        ImGui::Text("It plays on the matching output above.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_MidiMusic);
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+}
+
+static void menu_audio_synths(void)
+{
+    bool mt32 = emu_synth_is_compiled(GT_MIDI_ENGINE_MT32);
+    bool gm = emu_synth_is_compiled(GT_MIDI_ENGINE_SOUNDFONT);
+
+    if (!ImGui::BeginMenu("Built-in Synths", mt32 || gm))
+        return;
+
+    menu_audio_synth_mt32();
+    menu_audio_synth_gm();
+    ImGui::EndMenu();
+}
+
+static void menu_audio_synth_mt32(void)
+{
+    if (!ImGui::BeginMenu("MT-32", emu_synth_is_compiled(GT_MIDI_ENGINE_MT32)))
+        return;
+
+    if (ImGui::BeginMenu("ROMs"))
+    {
+        const char* locations = "Default Location\0Custom Location\0\0";
+        ImGui::PushItemWidth(gui_get_combo_width(ImGui::CalcTextSize("Custom Location").x));
+
+        if (ImGui::Combo("##mt32_option", &config_audio.mt32_rom_dir_option, locations))
+        {
+            emu_synth_scan_mt32();
+            emu_midi_update_port();
+        }
+
+        draw_synth_location_tooltip(GT_MIDI_ENGINE_MT32, config_audio.mt32_rom_dir_option,
+            config_audio.mt32_rom_path.c_str(), "MT-32 or CM-32L control and PCM ROMs.\n"
+            "Found by content, any file names.");
+        ImGui::PopItemWidth();
+
+        if (config_audio.mt32_rom_dir_option == 1)
+        {
+            if (ImGui::MenuItem("Choose..."))
+                choose_mt32_path = true;
+
+            ImGui::PushItemWidth(450);
+
+            if (ImGui::InputText("##mt32_path", gui_mt32_path, IM_ARRAYSIZE(gui_mt32_path),
+                ImGuiInputTextFlags_AutoSelectAll))
+            {
+                config_audio.mt32_rom_path.assign(gui_mt32_path);
+            }
+
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                emu_synth_scan_mt32();
+                emu_midi_update_port();
+            }
+
+            ImGui::PopItemWidth();
+        }
+
+        ImGui::EndMenu();
+    }
+
+    menu_audio_synth_mt32_model();
+    ImGui::Separator();
+    bool found = emu_synth_is_available(GT_MIDI_ENGINE_MT32);
+    ImGui::TextColored(found ? midi_playing_color : midi_stopped_color, "%s", emu_synth_get_mt32_status());
+
+    if (found && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", emu_synth_get_mt32_folder());
+
+    ImGui::EndMenu();
+}
+
+static void menu_audio_synth_mt32_model(void)
+{
+    if (!ImGui::BeginMenu("Model"))
+        return;
+
+    float text_width = 0.0f;
+
+    for (int i = 0; i < GT_MT32_MODEL_COUNT; i++)
+        text_width = MAX(text_width, ImGui::CalcTextSize(k_mt32_models[i].name).x);
+
+    ImGui::PushItemWidth(gui_get_combo_width(text_width));
+
+    if (ImGui::BeginCombo("##mt32_model", k_mt32_models[config_audio.mt32_model].name))
+    {
+        for (int i = 0; i < GT_MT32_MODEL_COUNT; i++)
+        {
+            if (ImGui::Selectable(k_mt32_models[i].name, config_audio.mt32_model == i))
+            {
+                config_audio.mt32_model = i;
+                emu_synth_update();
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+    else if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("Auto: CM-32L if found, otherwise MT-32.");
+        ImGui::Text("Old: MT-32 ROMs 1.0x. New: 2.0x.");
+        ImGui::Text("A model without its ROMs plays as Auto.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::EndMenu();
+}
+
+static void menu_audio_synth_gm(void)
+{
+    if (!ImGui::BeginMenu("General MIDI", emu_synth_is_compiled(GT_MIDI_ENGINE_SOUNDFONT)))
+        return;
+
+    if (ImGui::BeginMenu("Sound Bank"))
+    {
+        const char* locations = "Default Location\0Custom Location\0\0";
+        ImGui::PushItemWidth(gui_get_combo_width(ImGui::CalcTextSize("Custom Location").x));
+
+        if (ImGui::Combo("##soundfont_option", &config_audio.soundfont_option, locations))
+        {
+            emu_synth_find_soundfont();
+            emu_midi_update_port();
+        }
+
+        draw_synth_location_tooltip(GT_MIDI_ENGINE_SOUNDFONT, config_audio.soundfont_option,
+            config_audio.soundfont.c_str(), "A .sf2 or .sf3 General MIDI sound bank.\n"
+            "From a folder, the first by name.");
+        ImGui::PopItemWidth();
+
+        if (config_audio.soundfont_option == 1)
+        {
+            if (ImGui::MenuItem("Choose..."))
+                choose_soundfont = true;
+
+            ImGui::PushItemWidth(450);
+
+            if (ImGui::InputText("##soundfont_path", gui_soundfont_path, IM_ARRAYSIZE(gui_soundfont_path),
+                ImGuiInputTextFlags_AutoSelectAll))
+            {
+                config_audio.soundfont.assign(gui_soundfont_path);
+            }
+
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                emu_synth_find_soundfont();
+                emu_midi_update_port();
+            }
+
+            ImGui::PopItemWidth();
+        }
+
+        ImGui::EndMenu();
+    }
+
+    ImGui::Separator();
+    bool found = emu_synth_is_available(GT_MIDI_ENGINE_SOUNDFONT);
+    ImGui::TextColored(found ? midi_playing_color : midi_stopped_color, "%s", emu_synth_get_soundfont_status());
+
+    if (found && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", emu_synth_get_soundfont());
+
+    ImGui::EndMenu();
+}
+
+static void draw_synth_location_tooltip(int engine, int option, const char* custom, const char* about)
+{
+    if (!ImGui::IsItemHovered())
+        return;
+
+    ImGui::BeginTooltip();
+    ImGui::Text("%s", about);
+
+    if (option == 1)
+        ImGui::Text("%s", custom);
+    else
+    {
+        std::vector<std::string> folders;
+        emu_synth_get_default_folders(engine, folders);
+
+        for (size_t i = 0; i < folders.size(); i++)
+            ImGui::Text("%s", folders[i].c_str());
+    }
+
+    ImGui::EndTooltip();
+}
+
+static const char* get_builtin_label(int engine)
+{
+    static char labels[GT_MIDI_ENGINE_COUNT][64];
+    const char* label = emu_synth_get_label(engine);
+
+    if (!emu_synth_is_compiled(engine) || emu_synth_is_available(engine))
+        return label;
+
+    snprintf(labels[engine], sizeof(labels[engine]), "%s (%s)", label,
+        engine == GT_MIDI_ENGINE_MT32 ? "no ROMs" : "no sound bank");
+    return labels[engine];
+}
+
+static int find_midi_port(const char* port)
+{
+    for (int i = 0; (port[0] != 0) && (i < (int)midi_ports.size()); i++)
+    {
+        if (MidiPort::IsSamePort(port, midi_ports[i].id))
+            return i;
+    }
+
+    return -1;
+}
+
+static void update_midi_ports(void)
+{
+    if (ImGui::IsWindowAppearing())
+        midi_ports_pending = true;
+
+    if (midi_ports_pending && emu_midi_prepare())
+    {
+        MidiPort::ListPorts(midi_ports);
+        midi_ports_pending = false;
     }
 }
 
@@ -2282,6 +2828,7 @@ static void menu_debug(void)
             ImGui::MenuItem("Show YM3438 Registers", "", &config_debug.show_ym3438_registers);
             ImGui::MenuItem("Show RF5C68 PCM", "", &config_debug.show_rf5c68);
             ImGui::MenuItem("Show 16-bit PCM", "", &config_debug.show_pcm16);
+            ImGui::MenuItem("Show MIDI", "", &config_debug.show_midi);
             ImGui::MenuItem("Show Sound Control", "", &config_debug.show_sound_control);
             ImGui::EndMenu();
         }
@@ -2518,6 +3065,12 @@ static void file_dialogs(void)
 
     if (choose_savefiles_path)
         gui_file_dialog_choose_savefiles_path();
+
+    if (choose_mt32_path)
+        gui_file_dialog_choose_mt32_path();
+
+    if (choose_soundfont)
+        gui_file_dialog_choose_soundfont();
 
     if (choose_screenshots_path)
         gui_file_dialog_choose_screenshot_path();

@@ -128,7 +128,11 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/emu_game.cpp \
     $(DESKTOP_SRC_DIR)/emu_hard_disk.cpp \
     $(DESKTOP_SRC_DIR)/emu_memory_card.cpp \
+    $(DESKTOP_SRC_DIR)/emu_midi.cpp \
+    $(DESKTOP_SRC_DIR)/emu_synth.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
+    $(DESKTOP_SRC_DIR)/midi_queue.cpp \
+    $(DESKTOP_SRC_DIR)/midi_port.cpp \
     $(DESKTOP_SRC_DIR)/shift_jis.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
     $(DESKTOP_SRC_DIR)/debug/gui_debug.cpp \

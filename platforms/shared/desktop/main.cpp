@@ -314,9 +314,9 @@ static bool option_has_value(const char* option)
 
 static int machine_option(const char* option)
 {
-    static const char* const k_options[] = { "--model", "--cpu-mhz", "--ram", "--fpu", "--speed-mode" };
+    static const char* const k_options[] = { "--model", "--cpu-mhz", "--ram", "--fpu", "--speed-mode", "--midi-card" };
 
-    for (int i = Emu_Game_Setting_Model; i <= Emu_Game_Setting_SpeedMode; i++)
+    for (int i = Emu_Game_Setting_Model; i <= Emu_Game_Setting_MidiCard; i++)
     {
         if (strcmp(option, k_options[i]) == 0)
             return i;
@@ -421,6 +421,7 @@ static void print_usage(const char* program)
     print_wrapped("      --ram MB", sizes);
     print_wrapped("      --fpu FPU", "auto, none, 80387 (a 487SX on the 486 models)");
     print_wrapped("      --speed-mode MODE", "auto, compatible, high");
+    print_wrapped("      --midi-card CARD", "auto, none, fitted");
     printf("\nOptions:\n");
     print_wrapped("  -f, --fullscreen", "Start in fullscreen mode");
     print_wrapped("  -w, --windowed", "Start in windowed mode with menu visible");

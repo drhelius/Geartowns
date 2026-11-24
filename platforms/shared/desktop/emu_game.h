@@ -36,12 +36,14 @@ enum Emu_Game_Setting
     Emu_Game_Setting_RAM,
     Emu_Game_Setting_FPU,
     Emu_Game_Setting_SpeedMode,
+    Emu_Game_Setting_MidiCard,
     Emu_Game_Setting_Port1,
     Emu_Game_Setting_Port2,
     Emu_Game_Setting_Keyboard1,
     Emu_Game_Setting_Keyboard2,
     Emu_Game_Setting_CDROMSpeed,
     Emu_Game_Setting_FastDiskTiming,
+    Emu_Game_Setting_MidiMusic,
     Emu_Game_Setting_Count
 };
 

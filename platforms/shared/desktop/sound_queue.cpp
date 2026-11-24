@@ -31,6 +31,7 @@ static bool sound_queue_playing;
 static int sound_queue_max_queued_bytes;
 static int sound_queue_bytes_per_second;
 static float sound_queue_ratio;
+static float sound_queue_device_seconds;
 static int sound_queue_sync_wait_count;
 static int sound_queue_channels;
 static bool sound_queue_splice_dropping;
@@ -128,6 +129,12 @@ bool sound_queue_start(int sample_rate, int channel_count, int buffer_size, int 
     }
 
     SDL_AudioDeviceID selected_device = SDL_GetAudioStreamDevice(sound_queue_stream);
+    SDL_AudioSpec device_spec;
+    int device_frames = 0;
+    sound_queue_device_seconds = 0.0f;
+
+    if (SDL_GetAudioDeviceFormat(selected_device, &device_spec, &device_frames) && (device_spec.freq > 0))
+        sound_queue_device_seconds = (float)device_frames / device_spec.freq;
 
     Log("Sound Queue: Started [%s] - frequency: %d format: 0x%04X channels: %d", SDL_GetAudioDeviceName(selected_device), spec.freq, spec.format, spec.channels);
 
@@ -177,6 +184,15 @@ float sound_queue_get_target_latency_ms(void)
         return 0.0f;
 
     return (sound_queue_max_queued_bytes * 1000.0f) / sound_queue_bytes_per_second;
+}
+
+float sound_queue_get_queued_seconds(void)
+{
+    if (!sound_queue_sound_open || !sound_queue_stream || (sound_queue_bytes_per_second <= 0))
+        return 0.0f;
+
+    int queued = MAX(SDL_GetAudioStreamQueued(sound_queue_stream), 0);
+    return ((float)queued / sound_queue_bytes_per_second) / sound_queue_ratio + sound_queue_device_seconds;
 }
 
 bool sound_queue_is_open(void)

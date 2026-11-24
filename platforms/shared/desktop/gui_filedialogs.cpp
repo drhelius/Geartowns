@@ -25,6 +25,8 @@
 #include "application.h"
 #include "config.h"
 #include "emu.h"
+#include "emu_midi.h"
+#include "emu_synth.h"
 #include "gui.h"
 #include "gui_actions.h"
 #include "gui_notifications.h"
@@ -48,6 +50,8 @@ enum FileDialogID
     FileDialog_SaveState,
     FileDialog_ChooseSavestatePath,
     FileDialog_ChooseSavefilesPath,
+    FileDialog_ChooseMT32Path,
+    FileDialog_ChooseSoundFont,
     FileDialog_OpenFloppy,
     FileDialog_SaveFloppy,
     FileDialog_NewFloppy,
@@ -251,6 +255,25 @@ void gui_file_dialog_choose_savefiles_path(void)
     const char* default_path = config_emulator.savefiles_path.empty() ? NULL : config_emulator.savefiles_path.c_str();
     SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseSavefilesPath,
         application_sdl_window, default_path, false);
+}
+
+void gui_file_dialog_choose_mt32_path(void)
+{
+    if (!begin_dialog())
+        return;
+
+    const char* default_path = emu_synth_get_mt32_folder()[0] != 0 ? emu_synth_get_mt32_folder() : NULL;
+    SDL_ShowOpenFolderDialog(file_dialog_callback, (void*)(intptr_t)FileDialog_ChooseMT32Path,
+        application_sdl_window, default_path, false);
+}
+
+void gui_file_dialog_choose_soundfont(void)
+{
+    if (!begin_dialog())
+        return;
+
+    SDL_DialogFileFilter filters[] = { { "Sound Banks", "sf2;sf3" } };
+    show_open_file_dialog(FileDialog_ChooseSoundFont, filters, 1);
 }
 
 void gui_file_dialog_open_floppy(int drive)
@@ -618,6 +641,18 @@ static void process_dialog_result(FileDialogID id, const char* path)
             strncpy_fit(gui_savestates_path, path, sizeof(gui_savestates_path));
             config_emulator.savestates_path = path;
             update_savestates_data();
+            break;
+        case FileDialog_ChooseMT32Path:
+            strncpy_fit(gui_mt32_path, path, sizeof(gui_mt32_path));
+            config_audio.mt32_rom_path = path;
+            emu_synth_scan_mt32();
+            emu_midi_update_port();
+            break;
+        case FileDialog_ChooseSoundFont:
+            strncpy_fit(gui_soundfont_path, path, sizeof(gui_soundfont_path));
+            config_audio.soundfont = path;
+            emu_synth_find_soundfont();
+            emu_midi_update_port();
             break;
         case FileDialog_ChooseSavefilesPath:
             strncpy_fit(gui_savefiles_path, path, sizeof(gui_savefiles_path));

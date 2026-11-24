@@ -212,6 +212,7 @@ EXTERN bool emu_reload_firmware(void);
 EXTERN void emu_audio_mute(bool mute);
 EXTERN void emu_audio_set_master_volume(float volume);
 EXTERN void emu_audio_set_source_volume(int source, float volume);
+EXTERN void emu_audio_set_synth_volume(int engine, float volume);
 EXTERN void emu_audio_set_source_mute(int source, bool mute);
 EXTERN bool emu_audio_is_source_muted(int source);
 EXTERN void emu_audio_reset(void);

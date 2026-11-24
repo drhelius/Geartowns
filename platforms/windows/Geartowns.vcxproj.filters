@@ -259,6 +259,21 @@
     <ClCompile Include="..\..\src\system\memory.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\emu_midi.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\emu_synth.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\midi_port.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\midi_port_win32.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\midi_queue.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\audio\midi_out.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -750,6 +765,18 @@
     <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\midi_out.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\midi_out_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\shared\desktop\emu_midi.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\emu_synth.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\midi_port.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\midi_queue.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\audio\midi_card.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\midi_synth.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\midi_synth_inline.h"><Filter>src</Filter></ClInclude>

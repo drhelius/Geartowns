@@ -27,6 +27,8 @@
 #endif
 
 EXTERN char gui_savestates_path[4096];
+EXTERN char gui_mt32_path[4096];
+EXTERN char gui_soundfont_path[4096];
 EXTERN char gui_savefiles_path[4096];
 EXTERN char gui_screenshots_path[4096];
 EXTERN char gui_video_recordings_path[4096];

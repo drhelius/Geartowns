@@ -3,11 +3,14 @@ include ../shared/makefiles/Makefile.sources
 SOURCES_CXX += $(SRC_DIR)/cdrom/cdrom_drive.cpp
 SOURCES_CXX += $(SRC_DIR)/cdrom/cdrom_physical_image.cpp
 SOURCES_CXX += $(SRC_DIR)/cdrom/cdrom_drive_macos.cpp
+SOURCES_CXX += $(DESKTOP_SRC_DIR)/midi_port_macos.cpp
 SOURCES_MM += macos.mm
 OBJECTS += $(SOURCES_MM:.mm=.o)
 CPPFLAGS += -DGT_ENABLE_PHYSICAL_CDROM
+CPPFLAGS += -DGT_ENABLE_MIDI_PORT
 LDFLAGS += -framework AppKit
 LDFLAGS += -framework IOKit -framework CoreFoundation -framework DiscRecording
+LDFLAGS += -framework CoreMIDI
 
 include ../shared/makefiles/Makefile.common
 

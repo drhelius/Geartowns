@@ -92,6 +92,25 @@ bool MediaFileNative::ListDirectory(const char* path, std::vector<std::string>& 
 #endif
 }
 
+bool MediaFileNative::GetFileInfo(const char* path, u64* size, s64* modified)
+{
+#if defined(_WIN32)
+    struct _stat64 info;
+
+    if (_wstat64(utf8_to_wstring(path).c_str(), &info) != 0)
+        return false;
+#else
+    struct stat info;
+
+    if (stat(path, &info) != 0)
+        return false;
+#endif
+
+    *size = (u64)info.st_size;
+    *modified = (s64)info.st_mtime;
+    return true;
+}
+
 bool MediaFileNative::Exists(const char* path)
 {
 #if defined(_WIN32)
@@ -112,6 +131,11 @@ bool MediaFileNative::IsDirectory(const char* path)
     struct stat info;
     return (stat(path, &info) == 0) && S_ISDIR(info.st_mode);
 #endif
+}
+
+bool MediaFileNative::MakeDirectory(const char* path)
+{
+    return create_directory_if_not_exists(path);
 }
 
 bool MediaFileNative::Open(const char* path, bool writable)

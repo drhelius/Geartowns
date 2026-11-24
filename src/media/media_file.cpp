@@ -96,6 +96,34 @@ bool MediaFile::ListDirectory(const char* path, std::vector<std::string>& folder
     return MediaFileNative::ListDirectory(path, folders, files);
 }
 
+bool MediaFile::GetFileInfo(const char* path, u64* size, s64* modified)
+{
+    if (!IsValidPointer(path) || (path[0] == '\0'))
+        return false;
+
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsInterface())
+    {
+        bool found = false;
+
+        if (MediaFileLibretro::GetFileInfo(path, &found, size, modified))
+            return found;
+
+        MediaFile* file = OpenFile(path);
+
+        if (!IsValidPointer(file))
+            return false;
+
+        *size = (u64)file->GetSize();
+        *modified = 0;
+        SafeDelete(file);
+        return true;
+    }
+#endif
+
+    return MediaFileNative::GetFileInfo(path, size, modified);
+}
+
 bool MediaFile::Exists(const char* path)
 {
     if (!IsValidPointer(path) || (path[0] == '\0'))
@@ -252,6 +280,16 @@ bool MediaFile::HasVfsInterface()
 #else
     return false;
 #endif
+}
+
+bool MediaFile::MakeDirectory(const char* path)
+{
+#if defined(__LIBRETRO__)
+    if (MediaFileLibretro::HasVfsInterface())
+        return MediaFileLibretro::MakeDirectory(path);
+#endif
+
+    return MediaFileNative::MakeDirectory(path);
 }
 
 bool MediaFile::ReadExact(void* buffer, u64 size)

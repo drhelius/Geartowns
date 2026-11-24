@@ -30,8 +30,10 @@ public:
     virtual ~MediaFileNative();
 
     static bool ListDirectory(const char* path, std::vector<std::string>& folders, std::vector<std::string>& files);
+    static bool GetFileInfo(const char* path, u64* size, s64* modified);
     static bool Exists(const char* path);
     static bool IsDirectory(const char* path);
+    static bool MakeDirectory(const char* path);
 
     virtual bool Open(const char* path, bool writable) override;
     virtual bool Create(const char* path) override;

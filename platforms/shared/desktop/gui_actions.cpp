@@ -26,6 +26,7 @@
 #include "config.h"
 #include "display.h"
 #include "emu.h"
+#include "emu_game.h"
 #include "ogl_renderer.h"
 #include "events.h"
 #include "gui.h"
@@ -56,6 +57,7 @@ void gui_action_load_defaults(void)
     core->UnloadBios();
 
     config_load_defaults();
+    emu_game_clear_session();
     gui_apply_settings();
 
     emu_resume();

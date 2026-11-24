@@ -25,6 +25,7 @@
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "gui_floppy.h"
+#include "gui_game.h"
 #include "gui_firmware.h"
 #include "gui_hard_disks.h"
 #include "gui_memory_card.h"
@@ -36,6 +37,7 @@
 #include "gamepad.h"
 #include "sound_queue.h"
 #include "emu.h"
+#include "emu_game.h"
 #include "ogl_renderer.h"
 #include "ogl_shader_chain.h"
 #include "shader_preset.h"
@@ -80,11 +82,11 @@ static void menu_drives(void);
 static void menu_cdrom(void);
 static void menu_emulator(void);
 static void menu_machine(void);
-static bool menu_machine_model(void);
-static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile);
-static bool menu_machine_ram(const GT_Machine_Profile& profile);
-static bool menu_machine_fpu(const GT_Machine_Profile& profile);
-static bool menu_machine_speed_mode(const GT_Machine_Profile& profile);
+static void menu_machine_model(void);
+static void menu_machine_cpu_speed(const GT_Machine_Profile& profile);
+static void menu_machine_ram(const GT_Machine_Profile& profile);
+static void menu_machine_fpu(const GT_Machine_Profile& profile);
+static void menu_machine_speed_mode(const GT_Machine_Profile& profile);
 static const char* get_machine_fpu_text(const GT_Machine_Profile& profile);
 static void menu_machine_hardware(GT_Machine_Model model);
 static void get_machine_hardware(GT_Machine_Model model, char* text, size_t text_size);
@@ -534,12 +536,13 @@ static void menu_cdrom(void)
         ImGui::EndTooltip();
     }
 
-    if (ImGui::BeginMenu("Read Speed"))
+    if (gui_begin_game_menu("Read Speed", Emu_Game_Setting_CDROMSpeed))
     {
+        int speed = emu_game_get(Emu_Game_Setting_CDROMSpeed);
         ImGui::PushItemWidth(140.0f);
 
-        if (ImGui::Combo("##cdrom_speed", &config_emulator.cdrom_speed, "Auto\0" "1x\0" "2x\0" "4x\0" "8x\0\0"))
-            emu_set_cdrom_speed(config_emulator.cdrom_speed > 0 ? 1 << (config_emulator.cdrom_speed - 1) : 0);
+        if (ImGui::Combo("##cdrom_speed", &speed, "Auto\0" "1x\0" "2x\0" "4x\0" "8x\0\0"))
+            emu_game_set(Emu_Game_Setting_CDROMSpeed, speed);
 
         ImGui::PopItemWidth();
 
@@ -549,6 +552,7 @@ static void menu_cdrom(void)
             ImGui::Text("Auto reads at the speed of the model's drive: 2x on");
             ImGui::Text("the ME, MA, MX, MF/Fresh and HC in high-speed mode, 1x on the rest.");
             ImGui::Text("Faster speeds may break software that doesn't expect them.");
+            gui_draw_game_source_tooltip(Emu_Game_Setting_CDROMSpeed);
             ImGui::EndTooltip();
         }
 
@@ -907,7 +911,7 @@ static void menu_machine(void)
     const GT_Machine_Config& machine = running ? core->GetMachineConfig() : core->GetPendingMachineConfig();
     const GT_Machine_Report& report = core->GetPendingMachineReport();
     const GT_Machine_Profile& profile = k_machine_profiles[core->GetPendingMachineConfig().model];
-    bool changed = false;
+    GT_Machine_Model database_model = GT_MACHINE_MODEL1_2;
     char summary[128];
 
     get_machine_summary(machine, summary, sizeof(summary));
@@ -928,6 +932,10 @@ static void menu_machine(void)
         ImGui::TextDisabled("Auto: 1.44 MB floppy disk");
     else if (report.model == GT_MACHINE_SOURCE_DEFAULT)
         ImGui::TextDisabled("Auto: game not detected");
+    else if ((emu_game_get_source(Emu_Game_Setting_Model) == Emu_Game_Source_User) &&
+        core->GetDatabaseModel(database_model) && (database_model != config_machine.model))
+        ImGui::TextDisabled("General setting: %s, database: %s", k_machine_profiles[config_machine.model].name,
+            k_machine_profiles[database_model].name);
 
     if (report.ram == GT_MACHINE_SOURCE_HARD_DISK)
         ImGui::TextDisabled("Auto: 4 MB for the hard disk");
@@ -935,24 +943,23 @@ static void menu_machine(void)
     for (int i = 0; i < report.warning_count; i++)
         ImGui::TextColored(machine_warning_color, "%s", report.warnings[i]);
 
+    if (emu_game_is_open())
+        ImGui::TextDisabled("Settings for %s", emu_game_get_name());
+    else
+        ImGui::TextDisabled("General settings");
+
     ImGui::Separator();
 
-    if (menu_machine_model())
-        changed = true;
-
-    if (menu_machine_cpu_speed(profile))
-        changed = true;
-
-    if (menu_machine_ram(profile))
-        changed = true;
-
-    if (menu_machine_fpu(profile))
-        changed = true;
-
-    if (menu_machine_speed_mode(profile))
-        changed = true;
-
+    menu_machine_model();
+    menu_machine_cpu_speed(profile);
+    menu_machine_ram(profile);
+    menu_machine_fpu(profile);
+    menu_machine_speed_mode(profile);
     menu_machine_hardware(core->GetPendingMachineConfig().model);
+
+    ImGui::Separator();
+
+    gui_game_forget_item();
 
 #if !defined(GT_DISABLE_DYNAREC)
 
@@ -975,9 +982,6 @@ static void menu_machine(void)
     }
 #endif
 
-    if (changed)
-        emu_apply_machine_settings();
-
     if (running && core->IsMachineConfigPending())
     {
         ImGui::Separator();
@@ -989,13 +993,13 @@ static void menu_machine(void)
     ImGui::EndMenu();
 }
 
-static bool menu_machine_model(void)
+static void menu_machine_model(void)
 {
-    if (!ImGui::BeginMenu("Model"))
-        return false;
+    if (!gui_begin_game_menu("Model", Emu_Game_Setting_Model))
+        return;
 
     GeartownsCore* core = emu_get_core();
-    bool changed = false;
+    int selected = emu_game_get(Emu_Game_Setting_Model);
     float name_width = 0.0f;
     float cpu_width = 0.0f;
     char cpu[32];
@@ -1011,20 +1015,18 @@ static bool menu_machine_model(void)
 
     float cpu_column = name_width + ImGui::GetStyle().ItemSpacing.x * 4.0f;
 
-    if (config_machine.model == GT_MACHINE_AUTO)
+    if (selected == GT_MACHINE_AUTO)
         snprintf(preview, sizeof(preview), "Auto (%s)", k_machine_profiles[core->GetPendingMachineConfig().model].name);
     else
-        snprintf(preview, sizeof(preview), "%s", k_machine_profiles[config_machine.model].name);
+        snprintf(preview, sizeof(preview), "%s", k_machine_profiles[selected].name);
 
     ImGui::PushItemWidth(gui_get_combo_width(MAX(cpu_column + cpu_width, ImGui::CalcTextSize(preview).x)));
 
-    if (ImGui::BeginCombo("##machine_model", preview))
+    if (gui_begin_game_combo("##machine_model", preview, Emu_Game_Setting_Model))
     {
-        if (ImGui::Selectable(config_machine.model == GT_MACHINE_AUTO ? preview : "Auto",
-            config_machine.model == GT_MACHINE_AUTO))
+        if (ImGui::Selectable(selected == GT_MACHINE_AUTO ? preview : "Auto", selected == GT_MACHINE_AUTO))
         {
-            config_machine.model = GT_MACHINE_AUTO;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_Model, GT_MACHINE_AUTO);
         }
 
         ImGui::Separator();
@@ -1037,10 +1039,9 @@ static bool menu_machine_model(void)
 
             ImGui::BeginDisabled(!profile.emulated || !core->HasFirmware(model));
 
-            if (ImGui::Selectable(profile.name, config_machine.model == model))
+            if (ImGui::Selectable(profile.name, selected == model))
             {
-                config_machine.model = model;
-                changed = true;
+                emu_game_set(Emu_Game_Setting_Model, model);
             }
 
             bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
@@ -1061,26 +1062,26 @@ static bool menu_machine_model(void)
         ImGui::Text("Auto picks the machine and RAM from game database");
         ImGui::Text("or FM Towns (Model 1/2) if not detected.");
         ImGui::Text("Reset the emulator to apply changes.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_Model);
         ImGui::EndTooltip();
     }
 
     ImGui::PopItemWidth();
     ImGui::EndMenu();
-    return changed;
 }
 
-static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
+static void menu_machine_cpu_speed(const GT_Machine_Profile& profile)
 {
-    if (!ImGui::BeginMenu("CPU Speed"))
-        return false;
+    if (!gui_begin_game_menu("CPU Speed", Emu_Game_Setting_CPUSpeed))
+        return;
 
-    bool changed = false;
+    int cpu_mhz = emu_game_get(Emu_Game_Setting_CPUSpeed);
     int original = (int)(profile.cpu_clock_rate / 1000000);
     int in_use = (int)(emu_get_core()->GetPendingMachineConfig().cpu_clock_rate / 1000000);
     float text_width = 0.0f;
     char labels[GT_MACHINE_CPU_SPEED_COUNT][32];
     char auto_label[32];
-    snprintf(auto_label, sizeof(auto_label), "Auto (%d MHz)", config_machine.cpu_mhz == GT_MACHINE_AUTO ? in_use : original);
+    snprintf(auto_label, sizeof(auto_label), "Auto (%d MHz)", cpu_mhz == GT_MACHINE_AUTO ? in_use : original);
     const char* preview = auto_label;
 
     for (int i = 0; i < GT_MACHINE_CPU_SPEED_COUNT; i++)
@@ -1089,28 +1090,26 @@ static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
         snprintf(labels[i], sizeof(labels[i]), speed == original ? "%d MHz (Original)" : "%d MHz", speed);
         text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
 
-        if (speed == config_machine.cpu_mhz)
+        if (speed == cpu_mhz)
             preview = labels[i];
     }
 
     ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
-    if (ImGui::BeginCombo("##machine_cpu_speed", preview))
+    if (gui_begin_game_combo("##machine_cpu_speed", preview, Emu_Game_Setting_CPUSpeed))
     {
-        if (ImGui::Selectable(auto_label, config_machine.cpu_mhz == GT_MACHINE_AUTO))
+        if (ImGui::Selectable(auto_label, cpu_mhz == GT_MACHINE_AUTO))
         {
-            config_machine.cpu_mhz = GT_MACHINE_AUTO;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_CPUSpeed, GT_MACHINE_AUTO);
         }
 
         ImGui::Separator();
 
         for (int i = 0; i < GT_MACHINE_CPU_SPEED_COUNT; i++)
         {
-            if (ImGui::Selectable(labels[i], config_machine.cpu_mhz == k_machine_cpu_speeds_mhz[i]))
+            if (ImGui::Selectable(labels[i], cpu_mhz == k_machine_cpu_speeds_mhz[i]))
             {
-                config_machine.cpu_mhz = k_machine_cpu_speeds_mhz[i];
-                changed = true;
+                emu_game_set(Emu_Game_Setting_CPUSpeed, k_machine_cpu_speeds_mhz[i]);
             }
         }
 
@@ -1123,28 +1122,27 @@ static bool menu_machine_cpu_speed(const GT_Machine_Profile& profile)
         ImGui::Text("Auto picks the CPU clock from game database");
         ImGui::Text("or runs the CPU at the model's original clock.");
         ImGui::Text("Reset the emulator to apply changes.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_CPUSpeed);
         ImGui::EndTooltip();
     }
 
     ImGui::PopItemWidth();
     ImGui::EndMenu();
-    return changed;
 }
 
-static bool menu_machine_ram(const GT_Machine_Profile& profile)
+static void menu_machine_ram(const GT_Machine_Profile& profile)
 {
-    if (!ImGui::BeginMenu("Main RAM"))
-        return false;
+    if (!gui_begin_game_menu("Main RAM", Emu_Game_Setting_RAM))
+        return;
 
     GeartownsCore* core = emu_get_core();
-    bool changed = false;
+    int ram_mb = emu_game_get(Emu_Game_Setting_RAM);
     int in_use = (int)(core->GetPendingMachineConfig().ram_size / (1024 * 1024));
     float text_width = 0.0f;
     char labels[GT_MACHINE_RAM_SIZE_COUNT][32];
     char auto_label[32];
     char preview[96];
-    snprintf(auto_label, sizeof(auto_label), "Auto (%d MB)",
-        config_machine.ram_mb == GT_MACHINE_AUTO ? in_use : profile.ram_default_mb);
+    snprintf(auto_label, sizeof(auto_label), "Auto (%d MB)", ram_mb == GT_MACHINE_AUTO ? in_use : profile.ram_default_mb);
     snprintf(preview, sizeof(preview), "%s", auto_label);
 
     for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
@@ -1153,31 +1151,29 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
         snprintf(labels[i], sizeof(labels[i]), size == profile.ram_default_mb ? "%d MB (Original)" : "%d MB", size);
         text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
 
-        if (size == config_machine.ram_mb)
+        if (size == ram_mb)
             snprintf(preview, sizeof(preview), "%s", labels[i]);
     }
 
-    if ((config_machine.ram_mb != GT_MACHINE_AUTO) && (config_machine.ram_mb != in_use))
-        snprintf(preview, sizeof(preview), "%d MB, %d MB on the %s", config_machine.ram_mb, in_use, profile.name);
+    if ((ram_mb != GT_MACHINE_AUTO) && (ram_mb != in_use))
+        snprintf(preview, sizeof(preview), "%d MB, %d MB on the %s", ram_mb, in_use, profile.name);
 
     ImGui::PushItemWidth(gui_get_combo_width(MAX(text_width, ImGui::CalcTextSize(preview).x)));
 
-    if (ImGui::BeginCombo("##machine_ram", preview))
+    if (gui_begin_game_combo("##machine_ram", preview, Emu_Game_Setting_RAM))
     {
-        if (ImGui::Selectable(auto_label, config_machine.ram_mb == GT_MACHINE_AUTO))
+        if (ImGui::Selectable(auto_label, ram_mb == GT_MACHINE_AUTO))
         {
-            config_machine.ram_mb = GT_MACHINE_AUTO;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_RAM, GT_MACHINE_AUTO);
         }
 
         ImGui::Separator();
 
         for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
         {
-            if (ImGui::Selectable(labels[i], config_machine.ram_mb == k_machine_ram_sizes_mb[i]))
+            if (ImGui::Selectable(labels[i], ram_mb == k_machine_ram_sizes_mb[i]))
             {
-                config_machine.ram_mb = k_machine_ram_sizes_mb[i];
-                changed = true;
+                emu_game_set(Emu_Game_Setting_RAM, k_machine_ram_sizes_mb[i]);
             }
         }
 
@@ -1190,63 +1186,59 @@ static bool menu_machine_ram(const GT_Machine_Profile& profile)
         ImGui::Text("Auto picks the RAM from game database");
         ImGui::Text("or model's original RAM if not detected.");
         ImGui::Text("Reset the emulator to apply changes.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_RAM);
         ImGui::EndTooltip();
     }
 
     ImGui::PopItemWidth();
     ImGui::EndMenu();
-    return changed;
 }
 
-static bool menu_machine_fpu(const GT_Machine_Profile& profile)
+static void menu_machine_fpu(const GT_Machine_Profile& profile)
 {
-    if (!ImGui::BeginMenu("FPU"))
-        return false;
+    if (!gui_begin_game_menu("FPU", Emu_Game_Setting_FPU))
+        return;
 
-    bool changed = false;
+    int fpu = emu_game_get(Emu_Game_Setting_FPU);
     bool in_use = emu_get_core()->GetPendingMachineConfig().fpu;
     bool integrated = profile.fpu == GT_MACHINE_FPU_INTEGRATED;
     const char* labels[2] = { integrated ? "None" : "None (Original)", get_machine_fpu_name(profile.cpu) };
     char auto_label[32];
     char preview[96];
     snprintf(auto_label, sizeof(auto_label), "Auto (%s)", in_use ? labels[1] : "None");
-    snprintf(preview, sizeof(preview), "%s", config_machine.fpu == GT_MACHINE_AUTO ? auto_label :
-        labels[config_machine.fpu != 0 ? 1 : 0]);
+    snprintf(preview, sizeof(preview), "%s", fpu == GT_MACHINE_AUTO ? auto_label : labels[fpu != 0 ? 1 : 0]);
 
-    if ((config_machine.fpu > 0) && !in_use)
+    if ((fpu > 0) && !in_use)
         snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
 
-    if ((config_machine.fpu == 0) && integrated)
+    if ((fpu == 0) && integrated)
         snprintf(preview, sizeof(preview), "None, built into the %s", profile.name);
 
     float text_width = MAX(ImGui::CalcTextSize(labels[0]).x, ImGui::CalcTextSize(preview).x);
     ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
-    if (ImGui::BeginCombo("##machine_fpu", preview))
+    if (gui_begin_game_combo("##machine_fpu", preview, Emu_Game_Setting_FPU))
     {
-        if (ImGui::Selectable(auto_label, config_machine.fpu == GT_MACHINE_AUTO))
+        if (ImGui::Selectable(auto_label, fpu == GT_MACHINE_AUTO))
         {
-            config_machine.fpu = GT_MACHINE_AUTO;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_FPU, GT_MACHINE_AUTO);
         }
 
         ImGui::Separator();
 
         ImGui::BeginDisabled(integrated);
 
-        if (ImGui::Selectable(labels[0], config_machine.fpu == 0))
+        if (ImGui::Selectable(labels[0], fpu == 0))
         {
-            config_machine.fpu = 0;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_FPU, 0);
         }
 
         ImGui::EndDisabled();
         ImGui::BeginDisabled(profile.fpu == GT_MACHINE_FPU_NONE);
 
-        if (ImGui::Selectable(labels[1], config_machine.fpu > 0))
+        if (ImGui::Selectable(labels[1], fpu > 0))
         {
-            config_machine.fpu = 1;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_FPU, 1);
         }
 
         ImGui::EndDisabled();
@@ -1259,56 +1251,53 @@ static bool menu_machine_fpu(const GT_Machine_Profile& profile)
         ImGui::Text("Auto fits an 80387 or a 487SX if the game database asks for one");
         ImGui::Text("or keeps the model's original: none, or the built-in one of the MX and HC.");
         ImGui::Text("Reset the emulator to apply changes.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_FPU);
         ImGui::EndTooltip();
     }
 
     ImGui::PopItemWidth();
     ImGui::EndMenu();
-    return changed;
 }
 
-static bool menu_machine_speed_mode(const GT_Machine_Profile& profile)
+static void menu_machine_speed_mode(const GT_Machine_Profile& profile)
 {
-    if (!ImGui::BeginMenu("Speed Mode"))
-        return false;
+    if (!gui_begin_game_menu("Speed Mode", Emu_Game_Setting_SpeedMode))
+        return;
 
-    bool changed = false;
+    int speed_mode = emu_game_get(Emu_Game_Setting_SpeedMode);
     bool speed_control = (profile.features & GT_MACHINE_FEATURE_SPEED_CONTROL) != 0;
     bool database = emu_get_core()->GetPendingMachineReport().speed_mode == GT_MACHINE_SOURCE_DATABASE;
     const char* labels[2] = { "Compatible", "High Speed" };
     const char* auto_label = !speed_control ? "Auto (Compatible)" : database ? "Auto (High Speed)" : "Auto (CMOS)";
     char preview[96];
-    snprintf(preview, sizeof(preview), "%s", config_machine.speed_mode == GT_MACHINE_AUTO ? auto_label :
-        labels[config_machine.speed_mode != 0 ? 1 : 0]);
+    snprintf(preview, sizeof(preview), "%s", speed_mode == GT_MACHINE_AUTO ? auto_label :
+        labels[speed_mode != 0 ? 1 : 0]);
 
-    if ((config_machine.speed_mode > 0) && !speed_control)
+    if ((speed_mode > 0) && !speed_control)
         snprintf(preview, sizeof(preview), "%s, none on the %s", labels[1], profile.name);
 
     float text_width = MAX(ImGui::CalcTextSize(auto_label).x, ImGui::CalcTextSize(preview).x);
     ImGui::PushItemWidth(gui_get_combo_width(text_width));
 
-    if (ImGui::BeginCombo("##machine_speed_mode", preview))
+    if (gui_begin_game_combo("##machine_speed_mode", preview, Emu_Game_Setting_SpeedMode))
     {
-        if (ImGui::Selectable(auto_label, config_machine.speed_mode == GT_MACHINE_AUTO))
+        if (ImGui::Selectable(auto_label, speed_mode == GT_MACHINE_AUTO))
         {
-            config_machine.speed_mode = GT_MACHINE_AUTO;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_SpeedMode, GT_MACHINE_AUTO);
         }
 
         ImGui::Separator();
 
-        if (ImGui::Selectable(labels[0], config_machine.speed_mode == 0))
+        if (ImGui::Selectable(labels[0], speed_mode == 0))
         {
-            config_machine.speed_mode = 0;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_SpeedMode, 0);
         }
 
         ImGui::BeginDisabled(!speed_control);
 
-        if (ImGui::Selectable(labels[1], config_machine.speed_mode > 0))
+        if (ImGui::Selectable(labels[1], speed_mode > 0))
         {
-            config_machine.speed_mode = 1;
-            changed = true;
+            emu_game_set(Emu_Game_Setting_SpeedMode, 1);
         }
 
         ImGui::EndDisabled();
@@ -1325,12 +1314,12 @@ static bool menu_machine_speed_mode(const GT_Machine_Profile& profile)
         ImGui::Text("otherwise it keeps the CMOS setting, compatible on a new CMOS.");
         ImGui::Text("Some software misbehaves in high-speed mode.");
         ImGui::Text("Reset the emulator to apply changes.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_SpeedMode);
         ImGui::EndTooltip();
     }
 
     ImGui::PopItemWidth();
     ImGui::EndMenu();
-    return changed;
 }
 
 static const char* get_machine_fpu_text(const GT_Machine_Profile& profile)
@@ -1662,32 +1651,30 @@ static void draw_background_color_menu(const char* label, int theme)
 
 static void menu_input_controller(int port)
 {
-    int* setting = &config_input.controller_type[port];
-    bool automatic = *setting == config_ControllerType_Auto;
-    bool changed = false;
+    int setting = Emu_Game_Setting_Port1 + port;
+    int controller = emu_game_get(setting);
+    bool automatic = controller == config_ControllerType_Auto;
     char preview[64];
 
     if (automatic)
         snprintf(preview, sizeof(preview), "Auto (%s)", emu_get_pad_type_name(emu_get_pad_type((GT_Controllers)port)));
     else
-        snprintf(preview, sizeof(preview), "%s", emu_get_pad_type_name(*setting));
+        snprintf(preview, sizeof(preview), "%s", emu_get_pad_type_name(controller));
 
-    if (ImGui::BeginCombo("##controller", preview))
+    if (gui_begin_game_combo("##controller", preview, setting))
     {
         if (ImGui::Selectable(automatic ? preview : "Auto", automatic))
         {
-            *setting = config_ControllerType_Auto;
-            changed = true;
+            emu_game_set(setting, config_ControllerType_Auto);
         }
 
         ImGui::Separator();
 
         for (int type = GT_CONTROLLER_NONE; type <= GT_CONTROLLER_MOUSE; type++)
         {
-            if (ImGui::Selectable(emu_get_pad_type_name(type), *setting == type))
+            if (ImGui::Selectable(emu_get_pad_type_name(type), controller == type))
             {
-                *setting = type;
-                changed = true;
+                emu_game_set(setting, type);
             }
         }
 
@@ -1699,11 +1686,9 @@ static void menu_input_controller(int port)
         ImGui::Text("It is recommended to leave this option on Auto.");
         ImGui::Text("Auto picks the controller from game database or");
         ImGui::Text("Original Gamepad (port 1) and Mouse (port 2) if not detected.");
+        gui_draw_game_source_tooltip(setting);
         ImGui::EndTooltip();
     }
-
-    if (changed)
-        emu_update_pad_types();
 }
 
 static void menu_input(void)
@@ -1739,12 +1724,13 @@ static void menu_input(void)
                     menu_input_controller(i);
                     ImGui::PopItemWidth();
 
-                    if (ImGui::BeginMenu("Keyboard Mode"))
+                    if (gui_begin_game_menu("Keyboard Mode", Emu_Game_Setting_Keyboard1 + i))
                     {
+                        int keyboard_mode = emu_game_get(Emu_Game_Setting_Keyboard1 + i);
                         ImGui::PushItemWidth(170.0f);
 
-                        if (ImGui::Combo("##keyboard_mode", &config_input.keyboard_mode[i], "Gamepad\0FM Towns Keyboard\0\0"))
-                            events_sync_input();
+                        if (ImGui::Combo("##keyboard_mode", &keyboard_mode, "Gamepad\0FM Towns Keyboard\0\0"))
+                            emu_game_set(Emu_Game_Setting_Keyboard1 + i, keyboard_mode);
 
                         ImGui::PopItemWidth();
 
@@ -1754,6 +1740,7 @@ static void menu_input(void)
                             ImGui::Text("Gamepad: the Port %d bindings from Input > Keyboard control this gamepad.", i + 1);
                             ImGui::Text("FM Towns Keyboard: the Port %d bindings type on the FM Towns keyboard.", i + 1);
                             ImGui::Text("Other keys always type on the FM Towns keyboard.");
+                            gui_draw_game_source_tooltip(Emu_Game_Setting_Keyboard1 + i);
                             ImGui::EndTooltip();
                         }
 

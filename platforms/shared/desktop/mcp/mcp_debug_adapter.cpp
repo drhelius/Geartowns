@@ -69,6 +69,7 @@
 #include "../debug/gui_debug_trace_logger.h"
 #include "../debug/trace_logger_formatter.h"
 #include "../emu_floppy.h"
+#include "../emu_game.h"
 #include "../utils.h"
 #include "../video_recorder.h"
 
@@ -5495,7 +5496,7 @@ static const char* const k_controller_type_names[] =
 
 static const int k_controller_type_count = (int)(sizeof(k_controller_type_names) / sizeof(k_controller_type_names[0]));
 
-// The configuration follows so the desktop routes its host mouse and bindings the same way
+// The setting in use follows so the desktop routes its host mouse and bindings the same way
 json DebugAdapter::ControllerSetType(int player, const std::string& type)
 {
     if (player < 1 || player > GT_MAX_GAMEPADS)
@@ -5516,8 +5517,7 @@ json DebugAdapter::ControllerSetType(int player, const std::string& type)
     if (setting == -2)
         return {{"error", "Invalid controller type (must be: auto, none, original_gamepad, marty_gamepad, six_button_gamepad, mouse)"}};
 
-    config_input.controller_type[player - 1] = setting;
-    emu_update_pad_types();
+    emu_game_set_session(Emu_Game_Setting_Port1 + player - 1, setting);
     json result = ControllerGetType(player);
     result["setting"] = name;
     return result;
@@ -5529,7 +5529,7 @@ json DebugAdapter::ControllerGetType(int player)
         return {{"error", "Invalid player number (must be 1-2)"}};
 
     static const char* const k_sources[] = { "explicit", "database", "default", "fallback" };
-    int setting = config_input.controller_type[player - 1];
+    int setting = emu_game_get(Emu_Game_Setting_Port1 + player - 1);
     int type = (int)emu_get_pad_type((GT_Controllers)(player - 1));
     const char* name = type >= 0 && type < k_controller_type_count ? k_controller_type_names[type] : "unknown";
     const char* setting_name = setting == config_ControllerType_Auto ? "auto" : (setting >= 0 &&

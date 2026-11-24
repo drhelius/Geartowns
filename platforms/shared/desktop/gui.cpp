@@ -44,6 +44,7 @@
 #include "gui_notifications.h"
 #include "gui_drive_activity.h"
 #include "emu_floppy.h"
+#include "emu_game.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
 #include "gui_actions.h"
@@ -194,8 +195,6 @@ void gui_apply_settings(void)
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_BUZZER, config_audio.buzzer_volume);
     emu_audio_set_source_volume(Audio::AUDIO_SOURCE_PCM16, config_audio.pcm16_volume);
 
-    emu_update_pad_types();
-
     strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
     strncpy_fit(gui_savefiles_path, config_emulator.savefiles_path.c_str(), sizeof(gui_savefiles_path));
     strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
@@ -205,14 +204,12 @@ void gui_apply_settings(void)
     strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
 
     emu_set_preload_cdrom(config_emulator.preload_cdrom);
-    emu_set_cdrom_speed(config_emulator.cdrom_speed > 0 ? 1 << (config_emulator.cdrom_speed - 1) : 0);
     emu_set_ffwd_loads(config_emulator.ffwd_loads);
     emu_set_dynarec(config_emulator.dynarec);
     emu_set_native_resolution(config_video.native_resolution);
     emu_set_drive_letter_assignment(config_emulator.hard_disk_drive_letters);
-    emu_set_fast_hard_disk_timing(config_emulator.hard_disk_fast_timing);
     emu_apply_firmware_folders();
-    emu_apply_machine_settings();
+    emu_game_apply();
 }
 
 void gui_destroy(void)

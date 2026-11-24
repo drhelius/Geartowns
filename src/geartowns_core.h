@@ -98,6 +98,7 @@ public:
     const GT_Machine_Report& GetPendingMachineReport();
     bool IsMachineConfigPending();
     bool GetFloppyNotice(GT_Floppy_Notice& notice);
+    bool GetDatabaseModel(GT_Machine_Model& model) const;
     bool GetDatabaseController(int port, GT_Controller_Type& type) const;
     bool LoadBios(const char* directory_path);
     void UnloadBios();

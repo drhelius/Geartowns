@@ -26,11 +26,13 @@
 #include "gui_actions.h"
 #include "gui_colors.h"
 #include "gui_filedialogs.h"
+#include "gui_game.h"
 #include "gui_notifications.h"
 #include "application.h"
 #include "config.h"
 #include "emu.h"
 #include "emu_floppy.h"
+#include "emu_game.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
 #include "utils.h"
@@ -78,10 +80,16 @@ void gui_hard_disks_menu(void)
         ImGui::EndTooltip();
     }
 
-    if (ImGui::MenuItem("Fast Disk Timing", "", &config_emulator.hard_disk_fast_timing))
+    bool fast_timing = emu_game_get(Emu_Game_Setting_FastDiskTiming) != 0;
+    bool pushed = gui_push_game_source_color(Emu_Game_Setting_FastDiskTiming);
+
+    if (ImGui::MenuItem("Fast Disk Timing", "", &fast_timing))
     {
-        emu_set_fast_hard_disk_timing(config_emulator.hard_disk_fast_timing);
+        emu_game_set(Emu_Game_Setting_FastDiskTiming, fast_timing ? 1 : 0);
     }
+
+    if (pushed)
+        ImGui::PopStyleColor();
 
     if (ImGui::IsItemHovered())
     {
@@ -89,6 +97,7 @@ void gui_hard_disks_menu(void)
         ImGui::Text("Shortens hard disk bus phases and transfers, so the machine waits about a");
         ImGui::Text("quarter of the time for the disk when it loads, saves or installs.");
         ImGui::Text("When disabled, hard disks run at the machine's pace.");
+        gui_draw_game_source_tooltip(Emu_Game_Setting_FastDiskTiming);
         ImGui::EndTooltip();
     }
 

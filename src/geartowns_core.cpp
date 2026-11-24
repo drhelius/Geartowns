@@ -925,6 +925,15 @@ bool GeartownsCore::GetFloppyNotice(GT_Floppy_Notice& notice)
     return true;
 }
 
+bool GeartownsCore::GetDatabaseModel(GT_Machine_Model& model) const
+{
+    if (!IsValidPointer(m_auto_entry))
+        return false;
+
+    model = (GT_Machine_Model)m_auto_entry->model;
+    return true;
+}
+
 bool GeartownsCore::GetDatabaseController(int port, GT_Controller_Type& type) const
 {
     if (!IsValidPointer(m_auto_entry) || (port < 0) || (port >= GT_MAX_GAMEPADS))

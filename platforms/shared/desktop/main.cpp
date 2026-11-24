@@ -27,33 +27,14 @@
 #include "application_headless.h"
 #include "config.h"
 #include "console_utils.h"
+#include "emu_game.h"
 
 extern bool g_mcp_stdio_mode;
 extern bool g_mcp_router_enabled;
 
-struct Machine_Override
-{
-    bool set;
-    int value;
-    int saved;
-};
-
-static Machine_Override model_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
-static Machine_Override cpu_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
-static Machine_Override ram_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
-static Machine_Override fpu_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
-static Machine_Override speed_mode_override = { false, GT_MACHINE_AUTO, GT_MACHINE_AUTO };
-
 static bool option_has_value(const char* option);
 static const char* option_value(int argc, char* argv[], int* i);
-static bool parse_model(const char* text, int* model);
-static bool parse_fpu(const char* text, int* fpu);
-static bool parse_speed_mode(const char* text, int* speed_mode);
-static bool parse_number(const char* text, const int* values, int count, int* value);
-static void apply_override(Machine_Override& override, int* setting);
-static void restore_override(const Machine_Override& override, int* setting);
-static void apply_machine_overrides(void);
-static void restore_machine_settings(void);
+static int machine_option(const char* option);
 static void print_wrapped(const char* label, const std::string& text);
 static void print_usage(const char* program);
 
@@ -150,48 +131,22 @@ int main(int argc, char* argv[])
                 else
                     app_params.state_file = value;
             }
-            else if ((strcmp(argv[i], "--model") == 0) || (strcmp(argv[i], "--cpu-mhz") == 0) ||
-                (strcmp(argv[i], "--ram") == 0) || (strcmp(argv[i], "--fpu") == 0) ||
-                (strcmp(argv[i], "--speed-mode") == 0))
+            else if (machine_option(argv[i]) >= 0)
             {
                 const char* option = argv[i];
-                const char* value = option_value(argc, argv, &i);
-                Machine_Override* override = &ram_override;
-                bool valid = false;
+                const char* text = option_value(argc, argv, &i);
+                int value = GT_MACHINE_AUTO;
 
-                if (!value)
+                if (!text)
                     return -1;
 
-                if (strcmp(option, "--model") == 0)
+                if (!emu_game_parse(machine_option(option), text, &value))
                 {
-                    override = &model_override;
-                    valid = parse_model(value, &override->value);
-                }
-                else if (strcmp(option, "--cpu-mhz") == 0)
-                {
-                    override = &cpu_override;
-                    valid = parse_number(value, k_machine_cpu_speeds_mhz, GT_MACHINE_CPU_SPEED_COUNT, &override->value);
-                }
-                else if (strcmp(option, "--fpu") == 0)
-                {
-                    override = &fpu_override;
-                    valid = parse_fpu(value, &override->value);
-                }
-                else if (strcmp(option, "--speed-mode") == 0)
-                {
-                    override = &speed_mode_override;
-                    valid = parse_speed_mode(value, &override->value);
-                }
-                else
-                    valid = parse_number(value, k_machine_ram_sizes_mb, GT_MACHINE_RAM_SIZE_COUNT, &override->value);
-
-                override->set = valid;
-
-                if (!valid)
-                {
-                    fprintf(stderr, "Invalid value for %s: %s\n", option, value);
+                    fprintf(stderr, "Invalid value for %s: %s\n", option, text);
                     return -1;
                 }
+
+                emu_game_set_session(machine_option(option), value);
             }
             else if (strcmp(argv[i], "--mcp-http-port") == 0)
             {
@@ -285,7 +240,6 @@ int main(int argc, char* argv[])
 
     config_init(portable);
     config_read();
-    apply_machine_overrides();
 
     if (app_params.mcp_tcp_port_set)
         config_emulator.mcp_tcp_port = app_params.mcp_tcp_port;
@@ -307,7 +261,6 @@ int main(int argc, char* argv[])
             application_headless_destroy();
         }
 
-        restore_machine_settings();
         config_write();
         config_destroy();
 
@@ -330,7 +283,6 @@ int main(int argc, char* argv[])
 
     application_destroy();
 
-    restore_machine_settings();
     config_write();
     config_destroy();
 
@@ -340,7 +292,7 @@ int main(int argc, char* argv[])
 static bool option_has_value(const char* option)
 {
     static const char* const k_options[] = { "--mcp-http-port", "--mcp-http-address", "--cd", "--fd1", "--fd2",
-        "--card", "--load-state", "--model", "--cpu-mhz", "--ram", "--fpu", "--speed-mode" };
+        "--card", "--load-state" };
 
     for (size_t i = 0; i < sizeof(k_options) / sizeof(k_options[0]); i++)
     {
@@ -348,7 +300,20 @@ static bool option_has_value(const char* option)
             return true;
     }
 
-    return false;
+    return machine_option(option) >= 0;
+}
+
+static int machine_option(const char* option)
+{
+    static const char* const k_options[] = { "--model", "--cpu-mhz", "--ram", "--fpu", "--speed-mode" };
+
+    for (int i = Emu_Game_Setting_Model; i <= Emu_Game_Setting_SpeedMode; i++)
+    {
+        if (strcmp(option, k_options[i]) == 0)
+            return i;
+    }
+
+    return -1;
 }
 
 static const char* option_value(int argc, char* argv[], int* i)
@@ -360,115 +325,6 @@ static const char* option_value(int argc, char* argv[], int* i)
     }
 
     return argv[++(*i)];
-}
-
-static bool parse_model(const char* text, int* model)
-{
-    if (strcmp(text, "auto") == 0)
-    {
-        *model = GT_MACHINE_AUTO;
-        return true;
-    }
-
-    for (int i = 0; i < GT_MACHINE_RELEASE_ORDER_COUNT; i++)
-    {
-        GT_Machine_Model candidate = k_machine_release_order[i];
-
-        if (k_machine_profiles[candidate].emulated && (strcmp(k_machine_profiles[candidate].key, text) == 0))
-        {
-            *model = candidate;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static bool parse_number(const char* text, const int* values, int count, int* value)
-{
-    if (strcmp(text, "auto") == 0)
-    {
-        *value = GT_MACHINE_AUTO;
-        return true;
-    }
-
-    char* end = NULL;
-    long number = strtol(text, &end, 10);
-
-    if (!end || (*end != '\0') || (end == text))
-        return false;
-
-    for (int i = 0; i < count; i++)
-    {
-        if (values[i] == number)
-        {
-            *value = values[i];
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static bool parse_fpu(const char* text, int* fpu)
-{
-    if (strcmp(text, "auto") == 0)
-        *fpu = GT_MACHINE_AUTO;
-    else if (strcmp(text, "none") == 0)
-        *fpu = 0;
-    else if (strcmp(text, "80387") == 0)
-        *fpu = 1;
-    else
-        return false;
-
-    return true;
-}
-
-static bool parse_speed_mode(const char* text, int* speed_mode)
-{
-    if (strcmp(text, "auto") == 0)
-        *speed_mode = GT_MACHINE_AUTO;
-    else if (strcmp(text, "compatible") == 0)
-        *speed_mode = 0;
-    else if (strcmp(text, "high") == 0)
-        *speed_mode = 1;
-    else
-        return false;
-
-    return true;
-}
-
-static void apply_override(Machine_Override& override, int* setting)
-{
-    if (!override.set)
-        return;
-
-    override.saved = *setting;
-    *setting = override.value;
-}
-
-static void restore_override(const Machine_Override& override, int* setting)
-{
-    if (override.set && (*setting == override.value))
-        *setting = override.saved;
-}
-
-static void apply_machine_overrides(void)
-{
-    apply_override(model_override, &config_machine.model);
-    apply_override(cpu_override, &config_machine.cpu_mhz);
-    apply_override(ram_override, &config_machine.ram_mb);
-    apply_override(fpu_override, &config_machine.fpu);
-    apply_override(speed_mode_override, &config_machine.speed_mode);
-}
-
-static void restore_machine_settings(void)
-{
-    restore_override(model_override, &config_machine.model);
-    restore_override(cpu_override, &config_machine.cpu_mhz);
-    restore_override(ram_override, &config_machine.ram_mb);
-    restore_override(fpu_override, &config_machine.fpu);
-    restore_override(speed_mode_override, &config_machine.speed_mode);
 }
 
 static void print_wrapped(const char* label, const std::string& text)
@@ -542,7 +398,7 @@ static void print_usage(const char* program)
     print_wrapped("      --fd2 FILE", "Floppy image in drive 2");
     print_wrapped("      --card FILE", "IC memory card image");
     print_wrapped("      --load-state SLOT", "Load save state slot 1-5, or a state file, once the media is loaded");
-    printf("\nMachine (for this run only, the saved settings stay):\n");
+    printf("\nMachine (for this run only, over the saved and per-game settings):\n");
     print_wrapped("      --model MODEL", models);
     print_wrapped("      --cpu-mhz MHZ", speeds);
     print_wrapped("      --ram MB", sizes);

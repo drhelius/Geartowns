@@ -139,6 +139,16 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - **Floppy Images**: Insert floppy disks from **Drives → Floppies**, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
 
+### Per-Game Settings
+With a game inserted, the settings you change are saved for that game only, and win over the game database:
+
+- **Saved**: **Machine** (model, CPU speed, RAM, FPU and speed mode), **Input → FM Towns Ports**, the CD-ROM **Read Speed** and **Fast Disk Timing**. The menus show them in orange.
+- **General settings**: with nothing inserted, the same menus change the settings used by every game without its own. Choosing the general value again for a game removes its change.
+- **Forget**: **Machine → Forget This Game's Changes** removes the changes.
+- **Multi-disc games**: use an `m3u` playlist, so every disc shares the first one's settings. A disc inserted on its own while the machine is on keeps the current settings until the next reset, unless it has its own or is in the game database.
+
+They are stored in `games.ini`, next to `config.ini`. CDs are recognized by their contents, so renaming or converting an image keeps its settings. Floppies and hard disks are recognized by file name.
+
 ### Keyboard
 
 Keys type on the FM Towns keyboard while the window has focus. Geartowns keeps only its hotkeys, which use `Ctrl+Shift` or `Ctrl` with an F-key; on macOS, `Cmd` replaces `Ctrl` and `Option` replaces `Alt` in all of them.
@@ -313,7 +323,7 @@ Media:
       --load-state SLOT     Load save state slot 1-5, or a state file, once the
                             media is loaded
 
-Machine (for this run only, the saved settings stay):
+Machine (for this run only, over the saved and per-game settings):
       --model MODEL         auto, model1_2, 1f_2f, 10f_20f, cx, ux, ug, hg, hr,
                             ur, me, ma, mx, mf_fresh, hc, marty
       --cpu-mhz MHZ         auto, 16, 20, 25, 33, 40, 50, 66, 100

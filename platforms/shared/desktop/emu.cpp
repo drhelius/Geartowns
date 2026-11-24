@@ -33,6 +33,7 @@
 #include "config.h"
 #include "debug/gui_debug_trace_logger.h"
 #include "emu_floppy.h"
+#include "emu_game.h"
 #include "emu_hard_disk.h"
 #include "emu_memory_card.h"
 #include "events.h"
@@ -261,6 +262,8 @@ void emu_update(void)
         return;
     }
 #endif
+
+    emu_game_update();
 
     if (emu_is_empty())
     {
@@ -716,6 +719,7 @@ bool emu_power_on(void)
         return false;
 
     gui_debug_trace_logger_reset("power");
+    emu_game_restart();
     sync_cmos();
 
     if (!geartowns->PowerOn())
@@ -748,6 +752,7 @@ void emu_reset(void)
         return;
 
     gui_debug_trace_logger_reset("reset");
+    emu_game_restart();
     sync_cmos();
     geartowns->ResetMedia();
     emu_update_pad_types();
@@ -952,11 +957,11 @@ void emu_apply_machine_settings(void)
         return;
 
     GT_Machine_Settings settings;
-    settings.model = config_machine.model;
-    settings.cpu_mhz = config_machine.cpu_mhz;
-    settings.ram_mb = config_machine.ram_mb;
-    settings.fpu = config_machine.fpu;
-    settings.speed_mode = config_machine.speed_mode;
+    settings.model = emu_game_get(Emu_Game_Setting_Model);
+    settings.cpu_mhz = emu_game_get(Emu_Game_Setting_CPUSpeed);
+    settings.ram_mb = emu_game_get(Emu_Game_Setting_RAM);
+    settings.fpu = emu_game_get(Emu_Game_Setting_FPU);
+    settings.speed_mode = emu_game_get(Emu_Game_Setting_SpeedMode);
     geartowns->SetMachineSettings(settings);
 }
 
@@ -965,7 +970,9 @@ bool emu_latch_auto_media(void)
     if (!IsValidPointer(geartowns))
         return false;
 
-    geartowns->LatchAutoMedia();
+    if (!emu_game_open())
+        return false;
+
     emu_update_pad_types();
 
     if (!geartowns->IsPoweredOn())
@@ -1696,8 +1703,9 @@ void emu_update_pad_types(void)
 
     for (int i = 0; i < GT_MAX_GAMEPADS; i++)
     {
-        decided[i] = config_input.controller_type[i] != config_ControllerType_Auto;
-        types[i] = decided[i] ? (GT_Controller_Type)config_input.controller_type[i] : GT_CONTROLLER_NONE;
+        int setting = emu_game_get(Emu_Game_Setting_Port1 + i);
+        decided[i] = setting != config_ControllerType_Auto;
+        types[i] = decided[i] ? (GT_Controller_Type)setting : GT_CONTROLLER_NONE;
         pad_sources[i] = Emu_Pad_Source_Explicit;
         mouse = mouse || (types[i] == GT_CONTROLLER_MOUSE);
     }

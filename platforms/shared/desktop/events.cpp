@@ -21,6 +21,7 @@
 #include "application.h"
 #include "config.h"
 #include "emu.h"
+#include "emu_game.h"
 #include "gamepad.h"
 #include "gui.h"
 #include "game_focus.h"
@@ -240,7 +241,7 @@ static GT_GamePad_State input_build_state(int controller)
     SDL_Keymod mods = SDL_GetModState();
     bool six_button = emu_get_pad_type((GT_Controllers)controller) == GT_CONTROLLER_6_BUTTON_GAMEPAD;
 
-    if (config_input.keyboard_mode[controller] == config_KeyboardMode_Gamepad &&
+    if (emu_game_get(Emu_Game_Setting_Keyboard1 + controller) == config_KeyboardMode_Gamepad &&
         (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
     {
         const bool* keyboard = SDL_GetKeyboardState(NULL);
@@ -380,7 +381,7 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
     {
         int type = emu_get_pad_type((GT_Controllers)controller);
 
-        if (config_input.keyboard_mode[controller] != config_KeyboardMode_Gamepad || type == GT_CONTROLLER_NONE)
+        if (emu_game_get(Emu_Game_Setting_Keyboard1 + controller) != config_KeyboardMode_Gamepad || type == GT_CONTROLLER_NONE)
             continue;
 
         const config_Input_Keyboard& keys = config_input_keyboard[controller];

@@ -128,6 +128,10 @@ public:
     bool IsMemoryCardStateChanged() const;
     void SetBootDevice(GT_Boot_Device device);
     GT_Boot_Device GetBootDevice() const;
+    void SetDefaultBootDevice(GT_Boot_Device device);
+    GT_Boot_Device GetSkippedBootDevice() const;
+    bool IsBootDeviceSupported(GT_Machine_Model model) const;
+    bool IsBootDeviceAvailable(GT_Boot_Device device) const;
     void EnableDriveLetterAssignment(bool enabled);
     void EnableFastHardDiskTiming(bool enabled);
     bool IsFastHardDiskTimingEnabled() const;
@@ -288,6 +292,9 @@ private:
     u32 m_hard_disk_state_changes;
     bool m_memory_card_state_changed;
     GT_Boot_Device m_boot_device;
+    GT_Boot_Device m_default_boot_device;
+    GT_Boot_Device m_skipped_boot_device;
+    bool m_boot_device_requested;
     bool m_drive_letter_assignment;
     bool m_fast_hard_disk_timing;
     bool m_ram_size_locked;

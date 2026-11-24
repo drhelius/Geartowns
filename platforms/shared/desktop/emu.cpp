@@ -95,6 +95,9 @@ static Loading_Request_Type loading_request_type = Loading_Request_File;
 static std::vector<std::string> cdrom_playlist;
 static int cdrom_playlist_index = -1;
 static int cmos_model = -1;
+static GT_Boot_Device boot_device_override = GT_BOOT_DEVICE_AUTO;
+static bool boot_device_overridden = false;
+static bool boot_device_check = false;
 static std::string key_map_path;
 
 static void load_media_thread_func(void);
@@ -113,6 +116,7 @@ static void load_cmos(int model);
 static void save_cmos(void);
 static void sync_cmos(void);
 static void notify_machine(void);
+static void check_boot_device(void);
 static void update_key_map(void);
 static std::string get_key_map_path(std::string* title);
 static void save_key_map(void);
@@ -258,6 +262,7 @@ void emu_update(void)
     if (loading_state.load() != Loading_State_None)
         return;
 
+    check_boot_device();
     emu_mcp_pump_commands();
     input_macro_update(Input_Macro_Owner_GUI);
 
@@ -741,6 +746,7 @@ bool emu_power_on(void)
     if (!geartowns->PowerOn())
         return false;
 
+    boot_device_check = true;
     emu_update_pad_types();
     notify_machine();
     emu_floppy_check_drives();
@@ -771,6 +777,7 @@ void emu_reset(void)
     emu_game_restart();
     sync_cmos();
     geartowns->ResetMedia();
+    boot_device_check = true;
     emu_update_pad_types();
     notify_machine();
     emu_floppy_check_drives();
@@ -965,6 +972,50 @@ void emu_set_fast_hard_disk_timing(bool enabled)
 {
     if (IsValidPointer(geartowns))
         geartowns->EnableFastHardDiskTiming(enabled);
+}
+
+bool emu_parse_boot_device(const char* key, GT_Boot_Device* device)
+{
+    static const char* const k_keys[GT_BOOT_DEVICE_COUNT] = { "auto", "cdrom", "floppy1", "floppy2", "hard_disk0",
+        "hard_disk1", "hard_disk2", "hard_disk3", "hard_disk4", "memory_card" };
+
+    for (int i = 0; i < GT_BOOT_DEVICE_COUNT; i++)
+    {
+        if (strcmp(key, k_keys[i]) == 0)
+        {
+            *device = (GT_Boot_Device)i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+const char* emu_get_boot_device_name(GT_Boot_Device device)
+{
+    static const char* const k_names[GT_BOOT_DEVICE_COUNT] = { "Auto", "CD-ROM", "Floppy 1", "Floppy 2",
+        "Hard Disk ID 0", "Hard Disk ID 1", "Hard Disk ID 2", "Hard Disk ID 3", "Hard Disk ID 4", "IC Memory Card" };
+
+    return k_names[device];
+}
+
+void emu_override_boot_device(GT_Boot_Device device)
+{
+    boot_device_override = device;
+    boot_device_overridden = true;
+}
+
+bool emu_is_boot_device_overridden(GT_Boot_Device* device)
+{
+    *device = boot_device_override;
+    return boot_device_overridden;
+}
+
+void emu_apply_boot_device(void)
+{
+    if (IsValidPointer(geartowns))
+        geartowns->SetDefaultBootDevice(boot_device_overridden ? boot_device_override :
+            (GT_Boot_Device)config_emulator.default_boot_device);
 }
 
 void emu_apply_machine_settings(void)
@@ -2131,6 +2182,7 @@ static bool unload_media(void)
 
 static void after_state_loaded(const char* path, int index)
 {
+    boot_device_check = false;
     restore_state_frame(path, index);
     emu_floppy_reconcile();
     emu_hard_disk_state_loaded(false);
@@ -2385,6 +2437,36 @@ static void notify_machine(void)
     bool warning = (report.warning_count > 0) || floppy.warning || !port_warnings.empty();
     gui_notify(warning ? gui_NotificationWarning : gui_NotificationInfo, ICON_MD_MEMORY, message,
         detail.empty() ? NULL : detail.c_str(), "machine");
+}
+
+// Startup media may arrive after power-on, so the choice is settled before the first frame runs
+static void check_boot_device(void)
+{
+    if (!boot_device_check)
+        return;
+
+    boot_device_check = false;
+    GT_Boot_Device device = geartowns->GetSkippedBootDevice();
+
+    if ((device == GT_BOOT_DEVICE_AUTO) || !geartowns->IsPoweredOn())
+        return;
+
+    if (geartowns->IsBootDeviceAvailable(device))
+    {
+        bool paused = geartowns->IsPaused();
+        Log("%s is now available, restarting to boot from it", emu_get_boot_device_name(device));
+        emu_reset();
+        geartowns->Pause(paused);
+        return;
+    }
+
+    const char* detail = geartowns->IsBootDeviceSupported(geartowns->GetMachineConfig().model) ?
+        "No media available, using the normal boot order" :
+        "This model's system ROM doesn't read boot keys, using the normal boot order";
+    char message[64];
+    snprintf(message, sizeof(message), "Can't boot from %s", emu_get_boot_device_name(device));
+    Log("%s: %s", message, detail);
+    gui_notify(gui_NotificationWarning, NULL, message, detail, "boot_device");
 }
 
 static void sync_cmos(void)

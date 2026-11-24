@@ -103,6 +103,7 @@ static void menu_machine_hardware(const GT_Machine_Config& config);
 static void get_machine_hardware(const GT_Machine_Config& config, char* text, size_t text_size);
 static void add_machine_line(char* text, size_t text_size, const char* format, ...);
 static void menu_boot_device(void);
+static void menu_default_boot_device(void);
 static void draw_machine_profile_tooltip(GT_Machine_Model model);
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size);
 static void menu_video(void);
@@ -495,6 +496,10 @@ static void menu_drives(void)
 
         gui_hard_disks_menu();
         gui_memory_card_menu();
+
+        ImGui::Separator();
+
+        menu_default_boot_device();
 
         ImGui::EndMenu();
     }
@@ -1595,13 +1600,11 @@ static void draw_machine_profile_tooltip(GT_Machine_Model model)
 
 static void menu_boot_device(void)
 {
-    static const char* const names[GT_BOOT_DEVICE_COUNT] = { "", "CD-ROM", "Floppy 1", "Floppy 2", "Hard Disk ID 0",
-        "Hard Disk ID 1", "Hard Disk ID 2", "Hard Disk ID 3", "Hard Disk ID 4", "IC Memory Card" };
     static const char* const keys[GT_BOOT_DEVICE_COUNT] = { "", "C and D", "F and 0", "F and 1", "H and 0", "H and 1",
         "H and 2", "H and 3", "H and 4", "I, C and M" };
     GeartownsCore* core = emu_get_core();
     const GT_Machine_Config& config = core->GetPendingMachineConfig();
-    bool supported = (config.model != GT_MACHINE_MODEL1_2) && (config.model != GT_MACHINE_MARTY);
+    bool supported = core->IsBootDeviceSupported(config.model);
 
     for (int i = GT_BOOT_DEVICE_CDROM; i < GT_BOOT_DEVICE_COUNT; i++)
     {
@@ -1622,7 +1625,7 @@ static void menu_boot_device(void)
         if ((i == GT_BOOT_DEVICE_FLOPPY_0) || (i == GT_BOOT_DEVICE_HARD_DISK_0) || (i == GT_BOOT_DEVICE_MEMORY_CARD))
             ImGui::Separator();
 
-        if (ImGui::MenuItem(names[i], NULL, false, enabled))
+        if (ImGui::MenuItem(emu_get_boot_device_name((GT_Boot_Device)i), NULL, false, enabled))
         {
             core->SetBootDevice((GT_Boot_Device)i);
             gui_action_reset();
@@ -1636,6 +1639,49 @@ static void menu_boot_device(void)
                 ImGui::SetTooltip("This model's system ROM doesn't read boot keys");
         }
     }
+}
+
+static void menu_default_boot_device(void)
+{
+    if (!ImGui::BeginMenu("Default Boot Device"))
+        return;
+
+    GeartownsCore* core = emu_get_core();
+    GT_Boot_Device device = GT_BOOT_DEVICE_AUTO;
+
+    ImGui::PushItemWidth(160.0f);
+
+    if (ImGui::Combo("##default_boot_device", &config_emulator.default_boot_device,
+        "Auto\0" "CD-ROM\0" "Floppy 1\0" "Floppy 2\0" "Hard Disk ID 0\0" "Hard Disk ID 1\0" "Hard Disk ID 2\0"
+        "Hard Disk ID 3\0" "Hard Disk ID 4\0" "IC Memory Card\0\0", GT_BOOT_DEVICE_COUNT))
+    {
+        emu_apply_boot_device();
+    }
+
+    ImGui::PopItemWidth();
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::Text("The device each power-on and reset boots from.");
+        ImGui::Text("Auto follows the system ROM's normal boot order.");
+        ImGui::Text("Changes apply at the next power-on or reset.");
+        ImGui::EndTooltip();
+    }
+
+    bool overridden = emu_is_boot_device_overridden(&device);
+    bool supported = core->IsBootDeviceSupported(core->GetPendingMachineConfig().model);
+
+    if (overridden || !supported)
+        ImGui::Separator();
+
+    if (overridden)
+        ImGui::TextDisabled("Command line: %s", emu_get_boot_device_name(device));
+
+    if (!supported)
+        ImGui::TextDisabled("NOTE: Selected model\ndoesn't read boot keys");
+
+    ImGui::EndMenu();
 }
 
 static void get_machine_summary(const GT_Machine_Config& config, char* text, size_t text_size)

@@ -27,6 +27,7 @@
 #include "application_headless.h"
 #include "config.h"
 #include "console_utils.h"
+#include "emu.h"
 #include "emu_game.h"
 
 extern bool g_mcp_stdio_mode;
@@ -131,6 +132,21 @@ int main(int argc, char* argv[])
                     app_params.state_slot = value[0] - '0';
                 else
                     app_params.state_file = value;
+            }
+            else if (strcmp(argv[i], "--boot-device") == 0)
+            {
+                const char* value = option_value(argc, argv, &i);
+
+                if (!value)
+                    return -1;
+
+                if (!emu_parse_boot_device(value, &app_params.boot_device))
+                {
+                    fprintf(stderr, "Invalid value for --boot-device: %s\n", value);
+                    return -1;
+                }
+
+                app_params.boot_device_set = true;
             }
             else if (hard_disk_option(argv[i]) >= 0)
             {
@@ -301,7 +317,7 @@ int main(int argc, char* argv[])
 static bool option_has_value(const char* option)
 {
     static const char* const k_options[] = { "--mcp-http-port", "--mcp-http-address", "--cd", "--fd1", "--fd2",
-        "--card", "--load-state" };
+        "--card", "--load-state", "--boot-device" };
 
     for (size_t i = 0; i < sizeof(k_options) / sizeof(k_options[0]); i++)
     {
@@ -422,6 +438,8 @@ static void print_usage(const char* program)
     print_wrapped("      --fpu FPU", "auto, none, 80387 (a 487SX on the 486 models)");
     print_wrapped("      --speed-mode MODE", "auto, compatible, high");
     print_wrapped("      --midi-card CARD", "auto, none, fitted");
+    print_wrapped("      --boot-device DEVICE", "auto, cdrom, floppy1, floppy2, hard_disk0, up to hard_disk4, "
+        "memory_card");
     printf("\nOptions:\n");
     print_wrapped("  -f, --fullscreen", "Start in fullscreen mode");
     print_wrapped("  -w, --windowed", "Start in windowed mode with menu visible");

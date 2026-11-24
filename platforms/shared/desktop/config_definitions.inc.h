@@ -214,6 +214,8 @@ static inline void process(config_Operation operation)
     CONFIG_INT_RANGE("Emulator", "SaveSlot", config_emulator.save_slot, 0, 0, 4);
     CONFIG_BOOL("Emulator", "StartPaused", config_emulator.start_paused, false);
     CONFIG_BOOL("Emulator", "PowerOnAtStartup", config_emulator.power_on_startup, true);
+    CONFIG_INT_RANGE("Emulator", "DefaultBootDevice", config_emulator.default_boot_device, GT_BOOT_DEVICE_AUTO,
+        GT_BOOT_DEVICE_AUTO, GT_BOOT_DEVICE_COUNT - 1);
     CONFIG_BOOL("Emulator", "PauseWhenInactive", config_emulator.pause_when_inactive, true);
     CONFIG_BOOL("Emulator", "PreloadCDROM", config_emulator.preload_cdrom, false);
     CONFIG_INT_RANGE("Emulator", "CDROMSpeed", config_emulator.cdrom_speed, 0, 0, 4);

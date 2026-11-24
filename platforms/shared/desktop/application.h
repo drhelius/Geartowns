@@ -33,6 +33,8 @@ struct ApplicationParams
     const char* hard_disk_files[GT_MAX_HARD_DISKS] = { };
     const char* memory_card_file = NULL;
     const char* state_file = NULL;
+    GT_Boot_Device boot_device = GT_BOOT_DEVICE_AUTO;
+    bool boot_device_set = false;
     int state_slot = 0;
     bool force_fullscreen = false;
     bool force_windowed = false;

@@ -346,6 +346,8 @@ Machine (for this run only, over the saved and per-game settings):
       --fpu FPU             auto, none, 80387 (a 487SX on the 486 models)
       --speed-mode MODE     auto, compatible, high
       --midi-card CARD      auto, none, fitted
+      --boot-device DEVICE  auto, cdrom, floppy1, floppy2, hard_disk0, up to
+                            hard_disk4, memory_card
 
 Options:
   -f, --fullscreen          Start in fullscreen mode

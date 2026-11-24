@@ -111,6 +111,9 @@ GeartownsCore::GeartownsCore()
     m_hard_disk_state_changes = 0;
     m_memory_card_state_changed = false;
     m_boot_device = GT_BOOT_DEVICE_AUTO;
+    m_default_boot_device = GT_BOOT_DEVICE_AUTO;
+    m_skipped_boot_device = GT_BOOT_DEVICE_AUTO;
+    m_boot_device_requested = false;
     m_drive_letter_assignment = true;
     m_fast_hard_disk_timing = false;
     m_ram_size_locked = false;
@@ -1210,6 +1213,7 @@ bool GeartownsCore::IsMemoryCardStateChanged() const
 void GeartownsCore::SetBootDevice(GT_Boot_Device device)
 {
     m_boot_device = ((device >= GT_BOOT_DEVICE_AUTO) && (device < GT_BOOT_DEVICE_COUNT)) ? device : GT_BOOT_DEVICE_AUTO;
+    m_boot_device_requested = true;
     ResolveMachineConfig();
 
     if (!IsMachineConfigPending())
@@ -1218,7 +1222,56 @@ void GeartownsCore::SetBootDevice(GT_Boot_Device device)
 
 GT_Boot_Device GeartownsCore::GetBootDevice() const
 {
-    return m_boot_device;
+    return m_boot_device_requested ? m_boot_device : m_default_boot_device;
+}
+
+void GeartownsCore::SetDefaultBootDevice(GT_Boot_Device device)
+{
+    bool valid = (device >= GT_BOOT_DEVICE_AUTO) && (device < GT_BOOT_DEVICE_COUNT);
+    m_default_boot_device = valid ? device : GT_BOOT_DEVICE_AUTO;
+    ResolveMachineConfig();
+
+    if (!IsMachineConfigPending())
+        m_machine_report = m_pending_machine_report;
+}
+
+GT_Boot_Device GeartownsCore::GetSkippedBootDevice() const
+{
+    return m_skipped_boot_device;
+}
+
+bool GeartownsCore::IsBootDeviceSupported(GT_Machine_Model model) const
+{
+    return (model != GT_MACHINE_MODEL1_2) && (model != GT_MACHINE_MARTY);
+}
+
+bool GeartownsCore::IsBootDeviceAvailable(GT_Boot_Device device) const
+{
+    if (device == GT_BOOT_DEVICE_AUTO)
+        return true;
+
+    if (!IsBootDeviceSupported(m_pending_machine_config.model))
+        return false;
+
+    if (device == GT_BOOT_DEVICE_CDROM)
+        return IsValidPointer(m_media) && m_media->IsReady();
+
+    if ((device == GT_BOOT_DEVICE_FLOPPY_0) || (device == GT_BOOT_DEVICE_FLOPPY_1))
+    {
+        int drive = device - GT_BOOT_DEVICE_FLOPPY_0;
+        return IsValidPointer(m_fdc) && (drive < m_pending_machine_config.floppy_drives) &&
+            m_fdc->GetDisk(drive)->IsInserted();
+    }
+
+    if (device == GT_BOOT_DEVICE_MEMORY_CARD)
+        return IsValidPointer(m_memory_card) && m_memory_card->IsInserted();
+
+    int id = device - GT_BOOT_DEVICE_HARD_DISK_0;
+
+    if (!IsValidPointer(m_scsi))
+        return false;
+
+    return m_hard_disk_pending[id] ? !m_hard_disk_paths[id].empty() : m_scsi->GetDisk(id)->IsAttached();
 }
 
 void GeartownsCore::EnableDriveLetterAssignment(bool enabled)
@@ -1261,33 +1314,43 @@ void GeartownsCore::ApplyBootDevice()
 {
     static const GT_Keys k_digits[5] = { GT_KEY_0, GT_KEY_1, GT_KEY_2, GT_KEY_3, GT_KEY_4 };
     GT_Keys keys[3] = { GT_KEY_NONE, GT_KEY_NONE, GT_KEY_NONE };
-    int count = m_boot_device != GT_BOOT_DEVICE_AUTO ? 2 : 0;
+    GT_Boot_Device device = GetBootDevice();
+    m_skipped_boot_device = GT_BOOT_DEVICE_AUTO;
 
-    if (m_boot_device == GT_BOOT_DEVICE_CDROM)
+    if (!m_boot_device_requested && !IsBootDeviceAvailable(device))
+    {
+        m_skipped_boot_device = device;
+        device = GT_BOOT_DEVICE_AUTO;
+    }
+
+    int count = device != GT_BOOT_DEVICE_AUTO ? 2 : 0;
+
+    if (device == GT_BOOT_DEVICE_CDROM)
     {
         keys[0] = GT_KEY_C;
         keys[1] = GT_KEY_D;
     }
-    else if ((m_boot_device == GT_BOOT_DEVICE_FLOPPY_0) || (m_boot_device == GT_BOOT_DEVICE_FLOPPY_1))
+    else if ((device == GT_BOOT_DEVICE_FLOPPY_0) || (device == GT_BOOT_DEVICE_FLOPPY_1))
     {
         keys[0] = GT_KEY_F;
-        keys[1] = k_digits[m_boot_device - GT_BOOT_DEVICE_FLOPPY_0];
+        keys[1] = k_digits[device - GT_BOOT_DEVICE_FLOPPY_0];
     }
-    else if (m_boot_device == GT_BOOT_DEVICE_MEMORY_CARD)
+    else if (device == GT_BOOT_DEVICE_MEMORY_CARD)
     {
         keys[0] = GT_KEY_I;
         keys[1] = GT_KEY_C;
         keys[2] = GT_KEY_M;
         count = 3;
     }
-    else if (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0)
+    else if (device >= GT_BOOT_DEVICE_HARD_DISK_0)
     {
         keys[0] = GT_KEY_H;
-        keys[1] = k_digits[m_boot_device - GT_BOOT_DEVICE_HARD_DISK_0];
+        keys[1] = k_digits[device - GT_BOOT_DEVICE_HARD_DISK_0];
     }
 
     m_keyboard->SetBootKeys(keys, count);
     m_boot_device = GT_BOOT_DEVICE_AUTO;
+    m_boot_device_requested = false;
 }
 
 void GeartownsCore::BootReadCallback(void* context)
@@ -2229,6 +2292,7 @@ void GeartownsCore::Reset()
     m_debug_step_resume = false;
     m_debug_interrupt_deferred = false;
     ApplyHardDisks();
+    ResolveMachineConfig();
     LoadMachineFirmware(false, false);
     ApplyMachineConfig();
     AssignDriveLetters();
@@ -2428,7 +2492,9 @@ void GeartownsCore::ResolveMachineConfig()
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "This machine has no high-speed mode");
 
-    bool hard_disk_device = (m_boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) && (m_boot_device <= GT_BOOT_DEVICE_HARD_DISK_4);
+    GT_Boot_Device boot_device = GetBootDevice();
+    bool hard_disk_device = (boot_device >= GT_BOOT_DEVICE_HARD_DISK_0) &&
+        (boot_device <= GT_BOOT_DEVICE_HARD_DISK_4) && (m_boot_device_requested || IsBootDeviceAvailable(boot_device));
     bool hard_disk_boot = hard_disk_device || (IsValidPointer(entry) && ((entry->flags & GT_GAMEDB_HDD) != 0));
 
     if (auto_ram && config.scsi && HasHardDisks() && (!database || hard_disk_boot) && (config.ram_size < 4 * megabyte))

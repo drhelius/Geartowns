@@ -60,6 +60,9 @@ int application_headless_init(const ApplicationParams& params)
         return 2;
     }
 
+    if (params.boot_device_set)
+        emu_override_boot_device(params.boot_device);
+
     events_update_keyboard_layout();
 
     config_debug.debug = params.mcp_mode >= 0;
@@ -74,6 +77,7 @@ int application_headless_init(const ApplicationParams& params)
     }
 
     emu_set_drive_letter_assignment(config_emulator.hard_disk_drive_letters);
+    emu_apply_boot_device();
     emu_game_apply();
     emu_power_on();
 

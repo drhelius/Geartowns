@@ -126,6 +126,9 @@ int application_init(const ApplicationParams& params)
         return 3;
     }
 
+    if (params.boot_device_set)
+        emu_override_boot_device(params.boot_device);
+
     events_update_keyboard_layout();
 
     if (!gui_init())

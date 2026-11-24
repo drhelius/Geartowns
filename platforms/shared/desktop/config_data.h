@@ -78,6 +78,7 @@ struct config_Emulator
     int save_slot;
     bool start_paused;
     bool power_on_startup;
+    int default_boot_device;
     bool pause_when_inactive;
     bool preload_cdrom;
     int cdrom_speed;

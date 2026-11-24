@@ -1372,6 +1372,10 @@ json McpServer::BuildToolList()
         "mode, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level "
         "monitors and volume.", k_mcp_tool_read, empty_schema()));
 
+    tools.push_back(make_tool("get_midi_status", "Get MIDI Status",
+        "Read the MIDI card (0E50-0E77): outputs, interrupt masks and requests, and timer; and MIDI out: capture, "
+        "messages, SysEx log, kind of music, port, and the built-in synth playing it.", k_mcp_tool_read, empty_schema()));
+
     tools.push_back(make_tool("get_sound_status", "Get Sound Status",
         "Read the sound board: MB87078 volumes (04E0/04E2), FM and PCM mutes (04D5), output gate (04EC), "
         "04E9-04EB interrupts and the debugger mutes.", k_mcp_tool_read, empty_schema()));
@@ -1383,7 +1387,7 @@ json McpServer::BuildToolList()
             {"properties", {
                 {"source", {
                     {"type", "string"},
-                    {"enum", json::array({"fm", "pcm", "cdda", "buzzer", "pcm16"})}
+                    {"enum", json::array({"fm", "pcm", "cdda", "buzzer", "pcm16", "midi"})}
                 }},
                 {"channel", {
                     {"type", "integer"},
@@ -3246,6 +3250,10 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     {
         return m_debugAdapter.GetRF5C68Status();
     }
+    else if (normalizedTool == "get_midi_status")
+    {
+        return m_debugAdapter.GetMIDIStatus();
+    }
     else if (normalizedTool == "get_pcm16_status")
     {
         return m_debugAdapter.GetPCM16Status();
@@ -3444,6 +3452,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
         event_filters[TRACE_FM] = TRACE_FM_EVENT_DEFAULT;
         event_filters[TRACE_PCM] = TRACE_PCM_EVENT_ALL;
         event_filters[TRACE_PCM16] = TRACE_PCM16_EVENT_ALL;
+        event_filters[TRACE_MIDI] = TRACE_MIDI_EVENT_DEFAULT;
         event_filters[TRACE_MIXER] = TRACE_MIXER_EVENT_ALL;
         event_filters[TRACE_CDROM] = TRACE_CDROM_EVENT_ALL;
         event_filters[TRACE_FDC] = TRACE_FDC_EVENT_ALL;

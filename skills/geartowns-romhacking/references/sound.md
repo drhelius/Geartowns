@@ -149,3 +149,26 @@ EN set, C32 selects −32 dB, otherwise C0 selects 0 dB, otherwise the data appl
 | 04E8h | Read: bit 0 sample ready. Write: clears the sampling FIFO |
 
 Reset leaves the master output disabled. The mutes do not stop the FM timers or PCM playback and its interrupts.
+
+---
+
+## 7. MIDI Card
+
+The FMT-402 is optional, and absent ports read FFh. Only one card, with its output A, is emulated:
+
+| Port | Read | Write |
+|------|------|-------|
+| 0E50h / 0E51h | Output A: data / i8251 status | Data / mode and command |
+| 0E53h | FIFO status: bit 0 busy, bit 1 receive empty | Bit 0: FIFO enable |
+| 0E54h / 0E55h | Output B: data / status | Data / mode and command |
+| 0E70h | Output requests, 0 = request | Output interrupt mask |
+| 0E71h | Input requests, 0 = request | Input interrupt mask |
+| 0E73h | Timer 0 and 1 requests | Timer interrupt mask |
+| 0E74h-0E76h | 8253 counters | 8253 counters |
+| 0E77h | - | 8253 control |
+
+- The usual setup writes 00h three times, 40h (reset), 4Eh (8N1, x16) and 37h to the command port. The status then reads
+  05h. The rate is 31,250 baud, 320 us a byte.
+- The outputs interrupt on IRQ 4 while a transmitter is ready, on and unmasked. The timer runs at 500 kHz and interrupts
+  on IRQ 5 while an unmasked output is high. A new control word is the acknowledge.
+- TBIOS plays its music at the tempo of the card's timer when it finds a card, with or without MIDI.

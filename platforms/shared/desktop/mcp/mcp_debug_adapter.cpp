@@ -55,6 +55,8 @@
 #include "../gui_floppy.h"
 #include "../emu_hard_disk.h"
 #include "../emu_memory_card.h"
+#include "../emu_midi.h"
+#include "../midi_queue.h"
 #include "../rewind.h"
 #include "../debug/gui_debug_cdrom.h"
 #include "../debug/gui_debug_constants.h"
@@ -2295,6 +2297,7 @@ json DebugAdapter::GetSystemStatus()
     json fpu_setting = settings.fpu < 0 ? json("auto") : settings.fpu == 0 ? json("none") : json("80387");
     json speed_mode_setting = settings.speed_mode < 0 ? json("auto") : settings.speed_mode == 0 ?
         json("compatible") : json("high");
+    json midi_card_setting = settings.midi_card < 0 ? json("auto") : settings.midi_card == 0 ? json("none") : json("fitted");
     json warnings = json::array();
     json registers = json::object();
     u64 clocks = m_core->GetScheduler()->GetClocks();
@@ -2352,15 +2355,17 @@ json DebugAdapter::GetSystemStatus()
             {"cpu_clock_hz", machine.cpu_clock_rate},
             {"ram_kb", machine.ram_size / 1024},
             {"fpu", machine.fpu ? json(get_machine_fpu_name(machine.cpu)) : json()},
+            {"midi_card", machine.midi_card},
             {"floppy_drives", machine.floppy_drives},
             {"machine_id", Hex(gui_debug_system_machine_id(), 4)},
             {"memory_map", k_machine_maps[profile.map].name},
             {"firmware_set", IsValidPointer(profile.firmware_set) ? profile.firmware_set : ""},
             {"settings", {{"model", model_setting}, {"cpu_speed_mhz", cpu_setting}, {"ram_mb", ram_setting},
-                {"fpu", fpu_setting}, {"speed_mode", speed_mode_setting}}},
+                {"fpu", fpu_setting}, {"speed_mode", speed_mode_setting}, {"midi_card", midi_card_setting}}},
             {"source", {{"model", k_mcp_machine_sources[report.model]},
                 {"cpu_clock", k_mcp_machine_sources[report.cpu_clock]}, {"ram", k_mcp_machine_sources[report.ram]},
-                {"fpu", k_mcp_machine_sources[report.fpu]}, {"speed_mode", k_mcp_machine_sources[report.speed_mode]}}},
+                {"fpu", k_mcp_machine_sources[report.fpu]}, {"speed_mode", k_mcp_machine_sources[report.speed_mode]},
+                {"midi_card", k_mcp_machine_sources[report.midi_card]}}},
             {"game_database", IsValidPointer(report.title) ? json(report.title) : json()},
             {"warnings", warnings},
             {"reset_pending", m_core->IsMachineConfigPending()}
@@ -3279,6 +3284,77 @@ json DebugAdapter::GetPCM16Status()
     };
 }
 
+json DebugAdapter::GetMIDIStatus()
+{
+    static const char* const captures[3] = { "off", "on", "silent" };
+    static const char* const engines[GT_MIDI_ENGINE_COUNT] = { "none", "mt32", "soundfont" };
+    Audio* audio = m_core->GetAudio();
+    MidiCard* card = audio->GetMidiCard();
+    MidiCard::MidiCard_State* state = card->GetState();
+    MidiOut* midi = audio->GetMidiOut();
+    const MidiOut::MidiOut_Stats* stats = midi->GetStats();
+    const MidiOut::MidiOut_Synth& machine = midi->GetState()->machine;
+    u64 clocks = m_core->GetScheduler()->GetClocks();
+    u64 tick = clocks / k_midi_card_clock_divisor;
+    bool fitted = card->IsFitted();
+    int known = emu_midi_get_known_synth();
+    json outputs = json::array();
+    json counters = json::array();
+    MidiSynth::MidiSynth_Status synth;
+    audio->GetMidiSynth()->GetStatus(&synth);
+
+    for (int i = 0; i < MIDI_CARD_OUTPUTS; i++)
+    {
+        I8251* uart = card->GetUART(i);
+        outputs.push_back({{"output", i == 0 ? "A" : "B"}, {"mode", hex_text(uart->GetState()->mode, 2)},
+            {"command", hex_text(uart->GetState()->command, 2)}, {"status", hex_text(uart->ReadStatus(), 2)},
+            {"bytes", state->bytes[i]}});
+    }
+
+    for (int i = 0; i < I8253_COUNTER_COUNT; i++)
+    {
+        const I8253::I8253_Counter& counter = card->GetTimer()->GetState()->counters[i];
+        counters.push_back({{"counter", i}, {"programmed", counter.programmed}, {"mode", counter.mode},
+            {"reload", hex_text(counter.reload, 4)}, {"count", hex_text(card->GetTimer()->PeekCount(i, tick), 4)},
+            {"output", card->GetTimer()->PeekOutput(i, tick)}});
+    }
+
+    return {
+        {"card", {
+            {"fitted", fitted},
+            {"fifo_enabled", (state->fifo_control & k_midi_card_fifo_enable) != 0},
+            {"output_mask", hex_text(state->output_mask, 2)},
+            {"output_requests", hex_text(fitted ? card->GetOutputRequests() : 0, 2)},
+            {"input_mask", hex_text(state->input_mask, 2)},
+            {"timer_mask", hex_text(state->timer_mask, 2)},
+            {"timer_requests", hex_text(fitted ? card->GetTimerRequests(clocks) : 0, 2)},
+            {"outputs", outputs},
+            {"timer", counters}
+        }},
+        {"midi_out", {
+            {"capture", captures[midi->GetCapture()]},
+            {"messages", stats->messages},
+            {"bytes", stats->bytes},
+            {"dropped", stats->dropped + midi_queue_get_dropped()},
+            {"sysex_log", machine.log_size},
+            {"sysex_log_full", machine.log_full},
+            {"music", known >= 0 ? json(k_midi_synths[known].id) : json()},
+            {"detected", midi->GetDetected() >= 0 ? json(k_midi_synths[midi->GetDetected()].id) : json()},
+            {"port", emu_midi_get_port()},
+            {"wanted_port", emu_midi_get_wanted_port()}
+        }},
+        {"synth", {
+            {"engine", engines[synth.engine]},
+            {"mt32_open", synth.mt32_open},
+            {"soundfont_open", synth.soundfont_open},
+            {"voices", synth.voices},
+            {"max_voices", synth.max_voices},
+            {"render_ms", synth.render_ms},
+            {"muted", audio->IsSourceMuted(Audio::AUDIO_SOURCE_MIDI)}
+        }}
+    };
+}
+
 json DebugAdapter::GetSoundStatus()
 {
     Audio* audio = m_core->GetAudio();
@@ -3343,7 +3419,8 @@ json DebugAdapter::GetSoundStatus()
             {"pcm", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM)},
             {"cdda", audio->IsSourceMuted(Audio::AUDIO_SOURCE_CDDA)},
             {"buzzer", audio->IsSourceMuted(Audio::AUDIO_SOURCE_BUZZER)},
-            {"pcm16", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM16)}
+            {"pcm16", audio->IsSourceMuted(Audio::AUDIO_SOURCE_PCM16)},
+            {"midi", audio->IsSourceMuted(Audio::AUDIO_SOURCE_MIDI)}
         }}
     };
 }
@@ -3391,8 +3468,15 @@ json DebugAdapter::SetAudioMute(const std::string& source, int channel, bool mut
 
         audio->SetSourceMute(Audio::AUDIO_SOURCE_PCM16, mute);
     }
+    else if (source == "midi")
+    {
+        if (channel != 0)
+            return {{"error", "MIDI has no channels"}};
+
+        audio->SetSourceMute(Audio::AUDIO_SOURCE_MIDI, mute);
+    }
     else
-        return {{"error", "source must be fm, pcm, cdda, buzzer or pcm16"}};
+        return {{"error", "source must be fm, pcm, cdda, buzzer, pcm16 or midi"}};
 
     json result = {{"success", true}, {"source", source}, {"muted", mute}};
 

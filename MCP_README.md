@@ -482,6 +482,10 @@ pcm16.data
 pcm16.dma
 pcm16.buffer
 pcm16.irqs
+midi.messages
+midi.bytes
+midi.registers
+midi.irqs
 mixer.volume
 mixer.mute
 cdrom.commands
@@ -574,8 +578,9 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 - `get_ym3438_registers` - Get one part's register file as last written with register names, and the address latch; `part` (0 or 1)
 - `get_rf5c68_status` - Get the RF5C68: sound enable, channel and wave banks, IRQ mask and flags, and each channel's envelope, pan, step and playback rate, loop start, start and play address
 - `get_pcm16_status` - Get the 16-bit AD/DA PCM of the ME, MA, MX, MF/Fresh and HC (0510-051F): direction, format, sample rate, transfer mode, A/D and D/A ready, IRQ route and causes, DMA base and current address and count, buffer stages and errors, level and peak monitors, trigger level, volume 1 channel 2 and 3 gains and the raw registers
+- `get_midi_status` - Get the MIDI card (0E50-0E77): outputs A and B with mode, command, status and bytes sent, interrupt masks and requests, and the timer; MIDI out with capture, messages, SysEx log, kind of music and port; and the built-in synth with its voices and render time
 - `get_sound_status` - Get both electronic volumes with gain, the 04D5 FM and PCM mutes and the 04EC output gate, the 04E9-04EB interrupt causes, mask and flags, and the debugger mutes
-- `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`, `pcm16`) or one `channel` of it in the debugger; emulated state is unchanged
+- `set_audio_mute` - Mute or unmute `source` (`fm`, `pcm`, `cdda`, `buzzer`, `pcm16`, `midi`) or one `channel` of it in the debugger; emulated state is unchanged
 
 ### CD-ROM Hardware
 - `get_cdrom_status` - Get the CD-ROM controller: 04C0 master status bits, last command with flags and parameters, status queue, transfer mode, SIRQ/DEI and IRQ9, drive state, head position and track, read range, and the disc; `audio` with CD audio playback (state, end action, track, start, stop and current position, track position and CD-DA volume); and `playlist` with the discs of the loaded `.m3u` (`index`, current disc) and whether the drive is empty

@@ -268,8 +268,8 @@ static const char* const kMcpVideoTools[] =
 
 static const char* const kMcpAudioTools[] =
 {
-    "get_ym3438_status", "get_ym3438_registers", "get_rf5c68_status", "get_pcm16_status", "get_sound_status",
-    "set_audio_mute"
+    "get_ym3438_status", "get_ym3438_registers", "get_rf5c68_status", "get_pcm16_status", "get_midi_status",
+    "get_sound_status", "set_audio_mute"
 };
 
 static const char* const kMcpCdromTools[] =

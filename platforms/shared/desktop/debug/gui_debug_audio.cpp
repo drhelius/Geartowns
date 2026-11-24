@@ -89,6 +89,10 @@ static void draw_pcm16_control(Audio* audio);
 static void draw_pcm16_dma(PCM16::PCM16_State* state);
 static void draw_pcm16_buffer(PCM16::PCM16_State* state);
 static void draw_pcm16_monitors(Audio* audio);
+static void draw_midi_card(MidiCard* card);
+static void draw_midi_outputs(MidiCard* card);
+static void draw_midi_timer(MidiCard* card);
+static void draw_midi_out(Audio* audio);
 static void draw_volume_chip(Audio* audio, int chip);
 static void setup_control_columns(void);
 static void setup_pcm16_columns(void);
@@ -295,6 +299,42 @@ void gui_debug_window_pcm16(void)
 
     ImGui::NewLine(); ImGui::TextColored(cyan, "MONITORS"); ImGui::Separator();
     draw_pcm16_monitors(audio);
+
+    ImGui::PopFont();
+
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
+void gui_debug_window_midi(void)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::SetNextWindowPos(ImVec2(330, 108), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(309, 618), ImGuiCond_FirstUseEver);
+    ImGui::Begin("MIDI", &config_debug.show_midi);
+
+    Audio* audio = emu_get_core()->GetAudio();
+    MidiCard* card = audio->GetMidiCard();
+    bool muted = audio->IsSourceMuted(Audio::AUDIO_SOURCE_MIDI);
+
+    if (draw_mute_button("##midi_mute", muted, "Mute the built-in synths"))
+        audio->SetSourceMute(Audio::AUDIO_SOURCE_MIDI, !muted);
+
+    ImGui::SameLine();
+    draw_stereo_scope("##midi_mix", Audio::AUDIO_SOURCE_MIDI, 1.0f / 32768.0f, ImVec2(125, 50));
+
+    ImGui::PushFont(gui_default_font);
+
+    draw_midi_card(card);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "OUTPUTS"); ImGui::Separator();
+    draw_midi_outputs(card);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "TIMER"); ImGui::Separator();
+    draw_midi_timer(card);
+
+    ImGui::NewLine(); ImGui::TextColored(cyan, "MIDI OUT"); ImGui::Separator();
+    draw_midi_out(audio);
 
     ImGui::PopFont();
 
@@ -1490,6 +1530,230 @@ static void draw_pcm16_monitors(Audio* audio)
         ImGui::TableNextColumn();
         ImGui::TextColored(gray, "(04E0)");
     }
+
+    ImGui::EndTable();
+}
+
+static void draw_midi_card(MidiCard* card)
+{
+    MidiCard::MidiCard_State* state = card->GetState();
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float space = ImGui::CalcTextSize(" ").x;
+    bool fitted = card->IsFitted();
+    u8 outputs = fitted ? card->GetOutputRequests() : 0;
+    u8 timers = fitted ? card->GetTimerRequests(emu_get_core()->GetScheduler()->GetClocks()) : 0;
+
+    ImGui::TextColored(cyan, "CARD"); ImGui::Separator();
+
+    if (!ImGui::BeginTable("##midi_card", 3, flags))
+        return;
+
+    setup_pcm16_columns();
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("DEVICE");
+    ImGui::TextColored(fitted ? green : gray, "%s", fitted ? "FITTED" : "NOT FITTED");
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("FIFO");
+    ImGui::TextColored((state->fifo_control & k_midi_card_fifo_enable) ? green : gray, "%s",
+        (state->fifo_control & k_midi_card_fifo_enable) ? "ON" : "OFF");
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0E53)");
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("OUTPUT IRQ");
+    ImGui::TextColored(outputs != 0 ? yellow : gray, "IRQ%d", k_midi_card_output_irq); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(white, "MASK $%02X", state->output_mask);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0E70)");
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("INPUT IRQ");
+    ImGui::TextColored(gray, "IRQ%d", k_midi_card_output_irq); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(white, "MASK $%02X", state->input_mask);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0E71)");
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("TIMER IRQ");
+    ImGui::TextColored(timers != 0 ? yellow : gray, "IRQ%d", k_midi_card_timer_irq); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(white, "MASK $%02X", state->timer_mask);
+    ImGui::TableNextColumn();
+    ImGui::TextColored(gray, "(0E73)");
+
+    ImGui::EndTable();
+}
+
+static void draw_midi_outputs(MidiCard* card)
+{
+    static const char* const k_steps[4] = { "MODE", "SYNC 1", "SYNC 2", "READY" };
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float character = ImGui::CalcTextSize("0").x;
+    float space = ImGui::CalcTextSize(" ").x;
+
+    if (!ImGui::BeginTable("##midi_outputs", 3, flags))
+        return;
+
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 10);
+    ImGui::TableSetupColumn("A (0E50)", ImGuiTableColumnFlags_WidthFixed, character * 12);
+    ImGui::TableSetupColumn("B (0E54)", ImGuiTableColumnFlags_WidthFixed, character * 12);
+    ImGui::TableHeadersRow();
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("STEP");
+
+    for (int i = 0; i < MIDI_CARD_OUTPUTS; i++)
+    {
+        u8 step = card->GetUART(i)->GetState()->step;
+
+        if (i > 0)
+            ImGui::TableNextColumn();
+
+        ImGui::TextColored(step == I8251::I8251_STEP_COMMAND ? white : gray, "%s", k_steps[step & 0x03]);
+    }
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("MODE");
+
+    for (int i = 0; i < MIDI_CARD_OUTPUTS; i++)
+    {
+        if (i > 0)
+            ImGui::TableNextColumn();
+
+        ImGui::TextColored(white, "$%02X", card->GetUART(i)->GetState()->mode);
+    }
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("COMMAND");
+
+    for (int i = 0; i < MIDI_CARD_OUTPUTS; i++)
+    {
+        u8 command = card->GetUART(i)->GetState()->command;
+
+        if (i > 0)
+            ImGui::TableNextColumn();
+
+        ImGui::TextColored(white, "$%02X", command); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((command & k_i8251_command_transmit) ? green : gray, "TXEN");
+    }
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("STATUS");
+
+    for (int i = 0; i < MIDI_CARD_OUTPUTS; i++)
+    {
+        u8 status = card->GetUART(i)->ReadStatus();
+
+        if (i > 0)
+            ImGui::TableNextColumn();
+
+        ImGui::TextColored((status & k_i8251_status_tx_ready) ? green : gray, "READY"); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((status & k_i8251_status_tx_empty) ? green : gray, "EMPTY");
+    }
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("BYTES");
+
+    for (int i = 0; i < MIDI_CARD_OUTPUTS; i++)
+    {
+        if (i > 0)
+            ImGui::TableNextColumn();
+
+        ImGui::TextColored(white, "%u", card->GetState()->bytes[i]);
+    }
+
+    ImGui::EndTable();
+}
+
+static void draw_midi_timer(MidiCard* card)
+{
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float character = ImGui::CalcTextSize("0").x;
+    float space = ImGui::CalcTextSize(" ").x;
+    u64 tick = emu_get_core()->GetScheduler()->GetClocks() / k_midi_card_clock_divisor;
+    I8253* timer = card->GetTimer();
+
+    if (!ImGui::BeginTable("##midi_timer", 5, flags))
+        return;
+
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, character * 4);
+    ImGui::TableSetupColumn("MODE", ImGuiTableColumnFlags_WidthFixed, character * 5);
+    ImGui::TableSetupColumn("RELOAD", ImGuiTableColumnFlags_WidthFixed, character * 7);
+    ImGui::TableSetupColumn("COUNT", ImGuiTableColumnFlags_WidthFixed, character * 7);
+    ImGui::TableSetupColumn("OUTPUT", ImGuiTableColumnFlags_WidthFixed, character * 9);
+    ImGui::TableHeadersRow();
+
+    for (int i = 0; i < I8253_COUNTER_COUNT; i++)
+    {
+        const I8253::I8253_Counter& counter = timer->GetState()->counters[i];
+        bool high = timer->PeekOutput(i, tick);
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextColored(violet, "%d", i);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(counter.programmed ? white : gray, "%d", counter.mode);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(counter.programmed ? white : gray, "$%04X", counter.reload);
+        ImGui::TableNextColumn();
+        ImGui::TextColored(counter.programmed ? white : gray, "$%04X", timer->PeekCount(i, tick));
+        ImGui::TableNextColumn();
+        ImGui::TextColored(high ? green : gray, "%s", high ? "HIGH" : "LOW "); ImGui::SameLine(0.0f, space);
+        ImGui::TextColored((i < 2) && IS_SET_BIT(card->GetState()->timer_mask, i) ? green : gray, "IRQ");
+    }
+
+    ImGui::EndTable();
+}
+
+static void draw_midi_out(Audio* audio)
+{
+    static const char* const k_captures[3] = { "OFF", "ON", "SILENT" };
+    static const char* const k_engines[GT_MIDI_ENGINE_COUNT] = { "NONE", "MT-32", "GENERAL MIDI" };
+    MidiOut* midi = audio->GetMidiOut();
+    const MidiOut::MidiOut_Stats* stats = midi->GetStats();
+    const MidiOut::MidiOut_Synth& machine = midi->GetState()->machine;
+    ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+    float space = ImGui::CalcTextSize(" ").x;
+    int detected = midi->GetDetected();
+    MidiSynth::MidiSynth_Status status;
+    audio->GetMidiSynth()->GetStatus(&status);
+
+    if (!ImGui::BeginTable("##midi_out", 3, flags))
+        return;
+
+    setup_pcm16_columns();
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("CAPTURE");
+    ImGui::TextColored(midi->GetCapture() == MidiOut::MIDI_OUT_CAPTURE_ON ? green : gray, "%s",
+        k_captures[midi->GetCapture()]);
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("DETECTED");
+    ImGui::TextColored(detected >= 0 ? white : gray, "%s", detected >= 0 ? k_midi_synths[detected].name : "NONE");
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("MESSAGES");
+    ImGui::TextColored(white, "%u", stats->messages); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(stats->dropped > 0 ? red : gray, "DROPPED %u", stats->dropped);
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("SYSEX LOG");
+    ImGui::TextColored(white, "%u", machine.log_size); ImGui::SameLine(0.0f, space);
+    ImGui::TextColored(machine.log_full ? red : gray, "FULL");
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("SYNTH");
+    ImGui::TextColored(status.engine != GT_MIDI_ENGINE_NONE ? green : gray, "%s", k_engines[status.engine]);
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("VOICES");
+    ImGui::TextColored(status.engine != GT_MIDI_ENGINE_NONE ? white : gray, "%d / %d", status.voices, status.max_voices);
+
+    ImGui::TableNextRow();
+    gui_debug_grid_label("RENDER");
+    ImGui::TextColored(status.engine != GT_MIDI_ENGINE_NONE ? white : gray, "%.2f ms", status.render_ms);
 
     ImGui::EndTable();
 }

@@ -152,7 +152,30 @@ Reset leaves the master output disabled. The mutes do not stop the FM timers or 
 
 ---
 
-## 7. Driving it from MCP
+## 7. MIDI Card
+
+The FMT-402 is optional, and absent ports read FFh. Only one card, with its output A, is emulated:
+
+| Port | Read | Write |
+|------|------|-------|
+| 0E50h / 0E51h | Output A: data / i8251 status | Data / mode and command |
+| 0E53h | FIFO status: bit 0 busy, bit 1 receive empty | Bit 0: FIFO enable |
+| 0E54h / 0E55h | Output B: data / status | Data / mode and command |
+| 0E70h | Output requests, 0 = request | Output interrupt mask |
+| 0E71h | Input requests, 0 = request | Input interrupt mask |
+| 0E73h | Timer 0 and 1 requests | Timer interrupt mask |
+| 0E74h-0E76h | 8253 counters | 8253 counters |
+| 0E77h | - | 8253 control |
+
+- The usual setup writes 00h three times, 40h (reset), 4Eh (8N1, x16) and 37h to the command port. The status then reads
+  05h. The rate is 31,250 baud, 320 us a byte.
+- The outputs interrupt on IRQ 4 while a transmitter is ready, on and unmasked. The timer runs at 500 kHz and interrupts
+  on IRQ 5 while an unmasked output is high. A new control word is the acknowledge.
+- TBIOS plays its music at the tempo of the card's timer when it finds a card, with or without MIDI.
+
+---
+
+## 8. Driving it from MCP
 
 - `get_ym3438_status` (all channels, or `channel` 1-6) shows the LFO, channel 3 mode, DAC, timers A and B with status,
   and per channel `frequency` (`f_number`, `block`, `hz`, `note`), `algorithm`, `feedback`, `pan_left`, `pan_right`,
@@ -164,13 +187,15 @@ Reset leaves the master output disabled. The mutes do not stop the FM timers or 
   `address`. The PCM wave RAM memory area holds the 64 KB for `read_memory` and `write_memory`.
 - `get_pcm16_status` shows the 16-bit AD/DA PCM of the later models (`fitted`, direction, format, rate, DMA, buffer
   stages, errors, level monitors).
+- `get_midi_status` shows the MIDI card (outputs, masks, requests, timer), MIDI out (capture, messages, SysEx log, kind of
+  music, port) and the built-in synth.
 - `get_sound_status` shows the MB87078 volumes (04E0h/04E2h, per channel `gain_db` and `use`), the FM and PCM mutes
   (04D5h), the output gate and LED (04ECh), the 04E9h-04EBh causes (`cause_fm`, `cause_pcm`, timer flags) and the
   debugger mutes.
-- `set_audio_mute` mutes `fm` (channel 1-6), `pcm` (1-8), `cdda`, `buzzer` or `pcm16` in the debugger only; the guest
+- `set_audio_mute` mutes `fm` (channel 1-6), `pcm` (1-8), `cdda`, `buzzer`, `pcm16` or `midi` in the debugger only; the guest
   never sees it. `write_io_port` plays the chips without a game: the YM3438 (04D8h-04DEh), the volumes (04E0h/04E2h)
   and the RF5C68 (04F0h-04F8h).
 - Break on the sound interrupt with `set_breakpoint_on_interrupt` and `irq: 13`.
 - Trace `fm.key`, `fm.frequency`, `fm.operators`, `fm.channels`, `fm.global`, `fm.dac`, `fm.timers`, `fm.irqs`,
   `pcm.channels`, `pcm.key`, `pcm.control`, `pcm.irqs`, `pcm16.registers`, `pcm16.data`, `pcm16.dma`, `pcm16.buffer`,
-  `pcm16.irqs`, `mixer.volume` and `mixer.mute`.
+  `pcm16.irqs`, `midi.messages`, `midi.bytes`, `midi.registers`, `midi.irqs`, `mixer.volume` and `mixer.mute`.

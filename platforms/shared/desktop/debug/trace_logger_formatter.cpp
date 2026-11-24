@@ -50,6 +50,7 @@ static void format_sprite(const GT_Trace_Entry& entry, char* buffer, size_t size
 static void format_fm(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_pcm(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_pcm16(const GT_Trace_Entry& entry, char* buffer, size_t size);
+static void format_midi(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_mixer(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_cdrom(const GT_Trace_Entry& entry, char* buffer, size_t size);
 static void format_fdc(const GT_Trace_Entry& entry, char* buffer, size_t size);
@@ -157,6 +158,9 @@ void trace_logger_format_entry(const GT_Trace_Entry& entry,
             break;
         case TRACE_PCM16:
             format_pcm16(entry, buffer, buffer_size);
+            break;
+        case TRACE_MIDI:
+            format_midi(entry, buffer, buffer_size);
             break;
         case TRACE_MIXER:
             format_mixer(entry, buffer, buffer_size);
@@ -1086,6 +1090,90 @@ static void format_pcm16(const GT_Trace_Entry& entry, char* buffer, size_t size)
             break;
         default:
             format_event(buffer, size, "PCM16", "IRQ", "IRQ%u  Causes:$%02X", entry.pcm16.line, entry.pcm16.causes);
+            break;
+    }
+}
+
+static const char* midi_message_name(const u8* data, int count)
+{
+    u8 status = data[0];
+
+    if (status == 0xF0)
+    {
+        if (count >= 2 && data[1] == 0x41) return "SYSEX ROLAND";
+        if (count >= 2 && data[1] == 0x43) return "SYSEX YAMAHA";
+        if (count >= 2 && (data[1] == 0x7E || data[1] == 0x7F)) return "SYSEX UNIVERSAL";
+        return "SYSEX";
+    }
+
+    switch (status & 0xF0)
+    {
+        case 0x80: return "NOTE OFF";
+        case 0x90: return count >= 3 && data[2] == 0 ? "NOTE OFF" : "NOTE ON";
+        case 0xA0: return "AFTERTOUCH";
+        case 0xB0: return "CONTROL";
+        case 0xC0: return "PROGRAM";
+        case 0xD0: return "PRESSURE";
+        case 0xE0: return "PITCH BEND";
+        default: return status == 0xF8 ? "CLOCK" : status == 0xFA ? "START" : status == 0xFC ? "STOP" :
+            status == 0xFE ? "ACTIVE SENSE" : status == 0xFF ? "RESET" : "SYSTEM";
+    }
+}
+
+static const char* midi_register_name(u16 port)
+{
+    switch (port)
+    {
+        case 0x0E50: return "DATA A";
+        case 0x0E51: return "COMMAND A";
+        case 0x0E53: return "FIFO CONTROL";
+        case 0x0E54: return "DATA B";
+        case 0x0E55: return "COMMAND B";
+        case 0x0E70: return "OUTPUT MASK";
+        case 0x0E71: return "INPUT MASK";
+        case 0x0E73: return "TIMER MASK";
+        case 0x0E74: return "COUNTER 0";
+        case 0x0E75: return "COUNTER 1";
+        case 0x0E76: return "COUNTER 2";
+        case 0x0E77: return "TIMER CONTROL";
+        default: return "UNUSED";
+    }
+}
+
+static void format_midi(const GT_Trace_Entry& entry, char* buffer, size_t size)
+{
+    u8 value = entry.midi.value;
+
+    switch (entry.event)
+    {
+        case TRACE_MIDI_MESSAGE:
+        {
+            char bytes[96];
+            int count = MIN((int)entry.midi.count, 24);
+            bytes[0] = 0;
+
+            for (int i = 0; i < count; i++)
+                snprintf(bytes + i * 3, sizeof(bytes) - i * 3, " %02X", entry.midi.bytes[i]);
+
+            if (entry.midi.bytes[0] == 0xF0)
+                format_event(buffer, size, "MIDI", "MESSAGE", "%s  %u bytes:%s%s",
+                    midi_message_name(entry.midi.bytes, count), entry.midi.length, bytes, entry.midi.length > 24 ? " ..." : "");
+            else if (entry.midi.bytes[0] < 0xF0)
+                format_event(buffer, size, "MIDI", "MESSAGE", "CH%-2u %-10s%s", (entry.midi.bytes[0] & 0x0F) + 1,
+                    midi_message_name(entry.midi.bytes, count), bytes);
+            else
+                format_event(buffer, size, "MIDI", "MESSAGE", "%s%s", midi_message_name(entry.midi.bytes, count), bytes);
+            break;
+        }
+        case TRACE_MIDI_REGISTER:
+            format_event(buffer, size, "MIDI", "REGISTER", "$%04X %s <- $%02X", entry.midi.port,
+                midi_register_name(entry.midi.port), value);
+            break;
+        case TRACE_MIDI_BYTE:
+            format_event(buffer, size, "MIDI", "BYTE", "Output:%c  $%02X", 'A' + entry.midi.output, value);
+            break;
+        default:
+            format_event(buffer, size, "MIDI", "IRQ", "IRQ%u  Causes:$%02X", entry.midi.line, value);
             break;
     }
 }

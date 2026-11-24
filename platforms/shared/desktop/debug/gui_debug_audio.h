@@ -32,6 +32,7 @@ EXTERN void gui_debug_window_ym3438(void);
 EXTERN void gui_debug_window_ym3438_registers(void);
 EXTERN void gui_debug_window_rf5c68(void);
 EXTERN void gui_debug_window_pcm16(void);
+EXTERN void gui_debug_window_midi(void);
 EXTERN void gui_debug_window_sound_control(void);
 EXTERN void gui_debug_window_cdrom_audio(void);
 

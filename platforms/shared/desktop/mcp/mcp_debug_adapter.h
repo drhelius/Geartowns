@@ -94,6 +94,10 @@ static const McpTraceFilter k_mcp_trace_filters[] =
     { "pcm16.dma", TRACE_PCM16, TRACE_PCM16_EVENT_DMA },
     { "pcm16.buffer", TRACE_PCM16, TRACE_PCM16_EVENT_BUFFER },
     { "pcm16.irqs", TRACE_PCM16, TRACE_PCM16_EVENT_IRQS },
+    { "midi.messages", TRACE_MIDI, TRACE_MIDI_EVENT_MESSAGES },
+    { "midi.bytes", TRACE_MIDI, TRACE_MIDI_EVENT_BYTES },
+    { "midi.registers", TRACE_MIDI, TRACE_MIDI_EVENT_REGISTERS },
+    { "midi.irqs", TRACE_MIDI, TRACE_MIDI_EVENT_IRQS },
     { "mixer.volume", TRACE_MIXER, TRACE_MIXER_EVENT_VOLUME },
     { "mixer.mute", TRACE_MIXER, TRACE_MIXER_EVENT_MUTE },
     { "cdrom.commands", TRACE_CDROM, TRACE_CDROM_EVENT_COMMANDS },
@@ -265,6 +269,7 @@ public:
     json GetYM3438Registers(int part);
     json GetRF5C68Status();
     json GetPCM16Status();
+    json GetMIDIStatus();
     json GetSoundStatus();
     json SetAudioMute(const std::string& source, int channel, bool mute);
 

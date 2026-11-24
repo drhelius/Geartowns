@@ -146,6 +146,9 @@ bool LoadDetector::IsSilent() const
 {
     int samples = m_audio->GetFrameSamples();
 
+    if (m_audio->GetMidiCard()->IsFitted() && m_audio->GetMidiOut()->IsPlaying())
+        return false;
+
     for (int source = 0; source < Audio::AUDIO_SOURCE_COUNT; source++)
     {
         const s16* buffer = m_audio->GetSourceBuffer(source);

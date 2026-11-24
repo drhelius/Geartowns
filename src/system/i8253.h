@@ -78,6 +78,7 @@ public:
     bool GetOutput(int index, u64 tick);
     bool PeekOutput(int index, u64 tick) const;
     u64 GetNextRisingEdge(int index, u64 tick) const;
+    u64 GetNextEdge(int index, u64 tick) const;
     I8253_State* GetState();
     const I8253_State* GetState() const;
     void SaveState(std::ostream& stream);

@@ -41,6 +41,7 @@ enum GT_Trace_Type : u8
     TRACE_FM,
     TRACE_PCM,
     TRACE_PCM16,
+    TRACE_MIDI,
     TRACE_MIXER,
     TRACE_CDROM,
     TRACE_FDC,
@@ -65,6 +66,7 @@ static_assert(TRACE_TYPE_COUNT < 32, "Trace category flags exceed 32 bits");
 #define TRACE_FLAG_FM               (1U << TRACE_FM)
 #define TRACE_FLAG_PCM              (1U << TRACE_PCM)
 #define TRACE_FLAG_PCM16            (1U << TRACE_PCM16)
+#define TRACE_FLAG_MIDI             (1U << TRACE_MIDI)
 #define TRACE_FLAG_MIXER            (1U << TRACE_MIXER)
 #define TRACE_FLAG_CDROM            (1U << TRACE_CDROM)
 #define TRACE_FLAG_FDC              (1U << TRACE_FDC)
@@ -310,6 +312,22 @@ enum GT_Trace_PCM16_Event : u8
 #define TRACE_PCM16_EVENT_DEFAULT   (TRACE_PCM16_EVENT_REGISTERS | TRACE_PCM16_EVENT_DMA | TRACE_PCM16_EVENT_BUFFER | \
     TRACE_PCM16_EVENT_IRQS)
 #define TRACE_PCM16_EVENT_ALL       (TRACE_PCM16_EVENT_DEFAULT | TRACE_PCM16_EVENT_DATA)
+
+enum GT_Trace_MIDI_Event : u8
+{
+    TRACE_MIDI_REGISTER = 0,
+    TRACE_MIDI_BYTE,
+    TRACE_MIDI_MESSAGE,
+    TRACE_MIDI_IRQ
+};
+
+#define TRACE_MIDI_EVENT_REGISTERS (1U << TRACE_MIDI_REGISTER)
+#define TRACE_MIDI_EVENT_BYTES     (1U << TRACE_MIDI_BYTE)
+#define TRACE_MIDI_EVENT_MESSAGES  (1U << TRACE_MIDI_MESSAGE)
+#define TRACE_MIDI_EVENT_IRQS      (1U << TRACE_MIDI_IRQ)
+#define TRACE_MIDI_EVENT_DEFAULT   TRACE_MIDI_EVENT_MESSAGES
+#define TRACE_MIDI_EVENT_ALL       (TRACE_MIDI_EVENT_DEFAULT | TRACE_MIDI_EVENT_REGISTERS | TRACE_MIDI_EVENT_BYTES | \
+    TRACE_MIDI_EVENT_IRQS)
 
 enum GT_Trace_Mixer_Event : u8
 {
@@ -629,6 +647,17 @@ struct GT_Trace_Entry
             u8 read;
             u8 autoinit;
         } pcm16;
+
+        struct
+        {
+            u16 port;
+            u16 length;
+            u8 value;
+            u8 output;
+            u8 line;
+            u8 count;
+            u8 bytes[24];
+        } midi;
 
         struct
         {

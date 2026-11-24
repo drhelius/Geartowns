@@ -22,6 +22,9 @@
 
 #include "../common/common.h"
 
+static const u8 k_midi_voice_lengths[8] = { 3, 3, 3, 3, 2, 2, 3, 0 };
+static const u8 k_midi_mt32_reset[11] = { 0xF0, 0x41, 0x10, 0x16, 0x12, 0x7F, 0x00, 0x00, 0x00, 0x01, 0xF7 };
+
 INLINE s16 clamp_s16(s64 value)
 {
     return (s16)((value < -32768) ? -32768 : ((value > 32767) ? 32767 : value));

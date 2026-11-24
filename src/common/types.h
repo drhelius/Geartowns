@@ -629,6 +629,50 @@ struct GT_Machine_Profile
     const GT_Machine_Bus_Timing* bus_timing;
 };
 
+enum GT_MIDI_Synth
+{
+    GT_MIDI_SYNTH_GM = 0,
+    GT_MIDI_SYNTH_MT32,
+    GT_MIDI_SYNTH_COUNT
+};
+
+struct GT_MIDI_Synth_Info
+{
+    const char* name;
+    const char* id;
+};
+
+enum GT_MIDI_Engine
+{
+    GT_MIDI_ENGINE_NONE = 0,
+    GT_MIDI_ENGINE_MT32,
+    GT_MIDI_ENGINE_SOUNDFONT,
+    GT_MIDI_ENGINE_COUNT
+};
+
+enum GT_MIDI_Out
+{
+    GT_MIDI_OUT_BUILTIN = 0,
+    GT_MIDI_OUT_EXTERNAL,
+    GT_MIDI_OUT_NONE,
+    GT_MIDI_OUT_COUNT
+};
+
+enum GT_MT32_Model
+{
+    GT_MT32_MODEL_AUTO = 0,
+    GT_MT32_MODEL_MT32_OLD,
+    GT_MT32_MODEL_MT32_NEW,
+    GT_MT32_MODEL_CM32L,
+    GT_MT32_MODEL_COUNT
+};
+
+struct GT_MT32_Model_Info
+{
+    const char* name;
+    const char* id;
+};
+
 struct GT_Machine_Config
 {
     GT_Machine_Model model;
@@ -638,6 +682,7 @@ struct GT_Machine_Config
     u32 cpu_clock_rate;
     bool scsi;
     bool fpu;
+    bool midi_card;
     int speed_mode;
 };
 
@@ -648,6 +693,7 @@ struct GT_Machine_Settings
     int ram_mb;
     int fpu;
     int speed_mode;
+    int midi_card;
 };
 
 struct GT_Machine_Report
@@ -657,6 +703,7 @@ struct GT_Machine_Report
     GT_Machine_Source ram;
     GT_Machine_Source fpu;
     GT_Machine_Source speed_mode;
+    GT_Machine_Source midi_card;
     bool fallback;
     const char* title;
     int warning_count;

@@ -494,6 +494,36 @@ u8 IO::ReadPort(u16 port, GT_Bus_Access_Context& context)
                 break;
 
             return m_scsi->Read(port, context.clocks);
+        case 0x0E50:
+            // MIDI card data A
+        case 0x0E51:
+            // MIDI card status A
+        case 0x0E52:
+            // MIDI card FIFO data
+        case 0x0E53:
+            // MIDI card FIFO status
+        case 0x0E54:
+            // MIDI card data B
+        case 0x0E55:
+            // MIDI card status B
+        case 0x0E70:
+            // MIDI card output requests
+        case 0x0E71:
+            // MIDI card input requests
+        case 0x0E73:
+            // MIDI card timer requests
+        case 0x0E74:
+            // MIDI card counter 0
+        case 0x0E75:
+            // MIDI card counter 1
+        case 0x0E76:
+            // MIDI card counter 2
+        case 0x0E77:
+            // MIDI card timer control
+            if (!m_audio->GetMidiCard()->IsFitted())
+                break;
+
+            return m_audio->ReadMidiCard(port, context.clocks);
         case 0xFD90:
             // Palette index
         case 0xFD92:
@@ -767,6 +797,24 @@ bool IO::Peek(u16 port, u64 clocks, u8& value) const
                 return false;
 
             value = m_scsi->Peek(port);
+            break;
+        case 0x0E50:
+        case 0x0E51:
+        case 0x0E52:
+        case 0x0E53:
+        case 0x0E54:
+        case 0x0E55:
+        case 0x0E70:
+        case 0x0E71:
+        case 0x0E73:
+        case 0x0E74:
+        case 0x0E75:
+        case 0x0E76:
+        case 0x0E77:
+            if (!m_audio->GetMidiCard()->IsFitted())
+                return false;
+
+            value = m_audio->GetMidiCard()->Peek(port, clocks);
             break;
         case 0x05C0:
         case 0x05C2:
@@ -1304,6 +1352,37 @@ void IO::Write8(u16 port, u8 value, GT_Bus_Access_Context& context)
         case 0x0C32:
             // SCSI control
             m_scsi->Write(port, value, context.clocks);
+            break;
+        case 0x0E50:
+            // MIDI card data A
+        case 0x0E51:
+            // MIDI card command A
+        case 0x0E52:
+            // MIDI card FIFO data
+        case 0x0E53:
+            // MIDI card FIFO control
+        case 0x0E54:
+            // MIDI card data B
+        case 0x0E55:
+            // MIDI card command B
+        case 0x0E70:
+            // MIDI card output mask
+        case 0x0E71:
+            // MIDI card input mask
+        case 0x0E73:
+            // MIDI card timer mask
+        case 0x0E74:
+            // MIDI card counter 0
+        case 0x0E75:
+            // MIDI card counter 1
+        case 0x0E76:
+            // MIDI card counter 2
+        case 0x0E77:
+            // MIDI card timer control
+            if (!m_audio->GetMidiCard()->IsFitted())
+                break;
+
+            m_audio->WriteMidiCard(port, value, context.clocks);
             break;
         case 0xFD90:
             // Palette index

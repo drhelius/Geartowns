@@ -24,6 +24,9 @@
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "pcm16.h"
+#include "midi_card.h"
+#include "midi_out.h"
+#include "midi_synth.h"
 #include "../cdrom/cdrom_audio.h"
 #include "../system/pit.h"
 #include "../system/scheduler.h"
@@ -81,6 +84,16 @@ INLINE void Audio::SetPCM16Volume(float volume)
     m_pcm16_volume = volume;
 }
 
+INLINE void Audio::SetMT32Volume(float volume)
+{
+    m_mt32_volume = volume;
+}
+
+INLINE void Audio::SetGMVolume(float volume)
+{
+    m_gm_volume = volume;
+}
+
 INLINE YM3438* Audio::GetYM3438()
 {
     return m_ym3438;
@@ -94,6 +107,21 @@ INLINE RF5C68* Audio::GetRF5C68()
 INLINE PCM16* Audio::GetPCM16()
 {
     return m_pcm16;
+}
+
+INLINE MidiCard* Audio::GetMidiCard()
+{
+    return m_midi_card;
+}
+
+INLINE MidiOut* Audio::GetMidiOut()
+{
+    return m_midi_out;
+}
+
+INLINE MidiSynth* Audio::GetMidiSynth()
+{
+    return m_midi_synth;
 }
 
 INLINE Audio::Audio_State* Audio::GetState()
@@ -134,6 +162,8 @@ INLINE const s16* Audio::GetSourceBuffer(int source) const
             return m_cdda_buffer;
         case AUDIO_SOURCE_PCM16:
             return m_pcm16_buffer;
+        case AUDIO_SOURCE_MIDI:
+            return m_midi_buffer;
         default:
             return m_buzzer_buffer;
     }

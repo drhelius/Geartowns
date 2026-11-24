@@ -2,6 +2,8 @@ PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 STATIC_LINKING := 0
 AR             ?= ar
 DISABLE_DYNAREC ?= 0
+DISABLE_MT32 ?= 0
+DISABLE_SOUNDFONT ?= 0
 
 ifeq ($(platform),)
 	platform = unix
@@ -338,6 +340,14 @@ ifeq ($(DISABLE_DYNAREC), 1)
 	PLATFORM_FLAGS += -DGT_DISABLE_DYNAREC
 endif
 
+ifeq ($(DISABLE_MT32), 1)
+	PLATFORM_FLAGS += -DGT_DISABLE_MT32
+endif
+
+ifeq ($(DISABLE_SOUNDFONT), 1)
+	PLATFORM_FLAGS += -DGT_DISABLE_SOUNDFONT
+endif
+
 ifneq (,$(filter unix% win% classic_armv7_a7 rs90 gcw0 retrofw miyoo,$(platform)))
 	PLATFORM_FLAGS += -pthread
 	LDFLAGS += -pthread
@@ -387,6 +397,16 @@ INCLUDES += -I$(DEPS_DIR)/zstd
 INCLUDES += -I$(DEPS_DIR)/lzma/include
 INCLUDES += -I$(DEPS_DIR)/lightning/include
 INCLUDES += -I$(DEPS_DIR)/bochs_fpu
+INCLUDES += -I$(DEPS_DIR)/mt32emu/src
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/include
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/bindings
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/drivers
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/midi
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/rvoice
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/sfloader
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/synth
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/utils
 
 CFLAGS   += -DGT_DISABLE_DISASSEMBLER -DGT_DISABLE_VGMRECORDER -Wall -fno-exceptions -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)
 CXXFLAGS += -DGT_DISABLE_DISASSEMBLER -DGT_DISABLE_VGMRECORDER -Wall -fno-exceptions -D__LIBRETRO__ -DZ7_ST -DZSTD_DISABLE_ASM $(INCLUDES) $(fpic)

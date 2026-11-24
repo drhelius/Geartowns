@@ -26,7 +26,7 @@ struct GT_DB_Entry
 {
     u32 crc;
     const char* title;
-    u16 flags;
+    u32 flags;
     u8 model;
     u8 ram_mb;
     u8 cpu_mhz;
@@ -45,6 +45,7 @@ struct GT_DB_Entry
 #define GT_GAMEDB_FLOPPY_OPTIONAL          0x0040
 #define GT_GAMEDB_FLOPPY_PROTECTED         0x0080
 #define GT_GAMEDB_FLOPPY_MASK              0x00F0
+#define GT_GAMEDB_MIDI_CARD                0x0100
 #define GT_GAMEDB_FIRMWARE_EXTENSION       0x0200
 #define GT_GAMEDB_FIRMWARE_SERIAL          0x0400
 #define GT_GAMEDB_FIRMWARE_SYSTEM          0x0800
@@ -53,6 +54,8 @@ struct GT_DB_Entry
 #define GT_GAMEDB_FIRMWARE_DICTIONARY      0x4000
 #define GT_GAMEDB_FIRMWARE_FONT20          0x8000
 #define GT_GAMEDB_FIRMWARE_MASK            0xFE00
+#define GT_GAMEDB_MIDI_MT32                0x10000
+#define GT_GAMEDB_MIDI_GM                  0x20000
 
 #define GT_GAMEDB_PORT_DEFAULT             0
 #define GT_GAMEDB_PORT_NONE                1

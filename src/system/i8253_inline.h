@@ -84,6 +84,20 @@ INLINE u64 I8253::GetNextRisingEdge(int index, u64 tick) const
     return edge;
 }
 
+INLINE u64 I8253::GetNextEdge(int index, u64 tick) const
+{
+    const I8253_Counter& counter = m_state.counters[index];
+    u64 edge = GetNextRisingEdge(index, tick);
+
+    if ((edge == k_i8253_no_edge) || (counter.mode < 2))
+        return edge;
+
+    bool reloaded = counter.reload_pending && (edge > counter.pending_load);
+    u32 count = reloaded ? counter.pending_count : counter.count;
+    u64 falling = edge - ((counter.mode == 3) ? (count / 2) : 1);
+    return falling > tick ? falling : edge;
+}
+
 INLINE I8253::I8253_State* I8253::GetState()
 {
     return &m_state;

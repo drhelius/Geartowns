@@ -23,6 +23,9 @@
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "pcm16.h"
+#include "midi_card.h"
+#include "midi_out.h"
+#include "midi_synth.h"
 #include "../cdrom/cdrom_audio.h"
 #include "../system/memory.h"
 #include "../system/pic.h"
@@ -71,6 +74,9 @@ Audio::Audio()
     InitPointer(m_ym3438);
     InitPointer(m_rf5c68);
     InitPointer(m_pcm16);
+    InitPointer(m_midi_card);
+    InitPointer(m_midi_out);
+    InitPointer(m_midi_synth);
     InitPointer(m_cdrom_audio);
     InitPointer(m_scheduler);
     InitPointer(m_pic);
@@ -84,6 +90,8 @@ Audio::Audio()
     m_cdda_volume = 1.0f;
     m_buzzer_volume = 1.0f;
     m_pcm16_volume = 1.0f;
+    m_mt32_volume = 1.0f;
+    m_gm_volume = 1.0f;
     m_cdda_gain_left = 0;
     m_cdda_gain_right = 0;
     m_pcm16_gain_left = 0;
@@ -111,6 +119,8 @@ Audio::Audio()
     memset(m_cdda_buffer, 0, sizeof(m_cdda_buffer));
     memset(m_buzzer_buffer, 0, sizeof(m_buzzer_buffer));
     memset(m_pcm16_buffer, 0, sizeof(m_pcm16_buffer));
+    memset(m_midi_buffer, 0, sizeof(m_midi_buffer));
+    m_midi_rendered = false;
     memset(m_fm_channel_buffer, 0, sizeof(m_fm_channel_buffer));
     memset(m_pcm_channel_buffer, 0, sizeof(m_pcm_channel_buffer));
     SetPCMLowpassCutoff(k_audio_pcm_lowpass_cutoff);
@@ -118,6 +128,9 @@ Audio::Audio()
 
 Audio::~Audio()
 {
+    SafeDelete(m_midi_synth);
+    SafeDelete(m_midi_card);
+    SafeDelete(m_midi_out);
     SafeDelete(m_pcm16);
     SafeDelete(m_rf5c68);
     SafeDelete(m_ym3438);
@@ -140,9 +153,20 @@ void Audio::Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* p
     if (!IsValidPointer(m_pcm16))
         m_pcm16 = new PCM16();
 
+    if (!IsValidPointer(m_midi_card))
+        m_midi_card = new MidiCard();
+
+    if (!IsValidPointer(m_midi_out))
+        m_midi_out = new MidiOut();
+
+    if (!IsValidPointer(m_midi_synth))
+        m_midi_synth = new MidiSynth();
+
     m_ym3438->Init();
     m_rf5c68->Init();
     m_pcm16->Init(pic, memory);
+    m_midi_card->Init(scheduler, pic, m_midi_out);
+    m_midi_synth->Init(m_midi_out);
     Reset();
 }
 
@@ -150,6 +174,8 @@ void Audio::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = trace_logger;
     m_pcm16->SetTraceLogger(trace_logger);
+    m_midi_card->SetTraceLogger(trace_logger);
+    m_midi_out->SetTraceLogger(trace_logger);
 }
 
 void Audio::SetFeatures(u32 features)
@@ -159,11 +185,18 @@ void Audio::SetFeatures(u32 features)
     UpdateGates();
 }
 
+void Audio::SetMidiCard(bool fitted)
+{
+    m_midi_card->SetFitted(fitted);
+}
+
 void Audio::Reset()
 {
     m_ym3438->Reset();
     m_rf5c68->Reset();
     m_pcm16->Reset(m_scheduler->GetClocks());
+    m_midi_card->Reset();
+    m_midi_out->Reset();
 
     m_state.sound_clock_remainder = 0;
     m_state.sample_clock_counter = 0;
@@ -343,6 +376,27 @@ void Audio::WritePCM16(u16 port, u8 value)
 {
     m_pcm16->Write(port, value, m_state.clocks);
     UpdatePCM16Event();
+}
+
+u8 Audio::ReadMidiCard(u16 port, u64 clocks)
+{
+    Synchronize(clocks);
+    m_midi_out->SetPosition(m_buffer_index >> 1);
+    return m_midi_card->Read(port, clocks);
+}
+
+void Audio::WriteMidiCard(u16 port, u8 value, u64 clocks)
+{
+    Synchronize(clocks);
+    m_midi_out->SetPosition(m_buffer_index >> 1);
+    m_midi_card->Write(port, value, clocks);
+}
+
+void Audio::HandleMidiEvent(u64 clocks)
+{
+    Synchronize(clocks);
+    m_midi_out->SetPosition(m_buffer_index >> 1);
+    m_midi_card->HandleEvent(clocks);
 }
 
 u8 Audio::ReadPCMIRQFlags()
@@ -648,6 +702,21 @@ void Audio::CaptureChannels(int index)
         m_pcm_channel_buffer[i][index] = m_rf5c68->GetChannelOutput(i);
 }
 
+// The synth plays behind the machine's own mixer, as a module on another amplifier would
+void Audio::RenderMIDI(int samples)
+{
+    if (m_midi_synth->IsActive() && (m_midi_out->GetCapture() != MidiOut::MIDI_OUT_CAPTURE_OFF) && (samples > 0))
+    {
+        m_midi_synth->Render(m_midi_buffer, samples >> 1);
+        m_midi_rendered = true;
+    }
+    else if (m_midi_rendered)
+    {
+        memset(m_midi_buffer, 0, sizeof(m_midi_buffer));
+        m_midi_rendered = false;
+    }
+}
+
 void Audio::EndFrame(s16* sample_buffer, int* sample_count)
 {
     int samples = m_buffer_index;
@@ -655,6 +724,7 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     m_buffer_index = 0;
     m_buffer_overflow = false;
     m_frame_samples = samples;
+    RenderMIDI(samples);
 
     if (!IsValidPointer(sample_buffer) || !IsValidPointer(sample_count))
     {
@@ -677,21 +747,23 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
     float cdda_volume = m_source_mute[AUDIO_SOURCE_CDDA] ? 0.0f : m_cdda_volume;
     float buzzer_volume = m_source_mute[AUDIO_SOURCE_BUZZER] ? 0.0f : m_buzzer_volume;
     float pcm16_volume = m_source_mute[AUDIO_SOURCE_PCM16] ? 0.0f : m_pcm16_volume;
+    float midi_volume = m_source_mute[AUDIO_SOURCE_MIDI] ? 0.0f :
+        (m_midi_synth->GetEngine() == GT_MIDI_ENGINE_MT32) ? m_mt32_volume : m_gm_volume;
 
     s32 dc_left = m_state.output_dc_left;
     s32 dc_right = m_state.output_dc_right;
 
     // FM enters at its full DAC sum and PCM at 5/8 of its scale
     if ((m_master_volume == 1.0f) && (fm_volume == 1.0f) && (pcm_volume == 1.0f) && (cdda_volume == 1.0f) &&
-        (buzzer_volume == 1.0f) && (pcm16_volume == 1.0f))
+        (buzzer_volume == 1.0f) && (pcm16_volume == 1.0f) && (midi_volume == 1.0f))
     {
         for (int i = 0; i < samples; i += 2)
         {
             s32 left = (s32)m_fm_buffer[i] + ((m_pcm_buffer[i] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) +
-                m_cdda_buffer[i] + m_buzzer_buffer[i] + m_pcm16_buffer[i];
+                m_cdda_buffer[i] + m_buzzer_buffer[i] + m_pcm16_buffer[i] + m_midi_buffer[i];
             s32 right = (s32)m_fm_buffer[i + 1] +
                 ((m_pcm_buffer[i + 1] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) + m_cdda_buffer[i + 1] +
-                m_buzzer_buffer[i + 1] + m_pcm16_buffer[i + 1];
+                m_buzzer_buffer[i + 1] + m_pcm16_buffer[i + 1] + m_midi_buffer[i + 1];
             left = HighPass(dc_left, left);
             right = HighPass(dc_right, right);
             sample_buffer[i] = clamp_s16(left);
@@ -705,11 +777,11 @@ void Audio::EndFrame(s16* sample_buffer, int* sample_count)
             float left = (float)m_fm_buffer[i] * fm_volume +
                 (float)((m_pcm_buffer[i] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) * pcm_volume +
                 (float)m_cdda_buffer[i] * cdda_volume + (float)m_buzzer_buffer[i] * buzzer_volume +
-                (float)m_pcm16_buffer[i] * pcm16_volume;
+                (float)m_pcm16_buffer[i] * pcm16_volume + (float)m_midi_buffer[i] * midi_volume;
             float right = (float)m_fm_buffer[i + 1] * fm_volume +
                 (float)((m_pcm_buffer[i + 1] * k_audio_pcm_output_gain) >> k_audio_pcm_output_shift) * pcm_volume +
                 (float)m_cdda_buffer[i + 1] * cdda_volume + (float)m_buzzer_buffer[i + 1] * buzzer_volume +
-                (float)m_pcm16_buffer[i + 1] * pcm16_volume;
+                (float)m_pcm16_buffer[i + 1] * pcm16_volume + (float)m_midi_buffer[i + 1] * midi_volume;
             s32 out_left = (s32)((float)HighPass(dc_left, (s32)left) * m_master_volume);
             s32 out_right = (s32)((float)HighPass(dc_right, (s32)right) * m_master_volume);
             sample_buffer[i] = clamp_s16(out_left);
@@ -729,6 +801,12 @@ void Audio::SaveState(std::ostream& stream)
     m_ym3438->SaveState(stream);
     m_rf5c68->SaveState(stream);
     m_pcm16->SaveState(stream);
+
+    if (m_midi_card->IsFitted())
+    {
+        m_midi_card->SaveState(stream);
+        m_midi_out->SaveState(stream);
+    }
 }
 
 void Audio::LoadState(std::istream& stream, int version)
@@ -742,6 +820,12 @@ void Audio::LoadState(std::istream& stream, int version)
         m_pcm16->LoadState(stream);
     else
         m_pcm16->Reset(m_state.clocks);
+
+    if (m_midi_card->IsFitted() && (version >= GT_SAVESTATE_MIDI_VERSION))
+    {
+        m_midi_card->LoadState(stream);
+        m_midi_out->LoadState(stream);
+    }
 
     SanitizeState();
 }

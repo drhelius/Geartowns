@@ -23,6 +23,64 @@ SOURCES_LIGHTNING := \
     $(DEPS_DIR)/lightning/lib/jit_print.c \
     $(DEPS_DIR)/lightning/lib/jit_size.c \
 
+SOURCES_MT32 := \
+    $(DEPS_DIR)/mt32emu/src/Analog.cpp \
+    $(DEPS_DIR)/mt32emu/src/BReverbModel.cpp \
+    $(DEPS_DIR)/mt32emu/src/Display.cpp \
+    $(DEPS_DIR)/mt32emu/src/File.cpp \
+    $(DEPS_DIR)/mt32emu/src/LA32FloatWaveGenerator.cpp \
+    $(DEPS_DIR)/mt32emu/src/LA32Ramp.cpp \
+    $(DEPS_DIR)/mt32emu/src/LA32WaveGenerator.cpp \
+    $(DEPS_DIR)/mt32emu/src/Part.cpp \
+    $(DEPS_DIR)/mt32emu/src/Partial.cpp \
+    $(DEPS_DIR)/mt32emu/src/PartialManager.cpp \
+    $(DEPS_DIR)/mt32emu/src/Poly.cpp \
+    $(DEPS_DIR)/mt32emu/src/ROMInfo.cpp \
+    $(DEPS_DIR)/mt32emu/src/Synth.cpp \
+    $(DEPS_DIR)/mt32emu/src/TVA.cpp \
+    $(DEPS_DIR)/mt32emu/src/TVF.cpp \
+    $(DEPS_DIR)/mt32emu/src/TVP.cpp \
+    $(DEPS_DIR)/mt32emu/src/Tables.cpp \
+    $(DEPS_DIR)/mt32emu/src/sha1/sha1.cpp \
+
+SOURCES_SOUNDFONT := \
+    $(DEPS_DIR)/fluidsynth/fluid_geartowns.c \
+    $(DEPS_DIR)/fluidsynth/fluid_tables.c \
+    $(DEPS_DIR)/fluidsynth/src/drivers/fluid_audio_convert.cpp \
+    $(DEPS_DIR)/fluidsynth/src/midi/fluid_midi.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_adsr_env.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_chorus.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_iir_filter.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_iir_filter_impl.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_lfo.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rev.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rev_dattorro.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rev_fdn.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rev_freeverb.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rev_lexverb.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rvoice.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rvoice_dsp.cpp \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rvoice_event.c \
+    $(DEPS_DIR)/fluidsynth/src/rvoice/fluid_rvoice_mixer.c \
+    $(DEPS_DIR)/fluidsynth/src/sfloader/fluid_defsfont.c \
+    $(DEPS_DIR)/fluidsynth/src/sfloader/fluid_samplecache.c \
+    $(DEPS_DIR)/fluidsynth/src/sfloader/fluid_sffile.c \
+    $(DEPS_DIR)/fluidsynth/src/sfloader/fluid_sfont.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_chan.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_gen.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_mod.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_synth.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_synth_monopoly.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_synth_write_int.cpp \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_tuning.c \
+    $(DEPS_DIR)/fluidsynth/src/synth/fluid_voice.c \
+    $(DEPS_DIR)/fluidsynth/src/utils/fluid_conv.c \
+    $(DEPS_DIR)/fluidsynth/src/utils/fluid_hash.c \
+    $(DEPS_DIR)/fluidsynth/src/utils/fluid_list.c \
+    $(DEPS_DIR)/fluidsynth/src/utils/fluid_ringbuffer.c \
+    $(DEPS_DIR)/fluidsynth/src/utils/fluid_settings.c \
+    $(DEPS_DIR)/fluidsynth/src/utils/fluid_sys.c \
+
 SOURCES_CXX := \
     $(DEPS_DIR)/imgui/imgui_impl_sdl3.cpp \
     $(DEPS_DIR)/imgui/imgui_impl_opengl3.cpp \
@@ -100,8 +158,14 @@ SOURCES_CXX := \
     $(SRC_DIR)/common/profiler.cpp \
     $(SRC_DIR)/common/trace_logger.cpp \
     $(SRC_DIR)/audio/audio.cpp \
+    $(SRC_DIR)/audio/midi_card.cpp \
+    $(SRC_DIR)/audio/midi_out.cpp \
+    $(SRC_DIR)/audio/midi_synth.cpp \
+    $(SRC_DIR)/audio/midi_synth_host.cpp \
+    $(SRC_DIR)/audio/mt32_engine.cpp \
     $(SRC_DIR)/audio/pcm16.cpp \
     $(SRC_DIR)/audio/rf5c68.cpp \
+    $(SRC_DIR)/audio/soundfont_engine.cpp \
     $(SRC_DIR)/audio/ym3438.cpp \
     $(SRC_DIR)/audio/vgm_recorder.cpp \
     $(SRC_DIR)/cdrom/cdrom.cpp \
@@ -149,6 +213,7 @@ SOURCES_CXX := \
     $(SRC_DIR)/media/media_file.cpp \
     $(SRC_DIR)/media/media_file_native.cpp \
     $(SRC_DIR)/media/ogg_vorbis_decoder.cpp \
+    $(SRC_DIR)/system/i8251.cpp \
     $(SRC_DIR)/system/i8253.cpp \
     $(SRC_DIR)/system/i8259.cpp \
     $(SRC_DIR)/system/io.cpp \

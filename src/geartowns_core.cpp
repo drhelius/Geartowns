@@ -93,6 +93,7 @@ GeartownsCore::GeartownsCore()
     m_machine_settings.cpu_mhz = GT_MACHINE_AUTO;
     m_machine_settings.ram_mb = GT_MACHINE_AUTO;
     m_machine_settings.fpu = GT_MACHINE_AUTO;
+    m_machine_settings.midi_card = GT_MACHINE_AUTO;
     m_machine_settings.speed_mode = GT_MACHINE_AUTO;
     InitPointer(m_auto_entry);
     m_auto_three_mode = false;
@@ -812,6 +813,9 @@ INLINE void GeartownsCore::DispatchEvents()
             case SCHEDULER_EVENT_AUDIO:
                 m_audio->HandleEvent(clocks);
                 break;
+            case SCHEDULER_EVENT_MIDI:
+                m_audio->HandleMidiEvent(clocks);
+                break;
             default:
                 break;
         }
@@ -887,6 +891,7 @@ bool GeartownsCore::IsMachineConfigPending()
         (m_pending_machine_config.cpu_clock_rate != m_machine_config.cpu_clock_rate) ||
         (m_pending_machine_config.scsi != m_machine_config.scsi) ||
         (m_pending_machine_config.fpu != m_machine_config.fpu) ||
+        (m_pending_machine_config.midi_card != m_machine_config.midi_card) ||
         (m_pending_machine_config.speed_mode != m_machine_config.speed_mode);
 }
 
@@ -1230,6 +1235,17 @@ void GeartownsCore::EnableFastHardDiskTiming(bool enabled)
 bool GeartownsCore::IsFastHardDiskTimingEnabled() const
 {
     return m_fast_hard_disk_timing;
+}
+
+int GeartownsCore::GetDatabaseMidiSynth() const
+{
+    if (!IsValidPointer(m_auto_entry))
+        return -1;
+
+    if ((m_auto_entry->flags & GT_GAMEDB_MIDI_MT32) != 0)
+        return GT_MIDI_SYNTH_MT32;
+
+    return (m_auto_entry->flags & GT_GAMEDB_MIDI_GM) != 0 ? GT_MIDI_SYNTH_GM : -1;
 }
 
 void GeartownsCore::LockRAMSize(bool locked)
@@ -1802,7 +1818,8 @@ bool GeartownsCore::LoadState(std::istream& stream, GT_SaveState_Media* media)
     bool same_machine = (m_machine_config.model == machine_config.model) &&
         (m_machine_config.cpu == machine_config.cpu) && (m_machine_config.ram_size == machine_config.ram_size) &&
         (m_machine_config.floppy_drives == machine_config.floppy_drives) &&
-        (m_machine_config.scsi == machine_config.scsi) && (m_machine_config.fpu == machine_config.fpu);
+        (m_machine_config.scsi == machine_config.scsi) && (m_machine_config.fpu == machine_config.fpu) &&
+        (m_machine_config.midi_card == machine_config.midi_card);
 
     if (!same_machine)
     {
@@ -2030,7 +2047,6 @@ bool GeartownsCore::GetSaveStateScreenshot(int index, const char* path, GT_SaveS
 
 void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& config, int version)
 {
-    UNUSED(version);
     G_SERIALIZE(serializer, config.model);
     G_SERIALIZE(serializer, config.cpu);
     G_SERIALIZE(serializer, config.ram_size);
@@ -2038,6 +2054,11 @@ void GeartownsCore::Serialize(StateSerializer& serializer, GT_Machine_Config& co
     G_SERIALIZE(serializer, config.cpu_clock_rate);
     G_SERIALIZE(serializer, config.scsi);
     G_SERIALIZE(serializer, config.fpu);
+
+    if (version >= GT_SAVESTATE_MIDI_VERSION)
+        G_SERIALIZE(serializer, config.midi_card);
+    else
+        config.midi_card = false;
 }
 
 void GeartownsCore::SerializeMedia(StateSerializer& serializer, GT_SaveState_Media& media, u32 version)
@@ -2090,6 +2111,8 @@ void GeartownsCore::SanitizeMachineConfig(GT_Machine_Config& config)
     config.fpu = (profile.fpu == GT_MACHINE_FPU_INTEGRATED) || (config.fpu && (profile.fpu != GT_MACHINE_FPU_NONE));
     config.scsi = ((profile.features & GT_MACHINE_FEATURE_SCSI) != 0) ||
         (config.scsi && (config.model == GT_MACHINE_MODEL1_2));
+
+    config.midi_card = config.midi_card && (config.model != GT_MACHINE_MARTY);
 
     if ((profile.features & GT_MACHINE_FEATURE_SPEED_CONTROL) == 0)
         config.speed_mode = GT_MACHINE_AUTO;
@@ -2301,6 +2324,7 @@ void GeartownsCore::ResolveMachineConfig()
     bool auto_cpu = m_machine_settings.cpu_mhz <= 0;
     bool auto_ram = m_machine_settings.ram_mb <= 0;
     bool auto_fpu = m_machine_settings.fpu < 0;
+    bool auto_midi = m_machine_settings.midi_card < 0;
     bool auto_speed = m_machine_settings.speed_mode < 0;
     bool database = auto_model && IsValidPointer(entry);
     bool prefer_pcm16 = database && ((entry->flags & GT_GAMEDB_PREFER_PCM16) != 0);
@@ -2340,11 +2364,13 @@ void GeartownsCore::ResolveMachineConfig()
     config.ram_size = auto_ram ? 0 : (u32)m_machine_settings.ram_mb * megabyte;
     config.scsi = HasHardDisks();
     config.fpu = !auto_fpu && (m_machine_settings.fpu != 0);
+    config.midi_card = !auto_midi && (m_machine_settings.midi_card != 0);
     config.speed_mode = auto_speed ? GT_MACHINE_AUTO : m_machine_settings.speed_mode != 0 ? 1 : 0;
     report.model = auto_model ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
     report.cpu_clock = auto_cpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.ram = auto_ram ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.fpu = auto_fpu ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
+    report.midi_card = auto_midi ? GT_MACHINE_SOURCE_DEFAULT : GT_MACHINE_SOURCE_USER;
     report.speed_mode = auto_speed ? GT_MACHINE_SOURCE_MODEL : GT_MACHINE_SOURCE_USER;
     report.fallback = auto_model && (config.model != named);
     report.title = IsValidPointer(entry) ? entry->title : NULL;
@@ -2374,6 +2400,12 @@ void GeartownsCore::ResolveMachineConfig()
         report.fpu = GT_MACHINE_SOURCE_DATABASE;
     }
 
+    if (IsValidPointer(entry) && auto_midi && ((entry->flags & GT_GAMEDB_MIDI_CARD) != 0))
+    {
+        config.midi_card = true;
+        report.midi_card = GT_MACHINE_SOURCE_DATABASE;
+    }
+
     if ((report.model == GT_MACHINE_SOURCE_DATABASE) && auto_speed &&
         (k_machine_cpus[k_machine_profiles[config.model].cpu].family >= 4))
     {
@@ -2386,6 +2418,10 @@ void GeartownsCore::ResolveMachineConfig()
     if (!auto_fpu && (m_machine_settings.fpu != 0) && !config.fpu)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "This machine has no socket for an FPU");
+
+    if (!auto_midi && (m_machine_settings.midi_card != 0) && !config.midi_card)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "This machine has no slot for a MIDI card");
 
     if ((m_machine_settings.speed_mode > 0) &&
         ((k_machine_profiles[config.model].features & GT_MACHINE_FEATURE_SPEED_CONTROL) == 0))
@@ -2409,6 +2445,14 @@ void GeartownsCore::ResolveMachineConfig()
             config.ram_size / megabyte);
         config.ram_size = m_machine_config.ram_size;
         report.ram = m_machine_report.ram;
+    }
+
+    if (m_ram_size_locked && m_powered && (config.midi_card != m_machine_config.midi_card))
+    {
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "Restart the content to %s the MIDI card", config.midi_card ? "fit" : "remove");
+        config.midi_card = m_machine_config.midi_card;
+        report.midi_card = m_machine_report.midi_card;
     }
 
     if ((database || three_mode) && (config.model != named))
@@ -2436,6 +2480,10 @@ void GeartownsCore::ResolveMachineConfig()
     if (((entry->flags & GT_GAMEDB_FPU) != 0) && !config.fpu)
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
             "Needs an FPU, this machine has none");
+
+    if (((entry->flags & GT_GAMEDB_MIDI_CARD) != 0) && !config.midi_card)
+        snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
+            "Needs a MIDI card, this machine has none");
 
     if (((entry->flags & GT_GAMEDB_HDD) != 0) && !HasHardDisks())
         snprintf(report.warnings[report.warning_count++], GT_MACHINE_WARNING_SIZE,
@@ -2556,7 +2604,10 @@ void GeartownsCore::ApplyMachineConfig()
         m_cdrom->SetFeatures(profile.features);
 
     if (IsValidPointer(m_audio))
+    {
         m_audio->SetFeatures(profile.features);
+        m_audio->SetMidiCard(m_machine_config.midi_card);
+    }
 
     if (IsValidPointer(m_io))
         m_io->UpdateDecodedPorts();

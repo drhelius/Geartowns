@@ -259,6 +259,189 @@
     <ClCompile Include="..\..\src\system\memory.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\audio\midi_out.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio\midi_synth.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio\midi_synth_host.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio\mt32_engine.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio\soundfont_engine.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Analog.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\BReverbModel.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Display.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\File.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\LA32FloatWaveGenerator.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\LA32Ramp.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\LA32WaveGenerator.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Part.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Partial.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\PartialManager.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Poly.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\ROMInfo.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Synth.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\TVA.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\TVF.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\TVP.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\Tables.cpp">
+      <Filter>dependencies\mt32emu</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\mt32emu\src\sha1\sha1.cpp">
+      <Filter>dependencies\mt32emu\src\sha1</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\fluid_geartowns.c">
+      <Filter>dependencies\fluidsynth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\fluid_tables.c">
+      <Filter>dependencies\fluidsynth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\drivers\fluid_audio_convert.cpp">
+      <Filter>dependencies\fluidsynth\src\drivers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\midi\fluid_midi.c">
+      <Filter>dependencies\fluidsynth\src\midi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_adsr_env.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_chorus.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_iir_filter.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_iir_filter_impl.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_lfo.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rev.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rev_dattorro.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rev_fdn.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rev_freeverb.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rev_lexverb.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rvoice.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rvoice_dsp.cpp">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rvoice_event.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\rvoice\fluid_rvoice_mixer.c">
+      <Filter>dependencies\fluidsynth\src\rvoice</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\sfloader\fluid_defsfont.c">
+      <Filter>dependencies\fluidsynth\src\sfloader</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\sfloader\fluid_samplecache.c">
+      <Filter>dependencies\fluidsynth\src\sfloader</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\sfloader\fluid_sffile.c">
+      <Filter>dependencies\fluidsynth\src\sfloader</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\sfloader\fluid_sfont.c">
+      <Filter>dependencies\fluidsynth\src\sfloader</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_chan.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_gen.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_mod.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_synth.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_synth_monopoly.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_synth_write_int.cpp">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_tuning.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\synth\fluid_voice.c">
+      <Filter>dependencies\fluidsynth\src\synth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\utils\fluid_conv.c">
+      <Filter>dependencies\fluidsynth\src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\utils\fluid_hash.c">
+      <Filter>dependencies\fluidsynth\src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\utils\fluid_list.c">
+      <Filter>dependencies\fluidsynth\src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\utils\fluid_ringbuffer.c">
+      <Filter>dependencies\fluidsynth\src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\utils\fluid_settings.c">
+      <Filter>dependencies\fluidsynth\src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\dependencies\fluidsynth\src\utils\fluid_sys.c">
+      <Filter>dependencies\fluidsynth\src\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\audio\midi_card.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\system\i8251.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\audio\pcm16.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -565,6 +748,17 @@
     <ClInclude Include="..\..\src\video\video_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\system\memory_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_out.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_out_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_card.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_synth.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_synth_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_synth_host.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\mt32_engine.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\soundfont_engine.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\audio\midi_card_inline.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\i8251.h"><Filter>src</Filter></ClInclude>
+    <ClInclude Include="..\..\src\system\i8251_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\pcm16.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\pcm16_inline.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="..\..\src\audio\rf5c68.h"><Filter>src</Filter></ClInclude>
@@ -920,6 +1114,39 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <Filter Include="dependencies\fluidsynth">
+      <UniqueIdentifier>{3278ab10-94df-4a9c-8d47-1960e466b447}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src">
+      <UniqueIdentifier>{89febe80-1479-4d1d-8e78-e92c62c18270}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src\drivers">
+      <UniqueIdentifier>{f585f569-27b4-4cd6-b75c-de364be0def5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src\midi">
+      <UniqueIdentifier>{bc591104-9439-450e-af25-af1fcc68026f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src\rvoice">
+      <UniqueIdentifier>{adf8f590-672b-4bb5-834a-9a567cd5b3c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src\sfloader">
+      <UniqueIdentifier>{6a86012f-374e-4d32-b287-91b008b3e3cf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src\synth">
+      <UniqueIdentifier>{938c8c6d-958f-47fa-b127-770aa8ade0a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\fluidsynth\src\utils">
+      <UniqueIdentifier>{53458c56-db16-4404-87a5-f51d03fa9890}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\mt32emu">
+      <UniqueIdentifier>{4c602189-5644-41a3-9fab-16183087848c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\mt32emu\src">
+      <UniqueIdentifier>{8135588e-058e-4454-9e10-aab67b071437}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dependencies\mt32emu\src\sha1">
+      <UniqueIdentifier>{17b6afe8-dcf4-4b90-8f37-dc1964c3d10c}</UniqueIdentifier>
+    </Filter>
     <Filter Include="src">
       <UniqueIdentifier>{39e50856-2108-48fd-a913-eb2000b78c33}</UniqueIdentifier>
     </Filter>

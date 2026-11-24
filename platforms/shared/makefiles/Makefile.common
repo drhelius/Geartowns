@@ -11,6 +11,8 @@ define HEADER
   ** Profile: $(BUILD_CONFIG) **
   ** Debugger: $(DEBUGGER_CONFIG) **
   ** Dynarec: $(DYNAREC_CONFIG) **
+  ** MT-32: $(MT32_CONFIG) **
+  ** SoundFont: $(SOUNDFONT_CONFIG) **
 
 endef
 export HEADER
@@ -29,12 +31,40 @@ else
     SOURCES_C += $(SOURCES_LIGHTNING)
 endif
 
+DISABLE_MT32 ?= 0
+ifeq ($(DISABLE_MT32), 1)
+    MT32_CONFIG = Disabled
+    CPPFLAGS += -DGT_DISABLE_MT32
+else
+    MT32_CONFIG = Enabled
+    SOURCES_CXX += $(SOURCES_MT32)
+endif
+
+DISABLE_SOUNDFONT ?= 0
+ifeq ($(DISABLE_SOUNDFONT), 1)
+    SOUNDFONT_CONFIG = Disabled
+    CPPFLAGS += -DGT_DISABLE_SOUNDFONT
+else
+    SOUNDFONT_CONFIG = Enabled
+    SOURCES_C += $(filter %.c,$(SOURCES_SOUNDFONT))
+    SOURCES_CXX += $(filter %.cpp,$(SOURCES_SOUNDFONT))
+endif
+
 OBJECTS += $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
 CODEQL_OBJECTS := $(filter-out $(DEPS_DIR)/%,$(OBJECTS))
 
 INCLUDES += -I$(SRC_DIR) -I$(DESKTOP_SRC_DIR)
 
 INCLUDES += -I$(DEPS_DIR)/bochs_fpu
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/include
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/bindings
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/drivers
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/midi
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/rvoice
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/sfloader
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/synth
+INCLUDES += -I$(DEPS_DIR)/fluidsynth/src/utils
 INCLUDES += -I$(DEPS_DIR)/glad
 INCLUDES += -I$(DEPS_DIR)/imgui
 INCLUDES += -I$(DEPS_DIR)/json
@@ -44,6 +74,7 @@ INCLUDES += -I$(DEPS_DIR)/lzma/include
 INCLUDES += -I$(DEPS_DIR)/mINI
 INCLUDES += -I$(DEPS_DIR)/minivorbis
 INCLUDES += -I$(DEPS_DIR)/miniz
+INCLUDES += -I$(DEPS_DIR)/mt32emu/src
 INCLUDES += -I$(DEPS_DIR)/stb
 INCLUDES += -I$(DEPS_DIR)/zstd
 

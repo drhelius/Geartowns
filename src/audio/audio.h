@@ -25,6 +25,9 @@
 #include "ym3438.h"
 #include "rf5c68.h"
 #include "pcm16.h"
+#include "midi_card.h"
+#include "midi_out.h"
+#include "midi_synth.h"
 #include "vgm_recorder.h"
 
 #define AUDIO_VOLUME_CHIPS 2
@@ -48,6 +51,7 @@ public:
         AUDIO_SOURCE_CDDA,
         AUDIO_SOURCE_BUZZER,
         AUDIO_SOURCE_PCM16,
+        AUDIO_SOURCE_MIDI,
         AUDIO_SOURCE_COUNT
     };
 
@@ -74,6 +78,7 @@ public:
     void Init(Scheduler* scheduler, CdRomAudio* cdrom_audio, PIC* pic, PIT* pit, Memory* memory);
     void SetTraceLogger(TraceLogger* trace_logger);
     void SetFeatures(u32 features);
+    void SetMidiCard(bool fitted);
     void Reset();
     void Mute(bool mute);
     void SetMasterVolume(float volume);
@@ -82,9 +87,12 @@ public:
     void SetCDDAVolume(float volume);
     void SetBuzzerVolume(float volume);
     void SetPCM16Volume(float volume);
+    void SetMT32Volume(float volume);
+    void SetGMVolume(float volume);
     void SetPCMLowpassCutoff(float cutoff);
     void Synchronize(u64 clocks);
     void HandleEvent(u64 clocks);
+    void HandleMidiEvent(u64 clocks);
     void WriteFM(u8 port, u8 value);
     void WritePCM(u16 address, u8 value);
     void WritePCMIRQMask(u8 value);
@@ -92,6 +100,8 @@ public:
     u8 ReadPCM16(u16 port);
     u8 PeekPCM16(u16 port, u64 clocks) const;
     void WritePCM16(u16 port, u8 value);
+    u8 ReadMidiCard(u16 port, u64 clocks);
+    void WriteMidiCard(u16 port, u8 value, u64 clocks);
     u8 ReadVolume(u16 port) const;
     void WriteVolume(u16 port, u8 value);
     u8 ReadGate(u16 port) const;
@@ -101,6 +111,9 @@ public:
     YM3438* GetYM3438();
     RF5C68* GetRF5C68();
     PCM16* GetPCM16();
+    MidiCard* GetMidiCard();
+    MidiOut* GetMidiOut();
+    MidiSynth* GetMidiSynth();
     Audio_State* GetState();
     void SetSourceMute(int source, bool mute);
     bool IsSourceMuted(int source) const;
@@ -125,6 +138,7 @@ public:
     static void WriteWaveWindow32Callback(void* device, u32 offset, u32 value);
 
 private:
+    void RenderMIDI(int samples);
     void Clock(u32 clocks);
     void ClockSources(u32 clocks);
     void SampleSources();
@@ -151,6 +165,9 @@ private:
     YM3438* m_ym3438;
     RF5C68* m_rf5c68;
     PCM16* m_pcm16;
+    MidiCard* m_midi_card;
+    MidiOut* m_midi_out;
+    MidiSynth* m_midi_synth;
     CdRomAudio* m_cdrom_audio;
     Scheduler* m_scheduler;
     PIC* m_pic;
@@ -164,6 +181,8 @@ private:
     float m_cdda_volume;
     float m_buzzer_volume;
     float m_pcm16_volume;
+    float m_mt32_volume;
+    float m_gm_volume;
     Audio_State m_state;
     u16 m_pcm_lowpass_alpha_q15;
     s32 m_cdda_gain_left;
@@ -184,6 +203,8 @@ private:
     s16 m_cdda_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_buzzer_buffer[GT_AUDIO_BUFFER_SIZE];
     s16 m_pcm16_buffer[GT_AUDIO_BUFFER_SIZE];
+    s16 m_midi_buffer[GT_AUDIO_BUFFER_SIZE];
+    bool m_midi_rendered;
     int m_buffer_index;
     bool m_buffer_overflow;
     int m_frame_samples;

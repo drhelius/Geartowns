@@ -145,6 +145,22 @@ const int k_machine_cpu_speeds_mhz[GT_MACHINE_CPU_SPEED_COUNT] = { 16, 20, 25, 3
 const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 28, 32, 48, 64,
     68, 96, 100 };
 
+const GT_MIDI_Synth_Info k_midi_synths[GT_MIDI_SYNTH_COUNT] =
+{
+    { "General MIDI", "gm" },
+    { "MT-32", "mt32" }
+};
+
+const char* const k_midi_outs[GT_MIDI_OUT_COUNT] = { "Built-in Synth", "External Port", "None" };
+
+const GT_MT32_Model_Info k_mt32_models[GT_MT32_MODEL_COUNT] =
+{
+    { "Auto", "auto" },
+    { "MT-32 (old)", "mt32_old" },
+    { "MT-32 (new)", "mt32_new" },
+    { "CM-32L", "cm32l" }
+};
+
 const GT_Machine_CPU_Info k_machine_cpus[GT_MACHINE_CPU_COUNT] =
 {
     { "80386DX", true, 3, false, 0x00000308, 0x7FFFFFE0, 32, 1, 0, false, false },
@@ -194,6 +210,12 @@ static inline void get_machine_choices(const GT_Machine_Config& config, const GT
     if (report.fpu == GT_MACHINE_SOURCE_DATABASE)
     {
         snprintf(value, sizeof(value), "%s%s", text[0] ? ", " : "", get_machine_fpu_name(config.cpu));
+        strncat_fit(text, value, text_size);
+    }
+
+    if (report.midi_card == GT_MACHINE_SOURCE_DATABASE)
+    {
+        snprintf(value, sizeof(value), "%sMIDI card", text[0] ? ", " : "");
         strncat_fit(text, value, text_size);
     }
 }

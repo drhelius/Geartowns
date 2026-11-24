@@ -132,6 +132,7 @@ public:
     void EnableFastHardDiskTiming(bool enabled);
     bool IsFastHardDiskTimingEnabled() const;
     void LockRAMSize(bool locked);
+    int GetDatabaseMidiSynth() const;
     void DebugWritePort(u16 port, u32 value, int size);
 
     bool KeyPressed(GT_Keys key);

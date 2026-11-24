@@ -136,7 +136,7 @@ const GT_DB_Entry k_game_database[] =
     // Controller ports
     { 0x06E3D83D, "Dennou Ehon - Kyouryuu no Sekai", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, GT_GAMEDB_PORT_MOUSE, 0, 0xEFCE5DD7 },
     { 0xB5C2AD16, "Enkaiou Ver. 3 - Chikyuu Saidai no Kessen", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0x9CE723B4 },
-    { 0xC8468211, "J. B. Harold Jikenbo 1 - Murder Club DX", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, GT_GAMEDB_PORT_MOUSE, 0, 0x6898D3BC },
+    { 0xC8468211, "J. B. Harold Jikenbo 1 - Murder Club DX", GT_GAMEDB_MIDI_GM, GT_MACHINE_MODEL1_2, 0, 0, GT_GAMEDB_PORT_MOUSE, 0, 0x6898D3BC },
     { 0x9F9B811E, "Last Survivor", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0x9E12F9BF },
     { 0xD11E3504, "Mad Stalker - FullMetalForce", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, 0, GT_GAMEDB_PORT_PAD, 0x97C81AD4 },
     { 0x478F99B0, "Manami no Doko made Iku no 2 - Return of the Kuro Pack", GT_GAMEDB_FLAG_NONE, GT_MACHINE_MODEL1_2, 0, 0, GT_GAMEDB_PORT_MOUSE, 0, 0 },
@@ -167,6 +167,12 @@ const GT_DB_Entry k_game_database[] =
     { 0xB253F5C1, "Teo - Mou Hitotsu no Chikyuu (Version 2.0)", GT_GAMEDB_HDD | GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_CPU_486, GT_MACHINE_MX, 8, 66, 0, 0, 0 },
     { 0xADC925E6, "Theme Park", GT_GAMEDB_HDD | GT_GAMEDB_CPU_486, GT_MACHINE_HR, 4, 20, 0, 0, 0xC3C8B1CB }, // HR
 
+    // MIDI music
+    { 0x436FAA90, "Euphony II & MTR V1.1 L20", GT_GAMEDB_MIDI_CARD, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x0BB5B61C },
+    { 0x09E82832, "Genocide^2 - Genocide Square", GT_GAMEDB_MIDI_GM, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xC6063CCD },
+    { 0x3101B6A1, "Might and Magic III - Isles of Terra", GT_GAMEDB_MIDI_MT32, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xC3198580 },
+    { 0x6EAAA522, "Tele Harmonium - City Lights", GT_GAMEDB_MIDI_CARD | GT_GAMEDB_MIDI_GM, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x9004C4F8 },
+
     // Hard disk installs
     { 0x09706738, "Gakuen King - Hidehiko Gakkou o Tsukuru", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0 },
     { 0x89A5A3E0, "Mugen Houyou", GT_GAMEDB_HDD, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x531BC1A6 },
@@ -194,7 +200,7 @@ const GT_DB_Entry k_game_database[] =
     { 0xACC666FC, "Atlas II, The", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x5D7CEE11 },
     { 0x99F2C5E4, "Ayumi-chan Monogatari", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x7C1AF8BD },
     { 0x3446545D, "Ballade for Maria - Maria ni Sasageru Ballade", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xF14CDF91 },
-    { 0xE2C17C10, "Band-kun", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xFA706D2B },
+    { 0xE2C17C10, "Band-kun", GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_MIDI_CARD | GT_GAMEDB_MIDI_MT32, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xFA706D2B },
     { 0x20BC3F5B, "Bible Master - Crash of the BlleotRutz", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xDD769DE6 },
     { 0xA35641AD, "Bible Master 2 - The Chaos of Aglia", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x271D06FD },
     { 0xCF8EFBBA, "California X Party - Joshi Daisei Himitsu Club", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x28F9A1F1 },
@@ -340,7 +346,7 @@ const GT_DB_Entry k_game_database[] =
     { 0x829910E5, "Wrestle Angels Special", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xA8B7C33C },
     { 0xBC35A875, "Yami no Ketsuzoku Special - The Predestined Homicides (Rev 2)", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x603AE114 },
     { 0x551606EA, "Yayoi Umino Presents Private Slave", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x88ED96B7 },
-    { 0x54005FB3, "Yubiwa Monogatari Dainikan - Futatsu no Tou", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x7172FEF8 },
+    { 0x54005FB3, "Yubiwa Monogatari Dainikan - Futatsu no Tou", GT_GAMEDB_FLOPPY_REQUIRED | GT_GAMEDB_MIDI_MT32, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x7172FEF8 },
     { 0xEE93FC42, "Yuuwaku", GT_GAMEDB_FLOPPY_BOOT, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x6659AFA1 },
     { 0x15EF2C0A, "Zan II - Towns Special", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0x55C950BE },
     { 0xD0529EC1, "Zan III - Ten'un Ware ni Ari - Towns Special", GT_GAMEDB_FLOPPY_REQUIRED, GT_MACHINE_MODEL1_2, 0, 0, 0, 0, 0xDA71AA6F },

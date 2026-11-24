@@ -37,6 +37,9 @@ Licensing:
     - glad: glad contributors, WTFPL or CC0-1.0 and Apache-2.0.
     - Berkeley SoftFloat 3e (Bochs version): Copyright 2011-2018 The Regents of the University of California, BSD-3-clause.
     - Bochs x87 extensions: Copyright 2003-2018 Stanislav Shwartsman, SoftFloat 2b license and LGPL-2.1+.
+    - Munt (libmt32emu): Copyright 2003-2026 Dean Beeler, Jerome Fisher, Sergey V. Mikayev, LGPL-2.1+.
+    - Munt SHA-1: Copyright 2011 Micael Hildenborg, BSD-3-clause.
+    - FluidSynth: Copyright 2003 Peter Hanappe and others, LGPL-2.1+.
     - libretro API header: Copyright 2010-2024 The RetroArch team, MIT.
     - Shader assets: respective authors, GPL-2+, MIT and public domain.
 

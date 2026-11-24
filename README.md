@@ -111,6 +111,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - In-game keyboard mapper to bind host keys to the FM Towns keyboard per game.
 - Video recording to AVI and screenshots.
 - VGM recorder for the YM3438 and RF5C68 sound chips.
+- FMT-402 MIDI card with built-in MT-32 and General MIDI synths, or any MIDI port on the computer.
 - Internal database for automatic media detection and hardware selection if `Auto` options are selected.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
 - Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation 3, Nintendo GameCube, Nintendo WiiU, Nintendo Switch, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
@@ -142,7 +143,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 ### Per-Game Settings
 With a game inserted, the settings you change are saved for that game only, and win over the game database:
 
-- **Saved**: **Machine** (model, CPU speed, RAM, FPU and speed mode), **Input → FM Towns Ports**, the CD-ROM **Read Speed** and **Fast Disk Timing**. The menus show them in orange.
+- **Saved**: **Machine** (model, CPU speed, RAM, FPU, speed mode and MIDI card), **Input → FM Towns Ports**, the CD-ROM **Read Speed**, **Fast Disk Timing** and **Audio → MIDI Out → Game Music**. The menus show them in orange.
 - **General settings**: with nothing inserted, the same menus change the settings used by every game without its own. Choosing the general value again for a game removes its change.
 - **Disks**: **Keep with This Game**, in the menu of each floppy drive, hard disk and the IC memory card, puts the disk in that drive back each time the game is opened. A hard disk that goes in while the machine is on resets it.
 - **Forget**: **Machine → Forget This Game's Changes** removes the changes and the kept disks.
@@ -295,6 +296,17 @@ Towns OS V2.1's `TICM.SYS` uses at most 8 MB of a card. On the UX and the Marty 
 #### Save States
 Save states, rewind and run-ahead hold no card data. Loading one undoes the card writes made since then, and warns when it can't. A state loads only with a card of the same size in the slot, or with the slot empty if it was empty.
 
+### MIDI Music
+A few games and music tools play their music through a MIDI card, on a Roland MT-32 or a General MIDI (GS) module.
+
+- **The card**: **Machine → MIDI Card** fits an FMT-402, and a reset applies it. **Auto** fits it only for the software that needs it. Other games with MIDI music offer it in their own options once a card is fitted. The Marty has no slot for one. With a card fitted, many games take their music tempo from it, even without MIDI music.
+- **MT-32**: the built-in synth needs the control and PCM ROMs of an MT-32 or CM-32L, dumped from your own unit. Put them in the `mt32` folder next to `config.ini`, or choose a folder in **Audio → Built-in Synths → MT-32 → ROMs**. They are recognized by their contents.
+- **General MIDI**: the built-in synth needs a sound bank (a SoundFont file, `.sf2` or `.sf3`). Put one in the `soundfonts` folder next to `config.ini`, in the system's usual place, or choose a file in **Audio → Built-in Synths → General MIDI → Sound Bank**.
+- **Outputs**: **Audio → MIDI Out** sends each kind of music to its built-in synth, to an external port, or nowhere. An external port can be a software synth or a real module.
+- **Game Music**: **Auto** takes the kind of music from the game database, or from what the game sends. Choose **MT-32** or **General MIDI** for a game it gets wrong.
+
+In the libretro core these are core options. MT-32 ROMs go in `<system>/geartowns/mt32` and sound banks in `<system>/geartowns/soundfonts`, and **External Port** uses the frontend's MIDI output.
+
 ### Debugging Features
 - **Docking Windows**: In debug mode, you can dock windows together by pressing SHIFT and dragging a window onto another.
 - **Multi-viewport**: In Windows or macOS, you can enable "multi-viewport" in the debug menu. You must restart the emulator for the change to take effect. Once enabled, you can drag debugger windows outside the main window.
@@ -333,6 +345,7 @@ Machine (for this run only, over the saved and per-game settings):
                             32, 48, 64, 68, 96, 100
       --fpu FPU             auto, none, 80387 (a 487SX on the 486 models)
       --speed-mode MODE     auto, compatible, high
+      --midi-card CARD      auto, none, fitted
 
 Options:
   -f, --fullscreen          Start in fullscreen mode
@@ -401,7 +414,7 @@ make dist
 If you are using Ubuntu 26.04, you can install SDL3 directly. Use the following commands to build:
 
 ``` shell
-sudo apt install build-essential pkg-config libsdl3-dev libgl-dev
+sudo apt install build-essential pkg-config libsdl3-dev libgl-dev libasound2-dev
 cd platforms/linux
 make
 ```
@@ -425,7 +438,7 @@ make
 - Fedora:
 
 ``` shell
-sudo dnf install @development-tools gcc-c++ SDL3-devel
+sudo dnf install @development-tools gcc-c++ SDL3-devel alsa-lib-devel
 cd platforms/linux
 make
 ```
@@ -433,7 +446,7 @@ make
 - Arch Linux:
 
 ``` shell
-sudo pacman -S base-devel sdl3
+sudo pacman -S base-devel sdl3 alsa-lib
 cd platforms/linux
 make
 ```

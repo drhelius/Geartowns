@@ -1014,14 +1014,14 @@ bool GeartownsCore::ReloadFirmware()
     return true;
 }
 
-GT_CMOS_File_Result GeartownsCore::LoadCMOSFile(const char* path, int floppy_drives)
+GT_CMOS_File_Result GeartownsCore::LoadCMOSFile(const char* path, GT_Machine_Model model)
 {
     std::vector<u8> data;
     GT_CMOS_File_Result result = GT_CMOS_FILE_NONE;
-    m_memory->ResetCMOS(floppy_drives);
+    m_memory->ResetCMOS(model);
 
     if (IsValidPointer(path) && (path[0] != 0) && MediaFile::ReadFile(path, 0x10000, &data))
-        result = m_memory->LoadCMOSFile(data.data(), data.size(), floppy_drives) ? GT_CMOS_FILE_LOADED :
+        result = m_memory->LoadCMOSFile(data.data(), data.size(), model) ? GT_CMOS_FILE_LOADED :
             GT_CMOS_FILE_INVALID;
 
     memcpy(m_cmos_saved, m_memory->GetCMOS(), GT_CMOS_SIZE);

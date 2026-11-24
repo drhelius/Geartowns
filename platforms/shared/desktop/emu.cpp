@@ -2284,7 +2284,7 @@ static void load_cmos(int model)
     char path[GT_MAX_PATH];
     cmos_model = model;
     bool has_path = get_cmos_path(model, path, sizeof(path));
-    GT_CMOS_File_Result result = geartowns->LoadCMOSFile(has_path ? path : NULL, k_machine_profiles[model].floppy_drives);
+    GT_CMOS_File_Result result = geartowns->LoadCMOSFile(has_path ? path : NULL, (GT_Machine_Model)model);
 
     if (result == GT_CMOS_FILE_INVALID)
         Error("Invalid CMOS file: %s", path);

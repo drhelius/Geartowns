@@ -3522,16 +3522,15 @@ static void memory_card_update(void)
 
 static void cmos_load(void)
 {
-    const GT_Machine_Profile& profile = k_machine_profiles[core->GetPendingMachineConfig().model];
-    std::string name(profile.key);
+    GT_Machine_Model model = core->GetPendingMachineConfig().model;
+    std::string name(k_machine_profiles[model].key);
 
     cmos_shared_active = cmos_shared;
     cmos_idle_flush.Reset();
     cmos_path = retro_save_directory;
     append_path_component(cmos_path, (name + ".geartowns.cmos").c_str());
 
-    GT_CMOS_File_Result result = core->LoadCMOSFile(cmos_shared_active ? cmos_path.c_str() : NULL,
-        profile.floppy_drives);
+    GT_CMOS_File_Result result = core->LoadCMOSFile(cmos_shared_active ? cmos_path.c_str() : NULL, model);
 
     if (result == GT_CMOS_FILE_LOADED)
         log_cb(RETRO_LOG_INFO, "CMOS loaded from %s\n", cmos_path.c_str());

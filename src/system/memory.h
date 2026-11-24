@@ -132,8 +132,8 @@ public:
     u32 GetMainRAMSize() const;
     void SetMainRAMSize(u32 size);
     u8* GetCMOS();
-    void ResetCMOS(int floppy_drives);
-    bool LoadCMOSFile(const u8* data, size_t size, int floppy_drives);
+    void ResetCMOS(GT_Machine_Model model);
+    bool LoadCMOSFile(const u8* data, size_t size, GT_Machine_Model model);
     void SaveCMOSFile(u8* data) const;
     bool AssignCMOSDriveLetters(int unit, u16 partitions);
     u8 ReadCMOS(u32 index) const;
@@ -194,7 +194,7 @@ private:
     void NotifyCodeWrite(const DebugRegion* region, u32 offset, u32 size, bool changed);
 #endif
     void ApplyMapping();
-    void ResetCMOSSetup();
+    void ResetCMOSSetup(bool single_drive);
     void Serialize(StateSerializer& serializer, int version);
     void SanitizeState();
 

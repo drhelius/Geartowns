@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "memory.h"
+#include "machine_profiles.h"
 #include "../common/trace_logger.h"
 #include "../common/state_serializer.h"
 
@@ -92,6 +93,7 @@ static const u8 k_memory_cmos_tail[15] =
 
 static const u32 k_memory_cmos_setup_offset = 0x00E8;
 static const u32 k_memory_cmos_setup_size = 0x100;
+static const u32 k_memory_cmos_single_drive = 0x5E;
 static const int k_memory_cmos_drive_count = 16;
 static const int k_memory_cmos_first_hard_disk_drive = 3;
 
@@ -120,7 +122,7 @@ Memory::Memory()
     m_dirty_valid = false;
     m_main_ram_size = GT_MAIN_RAM_SIZE;
     InitPointer(m_state.main_ram);
-    ResetCMOS(GT_MAX_FLOPPY_DRIVES);
+    ResetCMOS(GT_MACHINE_MODEL1_2);
     m_state.main_memory = false;
     m_state.boot_ram = false;
     m_state.dictionary = false;
@@ -179,20 +181,20 @@ void Memory::Reset()
 
 // Blank CMOS with the stock OAK/2 user dictionary that Towns OS boot disks write with DICUTY
 // Some titles load OAK/2 without that fallback and stop at a hidden DOS prompt when it is missing
-// Two-drive machines also get the records the BIOS writes to a blank CMOS and a Towns OS SETUP record with
-// single-drive mode off, IO.SYS replaces a missing one with single-drive mode on
-void Memory::ResetCMOS(int floppy_drives)
+// All but the Marty also get the records the BIOS writes to a blank CMOS and a Towns OS SETUP record, with single-drive
+// mode off on two-drive machines. IO.SYS replaces a missing one with it on, and in MS-DOS 6.2 with hard disks from C:
+void Memory::ResetCMOS(GT_Machine_Model model)
 {
     memset(m_state.cmos, 0, sizeof(m_state.cmos));
     memcpy(m_state.cmos + 0x0800, k_memory_oak2_index, sizeof(k_memory_oak2_index));
     memcpy(m_state.cmos + 0x0D60, k_memory_oak2_words_0, sizeof(k_memory_oak2_words_0));
     memcpy(m_state.cmos + 0x1086, k_memory_oak2_words_1, sizeof(k_memory_oak2_words_1));
 
-    if (floppy_drives > 1)
-        ResetCMOSSetup();
+    if (model != GT_MACHINE_MARTY)
+        ResetCMOSSetup(k_machine_profiles[model].floppy_drives < 2);
 }
 
-bool Memory::LoadCMOSFile(const u8* data, size_t size, int floppy_drives)
+bool Memory::LoadCMOSFile(const u8* data, size_t size, GT_Machine_Model model)
 {
     int version = 0;
 
@@ -209,8 +211,8 @@ bool Memory::LoadCMOSFile(const u8* data, size_t size, int floppy_drives)
 
     memcpy(m_state.cmos, data, GT_CMOS_SIZE);
 
-    if ((version < 1) && (floppy_drives > 1))
-        ResetCMOSSetup();
+    if ((version < 1) && (k_machine_profiles[model].floppy_drives > 1))
+        ResetCMOSSetup(false);
 
     return true;
 }
@@ -274,7 +276,7 @@ bool Memory::AssignCMOSDriveLetters(int unit, u16 partitions)
     return true;
 }
 
-void Memory::ResetCMOSSetup()
+void Memory::ResetCMOSSetup(bool single_drive)
 {
     u8* setup = m_state.cmos + k_memory_cmos_setup_offset;
     u32 header_sum = 0;
@@ -297,6 +299,7 @@ void Memory::ResetCMOSSetup()
 
     memset(setup, 0, k_memory_cmos_setup_size);
     memcpy(setup, k_memory_cmos_setup, sizeof(k_memory_cmos_setup));
+    setup[k_memory_cmos_single_drive] = single_drive ? 0x01 : 0x00;
 
     for (u32 i = 0; i < k_memory_cmos_setup_size - 1; i++)
         sum += setup[i];

@@ -166,7 +166,7 @@ public:
     KeyMap* GetKeyMap();
     KeyMapper* GetKeyMapper();
     Memory* GetMemory();
-    GT_CMOS_File_Result LoadCMOSFile(const char* path, int floppy_drives);
+    GT_CMOS_File_Result LoadCMOSFile(const char* path, GT_Machine_Model model);
     GT_CMOS_File_Result SaveCMOSFileIfChanged(const char* path);
     I386* GetI386();
     X87* GetX87();

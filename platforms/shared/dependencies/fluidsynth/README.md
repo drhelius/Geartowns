@@ -81,6 +81,7 @@ folders as arguments. gcem is Apache-2.0 and is not part of Geartowns.
   `catch` did (a `NULL` reverb, `FLUID_FAILED`), the two constructors lost their `throw`, and a delay buffer length
   that is not positive becomes 1. A sample rate is always positive in the synth.
 - `fluid_audio_convert.h`: `std::clamp` is C++17. A three-line helper takes its place, so the file builds as C++11.
+  `std::round` and `std::nextafter` are missing from uClibc's `<cmath>`, so it calls `round` and scales the limit.
 - `fluid_sffile.c`: SoundFont 3 samples are Ogg Vorbis. The reader that used libsndfile through virtual I/O is
   replaced by one that reads the compressed bytes of the sample through the SoundFont's file callbacks into memory and
   decodes them with minivorbis (`ov_open_callbacks` over the buffer and `ov_read` to 16-bit mono), as the Ogg Vorbis

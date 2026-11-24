@@ -69,10 +69,10 @@ T round_clip_to(float x)
         // Implicit conversion from 'int' to 'float' changes value from 2147483647 to 2147483648.0f
         // Hence, adjust fmax to 2147483520.0f to prevent integer overflow when attempting to cast 2147483648.0f to int32_t below.
         // Same for 4294967295 to 4294967296.0f for uint32_t.
-        fmax = std::nextafter(fmax, 0.0f);
+        fmax *= 1.0f - std::numeric_limits<float>::epsilon() / 2.0f;
     }
 
-    x = std::round(x);
+    x = static_cast<float>(round(x));
     x = fluid_clamp(x, fmin, fmax);
 
     T i = static_cast<T>(x);

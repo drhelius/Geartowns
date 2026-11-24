@@ -214,6 +214,38 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         },
         "100"
     },
+    {
+        "geartowns_mt32_volume",
+        "Built-in MT-32 Volume",
+        NULL,
+        "Volume of Geartowns's own MT-32, as a percentage where 100 is the default. An external MIDI port keeps its own volume.",
+        NULL,
+        "audio",
+        {
+            { "0",   NULL }, { "10",  NULL }, { "20",  NULL }, { "30",  NULL }, { "40",  NULL },
+            { "50",  NULL }, { "60",  NULL }, { "70",  NULL }, { "80",  NULL }, { "90",  NULL },
+            { "100", NULL }, { "110", NULL }, { "120", NULL }, { "130", NULL }, { "140", NULL },
+            { "150", NULL }, { "160", NULL }, { "170", NULL }, { "180", NULL }, { "190", NULL },
+            { "200", NULL }, { NULL, NULL }
+        },
+        "100"
+    },
+    {
+        "geartowns_gm_volume",
+        "Built-in General MIDI Volume",
+        NULL,
+        "Volume of Geartowns's own General MIDI synth, as a percentage where 100 is the default. An external MIDI port keeps its own volume.",
+        NULL,
+        "audio",
+        {
+            { "0",   NULL }, { "10",  NULL }, { "20",  NULL }, { "30",  NULL }, { "40",  NULL },
+            { "50",  NULL }, { "60",  NULL }, { "70",  NULL }, { "80",  NULL }, { "90",  NULL },
+            { "100", NULL }, { "110", NULL }, { "120", NULL }, { "130", NULL }, { "140", NULL },
+            { "150", NULL }, { "160", NULL }, { "170", NULL }, { "180", NULL }, { "190", NULL },
+            { "200", NULL }, { NULL, NULL }
+        },
+        "100"
+    },
 
     /* Input */
 
@@ -505,6 +537,66 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "auto",       "Auto" },
             { "compatible", "Compatible" },
             { "high",       "High Speed" },
+            { NULL, NULL },
+        },
+        "auto"
+    },
+    {
+        "geartowns_midi_card",
+        "MIDI Card (restart)",
+        NULL,
+        "An FMT-402 MIDI card. Auto fits it only for the games that need one. Other games with MIDI music offer it in their own options with a card fitted. A card changes the music tempo source of many games, with or without MIDI. The Marty has no slot for it.",
+        NULL,
+        "system",
+        {
+            { "auto",   "Auto" },
+            { "none",   "None" },
+            { "fitted", "FMT-402" },
+            { NULL, NULL },
+        },
+        "auto"
+    },
+    {
+        "geartowns_midi",
+        "MIDI Out",
+        NULL,
+        "Where the music sent to the MIDI card plays. Built-in Synth plays MT-32 music on an MT-32 from your own ROMs in <system>/geartowns/mt32 (or <system>), and General MIDI music on a sound bank (.sf2 or .sf3) in <system>/geartowns/soundfonts; a game plays on the other one when its own is missing. External Port sends it to the port in Settings > Audio > MIDI.",
+        NULL,
+        "system",
+        {
+            { "builtin",   "Built-in Synth" },
+            { "retroarch", "External Port" },
+            { NULL, NULL },
+        },
+        "builtin"
+    },
+    {
+        "geartowns_midi_music",
+        "MIDI Game Music",
+        NULL,
+        "The kind of music the game sends to the MIDI card. Auto takes it from the game database, or from what the game sends.",
+        NULL,
+        "system",
+        {
+            { "auto", "Auto" },
+            { "gm",   "General MIDI" },
+            { "mt32", "MT-32" },
+            { NULL, NULL },
+        },
+        "auto"
+    },
+    {
+        "geartowns_mt32_model",
+        "Built-in MT-32 Model",
+        NULL,
+        "The unit the built-in MT-32 plays, when its ROMs are there. Auto plays a CM-32L first, then an MT-32.",
+        NULL,
+        "system",
+        {
+            { "auto",     "Auto" },
+            { "mt32_old", "MT-32 (old)" },
+            { "mt32_new", "MT-32 (new)" },
+            { "cm32l",    "CM-32L" },
             { NULL, NULL },
         },
         "auto"

@@ -29,6 +29,7 @@
 #include "libretro.h"
 #include "geartowns.h"
 #include "media/media_file.h"
+#include "audio/midi_synth_host.h"
 #include "media/crc.h"
 #include "common/idle_flush.h"
 #include "drive/fdc.h"
@@ -88,10 +89,22 @@ static s16 audio_buf[GT_AUDIO_BUFFER_SIZE];
 static int audio_sample_count = 0;
 static size_t savestate_size = 0;
 static GT_Machine_Settings machine_settings = { GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO, GT_MACHINE_AUTO,
-    GT_MACHINE_AUTO };
+    GT_MACHINE_AUTO, GT_MACHINE_AUTO };
 #if !defined(GT_DISABLE_DYNAREC)
 static int dynarec_option = -1;
 #endif
+
+static struct retro_midi_interface midi_interface;
+static bool midi_supported = false;
+static bool midi_output = false;
+static bool midi_notified = false;
+static u8 midi_restores = 0;
+static u64 midi_frame_base = 0;
+static u64 midi_last_sample = 0;
+static bool midi_builtin = true;
+static int midi_music = -1;
+static int midi_mt32_model = GT_MT32_MODEL_AUTO;
+static MidiSynthHost midi_host;
 
 static int current_screen_width = 0;
 static int current_screen_height = 0;
@@ -214,6 +227,15 @@ static void update_frameskip(void);
 static void update_load_ffwd(bool visible, GT_Run_Result result);
 static void set_ffwd_override(bool enabled);
 static bool is_normal_state_load(void);
+static void midi_begin_frame(int av_enable);
+static void midi_end_frame(int av_enable, int frame_samples);
+static void midi_write(MidiOut* midi);
+static void midi_create_folders(const std::string& mt32, const std::string& soundfonts);
+static void midi_scan(void);
+static int midi_get_kind(void);
+static int midi_get_engine(void);
+static int midi_get_mt32_index(void);
+static bool midi_activate(int engine);
 static void set_controller_info(void);
 static void set_input_descriptors(void);
 static int add_input_descriptors(struct retro_input_descriptor* descriptors, int count, unsigned port, const struct retro_input_descriptor* source, int source_count);
@@ -433,6 +455,11 @@ void retro_init(void)
     if (!environ_cb(RETRO_ENVIRONMENT_GET_MESSAGE_INTERFACE_VERSION, &message_interface_version))
         message_interface_version = 0;
 
+    memset(&midi_interface, 0, sizeof(midi_interface));
+    midi_supported = environ_cb(RETRO_ENVIRONMENT_GET_MIDI_INTERFACE, &midi_interface) &&
+        IsValidPointer(midi_interface.output_enabled) && IsValidPointer(midi_interface.write);
+    midi_output = false;
+
     uint64_t quirks = RETRO_SERIALIZATION_QUIRK_ENDIAN_DEPENDENT;
     environ_cb(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS, &quirks);
 }
@@ -456,6 +483,7 @@ void retro_deinit(void)
     machine_settings.ram_mb = GT_MACHINE_AUTO;
     machine_settings.fpu = GT_MACHINE_AUTO;
     machine_settings.speed_mode = GT_MACHINE_AUTO;
+    machine_settings.midi_card = GT_MACHINE_AUTO;
 #if !defined(GT_DISABLE_DYNAREC)
     dynarec_option = -1;
 #endif
@@ -564,12 +592,12 @@ void retro_run(void)
         report_controllers();
     }
 
-    bool render = true;
     int av_enable = 0;
 
-    if (environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av_enable))
-        render = (av_enable & 1) != 0;
+    if (!environ_cb(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE, &av_enable))
+        av_enable = RETRO_AV_ENABLE_VIDEO | RETRO_AV_ENABLE_AUDIO;
 
+    bool render = (av_enable & RETRO_AV_ENABLE_VIDEO) != 0;
     bool visible = render;
 
     if (render && frameskip_type > 0 && audio_buffer_active)
@@ -587,7 +615,9 @@ void retro_run(void)
 
     audio_sample_count = 0;
     bool powered = core->IsPoweredOn();
+    midi_begin_frame(av_enable);
     GT_Run_Result result = core->RunToFrame(frame_buffer, audio_buf, &audio_sample_count, render);
+    midi_end_frame(av_enable, audio_sample_count / 2);
     update_load_ffwd(visible, result);
     key_map_update();
     floppy_update();
@@ -724,6 +754,10 @@ bool retro_unserialize(const void *data, size_t size)
         {
             core->ResetLoadDetection();
             set_ffwd_override(false);
+            midi_restores |= 1;
+
+            if (midi_output || core->GetAudio()->GetMidiSynth()->IsActive())
+                core->GetAudio()->GetMidiOut()->Sync();
         }
 
         bool changed = core->GetHardDiskStateChanges() != 0;
@@ -815,6 +849,7 @@ static bool load_content(const char* path)
     }
 
     check_bios();
+    midi_scan();
     set_machine_config();
     disk_clear();
     clear_input_state();
@@ -840,6 +875,8 @@ static bool load_content(const char* path)
     report_machine();
     key_map_load();
     content_loaded = true;
+    midi_notified = false;
+    midi_restores = 0;
 
     if (!core->GetMaxSaveStateSize(savestate_size))
         savestate_size = 0;
@@ -883,6 +920,14 @@ static bool load_content(const char* path)
 
 static void unload_content(void)
 {
+    if (midi_output)
+    {
+        MidiOut* midi = core->GetAudio()->GetMidiOut();
+        midi->Silence();
+        midi_write(midi);
+        midi_output = false;
+    }
+
     for (int i = 0; i < FDC_DRIVES; i++)
     {
         if (!floppy_flush(i))
@@ -1218,6 +1263,238 @@ static bool is_normal_state_load(void)
         return (av_enable & RETRO_AV_ENABLE_FAST_SAVESTATES) == 0;
 
     return true;
+}
+
+// The frames RetroArch throws away for runahead have their audio off, and their MIDI goes with it. RetroArch rewinds
+// with ordinary loads, so loads before two frames in a row are a rewind and play no notes
+static void midi_begin_frame(int av_enable)
+{
+    MidiOut* midi = core->GetAudio()->GetMidiOut();
+    MidiSynth* synth = core->GetAudio()->GetMidiSynth();
+    bool fitted = core->GetAudio()->GetMidiCard()->IsFitted();
+    bool wanted = fitted && midi_builtin;
+    bool output = fitted && !wanted && midi_supported && midi_interface.output_enabled();
+    bool fast = false;
+    bool rewinding = midi_restores == 3;
+    midi_restores = (u8)((midi_restores & 1) << 1);
+
+    if (synth->IsOpen(GT_MIDI_ENGINE_MT32) && (midi_get_mt32_index() != midi_host.GetMT32Index()))
+        midi_activate(GT_MIDI_ENGINE_MT32);
+
+    int engine = wanted ? midi_get_engine() : GT_MIDI_ENGINE_NONE;
+    synth->SetEngine(midi_activate(engine) ? engine : GT_MIDI_ENGINE_NONE);
+    bool builtin = synth->IsActive();
+
+    if (output != midi_output)
+    {
+        midi_output = output;
+        midi->ForgetSynth();
+
+        if (output)
+            midi->Sync();
+        else
+            midi->Clear();
+    }
+
+    if (midi->TakeReset())
+    {
+        midi_notified = false;
+
+        if (builtin)
+            synth->Reset();
+        else if (output)
+            midi->Sync();
+    }
+
+    if (!environ_cb(RETRO_ENVIRONMENT_GET_FASTFORWARDING, &fast))
+        fast = false;
+
+    bool enabled = (output || builtin) && ((av_enable & RETRO_AV_ENABLE_AUDIO) != 0);
+    MidiOut::MidiOut_Capture_Change change = midi->UpdateCapture(enabled, fast || rewinding, builtin);
+
+    if (change == MidiOut::MIDI_OUT_CAPTURE_SILENCE)
+        midi->Silence();
+    else if (change == MidiOut::MIDI_OUT_CAPTURE_SYNC)
+        midi->Sync();
+}
+
+static void midi_end_frame(int av_enable, int frame_samples)
+{
+    MidiOut* midi = core->GetAudio()->GetMidiOut();
+
+    bool builtin = core->GetAudio()->GetMidiSynth()->IsActive();
+
+    if (midi->HasPlayed() && !midi_output && !builtin && !midi_notified && (midi_builtin || midi_supported))
+    {
+        midi_notified = true;
+
+        if (!midi_builtin)
+            show_message("This game plays MIDI music. Turn on MIDI output in Settings > Audio > MIDI", 4,
+                RETRO_LOG_INFO);
+        else if (midi_get_kind() == GT_MIDI_SYNTH_MT32)
+            show_message("This game plays MT-32 music. Put MT-32 ROMs in <system>/geartowns/mt32", 4, RETRO_LOG_INFO);
+        else
+            show_message("This game plays General MIDI music. Put a sound bank (.sf2) in <system>/geartowns/soundfonts", 4,
+                RETRO_LOG_INFO);
+    }
+
+    if (midi_output)
+        midi_write(midi);
+    else if (!builtin)
+        midi->Clear();
+
+    if ((av_enable & RETRO_AV_ENABLE_AUDIO) != 0)
+        midi_frame_base += (u64)MAX(frame_samples, 0);
+}
+
+static void midi_write(MidiOut* midi)
+{
+    int count = midi->GetMessageCount();
+    const MidiOut::MidiOut_Message* messages = midi->GetMessages();
+    const u8* data = midi->GetData();
+
+    for (int i = 0; i < count; i++)
+    {
+        const MidiOut::MidiOut_Message& message = messages[i];
+        u64 sample = message.offset == k_midi_out_immediate ? midi_frame_base : midi_frame_base + message.offset;
+        u32 delta = 0;
+
+        if (sample > midi_last_sample)
+        {
+            delta = (u32)MIN(((sample - midi_last_sample) * 1000000ULL) / GT_AUDIO_SAMPLE_RATE, (u64)0xFFFFFFFF);
+            midi_last_sample = sample;
+        }
+
+        for (int j = 0; j < message.size; j++)
+            midi_interface.write(data[message.data + j], j == 0 ? delta : 0);
+    }
+
+    if (count > 0)
+    {
+        if (IsValidPointer(midi_interface.flush))
+            midi_interface.flush();
+
+        midi->Clear();
+    }
+}
+
+static void midi_create_folders(const std::string& mt32, const std::string& soundfonts)
+{
+    if (!MidiSynth::IsAvailable(GT_MIDI_ENGINE_MT32) && !MidiSynth::IsAvailable(GT_MIDI_ENGINE_SOUNDFONT))
+        return;
+
+    std::string parent(retro_system_directory);
+    append_path_component(parent, "geartowns");
+    MediaFile::MakeDirectory(parent.c_str());
+
+    if (MidiSynth::IsAvailable(GT_MIDI_ENGINE_MT32))
+        MediaFile::MakeDirectory(mt32.c_str());
+
+    if (MidiSynth::IsAvailable(GT_MIDI_ENGINE_SOUNDFONT))
+        MediaFile::MakeDirectory(soundfonts.c_str());
+}
+
+static void midi_scan(void)
+{
+    MidiSynth* synth = core->GetAudio()->GetMidiSynth();
+    std::string mt32(retro_system_directory);
+    std::string soundfonts(retro_system_directory);
+    append_path_component(mt32, "geartowns");
+    append_path_component(mt32, "mt32");
+    append_path_component(soundfonts, "geartowns");
+    append_path_component(soundfonts, "soundfonts");
+    std::vector<std::string> mt32_folders;
+    std::vector<std::string> soundfont_folders;
+    std::string previous = midi_host.GetSoundFont();
+
+    if (retro_system_directory[0] != 0)
+    {
+        midi_create_folders(mt32, soundfonts);
+        mt32_folders.push_back(mt32);
+        mt32_folders.push_back(retro_system_directory);
+        soundfont_folders.push_back(soundfonts);
+    }
+
+    midi_host.ScanMT32(mt32_folders);
+    midi_host.FindSoundFont(soundfont_folders);
+
+    for (int i = 0; i < midi_host.GetMT32Count(); i++)
+        log_cb(RETRO_LOG_INFO, "MT-32 ROMs: %s\n", midi_host.GetMT32(i).name);
+
+    if (synth->IsOpen(GT_MIDI_ENGINE_MT32))
+        synth->CloseMT32();
+
+    if (midi_host.GetSoundFont() != previous)
+        synth->CloseSoundFont();
+}
+
+static int midi_get_kind(void)
+{
+    int kind = midi_music >= 0 ? midi_music : core->GetDatabaseMidiSynth();
+
+    if (kind < 0)
+        kind = core->GetAudio()->GetMidiOut()->GetDetected();
+
+    return kind >= 0 ? kind : GT_MIDI_SYNTH_GM;
+}
+
+static int midi_get_engine(void)
+{
+    int engine = midi_get_kind() == GT_MIDI_SYNTH_MT32 ? GT_MIDI_ENGINE_MT32 : GT_MIDI_ENGINE_SOUNDFONT;
+    bool mt32 = midi_host.IsAvailable(GT_MIDI_ENGINE_MT32);
+    bool soundfont = midi_host.IsAvailable(GT_MIDI_ENGINE_SOUNDFONT);
+
+    if ((engine == GT_MIDI_ENGINE_MT32) && !mt32)
+        engine = soundfont ? GT_MIDI_ENGINE_SOUNDFONT : GT_MIDI_ENGINE_NONE;
+    else if ((engine == GT_MIDI_ENGINE_SOUNDFONT) && !soundfont)
+        engine = mt32 ? GT_MIDI_ENGINE_MT32 : GT_MIDI_ENGINE_NONE;
+
+    return engine;
+}
+
+static int midi_get_mt32_index(void)
+{
+    return midi_host.FindMT32(midi_mt32_model);
+}
+
+static bool midi_activate(int engine)
+{
+    MidiSynth* synth = core->GetAudio()->GetMidiSynth();
+
+    if (engine == GT_MIDI_ENGINE_MT32)
+    {
+        int index = midi_get_mt32_index();
+
+        if (synth->IsOpen(engine) && (index == midi_host.GetMT32Index()))
+            return true;
+
+        MidiSynthHost::MidiSynthHost_Open result = midi_host.OpenMT32(synth, index);
+
+        if (result == MidiSynthHost::MIDI_SYNTH_HOST_OPENED)
+            log_cb(RETRO_LOG_INFO, "Built-in MT-32: %s\n", midi_host.GetMT32(index).name);
+        else if (result == MidiSynthHost::MIDI_SYNTH_HOST_FAILED)
+            log_cb(RETRO_LOG_ERROR, "Unable to open the %s ROMs\n", midi_host.GetMT32(index).name);
+
+        return result == MidiSynthHost::MIDI_SYNTH_HOST_OPENED;
+    }
+
+    if (engine == GT_MIDI_ENGINE_SOUNDFONT)
+    {
+        if (synth->IsOpen(engine))
+            return true;
+
+        MidiSynthHost::MidiSynthHost_Open result = midi_host.OpenSoundFont(synth);
+        const char* path = midi_host.GetSoundFont().c_str();
+
+        if (result == MidiSynthHost::MIDI_SYNTH_HOST_OPENED)
+            log_cb(RETRO_LOG_INFO, "Built-in SoundFont: %s\n", path);
+        else if (result == MidiSynthHost::MIDI_SYNTH_HOST_FAILED)
+            log_cb(RETRO_LOG_ERROR, "Unable to load the SoundFont %s\n", path);
+
+        return result == MidiSynthHost::MIDI_SYNTH_HOST_OPENED;
+    }
+
+    return false;
 }
 
 static void set_controller_info(void)
@@ -2027,6 +2304,22 @@ static void check_variables(void)
         core->GetAudio()->SetPCM16Volume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
     }
 
+    var.key = "geartowns_mt32_volume";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->GetAudio()->SetMT32Volume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
+    }
+
+    var.key = "geartowns_gm_volume";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        core->GetAudio()->SetGMVolume((float)CLAMP(atoi(var.value), 0, 200) / 100.0f);
+    }
+
     var.key = "geartowns_cdrom_speed";
     var.value = NULL;
 
@@ -2132,6 +2425,47 @@ static void check_variables(void)
     {
         machine_settings.speed_mode = strcmp(var.value, "compatible") == 0 ? 0 : strcmp(var.value, "high") == 0 ? 1 :
             GT_MACHINE_AUTO;
+    }
+
+    var.key = "geartowns_midi_card";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        machine_settings.midi_card = strcmp(var.value, "none") == 0 ? 0 : strcmp(var.value, "fitted") == 0 ? 1 :
+            GT_MACHINE_AUTO;
+    }
+
+    var.key = "geartowns_midi";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+        midi_builtin = strcmp(var.value, "retroarch") != 0;
+
+    var.key = "geartowns_midi_music";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        midi_music = -1;
+
+        for (int i = 0; i < GT_MIDI_SYNTH_COUNT; i++)
+        {
+            if (strcmp(var.value, k_midi_synths[i].id) == 0)
+                midi_music = i;
+        }
+    }
+
+    var.key = "geartowns_mt32_model";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        for (int i = 0; i < GT_MT32_MODEL_COUNT; i++)
+        {
+            if (strcmp(var.value, k_mt32_models[i].id) == 0)
+                midi_mt32_model = i;
+        }
     }
 
     var.key = "geartowns_boot_device";

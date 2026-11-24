@@ -564,17 +564,15 @@ void PCM16::UpdateIRQ()
     u8 causes = GetIRQCauses();
     bool asserted = (line >= 0) && (causes != 0);
 
-    // No other emulated device drives IRQ 4, 5, 10, 14 or 15
-
     if ((m_irq_line >= 0) && (line != m_irq_line) && m_irq_asserted)
-        m_pic->SetIRQLine(m_irq_line, false);
+        m_pic->SetSharedIRQLine(m_irq_line, PIC::PIC_SOURCE_PCM16, false);
 
     if ((line >= 0) && ((line != m_irq_line) || (asserted != m_irq_asserted)))
     {
         if (asserted)
             TraceIRQ(causes);
 
-        m_pic->SetIRQLine(line, asserted);
+        m_pic->SetSharedIRQLine(line, PIC::PIC_SOURCE_PCM16, asserted);
     }
 
     m_irq_line = line;
@@ -718,7 +716,5 @@ void PCM16::SanitizeState()
     m_state.transfer_control &= k_pcm16_transfer_input_irq | k_pcm16_transfer_dreq_mask | k_pcm16_transfer_buffer_mask;
     m_state.threshold &= 0x7F;
     m_state.phase %= k_pcm16_period;
-    m_irq_line = -1;
-    m_irq_asserted = false;
     UpdateIRQ();
 }

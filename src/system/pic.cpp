@@ -24,11 +24,25 @@ void PIC::Init()
     m_trace_logger = TraceLogger::GetDisabled();
     m_master.Init(true);
     m_slave.Init(false);
+    memset(m_shared_lines, 0, sizeof(m_shared_lines));
 }
 
 void PIC::SetTraceLogger(TraceLogger* trace_logger)
 {
     m_trace_logger = TraceLogger::Resolve(trace_logger);
+}
+
+// The line stays high while any of its sources holds it
+void PIC::SetSharedIRQLine(int irq, PIC_Source source, bool high)
+{
+    bool level = false;
+    u32 lines = m_shared_lines[source];
+    m_shared_lines[source] = (u16)(high ? SET_BIT(lines, irq) : UNSET_BIT(lines, irq));
+
+    for (int i = 0; i < PIC_SOURCE_COUNT; i++)
+        level |= IS_SET_BIT(m_shared_lines[i], irq);
+
+    SetIRQLine(irq, level);
 }
 
 // Only a rising input is a new request

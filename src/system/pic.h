@@ -29,12 +29,21 @@ class TraceLogger;
 class PIC
 {
 public:
+    enum PIC_Source
+    {
+        PIC_SOURCE_PCM16 = 0,
+        PIC_SOURCE_MIDI,
+        PIC_SOURCE_COUNT
+    };
+
+public:
     void Init();
     void Reset();
     u8 Read(u16 port);
     u8 Peek(u16 port) const;
     void Write(u16 port, u8 value);
     void SetIRQLine(int irq, bool high);
+    void SetSharedIRQLine(int irq, PIC_Source source, bool high);
     void SetTraceLogger(TraceLogger* trace_logger);
     bool IsInterruptPending() const;
     u8 AcknowledgeInterrupt();
@@ -56,6 +65,7 @@ private:
     I8259 m_master;
     I8259 m_slave;
     TraceLogger* m_trace_logger;
+    u16 m_shared_lines[PIC_SOURCE_COUNT];
 };
 
 static const int k_pic_cascade_line = 7;

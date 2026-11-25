@@ -34,6 +34,7 @@ static u32 state_changes = 0;
 static bool rewind_changed = false;
 
 static bool valid_id(int id);
+static bool save_changes(int id);
 static std::string get_working_path(const char* path);
 
 bool emu_hard_disk_is_image(const char* path)
@@ -63,7 +64,7 @@ int emu_hard_disk_get_image_id(const char* path)
 
 bool emu_hard_disk_attach(int id, const char* path, bool write_protected)
 {
-    if (!valid_id(id) || !IsValidPointer(path) ||
+    if (!valid_id(id) || !IsValidPointer(path) || !save_changes(id) ||
         !emu_get_core()->AttachHardDisk(id, path, write_protected, get_working_path(path).c_str()))
         return false;
 
@@ -74,7 +75,7 @@ bool emu_hard_disk_attach(int id, const char* path, bool write_protected)
 
 bool emu_hard_disk_detach(int id)
 {
-    if (!valid_id(id))
+    if (!valid_id(id) || !save_changes(id))
         return false;
 
     emu_get_core()->DetachHardDisk(id);
@@ -83,7 +84,7 @@ bool emu_hard_disk_detach(int id)
 
 bool emu_hard_disk_create(int id, const char* path, int size_mb, bool formatted, bool write_protected)
 {
-    if (!valid_id(id) || !IsValidPointer(path) || (size_mb <= 0) || SDL_GetPathInfo(path, NULL))
+    if (!valid_id(id) || !IsValidPointer(path) || (size_mb <= 0) || SDL_GetPathInfo(path, NULL) || !save_changes(id))
         return false;
 
     if (!HardDiskImage::Create(path, (u64)size_mb * 1024 * 1024, formatted))
@@ -199,6 +200,15 @@ u32 emu_hard_disk_take_state_changes(void)
 static bool valid_id(int id)
 {
     return (id >= 0) && (id < GT_MAX_HARD_DISKS);
+}
+
+static bool save_changes(int id)
+{
+    if (emu_get_core()->GetHardDisk(id)->Flush())
+        return true;
+
+    flush_error = true;
+    return false;
 }
 
 static std::string get_working_path(const char* path)

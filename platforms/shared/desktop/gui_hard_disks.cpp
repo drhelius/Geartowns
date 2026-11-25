@@ -257,11 +257,15 @@ static void disk_menu(int id)
 
     if (ImGui::MenuItem("Detach", NULL, false, present))
     {
-        emu_hard_disk_detach(id);
-        Emu_HardDiskInfo detached;
-        emu_hard_disk_get_info(id, &detached);
-        gui_notify(gui_NotificationInfo, ICON_MD_EJECT, "Hard disk detached",
-            detached.pending ? "At the next reset" : name);
+        if (emu_hard_disk_detach(id))
+        {
+            Emu_HardDiskInfo detached;
+            emu_hard_disk_get_info(id, &detached);
+            gui_notify(gui_NotificationInfo, ICON_MD_EJECT, "Hard disk detached",
+                detached.pending ? "At the next reset" : name);
+        }
+        else
+            gui_set_error_message("Unable to save the hard disk changes.\nThe disk stays attached until they are saved.");
     }
 
     ImGui::Separator();

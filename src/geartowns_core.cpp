@@ -1381,6 +1381,12 @@ void GeartownsCore::ApplyHardDisks()
         if (!m_hard_disk_pending[i])
             continue;
 
+        if (!m_scsi->GetDisk(i)->GetImage()->Flush())
+        {
+            Error("The hard disk on SCSI ID %d stays attached until its changes are saved", i);
+            continue;
+        }
+
         m_hard_disk_pending[i] = false;
         m_scsi->GetDisk(i)->Detach();
 

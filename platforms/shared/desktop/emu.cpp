@@ -237,7 +237,9 @@ void emu_destroy(void)
         Error("Unable to save one or more floppy disks on exit");
 
     save_cmos();
-    emu_hard_disk_flush();
+
+    if (!emu_hard_disk_flush())
+        Error("Unable to save one or more hard disks on exit");
 
     if (!emu_memory_card_flush())
         Error("Unable to save the IC memory card on exit");

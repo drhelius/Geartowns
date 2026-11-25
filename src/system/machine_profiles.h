@@ -22,7 +22,7 @@
 
 #include "../common/common.h"
 
-#define GT_MACHINE_RELEASE_ORDER_COUNT 15
+#define GT_MACHINE_RELEASE_ORDER_COUNT 18
 #define GT_MACHINE_FEATURE_COUNT 30
 #define GT_MACHINE_CPU_SPEED_COUNT 8
 #define GT_MACHINE_RAM_SIZE_COUNT 18
@@ -39,6 +39,7 @@ const u8 k_machine_ram_ma[] = { 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 100
 const u8 k_machine_ram_mx[] = { 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 38, 40, 42, 44, 46, 48, 52,
     53, 54, 56, 60, 68, 70, 72, 76, 84, 100, 0 };
 const u8 k_machine_ram_mf_fresh[] = { 4, 6, 8, 10, 12, 14, 16, 20, 22, 24, 28, 36, 38, 40, 44, 52, 68, 0 };
+const u8 k_machine_ram_fresh_e[] = { 8, 12, 16, 20, 24, 28, 32, 40, 44, 48, 56, 72, 0 };
 const u8 k_machine_ram_hc[] = { 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 0 };
 const u8 k_machine_ram_marty[] = { 2, 4, 0 };
 
@@ -131,14 +132,17 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
     { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", true, 0x0C02, GT_MACHINE_CPU_80486DX2, GT_MACHINE_FPU_INTEGRATED, 66000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_mx, 4, 2, true, "fmtownsmx", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II MF / Fresh", "mf_fresh", "MF20, MF170W, Fresh", "February 1994", true, 0x0F02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II HC", "hc", "HC53, HC53M", "February 1995", true, 0x1102, GT_MACHINE_CPU_PENTIUM, GT_MACHINE_FPU_INTEGRATED, 90000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_hc, 8, 1, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
-    { "FM Towns Marty", "marty", "Marty, Marty 2, TC Marty", "February 1993", true, 0x4A03, GT_MACHINE_CPU_80386SX, GT_MACHINE_FPU_NONE, 16000000, GT_MACHINE_MAP_MARTY, k_machine_features_marty, k_machine_ram_marty, 2, 1, false, "fmtmarty", &k_machine_video_marty, &k_machine_bus_sx }
+    { "FM Towns Marty", "marty", "Marty, Marty 2, TC Marty", "February 1993", true, 0x4A03, GT_MACHINE_CPU_80386SX, GT_MACHINE_FPU_NONE, 16000000, GT_MACHINE_MAP_MARTY, k_machine_features_marty, k_machine_ram_marty, 2, 1, false, "fmtmarty", &k_machine_video_marty, &k_machine_bus_sx },
+    { "FM Towns II EA / Fresh T", "ea", "EA2, Fresh T", "October 1994", true, 0x1302, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
+    { "FM Towns II Fresh E / ES / ET", "fresh_e", "Fresh E, Fresh ES, Fresh ET", "October 1994", true, 0x1402, GT_MACHINE_CPU_80486DX2, GT_MACHINE_FPU_INTEGRATED, 66000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_fresh_e, 8, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
+    { "FM Towns II Fresh FS / FT", "fresh_fs", "Fresh FS, Fresh FT, SX53", "Summer 1995", true, 0x1402, GT_MACHINE_CPU_AM486DX4, GT_MACHINE_FPU_INTEGRATED, 100000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_fresh_e, 8, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx }
 };
 
 const GT_Machine_Model k_machine_release_order[GT_MACHINE_RELEASE_ORDER_COUNT] =
 {
     GT_MACHINE_MODEL1_2, GT_MACHINE_1F_2F, GT_MACHINE_10F_20F, GT_MACHINE_CX, GT_MACHINE_UX, GT_MACHINE_UG, GT_MACHINE_HG,
-    GT_MACHINE_HR, GT_MACHINE_UR, GT_MACHINE_ME, GT_MACHINE_MA, GT_MACHINE_MX, GT_MACHINE_MF_FRESH, GT_MACHINE_HC,
-    GT_MACHINE_MARTY
+    GT_MACHINE_HR, GT_MACHINE_UR, GT_MACHINE_ME, GT_MACHINE_MA, GT_MACHINE_MX, GT_MACHINE_MF_FRESH, GT_MACHINE_EA,
+    GT_MACHINE_FRESH_E, GT_MACHINE_HC, GT_MACHINE_FRESH_FS, GT_MACHINE_MARTY
 };
 
 const int k_machine_cpu_speeds_mhz[GT_MACHINE_CPU_SPEED_COUNT] = { 16, 20, 25, 33, 40, 50, 66, 100 };
@@ -167,7 +171,8 @@ const GT_Machine_CPU_Info k_machine_cpus[GT_MACHINE_CPU_COUNT] =
     { "80386SX", true, 3, false, 0x00002308, 0x7FFFFFF0, 16, 1, 0, false, false },
     { "80486SX", true, 4, false, 0x00000420, 0x00000010, 32, 1, 8, false, false },
     { "80486DX2", true, 4, true, 0x00000433, 0x00000010, 32, 2, 8, false, false },
-    { "Pentium", true, 5, true, 0x00000521, 0x00000010, 64, 3, 16, true, false }
+    { "Pentium", true, 5, true, 0x00000521, 0x00000010, 64, 3, 16, true, false },
+    { "Am486DX4", true, 4, true, 0x00000432, 0x00000010, 32, 3, 8, false, false }
 };
 
 static inline const char* get_machine_fpu_name(GT_Machine_CPU cpu)

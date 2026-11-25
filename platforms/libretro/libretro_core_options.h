@@ -202,7 +202,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_pcm16_volume",
         "16-bit PCM Volume",
         NULL,
-        "Volume of the 16-bit PCM of the FM Towns II ME, MA, MX, MF/Fresh and HC, as a percentage where 100 is the default.",
+        "Volume of the 16-bit PCM of the FM Towns II ME, MA, MX, MF/Fresh, EA, Fresh E, HC and Fresh FS, as a percentage where 100 is the default.",
         NULL,
         "audio",
         {
@@ -342,7 +342,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_cdrom_speed",
         "CD-ROM Read Speed",
         NULL,
-        "How fast the drive reads sectors. Auto reads at the speed of the model's drive: 2x on the FM Towns II ME, MA, MX, MF/Fresh and HC in high-speed mode, 1x on the rest. Some software may not expect a faster drive.",
+        "How fast the drive reads sectors. Auto reads at the speed of the model's drive: 2x on the FM Towns II ME, MA, MX, MF/Fresh, EA, Fresh E, HC and Fresh FS in high-speed mode, 1x on the rest. Some software may not expect a faster drive.",
         NULL,
         "cdrom",
         {
@@ -453,7 +453,10 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "ma",       "FM Towns II MA (80486SX 33 MHz)" },
             { "mx",       "FM Towns II MX (80486DX2 66 MHz)" },
             { "mf_fresh", "FM Towns II MF / Fresh (80486SX 33 MHz)" },
+            { "ea",       "FM Towns II EA / Fresh T (80486SX 33 MHz)" },
+            { "fresh_e",  "FM Towns II Fresh E / ES / ET (80486DX2 66 MHz)" },
             { "hc",       "FM Towns II HC (Pentium 90 MHz)" },
+            { "fresh_fs", "FM Towns II Fresh FS / FT (Am486DX4 100 MHz)" },
             { "marty",    "FM Towns Marty (80386SX 16 MHz)" },
             { NULL, NULL },
         },
@@ -515,7 +518,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         "geartowns_fpu",
         "FPU (restart)",
         NULL,
-        "The math coprocessor: an 80387 card on the 386 models, a 487SX card on the HR, ME, MA and MF/Fresh, built in on the MX and HC. Auto fits one when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model but the MX and HC, whose FPU can't be removed. The UX, UG, UR and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
+        "The math coprocessor: an 80387 card on the 386 models, a 487SX card on the HR, ME, MA, MF/Fresh and EA, built in on the MX, Fresh E, HC and Fresh FS. Auto fits one when the game database names one for the game and Model is on Auto, otherwise it keeps the model's original, none on every emulated model but the MX, Fresh E, HC and Fresh FS, whose FPU can't be removed. The UX, UG, UR and Marty have no socket for it. A few games need one, and some run different code with one fitted.",
         NULL,
         "system",
         {

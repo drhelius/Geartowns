@@ -583,7 +583,8 @@ static void menu_cdrom(void)
         {
             ImGui::BeginTooltip();
             ImGui::Text("Auto reads at the speed of the model's drive: 2x on");
-            ImGui::Text("the ME, MA, MX, MF/Fresh and HC in high-speed mode, 1x on the rest.");
+            ImGui::Text("the ME, MA, MX, MF/Fresh, EA, Fresh E, HC and Fresh FS in high-speed mode,");
+            ImGui::Text("1x on the rest.");
             ImGui::Text("Faster speeds may break software that doesn't expect them.");
             gui_draw_game_source_tooltip(Emu_Game_Setting_CDROMSpeed);
             ImGui::EndTooltip();
@@ -1283,7 +1284,7 @@ static void menu_machine_fpu(const GT_Machine_Profile& profile)
         ImGui::BeginTooltip();
         ImGui::Text("It is recommended to leave this option on Auto.");
         ImGui::Text("Auto fits an 80387 or a 487SX if the game database asks for one");
-        ImGui::Text("or keeps the model's original: none, or the built-in one of the MX and HC.");
+        ImGui::Text("or keeps the model's original: none, or the built-in one of the DX2, DX4 and Pentium.");
         ImGui::Text("Reset the emulator to apply changes.");
         gui_draw_game_source_tooltip(Emu_Game_Setting_FPU);
         ImGui::EndTooltip();

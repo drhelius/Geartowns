@@ -520,16 +520,21 @@ static void draw_debug_registers(I386* cpu, const I386_State& state)
 const char* gui_debug_i386_cpu_name(void)
 {
     static char name[32];
-    snprintf(name, sizeof(name), "Intel %s", k_machine_cpus[emu_get_core()->GetMachineConfig().cpu].name);
+    GT_Machine_CPU cpu = emu_get_core()->GetMachineConfig().cpu;
+    snprintf(name, sizeof(name), "%s %s", cpu == GT_MACHINE_CPU_AM486DX4 ? "AMD" : "Intel", k_machine_cpus[cpu].name);
     return name;
 }
 
 const char* gui_debug_i386_fpu_name(void)
 {
-    const GT_Machine_CPU_Info& cpu = k_machine_cpus[emu_get_core()->GetMachineConfig().cpu];
+    GT_Machine_CPU type = emu_get_core()->GetMachineConfig().cpu;
+    const GT_Machine_CPU_Info& cpu = k_machine_cpus[type];
 
     if (cpu.family == 3)
         return "Intel 80387";
+
+    if (type == GT_MACHINE_CPU_AM486DX4)
+        return "AMD Am486 FPU";
 
     if (cpu.family == 4)
         return cpu.fpu ? "Intel 80486 FPU" : "Intel 80487SX";

@@ -170,6 +170,7 @@ EXTERN void emu_key_mapper_set_buttons(u8 buttons);
 EXTERN bool emu_key_mapping_is_enabled(void);
 EXTERN void emu_key_mapping_toggle(void);
 EXTERN const char* emu_key_map_get_path(void);
+EXTERN const char* emu_key_map_get_global_path(void);
 EXTERN void emu_key_map_save(void);
 EXTERN void emu_set_keyboard_layout(int layout);
 EXTERN void emu_set_host_chars(const u32* chars, const u16* level_keys, int level_key_count);

@@ -128,7 +128,9 @@ bool emu_game_open(bool* hard_disks_changed)
     bool powered = emu_is_powered_on();
     bool same = powered && (content.key == game.content.key);
     last_key = content.key;
-    latch_pending = powered && !same && emu_game_has_overrides() && !has_section(content.key) && !is_in_database(content);
+    bool has_keys = !emu_get_core()->GetKeyMap()->IsLayerEmpty(GT_KEY_MAP_USER);
+    latch_pending = powered && !same && (emu_game_has_overrides() || has_keys) && !has_section(content.key) &&
+        !is_in_database(content);
     *hard_disks_changed = false;
 
     if (latch_pending)
@@ -158,6 +160,11 @@ bool emu_game_is_open(void)
 const char* emu_game_get_name(void)
 {
     return game.content.name.c_str();
+}
+
+const char* emu_game_get_content_path(void)
+{
+    return emu_game_is_open() ? game.content.path.c_str() : "";
 }
 
 int emu_game_get(int setting)

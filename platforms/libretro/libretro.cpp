@@ -143,6 +143,7 @@ static bool retro_key_down[RETROK_LAST];
 static int pointer_last_x = 0;
 static int pointer_last_y = 0;
 static std::string key_map_path;
+static std::string global_key_map_path;
 static bool key_mapper_was_open = false;
 static bool key_mapping_was_enabled = true;
 
@@ -949,6 +950,7 @@ static void unload_content(void)
     core->GetKeyMapper()->Close();
     key_map_save();
     key_map_path.clear();
+    global_key_map_path.clear();
     core->EjectMedia();
     core->PowerOff();
 
@@ -1969,11 +1971,31 @@ static void key_map_load(void)
     std::string error;
 
     key_map_set_host_chars();
-    key_map_path = retro_save_directory;
-    append_path_component(key_map_path, (get_save_disk_name(get_file_name(retro_game_path, true)) + ".keys").c_str());
+    key_map_path.clear();
+    global_key_map_path = retro_save_directory;
+    append_path_component(global_key_map_path, "geartowns.keys");
     key_mapper_was_open = false;
     key_mapping_was_enabled = true;
-    core->GetKeyMapper()->SetTitle(get_file_name(retro_game_path, false).c_str());
+
+    if (retro_game_path[0] != 0)
+    {
+        key_map_path = retro_save_directory;
+        append_path_component(key_map_path, (get_save_disk_name(get_file_name(retro_game_path, true)) + ".keys").c_str());
+        core->GetKeyMapper()->SetTitle(get_file_name(retro_game_path, false).c_str());
+    }
+
+    if ((key_map_path.size() == global_key_map_path.size()) &&
+        ends_with_no_case(key_map_path.c_str(), global_key_map_path.c_str()))
+        key_map_path.clear();
+
+    if (key_map_path.empty())
+        core->GetKeyMapper()->SetTitle("");
+
+    if (!core->GetKeyMap()->LoadGlobalFile(global_key_map_path.c_str(), &error))
+    {
+        log_cb(RETRO_LOG_ERROR, "Ignoring the key map %s: %s\n", global_key_map_path.c_str(), error.c_str());
+        show_message(("Key map ignored: " + error).c_str(), 4, RETRO_LOG_ERROR);
+    }
 
     if (!core->GetKeyMap()->LoadFiles(key_map_path.c_str(), NULL, &error))
     {
@@ -1984,9 +2006,12 @@ static void key_map_load(void)
 
 static void key_map_save(void)
 {
-    if (!core->GetKeyMap()->SaveUserFile(key_map_path.c_str()))
+    bool saved = core->GetKeyMap()->SaveFile(GT_KEY_MAP_USER, key_map_path.c_str());
+    saved = core->GetKeyMap()->SaveFile(GT_KEY_MAP_GLOBAL, global_key_map_path.c_str()) && saved;
+
+    if (!saved)
     {
-        log_cb(RETRO_LOG_ERROR, "Unable to save the key map %s\n", key_map_path.c_str());
+        log_cb(RETRO_LOG_ERROR, "Unable to save the key map\n");
         show_message("Unable to save the key map", 3, RETRO_LOG_ERROR);
     }
 }

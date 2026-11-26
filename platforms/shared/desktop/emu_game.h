@@ -67,6 +67,7 @@ EXTERN bool emu_game_open(bool* hard_disks_changed);
 EXTERN void emu_game_restart(void);
 EXTERN bool emu_game_is_open(void);
 EXTERN const char* emu_game_get_name(void);
+EXTERN const char* emu_game_get_content_path(void);
 EXTERN int emu_game_get(int setting);
 EXTERN void emu_game_set(int setting, int value);
 EXTERN void emu_game_set_session(int setting, int value);

@@ -32,6 +32,7 @@ typedef void (*GT_Key_Event_Fn)(void* context, GT_Keys key, bool pressed);
 enum GT_Key_Map_Layer
 {
     GT_KEY_MAP_BUILT_IN = 0,
+    GT_KEY_MAP_GLOBAL,
     GT_KEY_MAP_GAME,
     GT_KEY_MAP_USER,
     GT_KEY_MAP_LAYER_COUNT
@@ -98,10 +99,13 @@ public:
     bool Bind(u16 usage, const GT_Keys* keys, int count);
     bool Unbind(u16 usage, GT_Keys key);
     bool RestoreBuiltIn(u16 usage);
-    bool IsChanged() const;
-    void SetChanged(bool changed);
+    void SetEditLayer(GT_Key_Map_Layer layer);
+    GT_Key_Map_Layer GetEditLayer() const;
+    bool IsChanged(GT_Key_Map_Layer layer) const;
+    void SetChanged(GT_Key_Map_Layer layer, bool changed);
     bool LoadFiles(const char* user_path, const char* game_text, std::string* error);
-    bool SaveUserFile(const char* path);
+    bool LoadGlobalFile(const char* path, std::string* error);
+    bool SaveFile(GT_Key_Map_Layer layer, const char* path);
 
     static bool IsHostKey(u16 usage);
     static bool IsLayoutHostKey(u16 usage);
@@ -116,8 +120,10 @@ public:
     static std::string FormatTargets(const GT_Key_Map_Entry& entry);
 
 private:
+    const GT_Key_Map_Entry& GetEntryUpTo(int top, u16 usage, GT_Key_Map_Layer* layer) const;
     const GT_Key_Map_Entry& GetBaseEntry(GT_Key_Map_Layer layer, u16 usage) const;
-    void SetUserEntry(u16 usage, const GT_Key_Map_Entry& entry);
+    bool UsesLayoutUpTo(int top, u16 usage) const;
+    void SetEditEntry(u16 usage, const GT_Key_Map_Entry& entry);
     bool KeepsUserEntry(u16 usage) const;
     bool FindLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const;
     void BuildLayoutTargets();
@@ -150,7 +156,8 @@ private:
     bool m_shift_forced;
     bool m_enabled;
     bool m_blocked;
-    bool m_changed;
+    bool m_changed[GT_KEY_MAP_LAYER_COUNT];
+    GT_Key_Map_Layer m_edit_layer;
     GT_Key_Event_Fn m_callback;
     void* m_context;
 };

@@ -22,7 +22,7 @@
 
 #include "../common/common.h"
 
-#define OSD_CANVAS_COLORS 16
+#define OSD_CANVAS_COLORS 32
 
 class OsdCanvas
 {

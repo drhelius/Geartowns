@@ -100,6 +100,7 @@ static GT_Boot_Device boot_device_override = GT_BOOT_DEVICE_AUTO;
 static bool boot_device_overridden = false;
 static bool boot_device_check = false;
 static std::string key_map_path;
+static std::string global_key_map_path;
 
 static void load_media_thread_func(void);
 static void reset_buffers(void);
@@ -120,6 +121,7 @@ static void notify_machine(void);
 static void check_boot_device(void);
 static void update_key_map(void);
 static std::string get_key_map_path(std::string* title);
+static std::string get_global_key_map_path(void);
 static void save_key_map(void);
 static Emu_Pad_Source pad_sources[GT_MAX_GAMEPADS];
 static bool init_debug(void);
@@ -666,6 +668,11 @@ void emu_key_mapping_toggle(void)
 const char* emu_key_map_get_path(void)
 {
     return key_map_path.c_str();
+}
+
+const char* emu_key_map_get_global_path(void)
+{
+    return global_key_map_path.c_str();
 }
 
 void emu_key_map_save(void)
@@ -2268,17 +2275,32 @@ static void update_key_map(void)
 {
     std::string title;
     std::string path = get_key_map_path(&title);
+    std::string global_path = get_global_key_map_path();
     KeyMap* key_map = geartowns->GetKeyMap();
+    std::string error;
 
     geartowns->GetKeyMapper()->SetTitle(title.c_str());
+
+    if ((path == key_map_path) && (global_path == global_key_map_path))
+        return;
+
+    save_key_map();
+
+    if (global_path != global_key_map_path)
+    {
+        global_key_map_path = global_path;
+
+        if (!key_map->LoadGlobalFile(global_path.c_str(), &error))
+        {
+            Log("Ignoring the key map %s: %s", global_path.c_str(), error.c_str());
+            gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Key map ignored", error.c_str(), "key_map");
+        }
+    }
 
     if (path == key_map_path)
         return;
 
-    save_key_map();
     key_map_path = path;
-
-    std::string error;
 
     if (!key_map->LoadFiles(path.c_str(), NULL, &error))
     {
@@ -2289,13 +2311,12 @@ static void update_key_map(void)
 
 static std::string get_key_map_path(std::string* title)
 {
-    const char* content = geartowns->GetMedia()->IsReady() ? geartowns->GetMedia()->GetFilePath() : "";
+    const char* content = emu_game_get_content_path();
+
+    *title = content[0] != '\0' ? get_filename(content) : "";
 
     if (content[0] == '\0')
-        content = emu_floppy_get_content_path();
-
-    if (content[0] == '\0')
-        content = emu_hard_disk_get_content_path();
+        return "";
 
     const char* directory = get_configurated_dir(config_emulator.savefiles_dir_option, config_emulator.savefiles_path.c_str());
     char folder[GT_MAX_PATH];
@@ -2304,30 +2325,46 @@ static std::string get_key_map_path(std::string* title)
 
     if (!IsValidPointer(directory))
     {
-        if (content[0] != '\0')
-            get_directory(content, folder, sizeof(folder));
-        else
-            strncpy_fit(folder, config_root_path, sizeof(folder));
-
+        get_directory(content, folder, sizeof(folder));
         directory = folder;
     }
 
-    if (content[0] != '\0')
-        get_filename_without_extension(content, name, sizeof(name));
-    else
-        strncpy_fit(name, "FM Towns", sizeof(name));
-
-    *title = content[0] != '\0' ? get_filename(content) : "";
+    get_filename_without_extension(content, name, sizeof(name));
     join_path(directory, (std::string(name) + ".keys").c_str(), path, sizeof(path));
+
+    std::string global = get_global_key_map_path();
+
+    if ((global.size() == strlen(path)) && ends_with_no_case(path, global.c_str()))
+    {
+        *title = "";
+        return "";
+    }
+
+    return path;
+}
+
+static std::string get_global_key_map_path(void)
+{
+    const char* directory = get_configurated_dir(config_emulator.savefiles_dir_option, config_emulator.savefiles_path.c_str());
+    char path[GT_MAX_PATH];
+
+    join_path(IsValidPointer(directory) ? directory : config_root_path, "FM Towns.keys", path, sizeof(path));
     return path;
 }
 
 static void save_key_map(void)
 {
-    if (!geartowns->GetKeyMap()->SaveUserFile(key_map_path.c_str()))
+    KeyMap* key_map = geartowns->GetKeyMap();
+    const std::string* paths[2] = { &key_map_path, &global_key_map_path };
+    const GT_Key_Map_Layer layers[2] = { GT_KEY_MAP_USER, GT_KEY_MAP_GLOBAL };
+
+    for (int i = 0; i < 2; i++)
     {
-        Log("Unable to save the key map %s", key_map_path.c_str());
-        gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Unable to save the key map", key_map_path.c_str(), "key_map");
+        if (key_map->SaveFile(layers[i], paths[i]->c_str()))
+            continue;
+
+        Log("Unable to save the key map %s", paths[i]->c_str());
+        gui_notify(gui_NotificationError, ICON_MD_KEYBOARD, "Unable to save the key map", paths[i]->c_str(), "key_map");
     }
 }
 

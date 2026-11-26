@@ -43,7 +43,8 @@ KeyMap::KeyMap()
     m_shift_forced = false;
     m_enabled = true;
     m_blocked = false;
-    m_changed = false;
+    memset(m_changed, 0, sizeof(m_changed));
+    m_edit_layer = GT_KEY_MAP_USER;
     ResetBuiltIn();
 }
 
@@ -289,10 +290,7 @@ int KeyMap::GetHostLevel() const
 
 bool KeyMap::UsesLayout(u16 usage) const
 {
-    if ((m_layout != GT_KEY_LAYOUT_CHARACTER) || !IsLayoutHostKey(usage))
-        return false;
-
-    return !m_layers[GT_KEY_MAP_GAME][usage].set && !m_layers[GT_KEY_MAP_USER][usage].set;
+    return UsesLayoutUpTo(m_edit_layer, usage);
 }
 
 bool KeyMap::GetLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const
@@ -457,6 +455,11 @@ const GT_Key_Map_Entry& KeyMap::GetLayerEntry(GT_Key_Map_Layer layer, u16 usage)
 
 const GT_Key_Map_Entry& KeyMap::GetEntry(u16 usage, GT_Key_Map_Layer* layer) const
 {
+    return GetEntryUpTo(m_edit_layer, usage, layer);
+}
+
+const GT_Key_Map_Entry& KeyMap::GetEntryUpTo(int top, u16 usage, GT_Key_Map_Layer* layer) const
+{
     if (!IsHostKey(usage))
     {
         if (IsValidPointer(layer))
@@ -465,7 +468,7 @@ const GT_Key_Map_Entry& KeyMap::GetEntry(u16 usage, GT_Key_Map_Layer* layer) con
         return k_key_map_empty;
     }
 
-    for (int l = GT_KEY_MAP_USER; l > GT_KEY_MAP_BUILT_IN; l--)
+    for (int l = top; l > GT_KEY_MAP_BUILT_IN; l--)
     {
         if (m_layers[l][usage].set)
         {
@@ -498,7 +501,7 @@ bool KeyMap::Bind(u16 usage, const GT_Keys* keys, int count)
         entry.keys[entry.count++] = (u8)keys[i];
     }
 
-    SetUserEntry(usage, entry);
+    SetEditEntry(usage, entry);
     return true;
 }
 
@@ -521,14 +524,14 @@ bool KeyMap::Unbind(u16 usage, GT_Keys key)
     if (entry.count == current.count)
         return false;
 
-    if ((entry.count == 0) && (layer == GT_KEY_MAP_USER))
+    if ((entry.count == 0) && (layer == m_edit_layer))
     {
-        m_layers[GT_KEY_MAP_USER][usage] = k_key_map_empty;
-        m_changed = true;
+        m_layers[m_edit_layer][usage] = k_key_map_empty;
+        m_changed[m_edit_layer] = true;
         return true;
     }
 
-    SetUserEntry(usage, entry);
+    SetEditEntry(usage, entry);
     return true;
 }
 
@@ -537,27 +540,37 @@ bool KeyMap::RestoreBuiltIn(u16 usage)
     if (!IsValidPointer(GetHostKeyName(usage)))
         return false;
 
-    if (KeepsUserEntry(usage))
+    if (KeepsUserEntry(usage) && UsesLayoutUpTo(m_edit_layer - 1, usage))
     {
-        m_layers[GT_KEY_MAP_USER][usage] = k_key_map_empty;
-        m_changed = true;
+        m_layers[m_edit_layer][usage] = k_key_map_empty;
+        m_changed[m_edit_layer] = true;
         return true;
     }
 
     GT_Key_Map_Entry entry = m_layers[GT_KEY_MAP_BUILT_IN][usage];
     entry.set = true;
-    SetUserEntry(usage, entry);
+    SetEditEntry(usage, entry);
     return true;
 }
 
-bool KeyMap::IsChanged() const
+void KeyMap::SetEditLayer(GT_Key_Map_Layer layer)
 {
-    return m_changed;
+    m_edit_layer = layer == GT_KEY_MAP_GLOBAL ? GT_KEY_MAP_GLOBAL : GT_KEY_MAP_USER;
 }
 
-void KeyMap::SetChanged(bool changed)
+GT_Key_Map_Layer KeyMap::GetEditLayer() const
 {
-    m_changed = changed;
+    return m_edit_layer;
+}
+
+bool KeyMap::IsChanged(GT_Key_Map_Layer layer) const
+{
+    return m_changed[layer];
+}
+
+void KeyMap::SetChanged(GT_Key_Map_Layer layer, bool changed)
+{
+    m_changed[layer] = changed;
 }
 
 bool KeyMap::LoadFiles(const char* user_path, const char* game_text, std::string* error)
@@ -568,7 +581,7 @@ bool KeyMap::LoadFiles(const char* user_path, const char* game_text, std::string
     SetEnabled(true);
     ClearLayer(GT_KEY_MAP_GAME);
     ClearLayer(GT_KEY_MAP_USER);
-    SetChanged(false);
+    SetChanged(GT_KEY_MAP_USER, false);
 
     if (!SetLayer(GT_KEY_MAP_GAME, game_text, &game_error))
         ClearLayer(GT_KEY_MAP_GAME);
@@ -584,21 +597,42 @@ bool KeyMap::LoadFiles(const char* user_path, const char* game_text, std::string
     return false;
 }
 
-bool KeyMap::SaveUserFile(const char* path)
+bool KeyMap::LoadGlobalFile(const char* path, std::string* error)
 {
-    if (!IsChanged() || !IsValidPointer(path) || (path[0] == 0))
+    std::string text;
+
+    ClearLayer(GT_KEY_MAP_GLOBAL);
+    SetChanged(GT_KEY_MAP_GLOBAL, false);
+
+    if (!IsValidPointer(path) || (path[0] == 0) || !MediaFile::ReadFile(path, k_media_file_no_limit, &text, true))
         return true;
 
-    SetChanged(false);
+    if (SetLayer(GT_KEY_MAP_GLOBAL, text.c_str(), error))
+        return true;
 
-    if (IsLayerEmpty(GT_KEY_MAP_USER))
+    ClearLayer(GT_KEY_MAP_GLOBAL);
+    return false;
+}
+
+bool KeyMap::SaveFile(GT_Key_Map_Layer layer, const char* path)
+{
+    if (!IsChanged(layer) || !IsValidPointer(path) || (path[0] == 0))
+        return true;
+
+    if (IsLayerEmpty(layer))
     {
         MediaFile::RemoveFile(path);
+        SetChanged(layer, false);
         return true;
     }
 
-    std::string text = "[keys]\n" + GetLayer(GT_KEY_MAP_USER);
-    return MediaFile::WriteFileAtomic(path, text.data(), text.size());
+    std::string text = "[keys]\n" + GetLayer(layer);
+
+    if (!MediaFile::WriteFileAtomic(path, text.data(), text.size()))
+        return false;
+
+    SetChanged(layer, false);
+    return true;
 }
 
 bool KeyMap::IsHostKey(u16 usage)
@@ -761,7 +795,7 @@ std::string KeyMap::FormatTargets(const GT_Key_Map_Entry& entry)
 
 const GT_Key_Map_Entry& KeyMap::GetActiveEntry(u16 usage) const
 {
-    return m_enabled ? GetEntry(usage) : m_layers[GT_KEY_MAP_BUILT_IN][usage];
+    return GetEntryUpTo(m_enabled ? m_edit_layer : GT_KEY_MAP_GLOBAL, usage, NULL);
 }
 
 const GT_Key_Map_Entry& KeyMap::GetBaseEntry(GT_Key_Map_Layer layer, u16 usage) const
@@ -775,14 +809,28 @@ const GT_Key_Map_Entry& KeyMap::GetBaseEntry(GT_Key_Map_Layer layer, u16 usage) 
     return m_layers[GT_KEY_MAP_BUILT_IN][usage];
 }
 
-void KeyMap::SetUserEntry(u16 usage, const GT_Key_Map_Entry& entry)
+bool KeyMap::UsesLayoutUpTo(int top, u16 usage) const
 {
-    if (!KeepsUserEntry(usage) && SameTargets(entry, GetBaseEntry(GT_KEY_MAP_USER, usage)))
-        m_layers[GT_KEY_MAP_USER][usage] = k_key_map_empty;
-    else
-        m_layers[GT_KEY_MAP_USER][usage] = entry;
+    if ((m_layout != GT_KEY_LAYOUT_CHARACTER) || !IsLayoutHostKey(usage))
+        return false;
 
-    m_changed = true;
+    for (int l = top; l > GT_KEY_MAP_BUILT_IN; l--)
+    {
+        if (m_layers[l][usage].set)
+            return false;
+    }
+
+    return true;
+}
+
+void KeyMap::SetEditEntry(u16 usage, const GT_Key_Map_Entry& entry)
+{
+    if (!KeepsUserEntry(usage) && SameTargets(entry, GetBaseEntry(m_edit_layer, usage)))
+        m_layers[m_edit_layer][usage] = k_key_map_empty;
+    else
+        m_layers[m_edit_layer][usage] = entry;
+
+    m_changed[m_edit_layer] = true;
 }
 
 bool KeyMap::KeepsUserEntry(u16 usage) const
@@ -792,7 +840,7 @@ bool KeyMap::KeepsUserEntry(u16 usage) const
 
 bool KeyMap::GetActiveLayoutTarget(u16 usage, int level, GT_Key_Map_Char* target) const
 {
-    if (m_enabled && !UsesLayout(usage))
+    if (!UsesLayoutUpTo(m_enabled ? m_edit_layer : GT_KEY_MAP_GLOBAL, usage))
         return false;
 
     return FindLayoutTarget(usage, level, target);
@@ -867,7 +915,8 @@ void KeyMap::FlushDeferredHostKeys(u16 usage)
 {
     GT_Key_Map_Char target;
     int level = GetHostLevel();
-    bool typed = (level >= 2) && (!m_enabled || UsesLayout(usage)) && GetLayoutTarget(usage, level, &target);
+    bool typed = (level >= 2) && UsesLayoutUpTo(m_enabled ? m_edit_layer : GT_KEY_MAP_GLOBAL, usage) &&
+        GetLayoutTarget(usage, level, &target);
 
     for (int i = k_host_key_first_modifier; i < GT_HOST_KEY_COUNT; i++)
     {

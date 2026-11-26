@@ -78,8 +78,11 @@ private:
     bool DrawLayoutChips(u16 usage, int start, int* x, int* y, int* row);
     void AddChip(const std::string& text, u8 fill, u16 usage, bool layout, int start, int* x, int* y, int* row);
     void DrawButtons();
-    void DrawButton(int x, int y, int width, const char* text);
+    void DrawButton(int x, int y, int width, const char* text, bool active = false, bool enabled = true);
+    void SetEditLayer(GT_Key_Map_Layer layer);
+    bool HasGame() const;
     void GetResetRect(int* x, int* y, int* width, int* height) const;
+    void GetLayerRect(int index, int* x, int* y, int* width, int* height) const;
     void GetCloseRect(int* x, int* y, int* width, int* height) const;
     bool IsPointerIn(int x, int y, int width, int height) const;
     std::string DescribeHostKey(u16 usage) const;

@@ -200,7 +200,7 @@ Press `Ctrl+F1` (`Cmd+F1` on macOS), or use **Input → Keyboard → Keyboard Ma
 - Each Towns key lists the host keys that drive it, built-in ones first. With Host Layout, keys that type it are tagged *(layout)* and show the Shift or AltGr they need, such as `2` and `Shift+'` under the Towns `2` on a US keyboard. Click the **x** on one to remove it. Removing a host key's last user binding gives it back its default mapping, while removing a built-in or layout one leaves the host key unbound (a layout key then types nothing at any level). Right click the Towns key to remove all but the built-in ones.
 - With no Towns key selected, pressing a host key shows what it types right now, Shift and AltGr included. Host keys are named after what they show on your keyboard.
 - Red keys are ones no host key reaches, such as 実行, 取消 and the dictionary keys.
-- **This Game** and **All Games**, at the bottom, pick what the changes are for. The mapper starts on This Game. All Games is for fixes to your own keyboard, applied to every game under each game's own changes. With nothing loaded it edits All Games.
+- **This Game** and **All Games**, at the bottom, choose where the changes go. The mapper opens on **This Game**, for the game you're running. **All Games** is for fixes to your own keyboard: they apply to every game, and a game's own change to the same key wins over them. With nothing loaded, only All Games is available.
 - **Reset All**, clicked twice, drops the changes of the side shown.
 - Press the same hotkey again, or click **Close**, to go back to the game.
 

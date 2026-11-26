@@ -1173,17 +1173,32 @@ static void menu_machine_ram(const GT_Machine_Profile& profile)
     GeartownsCore* core = emu_get_core();
     int ram_mb = emu_game_get(Emu_Game_Setting_RAM);
     int in_use = (int)(core->GetPendingMachineConfig().ram_size / (1024 * 1024));
+    bool any_model = !emu_game_is_open() && (emu_game_get(Emu_Game_Setting_Model) == GT_MACHINE_AUTO);
     float text_width = 0.0f;
+    int sizes[GT_MACHINE_RAM_SIZE_COUNT];
+    int count = 0;
     char labels[GT_MACHINE_RAM_SIZE_COUNT][32];
     char auto_label[32];
     char preview[96];
     snprintf(auto_label, sizeof(auto_label), "Auto (%d MB)", ram_mb == GT_MACHINE_AUTO ? in_use : profile.ram_default_mb);
     snprintf(preview, sizeof(preview), "%s", auto_label);
 
-    for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
+    if (any_model)
     {
-        int size = k_machine_ram_sizes_mb[i];
-        snprintf(labels[i], sizeof(labels[i]), size == profile.ram_default_mb ? "%d MB (Original)" : "%d MB", size);
+        for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
+            sizes[count++] = k_machine_ram_sizes_mb[i];
+    }
+    else
+    {
+        for (int i = 0; (profile.ram_sizes_mb[i] != 0) && (count < GT_MACHINE_RAM_SIZE_COUNT); i++)
+            sizes[count++] = profile.ram_sizes_mb[i];
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        int size = sizes[i];
+        snprintf(labels[i], sizeof(labels[i]), !any_model && (size == profile.ram_default_mb) ? "%d MB (Original)" :
+            "%d MB", size);
         text_width = MAX(text_width, ImGui::CalcTextSize(labels[i]).x);
 
         if (size == ram_mb)
@@ -1204,11 +1219,11 @@ static void menu_machine_ram(const GT_Machine_Profile& profile)
 
         ImGui::Separator();
 
-        for (int i = 0; i < GT_MACHINE_RAM_SIZE_COUNT; i++)
+        for (int i = 0; i < count; i++)
         {
-            if (ImGui::Selectable(labels[i], ram_mb == k_machine_ram_sizes_mb[i]))
+            if (ImGui::Selectable(labels[i], ram_mb == sizes[i]))
             {
-                emu_game_set(Emu_Game_Setting_RAM, k_machine_ram_sizes_mb[i]);
+                emu_game_set(Emu_Game_Setting_RAM, sizes[i]);
             }
         }
 

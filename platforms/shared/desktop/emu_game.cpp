@@ -64,7 +64,7 @@ struct Game_State
     Game_Disk disks[Emu_Game_Disk_Count];
 };
 
-static const int k_game_max_values = 32;
+static const int k_game_max_values = 64;
 static const char* const k_game_setting_keys[Emu_Game_Setting_Count] = { "Model", "CPUSpeed", "RAM", "FPU", "SpeedMode",
     "MIDICard", "Port1", "Port2", "Port1Keyboard", "Port2Keyboard", "CDROMSpeed", "FastDiskTiming", "MIDIMusic" };
 

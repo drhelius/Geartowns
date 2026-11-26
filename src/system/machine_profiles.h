@@ -25,22 +25,20 @@
 #define GT_MACHINE_RELEASE_ORDER_COUNT 18
 #define GT_MACHINE_FEATURE_COUNT 30
 #define GT_MACHINE_CPU_SPEED_COUNT 8
-#define GT_MACHINE_RAM_SIZE_COUNT 18
+#define GT_MACHINE_RAM_SIZE_COUNT 45
 
-const u8 k_machine_ram_model1_2[] = { 1, 2, 4, 6, 0 };
-const u8 k_machine_ram_1f_2f[] = { 1, 2, 4, 6, 8, 0 };
-const u8 k_machine_ram_10f_20f[] = { 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 0 };
-const u8 k_machine_ram_cx[] = { 2, 4, 6, 8, 10, 12, 16, 0 };
+// The board's RAM plus every mix of the era's modules in the free slots (Fujitsu catalogs), the HC's in pairs
+const u8 k_machine_ram_model1_2[] = { 1, 2, 3, 4, 5, 6, 0 };
+const u8 k_machine_ram_1f_2f[] = { 1, 2, 3, 4, 5, 6, 7, 8, 0 };
+const u8 k_machine_ram_10f_20f[] = { 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 26, 0 };
 const u8 k_machine_ram_ux[] = { 2, 4, 6, 10, 0 };
 const u8 k_machine_ram_hr[] = { 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 0 };
-const u8 k_machine_ram_ur[] = { 2, 4, 6, 8, 10, 0 };
-const u8 k_machine_ram_me[] = { 2, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 66, 0 };
-const u8 k_machine_ram_ma[] = { 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 100, 0 };
+const u8 k_machine_ram_me[] = { 2, 4, 6, 8, 10, 12, 14, 18, 20, 22, 26, 34, 36, 38, 42, 50, 66, 0 };
 const u8 k_machine_ram_mx[] = { 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 38, 40, 42, 44, 46, 48, 52,
-    53, 54, 56, 60, 68, 70, 72, 76, 84, 100, 0 };
+    54, 56, 60, 68, 70, 72, 76, 84, 100, 0 };
 const u8 k_machine_ram_mf_fresh[] = { 4, 6, 8, 10, 12, 14, 16, 20, 22, 24, 28, 36, 38, 40, 44, 52, 68, 0 };
-const u8 k_machine_ram_fresh_e[] = { 8, 12, 16, 20, 24, 28, 32, 40, 44, 48, 56, 72, 0 };
-const u8 k_machine_ram_hc[] = { 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 0 };
+const u8 k_machine_ram_fresh_e[] = { 8, 10, 12, 14, 16, 18, 20, 24, 26, 28, 32, 40, 42, 44, 48, 56, 72, 0 };
+const u8 k_machine_ram_hc[] = { 8, 16, 24, 32, 40, 48, 56, 72, 80, 88, 104, 0 };
 const u8 k_machine_ram_marty[] = { 2, 4, 0 };
 
 const u32 k_machine_features_1f = GT_MACHINE_FEATURE_RAM_SIZE | GT_MACHINE_FEATURE_FDD_STATUS |
@@ -121,14 +119,14 @@ const GT_Machine_Profile k_machine_profiles[GT_MACHINE_COUNT] =
     { "FM Towns (Model 1/2)", "model1_2", "Model 1, Model 2", "February 1989", true, 0x0101, GT_MACHINE_CPU_80386DX, GT_MACHINE_FPU_SOCKET, 16000000, GT_MACHINE_MAP_32BIT, 0, k_machine_ram_model1_2, 2, 2, false, "fmtowns", &k_machine_video_dx, &k_machine_bus_dx },
     { "FM Towns 1F/2F", "1f_2f", "1F, 2F, 1H, 2H", "November 1989", true, 0x0201, GT_MACHINE_CPU_80386DX, GT_MACHINE_FPU_SOCKET, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_1f, k_machine_ram_1f_2f, 2, 2, false, "fmtownsux", &k_machine_video_dx, &k_machine_bus_dx },
     { "FM Towns 10F/20F", "10f_20f", "10F, 20F, 40H, 80H", "October 1990", true, 0x0401, GT_MACHINE_CPU_80386DX, GT_MACHINE_FPU_SOCKET, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_10f, k_machine_ram_10f_20f, 2, 2, false, "fmtownsux", &k_machine_video_dx, &k_machine_bus_10f },
-    { "FM Towns II CX", "cx", "CX10, CX20, CX40, CX100", "November 1991", true, 0x0501, GT_MACHINE_CPU_80386DX, GT_MACHINE_FPU_SOCKET, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_cx, k_machine_ram_cx, 2, 2, false, "fmtownsux", &k_machine_video_dx, &k_machine_bus_cx },
+    { "FM Towns II CX", "cx", "CX10, CX20, CX40, CX100", "November 1991", true, 0x0501, GT_MACHINE_CPU_80386DX, GT_MACHINE_FPU_SOCKET, 16000000, GT_MACHINE_MAP_32BIT, k_machine_features_cx, k_machine_ram_10f_20f, 2, 2, false, "fmtownsux", &k_machine_video_dx, &k_machine_bus_cx },
     { "FM Towns II UX", "ux", "UX10, UX20, UX40", "November 1991", true, 0x0303, GT_MACHINE_CPU_80386SX, GT_MACHINE_FPU_NONE, 16000000, GT_MACHINE_MAP_24BIT, k_machine_features_ux, k_machine_ram_ux, 2, 2, false, "fmtownsux", &k_machine_video_sx, &k_machine_bus_sx },
     { "FM Towns II UG", "ug", "UG10, UG20, UG40, UG80", "November 1992", true, 0x0603, GT_MACHINE_CPU_80386SX, GT_MACHINE_FPU_NONE, 20000000, GT_MACHINE_MAP_24BIT, k_machine_features_ug, k_machine_ram_ux, 2, 2, false, "fmtownsux", &k_machine_video_sx, &k_machine_bus_ug },
     { "FM Towns II HG", "hg", "HG20, HG40, HG100", "November 1992", true, 0x0801, GT_MACHINE_CPU_80386DX, GT_MACHINE_FPU_SOCKET, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_hg, k_machine_ram_10f_20f, 2, 2, true, "fmtownshr", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II HR", "hr", "HR20, HR100, HR200", "November 1992", true, 0x0702, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_hr, k_machine_ram_hr, 4, 2, true, "fmtownshr", &k_machine_video_mx, &k_machine_bus_cx },
-    { "FM Towns II UR", "ur", "UR20, UR40, UR80", "February 1993", true, 0x0902, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_NONE, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_ur, k_machine_ram_ur, 2, 2, false, "fmtownshr", &k_machine_video_mx, &k_machine_bus_cx },
+    { "FM Towns II UR", "ur", "UR20, UR40, UR80", "February 1993", true, 0x0902, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_NONE, 20000000, GT_MACHINE_MAP_32BIT, k_machine_features_ur, k_machine_ram_ux, 2, 2, false, "fmtownshr", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II ME", "me", "ME20, ME170", "November 1993", true, 0x0D02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 25000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_me, 2, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
-    { "FM Towns II MA", "ma", "MA170, MA340, MA170W, MA340W", "November 1993", true, 0x0B02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_ma, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
+    { "FM Towns II MA", "ma", "MA170, MA340, MA170W, MA340W", "November 1993", true, 0x0B02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_mx, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II MX", "mx", "MX20, MX170, MX340, MX170W", "November 1993", true, 0x0C02, GT_MACHINE_CPU_80486DX2, GT_MACHINE_FPU_INTEGRATED, 66000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_mx, 4, 2, true, "fmtownsmx", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II MF / Fresh", "mf_fresh", "MF20, MF170W, Fresh", "February 1994", true, 0x0F02, GT_MACHINE_CPU_80486SX, GT_MACHINE_FPU_SOCKET, 33000000, GT_MACHINE_MAP_32BIT, k_machine_features_me, k_machine_ram_mf_fresh, 4, 2, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
     { "FM Towns II HC", "hc", "HC53, HC53M", "February 1995", true, 0x1102, GT_MACHINE_CPU_PENTIUM, GT_MACHINE_FPU_INTEGRATED, 90000000, GT_MACHINE_MAP_32BIT, k_machine_features_ma_mx, k_machine_ram_hc, 8, 1, true, "fmtownsftv", &k_machine_video_mx, &k_machine_bus_cx },
@@ -146,8 +144,8 @@ const GT_Machine_Model k_machine_release_order[GT_MACHINE_RELEASE_ORDER_COUNT] =
 };
 
 const int k_machine_cpu_speeds_mhz[GT_MACHINE_CPU_SPEED_COUNT] = { 16, 20, 25, 33, 40, 50, 66, 100 };
-const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 28, 32, 48, 64,
-    68, 96, 100 };
+const int k_machine_ram_sizes_mb[GT_MACHINE_RAM_SIZE_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24,
+    26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 60, 64, 66, 68, 70, 72, 76, 80, 84, 88, 96, 100, 104 };
 
 const GT_MIDI_Synth_Info k_midi_synths[GT_MIDI_SYNTH_COUNT] =
 {

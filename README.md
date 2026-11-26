@@ -342,8 +342,10 @@ Machine (for this run only, over the saved and per-game settings):
                             ur, me, ma, mx, mf_fresh, ea, fresh_e, hc,
                             fresh_fs, marty
       --cpu-mhz MHZ         auto, 16, 20, 25, 33, 40, 50, 66, 100
-      --ram MB              auto, 1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 26, 28,
-                            32, 48, 64, 68, 96, 100
+      --ram MB              auto, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18,
+                            20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44,
+                            46, 48, 50, 52, 54, 56, 60, 64, 66, 68, 70, 72, 76,
+                            80, 84, 88, 96, 100, 104
       --fpu FPU             auto, none, 80387 (a 487SX on the 486 models)
       --speed-mode MODE     auto, compatible, high
       --midi-card CARD      auto, none, fitted

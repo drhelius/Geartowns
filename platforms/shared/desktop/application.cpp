@@ -622,11 +622,16 @@ static void handle_title(void)
 
     char title[GT_MAX_PATH];
     const char* hotkey = config_hotkeys[config_HotkeyIndex_GameFocus].str;
+    const char* mouse_hotkey = config_hotkeys[config_HotkeyIndex_MouseCapture].str;
 
     if (game_focus_is_on() && (hotkey[0] != 0))
         snprintf(title, sizeof(title), "%s (Game Focus: %s to leave)", name, hotkey);
     else if (game_focus_is_on())
         snprintf(title, sizeof(title), "%s (Game Focus)", name);
+    else if (game_focus_is_mouse_on() && (mouse_hotkey[0] != 0))
+        snprintf(title, sizeof(title), "%s (Mouse Captured: %s to release)", name, mouse_hotkey);
+    else if (game_focus_is_mouse_on())
+        snprintf(title, sizeof(title), "%s (Mouse Captured)", name);
     else if (events_is_keyboard_captured())
         snprintf(title, sizeof(title), "%s (Keyboard Captured)", name);
     else

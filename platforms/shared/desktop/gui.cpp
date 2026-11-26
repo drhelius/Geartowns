@@ -366,6 +366,9 @@ void gui_hotkey(config_HotkeyIndex hotkey, bool pressed)
     case config_HotkeyIndex_GameFocus:
         game_focus_toggle();
         break;
+    case config_HotkeyIndex_MouseCapture:
+        game_focus_toggle_mouse();
+        break;
     case config_HotkeyIndex_KeyboardMapper:
         emu_key_mapper_toggle();
         break;
@@ -1111,7 +1114,7 @@ static void update_output_focus(bool output_was_focused)
     bool blocked = gui_in_use || gui_dialog_in_use || gui_file_dialog_is_active() ||
         ImGui::IsPopupOpen((const char*)NULL, ImGuiPopupFlags_AnyPopup);
     bool powered = !emu_is_empty();
-    bool game_focus = game_focus_is_on();
+    bool game_focus = game_focus_is_on() || game_focus_is_mouse_on();
 
     if (!output_debug || (powered && !output_powered) || (game_focus && !output_game_focus))
         output_focus_requested = true;

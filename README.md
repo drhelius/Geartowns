@@ -155,10 +155,13 @@ They are stored in `games.ini`, next to `config.ini`. CDs are recognized by thei
 
 Keys type on the FM Towns keyboard while the window has focus. Geartowns keeps only its hotkeys, which use `Ctrl+Shift` or `Ctrl` with an F-key; on macOS, `Cmd` replaces `Ctrl` and `Option` replaces `Alt` in all of them.
 
-**Game Focus** is for playing: press `Ctrl+F10`, or go fullscreen with `Alt+Enter`. The mouse is then locked in the window, and every hotkey is off except `Ctrl+F10`, `Alt+Enter`, `Ctrl+F1` and `Ctrl+F2`. The window title shows it's on. `Ctrl+F10` leaves it, and so do switching to another window and leaving fullscreen. Outside Game Focus, a mouse plugged into a port follows the pointer while it's over the screen.
+A mouse plugged into a port follows the pointer while it's over the screen. **Capture Mouse** (`Ctrl+F11`) locks it in the window instead, and every hotkey keeps working, so save states and rewind stay at hand; going fullscreen with `Alt+Enter` captures it too.
+
+**Game Focus** (`Ctrl+F10`) is for software that needs the `Ctrl+Shift` and `Ctrl`+F-key combinations: the mouse is locked and every hotkey is off except `Ctrl+F10`, `Alt+Enter`, `Ctrl+F1` and `Ctrl+F2`. Pressing `Ctrl+F10` again leaves it, back to the captured mouse in fullscreen. The window title shows either state. Switching to another window, opening a menu and leaving fullscreen release both.
 
 | Hotkey | Does |
 |---|---|
+| `Ctrl+F11` | Capture Mouse on and off |
 | `Ctrl+F10` | Game Focus on and off |
 | `Alt+Enter` | Fullscreen |
 | `Ctrl+F1`, `Ctrl+F2` | Keyboard mapper, key changes off and on |

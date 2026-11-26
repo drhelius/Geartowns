@@ -42,6 +42,7 @@ static u16 input_filter_opposing_directions(int controller, u16 buttons);
 static void keyboard_send_key(SDL_Scancode scancode, bool pressed);
 static bool keyboard_captures_event(const SDL_Event* event);
 static bool keyboard_controller_uses_key(SDL_Scancode scancode);
+static bool keyboard_modifiers_held(void);
 static int mouse_get_controller(void);
 
 void events_emu(const SDL_Event* event, bool shortcut_consumed)
@@ -238,11 +239,10 @@ static void input_update(bool check_shortcuts)
 static GT_GamePad_State input_build_state(int controller)
 {
     GT_GamePad_State state = { 0 };
-    SDL_Keymod mods = SDL_GetModState();
     bool six_button = emu_get_pad_type((GT_Controllers)controller) == GT_CONTROLLER_6_BUTTON_GAMEPAD;
 
     if (emu_game_get(Emu_Game_Setting_Keyboard1 + controller) == config_KeyboardMode_Gamepad &&
-        (mods & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0)
+        !keyboard_modifiers_held())
     {
         const bool* keyboard = SDL_GetKeyboardState(NULL);
         const config_Input_Keyboard& keys = config_input_keyboard[controller];
@@ -377,6 +377,9 @@ static void keyboard_send_key(SDL_Scancode scancode, bool pressed)
 // Keys bound to a gamepad driven by the keyboard never reach the Towns keyboard
 static bool keyboard_controller_uses_key(SDL_Scancode scancode)
 {
+    if (keyboard_modifiers_held())
+        return false;
+
     for (int controller = 0; controller < GT_MAX_GAMEPADS; controller++)
     {
         int type = emu_get_pad_type((GT_Controllers)controller);
@@ -392,7 +395,7 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
             keys.key_right, keys.key_up, keys.key_down, keys.key_select, keys.key_run, keys.key_C, keys.key_X,
             keys.key_Y, keys.key_Z
         };
-        int count = six_button ? 12 : (type == GT_CONTROLLER_MOUSE ? 2 : 9);
+        int count = six_button ? 12 : (type == GT_CONTROLLER_MOUSE ? 2 : 8);
 
         for (int i = 0; i < count; i++)
         {
@@ -405,6 +408,11 @@ static bool keyboard_controller_uses_key(SDL_Scancode scancode)
     }
 
     return false;
+}
+
+static bool keyboard_modifiers_held(void)
+{
+    return (SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0;
 }
 
 static int mouse_get_controller(void)

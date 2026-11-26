@@ -54,7 +54,7 @@ EXTERN void gui_apply_settings(void);
 EXTERN void gui_destroy(void);
 EXTERN void gui_render(void);
 EXTERN void gui_hotkey(config_HotkeyIndex hotkey, bool pressed);
-EXTERN bool gui_load_rom(const char* path, const char* symbol_path = NULL);
+EXTERN bool gui_load_rom(const char* path, const char* symbol_path = NULL, int playlist_index = 0);
 EXTERN bool gui_load_playlist_disc(int index);
 EXTERN void gui_load_physical_cdrom(const char* device_id);
 EXTERN void gui_reload_cdrom(void);

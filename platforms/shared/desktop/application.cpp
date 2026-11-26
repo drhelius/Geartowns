@@ -41,6 +41,7 @@
 #include "gamepad.h"
 #include "events.h"
 #include "game_focus.h"
+#include "gui_notifications.h"
 #include "hotkeys.h"
 
 #define APPLICATION_IMPORT
@@ -198,6 +199,7 @@ void application_destroy(void)
 #endif
 
     save_window_size();
+    emu_game_remember_drives();
     ogl_renderer_destroy();
     ImGui_ImplSDL3_Shutdown();
     gui_destroy();
@@ -370,13 +372,26 @@ void application_load_media(const ApplicationParams& params)
         emu_game_lock_disk(Emu_Game_Disk_MemoryCard);
     }
 
+    bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
+    std::string failed;
+
+    if (IsValidPointer(params.cd_file))
+        emu_game_lock_cdrom();
+
+    std::string remembered_cdrom;
+    hard_disks = emu_game_restore_drives(!rom_file_argument && !IsValidPointer(params.cd_file), &remembered_cdrom,
+        &failed) || hard_disks;
+    bool restore_cdrom = !remembered_cdrom.empty();
+
+    if (!failed.empty())
+        gui_notify(gui_NotificationError, NULL, "Unable to insert the remembered disks", failed.c_str());
+
     if (emu_is_powered_on() && gui_hard_disks_is_pending())
         emu_reset();
     else if (hard_disks && emu_is_empty() && !IsValidPointer(params.rom_file) && !IsValidPointer(params.cd_file) &&
-        emu_get_core()->GetFirmware()->IsReady())
+        !restore_cdrom && emu_get_core()->GetFirmware()->IsReady())
         gui_action_power_on();
 
-    bool rom_file_argument = IsValidPointer(params.rom_file) && (strlen(params.rom_file) > 0);
     bool symbol_file_argument = IsValidPointer(params.symbol_file) && (strlen(params.symbol_file) > 0);
 
     if (rom_file_argument)
@@ -403,6 +418,11 @@ void application_load_media(const ApplicationParams& params)
     {
         Log("CD-ROM argument: %s", params.cd_file);
         gui_load_rom(params.cd_file);
+    }
+    else if (restore_cdrom)
+    {
+        Log("Remembered CD-ROM: %s", remembered_cdrom.c_str());
+        gui_load_rom(remembered_cdrom.c_str(), NULL, config_drives.cdrom_index);
     }
 
     // A playlist's floppies may have taken the drives of the arguments

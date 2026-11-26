@@ -94,6 +94,7 @@ static char loading_file_path[GT_MAX_PATH] = { };
 static Loading_Request_Type loading_request_type = Loading_Request_File;
 static std::vector<std::string> cdrom_playlist;
 static int cdrom_playlist_index = -1;
+static std::string cdrom_playlist_file;
 static int cmos_model = -1;
 static GT_Boot_Device boot_device_override = GT_BOOT_DEVICE_AUTO;
 static bool boot_device_overridden = false;
@@ -818,6 +819,9 @@ bool emu_cdrom_playlist_load(const char* path, bool* floppies)
     if (IsValidPointer(floppies))
         *floppies = others;
 
+    if (!cdrom_playlist.empty())
+        cdrom_playlist_file = path;
+
     return !cdrom_playlist.empty();
 }
 
@@ -825,6 +829,7 @@ void emu_cdrom_playlist_clear(void)
 {
     cdrom_playlist.clear();
     cdrom_playlist_index = -1;
+    cdrom_playlist_file.clear();
 }
 
 bool emu_cdrom_playlist_select(const char* path)
@@ -849,6 +854,11 @@ int emu_cdrom_playlist_get_count(void)
 int emu_cdrom_playlist_get_index(void)
 {
     return cdrom_playlist_index;
+}
+
+const char* emu_cdrom_playlist_get_file(void)
+{
+    return cdrom_playlist_file.c_str();
 }
 
 const char* emu_cdrom_playlist_get_path(int index)

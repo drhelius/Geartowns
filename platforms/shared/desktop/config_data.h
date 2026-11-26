@@ -118,6 +118,17 @@ struct config_Emulator
     bool hard_disk_fast_timing;
     bool memory_card_write_protected;
     std::string recent_memory_cards[config_max_recent_memory_cards];
+    bool remember_drives;
+};
+
+struct config_Drives
+{
+    std::string hard_disks[GT_MAX_HARD_DISKS];
+    std::string floppies[config_floppy_drives];
+    int floppy_indexes[config_floppy_drives];
+    std::string memory_card;
+    std::string cdrom;
+    int cdrom_index;
 };
 
 struct config_FileDialogs
@@ -427,6 +438,7 @@ struct config_Debug
 
 EXTERN config_Emulator config_emulator;
 EXTERN config_FileDialogs config_file_dialogs;
+EXTERN config_Drives config_drives;
 EXTERN config_Machine config_machine;
 EXTERN config_Video config_video;
 EXTERN config_Audio config_audio;

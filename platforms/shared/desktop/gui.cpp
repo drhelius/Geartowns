@@ -507,7 +507,7 @@ ImVec4 gui_get_firmware_status_color(GT_Machine_Model model)
     }
 }
 
-bool gui_load_rom(const char* path, const char* symbol_path)
+bool gui_load_rom(const char* path, const char* symbol_path, int playlist_index)
 {
     if (loading_rom_active)
         return false;
@@ -555,7 +555,11 @@ bool gui_load_rom(const char* path, const char* symbol_path)
         if (floppies && (drives > 0))
             gui_floppy_open_disks(path);
 
-        media_path = emu_cdrom_playlist_get_path(0);
+        media_path = emu_cdrom_playlist_get_path(playlist_index);
+
+        if (!IsValidPointer(media_path))
+            media_path = emu_cdrom_playlist_get_path(0);
+
         emu_cdrom_playlist_select(media_path);
     }
     else if (!emu_cdrom_playlist_select(path))

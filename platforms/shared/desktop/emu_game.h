@@ -81,6 +81,9 @@ EXTERN bool emu_game_is_disk_kept(int disk);
 EXTERN bool emu_game_can_keep_disk(int disk);
 EXTERN void emu_game_keep_disk(int disk, bool keep);
 EXTERN void emu_game_lock_disk(int disk);
+EXTERN void emu_game_lock_cdrom(void);
+EXTERN void emu_game_remember_drives(void);
+EXTERN bool emu_game_restore_drives(bool cdrom, std::string* cdrom_path, std::string* failed);
 
 #undef EMU_GAME_IMPORT
 #undef EXTERN

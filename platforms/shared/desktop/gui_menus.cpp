@@ -501,6 +501,16 @@ static void menu_drives(void)
 
         menu_default_boot_device();
 
+        ImGui::MenuItem("Remember Drives", NULL, &config_emulator.remember_drives);
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Puts back the disks, IC memory card and CD-ROM image");
+            ImGui::Text("that were in the drives when Geartowns closed.");
+            ImGui::EndTooltip();
+        }
+
         ImGui::EndMenu();
     }
 }

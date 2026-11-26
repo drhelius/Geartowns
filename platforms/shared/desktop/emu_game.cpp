@@ -76,6 +76,9 @@ static bool latch_pending = false;
 static bool session_set[Emu_Game_Setting_Count] = { };
 static int session_values[Emu_Game_Setting_Count] = { };
 static bool locked_disks[Emu_Game_Disk_Count] = { };
+static bool locked_cdrom = false;
+static bool unavailable_disks[Emu_Game_Disk_Count] = { };
+static bool unavailable_cdrom = false;
 static bool applied = false;
 static int applied_keyboards[GT_MAX_GAMEPADS] = { };
 
@@ -99,6 +102,7 @@ static int get_values(int setting, int* values);
 static std::string get_value_text(int setting, int value);
 static std::string get_disk_key(int disk);
 static std::string get_disk_label(int disk);
+static std::string* get_remembered_disk(int disk, int** index);
 static std::string get_absolute_path(const char* path);
 static bool get_inserted_disk(int disk, Game_Disk* inserted);
 static bool is_own_disk(int disk);
@@ -317,6 +321,102 @@ void emu_game_keep_disk(int disk, bool keep)
 void emu_game_lock_disk(int disk)
 {
     locked_disks[disk] = true;
+}
+
+void emu_game_lock_cdrom(void)
+{
+    locked_cdrom = true;
+}
+
+void emu_game_remember_drives(void)
+{
+    if (!IsValidPointer(emu_get_core()))
+        return;
+
+    bool remember = config_emulator.remember_drives;
+
+    for (int i = 0; i < Emu_Game_Disk_Count; i++)
+    {
+        Game_Disk inserted;
+        bool present = get_inserted_disk(i, &inserted);
+
+        if (remember && (locked_disks[i] || (unavailable_disks[i] && !present)))
+            continue;
+
+        int* index = NULL;
+        std::string* path = get_remembered_disk(i, &index);
+        *path = remember ? inserted.path : "";
+
+        if (IsValidPointer(index))
+            *index = remember ? inserted.index : 0;
+    }
+
+    Media* media = emu_get_core()->GetMedia();
+    bool present = media->IsReady() && !media->IsPhysicalCdRom();
+
+    if (remember && (locked_cdrom || (unavailable_cdrom && !present)))
+        return;
+
+    const char* playlist = emu_cdrom_playlist_get_file();
+    config_drives.cdrom.clear();
+    config_drives.cdrom_index = 0;
+
+    if (!remember || !present)
+        return;
+
+    if (playlist[0] != 0)
+    {
+        config_drives.cdrom = get_absolute_path(playlist);
+        config_drives.cdrom_index = MAX(emu_cdrom_playlist_get_index(), 0);
+    }
+    else
+        config_drives.cdrom = get_absolute_path(media->GetFilePath());
+}
+
+bool emu_game_restore_drives(bool cdrom, std::string* cdrom_path, std::string* failed)
+{
+    int floppy_drives = emu_get_core()->GetPendingMachineConfig().floppy_drives;
+    bool hard_disks = false;
+
+    for (int i = 0; config_emulator.remember_drives && (i < Emu_Game_Disk_Count); i++)
+    {
+        int* index = NULL;
+        Game_Disk disk;
+        disk.path = *get_remembered_disk(i, &index);
+        disk.index = IsValidPointer(index) ? *index : 0;
+        bool missing_drive = (i >= Emu_Game_Disk_Floppy) && (i < Emu_Game_Disk_MemoryCard) &&
+            (i - Emu_Game_Disk_Floppy >= floppy_drives);
+
+        if (disk.path.empty() || locked_disks[i])
+            continue;
+
+        if (missing_drive || !insert_disk(i, disk))
+        {
+            unavailable_disks[i] = true;
+
+            if (!missing_drive)
+                *failed += (failed->empty() ? "" : "\n") + get_disk_label(i) + ": " + get_filename(disk.path.c_str());
+
+            continue;
+        }
+
+        hard_disks = hard_disks || (i < Emu_Game_Disk_Floppy);
+    }
+
+    cdrom_path->clear();
+
+    if (!config_emulator.remember_drives || !cdrom || locked_cdrom || config_drives.cdrom.empty())
+        return hard_disks;
+
+    if (path_exists(config_drives.cdrom.c_str()))
+        *cdrom_path = config_drives.cdrom;
+    else
+    {
+        unavailable_cdrom = true;
+        *failed += (failed->empty() ? "" : "\n") + std::string("CD-ROM: ") + get_filename(config_drives.cdrom.c_str());
+    }
+
+    return hard_disks;
 }
 
 static Game_Content find_content(void)
@@ -728,6 +828,22 @@ static std::string get_disk_label(int disk)
         return "SCSI ID " + std::to_string(disk);
 
     return disk < Emu_Game_Disk_MemoryCard ? "Floppy " + std::to_string(disk - Emu_Game_Disk_Floppy + 1) : "IC memory card";
+}
+
+static std::string* get_remembered_disk(int disk, int** index)
+{
+    *index = NULL;
+
+    if (disk < Emu_Game_Disk_Floppy)
+        return &config_drives.hard_disks[disk];
+
+    if (disk < Emu_Game_Disk_MemoryCard)
+    {
+        *index = &config_drives.floppy_indexes[disk - Emu_Game_Disk_Floppy];
+        return &config_drives.floppies[disk - Emu_Game_Disk_Floppy];
+    }
+
+    return &config_drives.memory_card;
 }
 
 static std::string get_absolute_path(const char* path)

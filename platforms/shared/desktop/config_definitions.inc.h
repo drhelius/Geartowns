@@ -257,6 +257,15 @@ static inline void process(config_Operation operation)
     CONFIG_BOOL("MemoryCard", "WriteProtected", config_emulator.memory_card_write_protected, false);
     CONFIG_STRING_ARRAY("MemoryCard", "Recent%d", config_emulator.recent_memory_cards, config_max_recent_memory_cards, "");
 
+    // Remembered drives
+    CONFIG_BOOL("Drives", "Remember", config_emulator.remember_drives, false);
+    CONFIG_STRING_ARRAY("Drives", "HardDisk%d", config_drives.hard_disks, GT_MAX_HARD_DISKS, "");
+    CONFIG_STRING_ARRAY("Drives", "Floppy%d", config_drives.floppies, config_floppy_drives, "");
+    CONFIG_INT_ARRAY("Drives", "FloppyIndex%d", config_drives.floppy_indexes, config_floppy_drives, 0);
+    CONFIG_STRING("Drives", "MemoryCard", config_drives.memory_card, "");
+    CONFIG_STRING("Drives", "CDROM", config_drives.cdrom, "");
+    CONFIG_INT_MIN("Drives", "CDROMIndex", config_drives.cdrom_index, 0, 0);
+
     // File dialogs
     CONFIG_STRING("FileDialogs", "ROM", config_file_dialogs.rom, "");
     CONFIG_STRING("FileDialogs", "States", config_file_dialogs.states, "");

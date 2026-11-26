@@ -190,6 +190,7 @@ EXTERN void emu_cdrom_playlist_clear(void);
 EXTERN bool emu_cdrom_playlist_select(const char* path);
 EXTERN int emu_cdrom_playlist_get_count(void);
 EXTERN int emu_cdrom_playlist_get_index(void);
+EXTERN const char* emu_cdrom_playlist_get_file(void);
 EXTERN const char* emu_cdrom_playlist_get_path(int index);
 EXTERN const char* emu_cdrom_playlist_get_name(int index);
 EXTERN void emu_set_preload_cdrom(bool enabled);

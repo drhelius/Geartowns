@@ -138,6 +138,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
   - The FM Towns (Model 1/2) for other content.
 - **CD-ROM Images**: Geartowns supports `chd`, zipped and unzipped `cue/bin` and `iso` images, and `m3u` playlists for multi-disc games. CUE audio tracks can use raw BIN, compatible WAV (44100 Hz, 16-bit, stereo) or Ogg Vorbis files. Change discs from **Drives → CD-ROM**.
 - **Floppy Images**: Insert floppy disks from **Drives → Floppies**, or load them from the command line. Supported images are `d77`, `d88`, `hdm`, `xdf`, `img` and `mfm`, also inside `zip` files, and `m3u` playlists.
+- **Remember Drives**: turn it on in the **Drives** menu to put back, at the next start, the hard disks, floppies, IC memory card and CD-ROM image that were in the drives when Geartowns closed. Disks given on the command line win for their drive and aren't remembered.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
 
 ### Per-Game Settings

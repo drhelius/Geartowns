@@ -73,6 +73,8 @@ binary_to_compressed_c
 #Switch
 *.a
 *.d
+*.elf
+*.nro
 
 #Android
 platforms/libretro/libs/

@@ -114,7 +114,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - FMT-402 MIDI card with built-in MT-32 and General MIDI synths, or any MIDI port on the computer.
 - Internal database for automatic media detection and hardware selection if `Auto` options are selected.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
-- Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation 3, Nintendo GameCube, Nintendo WiiU, Nintendo Switch, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
+- Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation 3, Nintendo GameCube, Nintendo WiiU, Nintendo Switch, Nintendo Switch 2, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
 - Full debugger:
   - Just-in-time disassembler, code navigation, call stack, debug symbols and automatic labels.
   - Execute, data, I/O and interrupt breakpoints.

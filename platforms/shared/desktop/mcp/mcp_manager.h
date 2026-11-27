@@ -215,6 +215,8 @@ public:
         m_tcp_address = "127.0.0.1";
         m_pending_media_load = false;
         m_pending_media_load_request_id = json();
+        m_pending_media_load_stop = json();
+        m_pending_media_load_generation = 0;
         m_reported_breakpoint_stops = 0;
         reset_input_macro();
         reset_controller_macro();
@@ -256,6 +258,7 @@ public:
         m_delayed_releases.clear();
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
+        m_pending_media_load_stop = json();
         reset_input_macro();
         reset_controller_macro();
         reset_mouse_macro();
@@ -302,6 +305,7 @@ public:
         m_delayed_releases.clear();
         m_pending_media_load = false;
         m_pending_media_load_file_path.clear();
+        m_pending_media_load_stop = json();
         release_input_macro_keys();
         reset_input_macro();
         release_controller_macro_held();
@@ -388,10 +392,15 @@ public:
             DebugResponse* response = new DebugResponse();
             response->requestId = m_pending_media_load_request_id;
             response->result = m_debug_adapter->FinishLoadMedia(m_pending_media_load_file_path);
+
+            if (!response->result.contains("error") && (emu_machine_generation != m_pending_media_load_generation))
+                m_debug_adapter->ApplyStopAtStart(m_pending_media_load_stop, response->result);
+
             UpdateResponseError(response);
 
             m_pending_media_load = false;
             m_pending_media_load_file_path.clear();
+            m_pending_media_load_stop = json();
             m_response_queue.Push(response);
         }
 
@@ -405,6 +414,9 @@ public:
             {
                 DebugResponse* response = new DebugResponse();
                 response->requestId = command->requestId;
+
+                m_pending_media_load_stop = tool == "load_media" ? command->arguments.value("stop_at_start", json()) : json();
+                m_pending_media_load_generation = emu_machine_generation;
 
                 if (tool == "load_media")
                     response->result = m_debug_adapter->StartLoadMedia(command->arguments.value("file_path", ""));
@@ -1982,6 +1994,8 @@ private:
     bool m_pending_media_load;
     json m_pending_media_load_request_id;
     std::string m_pending_media_load_file_path;
+    json m_pending_media_load_stop;
+    u32 m_pending_media_load_generation;
     std::vector<DelayedButtonRelease> m_delayed_releases;
     McpInputMacroState m_input_macro;
     McpControllerMacroState m_controller_macro;

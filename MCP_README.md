@@ -93,6 +93,10 @@ Media and machine can be set at launch too, for example `--cd game.cue --fd1 dis
 
 While the MCP server is running, the emulator keeps running when its window loses focus, even with **Pause When Inactive** enabled in the **Emulator** menu. The setting keeps its value and applies again once the server stops. Tools that wait for frames to run (`debug_step_frame`, `mouse_move`, `mouse_click`, `keyboard_type`, `controller_macro`) end with an error if emulation is paused from the GUI while they wait. Losing focus releases the keys the host keyboard holds, but the keys an MCP tool pressed stay held until a tool releases them or the server stops.
 
+### Start Paused
+
+`--mcp-stdio` and `--mcp-http` turn the debugger on. Loads and resets then follow **Start Paused** in the **Emulator** menu, as outside the debugger: with it off (the default) the game runs, with it on the debugger stops before the first instruction. `load_media` and `debug_reset` take an optional `stop_at_start` to choose for one call, and their answers say whether emulation is `paused`. For `load_media` it applies when the load starts or resets the machine, and only then does the answer have `paused`; a floppy or disc that goes into a running machine leaves it as it is.
+
 ### Concurrent Clients
 
 The HTTP server accepts repeated valid MCP initialization requests. All connected clients control the same Geartowns instance. Individual HTTP requests are serialized, but multi-request debugging workflows are not atomic. Concurrent agents can interfere with each other through pauses, resets, breakpoints, memory writes, media loads, and save states.
@@ -367,7 +371,7 @@ Results report the `linear` address, and `logical` and `physical` addresses wher
 - `debug_step_out` - Run until the current subroutine or interrupt handler returns; with an empty call stack it steps one instruction and adds a `note`
 - `debug_step_frame` - Run complete frames with breakpoints active, then pause; `frames` sets how many (default 1). By default it answers when they finish or a breakpoint stops them, with the `debug_get_status` fields plus `frames` run, `requested_frames` and `breakpoint_hit`, for up to 1800 frames. `wait: false` answers at once and takes up to 216000 frames; poll `debug_get_status` or stop them with `debug_pause`. A reset, state load or rewind during a wait ends it with an error
 - `debug_run_to_cursor` - Continue execution until reaching specified address
-- `debug_reset` - Reset emulation; optional `boot` (`cdrom`, `floppy1`, `floppy2`, `hard_disk0`-`hard_disk4`, `memory_card`) holds the system ROM's boot device keys through this reset, released at the first CD, floppy or SCSI read or IC memory card status read (1F/2F and later; the Model 1/2 and Marty ROMs ignore them)
+- `debug_reset` - Reset emulation; optional `boot` (`cdrom`, `floppy1`, `floppy2`, `hard_disk0`-`hard_disk4`, `memory_card`) holds the system ROM's boot device keys through this reset, released at the first CD, floppy or SCSI read or IC memory card status read (1F/2F and later; the Model 1/2 and Marty ROMs ignore them). Optional `stop_at_start` stops the debugger before the first instruction (default: the Start Paused setting); the answer has `paused`
 - `debug_get_status` - Get debug status: `paused`, `at_breakpoint`, `pc` (linear), `logical_pc`, `mode`, `halted`, `breakpoint`, `media_loading`, `media_ready`, `powered_on`, `frame`
 - `toggle_fast_forward` - Enable or disable fast forward mode with `enabled`; optional `speed` (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
 
@@ -612,7 +616,7 @@ Storage changes while tracing is active cleanly stop and restart the logger. Rep
 ### Media & State Management
 - `get_media_info` - Get loaded media info, firmware status, where each model takes its firmware from, the floppy drives (image, disk name, media, write protect, modified), the hard disks (as `list_hard_disks`) and the IC memory card (`memory_card`: inserted, image, size, write protect, modified, the 048Ah status, the window and, on JEIDA 4 models, the bank, attribute space and the card offset each window shows)
 - `list_recent_media` - List the most recent CD images, floppies, hard disks and IC memory cards opened by Geartowns
-- `load_media` - Load a CD image, a floppy image, a hard disk image or an IC memory card (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd, .hdm over 8 MB and hard disk .chd to the first free one; card: .icm). A hard disk powers on an empty machine, or waits for the next reset on a running one; a card goes in the slot at once and powers on an empty machine
+- `load_media` - Load a CD image, a floppy image, a hard disk image or an IC memory card (CD: .cue, .chd, .iso; floppy: .d77, .d88, .hdm, .xdf, .img, .mfm, .m3u; also inside .zip; hard disk: .h0-.h6 to that SCSI ID, .hdd, .hdm over 8 MB and hard disk .chd to the first free one; card: .icm). A hard disk powers on an empty machine, or waits for the next reset on a running one; a card goes in the slot at once and powers on an empty machine. Optional `stop_at_start` as in `debug_reset`, when the load starts or resets the machine
 - `eject_cdrom` - Eject the CD as the CD-ROM menu does; the machine keeps running with an empty drive
 - `insert_playlist_disc` - Insert playlist disc `index` (from the `get_cdrom_status` playlist), ejecting the current disc, as CD-ROM > Disc in Playlist does: a disc swap that keeps the machine
 - `load_bios` - Set the default firmware folder (searched with its subfolders and MAME zips), load the next machine's firmware, reset, and stop at the reset vector

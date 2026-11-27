@@ -197,7 +197,7 @@ void DebugAdapter::StepFrames(int frames)
     emu_debug_step_frames(frames);
 }
 
-json DebugAdapter::Reset(const std::string& boot)
+json DebugAdapter::Reset(const std::string& boot, const json& stop_at_start)
 {
     GT_Boot_Device device = GT_BOOT_DEVICE_AUTO;
 
@@ -211,7 +211,26 @@ json DebugAdapter::Reset(const std::string& boot)
 
     emu_reset();
     ClearControllerState();
-    return {{"success", true}};
+
+    json result = {{"success", true}};
+    ApplyStopAtStart(stop_at_start, result);
+    return result;
+}
+
+void DebugAdapter::ApplyStopAtStart(const json& stop_at_start, json& result)
+{
+    if (stop_at_start.is_boolean())
+    {
+        bool stop = stop_at_start.get<bool>();
+
+        if (stop)
+            config_debug.debug = true;
+
+        emu_debug_start_paused(stop);
+        emu_resume();
+    }
+
+    result["paused"] = emu_is_debug_idle() || emu_is_paused();
 }
 
 json DebugAdapter::GetDebugStatus()

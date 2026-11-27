@@ -164,6 +164,10 @@ int application_init(const ApplicationParams& params)
             Log("Auto-starting MCP server (mode: http, address: %s, port: %d)...", mcp_http_address, params.mcp_tcp_port);
 
         config_debug.debug = true;
+
+        if (emu_is_powered_on())
+            emu_debug_start_paused(config_emulator.start_paused);
+
         emu_mcp_set_transport(params.mcp_mode, params.mcp_tcp_port, mcp_http_address);
         emu_mcp_start();
     }

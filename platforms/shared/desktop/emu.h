@@ -246,6 +246,7 @@ EXTERN void emu_debug_step_frame(void);
 EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);
 EXTERN void emu_debug_continue(void);
+EXTERN void emu_debug_start_paused(bool paused);
 EXTERN void emu_debug_state_restored(void);
 
 EXTERN void emu_debug_update(void);

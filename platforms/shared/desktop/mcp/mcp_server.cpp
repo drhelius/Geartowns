@@ -473,7 +473,9 @@ json McpServer::BuildToolList()
                         "read or IC memory card status read."},
                     {"enum", json::array({"cdrom", "floppy1", "floppy2", "hard_disk0", "hard_disk1", "hard_disk2",
                         "hard_disk3", "hard_disk4", "memory_card"})}
-                }}
+                }},
+                {"stop_at_start", {{"type", "boolean"}, {"description", "Stop in the debugger before the first "
+                    "instruction; the answer's paused tells. Default: the Start Paused setting."}}}
             }},
             {"additionalProperties", false}
         }));
@@ -1495,7 +1497,10 @@ json McpServer::BuildToolList()
         {
             {"type", "object"},
             {"properties", {
-                {"file_path", {{"type", "string"}, {"description", "Absolute path."}}}
+                {"file_path", {{"type", "string"}, {"description", "Absolute path."}}},
+                {"stop_at_start", {{"type", "boolean"}, {"description", "When the load starts the machine, stop in "
+                    "the debugger before the first instruction; the answer's paused tells. Default: the Start Paused "
+                    "setting."}}}
             }},
             {"required", json::array({"file_path"})},
             {"additionalProperties", false}
@@ -2779,7 +2784,7 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     }
     else if (normalizedTool == "debug_reset")
     {
-        return m_debugAdapter.Reset(arguments.value("boot", ""));
+        return m_debugAdapter.Reset(arguments.value("boot", ""), arguments.value("stop_at_start", json()));
     }
     else if (normalizedTool == "debug_get_status")
     {

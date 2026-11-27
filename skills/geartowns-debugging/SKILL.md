@@ -90,7 +90,7 @@ FM Towns hardware documentation is available in the [references/](references/) d
 load_bios → load_media → get_media_info → get_i386_status → get_screenshot
 ```
 
-Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. Titles installed to a hard disk run from a raw image on a SCSI ID: `attach_hard_disk` (or `load_media` with `.hdd`, `.h0`-`.h6`, `.hdm` over 8 MB), which a running machine takes at the next reset. Saves and Towns OS files on an IC memory card use `insert_memory_card` (or `load_media` with `.icm`). `list_recent_media` shows recently opened images.
+Start every session by making sure the firmware is loaded (`load_bios` with the firmware directory, unless it is already configured), then load the CD image, confirming it loaded correctly with `get_media_info`, then checking CPU state and taking a screenshot to understand the current game state. Games are CD images (`.cue`, `.chd`, `.iso`, `.zip`) loaded with `load_media`. Some titles also need a boot floppy: use `insert_floppy` with a `.d77`, `.d88`, `.hdm`, `.img`, `.xdf`, `.mfm`, `.m3u` or `.zip` image in drive 0 or 1. Titles installed to a hard disk run from a raw image on a SCSI ID: `attach_hard_disk` (or `load_media` with `.hdd`, `.h0`-`.h6`, `.hdm` over 8 MB), which a running machine takes at the next reset. Saves and Towns OS files on an IC memory card use `insert_memory_card` (or `load_media` with `.icm`). `list_recent_media` shows recently opened images. The machine runs after a load or reset unless the emulator's Start Paused setting is on; pass `stop_at_start: true` to `debug_reset`, or to a `load_media` that starts the machine, to stop before the first instruction, and read `paused` in the answer.
 
 Load symbols with `load_symbols` (a text file with `ADDRESS NAME` or `NAME = ADDRESS` per line) or add individual labels with `add_symbol`.
 
@@ -238,7 +238,7 @@ Use screenshots after stepping or continuing to see the visual impact of changes
 
 ### Finding the Boot Path
 
-1. `debug_pause` right after `load_bios` — the CPU starts in real mode at the reset vector inside the System ROM
+1. `debug_reset` with `stop_at_start: true` (after `load_bios` if the firmware is not configured) — the CPU stops in real mode at the reset vector inside the System ROM
 2. `get_disassembly` at `CS:EIP` to follow the firmware boot code
 3. Set execution breakpoints along the way, then `debug_continue`
 4. Once the game is loaded from CD or floppy, `get_call_stack` and `add_symbol` to label the entry points

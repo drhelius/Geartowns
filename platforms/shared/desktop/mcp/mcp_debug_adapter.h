@@ -178,7 +178,8 @@ public:
     void StepOver();
     bool StepOut();
     void StepFrames(int frames);
-    json Reset(const std::string& boot = "");
+    json Reset(const std::string& boot, const json& stop_at_start);
+    void ApplyStopAtStart(const json& stop_at_start, json& result);
     json GetDebugStatus();
     json RunToAddress(const McpAddress& address);
     json SetFastForwardSpeed(int speed);

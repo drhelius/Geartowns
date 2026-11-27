@@ -439,7 +439,7 @@ static bool perform(bool discard_changes)
         {
             emu_reset();
 
-            if (config_emulator.start_paused)
+            if (config_emulator.start_paused && !config_debug.debug)
                 emu_pause();
         }
 

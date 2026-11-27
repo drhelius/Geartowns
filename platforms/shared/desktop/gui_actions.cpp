@@ -90,7 +90,7 @@ void gui_action_power_on(void)
 
     gui_notify(gui_NotificationInfo, ICON_MD_POWER_SETTINGS_NEW, "Powered on", NULL, "power");
 
-    if (config_emulator.start_paused)
+    if (config_emulator.start_paused && !config_debug.debug)
         emu_pause();
 }
 
@@ -114,7 +114,7 @@ void gui_action_reset(void)
     emu_resume();
     emu_reset();
 
-    if (config_emulator.start_paused)
+    if (config_emulator.start_paused && !config_debug.debug)
         emu_pause();
 }
 
